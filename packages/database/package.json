@@ -1,0 +1,19 @@
+{
+  "name": "@mrtpvrest/database",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "node seed.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  }
+}

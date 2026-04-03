@@ -1,0 +1,9 @@
+{
+  "name": "@mrtpvrest/config",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    "./tailwind": "./tailwind.config.base.js",
+    "./tsconfig": "./tsconfig.base.json"
+  }
+}

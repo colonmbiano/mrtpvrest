@@ -1,0 +1,13 @@
+{
+  "name": "@mrtpvrest/backend",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "build": "echo 'No build step for Express'",
+    "start": "node src/index.js",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy"
+  }
+}
