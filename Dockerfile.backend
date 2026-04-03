@@ -1,0 +1,26 @@
+FROM node:20-slim AS base
+
+# Install OpenSSL (required by Prisma) and pnpm
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+RUN npm install -g pnpm
+
+WORKDIR /app
+
+# Copy workspace manifests first (for layer caching)
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY packages/database/package.json ./packages/database/
+COPY apps/backend/package.json ./apps/backend/
+
+# Install only production deps for backend + database package
+RUN pnpm install --filter @mrtpvrest/backend... --frozen-lockfile
+
+# Copy source
+COPY packages/database/ ./packages/database/
+COPY apps/backend/ ./apps/backend/
+
+# Generate Prisma client
+RUN cd packages/database && pnpm db:generate
+
+EXPOSE 3000
+
+CMD ["node", "apps/backend/src/index.js"]
