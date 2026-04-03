@@ -1,13 +1,42 @@
 {
-  "name": "@mrtpvrest/backend",
-  "version": "0.0.1",
-  "private": true,
-  "scripts": {
-    "dev": "nodemon src/index.js",
-    "build": "echo 'No build step for Express'",
-    "start": "node src/index.js",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate deploy"
-  }
+   "name": "@mrtpvrest/backend",
+   "version": "1.0.0",
+   "main": "src/index.js",
+   "scripts": {
+      "dev": "nodemon src/index.js",
+      "start": "node src/index.js",
+      "build": "prisma generate",
+      "postinstall": "prisma generate",
+      "db:migrate": "npx prisma migrate dev",
+      "db:seed": "node prisma/seed.js"
+   },
+   "dependencies": {
+      "@google/generative-ai": "^0.24.1",
+      "@mrtpvrest/database": "workspace:*",
+      "@prisma/client": "^5.10.0",
+      "axios": "^1.6.7",
+      "bcryptjs": "^2.4.3",
+      "bull": "^4.12.2",
+      "cloudinary": "^2.9.0",
+      "compression": "^1.7.4",
+      "cors": "^2.8.5",
+      "dotenv": "^16.4.4",
+      "express": "^4.18.2",
+      "express-rate-limit": "^7.2.0",
+      "helmet": "^7.1.0",
+      "jsonwebtoken": "^9.0.2",
+      "mercadopago": "^2.12.0",
+      "morgan": "^1.10.0",
+      "multer": "^1.4.5-lts.1",
+      "node-cron": "^4.2.1",
+      "nodemailer": "^8.0.4",
+      "openai": "^6.33.0",
+      "prisma": "^5.10.0",
+      "socket.io": "^4.7.4",
+      "web-push": "^3.6.7",
+      "zod": "^3.22.4"
+   },
+   "devDependencies": {
+      "nodemon": "^3.0.3"
+   }
 }

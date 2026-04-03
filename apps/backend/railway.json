@@ -1,0 +1,1 @@
+{"build":{"builder":"DOCKERFILE","dockerfilePath":"Dockerfile"},"deploy":{"startCommand":"node src/index.js"}}

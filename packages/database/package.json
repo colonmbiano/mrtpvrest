@@ -5,10 +5,10 @@
   "main": "./index.js",
   "types": "./index.d.ts",
   "scripts": {
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate deploy",
-    "db:seed": "node seed.js"
+    "db:generate": "prisma generate --schema=./prisma/schema.prisma",
+    "db:push": "prisma db push --schema=./prisma/schema.prisma",
+    "db:migrate": "prisma migrate deploy --schema=./prisma/schema.prisma",
+    "db:seed": "node prisma/seed.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"
