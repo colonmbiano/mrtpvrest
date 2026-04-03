@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["openssl"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npx prisma generate"]
+
+[start]
+cmd = "node src/index.js"
