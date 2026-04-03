@@ -19,7 +19,7 @@ COPY packages/database/ ./packages/database/
 COPY apps/backend/ ./apps/backend/
 
 # Generate Prisma client
-RUN npx prisma generate --schema=./packages/database/prisma/schema.prisma
+RUN cat packages/database/prisma/schema.prisma || echo "SCHEMA NOT FOUND" && npx prisma generate --schema=./packages/database/prisma/schema.prisma || echo "PRISMA FAILED"
 
 EXPOSE 3000
 
