@@ -31,9 +31,11 @@ export default function MarcasPage() {
   const [search,  setSearch]  = useState("");
   const [filter,  setFilter]  = useState("ALL");
   const [toast,   setToast]   = useState("");
-  const [delConfirm, setDelConfirm] = useState<Tenant | null>(null);
-  const [planModal,  setPlanModal]  = useState<Tenant | null>(null);
-  const [newPlanId,  setNewPlanId]  = useState("");
+  const [delConfirm,  setDelConfirm]  = useState<Tenant | null>(null);
+  const [planModal,   setPlanModal]   = useState<Tenant | null>(null);
+  const [newPlanId,   setNewPlanId]   = useState("");
+  const [trialModal,  setTrialModal]  = useState<Tenant | null>(null);
+  const [extendDays,  setExtendDays]  = useState(7);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function showToast(msg: string) {
@@ -58,6 +60,11 @@ export default function MarcasPage() {
     if (!planModal || !newPlanId) return;
     await api.patch(`/api/saas/tenants/${planModal.id}/plan`, { planId: newPlanId }).catch(() => null);
     setPlanModal(null); await load(); showToast("Plan actualizado");
+  }
+  async function extendTrial() {
+    if (!trialModal) return;
+    await api.put(`/api/saas/tenants/${trialModal.id}/plan`, { extendDays }).catch(() => null);
+    setTrialModal(null); setExtendDays(7); await load(); showToast(`+${extendDays} días agregados`);
   }
   async function deleteTenant() {
     if (!delConfirm) return;
@@ -181,6 +188,8 @@ export default function MarcasPage() {
                           )}
                           <button className="db-btn" style={{ padding:"3px 8px", fontSize:10 }}
                             onClick={() => { setPlanModal(t); setNewPlanId(sub?.plan?.id ?? ""); }}>Plan</button>
+                          <button className="db-btn" style={{ padding:"3px 8px", fontSize:10, color:"var(--blue)", borderColor:"var(--blue-dim)" }}
+                            onClick={() => { setTrialModal(t); setExtendDays(7); }}>+Días</button>
                           <button className="db-btn" style={{ padding:"3px 8px", fontSize:10, color:"var(--red)", borderColor:"var(--red-dim)" }}
                             onClick={() => setDelConfirm(t)}>✕</button>
                         </div>
@@ -215,6 +224,31 @@ export default function MarcasPage() {
               <div style={{ display:"flex", gap:8, marginTop:4 }}>
                 <button className="db-btn" style={{ flex:1 }} onClick={() => setPlanModal(null)}>Cancelar</button>
                 <button className="db-btn db-btn-orange" style={{ flex:1 }} onClick={changePlan}>Confirmar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {trialModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:50 }}>
+          <div className="db-card" style={{ width:320 }}>
+            <div className="db-card-header">
+              <div className="db-card-title">Días gratis — {trialModal.name}</div>
+            </div>
+            <div className="db-card-body" style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              <label style={{ fontSize:11, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.5px" }}>
+                ¿Cuántos días adicionales?
+              </label>
+              <input
+                type="number" min={1} max={365} value={extendDays}
+                onChange={e => setExtendDays(Number(e.target.value))}
+                style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+                  padding:"8px 12px", fontSize:14, color:"var(--text)", outline:"none",
+                  fontFamily:"DM Mono,monospace", width:"100%" }} />
+              <div style={{ display:"flex", gap:8, marginTop:4 }}>
+                <button className="db-btn" style={{ flex:1 }} onClick={() => setTrialModal(null)}>Cancelar</button>
+                <button className="db-btn db-btn-orange" style={{ flex:1 }} onClick={extendTrial}>Confirmar</button>
               </div>
             </div>
           </div>
