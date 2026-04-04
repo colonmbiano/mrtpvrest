@@ -1,4 +1,6 @@
 {
-  "buildCommand": "mkdir -p public && echo '<h1>Coming soon</h1>' > public/index.html",
-  "outputDirectory": "public"
+  "framework": "nextjs",
+  "installCommand": "npm install -g pnpm@9.15.0 && cd ../.. && pnpm install --filter @mrtpvrest/client...",
+  "buildCommand": "cd ../.. && pnpm turbo build --filter @mrtpvrest/client",
+  "outputDirectory": ".next"
 }
