@@ -118,6 +118,14 @@ body {
 }
 .db-user-info p { font-size: 12px; font-weight: 500; color: var(--text); }
 .db-user-info span { font-size: 10px; color: var(--text3); }
+.db-logout-btn {
+  display: flex; align-items: center; gap: 7px;
+  width: 100%; margin-top: 8px; padding: 7px 10px; border-radius: 8px;
+  font-size: 11px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif;
+  background: var(--red-dim); color: var(--red);
+  border: 1px solid rgba(239, 68, 68, 0.2); transition: all 0.15s;
+}
+.db-logout-btn:hover { background: rgba(239, 68, 68, 0.18); }
 
 /* MAIN */
 .db-main { flex: 1; overflow-y: auto; background: var(--bg); transition: background 0.2s; }

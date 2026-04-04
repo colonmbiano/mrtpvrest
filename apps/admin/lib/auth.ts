@@ -14,6 +14,7 @@ export function getToken() {
 export function logout() {
   localStorage.removeItem("accessToken");
   localStorage.removeItem("user");
+  localStorage.removeItem("mb-role");
   document.cookie = "mb-role=; path=/; max-age=0; SameSite=Lax";
   window.location.href = "/login";
 }

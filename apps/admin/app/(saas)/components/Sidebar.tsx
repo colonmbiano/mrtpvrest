@@ -2,6 +2,7 @@
 // app/(saas)/components/Sidebar.tsx
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { logout } from "@/lib/auth";
 
 const navItems = [
   {
@@ -119,6 +120,14 @@ export default function Sidebar() {
             <span>Super Admin</span>
           </div>
         </div>
+        <button onClick={logout} className="db-logout-btn">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14">
+            <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>
+            <path d="M11 11l3-3-3-3"/>
+            <path d="M14 8H6"/>
+          </svg>
+          Salir
+        </button>
       </div>
     </aside>
   );
