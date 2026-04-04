@@ -28,6 +28,7 @@ Thumbs.db
 # Prisma
 *.db
 *.db-journal
+packages/database/generated/
 
 # Editor
 .vscode
