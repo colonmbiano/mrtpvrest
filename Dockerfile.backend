@@ -19,7 +19,7 @@ COPY packages/database/ ./packages/database/
 COPY apps/backend/ ./apps/backend/
 
 # Generate Prisma client
-RUN pnpm exec prisma generate --schema=./packages/database/prisma/schema.prisma
+RUN pnpm --filter @mrtpvrest/database run db:generate
 RUN ls /app/node_modules/.prisma/ || echo "NOT FOUND"
 
 EXPOSE 3000
