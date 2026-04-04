@@ -11,8 +11,8 @@ COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/database/package.json ./packages/database/
 COPY apps/backend/package.json ./apps/backend/
 
-# Install only production deps for backend + database package
-RUN pnpm install --filter @mrtpvrest/backend... --frozen-lockfile
+# Install all deps (including devDeps needed for prisma generate)
+RUN pnpm install --frozen-lockfile
 
 # Copy source
 COPY packages/database/ ./packages/database/
