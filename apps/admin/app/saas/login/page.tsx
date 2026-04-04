@@ -29,7 +29,7 @@ export default function SaaSLoginPage() {
       localStorage.removeItem("restaurantId");
       localStorage.removeItem("locationId");
 
-      router.push("/saas/dashboard");
+      router.push("/dashboard");
     } catch (err: any) {
       setError(err.response?.data?.error || "Error de conexión con la central");
     } finally {
