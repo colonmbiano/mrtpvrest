@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3004",
-    "build": "next build",
+    "build": "echo 'delivery not ready'",
     "start": "next start -p 3004",
     "lint": "next lint",
     "type-check": "tsc --noEmit"
