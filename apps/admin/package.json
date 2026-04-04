@@ -19,6 +19,7 @@
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
+    "@mrtpvrest/config": "workspace:*",
     "@types/js-cookie": "^3.0.6",
     "@types/node": "^20",
     "@types/react": "^18",
