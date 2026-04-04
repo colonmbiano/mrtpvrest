@@ -20,7 +20,6 @@ COPY apps/backend/ ./apps/backend/
 
 # Generate Prisma client
 RUN pnpm --filter @mrtpvrest/database run db:generate
-RUN ls /app/node_modules/.prisma/ || echo "NOT FOUND"
 
 EXPOSE 3000
 
