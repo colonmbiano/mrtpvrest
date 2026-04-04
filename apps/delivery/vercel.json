@@ -1,0 +1,4 @@
+{
+  "buildCommand": "mkdir -p public && echo '<h1>Coming soon</h1>' > public/index.html",
+  "outputDirectory": "public"
+}
