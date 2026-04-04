@@ -1,8 +1,7 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('@mrtpvrest/database');
 const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
 const router = express.Router();
-const prisma = new PrismaClient();
 
 const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN,

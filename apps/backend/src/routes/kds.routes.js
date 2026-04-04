@@ -1,6 +1,5 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const { prisma } = require('@mrtpvrest/database');
 const router = express.Router();
 
 // GET pedidos activos para una estación

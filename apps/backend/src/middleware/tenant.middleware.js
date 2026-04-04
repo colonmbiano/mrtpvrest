@@ -1,6 +1,5 @@
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('@mrtpvrest/database');
 const jwt = require('jsonwebtoken');
-const prisma = new PrismaClient();
 
 const IGNORED_SUBDOMAINS = new Set(['www', 'api', 'admin', 'localhost', '127']);
 
