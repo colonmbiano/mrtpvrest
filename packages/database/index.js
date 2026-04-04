@@ -1,4 +1,4 @@
-const { PrismaClient } = require('./generated/client');
+const { PrismaClient } = require('@prisma/client');
 
 const globalForPrisma = globalThis;
 
