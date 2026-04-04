@@ -1,8 +1,7 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
 const { notifyOrderStatus, notifyIngredientShortage, sendWhatsApp } = require('../services/notifications.service');
-const prisma = new PrismaClient();
 const router = express.Router();
 
 // GET clave pública VAPID (para el frontend)

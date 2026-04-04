@@ -1,9 +1,8 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
-const prisma = new PrismaClient();
 const router = express.Router();
 
 cloudinary.config({

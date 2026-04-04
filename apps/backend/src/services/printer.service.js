@@ -1,6 +1,5 @@
 const net = require('net');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const { prisma } = require('@mrtpvrest/database');
 
 // ── ESC/POS helpers ───────────────────────────────────────────────────────
 const ESC = '\x1b';

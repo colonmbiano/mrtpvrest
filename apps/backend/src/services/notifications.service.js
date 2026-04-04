@@ -1,8 +1,7 @@
 require('dotenv').config();
 const webpush = require('web-push');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('@mrtpvrest/database');
 const axios = require('axios');
-const prisma = new PrismaClient();
 
 const vapidSubject = process.env.VAPID_EMAIL
   ? (process.env.VAPID_EMAIL.startsWith('mailto:') || process.env.VAPID_EMAIL.startsWith('https://')
