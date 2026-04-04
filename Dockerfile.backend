@@ -20,7 +20,7 @@ COPY apps/backend/ ./apps/backend/
 
 # Generate Prisma client
 RUN npx prisma generate --schema=./packages/database/prisma/schema.prisma
-RUN ls /app/node_modules/.pnpm/ | grep prisma
+RUN ls /app/node_modules/.prisma/ || echo "NOT FOUND"
 
 EXPOSE 3000
 
