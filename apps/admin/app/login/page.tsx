@@ -9,16 +9,33 @@ import api from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [email, setEmail]           = useState("");
+  const [password, setPassword]     = useState("");
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState("");
+  const [showPass, setShowPass]     = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");   // email sin verificar
+  const [resending, setResending]   = useState(false);
+  const [resendDone, setResendDone] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
     if (token) router.push("/dashboard");
   }, []);
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [showPass, setShowPass] = useState(false);
+
+  const handleResend = async () => {
+    setResending(true);
+    try {
+      const token = localStorage.getItem("accessToken");
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/auth/resend-verification`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setResendDone(true);
+      setTimeout(() => setResendDone(false), 5000);
+    } catch { /* silencioso */ }
+    setResending(false);
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,11 +45,21 @@ export default function LoginPage() {
       const { data } = await api.post("/api/auth/login", { email, password });
       localStorage.setItem("accessToken", data.accessToken);
       document.cookie = `mb-role=${data.user.role}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
+
       if (data.user?.role === "SUPER_ADMIN") {
         router.push("/dashboard");
-      } else {
-        router.push("/admin");
+        return;
       }
+
+      // Para ADMIN: verificar si el email está confirmado antes de entrar
+      const tenantRes = await api.get("/api/tenant/me");
+      const tenant = tenantRes.data;
+      if (!tenant.emailVerifiedAt) {
+        setPendingEmail(data.user.email);
+        return;
+      }
+
+      router.push("/admin");
     } catch (err: any) {
       setError(err?.response?.data?.error ?? "Credenciales incorrectas");
     } finally {
@@ -285,6 +312,60 @@ export default function LoginPage() {
         }
         .login-card { animation: fadeUp 0.4s ease both; }
       `}</style>
+
+      {/* ── PANTALLA: email pendiente de verificación ── */}
+      {pendingEmail && (
+        <div style={{
+          position: "fixed", inset: 0, background: "#050505",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: "'Inter', sans-serif", padding: "24px", zIndex: 9999,
+        }}>
+          <div style={{
+            width: "100%", maxWidth: "420px", background: "#111",
+            border: "1px solid rgba(255,255,255,0.05)", borderRadius: "2.5rem",
+            padding: "40px", textAlign: "center",
+          }}>
+            <div style={{
+              width: 72, height: 72, margin: "0 auto 24px",
+              borderRadius: "50%", background: "rgba(249,115,22,0.1)",
+              border: "1px solid rgba(249,115,22,0.3)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 32,
+            }}>✉️</div>
+            <p style={{ fontSize: 22, fontWeight: 900, color: "#fff", margin: "0 0 8px" }}>
+              Verifica tu email
+            </p>
+            <p style={{ fontSize: 14, color: "#9ca3af", margin: "0 0 32px", lineHeight: 1.6 }}>
+              Enviamos un enlace de confirmación a{" "}
+              <strong style={{ color: "#fff" }}>{pendingEmail}</strong>.
+              Debes verificarlo para acceder.
+            </p>
+            <button
+              onClick={handleResend}
+              disabled={resending || resendDone}
+              style={{
+                width: "100%", padding: "14px", borderRadius: "1rem",
+                background: resendDone ? "rgba(34,197,94,0.1)" : "#f97316",
+                border: resendDone ? "1px solid rgba(34,197,94,0.3)" : "none",
+                color: resendDone ? "#4ade80" : "#000",
+                fontWeight: 900, fontSize: 14, cursor: "pointer",
+                opacity: resending ? 0.6 : 1, marginBottom: 12,
+              }}
+            >
+              {resendDone ? "✓ Correo reenviado" : resending ? "Enviando..." : "Reenviar correo de verificación"}
+            </button>
+            <button
+              onClick={() => { setPendingEmail(""); localStorage.removeItem("accessToken"); document.cookie = "mb-role=; path=/; max-age=0"; }}
+              style={{
+                background: "none", border: "none", color: "#6b7280",
+                fontSize: 13, cursor: "pointer", textDecoration: "underline",
+              }}
+            >
+              Volver al login
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="login-root">
         {/* LEFT */}

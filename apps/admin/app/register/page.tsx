@@ -195,12 +195,6 @@ export default function RegisterPage() {
               ))}
             </div>
             <button
-              onClick={() => router.push("/onboarding")}
-              className="w-full py-4 rounded-2xl font-black bg-orange-500 hover:bg-orange-600 text-white transition-all active:scale-95"
-            >
-              IR AL DASHBOARD →
-            </button>
-            <button
               onClick={handleResend}
               disabled={resending || resendDone}
               className="w-full py-3 rounded-2xl font-black border border-white/10 hover:border-white/20 text-gray-400 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
