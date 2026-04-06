@@ -43,7 +43,25 @@ export default function RegisterPage() {
 
   const canNext1 = restaurantName.trim().length >= 2 && ownerName.trim().length >= 2;
   const emailDomain = email.split("@")[1] || "";
+  const [resending, setResending]     = useState(false);
+  const [resendDone, setResendDone]   = useState(false);
   const canNext2 = email.trim() && password.length >= 8 && terms;
+
+  const handleResend = async () => {
+    setResending(true);
+    try {
+      const token = localStorage.getItem("accessToken");
+      await fetch(`${API}/api/auth/resend-verification`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setResendDone(true);
+      setTimeout(() => setResendDone(false), 5000);
+    } catch {
+      // silencioso — el usuario puede reintentar
+    }
+    setResending(false);
+  };
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -182,9 +200,19 @@ export default function RegisterPage() {
             >
               IR AL DASHBOARD →
             </button>
+            <button
+              onClick={handleResend}
+              disabled={resending || resendDone}
+              className="w-full py-3 rounded-2xl font-black border border-white/10 hover:border-white/20 text-gray-400 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              {resendDone
+                ? "✓ Correo reenviado"
+                : resending
+                  ? "Enviando..."
+                  : "No llegó el correo — reenviar"}
+            </button>
             <p className="text-xs text-gray-600">
-              El enlace expira en 24 horas.{" "}
-              <span className="text-gray-500">Puedes usar el sistema mientras tanto.</span>
+              El enlace expira en 24 horas.
             </p>
           </div>
         )}
