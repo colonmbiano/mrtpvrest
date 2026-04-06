@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pnpm install:*)"
+      "Bash(pnpm install:*)",
+      "Bash(xargs grep:*)",
+      "Bash(npx prisma:*)",
+      "Bash(set DATABASE_URL=postgresql://postgres:4kG._LP%40mu_y%2BwQ@db.lhkzogxrqcrrwoprydhg.supabase.co:5432/postgres)",
+      "Bash(railway logs:*)",
+      "Bash(npm run:*)",
+      "Bash(curl:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(pnpm add:*)"
     ]
   }
 }
