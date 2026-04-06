@@ -38,8 +38,8 @@ router.post('/login', loginLimiter, async (req, res) => {
     const valid = await bcrypt.compare(password, user.passwordHash)
     if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' })
 
-    // Generamos tokens con el contexto del restaurante del usuario
-    const { accessToken, refreshToken } = generateTokens(user.id, user.restaurantId, user.role)
+    // Generamos tokens con el contexto del restaurante y tenant del usuario
+    const { accessToken, refreshToken } = generateTokens(user.id, user.restaurantId, user.role, user.tenantId)
 
     await prisma.refreshToken.create({
       data: { token: refreshToken, userId: user.id, expiresAt: new Date(Date.now() + 30*24*60*60*1000) }
@@ -218,13 +218,6 @@ router.post('/register-tenant', registerLimiter, async (req, res) => {
     })
 
     // Enviar email (sin bloquear la respuesta)
-    console.log('SMTP config:', {
-      host:     process.env.SMTP_HOST,
-      port:     process.env.SMTP_PORT,
-      user:     process.env.SMTP_USER ? 'SET' : 'NOT SET',
-      pass:     process.env.SMTP_PASS ? 'SET' : 'NOT SET',
-      frontend: process.env.FRONTEND_URL,
-    })
     const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/verify-email?token=${verificationToken}`
     sendEmail(
       email.toLowerCase(),
