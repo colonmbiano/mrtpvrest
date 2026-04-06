@@ -218,6 +218,13 @@ router.post('/register-tenant', registerLimiter, async (req, res) => {
     })
 
     // Enviar email (sin bloquear la respuesta)
+    console.log('SMTP config:', {
+      host:     process.env.SMTP_HOST,
+      port:     process.env.SMTP_PORT,
+      user:     process.env.SMTP_USER ? 'SET' : 'NOT SET',
+      pass:     process.env.SMTP_PASS ? 'SET' : 'NOT SET',
+      frontend: process.env.FRONTEND_URL,
+    })
     const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/verify-email?token=${verificationToken}`
     sendEmail(
       email.toLowerCase(),
