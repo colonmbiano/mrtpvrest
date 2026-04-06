@@ -7,7 +7,7 @@ const SAAS_PATHS = ["/dashboard", "/marcas", "/ajustes", "/facturacion", "/logs"
 const ADMIN_PREFIX = "/admin";
 
 // Public paths — always allowed
-const PUBLIC_PATHS = ["/login", "/register", "/onboarding", "/saas/login", "/_next", "/favicon", "/logo", "/api"];
+const PUBLIC_PATHS = ["/login", "/register", "/verify-email", "/saas/login", "/_next", "/favicon", "/logo", "/api"];
 
 function getRole(req: NextRequest): string | null {
   return req.cookies.get("mb-role")?.value ?? null;

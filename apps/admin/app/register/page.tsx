@@ -42,6 +42,7 @@ export default function RegisterPage() {
   const [terms, setTerms]       = useState(false);
 
   const canNext1 = restaurantName.trim().length >= 2 && ownerName.trim().length >= 2;
+  const emailDomain = email.split("@")[1] || "";
   const canNext2 = email.trim() && password.length >= 8 && terms;
 
   const handleSubmit = async () => {
@@ -62,7 +63,7 @@ export default function RegisterPage() {
       localStorage.setItem("restaurantId", data.restaurant.id);
       localStorage.setItem("tenantId",     data.tenant.id);
 
-      router.push("/onboarding");
+      setStep(3);
     } catch {
       setError("Error de conexión. Intenta de nuevo.");
       setLoading(false);
@@ -83,31 +84,33 @@ export default function RegisterPage() {
         </p>
       </div>
 
-      {/* Stepper */}
-      <div className="flex items-center gap-3 mb-10">
-        {[
-          { n: 1, label: "Tu Restaurante" },
-          { n: 2, label: "Tu Cuenta"      },
-        ].map(({ n, label }, i) => (
-          <div key={n} className="flex items-center gap-3">
-            <div className="flex flex-col items-center gap-1">
-              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-black transition-all
-                ${step === n ? "bg-orange-500 text-black" :
-                  step > n  ? "bg-green-500 text-black"  :
-                               "bg-white/5 text-gray-500 border border-white/10"}`}>
-                {step > n ? "✓" : n}
+      {/* Stepper — solo visible en pasos 1 y 2 */}
+      {step < 3 && (
+        <div className="flex items-center gap-3 mb-10">
+          {[
+            { n: 1, label: "Tu Restaurante" },
+            { n: 2, label: "Tu Cuenta"      },
+          ].map(({ n, label }, i) => (
+            <div key={n} className="flex items-center gap-3">
+              <div className="flex flex-col items-center gap-1">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-black transition-all
+                  ${step === n ? "bg-orange-500 text-black" :
+                    step > n  ? "bg-green-500 text-black"  :
+                                 "bg-white/5 text-gray-500 border border-white/10"}`}>
+                  {step > n ? "✓" : n}
+                </div>
+                <span className={`text-[9px] font-black uppercase tracking-widest
+                  ${step === n ? "text-orange-400" : step > n ? "text-green-400" : "text-gray-600"}`}>
+                  {label}
+                </span>
               </div>
-              <span className={`text-[9px] font-black uppercase tracking-widest
-                ${step === n ? "text-orange-400" : step > n ? "text-green-400" : "text-gray-600"}`}>
-                {label}
-              </span>
+              {i < 1 && (
+                <div className={`w-16 h-[2px] mb-4 rounded transition-all ${step > n ? "bg-green-500" : "bg-white/5"}`} />
+              )}
             </div>
-            {i < 1 && (
-              <div className={`w-16 h-[2px] mb-4 rounded transition-all ${step > n ? "bg-green-500" : "bg-white/5"}`} />
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Card */}
       <div className="w-full max-w-md bg-[#111] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl">
@@ -132,6 +135,57 @@ export default function RegisterPage() {
               <p className="text-white font-bold">15 días gratis · Plan Básico</p>
               <p className="text-gray-400 text-xs mt-0.5">Sin tarjeta de crédito requerida</p>
             </div>
+          </div>
+        )}
+
+        {/* ── PASO 3 — Revisa tu email ── */}
+        {step === 3 && (
+          <div className="text-center space-y-6">
+            <div className="w-20 h-20 mx-auto rounded-full bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-4xl">
+              ✉️
+            </div>
+            <div>
+              <h2 className="text-2xl font-black mb-2">Revisa tu email</h2>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                Enviamos un enlace de verificación a{" "}
+                <span className="text-white font-bold">{email}</span>
+              </p>
+              {emailDomain && (
+                <a
+                  href={`https://${emailDomain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block mt-4 px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white hover:bg-white/10 transition-all"
+                >
+                  Abrir {emailDomain} →
+                </a>
+              )}
+            </div>
+            <div className="bg-white/3 border border-white/5 rounded-2xl p-4 text-left space-y-2">
+              <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Que sigue</p>
+              {[
+                "Haz clic en el botón del email",
+                "Tu cuenta queda activada",
+                "Configura tu negocio",
+              ].map((s, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 text-[10px] font-black flex items-center justify-center flex-shrink-0">
+                    {i + 1}
+                  </div>
+                  <span className="text-sm text-gray-400">{s}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => router.push("/onboarding")}
+              className="w-full py-4 rounded-2xl font-black bg-orange-500 hover:bg-orange-600 text-white transition-all active:scale-95"
+            >
+              IR AL DASHBOARD →
+            </button>
+            <p className="text-xs text-gray-600">
+              El enlace expira en 24 horas.{" "}
+              <span className="text-gray-500">Puedes usar el sistema mientras tanto.</span>
+            </p>
           </div>
         )}
 
@@ -184,8 +238,8 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {/* Navegación */}
-        <div className="flex gap-3 mt-8">
+        {/* Navegación — oculta en paso 3 */}
+        <div className={`flex gap-3 mt-8 ${step === 3 ? "hidden" : ""}`}>
           {step > 1 && (
             <button onClick={() => { setStep(s => s - 1); setError(""); }}
               className="flex-1 py-4 rounded-2xl font-black text-gray-400 hover:text-white border border-white/10 hover:border-white/20 transition-all">
@@ -205,12 +259,14 @@ export default function RegisterPage() {
           )}
         </div>
 
-        <p className="text-center text-gray-600 text-xs mt-6">
-          ¿Ya tienes cuenta?{" "}
-          <a href="/login" className="text-orange-400 hover:text-orange-300 font-bold transition-colors">
-            Iniciar sesión
-          </a>
-        </p>
+        {step < 3 && (
+          <p className="text-center text-gray-600 text-xs mt-6">
+            ¿Ya tienes cuenta?{" "}
+            <a href="/login" className="text-orange-400 hover:text-orange-300 font-bold transition-colors">
+              Iniciar sesión
+            </a>
+          </p>
+        )}
       </div>
     </div>
   );
