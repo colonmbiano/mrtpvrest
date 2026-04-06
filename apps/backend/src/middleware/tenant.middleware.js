@@ -62,7 +62,7 @@ const tenantMiddleware = async (req, res, next) => {
     // ── RESOLVER RESTAURANTE ──────────────────────────────────────────────
     const include = {
       config: true,
-      subscription: { include: { plan: true } }
+      // subscription eliminado: pertenece a Tenant, no a Restaurant
     };
 
     if (restaurantId) {
@@ -83,12 +83,27 @@ const tenantMiddleware = async (req, res, next) => {
       });
     }
 
+    // ── OBTENER TENANT CON SUBSCRIPTION ──────────────────────────────────
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: restaurant.tenantId },
+      select: {
+        id: true,
+        subscription: {
+          select: {
+            status: true,
+            currentPeriodEnd: true,
+            plan: { select: { name: true, displayName: true } }
+          }
+        }
+      }
+    })
+
     // ── VALIDACIÓN DE SUSCRIPCIÓN ─────────────────────────────────────────
     if (!restaurant.isActive) {
       return res.status(403).json({ error: 'Este restaurante ha sido suspendido.' });
     }
 
-    const sub = restaurant.subscription;
+    const sub = tenant?.subscription;
 
     if (sub) {
       if (sub.status === 'SUSPENDED') {
@@ -109,6 +124,7 @@ const tenantMiddleware = async (req, res, next) => {
     // ── ADJUNTAR AL REQUEST ───────────────────────────────────────────────
     req.restaurantId = restaurant.id;
     req.restaurant   = restaurant;
+    req.tenant       = { ...restaurant, tenant };
     req.plan         = sub?.plan ?? null; // controllers: req.plan.hasKDS, req.plan.maxLocations
 
     // ── RESOLVER SUCURSAL (sin cambios) ──────────────────────────────────
