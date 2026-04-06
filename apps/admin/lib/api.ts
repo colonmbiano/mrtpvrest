@@ -26,6 +26,7 @@ api.interceptors.response.use(
       if (!window.location.pathname.includes('/login')) {
         localStorage.removeItem("accessToken");
         localStorage.removeItem("user");
+        document.cookie = "mb-role=; path=/; max-age=0; SameSite=Lax";
         window.location.href = "/login";
       }
     }

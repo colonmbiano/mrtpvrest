@@ -28,6 +28,7 @@ export default function SaaSLoginPage() {
       // El Super Admin no necesita restaurantId ya que ve todo
       localStorage.removeItem("restaurantId");
       localStorage.removeItem("locationId");
+      document.cookie = `mb-role=SUPER_ADMIN; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
 
       router.push("/dashboard");
     } catch (err: any) {
