@@ -27,6 +27,7 @@ export default function LoginPage() {
     try {
       const { data } = await api.post("/api/auth/login", { email, password });
       localStorage.setItem("accessToken", data.accessToken);
+      document.cookie = `mb-role=${data.user.role}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
       if (data.user?.role === "SUPER_ADMIN") {
         router.push("/dashboard");
       } else {
