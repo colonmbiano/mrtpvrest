@@ -38,6 +38,7 @@ export default function OnboardingPage() {
       .then(data => {
         if (!data) return;
         if (data.isOnboarded) { router.replace("/admin"); return; }
+        if (!data.emailVerifiedAt) { router.replace("/register?pending=true"); return; }
         setTenantName(data.name || "");
         setLoading(false);
       })
