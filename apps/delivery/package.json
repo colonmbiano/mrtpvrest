@@ -8,5 +8,10 @@
     "start": "next start -p 3004",
     "lint": "next lint",
     "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "14.2.35",
+    "react": "^18",
+    "react-dom": "^18"
   }
 }
