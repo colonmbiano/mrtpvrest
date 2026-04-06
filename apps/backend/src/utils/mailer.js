@@ -9,6 +9,7 @@ function createTransport() {
     host:   process.env.SMTP_HOST   || 'smtp.hostinger.com',
     port:   parseInt(process.env.SMTP_PORT || '465'),
     secure: process.env.SMTP_SECURE !== 'false', // true por defecto en Hostinger
+    family: 4, // forzar IPv4 — Railway no tiene salida IPv6
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
