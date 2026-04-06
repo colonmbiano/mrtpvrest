@@ -1,32 +1,22 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// mailer.js — Servicio de email compartido (nodemailer + Hostinger SMTP)
+// mailer.js — Servicio de email via Resend (HTTP API, no SMTP)
+// Railway bloquea puertos SMTP (465/587) — Resend usa HTTPS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const nodemailer = require('nodemailer')
+const { Resend } = require('resend')
 
-function createTransport() {
-  return nodemailer.createTransport({
-    host:       process.env.SMTP_HOST || 'smtp.hostinger.com',
-    port:       587,
-    secure:     false,   // false = STARTTLS (Railway bloquea 465/SSL)
-    requireTLS: true,
-    family:     4,       // forzar IPv4 — Railway no tiene salida IPv6
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  })
-}
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 async function sendEmail(to, subject, html) {
-  if (!process.env.SMTP_USER) {
-    console.log(`[mailer] Skipped (no SMTP): ${to} — ${subject}`)
+  if (!process.env.RESEND_API_KEY) {
+    console.log(`[mailer] Skipped (no RESEND_API_KEY): ${to} — ${subject}`)
     return
   }
   const from = `${process.env.SMTP_FROM_NAME || 'MRTPVREST'} <${process.env.SMTP_USER}>`
-  const transport = createTransport()
-  await transport.sendMail({ from, to, subject, html })
-  console.log(`[mailer] Enviado → ${to}`)
+  const { data, error } = await resend.emails.send({ from, to, subject, html })
+  if (error) throw new Error(error.message)
+  console.log(`[mailer] Enviado → ${to} (id: ${data.id})`)
+  return data
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────

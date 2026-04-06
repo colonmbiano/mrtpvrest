@@ -31,6 +31,7 @@
       "nodemailer": "^8.0.4",
       "openai": "^6.33.0",
       "prisma": "^5.10.0",
+      "resend": "^6.10.0",
       "socket.io": "^4.7.4",
       "web-push": "^3.6.7",
       "zod": "^3.22.4"
