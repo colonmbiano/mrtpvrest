@@ -14,3 +14,5 @@ const nextConfig = {
   },
 }
 module.exports = nextConfig
+
+// last deploy: abril 2026
