@@ -42,6 +42,8 @@ router.get('/me', async (req, res) => {
       primaryColor:   tenant.primaryColor,
       onboardingStep: tenant.onboardingStep,
       onboardingDone: tenant.onboardingDone,
+      businessType:   tenant.businessType,
+      isOnboarded:    tenant.isOnboarded,
       restaurants:    tenant.restaurants,
       subscription: sub ? {
         status:      sub.status,
@@ -55,6 +57,39 @@ router.get('/me', async (req, res) => {
   } catch (e) {
     console.error('GET /tenant/me:', e)
     res.status(500).json({ error: 'Error al obtener datos del tenant' })
+  }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH /api/tenant/me/business-type — elige tipo de negocio (onboarding)
+// ─────────────────────────────────────────────────────────────────────────────
+const VALID_BUSINESS_TYPES = ['RESTAURANT', 'GROCERY', 'BUTCHER', 'POULTRY', 'OTHER']
+
+router.patch('/me/business-type', async (req, res) => {
+  const tenantId = req.user.tenantId
+  if (!tenantId) return res.status(400).json({ error: 'Usuario no asociado a ningún tenant' })
+
+  const { businessType } = req.body
+  if (!businessType || !VALID_BUSINESS_TYPES.includes(businessType)) {
+    return res.status(400).json({
+      error: `businessType inválido. Valores permitidos: ${VALID_BUSINESS_TYPES.join(', ')}`
+    })
+  }
+
+  try {
+    const tenant = await prisma.tenant.update({
+      where: { id: tenantId },
+      data:  { businessType, isOnboarded: true },
+      select: {
+        id: true, name: true, slug: true,
+        businessType: true, isOnboarded: true,
+        onboardingStep: true, onboardingDone: true,
+      }
+    })
+    res.json(tenant)
+  } catch (e) {
+    console.error('PATCH /tenant/me/business-type:', e)
+    res.status(500).json({ error: 'Error al guardar el tipo de negocio' })
   }
 })
 

@@ -25,6 +25,12 @@ model Tenant {
   primaryColor   String?
   onboardingStep Int      @default(0)
   onboardingDone Boolean  @default(false)
+  businessType   String?              // RESTAURANT | GROCERY | BUTCHER | POULTRY | OTHER
+  isOnboarded    Boolean  @default(false)
+
+  emailVerifiedAt         DateTime?
+  emailVerificationToken  String?   @unique
+  emailVerificationExpiry DateTime?
 
   subscription   Subscription?
   restaurants    Restaurant[]

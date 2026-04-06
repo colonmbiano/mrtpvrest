@@ -1,10 +1,12 @@
 ﻿const express    = require('express')
 const bcrypt     = require('bcryptjs')
 const jwt        = require('jsonwebtoken')
+const crypto     = require('crypto')
 const { z }      = require('zod')
 const prisma     = require('../utils/prisma')
 const { authenticate } = require('../middleware/auth.middleware')
 const rateLimit  = require('express-rate-limit')
+const { sendEmail, verificationEmailHtml } = require('../utils/mailer')
 
 const router = express.Router()
 
@@ -204,6 +206,25 @@ router.post('/register-tenant', registerLimiter, async (req, res) => {
       data: { token: refreshToken, userId: user.id, expiresAt: new Date(Date.now() + 30*24*60*60*1000) }
     })
 
+    // Generar token de verificación de email (24h)
+    const verificationToken  = crypto.randomBytes(32).toString('hex')
+    const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: {
+        emailVerificationToken:  verificationToken,
+        emailVerificationExpiry: verificationExpiry,
+      }
+    })
+
+    // Enviar email (sin bloquear la respuesta)
+    const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/verify-email?token=${verificationToken}`
+    sendEmail(
+      email.toLowerCase(),
+      `Verifica tu cuenta de ${restaurantName} — MRTPVREST`,
+      verificationEmailHtml(ownerName, restaurantName, verifyUrl)
+    ).catch(err => console.error('[register-tenant] Error enviando email:', err.message))
+
     res.status(201).json({
       user: {
         id:    user.id,
@@ -234,6 +255,77 @@ router.post('/register-tenant', registerLimiter, async (req, res) => {
     if (e.code === 'P2002') return res.status(409).json({ error: 'El email o nombre ya está registrado' })
     console.error('Error en /auth/register-tenant:', e)
     res.status(500).json({ error: 'Error al registrar. Intenta de nuevo.' })
+  }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VERIFICAR EMAIL — GET /api/auth/verify-email/:token
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/verify-email/:token', async (req, res) => {
+  const { token } = req.params
+  if (!token) return res.status(400).json({ error: 'Token requerido' })
+
+  try {
+    const tenant = await prisma.tenant.findFirst({
+      where: { emailVerificationToken: token }
+    })
+
+    if (!tenant) {
+      return res.status(404).json({ error: 'Token inválido o ya fue usado' })
+    }
+
+    if (tenant.emailVerificationExpiry && tenant.emailVerificationExpiry < new Date()) {
+      return res.status(410).json({ error: 'El enlace ha expirado. Solicita uno nuevo.' })
+    }
+
+    const updated = await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: {
+        emailVerifiedAt:         new Date(),
+        emailVerificationToken:  null,
+        emailVerificationExpiry: null,
+      },
+      select: { isOnboarded: true }
+    })
+
+    res.json({ ok: true, message: 'Email verificado correctamente', isOnboarded: updated.isOnboarded })
+  } catch (e) {
+    console.error('Error en /verify-email:', e)
+    res.status(500).json({ error: 'Error al verificar' })
+  }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REENVIAR EMAIL DE VERIFICACIÓN — POST /api/auth/resend-verification
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/resend-verification', authenticate, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { tenant: true }
+    })
+    if (!user?.tenant) return res.status(404).json({ error: 'Tenant no encontrado' })
+    if (user.tenant.emailVerifiedAt) return res.status(400).json({ error: 'El email ya está verificado' })
+
+    const verificationToken  = crypto.randomBytes(32).toString('hex')
+    const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000)
+
+    await prisma.tenant.update({
+      where: { id: user.tenant.id },
+      data: { emailVerificationToken: verificationToken, emailVerificationExpiry: verificationExpiry }
+    })
+
+    const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/verify-email?token=${verificationToken}`
+    await sendEmail(
+      user.tenant.ownerEmail,
+      `Verifica tu cuenta de ${user.tenant.name} — MRTPVREST`,
+      verificationEmailHtml(user.name, user.tenant.name, verifyUrl)
+    )
+
+    res.json({ ok: true, message: 'Email reenviado' })
+  } catch (e) {
+    console.error('Error en /resend-verification:', e)
+    res.status(500).json({ error: 'Error al reenviar' })
   }
 })
 
