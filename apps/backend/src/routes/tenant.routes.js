@@ -43,8 +43,9 @@ router.get('/me', async (req, res) => {
       onboardingStep: tenant.onboardingStep,
       onboardingDone: tenant.onboardingDone,
       businessType:   tenant.businessType,
-      isOnboarded:    tenant.isOnboarded,
-      restaurants:    tenant.restaurants,
+      isOnboarded:     tenant.isOnboarded,
+      emailVerifiedAt: tenant.emailVerifiedAt,
+      restaurants:     tenant.restaurants,
       subscription: sub ? {
         status:      sub.status,
         plan:        sub.plan?.displayName,
