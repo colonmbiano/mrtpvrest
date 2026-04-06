@@ -12,7 +12,7 @@ async function sendEmail(to, subject, html) {
     console.log(`[mailer] Skipped (no RESEND_API_KEY): ${to} — ${subject}`)
     return
   }
-  const from = `${process.env.SMTP_FROM_NAME || 'MRTPVREST'} <${process.env.SMTP_USER}>`
+  const from = `${process.env.SMTP_FROM_NAME || 'MRTPVREST'} <mrtpvrest@masterburguers.com>`
   const { data, error } = await resend.emails.send({ from, to, subject, html })
   if (error) throw new Error(error.message)
   console.log(`[mailer] Enviado → ${to} (id: ${data.id})`)
