@@ -71,7 +71,9 @@ export default function MenuPage() {
   const [search, setSearch] = useState("");
 
   // IA Escaneo
-  const [isScanning, setIsScanning] = useState(false);
+  const [scanState, setScanState] = useState<{
+    active: boolean; currentFile: string; current: number; total: number; error: string | null;
+  }>({ active: false, currentFile: '', current: 0, total: 0, error: null });
 
   // Complementos
   const [complements, setComplements] = useState<any[]>([]);
@@ -95,65 +97,66 @@ export default function MenuPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // ── IA: Escanear Menú (CORREGIDO PARA MÚLTIPLES IMÁGENES) ────────────────
+  // ── IA: Escanear Menú ────────────────────────────────────────────────────
   async function handleAIScan(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    setIsScanning(true);
+    const fileNames = Array.from(files).map(f => f.name);
+    setScanState({ active: true, currentFile: fileNames[0], current: 1, total: files.length, error: null });
+
+    // Cicla entre los nombres de archivo mientras espera la respuesta de la IA
+    let fileIdx = 0;
+    const cycleInterval = setInterval(() => {
+      fileIdx = (fileIdx + 1) % fileNames.length;
+      setScanState(p => (!p.error ? { ...p, currentFile: fileNames[fileIdx], current: fileIdx + 1 } : p));
+    }, 1200);
+
     try {
       const fd = new FormData();
-      // Añadimos todos los archivos al FormData usando la clave 'images'
-      for (let i = 0; i < files.length; i++) {
-        fd.append("images", files[i]);
-      }
+      for (let i = 0; i < files.length; i++) fd.append("images", files[i]);
 
       const { data } = await api.post("/api/ai/scan-menu", fd, {
         headers: { "Content-Type": "multipart/form-data" }
       });
 
-      alert(`🤖 IA Detectó: ${data.data.items?.length || 0} platillos. Procesando carga...`);
-
+      clearInterval(cycleInterval);
       const { categories: aiCats, items: aiItems } = data.data;
 
-      // 1. Crear categorías que no existan
+      // Fase 2: importar categorías
+      setScanState(p => ({ ...p, currentFile: 'Creando categorías...', current: 0, total: aiItems?.length || 0 }));
       let currentCats = [...cats];
       if (aiCats) {
         for (const catName of aiCats) {
           const exists = currentCats.find(c => c.name.toLowerCase() === catName.toLowerCase());
           if (!exists) {
-            try {
-              const res = await api.post("/api/menu/categories", { name: catName });
-              currentCats.push(res.data);
-            } catch (err) { console.error("Error creando categoria IA", err); }
+            try { const res = await api.post("/api/menu/categories", { name: catName }); currentCats.push(res.data); }
+            catch (err) { console.error("Error creando categoria IA", err); }
           }
         }
       }
 
-      // 2. Crear artículos
+      // Fase 3: importar platillos con progreso
       if (aiItems) {
-        for (const item of aiItems) {
+        for (let i = 0; i < aiItems.length; i++) {
+          const item = aiItems[i];
+          setScanState(p => ({ ...p, currentFile: item.name, current: i + 1 }));
           const category = currentCats.find(c => c.name.toLowerCase() === (item.category || "").toLowerCase());
           try {
             await api.post("/api/menu/items", {
-              name: item.name,
-              description: item.description,
-              price: item.price || 0,
-              categoryId: category?.id || currentCats[0]?.id,
-              isPopular: false
+              name: item.name, description: item.description,
+              price: item.price || 0, categoryId: category?.id || currentCats[0]?.id, isPopular: false
             });
           } catch (err) { console.error("Error creando item IA", err); }
         }
       }
 
       fetchData();
-      alert("✅ Menú cargado exitosamente desde las imágenes.");
+      setScanState({ active: false, currentFile: '', current: 0, total: 0, error: null });
     } catch (error: any) {
-      console.error(error);
-      alert(error.response?.data?.error || "Error al procesar con IA");
+      clearInterval(cycleInterval);
+      setScanState(p => ({ ...p, error: error.response?.data?.error || error.message || "Error al procesar con IA" }));
     } finally {
-      setIsScanning(false);
-      // Limpiar el input para permitir volver a subir
       e.target.value = "";
     }
   }
@@ -383,10 +386,10 @@ export default function MenuPage() {
           <p className="text-xs text-gray-500 uppercase font-bold tracking-widest mt-1">Gestión de artículos y categorías</p>
         </div>
         <div className="flex gap-3">
-          {/* BOTÓN IA ESCANEO (CORREGIDO CON MULTIPLE) */}
-          <label className={`px-4 py-2 rounded-xl text-sm font-black flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-lg ${isScanning ? 'bg-orange-200 text-black animate-pulse' : 'bg-orange-500 text-white shadow-orange-500/20'}`}>
-            {isScanning ? "🤖 Escaneando..." : "🤖 Escaneo Inteligente (IA)"}
-            {!isScanning && <input type="file" accept="image/*" multiple onChange={handleAIScan} className="hidden" />}
+          {/* BOTÓN IA ESCANEO */}
+          <label className={`px-4 py-2 rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 shadow-lg ${scanState.active ? 'bg-orange-200 text-black cursor-not-allowed' : 'bg-orange-500 text-white shadow-orange-500/20 cursor-pointer'}`}>
+            🤖 Escaneo Inteligente (IA)
+            {!scanState.active && <input type="file" accept="image/*" multiple onChange={handleAIScan} className="hidden" />}
           </label>
 
           <button onClick={() => openForm()}
@@ -449,7 +452,58 @@ export default function MenuPage() {
         </div>
       )}
 
-      {/* Modal Formulario... (Lo mantengo igual que en tu archivo original) */}
+      {/* Overlay IA Escaneo */}
+      {scanState.active && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.75)' }}>
+          <style>{`
+            @keyframes ai-scan-bar {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(500%); }
+            }
+          `}</style>
+          <div className="rounded-2xl p-8 w-full max-w-sm mx-4 text-center flex flex-col items-center gap-5"
+            style={{ background: 'var(--surf)', border: '1px solid var(--border)' }}>
+            {scanState.error ? (
+              <>
+                <div className="text-4xl">❌</div>
+                <h2 className="font-syne font-black text-xl">Error al escanear</h2>
+                <p className="text-sm px-2" style={{ color: 'var(--muted)' }}>{scanState.error}</p>
+                <button
+                  onClick={() => setScanState({ active: false, currentFile: '', current: 0, total: 0, error: null })}
+                  className="px-6 py-2.5 rounded-xl font-bold text-sm"
+                  style={{ background: 'var(--gold)', color: '#000' }}>
+                  Cerrar
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="text-5xl animate-bounce">🤖</div>
+                <div>
+                  <h2 className="font-syne font-black text-xl">Analizando con IA...</h2>
+                  <p className="text-sm mt-1" style={{ color: 'var(--muted)' }}>No cierres esta ventana</p>
+                </div>
+                <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'var(--surf2)' }}>
+                  <div className="h-full w-1/3 rounded-full"
+                    style={{ background: 'var(--gold)', animation: 'ai-scan-bar 1.5s infinite ease-in-out' }} />
+                </div>
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                  Procesando:{' '}
+                  <span className="font-bold" style={{ color: 'var(--text)' }}>{scanState.currentFile}</span>
+                  {scanState.total > 0 && ` (${scanState.current} de ${scanState.total})`}
+                </p>
+                <div className="flex gap-2">
+                  {[0, 1, 2].map(i => (
+                    <div key={i} className="w-2.5 h-2.5 rounded-full animate-bounce"
+                      style={{ background: 'var(--gold)', animationDelay: `${i * 0.18}s` }} />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Formulario */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" style={{background:"rgba(0,0,0,0.8)"}}>
           <div className="w-full max-w-lg rounded-2xl border my-4" style={{background:"var(--surf)",borderColor:"var(--border)"}}>
