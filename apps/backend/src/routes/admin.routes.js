@@ -89,7 +89,7 @@ router.put('/config', authenticate, requireAdmin, async (req, res) => {
 
 router.get('/locations', authenticate, requireAdmin, async (req, res) => {
   try {
-    const locations = await prisma.location.findMany({ where: { restaurantId: req.restaurantId } });
+    const locations = await prisma.location.findMany({ where: { restaurantId: req.user.restaurantId } });
     res.json(locations);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
