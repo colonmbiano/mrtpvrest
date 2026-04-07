@@ -16,7 +16,7 @@ const INTEGRATION_TYPES = {
 router.get('/', authenticate, requireAdmin, async (req, res) => {
   try {
     const configs = await prisma.integrationConfig.findMany({
-      where: { restaurantId: req.restaurantId }
+      where: { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId }
     });
 
     // Enmascarar credenciales sensibles antes de enviar al frontend
@@ -46,7 +46,7 @@ router.put('/:type', authenticate, requireAdmin, async (req, res) => {
     const integration = await prisma.integrationConfig.upsert({
       where: {
         restaurantId_type: {
-          restaurantId: req.restaurantId,
+          restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId,
           type
         }
       },
@@ -56,7 +56,7 @@ router.put('/:type', authenticate, requireAdmin, async (req, res) => {
         config: JSON.stringify(config)
       },
       create: {
-        restaurantId: req.restaurantId,
+        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId,
         type,
         enabled: enabled || false,
         mode: mode || 'sandbox',
