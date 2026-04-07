@@ -98,14 +98,14 @@ router.post('/locations', authenticate, requireAdmin, async (req, res) => {
   try {
     const { name, slug, address, phone } = req.body;
     const restaurant = await prisma.restaurant.findUnique({
-      where: { id: req.restaurantId },
+      where: { id: req.user.restaurantId },
       include: { _count: { select: { locations: true } } }
     });
     if (restaurant._count.locations >= restaurant.maxLocations) {
       return res.status(403).json({ error: `Límite de sucursales alcanzado (${restaurant.maxLocations}).` });
     }
     const location = await prisma.location.create({
-      data: { restaurantId: req.restaurantId, name, slug: slug.toLowerCase(), address, phone, ticketConfig: { create: { businessName: name } } }
+      data: { restaurantId: req.user.restaurantId, name, slug: slug.toLowerCase(), address, phone, ticketConfig: { create: { businessName: name } } }
     });
     res.json(location);
   } catch (e) { res.status(500).json({ error: e.message }); }
