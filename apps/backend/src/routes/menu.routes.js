@@ -10,7 +10,7 @@ router.get('/categories', async (req, res) => {
     const categories = await prisma.category.findMany({
       where: {
         isActive: true,
-        restaurantId: req.restaurantId // Filtrado por Tenant
+        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId // Filtrado por Tenant
       },
       orderBy: { sortOrder: 'asc' }
     })
@@ -26,7 +26,7 @@ router.post('/categories', authenticate, requireAdmin, async (req, res) => {
       data: {
         name,
         isActive: true,
-        restaurantId: req.restaurantId // Asignación automática al Tenant
+        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId // Asignación automática al Tenant
       }
     });
     res.json(cat);
@@ -39,7 +39,7 @@ router.put('/categories/:id', authenticate, requireAdmin, async (req, res) => {
     const cat = await prisma.category.update({
       where: {
         id: req.params.id,
-        restaurantId: req.restaurantId // Seguridad: Solo si pertenece a este Tenant
+        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId // Seguridad: Solo si pertenece a este Tenant
       },
       data: req.body
     });
@@ -52,7 +52,7 @@ router.delete('/categories/:id', authenticate, requireAdmin, async (req, res) =>
     await prisma.category.delete({
       where: {
         id: req.params.id,
-        restaurantId: req.restaurantId
+        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId
       }
     });
     res.json({ ok: true });
@@ -66,7 +66,7 @@ router.get('/items', async (req, res) => {
     const { categoryId } = req.query
     const where = {
       isAvailable: true,
-      restaurantId: req.restaurantId // Filtrado por Tenant
+      restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId // Filtrado por Tenant
     }
     if (categoryId) where.categoryId = categoryId
     const items = await prisma.menuItem.findMany({
@@ -86,7 +86,7 @@ router.get('/items/:id', async (req, res) => {
     const item = await prisma.menuItem.findUnique({
       where: {
         id: req.params.id,
-        restaurantId: req.restaurantId
+        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId
       },
       include: {
         category: true,
@@ -105,7 +105,7 @@ router.post('/items', authenticate, requireAdmin, async (req, res) => {
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
 
     // Verificamos que la categoría pertenezca al restaurante
-    const category = await prisma.category.findUnique({ where: { id: categoryId, restaurantId: req.restaurantId } });
+    const category = await prisma.category.findUnique({ where: { id: categoryId, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId } });
     if (!category) return res.status(400).json({ error: 'Categoría inválida para este restaurante' });
 
     const item = await prisma.menuItem.create({
@@ -117,7 +117,7 @@ router.post('/items', authenticate, requireAdmin, async (req, res) => {
         price: parseFloat(price),
         preparationTime: preparationTime || 15,
         isPopular: isPopular || false,
-        restaurantId: req.restaurantId // Asignación al Tenant
+        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId // Asignación al Tenant
       },
     })
     res.status(201).json(item)
@@ -130,7 +130,7 @@ router.put('/items/:id', authenticate, requireAdmin, async (req, res) => {
     const item = await prisma.menuItem.update({
       where: {
         id: req.params.id,
-        restaurantId: req.restaurantId
+        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId
       },
       data: {
         ...(name !== undefined && { name }),
@@ -151,7 +151,7 @@ router.delete('/items/:id', authenticate, requireAdmin, async (req, res) => {
     await prisma.menuItem.delete({
       where: {
         id: req.params.id,
-        restaurantId: req.restaurantId
+        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId
       }
     });
     res.json({ ok: true });
@@ -166,7 +166,7 @@ router.get('/:id/variants', async (req, res) => {
     const variants = await prisma.menuItemVariant.findMany({
       where: {
         menuItemId: req.params.id,
-        menuItem: { restaurantId: req.restaurantId } // Doble check de seguridad
+        menuItem: { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId } // Doble check de seguridad
       },
       orderBy: { sortOrder: 'asc' }
     });
@@ -181,7 +181,7 @@ router.get('/:id/variants', async (req, res) => {
 router.get('/variant-templates', authenticate, requireAdmin, async (req, res) => {
   try {
     const templates = await prisma.variantTemplate.findMany({
-      where: { restaurantId: req.restaurantId }, // Filtrado por Tenant
+      where: { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId }, // Filtrado por Tenant
       include: { options: { orderBy: { sortOrder: 'asc' } } },
       orderBy: { createdAt: 'desc' }
     });
@@ -196,7 +196,7 @@ router.post('/variant-templates', authenticate, requireAdmin, async (req, res) =
     const template = await prisma.variantTemplate.create({
       data: {
         name,
-        restaurantId: req.restaurantId,
+        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId,
         options: { create: options.map((o, i) => ({ name: o.name, price: parseFloat(o.price) || 0, sortOrder: i })) }
       },
       include: { options: true }

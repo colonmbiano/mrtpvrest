@@ -6,7 +6,7 @@ const router  = express.Router()
 router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
   try {
     const { from, to } = req.query;
-    const where = { restaurantId: req.restaurantId, status: { not: 'CANCELLED' } };
+    const where = { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId, status: { not: 'CANCELLED' } };
     if (from || to) {
       where.createdAt = {};
       if (from) where.createdAt.gte = new Date(from);
@@ -75,7 +75,7 @@ router.get('/by-day', authenticate, requireAdmin, async (req, res) => {
     const days  = parseInt(req.query.days) || 30
     const from  = new Date(); from.setDate(from.getDate() - days + 1); from.setHours(0,0,0,0)
     const orders = await prisma.order.findMany({
-      where: { restaurantId: req.restaurantId, status: { not: 'CANCELLED' }, createdAt: { gte: from } },
+      where: { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId, status: { not: 'CANCELLED' }, createdAt: { gte: from } },
       select: { total: true, createdAt: true }
     })
 

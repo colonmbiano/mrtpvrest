@@ -45,7 +45,7 @@ router.get('/admin', authenticate, requireAdmin, async (req, res) => {
 
     const orders = await prisma.order.findMany({
       where: {
-        restaurantId: req.restaurantId,
+        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId,
         locationId: req.locationId
       },
       orderBy: { createdAt: 'desc' },
@@ -64,7 +64,7 @@ router.get('/admin', authenticate, requireAdmin, async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
-      where: { id: req.params.id, restaurantId: req.restaurantId },
+      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
       include: {
         user: { select: { name: true, phone: true, email: true } },
         items: { include: { menuItem: true } },
@@ -97,7 +97,7 @@ router.post('/tpv', authenticate, requireAdmin, async (req, res) => {
 
     const createdItems = await Promise.all(items.map(async (item) => {
       const menuItem = await prisma.menuItem.findUnique({
-        where: { id: item.menuItemId, restaurantId: req.restaurantId }
+        where: { id: item.menuItemId, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId }
       });
       return {
         menuItemId: item.menuItemId,
@@ -111,7 +111,7 @@ router.post('/tpv', authenticate, requireAdmin, async (req, res) => {
 
     const order = await prisma.order.create({
       data: {
-        restaurantId: req.restaurantId,
+        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId,
         locationId: req.locationId,
         orderNumber,
         status: status || 'CONFIRMED',
@@ -128,11 +128,11 @@ router.post('/tpv', authenticate, requireAdmin, async (req, res) => {
       include: { items: { include: { menuItem: { include: { category: true } } } } },
     });
 
-    await discountInventory(prisma, items, order.id, req.restaurantId, req.locationId);
+    await discountInventory(prisma, items, order.id, req.user?.restaurantId || req.user?.restaurantId || req.restaurantId, req.locationId);
 
     const io = req.app.get('io');
     if (io) {
-      io.to(`restaurant:${req.restaurantId}:location:${req.locationId}:admins`).emit('order:new', order);
+      io.to(`restaurant:${req.user?.restaurantId || req.user?.restaurantId || req.restaurantId}:location:${req.locationId}:admins`).emit('order:new', order);
     }
 
     res.json(order);
@@ -144,7 +144,7 @@ router.post('/tpv', authenticate, requireAdmin, async (req, res) => {
 router.post('/:id/confirm-payment', authenticate, requireAdmin, async (req, res) => {
   try {
     const order = await prisma.order.update({
-      where: { id: req.params.id, restaurantId: req.restaurantId },
+      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
       data: { status: 'CONFIRMED', paidAt: new Date(), paymentStatus: 'PAID' },
       include: { user: true }
     });
@@ -155,7 +155,7 @@ router.post('/:id/confirm-payment', authenticate, requireAdmin, async (req, res)
 router.post('/:id/print-bill', authenticate, requireAdmin, async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
-      where: { id: req.params.id, restaurantId: req.restaurantId },
+      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
       include: { items: { include: { menuItem: true } } }
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
@@ -173,7 +173,7 @@ router.post('/:id/print-bill', authenticate, requireAdmin, async (req, res) => {
 router.put('/:id/confirm-cash', authenticate, async (req, res) => {
   try {
     const order = await prisma.order.update({
-      where: { id: req.params.id, restaurantId: req.restaurantId },
+      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
       data: {
         cashCollected: true,
         cashCollectedAt: new Date(),

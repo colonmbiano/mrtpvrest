@@ -49,7 +49,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
 
     // PIN único dentro de la sucursal (o marca, por seguridad)
     const existing = await prisma.employee.findFirst({
-      where: { pin, location: { restaurantId: req.restaurantId } }
+      where: { pin, location: { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId } }
     });
     if (existing) return res.status(400).json({ error: 'Este PIN ya está en uso en tu restaurante' });
 
@@ -88,7 +88,7 @@ router.post('/login', async (req, res) => {
 
     const jwt = require('jsonwebtoken');
     const token = jwt.sign(
-      { id: emp.id, role: emp.role, restaurantId: req.restaurantId, locationId: req.locationId },
+      { id: emp.id, role: emp.role, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId, locationId: req.locationId },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     );
