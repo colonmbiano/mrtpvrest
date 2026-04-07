@@ -55,8 +55,8 @@ export default function BrandConfigPage() {
       // 2. Guardar Config Operativa
       await api.put("/api/admin/config", config);
       alert("¡Identidad de marca actualizada!");
-    } catch {
-      alert("Error al guardar");
+    } catch (err: any) {
+      alert("Error: " + (err?.response?.data?.error || err?.response?.data?.message || err?.message || JSON.stringify(err)));
     } finally {
       setSaving(false);
     }
