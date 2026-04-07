@@ -16,7 +16,7 @@ const SECTIONS = [
     items: [
       { href: "/admin",                      icon: "📊", label: "Dashboard" },
       { href: "/admin/restaurant-dashboard", icon: "🍽️", label: "Rest. Dashboard" },
-      { href: "/admin/clientes",             icon: "🏢", label: "Mi Marca" },
+      { href: "/admin/mi-marca",             icon: "🏢", label: "Mi Marca" },
       { href: "/admin/reportes",             icon: "📈", label: "Reportes" },
       { href: "/admin/integraciones",        icon: "🔌", label: "Integraciones" },
     ],
