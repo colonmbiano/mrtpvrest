@@ -43,7 +43,6 @@ const SECTIONS = [
       { href: "/admin/restaurant-dashboard", icon: "🍽️", label: "Rest. Dashboard" },
       { href: "/admin/clientes",             icon: "🏢", label: "Mi Marca" },
       { href: "/admin/reportes",             icon: "📈", label: "Reportes" },
-      { href: "/admin/impresoras",           icon: "🖨️", label: "Impresoras" },
       { href: "/admin/integraciones",        icon: "🔌", label: "Integraciones" },
     ],
   },
