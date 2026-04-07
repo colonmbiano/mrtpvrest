@@ -1,6 +1,6 @@
 # 🌮 Restaurante — Backend API
 
-Plataforma de pedidos online con integración Loyverse, impresión automática y WhatsApp.
+Plataforma de pedidos online con impresión automática y WhatsApp.
 
 ---
 
@@ -37,7 +37,7 @@ JWT_SECRET="escribe-cualquier-texto-largo-aqui-min-32-chars"
 JWT_REFRESH_SECRET="otro-texto-largo-diferente-al-de-arriba"
 ```
 
-> El resto (Loyverse, WhatsApp, impresora) lo configuras en fases posteriores.
+> El resto (WhatsApp, impresora) lo configuras en fases posteriores.
 
 ### Paso 4 — Crear las tablas en la BD
 
@@ -136,14 +136,13 @@ backend/
 │   │   └── auth.middleware.js   ← Verificación JWT
 │   ├── routes/
 │   │   ├── auth.routes.js       ← Login, registro, refresh
-│   │   ├── menu.routes.js       ← Menú + sync Loyverse
+│   │   ├── menu.routes.js       ← Menú
 │   │   ├── orders.routes.js     ← ⭐ Flujo principal de pedidos
 │   │   ├── loyalty.routes.js    ← Puntos y cupones
 │   │   ├── payments.routes.js   ← Conekta (stub)
 │   │   ├── reports.routes.js    ← Dashboard ventas
 │   │   └── admin.routes.js      ← Config restaurante
 │   ├── services/
-│   │   ├── loyverse.service.js  ← Crear receipt en Loyverse
 │   │   ├── printer.service.js   ← Imprimir ticket ESC/POS
 │   │   ├── whatsapp.service.js  ← Mensajes WhatsApp
 │   │   └── loyalty.service.js   ← Lógica de puntos
@@ -161,7 +160,6 @@ backend/
 |---|---|
 | `DATABASE_URL` | **Ahora (Fase 1)** |
 | `JWT_SECRET` | **Ahora (Fase 1)** |
-| `LOYVERSE_API_TOKEN` | Fase 4 |
 | `WHAPI_TOKEN` | Fase 4 |
 | `PRINTER_IP` | Fase 4 |
 | `CONEKTA_SECRET_KEY` | Fase 3 |

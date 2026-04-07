@@ -56,18 +56,15 @@ async function main() {
 
   // 3. Categorías
   const catDefs = [
-    { name: 'Hamburguesas', sortOrder: 1, loyverseId: 'seed-hamburguesas' },
-    { name: 'Papas',        sortOrder: 2, loyverseId: 'seed-papas-cat'    },
-    { name: 'Bebidas',      sortOrder: 3, loyverseId: 'seed-bebidas'      },
-    { name: 'Postres',      sortOrder: 4, loyverseId: 'seed-postres'      },
+    { name: 'Hamburguesas', sortOrder: 1 },
+    { name: 'Papas',        sortOrder: 2 },
+    { name: 'Bebidas',      sortOrder: 3 },
+    { name: 'Postres',      sortOrder: 4 },
   ]
 
   for (const cat of catDefs) {
-    await prisma.category.upsert({
-      where:  { loyverseId: cat.loyverseId },
-      create: { ...cat, restaurantId: rid },
-      update: {},
-    })
+    const existing = await prisma.category.findFirst({ where: { name: cat.name, restaurantId: rid } })
+    if (!existing) await prisma.category.create({ data: { ...cat, restaurantId: rid } })
   }
   console.log('✅ Categorías creadas')
 
@@ -81,34 +78,32 @@ async function main() {
       categoryId: hamburguesas.id, restaurantId: rid,
       name: 'Hamburguesa Clásica',
       description: 'Carne de res, lechuga, tomate, queso americano',
-      price: 89, isPopular: true, loyverseId: 'seed-burg-clasica',
+      price: 89, isPopular: true,
     },
     {
       categoryId: hamburguesas.id, restaurantId: rid,
       name: 'Hamburguesa BBQ',
       description: 'Carne de res, tocino, queso gouda, salsa BBQ',
-      price: 109, isPopular: true, loyverseId: 'seed-burg-bbq',
+      price: 109, isPopular: true,
     },
     {
       categoryId: papas.id, restaurantId: rid,
       name: 'Papas Fritas',
       description: 'Papas naturales fritas, sal de mar',
-      price: 45, loyverseId: 'seed-papas',
+      price: 45,
     },
     {
       categoryId: bebidas.id, restaurantId: rid,
       name: 'Refresco',
       description: 'Coca-Cola, Sprite o Fanta 355ml',
-      price: 30, loyverseId: 'seed-refresco',
+      price: 30,
     },
   ]
 
   for (const p of platillos) {
-    await prisma.menuItem.upsert({
-      where:  { loyverseId: p.loyverseId },
-      create: p,
-      update: { price: p.price },
-    })
+    const existing = await prisma.menuItem.findFirst({ where: { name: p.name, restaurantId: rid } })
+    if (!existing) await prisma.menuItem.create({ data: p })
+    else await prisma.menuItem.update({ where: { id: existing.id }, data: { price: p.price } })
   }
   console.log('✅ Platillos creados')
 

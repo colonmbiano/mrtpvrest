@@ -307,7 +307,6 @@ model Category {
   imageUrl     String?
   sortOrder    Int        @default(0)
   isActive     Boolean    @default(true)
-  loyverseId   String?    @unique
   items        MenuItem[]
 
   createdAt DateTime @default(now())
@@ -331,7 +330,6 @@ model MenuItem {
   isPopular       Boolean              @default(false)
   hasVariants     Boolean              @default(false)
   preparationTime Int                  @default(15)
-  loyverseId      String?              @unique
 
   modifierGroups  ModifierGroup[]
   orderItems      OrderItem[]
@@ -447,7 +445,6 @@ model Order {
 
   conektaOrderId  String?
   conektaChargeId String?
-  loyverseReceiptId String?
   estimatedMinutes Int?
 
   items         OrderItem[]
