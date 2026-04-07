@@ -9,6 +9,19 @@ import api from "@/lib/api";
 
 const SECTIONS = [
   {
+    key: "bo",
+    label: "Back Office",
+    icon: "📊",
+    accent: "#22c55e",
+    items: [
+      { href: "/admin",                      icon: "📊", label: "Dashboard" },
+      { href: "/admin/restaurant-dashboard", icon: "🍽️", label: "Rest. Dashboard" },
+      { href: "/admin/clientes",             icon: "🏢", label: "Mi Marca" },
+      { href: "/admin/reportes",             icon: "📈", label: "Reportes" },
+      { href: "/admin/integraciones",        icon: "🔌", label: "Integraciones" },
+    ],
+  },
+  {
     key: "menu",
     label: "Menú",
     icon: "🍔",
@@ -31,19 +44,6 @@ const SECTIONS = [
       { href: "/admin/turnos",            icon: "🕒", label: "Turnos de caja" },
       { href: "/admin/caja-repartidores", icon: "💵", label: "Caja Rep." },
       { href: "/admin/rastreo",           icon: "📍", label: "Rastreo GPS" },
-    ],
-  },
-  {
-    key: "bo",
-    label: "Back Office",
-    icon: "📊",
-    accent: "#22c55e",
-    items: [
-      { href: "/admin",                      icon: "📊", label: "Dashboard" },
-      { href: "/admin/restaurant-dashboard", icon: "🍽️", label: "Rest. Dashboard" },
-      { href: "/admin/clientes",             icon: "🏢", label: "Mi Marca" },
-      { href: "/admin/reportes",             icon: "📈", label: "Reportes" },
-      { href: "/admin/integraciones",        icon: "🔌", label: "Integraciones" },
     ],
   },
 ];
