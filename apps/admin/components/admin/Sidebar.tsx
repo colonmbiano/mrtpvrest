@@ -128,7 +128,7 @@ export default function Sidebar() {
           >
             {!imgError ? (
               <Image src="/logo.png" alt="Logo" width={36} height={36} className="rounded-xl object-cover" onError={() => setImgError(true)} />
-            ) : "M"}
+            ) : <span className="text-[10px]">MB</span>}
           </div>
           <div>
             <div className="font-black text-xs leading-tight tracking-tighter" style={{ color: "var(--text)", fontFamily: "var(--font-display, sans-serif)" }}>
