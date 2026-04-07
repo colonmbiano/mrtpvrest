@@ -63,7 +63,7 @@ export default function MenuPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"" });
+  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[] as string[] });
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -164,7 +164,7 @@ export default function MenuPage() {
   function openForm(item?: any) {
     if (item) {
       setEditItem(item);
-      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"" });
+      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", isPromo:item.isPromo||false, activeDays:item.activeDays||[] });
       setImagePreview(item.imageUrl||"");
       api.get(`/api/menu/items/${item.id}`).then(r => {
         setComplements(r.data.complements || []);
@@ -172,7 +172,7 @@ export default function MenuPage() {
       });
     } else {
       setEditItem(null);
-      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"" });
+      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[] });
       setImagePreview("");
       setComplements([]);
       setVariants([]);
@@ -547,6 +547,53 @@ export default function MenuPage() {
                     <option value="">Seleccionar...</option>
                     {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
+                </div>
+
+                {/* Promoción por día */}
+                <div className="col-span-2">
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-xs font-bold uppercase tracking-wider" style={{color:"var(--muted)"}}>Promoción por día</span>
+                    <button
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, isPromo: !p.isPromo }))}
+                      className="relative w-11 h-6 rounded-full transition-all"
+                      style={{ background: form.isPromo ? '#ff5c35' : 'var(--surf2)', border: '1px solid var(--border)' }}>
+                      <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
+                        style={{ transform: form.isPromo ? 'translateX(20px)' : 'translateX(0)' }} />
+                    </button>
+                  </div>
+                  {form.isPromo && (
+                    <div className="mt-2 flex gap-1.5 flex-wrap">
+                      {[
+                        { key: 'MONDAY',    label: 'Lun' },
+                        { key: 'TUESDAY',   label: 'Mar' },
+                        { key: 'WEDNESDAY', label: 'Mié' },
+                        { key: 'THURSDAY',  label: 'Jue' },
+                        { key: 'FRIDAY',    label: 'Vie' },
+                        { key: 'SATURDAY',  label: 'Sáb' },
+                        { key: 'SUNDAY',    label: 'Dom' },
+                      ].map(({ key, label }) => {
+                        const active = form.activeDays.includes(key)
+                        return (
+                          <button key={key} type="button"
+                            onClick={() => setForm(p => ({
+                              ...p,
+                              activeDays: active
+                                ? p.activeDays.filter(d => d !== key)
+                                : [...p.activeDays, key]
+                            }))}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                            style={{
+                              background: active ? '#ff5c35' : 'var(--surf2)',
+                              color: active ? '#fff' : 'var(--muted)',
+                              border: `1px solid ${active ? '#ff5c35' : 'var(--border)'}`
+                            }}>
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 

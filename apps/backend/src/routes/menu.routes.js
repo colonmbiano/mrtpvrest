@@ -66,18 +66,30 @@ router.get('/items', async (req, res) => {
     const { categoryId } = req.query
     const where = {
       isAvailable: true,
-      restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId // Filtrado por Tenant
+      restaurantId: req.user?.restaurantId || req.restaurantId
     }
     if (categoryId) where.categoryId = categoryId
+
     const items = await prisma.menuItem.findMany({
       where,
       include: {
         category: { select: { id: true, name: true } },
         modifierGroups: { include: { modifiers: true } }
       },
-      orderBy: [{ isPopular: 'desc' }, { name: 'asc' }],
+      orderBy: [{ isPromo: 'desc' }, { isPopular: 'desc' }, { name: 'asc' }],
     })
-    res.json(items)
+
+    // Filtrar promos por día actual en timezone México
+    const todayDay = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Mexico_City', weekday: 'long'
+    }).format(new Date()).toUpperCase() // → "MONDAY", "TUESDAY", etc.
+
+    const filtered = items.filter(item => {
+      if (!item.isPromo) return true
+      return item.activeDays.includes(todayDay)
+    })
+
+    res.json(filtered)
   } catch (e) { res.status(500).json({ error: 'Error al obtener menu' }) }
 })
 
@@ -101,11 +113,10 @@ router.get('/items/:id', async (req, res) => {
 
 router.post('/items', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { categoryId, name, description, imageUrl, price, preparationTime, isPopular } = req.body
+    const { categoryId, name, description, imageUrl, price, preparationTime, isPopular, isPromo, activeDays } = req.body
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
 
-    // Verificamos que la categoría pertenezca al restaurante
-    const category = await prisma.category.findUnique({ where: { id: categoryId, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId } });
+    const category = await prisma.category.findUnique({ where: { id: categoryId, restaurantId: req.user?.restaurantId || req.restaurantId } });
     if (!category) return res.status(400).json({ error: 'Categoría inválida para este restaurante' });
 
     const item = await prisma.menuItem.create({
@@ -117,7 +128,9 @@ router.post('/items', authenticate, requireAdmin, async (req, res) => {
         price: parseFloat(price),
         preparationTime: preparationTime || 15,
         isPopular: isPopular || false,
-        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId // Asignación al Tenant
+        isPromo: isPromo || false,
+        activeDays: activeDays || [],
+        restaurantId: req.user?.restaurantId || req.restaurantId
       },
     })
     res.status(201).json(item)
@@ -126,11 +139,11 @@ router.post('/items', authenticate, requireAdmin, async (req, res) => {
 
 router.put('/items/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { name, description, price, isAvailable, isPopular, imageUrl, categoryId } = req.body
+    const { name, description, price, isAvailable, isPopular, imageUrl, categoryId, isPromo, activeDays } = req.body
     const item = await prisma.menuItem.update({
       where: {
         id: req.params.id,
-        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId
+        restaurantId: req.user?.restaurantId || req.restaurantId
       },
       data: {
         ...(name !== undefined && { name }),
@@ -140,6 +153,8 @@ router.put('/items/:id', authenticate, requireAdmin, async (req, res) => {
         ...(isPopular !== undefined && { isPopular }),
         ...(imageUrl !== undefined && { imageUrl }),
         ...(categoryId !== undefined && { categoryId }),
+        ...(isPromo !== undefined && { isPromo }),
+        ...(activeDays !== undefined && { activeDays }),
       },
     })
     res.json(item)
