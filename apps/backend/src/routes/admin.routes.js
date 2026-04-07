@@ -42,13 +42,10 @@ router.put('/global-config', authenticate, requireSuperAdmin, async (req, res) =
 
 router.get('/config', authenticate, requireAdmin, async (req, res) => {
   try {
-    if (!req.restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
-
+    const restaurantId = req.user.restaurantId;
     const config = await prisma.restaurantConfig.findUnique({
-      where: { restaurantId: req.restaurantId }
+      where: { restaurantId }
     });
-
-    // IMPORTANTE: Devolvemos el nombre de la marca (Restaurant) junto con la config
     res.json({
       ...(config || {}),
       name: req.restaurant?.name || 'Nuevo Restaurante',
@@ -61,7 +58,7 @@ router.put('/brand', authenticate, requireAdmin, async (req, res) => {
   try {
     const { name, logoUrl } = req.body;
     const updated = await prisma.restaurant.update({
-      where: { id: req.restaurantId },
+      where: { id: req.user.restaurantId },
       data: { ...(name && { name }), ...(logoUrl !== undefined && { logoUrl }) }
     });
     res.json(updated);
@@ -70,12 +67,21 @@ router.put('/brand', authenticate, requireAdmin, async (req, res) => {
 
 router.put('/config', authenticate, requireAdmin, async (req, res) => {
   try {
+    const restaurantId = req.user.restaurantId;
+    const VALID_FIELDS = [
+      'phone','whatsappNumber','address','deliveryFee','freeDeliveryFrom',
+      'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
+      'pointsPerTen','pointsValuePesos'
+    ];
+    const data = Object.fromEntries(
+      Object.entries(req.body).filter(([k]) => VALID_FIELDS.includes(k))
+    );
     const config = await prisma.restaurantConfig.upsert({
-      where: { restaurantId: req.restaurantId },
-      create: { restaurantId: req.restaurantId, ...req.body },
-      update: req.body
-    })
-    res.json(config)
+      where:  { restaurantId },
+      create: { restaurantId, ...data },
+      update: data
+    });
+    res.json(config);
   } catch (e) { res.status(500).json({ error: 'Error al guardar configuracion' }) }
 })
 
