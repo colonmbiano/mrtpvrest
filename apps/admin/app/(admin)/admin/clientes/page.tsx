@@ -18,10 +18,12 @@ export default function BrandConfigPage() {
   });
 
   useEffect(() => {
-    api.get("/api/admin/config").then(res => {
-      setConfig(res.data);
-      setLoading(false);
-    });
+    api.get("/api/admin/config")
+      .then(res => {
+        setConfig(prev => ({ ...prev, ...res.data }));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
