@@ -9,15 +9,6 @@ import api from "@/lib/api";
 
 const SECTIONS = [
   {
-    key: "tpv",
-    label: "Punto de Venta",
-    icon: "🖥️",
-    accent: "#ff5c35",
-    items: [
-      { href: "/admin/pedidos", icon: "📋", label: "Pedidos" },
-    ],
-  },
-  {
     key: "menu",
     label: "Menú",
     icon: "🍔",
