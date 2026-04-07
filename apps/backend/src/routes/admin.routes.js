@@ -40,7 +40,7 @@ router.put('/global-config', authenticate, requireSuperAdmin, async (req, res) =
 
 // ── CONFIGURACIÓN DEL RESTAURANTE (PARA EL DUEÑO Y LA APP) ────────────────
 
-router.get('/config', async (req, res) => {
+router.get('/config', authenticate, requireAdmin, async (req, res) => {
   try {
     if (!req.restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
 
