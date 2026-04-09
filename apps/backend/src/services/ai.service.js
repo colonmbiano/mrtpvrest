@@ -3,9 +3,12 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 /**
  * Servicio de IA consolidado para Menú e Inventario
  */
-async function getGeminiModel() {
+async function getGeminiModel(json = false) {
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
-  return genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+  return genAI.getGenerativeModel({
+    model: "gemini-flash-latest",
+    ...(json && { generationConfig: { responseMimeType: "application/json" } }),
+  });
 }
 
 /**
@@ -30,22 +33,26 @@ async function scanMenuFromImages(base64Images) {
  */
 async function scanInventoryFromImages(base64Images) {
   try {
-    const model = await getGeminiModel();
-    const prompt = `Analiza estas fotos de una factura, ticket de compra o lista de inventario.
-    Extrae los ingredientes o productos, su cantidad recibida y el costo unitario si aparece.
-    Devuelve el resultado ESTRICTAMENTE en formato JSON:
-    {
-      "ingredients": [
-        { "name": "nombre ingrediente", "quantity": 0, "unit": "pz/kg/gr/lt", "cost": 0 }
-      ]
-    }.
-    Solo JSON puro. Consolida todo en una sola lista.`;
+    const model = await getGeminiModel(true);
+    const prompt = `Eres un asistente de inventario para restaurantes. Analiza esta foto de un ticket, factura o lista de compras.
+
+Por cada producto que identifiques, extrae EXACTAMENTE estos 3 datos:
+- name: nombre del producto en español, claro y conciso (ej. "Tomate", "Pechuga de Pollo")
+- totalCost: el precio TOTAL pagado por ese producto en esa compra (número, sin símbolo $)
+- quantityFound: la cantidad de piezas/unidades/kilos que se compraron según el ticket (número)
+
+Responde ÚNICAMENTE con este JSON, sin texto extra:
+{
+  "ingredients": [
+    { "name": "string", "totalCost": 0, "quantityFound": 0 }
+  ]
+}
+
+Si no puedes determinar un valor, usa 0. Consolida duplicados en una sola entrada.`;
 
     const imageParts = base64Images.map(base64 => ({ inlineData: { data: base64, mimeType: "image/jpeg" } }));
     const result = await model.generateContent([prompt, ...imageParts]);
-    const text = result.response.text();
-
-    return JSON.parse(text.replace(/```json|```/g, "").trim());
+    return JSON.parse(result.response.text());
   } catch (error) {
     console.error('Error IA Inventario:', error);
     throw error;

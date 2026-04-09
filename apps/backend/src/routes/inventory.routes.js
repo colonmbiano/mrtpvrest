@@ -53,8 +53,13 @@ router.post('/ingredients', authenticate, requireAdmin, async (req, res) => {
   try {
     const locationId = req.headers['x-location-id'] || req.query.locationId;
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+    const { name, unit, stock, minStock, supplierId, purchaseUnit, purchaseCost, conversionFactor } = req.body;
+    const factor = parseFloat(conversionFactor) || 1;
+    const cost = purchaseCost ? parseFloat(purchaseCost) / factor : parseFloat(req.body.cost) || 0;
     const ingredient = await prisma.ingredient.create({
-      data: { ...req.body, locationId }
+      data: { name, unit, stock: parseFloat(stock) || 0, minStock: parseFloat(minStock) || 0,
+        cost, purchaseUnit: purchaseUnit || null, purchaseCost: purchaseCost ? parseFloat(purchaseCost) : null,
+        conversionFactor: factor, supplierId: supplierId || null, locationId }
     });
     res.json(ingredient);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -63,10 +68,19 @@ router.post('/ingredients', authenticate, requireAdmin, async (req, res) => {
 router.put('/ingredients/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const locationId = req.headers['x-location-id'] || req.query.locationId;
-    const VALID = ['name', 'unit', 'cost', 'stock', 'minStock', 'supplierId'];
-    const data = Object.fromEntries(
-      Object.entries(req.body).filter(([k]) => VALID.includes(k))
-    );
+    const { name, unit, stock, minStock, supplierId, purchaseUnit, purchaseCost, conversionFactor } = req.body;
+    const factor = parseFloat(conversionFactor) || 1;
+    const cost = purchaseCost ? parseFloat(purchaseCost) / factor : parseFloat(req.body.cost) || 0;
+    const data = {
+      ...(name !== undefined && { name }),
+      ...(unit !== undefined && { unit }),
+      ...(stock !== undefined && { stock: parseFloat(stock) }),
+      ...(minStock !== undefined && { minStock: parseFloat(minStock) }),
+      ...(supplierId !== undefined && { supplierId: supplierId || null }),
+      ...(purchaseUnit !== undefined && { purchaseUnit: purchaseUnit || null }),
+      ...(purchaseCost !== undefined && { purchaseCost: parseFloat(purchaseCost), conversionFactor: factor, cost }),
+      ...(purchaseCost === undefined && req.body.cost !== undefined && { cost: parseFloat(req.body.cost) }),
+    };
     const ingredient = await prisma.ingredient.update({
       where: { id: req.params.id, locationId },
       data
@@ -85,6 +99,58 @@ router.delete('/ingredients/:id', authenticate, requireAdmin, async (req, res) =
     res.json({ ok: true });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Ingrediente no encontrado' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/bulk-confirm', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0)
+      return res.status(400).json({ error: 'No hay ingredientes para confirmar' });
+
+    const results = await Promise.all(items.map(async item => {
+      const { name, totalCost, quantityFound, unit } = item;
+      const factor = parseFloat(quantityFound) || 1;
+      const cost = parseFloat(totalCost) / factor;
+      const addedStock = parseFloat(quantityFound) || 0;
+
+      const existing = await prisma.ingredient.findFirst({
+        where: { locationId, name: { equals: name, mode: 'insensitive' } }
+      });
+
+      if (existing) {
+        return prisma.ingredient.update({
+          where: { id: existing.id },
+          data: {
+            cost,
+            purchaseCost: parseFloat(totalCost),
+            conversionFactor: factor,
+            stock: existing.stock + addedStock,
+            ...(unit && { unit }),
+          }
+        });
+      }
+
+      return prisma.ingredient.create({
+        data: {
+          locationId, name,
+          unit: unit || 'pz',
+          stock: addedStock,
+          minStock: 0,
+          cost,
+          purchaseCost: parseFloat(totalCost),
+          conversionFactor: factor,
+        }
+      });
+    }));
+
+    res.json({ ok: true, count: results.length });
+  } catch (e) {
+    console.error('bulk-confirm error:', e);
     res.status(500).json({ error: e.message });
   }
 });
