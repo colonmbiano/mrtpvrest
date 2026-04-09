@@ -60,6 +60,35 @@ router.post('/ingredients', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.put('/ingredients/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    const VALID = ['name', 'unit', 'cost', 'stock', 'minStock', 'supplierId'];
+    const data = Object.fromEntries(
+      Object.entries(req.body).filter(([k]) => VALID.includes(k))
+    );
+    const ingredient = await prisma.ingredient.update({
+      where: { id: req.params.id, locationId },
+      data
+    });
+    res.json(ingredient);
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Ingrediente no encontrado' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete('/ingredients/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    await prisma.ingredient.delete({ where: { id: req.params.id, locationId } });
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Ingrediente no encontrado' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/movements', authenticate, requireAdmin, async (req, res) => {
   res.json([]); // TODO: Implementar lógica de movimientos
 });
