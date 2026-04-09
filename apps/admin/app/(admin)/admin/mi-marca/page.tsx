@@ -203,15 +203,17 @@ export default function BrandConfigPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      // 1. Guardar Marca (Nombre y Logo)
-      await api.put("/api/admin/brand", { name: config.name, logoUrl: config.logoUrl });
-      // 2. Guardar Config Operativa
-      await api.put("/api/admin/config", config);
+      // 1. Guardar Marca (Nombre y Logo) — captura config actual en closure
+      const current = config;
+      await api.put("/api/admin/brand", { name: current.name, logoUrl: current.logoUrl });
+      // 2. Guardar Config Operativa — excluir logoUrl para no enviar base64 dos veces
+      const { logoUrl: _logo, ...configWithoutLogo } = current;
+      await api.put("/api/admin/config", configWithoutLogo);
       // 3. Forzar recarga para que el Sidebar refleje nombre y logo actualizados
       window.location.reload();
     } catch (err: any) {
-      alert("Error: " + (err?.response?.data?.error || err?.response?.data?.message || err?.message || JSON.stringify(err)));
-    } finally {
+      const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message || "Error desconocido";
+      alert("Error al guardar: " + msg);
       setSaving(false);
     }
   }
@@ -260,23 +262,23 @@ export default function BrandConfigPage() {
           <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 space-y-6">
             <div>
               <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Nombre del Restaurante</label>
-              <input type="text" value={config.name} onChange={(e) => setConfig({...config, name: e.target.value})} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all font-black text-lg" />
+              <input type="text" value={config.name} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, name: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all font-black text-lg" />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Teléfono</label>
-                <input type="text" value={config.phone} onChange={(e) => setConfig({...config, phone: e.target.value})} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+                <input type="text" value={config.phone} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, phone: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
               </div>
               <div>
                 <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">WhatsApp</label>
-                <input type="text" value={config.whatsappNumber} onChange={(e) => setConfig({...config, whatsappNumber: e.target.value})} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+                <input type="text" value={config.whatsappNumber} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, whatsappNumber: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
               </div>
             </div>
 
             <div>
               <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Dirección Principal</label>
-              <input type="text" value={config.address} onChange={(e) => setConfig({...config, address: e.target.value})} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+              <input type="text" value={config.address} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, address: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
             </div>
           </div>
 
