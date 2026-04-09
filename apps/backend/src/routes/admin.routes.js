@@ -111,6 +111,30 @@ router.post('/locations', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.put('/locations/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, address, phone } = req.body;
+    const location = await prisma.location.findUnique({ where: { id: req.params.id } });
+    if (!location || location.restaurantId !== req.user.restaurantId)
+      return res.status(404).json({ error: 'Sucursal no encontrada' });
+    const updated = await prisma.location.update({
+      where: { id: req.params.id },
+      data: { ...(name && { name }), ...(address !== undefined && { address }), ...(phone !== undefined && { phone }) }
+    });
+    res.json(updated);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/locations/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const location = await prisma.location.findUnique({ where: { id: req.params.id } });
+    if (!location || location.restaurantId !== req.user.restaurantId)
+      return res.status(404).json({ error: 'Sucursal no encontrada' });
+    await prisma.location.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── GESTIÓN DE TENANTS (SUPER_ADMIN) ──────────────────
 
 router.get('/tenants', authenticate, requireSuperAdmin, async (req, res) => {

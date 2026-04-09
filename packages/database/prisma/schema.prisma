@@ -334,6 +334,8 @@ model MenuItem {
   price           Float
   isAvailable     Boolean              @default(true)
   isPopular       Boolean              @default(false)
+  isPromo         Boolean              @default(false)
+  activeDays      String[]
   hasVariants     Boolean              @default(false)
   preparationTime Int                  @default(15)
 
