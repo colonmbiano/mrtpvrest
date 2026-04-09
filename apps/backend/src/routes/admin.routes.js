@@ -42,7 +42,8 @@ router.put('/global-config', authenticate, requireSuperAdmin, async (req, res) =
 
 router.get('/config', authenticate, requireAdmin, async (req, res) => {
   try {
-    const restaurantId = req.user.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
     const config = await prisma.restaurantConfig.findUnique({
       where: { restaurantId }
     });
@@ -56,17 +57,19 @@ router.get('/config', authenticate, requireAdmin, async (req, res) => {
 
 router.put('/brand', authenticate, requireAdmin, async (req, res) => {
   try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
     const { name, logoUrl } = req.body;
     const data = {};
     if (name !== undefined && name !== null) data.name = name;
     if (logoUrl !== undefined) data.logoUrl = logoUrl || null;
     const updated = await prisma.restaurant.update({
-      where: { id: req.user.restaurantId },
+      where: { id: restaurantId },
       data,
       select: { id: true, name: true, logoUrl: true }
     });
     res.json(updated);
-  } catch (e) { res.status(500).json({ error: 'Error al actualizar marca' }) }
+  } catch (e) { res.status(500).json({ error: 'Error al actualizar marca: ' + e.message }) }
 })
 
 router.put('/config', authenticate, requireAdmin, async (req, res) => {
