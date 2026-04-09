@@ -57,6 +57,7 @@ export default function Sidebar() {
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
   const [imgError, setImgError]     = useState(false);
   const [open, setOpen]             = useState<Record<string, boolean>>({});
+  const [brand, setBrand]           = useState<{ name: string; logoUrl: string | null }>({ name: "", logoUrl: null });
 
   useEffect(() => {
     const currentUser = getUser();
@@ -65,14 +66,18 @@ export default function Sidebar() {
     if (currentUser) {
       (async () => {
         try {
-          const res = await api.get("/api/admin/locations");
-          setLocations(res.data);
+          const [locRes, brandRes] = await Promise.all([
+            api.get("/api/admin/locations"),
+            api.get("/api/admin/config"),
+          ]);
+          setLocations(locRes.data);
+          setBrand({ name: brandRes.data.name || "", logoUrl: brandRes.data.logoUrl || null });
           const saved = localStorage.getItem("locationId");
-          if (saved && res.data.some((l: any) => l.id === saved)) {
+          if (saved && locRes.data.some((l: any) => l.id === saved)) {
             setActiveLocationId(saved);
-          } else if (res.data.length > 0) {
-            localStorage.setItem("locationId", res.data[0].id);
-            setActiveLocationId(res.data[0].id);
+          } else if (locRes.data.length > 0) {
+            localStorage.setItem("locationId", locRes.data[0].id);
+            setActiveLocationId(locRes.data[0].id);
           }
         } catch {
           // mantener locations vacío, isLoadingLocations → false
@@ -123,16 +128,18 @@ export default function Sidebar() {
       <div className="px-4 py-5 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex items-center gap-3 mb-5">
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-black text-sm"
+            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-black text-sm overflow-hidden flex-shrink-0"
             style={{ background: "linear-gradient(135deg,#ff5c35,#ff8c6b)" }}
           >
-            {!imgError ? (
-              <Image src="/logo.png" alt="Logo" width={36} height={36} className="rounded-xl object-cover" onError={() => setImgError(true)} />
-            ) : <span className="text-[10px]">MB</span>}
+            {brand.logoUrl && !imgError ? (
+              <Image src={brand.logoUrl} alt="Logo" width={36} height={36} className="rounded-xl object-cover w-full h-full" onError={() => setImgError(true)} />
+            ) : (
+              <span className="text-[10px]">{brand.name ? brand.name.slice(0,2).toUpperCase() : "MR"}</span>
+            )}
           </div>
-          <div>
-            <div className="font-black text-xs leading-tight tracking-tighter" style={{ color: "var(--text)", fontFamily: "var(--font-display, sans-serif)" }}>
-              MRTPV<span style={{ color: "#ff5c35" }}>REST</span>
+          <div className="min-w-0">
+            <div className="font-black text-xs leading-tight tracking-tighter truncate" style={{ color: "var(--text)", fontFamily: "var(--font-display, sans-serif)" }}>
+              {brand.name || <span>MRTPV<span style={{ color: "#ff5c35" }}>REST</span></span>}
             </div>
             <div className="text-[9px] font-bold tracking-widest uppercase" style={{ color: "var(--muted)" }}>
               Control Panel
