@@ -57,9 +57,13 @@ router.get('/config', authenticate, requireAdmin, async (req, res) => {
 router.put('/brand', authenticate, requireAdmin, async (req, res) => {
   try {
     const { name, logoUrl } = req.body;
+    const data = {};
+    if (name !== undefined && name !== null) data.name = name;
+    if (logoUrl !== undefined) data.logoUrl = logoUrl || null;
     const updated = await prisma.restaurant.update({
       where: { id: req.user.restaurantId },
-      data: { ...(name && { name }), ...(logoUrl !== undefined && { logoUrl }) }
+      data,
+      select: { id: true, name: true, logoUrl: true }
     });
     res.json(updated);
   } catch (e) { res.status(500).json({ error: 'Error al actualizar marca' }) }

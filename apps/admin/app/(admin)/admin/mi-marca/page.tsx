@@ -209,7 +209,8 @@ export default function BrandConfigPage() {
       await api.put("/api/admin/brand", { name: config.name, logoUrl: config.logoUrl });
       // 2. Guardar Config Operativa
       await api.put("/api/admin/config", config);
-      alert("¡Identidad de marca actualizada!");
+      // 3. Forzar recarga para que el Sidebar refleje nombre y logo actualizados
+      window.location.reload();
     } catch (err: any) {
       alert("Error: " + (err?.response?.data?.error || err?.response?.data?.message || err?.message || JSON.stringify(err)));
     } finally {
