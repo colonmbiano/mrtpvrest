@@ -181,24 +181,22 @@ export default function BrandConfigPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploading(true);
-    const fd = new FormData();
-    fd.append("image", file);
-
-    try {
-      const { data } = await api.post("/api/upload/image", fd, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-      setConfig({ ...config, logoUrl: data.url });
-    } catch (error) {
-      alert("Error al subir el logo");
-    } finally {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string; // "data:image/png;base64,..."
+      setConfig(prev => ({ ...prev, logoUrl: base64 }));
       setUploading(false);
-    }
+    };
+    reader.onerror = () => {
+      alert("Error al leer la imagen");
+      setUploading(false);
+    };
+    reader.readAsDataURL(file);
   };
 
   async function handleSave(e: React.FormEvent) {
