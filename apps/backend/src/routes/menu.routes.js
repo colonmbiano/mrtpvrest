@@ -220,6 +220,58 @@ router.post('/variant-templates', authenticate, requireAdmin, async (req, res) =
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Menú Público (sin auth) ────────────────────────────────────────────────
+
+router.get('/public/:slug/menu', async (req, res) => {
+  try {
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { slug: req.params.slug },
+      select: { id: true, name: true, logoUrl: true, isActive: true }
+    })
+    if (!restaurant || !restaurant.isActive)
+      return res.status(404).json({ error: 'Restaurante no encontrado' })
+
+    const todayDay = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Mexico_City', weekday: 'long'
+    }).format(new Date()).toUpperCase()
+
+    const categories = await prisma.category.findMany({
+      where: { restaurantId: restaurant.id, isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        items: {
+          where: { isAvailable: true },
+          orderBy: [{ isPromo: 'desc' }, { isPopular: 'desc' }, { name: 'asc' }],
+          select: {
+            id: true, name: true, description: true,
+            price: true, imageUrl: true,
+            isPopular: true, isPromo: true, activeDays: true,
+          }
+        }
+      }
+    })
+
+    // Filtrar promos inactivas hoy de cada categoría
+    const filtered = categories
+      .map(cat => ({
+        ...cat,
+        items: cat.items.filter(item =>
+          !item.isPromo || item.activeDays.includes(todayDay)
+        )
+      }))
+      .filter(cat => cat.items.length > 0)
+
+    res.json({
+      restaurant: { name: restaurant.name, logoUrl: restaurant.logoUrl },
+      categories: filtered,
+      todayDay,
+    })
+  } catch (e) {
+    console.error('GET /menu/public/:slug/menu', e)
+    res.status(500).json({ error: 'Error al obtener menú' })
+  }
+})
+
 // ... Repetir lógica para DELETE y UPDATE ...
 
 module.exports = router

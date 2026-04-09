@@ -7,8 +7,10 @@ interface MenuItem {
   name: string
   description?: string
   price: number
-  photo?: string
+  imageUrl?: string
   isAvailable: boolean
+  isPromo: boolean
+  activeDays: string[]
 }
 
 interface Category {
@@ -18,7 +20,9 @@ interface Category {
 }
 
 interface MenuData {
+  restaurant: { name: string; logoUrl?: string }
   categories: Category[]
+  todayDay: string
 }
 
 async function getMenu(slug: string): Promise<MenuData | null> {
@@ -34,6 +38,34 @@ async function getMenu(slug: string): Promise<MenuData | null> {
   }
 }
 
+function ItemCard({ item, isPromoToday }: { item: MenuItem; isPromoToday: boolean }) {
+  return (
+    <div className="relative flex gap-4 bg-white rounded-xl border border-gray-100 p-4 hover:border-orange-200 hover:shadow-sm transition-all">
+      {isPromoToday && (
+        <span className="absolute top-3 left-3 bg-orange-500 text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shadow-sm">
+          🔥 Promo
+        </span>
+      )}
+      <div className={`flex-1 min-w-0 ${isPromoToday ? 'pt-5' : ''}`}>
+        <h3 className="font-semibold text-gray-900 text-sm">{item.name}</h3>
+        {item.description && (
+          <p className="text-xs text-gray-400 mt-1 line-clamp-2">{item.description}</p>
+        )}
+        <p className="mt-2 font-bold text-orange-500 text-sm">
+          ${item.price.toFixed(2)}
+        </p>
+      </div>
+      {item.imageUrl && (
+        <img
+          src={item.imageUrl}
+          alt={item.name}
+          className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+        />
+      )}
+    </div>
+  )
+}
+
 export default async function RestaurantPage({
   params,
 }: {
@@ -43,8 +75,27 @@ export default async function RestaurantPage({
 
   if (!menu) notFound()
 
-  const availableCategories = menu.categories.filter(
-    (cat) => cat.items.some((item) => item.isAvailable)
+  // Items que son promos activas hoy (backend ya filtró las inactivas,
+  // así que todo item con isPromo=true en la respuesta es válido hoy)
+  const promoItems = menu.categories
+    .flatMap(cat => cat.items)
+    .filter(item => item.isPromo)
+
+  const promoIds = new Set(promoItems.map(i => i.id))
+
+  // Categoría virtual al inicio si hay promos hoy
+  const virtualPromoCategory: Category | null =
+    promoItems.length > 0
+      ? { id: '__promos__', name: '🔥 Promociones de Hoy', items: promoItems }
+      : null
+
+  const allCategories = [
+    ...(virtualPromoCategory ? [virtualPromoCategory] : []),
+    ...menu.categories,
+  ]
+
+  const availableCategories = allCategories.filter(
+    cat => cat.items.some(item => item.isAvailable !== false)
   )
 
   if (availableCategories.length === 0) {
@@ -65,29 +116,13 @@ export default async function RestaurantPage({
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {category.items
-              .filter((item) => item.isAvailable)
-              .map((item) => (
-                <div
+              .filter(item => item.isAvailable !== false)
+              .map(item => (
+                <ItemCard
                   key={item.id}
-                  className="flex gap-4 bg-white rounded-xl border border-gray-100 p-4 hover:border-orange-200 hover:shadow-sm transition-all"
-                >
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-900 text-sm">{item.name}</h3>
-                    {item.description && (
-                      <p className="text-xs text-gray-400 mt-1 line-clamp-2">{item.description}</p>
-                    )}
-                    <p className="mt-2 font-bold text-orange-500 text-sm">
-                      ${item.price.toFixed(2)}
-                    </p>
-                  </div>
-                  {item.photo && (
-                    <img
-                      src={item.photo}
-                      alt={item.name}
-                      className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
-                    />
-                  )}
-                </div>
+                  item={item}
+                  isPromoToday={promoIds.has(item.id)}
+                />
               ))}
           </div>
         </section>

@@ -3,6 +3,161 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import Image from "next/image";
 
+type Location = { id: string; name: string; slug: string; address?: string; phone?: string };
+
+function slugify(text: string) {
+  return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+}
+
+function LocationsSection() {
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<Location | null>(null);
+  const [form, setForm] = useState({ name: "", address: "", phone: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const fetchLocations = () => {
+    setLoading(true);
+    api.get("/api/admin/locations")
+      .then(r => setLocations(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchLocations(); }, []);
+
+  const openCreate = () => { setEditing(null); setForm({ name: "", address: "", phone: "" }); setError(""); setShowModal(true); };
+  const openEdit = (loc: Location) => { setEditing(loc); setForm({ name: loc.name, address: loc.address || "", phone: loc.phone || "" }); setError(""); setShowModal(true); };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) { setError("El nombre es requerido"); return; }
+    setSaving(true); setError("");
+    try {
+      if (editing) {
+        await api.put(`/api/admin/locations/${editing.id}`, form);
+      } else {
+        await api.post("/api/admin/locations", { ...form, slug: slugify(form.name) });
+      }
+      setShowModal(false);
+      fetchLocations();
+      if (!editing) window.location.reload();
+    } catch (err: any) {
+      setError(err?.response?.data?.error || "Error al guardar");
+    } finally { setSaving(false); }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`¿Eliminar sucursal "${name}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api.delete(`/api/admin/locations/${id}`);
+      fetchLocations();
+      window.location.reload();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || "Error al eliminar");
+    }
+  };
+
+  return (
+    <div className="mt-12">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-black uppercase tracking-tighter">Mis Sucursales</h2>
+          <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.2em]">Administra tus puntos de venta</p>
+        </div>
+        <button
+          onClick={openCreate}
+          className="bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase tracking-widest px-5 py-3 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/20"
+        >
+          + Nueva Sucursal
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="text-gray-500 text-xs uppercase tracking-widest">Cargando...</div>
+      ) : locations.length === 0 ? (
+        <div className="bg-[#111] border border-dashed border-gray-700 rounded-[2rem] p-10 text-center">
+          <p className="text-gray-500 text-sm font-bold">Sin sucursales registradas</p>
+          <p className="text-gray-700 text-xs mt-1">Crea tu primera sucursal para comenzar a operar</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {locations.map(loc => (
+            <div key={loc.id} className="bg-[#111] border border-gray-800 rounded-[2rem] p-6 flex flex-col gap-2">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-black text-white text-base">{loc.name}</p>
+                  <p className="text-[10px] text-gray-600 font-mono mt-0.5">/{loc.slug}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => openEdit(loc)} className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-orange-400 transition-colors px-3 py-1.5 rounded-xl border border-gray-700 hover:border-orange-500/40">Editar</button>
+                  <button onClick={() => handleDelete(loc.id, loc.name)} className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-red-400 transition-colors px-3 py-1.5 rounded-xl border border-gray-700 hover:border-red-500/40">Eliminar</button>
+                </div>
+              </div>
+              {loc.address && <p className="text-xs text-gray-500">{loc.address}</p>}
+              {loc.phone && <p className="text-xs text-gray-600">{loc.phone}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 w-full max-w-md mx-4 shadow-2xl">
+            <h3 className="text-xl font-black uppercase tracking-tighter mb-6">
+              {editing ? "Editar Sucursal" : "Nueva Sucursal"}
+            </h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Nombre *</label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={form.name}
+                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  placeholder="Ej. Sucursal Centro"
+                  className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all font-bold text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Dirección</label>
+                <input
+                  type="text"
+                  value={form.address}
+                  onChange={e => setForm({ ...form, address: e.target.value })}
+                  placeholder="Ej. Av. Reforma 123"
+                  className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Teléfono</label>
+                <input
+                  type="text"
+                  value={form.phone}
+                  onChange={e => setForm({ ...form, phone: e.target.value })}
+                  placeholder="Ej. 55 1234 5678"
+                  className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold"
+                />
+              </div>
+              {error && <p className="text-red-400 text-xs font-bold ml-2">{error}</p>}
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest border border-gray-700 text-gray-400 hover:border-gray-500 transition-all">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={saving} className="flex-1 bg-orange-500 hover:bg-orange-600 py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest text-white shadow-xl shadow-orange-500/20 disabled:opacity-50 transition-all">
+                  {saving ? "Guardando..." : editing ? "Actualizar" : "Crear Sucursal"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BrandConfigPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -134,6 +289,8 @@ export default function BrandConfigPage() {
           </button>
         </div>
       </form>
+
+      <LocationsSection />
     </div>
   );
 }
