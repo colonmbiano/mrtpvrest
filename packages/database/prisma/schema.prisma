@@ -692,12 +692,15 @@ model Ingredient {
   locationId   String?
   location     Location?            @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  name         String
-  unit         String              @default("pz")
-  stock        Float               @default(0)
-  minStock     Float               @default(0)
-  cost         Float               @default(0)
-  supplierId   String?
+  name             String
+  unit             String              @default("pz")
+  stock            Float               @default(0)
+  minStock         Float               @default(0)
+  cost             Float               @default(0)
+  purchaseUnit     String?
+  purchaseCost     Float?
+  conversionFactor Float               @default(1)
+  supplierId       String?
   supplier     Supplier?           @relation(fields: [supplierId], references: [id])
   isActive     Boolean             @default(true)
   recipeItems  RecipeItem[]

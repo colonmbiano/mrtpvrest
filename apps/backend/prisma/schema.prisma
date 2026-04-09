@@ -26,6 +26,12 @@ model Tenant {
   onboardingStep Int      @default(0)
   onboardingDone Boolean  @default(false)
 
+  businessType            String?
+  emailVerifiedAt         DateTime?
+  emailVerificationToken  String?
+  emailVerificationExpiry DateTime?
+  isOnboarded             Boolean   @default(false)
+
   subscription   Subscription?
   restaurants    Restaurant[]
   users          User[]
@@ -328,6 +334,8 @@ model MenuItem {
   price           Float
   isAvailable     Boolean              @default(true)
   isPopular       Boolean              @default(false)
+  isPromo         Boolean              @default(false)
+  activeDays      String[]
   hasVariants     Boolean              @default(false)
   preparationTime Int                  @default(15)
 
@@ -684,12 +692,15 @@ model Ingredient {
   locationId   String?
   location     Location?            @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  name         String
-  unit         String              @default("pz")
-  stock        Float               @default(0)
-  minStock     Float               @default(0)
-  cost         Float               @default(0)
-  supplierId   String?
+  name             String
+  unit             String              @default("pz")
+  stock            Float               @default(0)
+  minStock         Float               @default(0)
+  cost             Float               @default(0)
+  purchaseUnit     String?
+  purchaseCost     Float?
+  conversionFactor Float               @default(1)
+  supplierId       String?
   supplier     Supplier?           @relation(fields: [supplierId], references: [id])
   isActive     Boolean             @default(true)
   recipeItems  RecipeItem[]
