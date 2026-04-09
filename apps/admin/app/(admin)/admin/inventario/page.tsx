@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import api from "@/lib/api";
 import Link from "next/link";
 
@@ -22,6 +22,9 @@ interface ShoppingList { list: ShoppingItem[]; }
 type FormState = { name: string; unit: string; stock: number | string; minStock: number | string; cost: number | string; supplierId: string; };
 
 export default function InventarioPage() {
+  const [activeLocationId, setActiveLocationId] = useState<string>(() =>
+    typeof window !== "undefined" ? localStorage.getItem("locationId") || "" : ""
+  );
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [alerts, setAlerts]           = useState<Ingredient[]>([]);
   const [movements, setMovements]     = useState<Movement[]>([]);
@@ -47,7 +50,7 @@ export default function InventarioPage() {
 
   const UNITS = ["pz","kg","g","l","ml","bolsa","lata","caja","sobre","rollo"];
 
-  async function fetchAll() {
+  const fetchAll = useCallback(async (locationId: string) => {
     try {
       const [ing, al, mov, sup] = await Promise.all([
         api.get("/api/inventory/ingredients"),
@@ -60,10 +63,24 @@ export default function InventarioPage() {
       setMovements(mov.data);
       setSuppliers(sup.data);
     } catch {}
-    setLoading(false);
-  }
+    finally { setLoading(false); }
+  }, []);
 
-  useEffect(() => { fetchAll(); }, []);
+  // Esperar a que la sucursal esté disponible antes de disparar peticiones
+  useEffect(() => {
+    if (activeLocationId) {
+      fetchAll(activeLocationId);
+      return;
+    }
+    // Escuchar cuando el Sidebar grabe el locationId en localStorage
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "locationId" && e.newValue) {
+        setActiveLocationId(e.newValue);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [activeLocationId, fetchAll]);
 
   // --- IA: Escaneo de Inventario ---
   async function handleAIScan(e: React.ChangeEvent<HTMLInputElement>) {
@@ -98,7 +115,7 @@ export default function InventarioPage() {
         } catch (err) { console.error("Error cargando ingrediente IA", err); }
       }
 
-      fetchAll();
+      fetchAll(activeLocationId);
       alert("✅ Inventario actualizado exitosamente.");
     } catch (error: any) {
       alert(error.response?.data?.error || "Error al procesar tickets con IA");
@@ -125,7 +142,7 @@ export default function InventarioPage() {
       if (editItem) await api.put("/api/inventory/ingredients/" + editItem.id, payload);
       else await api.post("/api/inventory/ingredients", payload);
       setShowForm(false);
-      fetchAll();
+      fetchAll(activeLocationId);
     } catch (err: any) { alert(err.response?.data?.error || "Error"); }
     finally { setSaving(false); }
   }
@@ -133,7 +150,7 @@ export default function InventarioPage() {
   async function deleteIngredient(id: string) {
     if (!confirm("¿Eliminar ingrediente?")) return;
     await api.delete("/api/inventory/ingredients/" + id);
-    fetchAll();
+    fetchAll(activeLocationId);
   }
 
   const filtered = ingredients.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));

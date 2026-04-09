@@ -38,9 +38,10 @@ router.put('/suppliers/:id', authenticate, requireAdmin, async (req, res) => {
 
 router.get('/ingredients', authenticate, requireAdmin, async (req, res) => {
   try {
-    if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
     const ingredients = await prisma.ingredient.findMany({
-      where: { locationId: req.locationId }, // Stock Local
+      where: { locationId },
       include: { supplier: true },
       orderBy: { name: 'asc' }
     });
@@ -50,12 +51,21 @@ router.get('/ingredients', authenticate, requireAdmin, async (req, res) => {
 
 router.post('/ingredients', authenticate, requireAdmin, async (req, res) => {
   try {
-    if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
     const ingredient = await prisma.ingredient.create({
-      data: { ...req.body, locationId: req.locationId }
+      data: { ...req.body, locationId }
     });
     res.json(ingredient);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/movements', authenticate, requireAdmin, async (req, res) => {
+  res.json([]); // TODO: Implementar lógica de movimientos
+});
+
+router.get('/alerts', authenticate, requireAdmin, async (req, res) => {
+  res.json([]); // TODO: Implementar lógica de alertas
 });
 
 // ── RECETAS (Nivel Marca) ──────────────────────────────────────────────────

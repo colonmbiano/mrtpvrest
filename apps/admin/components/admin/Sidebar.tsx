@@ -54,6 +54,7 @@ export default function Sidebar() {
   const [superAdmin, setSuperAdmin] = useState(false);
   const [locations, setLocations]   = useState<any[]>([]);
   const [activeLocationId, setActiveLocationId] = useState<string>("");
+  const [isLoadingLocations, setIsLoadingLocations] = useState(true);
   const [imgError, setImgError]     = useState(false);
   const [open, setOpen]             = useState<Record<string, boolean>>({});
 
@@ -62,16 +63,25 @@ export default function Sidebar() {
     setUser(currentUser);
     setSuperAdmin(isSuperAdmin());
     if (currentUser) {
-      api.get("/api/admin/locations").then(res => {
-        setLocations(res.data);
-        const saved = localStorage.getItem("locationId");
-        if (saved) {
-          setActiveLocationId(saved);
-        } else if (res.data.length > 0) {
-          localStorage.setItem("locationId", res.data[0].id);
-          setActiveLocationId(res.data[0].id);
+      (async () => {
+        try {
+          const res = await api.get("/api/admin/locations");
+          setLocations(res.data);
+          const saved = localStorage.getItem("locationId");
+          if (saved && res.data.some((l: any) => l.id === saved)) {
+            setActiveLocationId(saved);
+          } else if (res.data.length > 0) {
+            localStorage.setItem("locationId", res.data[0].id);
+            setActiveLocationId(res.data[0].id);
+          }
+        } catch {
+          // mantener locations vacío, isLoadingLocations → false
+        } finally {
+          setIsLoadingLocations(false);
         }
-      }).catch(() => {});
+      })();
+    } else {
+      setIsLoadingLocations(false);
     }
     setOpen(getDefaultOpen());
   }, [path]);
@@ -146,7 +156,8 @@ export default function Sidebar() {
                 color: "var(--text)",
               }}
             >
-              {locations.length === 0 && <option>Cargando...</option>}
+              {isLoadingLocations && <option>Cargando...</option>}
+              {!isLoadingLocations && locations.length === 0 && <option>Sin sucursales</option>}
               {locations.map(loc => (
                 <option key={loc.id} value={loc.id}>{loc.name}</option>
               ))}
