@@ -1,7 +1,33 @@
 const express = require('express');
+const crypto  = require('crypto');
 const { prisma } = require('@mrtpvrest/database');
 const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
 const router = express.Router();
+
+/**
+ * Verifica la firma HMAC-SHA256 del webhook de MercadoPago.
+ * Header formato: x-signature: ts=<timestamp>,v1=<hash>
+ * Cadena firmada:  id:<paymentId>;request-id:<x-request-id>;ts:<timestamp>
+ */
+function verifyMPSignature(req) {
+  const secret = process.env.MP_WEBHOOK_SECRET;
+  if (!secret) return true; // Si no hay secret configurado, saltar verificación (dev)
+
+  const xSignature  = req.headers['x-signature']  || '';
+  const xRequestId  = req.headers['x-request-id'] || '';
+  const paymentId   = req.query?.['data.id'] || req.body?.data?.id || '';
+
+  const tsMatch = xSignature.match(/ts=(\d+)/);
+  const v1Match = xSignature.match(/v1=([a-f0-9]+)/);
+  if (!tsMatch || !v1Match) return false;
+
+  const ts       = tsMatch[1];
+  const received = v1Match[1];
+  const manifest = `id:${paymentId};request-id:${xRequestId};ts:${ts}`;
+  const expected = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
+
+  return crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(received.padEnd(expected.length, '0').slice(0, expected.length), 'hex'));
+}
 
 const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN,
@@ -61,6 +87,12 @@ router.post('/create', async (req, res) => {
 
 // POST /api/payments/webhook — Notificación de MercadoPago
 router.post('/webhook', async (req, res) => {
+  // Verificar firma antes de procesar cualquier cosa
+  if (!verifyMPSignature(req)) {
+    console.warn('[webhook] Firma inválida — posible request falsificado');
+    return res.sendStatus(400);
+  }
+
   try {
     const { type, data } = req.body;
     if (type !== 'payment') { res.sendStatus(200); return; }

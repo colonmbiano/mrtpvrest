@@ -46,6 +46,7 @@ export default function EmpleadosPage() {
   const [saving, setSaving]         = useState(false);
   const [filterRole, setFilterRole] = useState("ALL");
   const [selectedEmp, setSelectedEmp] = useState<any>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [shifts, setShifts]         = useState<any[]>([]);
   const [loadingShifts, setLoadingShifts] = useState(false);
   const [activeTab, setActiveTab]   = useState<"list"|"detail">("list");
@@ -105,6 +106,24 @@ export default function EmpleadosPage() {
   }
 
   // ... (Resto del componente igual) ...
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleSelectAll() {
+    setSelectedIds(selectedIds.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map((e: any) => e.id)));
+  }
+  async function bulkToggleActive(isActive: boolean) {
+    await Promise.all([...selectedIds].map(id => api.put(`/api/employees/${id}`, { isActive }).catch(() => {})));
+    setSelectedIds(new Set()); fetchEmployees();
+  }
+  async function bulkDelete() {
+    const adminSelected = filtered.filter((e: any) => selectedIds.has(e.id) && e.role === "ADMIN");
+    if (adminSelected.length > 0) { alert("No puedes eliminar administradores."); return; }
+    if (!confirm(`¿Eliminar ${selectedIds.size} empleado(s)? Esta acción no se puede deshacer.`)) return;
+    await Promise.all([...selectedIds].map(id => api.delete(`/api/employees/${id}`).catch(() => {})));
+    setSelectedIds(new Set()); fetchEmployees();
+  }
 
   function closeForm() {
     setShowForm(false);
@@ -203,7 +222,14 @@ export default function EmpleadosPage() {
       {activeTab === "list" && (
         <>
           {/* Filtro por rol */}
-          <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+          <div className="flex gap-2 mb-4 overflow-x-auto pb-1 items-center">
+            <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold flex-shrink-0 cursor-pointer"
+              style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--muted)"}}>
+              <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
+                checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                onChange={toggleSelectAll} />
+              Seleccionar todo
+            </label>
             <button onClick={() => setFilterRole("ALL")}
               className="px-3 py-1.5 rounded-xl text-xs font-bold flex-shrink-0"
               style={{background: filterRole==="ALL" ? "var(--gold)" : "var(--surf)", color: filterRole==="ALL" ? "#000" : "var(--muted)", border:"1px solid var(--border)"}}>
@@ -229,10 +255,13 @@ export default function EmpleadosPage() {
               {filtered.map((emp: any) => {
                 const role = ROLES.find(r => r.value === emp.role);
                 const isOnShift = emp.shifts?.length > 0;
+                const sel = selectedIds.has(emp.id);
                 return (
-                  <div key={emp.id} className="rounded-2xl border overflow-hidden"
-                    style={{background:"var(--surf)", borderColor: isOnShift ? "#22c55e" : "var(--border)",
+                  <div key={emp.id} className="rounded-2xl border overflow-hidden relative"
+                    style={{background:"var(--surf)", borderColor: sel ? "var(--gold)" : isOnShift ? "#22c55e" : "var(--border)",
                       opacity: emp.isActive ? 1 : 0.5}}>
+                    <input type="checkbox" checked={sel} onChange={() => toggleSelect(emp.id)}
+                      className="absolute top-3 right-3 rounded cursor-pointer z-10 accent-[var(--gold)] w-4 h-4" />
                     <div className="p-4 flex items-center gap-3">
                       {emp.photo ? (
                         <img src={emp.photo} alt="" className="w-14 h-14 rounded-full object-cover border-2" style={{borderColor: role?.color || "var(--border)"}} />
@@ -370,6 +399,31 @@ export default function EmpleadosPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Floating Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border"
+          style={{background:"var(--surf)",borderColor:"var(--gold)",boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}>
+          <span className="text-xs font-black uppercase tracking-widest px-2 py-1 rounded-lg" style={{background:"rgba(245,166,35,0.15)",color:"var(--gold)"}}>
+            {selectedIds.size} seleccionado{selectedIds.size !== 1 ? "s" : ""}
+          </span>
+          <button onClick={() => bulkToggleActive(true)}
+            className="px-3 py-1.5 rounded-xl text-xs font-black text-green-400 border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 transition-all">
+            Activar
+          </button>
+          <button onClick={() => bulkToggleActive(false)}
+            className="px-3 py-1.5 rounded-xl text-xs font-black text-yellow-400 border border-yellow-500/30 bg-yellow-500/10 hover:bg-yellow-500/20 transition-all">
+            Desactivar
+          </button>
+          <button onClick={bulkDelete}
+            className="px-3 py-1.5 rounded-xl text-xs font-black text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all">
+            🗑️ Eliminar
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            className="w-7 h-7 rounded-xl flex items-center justify-center text-sm transition-all"
+            style={{background:"var(--surf2)",color:"var(--muted)"}}>✕</button>
         </div>
       )}
 

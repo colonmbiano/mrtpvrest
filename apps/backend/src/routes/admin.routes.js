@@ -151,10 +151,16 @@ router.delete('/locations/:id', authenticate, requireAdmin, async (req, res) => 
 
 router.get('/tenants', authenticate, requireSuperAdmin, async (req, res) => {
   try {
-    const tenants = await prisma.restaurant.findMany({
+    const tenants = await prisma.tenant.findMany({
       include: {
-        _count: { select: { orders: true, users: true, menuItems: true, locations: true } },
-        locations: { select: { id: true, name: true, slug: true } }
+        subscription: { include: { plan: true } },
+        restaurants: {
+          include: {
+            _count: { select: { orders: true, menuItems: true, locations: true } },
+            locations: { select: { id: true, name: true, slug: true } }
+          }
+        },
+        _count: { select: { users: true } }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -164,104 +170,139 @@ router.get('/tenants', authenticate, requireSuperAdmin, async (req, res) => {
 
 router.post('/tenants', authenticate, requireSuperAdmin, async (req, res) => {
   try {
-    const { name, slug, email, password, plan, maxLocations, subscriptionEndsAt, isTrial } = req.body;
+    const bcrypt = require('bcryptjs');
+    const { name, slug, email, password, plan: planName, subscriptionEndsAt, isTrial } = req.body;
     if (!name || !slug) return res.status(400).json({ error: 'Nombre y Slug requeridos' });
 
-    let endsAt = subscriptionEndsAt ? new Date(subscriptionEndsAt) : null;
-    if (isTrial && !endsAt) {
-      const globalConfig = await prisma.globalConfig.upsert({ where: { id: 'saas-config' }, update: {}, create: { id: 'saas-config' } });
-      endsAt = new Date();
-      endsAt.setDate(endsAt.getDate() + globalConfig.trialDays);
-    }
+    const cleanSlug = slug.toLowerCase().replace(/\s+/g, '-');
 
-    const restaurant = await prisma.restaurant.create({
+    // Buscar plan por nombre o usar el primero activo
+    let planRecord = planName
+      ? await prisma.plan.findFirst({ where: { name: planName.toUpperCase(), isActive: true } })
+      : null;
+    if (!planRecord) planRecord = await prisma.plan.findFirst({ where: { isActive: true }, orderBy: { price: 'asc' } });
+    if (!planRecord) return res.status(400).json({ error: 'No hay planes activos configurados' });
+
+    const now      = new Date();
+    const endsAt   = subscriptionEndsAt ? new Date(subscriptionEndsAt)
+      : isTrial    ? new Date(now.getTime() + planRecord.trialDays * 86400000)
+      : null;
+    const status   = isTrial ? 'TRIAL' : 'ACTIVE';
+
+    const tenant = await prisma.tenant.create({
       data: {
         name,
-        slug: slug.toLowerCase().replace(/\s+/g, '-'),
-        plan: plan || 'BASIC',
-        subscriptionStatus: isTrial ? 'TRIAL' : 'ACTIVE',
-        maxLocations: parseInt(maxLocations) || 1,
-        subscriptionEndsAt: endsAt,
-        config: { create: { } }
-      }
+        slug: cleanSlug,
+        ownerEmail: email || '',
+        subscription: {
+          create: {
+            planId:             planRecord.id,
+            status,
+            trialEndsAt:        isTrial ? endsAt : null,
+            currentPeriodStart: now,
+            currentPeriodEnd:   endsAt || new Date(now.getTime() + 30 * 86400000),
+            priceSnapshot:      planRecord.price,
+            paymentGateway:     'MANUAL',
+          }
+        },
+        restaurants: {
+          create: {
+            slug:     cleanSlug,
+            name,
+            isActive: true,
+            config:   { create: {} }
+          }
+        }
+      },
+      include: { subscription: { include: { plan: true } }, restaurants: true }
     });
 
     if (email && password) {
-      const bcrypt = require('bcryptjs');
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await bcrypt.hash(password, 12);
       await prisma.user.create({
         data: {
-          name: `Admin ${name}`, email, passwordHash: hashedPassword,
-          role: 'ADMIN', restaurantId: restaurant.id
+          tenantId:     tenant.id,
+          restaurantId: tenant.restaurants[0]?.id,
+          name:         `Admin ${name}`,
+          email,
+          passwordHash: hashedPassword,
+          role:         'ADMIN',
+          isActive:     true,
         }
       });
     }
-    res.status(201).json({ ok: true, restaurant });
+
+    res.status(201).json({ ok: true, tenant });
   } catch (e) {
     if (e.code === 'P2002') return res.status(400).json({ error: 'El slug o email ya existe' });
     res.status(500).json({ error: e.message });
   }
 });
 
+// Regalar días de suscripción — opera sobre la Subscription del Tenant
 router.post('/tenants/:id/gift', authenticate, requireSuperAdmin, async (req, res) => {
   try {
     const { days = 30 } = req.body;
-    const current = await prisma.restaurant.findUnique({ where: { id: req.params.id } });
-    let newDate = current.subscriptionEndsAt && new Date(current.subscriptionEndsAt) > new Date() ? new Date(current.subscriptionEndsAt) : new Date();
-    newDate.setDate(newDate.getDate() + days);
-    const updated = await prisma.restaurant.update({
-      where: { id: req.params.id },
-      data: { subscriptionEndsAt: newDate, subscriptionStatus: 'ACTIVE', isActive: true }
+    const sub = await prisma.subscription.findUnique({ where: { tenantId: req.params.id } });
+    if (!sub) return res.status(404).json({ error: 'Suscripción no encontrada' });
+
+    const base   = sub.currentPeriodEnd && new Date(sub.currentPeriodEnd) > new Date()
+      ? new Date(sub.currentPeriodEnd) : new Date();
+    const newEnd = new Date(base.getTime() + days * 86400000);
+
+    const updated = await prisma.subscription.update({
+      where: { tenantId: req.params.id },
+      data:  { currentPeriodEnd: newEnd, status: 'ACTIVE' }
     });
-    res.json({ ok: true, expiresAt: updated.subscriptionEndsAt });
+    res.json({ ok: true, expiresAt: updated.currentPeriodEnd });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.put('/tenants/:id', authenticate, requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    if (!id) return res.status(400).json({ error: 'Falta el ID del restaurante' });
+    const { name, plan: planName, subscriptionStatus, subscriptionEndsAt, isActive, logoUrl } = req.body;
 
-    const { name, plan, subscriptionStatus, subscriptionEndsAt, isActive, logoUrl, domain } = req.body;
+    // 1. Datos del Tenant
+    const tenantData = {};
+    if (name      !== undefined) tenantData.name      = name;
+    if (logoUrl   !== undefined) tenantData.logoUrl   = logoUrl || null;
+    if (isActive  !== undefined) {
+      // Propagar isActive a todos los restaurantes del tenant
+      await prisma.restaurant.updateMany({
+        where: { tenantId: id },
+        data:  { isActive: isActive === true || isActive === 'true' }
+      });
+    }
 
-    // 1. Actualizar campos directos del Restaurant
-    const restaurantData = {};
-    if (name !== undefined)     restaurantData.name     = name;
-    if (isActive !== undefined) restaurantData.isActive = isActive === true || isActive === 'true';
-    if (logoUrl !== undefined)  restaurantData.logoUrl  = logoUrl || null;
-    if (domain !== undefined)   restaurantData.domain   = domain  || null;
-
-    // 2. Actualizar Subscription si viene algún campo relacionado
+    // 2. Datos de Subscription
     const subData = {};
     if (subscriptionStatus !== undefined) subData.status           = subscriptionStatus;
     if (subscriptionEndsAt !== undefined) subData.currentPeriodEnd = subscriptionEndsAt ? new Date(subscriptionEndsAt) : new Date();
-
-    // Si viene plan (nombre del plan), buscar su ID y actualizar
-    if (plan !== undefined) {
-      const planRecord = await prisma.plan.findFirst({ where: { name: plan } });
+    if (planName !== undefined) {
+      const planRecord = await prisma.plan.findFirst({ where: { name: planName.toUpperCase() } });
       if (planRecord) subData.planId = planRecord.id;
     }
-
     if (Object.keys(subData).length > 0) {
-      restaurantData.subscription = { update: subData };
+      tenantData.subscription = { update: subData };
     }
 
-    const updated = await prisma.restaurant.update({
-      where: { id },
-      data: restaurantData,
-      include: { subscription: { include: { plan: true } } }
+    const updated = await prisma.tenant.update({
+      where:   { id },
+      data:    tenantData,
+      include: { subscription: { include: { plan: true } }, restaurants: true }
     });
 
     res.json(updated);
   } catch (e) {
-    console.error('Error actualizando restaurante:', e);
+    console.error('Error actualizando tenant:', e);
     res.status(500).json({ error: e.message });
   }
 });
 
 router.delete('/tenants/:id', authenticate, requireSuperAdmin, async (req, res) => {
   try {
-    await prisma.restaurant.delete({ where: { id: req.params.id } });
+    await prisma.tenant.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

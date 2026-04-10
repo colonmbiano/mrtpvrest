@@ -48,8 +48,10 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
 
 router.get('/sales', authenticate, requireAdmin, async (req, res) => {
   try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
     const { from, to } = req.query
-    const where = { status: { not: 'CANCELLED' } }
+    const where = { restaurantId, status: { not: 'CANCELLED' } }
     if (from || to) {
       where.createdAt = {}
       if (from) where.createdAt.gte = new Date(from)
@@ -62,8 +64,14 @@ router.get('/sales', authenticate, requireAdmin, async (req, res) => {
 
 router.get('/top-items', authenticate, requireAdmin, async (req, res) => {
   try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
     const items = await prisma.orderItem.groupBy({
-      by: ['name'], _sum: { quantity: true, subtotal: true }, orderBy: { _sum: { quantity: 'desc' } }, take: 10,
+      by: ['name'],
+      where: { order: { restaurantId } },
+      _sum: { quantity: true, subtotal: true },
+      orderBy: { _sum: { quantity: 'desc' } },
+      take: 10,
     })
     res.json(items)
   } catch (e) { res.status(500).json({ error: 'Error al obtener top platillos' }) }

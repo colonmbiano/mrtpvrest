@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt  = require('bcryptjs');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
 const router = express.Router();
@@ -46,18 +47,24 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
       canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout } = req.body;
 
     if (!name || !pin) return res.status(400).json({ error: 'Nombre y PIN requeridos' });
+    if (!/^\d{4,6}$/.test(pin)) return res.status(400).json({ error: 'El PIN debe ser numérico de 4 a 6 dígitos' });
 
-    // PIN único dentro de la sucursal (o marca, por seguridad)
-    const existing = await prisma.employee.findFirst({
-      where: { pin, location: { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId } }
+    // PIN único dentro de la marca — comparar contra hashes existentes
+    const sameRestaurantEmps = await prisma.employee.findMany({
+      where: { location: { restaurantId: req.user?.restaurantId || req.restaurantId } },
+      select: { pin: true }
     });
-    if (existing) return res.status(400).json({ error: 'Este PIN ya está en uso en tu restaurante' });
+    for (const e of sameRestaurantEmps) {
+      const isDup = e.pin.startsWith('$2') ? await bcrypt.compare(pin, e.pin) : e.pin === pin;
+      if (isDup) return res.status(400).json({ error: 'Este PIN ya está en uso en tu restaurante' });
+    }
 
+    const pinHash = await bcrypt.hash(pin, 10);
     const defaults = ROLE_DEFAULTS[role] || ROLE_DEFAULTS.WAITER;
     const emp = await prisma.employee.create({
       data: {
         locationId: req.locationId,
-        name, phone: phone||null, pin, role: role||'WAITER',
+        name, phone: phone||null, pin: pinHash, role: role||'WAITER',
         photo: photo||null, tables: tables||[],
         scheduleStart: scheduleStart||null, scheduleEnd: scheduleEnd||null,
         scheduleDays: scheduleDays||[],
@@ -79,20 +86,40 @@ router.post('/login', async (req, res) => {
   try {
     const { pin } = req.body;
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+    if (!pin) return res.status(400).json({ error: 'PIN requerido' });
 
-    const emp = await prisma.employee.findFirst({
-      where: { pin, locationId: req.locationId, isActive: true }
+    // Buscar todos los empleados activos de la sucursal y comparar PIN
+    const candidates = await prisma.employee.findMany({
+      where: { locationId: req.locationId, isActive: true }
     });
-    
+
+    let emp = null;
+    let needsRehash = false;
+    for (const c of candidates) {
+      if (c.pin.startsWith('$2')) {
+        // PIN hasheado con bcrypt
+        if (await bcrypt.compare(pin, c.pin)) { emp = c; break; }
+      } else {
+        // PIN legacy en texto plano — migrar al vuelo
+        if (c.pin === pin) { emp = c; needsRehash = true; break; }
+      }
+    }
+
     if (!emp) return res.status(401).json({ error: 'PIN incorrecto o empleado no pertenece a esta sucursal' });
+
+    // Migrar PIN legacy a hash
+    if (needsRehash) {
+      const pinHash = await bcrypt.hash(pin, 10);
+      await prisma.employee.update({ where: { id: emp.id }, data: { pin: pinHash } }).catch(() => {});
+    }
 
     const jwt = require('jsonwebtoken');
     const token = jwt.sign(
-      { id: emp.id, role: emp.role, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId, locationId: req.locationId },
+      { id: emp.id, role: emp.role, restaurantId: req.user?.restaurantId || req.restaurantId, locationId: req.locationId },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     );
-    
+
     res.json({ employee: emp, token });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

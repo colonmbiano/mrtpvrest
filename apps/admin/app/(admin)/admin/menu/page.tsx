@@ -70,6 +70,7 @@ export default function MenuPage() {
   const [uploading, setUploading] = useState(false);
   const [filterCat, setFilterCat] = useState("all");
   const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // IA Escaneo
   const [scanState, setScanState] = useState<{
@@ -323,6 +324,27 @@ export default function MenuPage() {
     fetchData();
   }
 
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleSelectAll() {
+    setSelectedIds(selectedIds.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map(i => i.id)));
+  }
+  async function bulkToggleAvailable(available: boolean) {
+    await Promise.all([...selectedIds].map(id => api.put(`/api/menu/items/${id}`, { isAvailable: available }).catch(() => {})));
+    setSelectedIds(new Set()); fetchData();
+  }
+  async function bulkDelete() {
+    if (!confirm(`¿Eliminar ${selectedIds.size} platillo(s)? Esta acción no se puede deshacer.`)) return;
+    await Promise.all([...selectedIds].map(id => api.delete(`/api/menu/items/${id}`).catch(() => {})));
+    setSelectedIds(new Set()); fetchData();
+  }
+  async function bulkChangeCategory(categoryId: string) {
+    if (!categoryId) return;
+    await Promise.all([...selectedIds].map(id => api.put(`/api/menu/items/${id}`, { categoryId }).catch(() => {})));
+    setSelectedIds(new Set()); fetchData();
+  }
+
   function EditableList({ items, editingId, editForm, onStartEdit, onSaveEdit, onCancelEdit, onDelete, onChangeForm, addSection }: any) {
     return (
       <div>
@@ -432,35 +454,45 @@ export default function MenuPage() {
         <div className="rounded-2xl border overflow-hidden" style={{borderColor:"var(--border)"}}>
           <div className="grid grid-cols-12 gap-3 px-4 py-3 text-xs font-black uppercase tracking-wider border-b"
             style={{background:"var(--surf2)",borderColor:"var(--border)",color:"var(--muted)"}}>
-            <span className="col-span-1"></span>
-            <span className="col-span-4">Nombre del artículo</span>
+            <div className="col-span-1 flex items-center gap-2">
+              <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
+                checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                onChange={toggleSelectAll} />
+            </div>
+            <span className="col-span-3">Nombre del artículo</span>
             <span className="col-span-2">Categoría</span>
             <span className="col-span-1 text-right">Precio</span>
             <span className="col-span-2 text-center">Estado</span>
-            <span className="col-span-2 text-right">Acciones</span>
+            <span className="col-span-3 text-right">Acciones</span>
           </div>
 
-          {filtered.map((item, idx) => (
-            <div key={item.id} className="grid grid-cols-12 gap-3 px-4 py-3 items-center border-b transition-all" style={{borderColor:"var(--border)", background: idx % 2 === 0 ? "var(--surf)" : "transparent", opacity: item.isAvailable ? 1 : 0.5}}>
-              <div className="col-span-1">
-                <div className="w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center" style={{background:"var(--surf2)"}}>
-                  {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={40} height={40} className="object-cover w-full h-full" /> : <span className="text-lg">🍔</span>}
+          {filtered.map((item, idx) => {
+            const sel = selectedIds.has(item.id);
+            return (
+              <div key={item.id} className="grid grid-cols-12 gap-3 px-4 py-3 items-center border-b transition-all"
+                style={{borderColor:"var(--border)", background: sel ? "rgba(245,166,35,0.05)" : idx % 2 === 0 ? "var(--surf)" : "transparent", opacity: item.isAvailable ? 1 : 0.5}}>
+                <div className="col-span-1 flex items-center gap-2">
+                  <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
+                    checked={sel} onChange={() => toggleSelect(item.id)} />
+                  <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:"var(--surf2)"}}>
+                    {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={32} height={32} className="object-cover w-full h-full" /> : <span className="text-sm">🍔</span>}
+                  </div>
+                </div>
+                <div className="col-span-3 font-syne font-bold text-sm truncate">{item.name}</div>
+                <div className="col-span-2 text-xs font-medium text-[var(--muted)]">{item.category?.name || "—"}</div>
+                <div className="col-span-1 text-right font-syne font-black text-sm text-[var(--gold)]">${item.price}</div>
+                <div className="col-span-2 flex justify-center">
+                  <button onClick={() => toggleAvailable(item)} className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${item.isAvailable ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
+                    {item.isAvailable ? "● Activo" : "● Inactivo"}
+                  </button>
+                </div>
+                <div className="col-span-3 flex gap-2 justify-end">
+                  <button onClick={() => openForm(item)} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{borderColor:"var(--border)",color:"var(--muted)"}}>✏️ Editar</button>
+                  <button onClick={() => deleteItem(item)} className="px-2 py-1.5 rounded-lg text-xs bg-red-500/10 text-red-500 border border-red-500/20">🗑️</button>
                 </div>
               </div>
-              <div className="col-span-4 font-syne font-bold text-sm">{item.name}</div>
-              <div className="col-span-2 text-xs font-medium text-[var(--muted)]">{item.category?.name || "—"}</div>
-              <div className="col-span-1 text-right font-syne font-black text-sm text-[var(--gold)]">${item.price}</div>
-              <div className="col-span-2 flex justify-center">
-                <button onClick={() => toggleAvailable(item)} className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${item.isAvailable ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
-                  {item.isAvailable ? "● Activo" : "● Inactivo"}
-                </button>
-              </div>
-              <div className="col-span-2 flex gap-2 justify-end">
-                <button onClick={() => openForm(item)} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{borderColor:"var(--border)",color:"var(--muted)"}}>✏️ Editar</button>
-                <button onClick={() => deleteItem(item)} className="px-2 py-1.5 rounded-lg text-xs bg-red-500/10 text-red-500 border border-red-500/20">🗑️</button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -512,6 +544,38 @@ export default function MenuPage() {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Floating Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border"
+          style={{background:"var(--surf)",borderColor:"var(--gold)",boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}>
+          <span className="text-xs font-black uppercase tracking-widest px-2 py-1 rounded-lg" style={{background:"rgba(245,166,35,0.15)",color:"var(--gold)"}}>
+            {selectedIds.size} seleccionado{selectedIds.size !== 1 ? "s" : ""}
+          </span>
+          <button onClick={() => bulkToggleAvailable(true)}
+            className="px-3 py-1.5 rounded-xl text-xs font-black text-green-400 border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 transition-all">
+            ● Activar
+          </button>
+          <button onClick={() => bulkToggleAvailable(false)}
+            className="px-3 py-1.5 rounded-xl text-xs font-black text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all">
+            ● Desactivar
+          </button>
+          <select onChange={e => { bulkChangeCategory(e.target.value); e.target.value = ""; }}
+            defaultValue=""
+            className="px-3 py-1.5 rounded-xl text-xs font-black outline-none"
+            style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}}>
+            <option value="" disabled>Mover a categoría…</option>
+            {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <button onClick={bulkDelete}
+            className="px-3 py-1.5 rounded-xl text-xs font-black text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all">
+            🗑️ Eliminar
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            className="w-7 h-7 rounded-xl flex items-center justify-center text-sm transition-all"
+            style={{background:"var(--surf2)",color:"var(--muted)"}}>✕</button>
         </div>
       )}
 
