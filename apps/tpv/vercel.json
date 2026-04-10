@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "installCommand": "npm install -g pnpm@9.15.0 && cd ../.. && pnpm install --filter @mrtpvrest/tpv...",
+  "installCommand": "cd ../.. && pnpm install",
   "buildCommand": "cd ../.. && pnpm turbo build --filter @mrtpvrest/tpv",
   "outputDirectory": ".next"
 }
