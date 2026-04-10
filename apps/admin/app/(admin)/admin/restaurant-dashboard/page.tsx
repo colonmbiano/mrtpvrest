@@ -14,7 +14,9 @@ type Order = {
 type Tab = "ops" | "drivers";
 
 function minutesSince(d: string) {
-  return Math.floor((Date.now() - new Date(d).getTime()) / 60000);
+  if (!d) return 0;
+  const ms = Date.now() - new Date(d).getTime();
+  return isNaN(ms) ? 0 : Math.floor(ms / 60000);
 }
 function timerColor(m: number) {
   if (m < 8)  return "#22c55e";
@@ -108,7 +110,7 @@ export default function RestaurantDashboard() {
       prevIds.current = newIds;
       const hoy = arr.filter(o => new Date(o.createdAt).toDateString() === new Date().toDateString());
       const delivered = hoy.filter(o => o.status === "DELIVERED");
-      const ventas = delivered.reduce((s, o) => s + o.total, 0);
+      const ventas = delivered.reduce((s, o) => s + (o.total || 0), 0);
       const ticket = delivered.length ? Math.round(ventas / delivered.length) : 0;
       const active = arr.filter(o => !["DELIVERED","CANCELLED"].includes(o.status));
       const espera = active.length ? Math.round(active.reduce((s, o) => s + minutesSince(o.createdAt), 0) / active.length) : 0;
@@ -378,14 +380,14 @@ export default function RestaurantDashboard() {
                             </span>
                           </div>
                           <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8, lineHeight: 1.6 }}>
-                            {order.items.slice(0, 2).map((item, i) => (
+                            {(order.items || []).slice(0, 2).map((item, i) => (
                               <div key={i}>{item.quantity}× {item.menuItem?.name}</div>
                             ))}
-                            {order.items.length > 2 && <div>+{order.items.length - 2} más</div>}
+                            {(order.items?.length ?? 0) > 2 && <div>+{order.items.length - 2} más</div>}
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <span style={{ fontSize: 13, fontWeight: 800, color: "#ff5c35", fontFamily: "Syne, sans-serif" }}>
-                              {fmtMoney(order.total)}
+                              {fmtMoney(order.total || 0)}
                             </span>
                             {col.key !== "DELIVERING" && (
                               <button
