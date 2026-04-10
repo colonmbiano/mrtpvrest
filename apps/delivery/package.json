@@ -3,15 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3004",
-    "build": "echo 'delivery not ready'",
-    "start": "next start -p 3004",
-    "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "dev": "echo 'delivery app - in development'",
+    "build": "echo 'delivery app - skipping build'",
+    "start": "echo 'delivery app - not deployed'",
+    "lint": "echo 'delivery app - no lint'",
+    "type-check": "echo 'delivery app - no types'"
   },
-  "dependencies": {
-    "next": "14.2.35",
-    "react": "^18",
-    "react-dom": "^18"
-  }
+  "dependencies": {},
+  "devDependencies": {}
 }
