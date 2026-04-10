@@ -1,4 +1,5 @@
 {
-  "buildCommand": "mkdir -p public && echo '<h1>Coming soon</h1>' > public/index.html",
-  "outputDirectory": "public"
+  "installCommand": "exit 0",
+  "buildCommand": "exit 0",
+  "outputDirectory": ".next"
 }
