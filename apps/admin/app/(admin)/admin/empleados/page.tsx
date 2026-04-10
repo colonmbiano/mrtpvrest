@@ -106,10 +106,24 @@ export default function EmpleadosPage() {
 
   // ... (Resto del componente igual) ...
 
-  async function deleteEmployee(id: string) {
+  function closeForm() {
+    setShowForm(false);
+    setForm({ ...emptyForm });
+    setEditEmp(null);
+  }
+
+  async function deleteEmployee(id: string, role: string) {
+    if (role === "ADMIN") {
+      alert("No puedes eliminar a un administrador.");
+      return;
+    }
     if (!confirm("¿Eliminar empleado?")) return;
-    await api.delete(`/api/employees/${id}`);
-    fetchEmployees();
+    try {
+      await api.delete(`/api/employees/${id}`);
+      fetchEmployees();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || "Error al eliminar empleado");
+    }
   }
 
   async function viewDetail(emp: any) {
@@ -269,7 +283,7 @@ export default function EmpleadosPage() {
                         style={{borderColor:"var(--border)",color:"var(--muted)"}}>
                         Editar
                       </button>
-                      <button onClick={() => deleteEmployee(emp.id)}
+                      <button onClick={() => deleteEmployee(emp.id, emp.role)}
                         className="px-3 py-2 rounded-xl text-xs"
                         style={{background:"rgba(239,68,68,0.1)",color:"#ef4444"}}>
                         🗑️
@@ -364,7 +378,7 @@ export default function EmpleadosPage() {
           <div className="w-full max-w-2xl rounded-2xl border my-4" style={{background:"var(--surf)",borderColor:"var(--border)"}}>
             <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0" style={{borderColor:"var(--border)"}}>
               <h2 className="font-syne font-black text-xl">{editEmp ? "Editar" : "Nuevo"} empleado</h2>
-              <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-xl flex items-center justify-center"
+              <button onClick={closeForm} className="w-8 h-8 rounded-xl flex items-center justify-center"
                 style={{background:"var(--surf2)",color:"var(--muted)"}}>✕</button>
             </div>
             <form onSubmit={saveEmployee} className="p-6 overflow-y-auto" style={{maxHeight:"80vh"}}>
@@ -474,7 +488,7 @@ export default function EmpleadosPage() {
               </div>
 
               <div className="flex gap-3">
-                <button type="button" onClick={() => setShowForm(false)}
+                <button type="button" onClick={closeForm}
                   className="flex-1 py-3 rounded-xl font-bold border"
                   style={{borderColor:"var(--border)",color:"var(--muted)"}}>Cancelar</button>
                 <button type="submit" disabled={saving}

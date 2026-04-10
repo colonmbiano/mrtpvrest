@@ -3,6 +3,12 @@
 import { useEffect, useState, useRef } from "react";
 import api from "@/lib/api";
 
+function safeParseConfig(raw: any): Record<string, any> {
+  if (!raw) return {};
+  if (typeof raw === "object" && !Array.isArray(raw)) return raw;
+  try { return JSON.parse(raw); } catch { return {}; }
+}
+
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<any[]>([]);
   const [types, setTypes] = useState<any>({});
@@ -10,6 +16,10 @@ export default function IntegrationsPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => { if (toastTimer.current) clearTimeout(toastTimer.current); };
+  }, []);
 
   function showToast(msg: string, ok = true) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -33,7 +43,7 @@ export default function IntegrationsPage() {
         forms[type] = {
           enabled: existing?.enabled || false,
           mode: existing?.mode || "sandbox",
-          config: existing?.config || {}
+          config: safeParseConfig(existing?.config),
         };
       });
       setConfigForms(forms);

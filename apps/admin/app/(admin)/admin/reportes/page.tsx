@@ -36,9 +36,11 @@ export default function ReportesPage() {
         api.get(`/api/reports/sales?from=${from}&to=${to}`),
         api.get("/api/reports/top-items"),
       ]);
-      setByDay(bd.data);
-      setStats(s.data);
-      setTopItems(t.data);
+      setByDay(Array.isArray(bd.data) ? bd.data : []);
+      setStats(s.data || null);
+      setTopItems(Array.isArray(t.data) ? t.data : []);
+    } catch {
+      setByDay([]); setTopItems([]);
     } finally { setLoading(false); }
   }
 
@@ -192,6 +194,11 @@ export default function ReportesPage() {
         <div style={{ height: 240 }}>
           {loading ? (
             <div className="h-full flex items-center justify-center" style={{ color: "var(--muted)" }}>Cargando…</div>
+          ) : byDay.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center gap-2" style={{ color: "var(--muted)" }}>
+              <span className="text-3xl">📊</span>
+              <p className="text-sm">No hay datos para este período</p>
+            </div>
           ) : chartType === "bar" ? (
             <Bar data={chartDataRevenue} options={chartOptions} />
           ) : (
@@ -208,6 +215,10 @@ export default function ReportesPage() {
         <div style={{ height: 180 }}>
           {loading ? (
             <div className="h-full flex items-center justify-center" style={{ color: "var(--muted)" }}>Cargando…</div>
+          ) : byDay.length === 0 ? (
+            <div className="h-full flex items-center justify-center" style={{ color: "var(--muted)" }}>
+              <p className="text-sm">No hay datos para este período</p>
+            </div>
           ) : (
             <Bar data={ordersChartData} options={ordersOptions} />
           )}
