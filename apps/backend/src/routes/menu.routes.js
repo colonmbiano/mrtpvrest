@@ -220,6 +220,62 @@ router.post('/variant-templates', authenticate, requireAdmin, async (req, res) =
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.post('/variant-templates/:id/options', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, price } = req.body;
+    
+    if (!name) return res.status(400).json({ error: 'Nombre requerido' });
+    
+    // Verificar que el template pertenezca al restaurante
+    const template = await prisma.variantTemplate.findUnique({
+      where: { id },
+    });
+    
+    if (!template) return res.status(404).json({ error: 'Template no encontrado' });
+    if (template.restaurantId !== (req.user?.restaurantId || req.restaurantId)) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+    
+    const option = await prisma.variantTemplateOption.create({
+      data: {
+        templateId: id,
+        name,
+        price: parseFloat(price) || 0,
+        sortOrder: 0
+      }
+    });
+    
+    res.status(201).json(option);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/variant-templates/:id/options/:optionId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, price, sortOrder } = req.body;
+    
+    const option = await prisma.variantTemplateOption.update({
+      where: { id: req.params.optionId },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(price !== undefined && { price: parseFloat(price) }),
+        ...(sortOrder !== undefined && { sortOrder })
+      }
+    });
+    
+    res.json(option);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/variant-templates/:id/options/:optionId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    await prisma.variantTemplateOption.delete({
+      where: { id: req.params.optionId }
+    });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Menú Público (sin auth) ────────────────────────────────────────────────
 
 router.get('/public/:slug/menu', async (req, res) => {
