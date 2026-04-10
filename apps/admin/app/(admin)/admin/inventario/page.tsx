@@ -42,6 +42,7 @@ export default function InventarioPage() {
   const [shoppingList, setShoppingList] = useState<ShoppingList | null>(null);
   const [shoppingPeriod, setShoppingPeriod] = useState("week");
   const [search, setSearch]           = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // IA Escaneo
   const [isScanning, setIsScanning] = useState(false);
@@ -167,6 +168,18 @@ export default function InventarioPage() {
     fetchAll(activeLocationId);
   }
 
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleSelectAll() {
+    setSelectedIds(selectedIds.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map(i => i.id)));
+  }
+  async function bulkDelete() {
+    if (!confirm(`¿Eliminar ${selectedIds.size} ingrediente(s)? Esta acción no se puede deshacer.`)) return;
+    await Promise.all([...selectedIds].map(id => api.delete("/api/inventory/ingredients/" + id).catch(() => {})));
+    setSelectedIds(new Set()); fetchAll(activeLocationId);
+  }
+
   const filtered = ingredients.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -224,6 +237,11 @@ export default function InventarioPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{background:"var(--surf2)",borderBottom:"1px solid var(--border)"}}>
+                  <th className="px-4 py-3 w-10">
+                    <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
+                      checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                      onChange={toggleSelectAll} />
+                  </th>
                   {["Ingrediente","Unidad","Stock Actual","Stock Mínimo","Costo","Proveedor",""].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider"
                       style={{color:"var(--muted)"}}>{h}</th>
@@ -231,11 +249,17 @@ export default function InventarioPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((ing, idx) => (
+                {filtered.map((ing, idx) => {
+                  const sel = selectedIds.has(ing.id);
+                  return (
                   <tr key={ing.id} style={{
                     borderBottom:"1px solid var(--border)",
-                    background: ing.lowStock ? "rgba(239,68,68,0.03)" : idx%2===0 ? "var(--surf)" : "transparent"
+                    background: sel ? "rgba(245,166,35,0.05)" : ing.lowStock ? "rgba(239,68,68,0.03)" : idx%2===0 ? "var(--surf)" : "transparent"
                   }}>
+                    <td className="px-4 py-3">
+                      <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
+                        checked={sel} onChange={() => toggleSelect(ing.id)} />
+                    </td>
                     <td className="px-4 py-3 font-medium text-white">{ing.lowStock && <span className="mr-1">⚠️</span>}{ing.name}</td>
                     <td className="px-4 py-3" style={{color:"var(--muted)"}}>{ing.unit}</td>
                     <td className="px-4 py-3 font-bold" style={{color: ing.lowStock ? "#ef4444" : "#22c55e"}}>{ing.stock}</td>
@@ -251,7 +275,8 @@ export default function InventarioPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -259,6 +284,23 @@ export default function InventarioPage() {
       )}
 
       {/* ... tabs de movimientos y shopping list ... */}
+
+      {/* Floating Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border"
+          style={{background:"var(--surf)",borderColor:"var(--gold)",boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}>
+          <span className="text-xs font-black uppercase tracking-widest px-2 py-1 rounded-lg" style={{background:"rgba(245,166,35,0.15)",color:"var(--gold)"}}>
+            {selectedIds.size} seleccionado{selectedIds.size !== 1 ? "s" : ""}
+          </span>
+          <button onClick={bulkDelete}
+            className="px-3 py-1.5 rounded-xl text-xs font-black text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all">
+            🗑️ Eliminar
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            className="w-7 h-7 rounded-xl flex items-center justify-center text-sm transition-all"
+            style={{background:"var(--surf2)",color:"var(--muted)"}}>✕</button>
+        </div>
+      )}
 
       {/* ── Modal de Revisión IA ───────────────────────────────────────── */}
       {isReviewOpen && (

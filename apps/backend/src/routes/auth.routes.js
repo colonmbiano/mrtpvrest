@@ -17,8 +17,8 @@ const loginLimiter = rateLimit({
 })
 
 const generateTokens = (userId, restaurantId, role, tenantId = null) => {
-  const accessToken = jwt.sign({ userId, restaurantId, role, tenantId }, process.env.JWT_SECRET, { expiresIn: '365d' })
-  const refreshToken = jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, { expiresIn: '365d' })
+  const accessToken  = jwt.sign({ userId, restaurantId, role, tenantId }, process.env.JWT_SECRET,         { expiresIn: '15m' })
+  const refreshToken = jwt.sign({ userId },                               process.env.JWT_REFRESH_SECRET, { expiresIn: '30d' })
   return { accessToken, refreshToken }
 }
 
@@ -327,6 +327,59 @@ router.post('/resend-verification', authenticate, async (req, res) => {
     console.error('Error en /resend-verification:', e)
     res.status(500).json({ error: 'Error al reenviar' })
   }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REFRESH TOKEN — POST /api/auth/refresh
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/refresh', async (req, res) => {
+  const { refreshToken } = req.body
+  if (!refreshToken) return res.status(400).json({ error: 'refreshToken requerido' })
+
+  try {
+    const payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET)
+
+    // Verificar que el token existe en BD y no ha expirado
+    const stored = await prisma.refreshToken.findFirst({
+      where: { token: refreshToken, userId: payload.userId }
+    })
+    if (!stored) return res.status(401).json({ error: 'Refresh token inválido o revocado', code: 'TOKEN_INVALID' })
+    if (stored.expiresAt < new Date()) {
+      await prisma.refreshToken.delete({ where: { id: stored.id } }).catch(() => {})
+      return res.status(401).json({ error: 'Refresh token expirado', code: 'TOKEN_EXPIRED' })
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, role: true, restaurantId: true, tenantId: true, isActive: true }
+    })
+    if (!user || !user.isActive) return res.status(401).json({ error: 'Usuario inactivo' })
+
+    // Rotar: eliminar el token anterior y emitir uno nuevo
+    const newTokens = generateTokens(user.id, user.restaurantId, user.role, user.tenantId)
+    await prisma.refreshToken.delete({ where: { id: stored.id } })
+    await prisma.refreshToken.create({
+      data: { token: newTokens.refreshToken, userId: user.id, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) }
+    })
+
+    res.json({ accessToken: newTokens.accessToken, refreshToken: newTokens.refreshToken })
+  } catch (e) {
+    if (e.name === 'TokenExpiredError') return res.status(401).json({ error: 'Refresh token expirado', code: 'TOKEN_EXPIRED' })
+    res.status(401).json({ error: 'Refresh token inválido' })
+  }
+})
+
+// POST /api/auth/logout — eliminar refresh token
+router.post('/logout', authenticate, async (req, res) => {
+  const { refreshToken } = req.body
+  try {
+    if (refreshToken) {
+      await prisma.refreshToken.deleteMany({
+        where: { token: refreshToken, userId: req.user.id }
+      })
+    }
+    res.json({ ok: true })
+  } catch { res.json({ ok: true }) }
 })
 
 module.exports = router
