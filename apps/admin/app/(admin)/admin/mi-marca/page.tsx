@@ -199,8 +199,7 @@ export default function BrandConfigPage() {
     reader.readAsDataURL(file);
   };
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSave() {
     setSaving(true);
     try {
       // 1. Guardar Marca (Nombre y Logo) — captura config actual en closure
@@ -232,7 +231,7 @@ export default function BrandConfigPage() {
         <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.2em]">Personaliza tu identidad visual</p>
       </div>
 
-      <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Columna Izquierda: Logo */}
         <div className="md:col-span-1">
           <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 text-center flex flex-col items-center">
@@ -283,14 +282,15 @@ export default function BrandConfigPage() {
           </div>
 
           <button
-            type="submit"
+            type="button"
+            onClick={handleSave}
             disabled={saving || uploading}
             className="w-full bg-orange-500 hover:bg-orange-600 py-5 rounded-[2rem] font-black text-white shadow-2xl shadow-orange-500/20 active:scale-95 transition-all uppercase tracking-widest disabled:opacity-50"
           >
             {saving ? "Guardando..." : "Actualizar Identidad"}
           </button>
         </div>
-      </form>
+      </div>
 
       <LocationsSection />
     </div>
