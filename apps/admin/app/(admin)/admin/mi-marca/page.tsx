@@ -283,6 +283,7 @@ export default function BrandConfigPage() {
           </div>
 
           <button
+            type="submit"
             disabled={saving || uploading}
             className="w-full bg-orange-500 hover:bg-orange-600 py-5 rounded-[2rem] font-black text-white shadow-2xl shadow-orange-500/20 active:scale-95 transition-all uppercase tracking-widest disabled:opacity-50"
           >
