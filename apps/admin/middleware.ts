@@ -7,7 +7,7 @@ const SAAS_PATHS = ["/dashboard", "/marcas", "/ajustes", "/facturacion", "/logs"
 const ADMIN_PREFIX = "/admin";
 
 // Public paths — always allowed
-const PUBLIC_PATHS = ["/login", "/register", "/verify-email", "/saas/login", "/_next", "/favicon", "/logo", "/api"];
+const PUBLIC_PATHS = ["/login", "/register", "/verify-email", "/saas/login", "/_next", "/favicon", "/logo", "/api", "/.well-known"];
 
 function getRole(req: NextRequest): string | null {
   return req.cookies.get("mb-role")?.value ?? null;
@@ -67,7 +67,8 @@ export const config = {
      * Match all request paths EXCEPT:
      * - _next/static, _next/image (Next.js internals)
      * - favicon.ico, logo.png (static assets)
+     * - .well-known/* (Vercel internal JWE/OIDC endpoints — MUST NOT be intercepted)
      */
-    "/((?!_next/static|_next/image|favicon.ico|logo.png|manifest).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|logo\\.png|manifest|\\.well-known).*)",
   ],
 };
