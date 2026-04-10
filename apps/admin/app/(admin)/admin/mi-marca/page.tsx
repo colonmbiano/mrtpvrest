@@ -202,17 +202,20 @@ export default function BrandConfigPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      // 1. Guardar Marca (Nombre y Logo) — captura config actual en closure
       const current = config;
+      // Log para diagnóstico — confirma que la función ejecuta y la URL destino
+      console.log("[mi-marca] handleSave START — API_URL:", process.env.NEXT_PUBLIC_API_URL);
       await api.put("/api/admin/brand", { name: current.name, logoUrl: current.logoUrl });
-      // 2. Guardar Config Operativa — excluir logoUrl para no enviar base64 dos veces
+      console.log("[mi-marca] brand OK");
       const { logoUrl: _logo, ...configWithoutLogo } = current;
       await api.put("/api/admin/config", configWithoutLogo);
-      // 3. Forzar recarga para que el Sidebar refleje nombre y logo actualizados
+      console.log("[mi-marca] config OK — reloading");
       window.location.reload();
     } catch (err: any) {
+      const status = err?.response?.status;
       const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message || "Error desconocido";
-      alert("Error al guardar: " + msg);
+      console.error("[mi-marca] handleSave FAIL", { status, msg, err });
+      alert(`Error al guardar (${status ?? "sin respuesta"}): ${msg}`);
       setSaving(false);
     }
   }
