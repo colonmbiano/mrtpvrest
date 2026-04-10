@@ -59,11 +59,12 @@ function ApplyTemplateButton({ itemId, onApplied }: { itemId: string, onApplied:
 export default function MenuPage() {
   const [items, setItems] = useState<any[]>([]);
   const [cats, setCats] = useState<any[]>([]);
+  const [variantTemplates, setVariantTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[] as string[] });
+  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[] as string[], variantTemplateIds:[] as string[] });
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -92,9 +93,14 @@ export default function MenuPage() {
 
   async function fetchData() {
     try {
-      const [i, c] = await Promise.all([api.get("/api/menu/items"), api.get("/api/menu/categories")]);
+      const [i, c, vt] = await Promise.all([
+        api.get("/api/menu/items"),
+        api.get("/api/menu/categories"),
+        api.get("/api/menu/variant-templates"),
+      ]);
       setItems(Array.isArray(i.data) ? i.data : []);
       setCats(Array.isArray(c.data) ? c.data : []);
+      setVariantTemplates(Array.isArray(vt.data) ? vt.data : []);
     } catch {}
     finally { setLoading(false); }
   }
@@ -168,15 +174,17 @@ export default function MenuPage() {
   function openForm(item?: any) {
     if (item) {
       setEditItem(item);
-      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", isPromo:item.isPromo||false, activeDays:item.activeDays||[] });
+      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", isPromo:item.isPromo||false, activeDays:item.activeDays||[], variantTemplateIds:[] });
       setImagePreview(item.imageUrl||"");
       api.get(`/api/menu/items/${item.id}`).then(r => {
         setComplements(r.data.complements || []);
         setVariants(r.data.variants || []);
+        const tplIds = (r.data.variantTemplates || r.data.appliedTemplates || []).map((t: any) => t.id ?? t.variantTemplateId).filter(Boolean);
+        setForm(p => ({ ...p, variantTemplateIds: tplIds }));
       }).catch(() => { setComplements([]); setVariants([]); });
     } else {
       setEditItem(null);
-      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[] });
+      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[], variantTemplateIds:[] });
       setImagePreview("");
       setComplements([]);
       setVariants([]);
@@ -551,6 +559,53 @@ export default function MenuPage() {
                     <option value="">Seleccionar...</option>
                     {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
+                </div>
+
+                {/* Grupos de Variantes */}
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold mb-2 uppercase tracking-wider" style={{color:"var(--muted)"}}>
+                    Grupos de Variantes <span style={{color:"var(--muted)",fontWeight:400,textTransform:"none",letterSpacing:0}}>(Opcional)</span>
+                  </label>
+                  {variantTemplates.length === 0 ? (
+                    <p className="text-xs px-1" style={{color:"var(--muted)"}}>
+                      Sin grupos creados.{" "}
+                      <a href="/admin/menu/variantes" target="_blank" style={{color:"var(--gold)"}}>Crear grupos →</a>
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      {variantTemplates.map((tpl: any) => {
+                        const selected = form.variantTemplateIds.includes(tpl.id);
+                        return (
+                          <button
+                            key={tpl.id}
+                            type="button"
+                            onClick={() => setForm(p => ({
+                              ...p,
+                              variantTemplateIds: selected
+                                ? p.variantTemplateIds.filter(id => id !== tpl.id)
+                                : [...p.variantTemplateIds, tpl.id],
+                            }))}
+                            className="flex items-center justify-between px-3 py-2.5 rounded-xl text-sm text-left transition-all"
+                            style={{
+                              background: selected ? "rgba(245,166,35,0.12)" : "var(--surf2)",
+                              border: `1.5px solid ${selected ? "var(--gold)" : "var(--border)"}`,
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
+                                style={{background: selected ? "var(--gold)" : "var(--surf)", border:`1px solid ${selected ? "var(--gold)" : "var(--border)"}`}}>
+                                {selected && <span className="text-black text-[10px] font-black leading-none">✓</span>}
+                              </div>
+                              <span className="font-bold">{tpl.name}</span>
+                            </div>
+                            <span className="text-xs" style={{color:"var(--muted)"}}>
+                              {tpl.options?.length ?? 0} opciones
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Promoción por día */}
