@@ -44,13 +44,18 @@ router.get('/config', authenticate, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
-    const config = await prisma.restaurantConfig.findUnique({
-      where: { restaurantId }
-    });
+    const [config, restaurant] = await Promise.all([
+      prisma.restaurantConfig.findUnique({ where: { restaurantId } }),
+      prisma.restaurant.findUnique({
+        where: { id: restaurantId },
+        select: { name: true, logoUrl: true }
+      })
+    ]);
+    res.set('Cache-Control', 'no-store');
     res.json({
       ...(config || {}),
-      name: req.restaurant?.name || 'Nuevo Restaurante',
-      logoUrl: req.restaurant?.logoUrl || null
+      name: restaurant?.name || 'Nuevo Restaurante',
+      logoUrl: restaurant?.logoUrl || null
     });
   } catch (e) { res.status(500).json({ error: 'Error al obtener configuracion' }) }
 })
