@@ -91,8 +91,12 @@ export default function MenuPage() {
   const [activeTab, setActiveTab] = useState<'complements'|'variants'>('variants');
 
   async function fetchData() {
-    const [i, c] = await Promise.all([api.get("/api/menu/items"), api.get("/api/menu/categories")]);
-    setItems(i.data); setCats(c.data); setLoading(false);
+    try {
+      const [i, c] = await Promise.all([api.get("/api/menu/items"), api.get("/api/menu/categories")]);
+      setItems(Array.isArray(i.data) ? i.data : []);
+      setCats(Array.isArray(c.data) ? c.data : []);
+    } catch {}
+    finally { setLoading(false); }
   }
 
   useEffect(() => { fetchData(); }, []);
@@ -169,7 +173,7 @@ export default function MenuPage() {
       api.get(`/api/menu/items/${item.id}`).then(r => {
         setComplements(r.data.complements || []);
         setVariants(r.data.variants || []);
-      });
+      }).catch(() => { setComplements([]); setVariants([]); });
     } else {
       setEditItem(null);
       setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[] });
@@ -374,7 +378,7 @@ export default function MenuPage() {
 
   const filtered = items.filter(i =>
     (filterCat === "all" || i.categoryId === filterCat) &&
-    (search === "" || i.name.toLowerCase().includes(search.toLowerCase()))
+    (search === "" || (i.name || "").toLowerCase().includes(search.toLowerCase()))
   );
 
   return (

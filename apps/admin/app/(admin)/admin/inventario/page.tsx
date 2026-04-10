@@ -269,7 +269,7 @@ export default function InventarioPage() {
                 <h2 className="text-2xl font-black text-white uppercase tracking-tighter">🤖 Revisión de Ticket</h2>
                 <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest font-bold">Verifica y corrige antes de guardar</p>
               </div>
-              <button onClick={() => setIsReviewOpen(false)} className="text-gray-600 hover:text-white transition-colors text-xl">✕</button>
+              <button onClick={() => { setIsReviewOpen(false); setScannedItems([]); }} className="text-gray-600 hover:text-white transition-colors text-xl">✕</button>
             </div>
 
             <div className="overflow-x-auto">
@@ -349,7 +349,7 @@ export default function InventarioPage() {
                 + Agregar fila
               </button>
               <div className="flex gap-3">
-                <button onClick={() => setIsReviewOpen(false)} className="px-5 py-2.5 text-gray-500 font-bold uppercase tracking-widest text-xs">
+                <button onClick={() => { setIsReviewOpen(false); setScannedItems([]); }} className="px-5 py-2.5 text-gray-500 font-bold uppercase tracking-widest text-xs">
                   Cancelar
                 </button>
                 <button
