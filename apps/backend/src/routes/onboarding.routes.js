@@ -91,38 +91,35 @@ router.post('/chat', async (req, res) => {
     return res.status(400).json({ error: 'El campo "message" es requerido' })
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.GOOGLE_AI_API_KEY
   if (!apiKey) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY no configurada' })
+    return res.status(500).json({ error: 'GOOGLE_AI_API_KEY no configurada' })
   }
-
-  // Construir messages para la API (historial + mensaje actual)
-  const messages = [
-    ...history.map(h => ({ role: h.role, content: h.content })),
-    { role: 'user', content: message },
-  ]
 
   let aiJson
   try {
     const response = await axios.post(
-      'https://api.anthropic.com/v1/messages',
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
-        model:      'claude-sonnet-4-6',
-        max_tokens: 1000,
-        system:     SYSTEM_PROMPT,
-        messages,
-      },
-      {
-        headers: {
-          'x-api-key':         apiKey,
-          'anthropic-version': '2023-06-01',
-          'content-type':      'application/json',
+        contents: [
+          ...history.map(h => ({
+            role:  h.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: h.content }]
+          })),
+          { role: 'user', parts: [{ text: message }] }
+        ],
+        systemInstruction: {
+          parts: [{ text: SYSTEM_PROMPT }]
         },
-        timeout: 30000,
-      }
+        generationConfig: {
+          temperature:      0.7,
+          maxOutputTokens:  1000,
+        }
+      },
+      { timeout: 30000 }
     )
 
-    const rawText = response.data?.content?.[0]?.text ?? ''
+    const rawText = response.data.candidates[0].content.parts[0].text
 
     try {
       aiJson = JSON.parse(rawText)
