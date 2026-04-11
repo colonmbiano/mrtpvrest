@@ -110,6 +110,7 @@ app.use('/api/banners',      require('./routes/banners.routes'))
 app.use('/api/admin',        require('./routes/admin.routes'))
 app.use('/api/saas',         require('./routes/saas.routes'))
 app.use('/api/ai',           require('./routes/ai.routes'));
+app.use('/api/onboarding',   require('./routes/onboarding.routes'));
 
 app.get('/health', (req, res) => {
   res.json({
