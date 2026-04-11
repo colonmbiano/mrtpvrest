@@ -27,6 +27,7 @@ model Tenant {
   onboardingDone Boolean  @default(false)
   businessType   String?              // RESTAURANT | GROCERY | BUTCHER | POULTRY | OTHER
   isOnboarded    Boolean  @default(false)
+  activeModules  Json     @default("[]")
 
   emailVerifiedAt         DateTime?
   emailVerificationToken  String?   @unique
@@ -168,8 +169,9 @@ model Restaurant {
   slug        String   @unique
   name        String
   domain      String?  @unique
-  isActive    Boolean  @default(true)
-  logoUrl     String?  // Logo personalizado del cliente
+  isActive     Boolean  @default(true)
+  logoUrl      String?  // Logo personalizado del cliente
+  businessType String   @default("RESTAURANT") // RESTAURANT | RETAIL | GROCERY
 
   // Configuración Global
   config        RestaurantConfig?
@@ -705,8 +707,27 @@ model Ingredient {
   isActive     Boolean             @default(true)
   recipeItems  RecipeItem[]
   movements    InventoryMovement[]
+  batches      InventoryBatch[]
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
+}
+
+model InventoryBatch {
+  id             String     @id @default(cuid())
+  ingredientId   String
+  ingredient     Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  quantity       Float                        // Cantidad inicial del lote
+  currentStock   Float                        // Cantidad disponible actualmente
+  cost           Float                        // Costo de adquisición de este lote
+  sku            String?                      // Código de barras o SKU
+  expirationDate DateTime?                    // Clave para abarrotes/retail
+  receivedAt     DateTime   @default(now())
+
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@map("inventory_batches")
 }
 
 model RecipeItem {
