@@ -163,7 +163,7 @@ export default function TPVPage() {
   const fetchOrders = useCallback(async () => {
     try {
       const { data } = await api.get("/api/orders/admin");
-      setOrders(data.filter((o: any) => !["DELIVERED", "CANCELLED"].includes(o.status) && (o.source === "TPV" || o.source === "WAITER")));
+      setOrders(data.filter((o: any) => !["DELIVERED", "CANCELLED"].includes(o.status) && (o.source === "TPV" || o.source === "WAITER" || o.source === "ONLINE")));
       setPendingCashOrders(data.filter((o: any) => o.status === "DELIVERED" && o.cashCollected === false && o.paymentMethod === "CASH_ON_DELIVERY"));
     } catch {}
   }, []);
