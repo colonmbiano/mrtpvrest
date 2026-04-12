@@ -2,8 +2,15 @@
 import { useEffect, useState, useRef } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-const SLUG = process.env.NEXT_PUBLIC_STORE_SLUG || "masterburguers";
 const ACCENT = "#ff5c35";
+
+const getSlug = () => {
+  if (typeof window === "undefined") return "masterburguers";
+  const host = window.location.hostname;
+  const sub  = host.split(".")[0];
+  const SYSTEM = ["www", "localhost", "mrtpvrest"];
+  return SYSTEM.includes(sub) ? "masterburguers" : sub;
+};
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Variant    = { id: string; name: string; price: number };
@@ -107,7 +114,7 @@ function CheckoutModal({ cart, onClose, onSuccess }: {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/store/orders?r=${SLUG}`, {
+      const res = await fetch(`${API}/api/store/orders?r=${getSlug()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -301,6 +308,7 @@ function ProductCard({ item, onAdd }: { item: MenuItem; onAdd: (item: MenuItem) 
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function StorePage() {
+  const [slug]                        = useState(() => getSlug());
   const [storeInfo, setStoreInfo]     = useState<StoreInfo | null>(null);
   const [categories, setCategories]   = useState<Category[]>([]);
   const [cart, setCart]               = useState<CartItem[]>([]);
@@ -313,8 +321,8 @@ export default function StorePage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/api/store/info?r=${SLUG}`).then(r => r.json()),
-      fetch(`${API}/api/store/menu?r=${SLUG}`).then(r => r.json()),
+      fetch(`${API}/api/store/info?r=${slug}`).then(r => r.json()),
+      fetch(`${API}/api/store/menu?r=${slug}`).then(r => r.json()),
     ]).then(([info, menu]) => {
       setStoreInfo(info);
       setCategories(menu.categories || []);
