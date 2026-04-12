@@ -78,6 +78,14 @@ export default function TPVPage() {
   const [pinInput, setPinInput]                 = useState("");
   const [isVerifyingPin, setIsVerifyingPin]     = useState(false);
 
+  // Email login (dispositivo no configurado)
+  const [isEmailLogin, setIsEmailLogin]         = useState(false);
+  const [emailInput, setEmailInput]             = useState("");
+  const [passwordInput, setPasswordInput]       = useState("");
+  const [loginError, setLoginError]             = useState("");
+  const [isLoggingIn, setIsLoggingIn]           = useState(false);
+  const [showPassword, setShowPassword]         = useState(false);
+
   // Modales manager
   const [showManagerMenu, setShowManagerMenu]     = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -98,7 +106,7 @@ export default function TPVPage() {
     const restId = localStorage.getItem("restaurantId");
     const locId  = localStorage.getItem("locationId");
     if (!restId || !locId) {
-      router.push("/setup");
+      setIsEmailLogin(true);
     } else {
       setIsConfigured(true);
       api.get("/api/admin/config").then(res => {
@@ -128,6 +136,28 @@ export default function TPVPage() {
       setPinInput("");
     } catch { alert("PIN Incorrecto ❌"); setPinInput(""); }
     finally { setIsVerifyingPin(false); }
+  };
+
+  const handleEmailLogin = async () => {
+    setIsLoggingIn(true);
+    setLoginError("");
+    try {
+      const { data } = await api.post("/api/auth/login", { email: emailInput, password: passwordInput });
+      const token  = data.token;
+      const restId = data.restaurant?.id          || data.user?.restaurantId;
+      const locId  = data.restaurant?.locationId  || data.user?.locationId;
+      if (token)  localStorage.setItem("accessToken",  token);
+      if (restId) localStorage.setItem("restaurantId", String(restId));
+      if (locId)  localStorage.setItem("locationId",   String(locId));
+      if (data.restaurant?.name)           setRestaurantName(data.restaurant.name);
+      if (data.restaurant?.location?.name) setLocationName(data.restaurant.location.name);
+      setIsConfigured(true);
+      setIsEmailLogin(false);
+    } catch {
+      setLoginError("Credenciales incorrectas");
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   const fetchOrders = useCallback(async () => {
@@ -349,6 +379,56 @@ export default function TPVPage() {
   );
 
   // ── PANTALLA DE BLOQUEO ────────────────────────────────────────────────────
+  if (isEmailLogin) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[var(--bg)] flex-col px-4">
+        <h1 className="text-5xl font-syne font-black mb-1 text-center uppercase tracking-tighter"
+          style={{ color: ACCENT }}>MRTPVREST</h1>
+        <p className="text-[var(--muted)] mb-10 text-center text-sm font-medium">Configura este dispositivo</p>
+        <div className="bg-[var(--surf)] border border-[var(--border)] p-8 rounded-[2rem] w-full max-w-sm shadow-2xl flex flex-col gap-4">
+          <input
+            type="email"
+            placeholder="Correo electrónico"
+            value={emailInput}
+            onChange={e => setEmailInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleEmailLogin()}
+            className="w-full px-4 py-3 rounded-2xl text-sm outline-none"
+            style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
+          />
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Contraseña"
+              value={passwordInput}
+              onChange={e => setPasswordInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleEmailLogin()}
+              className="w-full px-4 py-3 rounded-2xl text-sm outline-none pr-12"
+              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 text-sm"
+            >
+              {showPassword ? "🙈" : "👁"}
+            </button>
+          </div>
+          {loginError && (
+            <p className="text-center text-sm text-red-400">{loginError}</p>
+          )}
+          <button
+            onClick={handleEmailLogin}
+            disabled={isLoggingIn || !emailInput || !passwordInput}
+            className="w-full py-4 rounded-2xl text-base font-black uppercase tracking-wide transition-opacity disabled:opacity-50"
+            style={{ background: ACCENT, color: "#000" }}
+          >
+            {isLoggingIn ? "Ingresando..." : "Ingresar"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (isGlobalLocked) {
     return (
       <div className="flex h-screen items-center justify-center bg-[var(--bg)] flex-col px-4">
