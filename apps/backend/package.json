@@ -5,9 +5,9 @@
    "scripts": {
       "dev": "nodemon src/index.js",
       "start": "node src/index.js",
-      "build": "prisma generate",
-      "db:migrate": "npx prisma migrate dev",
-      "db:seed": "node prisma/seed.js"
+      "build": "prisma generate --schema=../../packages/database/prisma/schema.prisma",
+      "db:migrate": "npx prisma migrate dev --schema=../../packages/database/prisma/schema.prisma",
+      "db:seed": "node ../../packages/database/prisma/seed.js"
    },
    "dependencies": {
       "@google/generative-ai": "^0.24.1",

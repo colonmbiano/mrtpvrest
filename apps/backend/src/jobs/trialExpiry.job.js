@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const cron   = require('node-cron')
-const prisma = require('../utils/prisma')
+const prisma = require('@mrtpvrest/database').prisma
 const { sendEmail, trialReminderHtml, trialExpiredHtml } = require('../utils/mailer')
 
 // ── Job principal ─────────────────────────────────────────────────────────────

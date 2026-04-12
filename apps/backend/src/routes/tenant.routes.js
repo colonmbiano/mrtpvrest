@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const router  = require('express').Router()
-const prisma  = require('../utils/prisma')
+const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate } = require('../middleware/auth.middleware')
 const multer  = require('multer')
 const { scanMenuFromImages } = require('../services/ai.service')

@@ -1,5 +1,0 @@
-{
-  "installCommand": "exit 0",
-  "buildCommand": "exit 0",
-  "outputDirectory": ".next"
-}

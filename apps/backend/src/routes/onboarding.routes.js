@@ -5,7 +5,7 @@
 
 const router = require('express').Router()
 const axios  = require('axios')
-const prisma = require('../utils/prisma')
+const prisma = require('@mrtpvrest/database').prisma
 const { authenticate } = require('../middleware/auth.middleware')
 
 // Nota: usamos axios directo a la Anthropic API porque @anthropic-ai/sdk
