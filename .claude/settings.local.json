@@ -11,7 +11,19 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(node:*)",
+      "Skill(update-config)",
+      "Bash(pnpm:*)",
+      "Bash(ls apps/backend/*.env* apps/backend/.env*)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(claude plugins:*)",
+      "Bash(xargs du:*)",
+      "Bash(find ./apps -name \".gitignore\" -exec echo \"=== {} ===\" \\\\; -exec cat {} \\\\;)",
+      "Bash(find ./apps -name \"tsconfig.json\" -exec echo \"=== {} ===\" \\\\; -exec cat {} \\\\;)",
+      "Bash(find ./apps -name \".eslintrc.json\" -exec echo \"=== {} ===\" \\\\; -exec cat {} \\\\;)",
+      "Bash(xargs ls:*)",
+      "Bash(git worktree:*)"
     ]
   }
 }

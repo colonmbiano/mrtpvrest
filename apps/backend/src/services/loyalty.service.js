@@ -1,4 +1,4 @@
-﻿const prisma = require('../utils/prisma')
+﻿const prisma = require('@mrtpvrest/database').prisma
 
 const TIERS = [
   { name: 'GOLD',   min: 1500 },

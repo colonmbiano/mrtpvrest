@@ -5,7 +5,7 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"],
-      "inputs": ["!apps/delivery/**"]
+      "inputs": ["!apps/delivery/**", "!apps/client/**"]
     },
     "dev": {
       "cache": false,

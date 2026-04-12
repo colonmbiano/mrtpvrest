@@ -1,5 +1,5 @@
 ﻿const express = require('express')
-const prisma  = require('../utils/prisma')
+const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin } = require('../middleware/auth.middleware')
 const router  = express.Router()
 
