@@ -2,10 +2,10 @@
 nixPkgs = ["openssl"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm install -g pnpm@9.15.0", "pnpm install --frozen-lockfile"]
 
 [phases.build]
-cmds = ["npx prisma generate"]
+cmds = ["pnpm --filter @mrtpvrest/database exec prisma generate"]
 
 [start]
 cmd = "node src/index.js"
