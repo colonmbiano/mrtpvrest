@@ -2,18 +2,21 @@ FROM node:18
 
 WORKDIR /app
 
+# Instalar pnpm
+RUN npm install -g pnpm@9.15.0
+
 # Copiar todo el código fuente
 COPY . .
 
-# Eliminar node_modules de Windows si se coló (independiente del .dockerignore)
-RUN rm -rf node_modules .npm
+# Eliminar node_modules de Windows si se coló
+RUN rm -rf node_modules apps/backend/node_modules packages/database/node_modules
 
-# Instalar dependencias limpias en Linux
-RUN npm ci
+# Instalar dependencias con pnpm
+RUN pnpm install --frozen-lockfile
 
-# Generar cliente de Prisma en Linux — produce binario debian-openssl-3.0.x
-RUN npx prisma generate
+# Generar cliente de Prisma
+RUN pnpm --filter @mrtpvrest/database exec prisma generate
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+CMD ["node", "apps/backend/src/index.js"]
