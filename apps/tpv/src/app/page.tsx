@@ -722,13 +722,13 @@ export default function TPVPage() {
                           ))}
                         </div>
                         <div className="space-y-1.5">
-                          {NEXT_STATUS[order.status] && (
-                            <button onClick={() => updateOrderStatus(order.id, NEXT_STATUS[order.status])} disabled={updatingOrder === order.id}
+                          {(() => { const nextStatus = NEXT_STATUS[order.status]; return nextStatus && (
+                            <button onClick={() => updateOrderStatus(order.id, nextStatus)} disabled={updatingOrder === order.id}
                               className="w-full py-2.5 rounded-xl text-xs font-bold min-h-[44px]"
                               style={{ background: ACCENT, color: "#fff" }}>
-                              {updatingOrder === order.id ? "..." : `→ ${STATUS_LABELS[NEXT_STATUS[order.status]]}`}
+                              {updatingOrder === order.id ? "..." : `→ ${STATUS_LABELS[nextStatus]}`}
                             </button>
-                          )}
+                          ); })()}
                           <button onClick={() => { setPayModal(order); setPayMethod("CASH"); setCashReceived(""); }}
                             className="w-full py-2.5 rounded-xl text-xs font-bold min-h-[44px]"
                             style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}>
@@ -957,13 +957,13 @@ export default function TPVPage() {
                           ))}
                         </div>
                         <div className="space-y-1.5">
-                          {NEXT_STATUS[order.status] && (
-                            <button onClick={() => updateOrderStatus(order.id, NEXT_STATUS[order.status])} disabled={updatingOrder === order.id}
+                          {(() => { const nextStatus = NEXT_STATUS[order.status]; return nextStatus && (
+                            <button onClick={() => updateOrderStatus(order.id, nextStatus)} disabled={updatingOrder === order.id}
                               className="w-full py-2.5 rounded-xl text-xs font-bold min-h-[44px]"
                               style={{ background: ACCENT, color: "#fff" }}>
-                              {updatingOrder === order.id ? "..." : `→ ${STATUS_LABELS[NEXT_STATUS[order.status]]}`}
+                              {updatingOrder === order.id ? "..." : `→ ${STATUS_LABELS[nextStatus]}`}
                             </button>
-                          )}
+                          ); })()}
                           <button onClick={() => { setPayModal(order); setPayMethod("CASH"); setCashReceived(""); }}
                             className="w-full py-2.5 rounded-xl text-xs font-bold min-h-[44px]"
                             style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}>
