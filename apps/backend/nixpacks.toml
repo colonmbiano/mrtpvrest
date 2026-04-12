@@ -2,7 +2,7 @@
 nixPkgs = ["openssl"]
 
 [phases.install]
-cmds = ["npm install -g pnpm@9.15.0", "pnpm install --frozen-lockfile"]
+cmds = ["npm install -g pnpm@9.15.0", "pnpm install --no-frozen-lockfile"]
 
 [phases.build]
 cmds = ["pnpm --filter @mrtpvrest/database exec prisma generate"]

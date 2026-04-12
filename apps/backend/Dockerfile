@@ -1,4 +1,4 @@
-FROM node:18
+FROM node:20
 
 WORKDIR /app
 
@@ -12,7 +12,7 @@ COPY . .
 RUN rm -rf node_modules apps/backend/node_modules packages/database/node_modules
 
 # Instalar dependencias con pnpm
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Generar cliente de Prisma
 RUN pnpm --filter @mrtpvrest/database exec prisma generate
