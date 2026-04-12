@@ -181,8 +181,6 @@ export default function TPVPage() {
     return () => clearInterval(t);
   }, [fetchOrders, isGlobalLocked, isConfigured]);
 
-  if (!isConfigured) return null;
-
   // ── TICKET HELPERS ─────────────────────────────────────────────────────────
   function updateTicket(patch: any) {
     setTickets(ts => ts.map((t, i) => i === activeTicket ? { ...t, ...patch } : t));
@@ -377,6 +375,8 @@ export default function TPVPage() {
   const filteredSettingsItems = allItems.filter((p: any) =>
     p.name.toLowerCase().includes(settingsSearch.toLowerCase())
   );
+
+  if (!isConfigured && !isEmailLogin) return null;
 
   // ── PANTALLA DE BLOQUEO ────────────────────────────────────────────────────
   if (isEmailLogin) {
