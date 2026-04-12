@@ -72,6 +72,7 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
 // Rutas públicas (sin tenantMiddleware)
 app.use('/api/public', require('./routes/menu.routes'))
+app.use('/api/store',  require('./routes/store.routes'))
 
 // --- MIDDLEWARE DE SAAS (TENANT) ---
 app.use(tenantMiddleware);
