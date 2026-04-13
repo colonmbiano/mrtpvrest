@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd ../.. && pnpm --filter @mrtpvrest/landing build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "installCommand": "npm install -g pnpm@9.15.0 && cd ../.. && pnpm install --filter @mrtpvrest/landing..."
+}
