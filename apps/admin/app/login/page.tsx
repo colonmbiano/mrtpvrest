@@ -1,10 +1,9 @@
 "use client";
 // app/(admin)/login/page.tsx
-// Coloca en: apps/admin/app/(admin)/login/page.tsx
-// O donde esté actualmente tu login page
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import api from "@/lib/api";
 
 export default function LoginPage() {
@@ -72,297 +71,33 @@ export default function LoginPage() {
 
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        .login-root {
-          min-height: 100vh;
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          font-family: 'Sora', sans-serif;
-          background: #0c0c0e;
-        }
-        /* LEFT PANEL */
-        .login-left {
-          position: relative;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          padding: 48px;
-          background: #0c0c0e;
-          overflow: hidden;
-        }
-        .login-left::before {
-          content: '';
-          position: absolute;
-          top: -120px; left: -120px;
-          width: 500px; height: 500px;
-          background: radial-gradient(circle, rgba(232,93,40,0.15) 0%, transparent 70%);
-          pointer-events: none;
-        }
-        .login-left::after {
-          content: '';
-          position: absolute;
-          bottom: -80px; right: -80px;
-          width: 400px; height: 400px;
-          background: radial-gradient(circle, rgba(232,93,40,0.08) 0%, transparent 70%);
-          pointer-events: none;
-        }
-        .brand {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          position: relative;
-          z-index: 1;
-        }
-        .brand-mark {
-          width: 36px; height: 36px;
-          background: #e85d28;
-          border-radius: 10px;
-          display: flex; align-items: center; justify-content: center;
-        }
-        .brand-mark svg { width: 20px; height: 20px; stroke: white; fill: none; stroke-width: 2; }
-        .brand-name { font-size: 15px; font-weight: 600; color: #f0f0f0; letter-spacing: -0.3px; }
-        .brand-name span { color: #e85d28; }
-        .left-content {
-          position: relative;
-          z-index: 1;
-        }
-        .left-headline {
-          font-size: 38px;
-          font-weight: 600;
-          color: #f0f0f0;
-          line-height: 1.15;
-          letter-spacing: -1.5px;
-          margin-bottom: 20px;
-        }
-        .left-headline em {
-          font-style: normal;
-          color: #e85d28;
-        }
-        .left-sub {
-          font-size: 15px;
-          color: #666;
-          line-height: 1.6;
-          max-width: 340px;
-        }
-        .left-stats {
-          display: flex;
-          gap: 32px;
-          position: relative;
-          z-index: 1;
-        }
-        .stat-item {}
-        .stat-num {
-          font-size: 28px;
-          font-weight: 600;
-          color: #f0f0f0;
-          letter-spacing: -1px;
-          font-family: 'DM Mono', monospace;
-        }
-        .stat-label {
-          font-size: 12px;
-          color: #444;
-          margin-top: 2px;
-        }
-
-        /* RIGHT PANEL */
-        .login-right {
-          background: #f7f6f3;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 48px;
-        }
-        .login-card {
-          width: 100%;
-          max-width: 380px;
-        }
-        .login-card-title {
-          font-size: 22px;
-          font-weight: 600;
-          color: #111;
-          letter-spacing: -0.5px;
-          margin-bottom: 6px;
-        }
-        .login-card-sub {
-          font-size: 13px;
-          color: #888;
-          margin-bottom: 36px;
-        }
-        .field {
-          margin-bottom: 16px;
-        }
-        .field label {
-          display: block;
-          font-size: 11px;
-          font-weight: 500;
-          color: #555;
-          letter-spacing: 0.5px;
-          text-transform: uppercase;
-          margin-bottom: 6px;
-        }
-        .input-wrap {
-          position: relative;
-        }
-        .field input {
-          width: 100%;
-          height: 44px;
-          padding: 0 14px;
-          border: 1px solid #e2e1d9;
-          border-radius: 10px;
-          background: #fff;
-          font-size: 14px;
-          font-family: 'Sora', sans-serif;
-          color: #111;
-          outline: none;
-          transition: border-color 0.15s;
-          appearance: none;
-        }
-        .field input:focus {
-          border-color: #e85d28;
-          box-shadow: 0 0 0 3px rgba(232,93,40,0.08);
-        }
-        .pass-toggle {
-          position: absolute;
-          right: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          background: none;
-          border: none;
-          cursor: pointer;
-          padding: 4px;
-          color: #aaa;
-          display: flex;
-          align-items: center;
-        }
-        .pass-toggle:hover { color: #666; }
-        .pass-toggle svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.5; }
-        .field input[type="password"] { padding-right: 40px; }
-        .field input[type="text"] { padding-right: 40px; }
-
-        .error-msg {
-          background: #fef2f2;
-          border: 1px solid #fecaca;
-          border-radius: 8px;
-          padding: 10px 14px;
-          font-size: 12px;
-          color: #dc2626;
-          margin-bottom: 16px;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-        .error-msg svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
-
-        .submit-btn {
-          width: 100%;
-          height: 46px;
-          background: #111;
-          color: #fff;
-          border: none;
-          border-radius: 10px;
-          font-size: 14px;
-          font-weight: 500;
-          font-family: 'Sora', sans-serif;
-          cursor: pointer;
-          transition: all 0.15s;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          margin-top: 8px;
-        }
-        .submit-btn:hover:not(:disabled) {
-          background: #e85d28;
-        }
-        .submit-btn:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-        .submit-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
-
-        .divider {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          margin: 20px 0;
-        }
-        .divider-line { flex: 1; height: 1px; background: #e2e1d9; }
-        .divider-text { font-size: 11px; color: #bbb; }
-
-        .register-link {
-          text-align: center;
-          font-size: 13px;
-          color: #888;
-        }
-        .register-link a {
-          color: #e85d28;
-          text-decoration: none;
-          font-weight: 500;
-        }
-        .register-link a:hover { text-decoration: underline; }
-
-        @media (max-width: 768px) {
-          .login-root { grid-template-columns: 1fr; }
-          .login-left { display: none; }
-          .login-right { padding: 32px 24px; }
-        }
-
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(16px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .login-card { animation: fadeUp 0.4s ease both; }
-      `}</style>
-
-      {/* ── PANTALLA: email pendiente de verificación ── */}
+      {/* ── MODAL: email pendiente de verificación ── */}
       {pendingEmail && (
-        <div style={{
-          position: "fixed", inset: 0, background: "#050505",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: "'Inter', sans-serif", padding: "24px", zIndex: 9999,
-        }}>
-          <div style={{
-            width: "100%", maxWidth: "420px", background: "#111",
-            border: "1px solid rgba(255,255,255,0.05)", borderRadius: "2.5rem",
-            padding: "40px", textAlign: "center",
-          }}>
-            <div style={{
-              width: 72, height: 72, margin: "0 auto 24px",
-              borderRadius: "50%", background: "rgba(249,115,22,0.1)",
-              border: "1px solid rgba(249,115,22,0.3)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 32,
-            }}>✉️</div>
-            <p style={{ fontSize: 22, fontWeight: 900, color: "#fff", margin: "0 0 8px" }}>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-50 font-sans">
+          <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-10 text-center shadow-2xl animate-fade-in-up">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-[#fff0ed] border border-red-50 flex items-center justify-center text-4xl shadow-inner">
+              ✉️
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 mb-2">
               Verifica tu email
-            </p>
-            <p style={{ fontSize: 14, color: "#9ca3af", margin: "0 0 32px", lineHeight: 1.6 }}>
-              Enviamos un enlace de confirmación a{" "}
-              <strong style={{ color: "#fff" }}>{pendingEmail}</strong>.
+            </h2>
+            <p className="text-sm text-slate-600 mb-8 leading-relaxed">
+              Enviamos un enlace de confirmación a <strong className="text-slate-900">{pendingEmail}</strong>.
               Debes verificarlo para acceder.
             </p>
             <button
               onClick={handleResend}
               disabled={resending || resendDone}
-              style={{
-                width: "100%", padding: "14px", borderRadius: "1rem",
-                background: resendDone ? "rgba(34,197,94,0.1)" : "#f97316",
-                border: resendDone ? "1px solid rgba(34,197,94,0.3)" : "none",
-                color: resendDone ? "#4ade80" : "#000",
-                fontWeight: 900, fontSize: 14, cursor: "pointer",
-                opacity: resending ? 0.6 : 1, marginBottom: 12,
-              }}
+              className={`w-full py-4 rounded-xl font-bold text-sm transition-all mb-4
+                ${resendDone 
+                  ? "bg-green-50 border border-green-200 text-green-600" 
+                  : "bg-[#ff5c35] hover:bg-[#e54a25] text-white shadow-lg shadow-orange-500/20 disabled:opacity-60"}`}
             >
               {resendDone ? "✓ Correo reenviado" : resending ? "Enviando..." : "Reenviar correo de verificación"}
             </button>
             <button
               onClick={() => { setPendingEmail(""); localStorage.removeItem("accessToken"); document.cookie = "mb-role=; path=/; max-age=0"; }}
-              style={{
-                background: "none", border: "none", color: "#6b7280",
-                fontSize: 13, cursor: "pointer", textDecoration: "underline",
-              }}
+              className="text-sm text-slate-500 hover:text-slate-800 underline transition-colors"
             >
               Volver al login
             </button>
@@ -370,57 +105,74 @@ export default function LoginPage() {
         </div>
       )}
 
-      <div className="login-root">
-        {/* LEFT */}
-        <div className="login-left">
-          <div className="brand">
-            <div className="brand-mark">
-              <svg viewBox="0 0 24 24"><path d="M3 12h18M3 6h18M3 18h12"/></svg>
+      {/* ── PANTALLA PRINCIPAL DE LOGIN ── */}
+      <div className="min-h-screen grid grid-cols-1 md:grid-cols-[1.3fr,1fr] bg-white font-sans">
+        
+        {/* LEFT PANEL */}
+        <div className="hidden md:flex bg-slate-50 flex-col justify-between p-12 lg:p-20 border-r border-slate-200 relative overflow-hidden">
+          {/* Adornos visuales sutiles */}
+          <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#ff5c35] opacity-[0.03] rounded-full blur-3xl pointer-events-none"></div>
+          
+          <div className="relative z-10">
+            <Link href="/" className="flex items-center gap-3 mb-20 hover:opacity-80 transition-opacity">
+              <div className="w-10 h-10 rounded-xl bg-[#ff5c35] flex items-center justify-center shadow-md">
+                <svg viewBox="0 0 24 24" className="w-6 h-6 stroke-white fill-none stroke-2"><path d="M3 12h18M3 6h18M3 18h12"/></svg>
+              </div>
+              <span className="text-2xl font-black text-slate-900 tracking-tighter">MR<span className="text-[#ff5c35]">TPV</span>REST</span>
+            </Link>
+            
+            <div className="max-w-xl">
+              <h1 className="text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.1] mb-6">
+                Gestiona tu restaurante <br/><em className="not-italic text-[#ff5c35]">sin complicaciones.</em>
+              </h1>
+              <p className="text-lg text-slate-600 leading-relaxed max-w-md">
+                TPV, cocina, delivery y tienda online. Todo en una plataforma diseñada para restaurantes en LATAM.
+              </p>
             </div>
-            <div className="brand-name">MR<span>TPV</span>REST</div>
           </div>
-
-          <div className="left-content">
-            <div className="left-headline">
-              Gestiona tu<br />restaurante<br /><em>sin complicaciones.</em>
+          
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-6 pt-10 border-t border-slate-200 relative z-10">
+            <div>
+              <p className="text-4xl font-black text-slate-900 font-mono tracking-tighter">62</p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-2">Restaurantes activos</p>
             </div>
-            <div className="left-sub">
-              TPV, cocina, delivery y tienda online. Todo en una plataforma diseñada para restaurantes en LATAM.
+            <div>
+              <p className="text-4xl font-black text-slate-900 font-mono tracking-tighter">$2</p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-2">Desde por mes</p>
             </div>
-          </div>
-
-          <div className="left-stats">
-            <div className="stat-item">
-              <div className="stat-num">62</div>
-              <div className="stat-label">Restaurantes activos</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-num">$2</div>
-              <div className="stat-label">Desde por mes</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-num">15d</div>
-              <div className="stat-label">Prueba gratis</div>
+            <div>
+              <p className="text-4xl font-black text-slate-900 font-mono tracking-tighter">15d</p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-2">Prueba gratis</p>
             </div>
           </div>
         </div>
 
-        {/* RIGHT */}
-        <div className="login-right">
-          <div className="login-card">
-            <div className="login-card-title">Bienvenido de nuevo</div>
-            <div className="login-card-sub">Ingresa a tu panel de administración</div>
+        {/* RIGHT PANEL (FORM) */}
+        <div className="flex items-center justify-center p-8 sm:p-12 lg:p-20 bg-white">
+          <div className="w-full max-w-md animate-fade-in-up">
+            
+            {/* Header móvil */}
+            <div className="md:hidden flex items-center gap-2 mb-10">
+               <div className="w-8 h-8 rounded-lg bg-[#ff5c35] flex items-center justify-center">
+                <svg viewBox="0 0 24 24" className="w-5 h-5 stroke-white fill-none stroke-2"><path d="M3 12h18M3 6h18M3 18h12"/></svg>
+              </div>
+              <span className="text-xl font-black text-slate-900 tracking-tighter">MRTPVREST</span>
+            </div>
+
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-2">Bienvenido de nuevo</h2>
+            <p className="text-sm text-slate-500 font-medium mb-10">Ingresa a tu panel de administración</p>
 
             {error && (
-              <div className="error-msg">
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <div className="mb-6 bg-red-50 border border-red-200 text-red-600 text-sm font-bold px-4 py-3 rounded-lg flex items-center gap-3">
+                <svg viewBox="0 0 24 24" className="w-5 h-5 stroke-current fill-none stroke-2 flex-shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleSubmit}>
-              <div className="field">
-                <label>Correo electrónico</label>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Correo electrónico</label>
                 <input
                   type="email"
                   placeholder="tu@restaurante.com"
@@ -428,12 +180,13 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoComplete="email"
+                  className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-[#ff5c35] focus:border-[#ff5c35] transition-all text-sm font-medium outline-none"
                 />
               </div>
 
-              <div className="field">
-                <label>Contraseña</label>
-                <div className="input-wrap">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Contraseña</label>
+                <div className="relative">
                   <input
                     type={showPass ? "text" : "password"}
                     placeholder="••••••••"
@@ -441,46 +194,65 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     autoComplete="current-password"
+                    className="w-full pl-4 pr-12 py-3.5 rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-[#ff5c35] focus:border-[#ff5c35] transition-all text-sm font-medium outline-none"
                   />
                   <button
                     type="button"
-                    className="pass-toggle"
                     onClick={() => setShowPass((v) => !v)}
                     tabIndex={-1}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
                   >
                     {showPass ? (
-                      <svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                      <svg viewBox="0 0 24 24" className="w-5 h-5 stroke-current fill-none stroke-[1.5]"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                     ) : (
-                      <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      <svg viewBox="0 0 24 24" className="w-5 h-5 stroke-current fill-none stroke-[1.5]"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     )}
                   </button>
                 </div>
               </div>
 
-              <button type="submit" className="submit-btn" disabled={loading}>
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="w-full mt-2 py-4 rounded-xl font-bold text-white bg-slate-900 hover:bg-[#ff5c35] shadow-lg hover:shadow-orange-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
                 {loading ? (
-                  <>Verificando...</>
+                  "Verificando..."
                 ) : (
                   <>
                     Entrar al panel
-                    <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-current fill-none stroke-2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                   </>
                 )}
               </button>
             </form>
 
-            <div className="divider">
-              <div className="divider-line" />
-              <div className="divider-text">¿nuevo aquí?</div>
-              <div className="divider-line" />
+            <div className="flex items-center gap-4 my-8">
+              <div className="flex-1 h-px bg-slate-200"></div>
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">¿nuevo aquí?</div>
+              <div className="flex-1 h-px bg-slate-200"></div>
             </div>
 
-            <div className="register-link">
-              <a href="https://masterburguers.com/#precios">Crear cuenta gratis — 15 días sin tarjeta</a>
+            <div className="text-center">
+              <Link href="/register" className="text-sm font-bold text-slate-600 hover:text-[#ff5c35] hover:underline transition-colors">
+                Crear cuenta gratis — 15 días sin tarjeta
+              </Link>
             </div>
+
           </div>
         </div>
       </div>
+      
+      {/* Animación global para la entrada suave */}
+      <style>{`
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up {
+          animation: fadeInUp 0.5s ease-out forwards;
+        }
+      `}</style>
     </>
   );
 }
