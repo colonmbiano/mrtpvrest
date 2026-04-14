@@ -8,6 +8,8 @@ const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate } = require('../middleware/auth.middleware')
 const multer  = require('multer')
 const { scanMenuFromImages } = require('../services/ai.service')
+const { uploadImage } = require('../services/cloudinary.service')
+const { extractAccentColor } = require('../services/extractColor.service')
 
 router.use(authenticate)
 
@@ -287,6 +289,45 @@ router.post('/import-menu', _menuUpload.single('menu'), async (req, res) => {
   } catch (e) {
     console.error('POST /tenant/import-menu:', e)
     res.status(500).json({ error: 'Error al importar el menú' })
+  }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/tenant/me/logo — sube el logo del restaurante y extrae accentColor
+// Multipart field: logo (image/jpeg, image/png, image/webp)
+// ─────────────────────────────────────────────────────────────────────────────
+const _logoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (allowed.includes(file.mimetype)) cb(null, true)
+    else cb(new Error('Tipo de archivo no permitido. Use imágenes jpeg, png o webp.'))
+  },
+})
+
+router.post('/me/logo', _logoUpload.single('logo'), async (req, res) => {
+  const { restaurantId } = req.user
+  if (!restaurantId) return res.status(400).json({ error: 'Sin restaurante asociado' })
+  if (!req.file)    return res.status(400).json({ error: 'Se requiere un archivo en el campo "logo"' })
+
+  try {
+    // 1. Extraer color del buffer en memoria (antes de subir a Cloudinary)
+    const accentColor = await extractAccentColor(req.file.buffer)
+
+    // 2. Subir imagen a Cloudinary
+    const logoUrl = await uploadImage(req.file.buffer, 'logos')
+
+    // 3. Persistir logoUrl y accentColor en el restaurante
+    await prisma.restaurant.update({
+      where: { id: restaurantId },
+      data:  { logoUrl, accentColor },
+    })
+
+    res.json({ ok: true, logoUrl, accentColor })
+  } catch (e) {
+    console.error('POST /tenant/me/logo:', e)
+    res.status(500).json({ error: 'Error al subir el logo' })
   }
 })
 
