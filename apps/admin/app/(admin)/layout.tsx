@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Sidebar from "@/components/admin/Sidebar";
 import TrialBanner from "@/components/TrialBanner";
 import { getUser } from "@/lib/auth";
+import { AccentInjector } from "@/components/AccentInjector";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen" style={{background:"var(--bg)"}}>
+      <AccentInjector />
       <Sidebar />
       <div className="ml-56 min-h-screen flex flex-col">
         <TrialBanner />
