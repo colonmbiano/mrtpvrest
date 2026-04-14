@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
-import { useTheme } from "./ThemeProvider";
+import { useTheme } from "@/components/ThemeProvider";
 
 export default function MrrChart() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
