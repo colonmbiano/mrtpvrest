@@ -12,7 +12,7 @@ async function sendEmail(to, subject, html) {
     console.log(`[mailer] Skipped (no RESEND_API_KEY): ${to} — ${subject}`)
     return
   }
-  const from = `${process.env.SMTP_FROM_NAME || 'MRTPVREST'} <mrtpvrest@masterburguers.com>`
+  const from = `${process.env.SMTP_FROM_NAME || 'MRTPVREST'} <${process.env.SMTP_FROM_EMAIL || 'noreply@mrtpvrest.com'}>`
   const { data, error } = await resend.emails.send({ from, to, subject, html })
   if (error) throw new Error(error.message)
   console.log(`[mailer] Enviado → ${to} (id: ${data.id})`)
@@ -23,29 +23,29 @@ async function sendEmail(to, subject, html) {
 
 function verificationEmailHtml(ownerName, tenantName, verifyUrl) {
   return `
-    <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;background:#0a0a0a;color:#fff;border-radius:16px;overflow:hidden;">
-      <div style="background:#f97316;padding:24px 32px;">
-        <h1 style="margin:0;font-size:20px;font-weight:900;letter-spacing:-0.5px;">
-          MRTPV<span style="color:#000">REST</span>
+    <div style="font-family:'DM Sans',Inter,sans-serif;max-width:560px;margin:0 auto;background:#080810;color:#f0f0f8;border-radius:16px;overflow:hidden;border:1px solid #1e1e30;">
+      <div style="background:linear-gradient(135deg,#7c3aed,#9f67ff);padding:24px 32px;">
+        <h1 style="margin:0;font-size:20px;font-weight:900;letter-spacing:-0.5px;color:#fff;">
+          MRTPVREST
         </h1>
       </div>
       <div style="padding:32px;">
-        <p style="font-size:24px;font-weight:900;margin:0 0 8px;">Hola, ${ownerName}</p>
-        <p style="color:#9ca3af;margin:0 0 8px;">
-          Tu cuenta de <strong style="color:#fff">${tenantName}</strong> fue creada. Solo falta verificar tu email para activarla.
+        <p style="font-size:24px;font-weight:900;margin:0 0 8px;">Hola, ${ownerName} 👋</p>
+        <p style="color:#6b6b90;margin:0 0 8px;">
+          Tu cuenta de <strong style="color:#f0f0f8">${tenantName}</strong> fue creada. Solo falta verificar tu email para activarla.
         </p>
-        <p style="color:#6b7280;font-size:13px;margin:0 0 32px;">
-          Este enlace expira en <strong style="color:#fff">24 horas</strong>.
+        <p style="color:#4a4a6a;font-size:13px;margin:0 0 32px;">
+          Este enlace expira en <strong style="color:#f0f0f8">24 horas</strong>.
         </p>
         <a href="${verifyUrl}"
-          style="display:inline-block;background:#f97316;color:#000;padding:16px 32px;border-radius:12px;font-weight:900;text-decoration:none;font-size:15px;letter-spacing:-0.3px;">
+          style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#9f67ff);color:#fff;padding:16px 32px;border-radius:12px;font-weight:900;text-decoration:none;font-size:15px;letter-spacing:-0.3px;box-shadow:0 4px 20px rgba(124,58,237,0.4);">
           VERIFICAR MI CUENTA →
         </a>
-        <p style="color:#4b5563;font-size:12px;margin:32px 0 0;">
+        <p style="color:#4a4a6a;font-size:12px;margin:32px 0 0;">
           Si no creaste esta cuenta, ignora este mensaje.
         </p>
       </div>
-      <div style="padding:16px 32px;border-top:1px solid #1f1f1f;color:#6b7280;font-size:12px;">
+      <div style="padding:16px 32px;border-top:1px solid #1e1e30;color:#4a4a6a;font-size:12px;">
         MRTPVREST · Sistema de punto de venta para restaurantes
       </div>
     </div>
