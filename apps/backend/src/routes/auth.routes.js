@@ -369,6 +369,33 @@ router.post('/refresh', async (req, res) => {
   }
 })
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CAMBIAR CONTRASEÑA — PUT /api/auth/change-password
+// ─────────────────────────────────────────────────────────────────────────────
+router.put('/change-password', authenticate, async (req, res) => {
+  const { currentPassword, newPassword } = req.body
+  if (!currentPassword || !newPassword)
+    return res.status(400).json({ error: 'currentPassword y newPassword son requeridos' })
+  if (newPassword.length < 8)
+    return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 8 caracteres' })
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } })
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash)
+    if (!valid) return res.status(401).json({ error: 'La contraseña actual es incorrecta' })
+
+    const passwordHash = await bcrypt.hash(newPassword, 12)
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash } })
+
+    res.json({ ok: true, message: 'Contraseña actualizada correctamente' })
+  } catch (e) {
+    console.error('Error en /change-password:', e)
+    res.status(500).json({ error: 'Error al cambiar la contraseña' })
+  }
+})
+
 // POST /api/auth/logout — eliminar refresh token
 router.post('/logout', authenticate, async (req, res) => {
   const { refreshToken } = req.body

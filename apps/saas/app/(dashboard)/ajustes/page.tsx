@@ -26,6 +26,30 @@ export default function AjustesPage() {
   const [newPlan, setNewPlan] = useState({ name:"", displayName:"", price:0, trialDays:15, maxLocations:1, maxEmployees:5 });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Cambio de contraseña ──
+  const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwError,   setPwError]   = useState("");
+  const [pwOk,      setPwOk]      = useState(false);
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPwError(""); setPwOk(false);
+    if (pw.next !== pw.confirm) { setPwError("Las contraseñas nuevas no coinciden"); return; }
+    if (pw.next.length < 8)    { setPwError("Mínimo 8 caracteres"); return; }
+    setPwLoading(true);
+    try {
+      await api.put("/api/auth/change-password", { currentPassword: pw.current, newPassword: pw.next });
+      setPwOk(true);
+      setPw({ current: "", next: "", confirm: "" });
+      showToast("Contraseña actualizada");
+    } catch (err: any) {
+      setPwError(err?.response?.data?.error ?? "Error al cambiar la contraseña");
+    } finally {
+      setPwLoading(false);
+    }
+  }
+
   function showToast(msg: string) {
     if (timer.current) clearTimeout(timer.current);
     setToast(msg); timer.current = setTimeout(() => setToast(""), 2500);
@@ -199,6 +223,65 @@ export default function AjustesPage() {
           </div>
         </div>
       )}
+
+      {/* ── Tarjeta cambio de contraseña ── */}
+      <div className="db-content" style={{ marginTop: 0, paddingTop: 0 }}>
+        <div className="db-card" style={{ maxWidth: 480 }}>
+          <div className="db-card-header">
+            <div>
+              <div className="db-card-title">Cambiar contraseña</div>
+              <div className="db-card-sub">Actualiza la contraseña de tu cuenta SaaS</div>
+            </div>
+          </div>
+          <div className="db-card-body">
+            <form onSubmit={handleChangePassword} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {[
+                { label: "Contraseña actual",       key: "current",  type: "password" },
+                { label: "Nueva contraseña",         key: "next",     type: "password" },
+                { label: "Confirmar nueva contraseña", key: "confirm", type: "password" },
+              ].map(({ label, key, type }) => (
+                <div key={key} className="db-field">
+                  <label>{label}</label>
+                  <div className="db-field-wrap">
+                    <input
+                      type={type}
+                      value={pw[key as keyof typeof pw]}
+                      onChange={e => setPw(p => ({ ...p, [key]: e.target.value }))}
+                      placeholder="••••••••"
+                      required
+                    />
+                  </div>
+                </div>
+              ))}
+
+              {pwError && (
+                <div style={{
+                  padding: "8px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+                  background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
+                  color: "#ef4444",
+                }}>{pwError}</div>
+              )}
+
+              {pwOk && (
+                <div style={{
+                  padding: "8px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+                  background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)",
+                  color: "#10b981",
+                }}>✓ Contraseña actualizada correctamente</div>
+              )}
+
+              <button
+                type="submit"
+                className="db-btn db-btn-orange"
+                disabled={pwLoading}
+                style={{ marginTop: 4, alignSelf: "flex-start", minWidth: 180 }}
+              >
+                {pwLoading ? "Actualizando…" : "Cambiar contraseña"}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
 
       <div className={`db-toast ${toast?"show":""}`}>{toast}</div>
     </>
