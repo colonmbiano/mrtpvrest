@@ -1,25 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// SaaS (SUPER_ADMIN) protected paths
-const SAAS_PATHS = ["/dashboard", "/marcas", "/ajustes", "/facturacion", "/logs", "/api-keys"];
-
-// Admin (ADMIN/KITCHEN) protected paths — prefix match
-const ADMIN_PREFIX = "/admin";
-
 // Public paths — always allowed
-const PUBLIC_PATHS = ["/login", "/register", "/verify-email", "/saas/login", "/_next", "/favicon", "/logo", "/api", "/.well-known"];
-
-function getRole(req: NextRequest): string | null {
-  return req.cookies.get("mb-role")?.value ?? null;
-}
-
-function isSaasPath(pathname: string) {
-  return SAAS_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
-}
-
-function isAdminPath(pathname: string) {
-  return pathname === ADMIN_PREFIX || pathname.startsWith(ADMIN_PREFIX + "/");
-}
+const PUBLIC_PATHS = ["/login", "/register", "/verify-email", "/onboarding", "/_next", "/favicon", "/logo", "/api", "/.well-known"];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
@@ -28,47 +10,31 @@ function isPublic(pathname: string) {
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Let public and static routes through immediately
   if (isPublic(pathname)) return NextResponse.next();
-
-  // KDS and repartidor are handled by their own auth
   if (pathname.startsWith("/kds") || pathname.startsWith("/repartidor")) return NextResponse.next();
 
-  const role = getRole(req);
+  const role = req.cookies.get("mb-role")?.value ?? null;
 
-  // No cookie → redirect to login
   if (!role) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // SUPER_ADMIN: allow SaaS paths, block admin-only paths
+  // SUPER_ADMIN ya no tiene panel aquí → redirigir a saas app
   if (role === "SUPER_ADMIN") {
-    if (isAdminPath(pathname)) {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
-    }
-    return NextResponse.next();
+    const saasUrl = process.env.NEXT_PUBLIC_SAAS_URL || "http://localhost:3005";
+    return NextResponse.redirect(new URL("/dashboard", saasUrl));
   }
 
-  // ADMIN / KITCHEN: allow admin paths, block SaaS paths
+  // ADMIN / KITCHEN: solo acceden a rutas /admin
   if (role === "ADMIN" || role === "KITCHEN") {
-    if (isSaasPath(pathname)) {
-      return NextResponse.redirect(new URL("/admin", req.url));
-    }
     return NextResponse.next();
   }
 
-  // Unknown role → login
   return NextResponse.redirect(new URL("/login", req.url));
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths EXCEPT:
-     * - _next/static, _next/image (Next.js internals)
-     * - favicon.ico, logo.png (static assets)
-     * - .well-known/* (Vercel internal JWE/OIDC endpoints — MUST NOT be intercepted)
-     */
     "/((?!_next/static|_next/image|favicon\\.ico|logo\\.png|manifest|\\.well-known).*)",
   ],
 };
