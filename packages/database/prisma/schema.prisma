@@ -171,6 +171,7 @@ model Restaurant {
   domain      String?  @unique
   isActive     Boolean  @default(true)
   logoUrl      String?  // Logo personalizado del cliente
+  accentColor  String?  // HEX extraído del logo con colorthief, ej: "#7c3aed"
   businessType String   @default("RESTAURANT") // RESTAURANT | RETAIL | GROCERY
 
   // Configuración Global
