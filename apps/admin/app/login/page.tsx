@@ -1,6 +1,4 @@
 "use client";
-// app/(admin)/login/page.tsx
-
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -13,7 +11,7 @@ export default function LoginPage() {
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState("");
   const [showPass, setShowPass]     = useState(false);
-  const [pendingEmail, setPendingEmail] = useState("");   // email sin verificar
+  const [pendingEmail, setPendingEmail] = useState("");
   const [resending, setResending]   = useState(false);
   const [resendDone, setResendDone] = useState(false);
 
@@ -53,9 +51,14 @@ export default function LoginPage() {
         return;
       }
 
-      // Para ADMIN: verificar si el email está confirmado antes de entrar
       const tenantRes = await api.get("/api/tenant/me");
       const tenant = tenantRes.data;
+
+      // Guardar accentColor para ThemeProvider
+      if (tenant.accentColor) {
+        localStorage.setItem("mb-accent", tenant.accentColor);
+      }
+
       if (!tenant.emailVerifiedAt) {
         setPendingEmail(data.user.email);
         return;
@@ -69,190 +72,168 @@ export default function LoginPage() {
     }
   }
 
+  // Estilos reutilizables
+  const inputStyle = {
+    width: "100%", padding: "11px 14px",
+    border: "1px solid var(--border2)",
+    borderRadius: 10, background: "var(--surf)",
+    color: "var(--text)", fontSize: 13, outline: "none",
+    fontFamily: "'DM Sans', sans-serif",
+  } as const;
+
   return (
     <>
-      {/* ── MODAL: email pendiente de verificación ── */}
+      {/* Modal email pendiente */}
       {pendingEmail && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-50 font-sans">
-          <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-10 text-center shadow-2xl animate-fade-in-up">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-[#fff0ed] border border-red-50 flex items-center justify-center text-4xl shadow-inner">
-              ✉️
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 mb-2">
+        <div style={{
+          position: "fixed", inset: 0,
+          background: "rgba(8,8,16,0.8)", backdropFilter: "blur(8px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 24, zIndex: 50,
+        }}>
+          <div style={{
+            width: "100%", maxWidth: 400,
+            background: "var(--surf)", border: "1px solid var(--border2)",
+            borderRadius: 24, padding: 40, textAlign: "center",
+            boxShadow: "0 0 60px rgba(0,0,0,0.5)"
+          }}>
+            <div style={{
+              width: 72, height: 72, borderRadius: "50%",
+              background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.2)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 36, margin: "0 auto 20px"
+            }}>✉️</div>
+            <h2 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 20, color: "var(--text)", marginBottom: 8 }}>
               Verifica tu email
             </h2>
-            <p className="text-sm text-slate-600 mb-8 leading-relaxed">
-              Enviamos un enlace de confirmación a <strong className="text-slate-900">{pendingEmail}</strong>.
-              Debes verificarlo para acceder.
+            <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 24, lineHeight: 1.6 }}>
+              Enviamos un enlace a <strong style={{ color: "var(--text)" }}>{pendingEmail}</strong>
             </p>
             <button
-              onClick={handleResend}
-              disabled={resending || resendDone}
-              className={`w-full py-4 rounded-xl font-bold text-sm transition-all mb-4
-                ${resendDone 
-                  ? "bg-green-50 border border-green-200 text-green-600" 
-                  : "bg-[#ff5c35] hover:bg-[#e54a25] text-white shadow-lg shadow-orange-500/20 disabled:opacity-60"}`}
+              onClick={handleResend} disabled={resending || resendDone}
+              style={{
+                width: "100%", padding: "12px",
+                borderRadius: 10, fontWeight: 700, fontSize: 13,
+                cursor: "pointer", marginBottom: 12, border: "none",
+                background: resendDone ? "rgba(16,185,129,0.1)" : "var(--brand-primary)",
+                color: resendDone ? "#10b981" : "#fff",
+                opacity: resending ? 0.6 : 1,
+              }}
             >
-              {resendDone ? "✓ Correo reenviado" : resending ? "Enviando..." : "Reenviar correo de verificación"}
+              {resendDone ? "✓ Correo reenviado" : resending ? "Enviando..." : "Reenviar correo"}
             </button>
             <button
               onClick={() => { setPendingEmail(""); localStorage.removeItem("accessToken"); document.cookie = "mb-role=; path=/; max-age=0"; }}
-              className="text-sm text-slate-500 hover:text-slate-800 underline transition-colors"
-            >
-              Volver al login
-            </button>
+              style={{ background: "none", border: "none", fontSize: 12, color: "var(--muted)", cursor: "pointer", textDecoration: "underline" }}
+            >Volver al login</button>
           </div>
         </div>
       )}
 
-      {/* ── PANTALLA PRINCIPAL DE LOGIN ── */}
-      <div className="min-h-screen grid grid-cols-1 md:grid-cols-[1.3fr,1fr] bg-white font-sans">
-        
-        {/* LEFT PANEL */}
-        <div className="hidden md:flex bg-slate-50 flex-col justify-between p-12 lg:p-20 border-r border-slate-200 relative overflow-hidden">
-          {/* Adornos visuales sutiles */}
-          <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#ff5c35] opacity-[0.03] rounded-full blur-3xl pointer-events-none"></div>
-          
-          <div className="relative z-10">
-            <Link href="/" className="flex items-center gap-3 mb-20 hover:opacity-80 transition-opacity">
-              <div className="w-10 h-10 rounded-xl bg-[#ff5c35] flex items-center justify-center shadow-md">
-                <svg viewBox="0 0 24 24" className="w-6 h-6 stroke-white fill-none stroke-2"><path d="M3 12h18M3 6h18M3 18h12"/></svg>
-              </div>
-              <span className="text-2xl font-black text-slate-900 tracking-tighter">MR<span className="text-[#ff5c35]">TPV</span>REST</span>
+      {/* Layout split */}
+      <div style={{
+        minHeight: "100vh", display: "grid",
+        gridTemplateColumns: "1.3fr 1fr",
+        fontFamily: "'DM Sans', sans-serif",
+      }}>
+        {/* Panel izquierdo */}
+        <div style={{
+          background: "var(--surf)", borderRight: "1px solid var(--border)",
+          padding: "48px 48px", display: "flex", flexDirection: "column",
+          justifyContent: "space-between", position: "relative", overflow: "hidden",
+        }}>
+          <div style={{
+            position: "absolute", top: "-20%", left: "-20%",
+            width: 500, height: 500,
+            background: "radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 70%)",
+            pointerEvents: "none",
+          }} />
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 48, textDecoration: "none" }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: "linear-gradient(135deg, #7c3aed, #9f67ff)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 11, color: "#fff"
+              }}>MR</div>
+              <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 18, color: "var(--text)", letterSpacing: -0.5 }}>
+                MRTPV<span style={{ color: "var(--brand-primary)" }}>REST</span>
+              </span>
             </Link>
-            
-            <div className="max-w-xl">
-              <h1 className="text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.1] mb-6">
-                Gestiona tu restaurante <br/><em className="not-italic text-[#ff5c35]">sin complicaciones.</em>
-              </h1>
-              <p className="text-lg text-slate-600 leading-relaxed max-w-md">
-                TPV, cocina, delivery y tienda online. Todo en una plataforma diseñada para restaurantes en LATAM.
-              </p>
-            </div>
+            <h1 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 36, color: "var(--text)", lineHeight: 1.1, letterSpacing: -1.5, marginBottom: 16 }}>
+              Gestiona tu restaurante{" "}
+              <em style={{ fontStyle: "normal", color: "var(--brand-primary)" }}>sin complicaciones.</em>
+            </h1>
+            <p style={{ fontSize: 15, color: "var(--muted)", lineHeight: 1.7, maxWidth: 340 }}>
+              TPV, cocina, delivery y tienda online. Todo sincronizado en tiempo real para restaurantes en LATAM.
+            </p>
           </div>
-          
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-6 pt-10 border-t border-slate-200 relative z-10">
-            <div>
-              <p className="text-4xl font-black text-slate-900 font-mono tracking-tighter">62</p>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-2">Restaurantes activos</p>
-            </div>
-            <div>
-              <p className="text-4xl font-black text-slate-900 font-mono tracking-tighter">$2</p>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-2">Desde por mes</p>
-            </div>
-            <div>
-              <p className="text-4xl font-black text-slate-900 font-mono tracking-tighter">15d</p>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-2">Prueba gratis</p>
-            </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 24, borderTop: "1px solid var(--border)", paddingTop: 24, position: "relative", zIndex: 1 }}>
+            {[{ n: "+500", l: "Restaurantes activos" }, { n: "$29", l: "Desde por mes" }, { n: "15d", l: "Prueba gratis" }].map(s => (
+              <div key={s.n}>
+                <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 24, fontWeight: 800, color: "var(--text)" }}>{s.n}</div>
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{s.l}</div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* RIGHT PANEL (FORM) */}
-        <div className="flex items-center justify-center p-8 sm:p-12 lg:p-20 bg-white">
-          <div className="w-full max-w-md animate-fade-in-up">
-            
-            {/* Header móvil */}
-            <div className="md:hidden flex items-center gap-2 mb-10">
-               <div className="w-8 h-8 rounded-lg bg-[#ff5c35] flex items-center justify-center">
-                <svg viewBox="0 0 24 24" className="w-5 h-5 stroke-white fill-none stroke-2"><path d="M3 12h18M3 6h18M3 18h12"/></svg>
-              </div>
-              <span className="text-xl font-black text-slate-900 tracking-tighter">MRTPVREST</span>
-            </div>
-
-            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-2">Bienvenido de nuevo</h2>
-            <p className="text-sm text-slate-500 font-medium mb-10">Ingresa a tu panel de administración</p>
+        {/* Panel derecho (formulario) */}
+        <div style={{ background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: "48px 40px" }}>
+          <div style={{ width: "100%", maxWidth: 380 }}>
+            <h2 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 24, color: "var(--text)", marginBottom: 4, letterSpacing: -0.5 }}>Bienvenido de nuevo</h2>
+            <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 28 }}>Ingresa a tu panel de administración</p>
 
             {error && (
-              <div className="mb-6 bg-red-50 border border-red-200 text-red-600 text-sm font-bold px-4 py-3 rounded-lg flex items-center gap-3">
-                <svg viewBox="0 0 24 24" className="w-5 h-5 stroke-current fill-none stroke-2 flex-shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                {error}
-              </div>
+              <div style={{
+                marginBottom: 20, padding: "10px 14px", borderRadius: 10,
+                background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
+                color: "#ef4444", fontSize: 13, fontWeight: 700
+              }}>{error}</div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Correo electrónico</label>
-                <input
-                  type="email"
-                  placeholder="tu@restaurante.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-[#ff5c35] focus:border-[#ff5c35] transition-all text-sm font-medium outline-none"
-                />
+                <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>Correo electrónico</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@restaurante.com" required autoComplete="email" style={inputStyle} />
               </div>
-
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Contraseña</label>
-                <div className="relative">
-                  <input
-                    type={showPass ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    autoComplete="current-password"
-                    className="w-full pl-4 pr-12 py-3.5 rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-[#ff5c35] focus:border-[#ff5c35] transition-all text-sm font-medium outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPass((v) => !v)}
-                    tabIndex={-1}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
-                  >
-                    {showPass ? (
-                      <svg viewBox="0 0 24 24" className="w-5 h-5 stroke-current fill-none stroke-[1.5]"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" className="w-5 h-5 stroke-current fill-none stroke-[1.5]"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    )}
+                <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>Contraseña</label>
+                <div style={{ position: "relative" }}>
+                  <input type={showPass ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required autoComplete="current-password" style={{ ...inputStyle, paddingRight: 44 }} />
+                  <button type="button" onClick={() => setShowPass(v => !v)} tabIndex={-1}
+                    style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 16 }}>
+                    {showPass ? "🙈" : "👁️"}
                   </button>
                 </div>
               </div>
-
-              <button 
-                type="submit" 
-                disabled={loading}
-                className="w-full mt-2 py-4 rounded-xl font-bold text-white bg-slate-900 hover:bg-[#ff5c35] shadow-lg hover:shadow-orange-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  "Verificando..."
-                ) : (
-                  <>
-                    Entrar al panel
-                    <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-current fill-none stroke-2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-                  </>
-                )}
+              <button type="submit" disabled={loading} style={{
+                width: "100%", padding: "13px",
+                background: "var(--brand-primary)",
+                border: "none", borderRadius: 10,
+                fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 13,
+                color: "#fff", cursor: loading ? "not-allowed" : "pointer",
+                opacity: loading ? 0.6 : 1,
+                boxShadow: "0 4px 20px rgba(124,58,237,0.25)",
+                transition: "all .2s", marginTop: 4,
+              }}>
+                {loading ? "Verificando..." : "Entrar al panel →"}
               </button>
             </form>
 
-            <div className="flex items-center gap-4 my-8">
-              <div className="flex-1 h-px bg-slate-200"></div>
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">¿nuevo aquí?</div>
-              <div className="flex-1 h-px bg-slate-200"></div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "24px 0" }}>
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+              <span style={{ fontSize: 10, color: "var(--muted2)", textTransform: "uppercase", letterSpacing: "0.8px" }}>¿nuevo aquí?</span>
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
             </div>
-
-            <div className="text-center">
-              <Link href="/register" className="text-sm font-bold text-slate-600 hover:text-[#ff5c35] hover:underline transition-colors">
+            <div style={{ textAlign: "center" }}>
+              <Link href="/register" style={{ fontSize: 13, fontWeight: 700, color: "var(--brand-primary)", textDecoration: "none" }}>
                 Crear cuenta gratis — 15 días sin tarjeta
               </Link>
             </div>
-
           </div>
         </div>
       </div>
-      
-      {/* Animación global para la entrada suave */}
-      <style>{`
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in-up {
-          animation: fadeInUp 0.5s ease-out forwards;
-        }
-      `}</style>
     </>
   );
 }
