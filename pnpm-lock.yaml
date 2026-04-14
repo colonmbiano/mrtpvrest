@@ -328,6 +328,12 @@ importers:
       '@prisma/client':
         specifier: ^5.22.0
         version: 5.22.0(prisma@5.22.0)
+      bcryptjs:
+        specifier: ^2.4.3
+        version: 2.4.3
+      dotenv:
+        specifier: ^16.4.4
+        version: 16.6.1
     devDependencies:
       prisma:
         specifier: ^5.22.0
