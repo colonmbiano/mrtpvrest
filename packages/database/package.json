@@ -11,7 +11,9 @@
     "db:seed": "node prisma/seed.js"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0"
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.4"
   },
   "devDependencies": {
     "prisma": "^5.22.0"
