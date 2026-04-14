@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { logout, getUser, isSuperAdmin } from "@/lib/auth";
-import ThemeToggle from "@/components/ThemeToggle";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import api from "@/lib/api";
 
 const SECTIONS = [
@@ -308,7 +308,7 @@ export default function Sidebar() {
 
           <div className="flex items-center justify-between mb-2.5 px-0.5">
             <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>Tema</span>
-            <ThemeToggle size="sm" />
+            <ThemeToggle />
           </div>
 
           <button
