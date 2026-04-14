@@ -46,8 +46,8 @@ function authHeader(): Record<string, string> {
 function TypingIndicator() {
   return (
     <div className="flex items-end gap-2 mb-4">
-      <div className="w-7 h-7 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0">
-        <span className="text-orange-500 text-[10px] font-black">AI</span>
+      <div className="w-7 h-7 rounded-full bg-[var(--brand-primary)]/20 border border-[var(--brand-primary)]/30 flex items-center justify-center shrink-0">
+        <span className="text-[var(--brand-primary)] text-[10px] font-black">AI</span>
       </div>
       <div className="bg-white/[0.06] border border-white/10 rounded-2xl rounded-bl-sm px-4 py-3">
         <div className="flex gap-1 items-center h-4">
@@ -70,8 +70,8 @@ function ChatBubble({ msg }: { msg: Message }) {
     <div className={`flex items-end gap-2 mb-4 ${isUser ? "flex-row-reverse" : ""}`}>
       {/* Avatar */}
       {!isUser && (
-        <div className="w-7 h-7 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0">
-          <span className="text-orange-500 text-[10px] font-black">AI</span>
+        <div className="w-7 h-7 rounded-full bg-[var(--brand-primary)]/20 border border-[var(--brand-primary)]/30 flex items-center justify-center shrink-0">
+          <span className="text-[var(--brand-primary)] text-[10px] font-black">AI</span>
         </div>
       )}
 
@@ -79,7 +79,7 @@ function ChatBubble({ msg }: { msg: Message }) {
       <div
         className={`max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
           isUser
-            ? "bg-orange-500 text-black font-medium rounded-br-sm"
+            ? "bg-[var(--brand-primary)] text-black font-medium rounded-br-sm"
             : "bg-white/[0.06] border border-white/10 text-gray-100 rounded-bl-sm"
         }`}
       >
@@ -224,8 +224,8 @@ export default function OnboardingPage() {
   // ── Loading inicial ────────────────────────────────────────────────────────
   if (booting) {
     return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
+      <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[var(--brand-primary)]/30 border-t-[var(--brand-primary)] rounded-full animate-spin" />
       </div>
     );
   }
@@ -234,14 +234,14 @@ export default function OnboardingPage() {
 
   // ── UI principal ───────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#050505] text-white flex" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="min-h-screen bg-[var(--bg)] text-white flex" style={{ fontFamily: "'Inter', sans-serif" }}>
 
       {/* ── Columna izquierda: branding ──────────────────────────────────── */}
       <aside className="hidden lg:flex flex-col justify-between w-[340px] shrink-0 border-r border-white/[0.06] p-10">
         {/* Logo */}
         <div>
           <h1 className="text-2xl font-black tracking-tighter mb-1">
-            MRTPV<span className="text-orange-500">REST</span>
+            MRTPV<span className="text-[var(--brand-primary)]">REST</span>
           </h1>
           <p className="text-gray-500 text-sm">Sistema POS para LATAM</p>
         </div>
@@ -296,7 +296,7 @@ export default function OnboardingPage() {
         {/* Header móvil */}
         <div className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
           <h1 className="text-lg font-black tracking-tighter">
-            MRTPV<span className="text-orange-500">REST</span>
+            MRTPV<span className="text-[var(--brand-primary)]">REST</span>
           </h1>
           {obState.activatedModules.length > 0 && (
             <div className="flex gap-1 flex-wrap justify-end max-w-[60%]">
@@ -335,12 +335,12 @@ export default function OnboardingPage() {
             onChange={(e) => setInput(e.target.value)}
             disabled={loading || isDone}
             placeholder={isDone ? "Configuración completada" : "Escribe tu respuesta…"}
-            className="flex-1 bg-white/[0.04] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-gray-600 outline-none focus:border-orange-500/50 focus:bg-white/[0.06] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-1 bg-white/[0.04] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-gray-600 outline-none focus:border-[var(--brand-primary)]/50 focus:bg-white/[0.06] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           />
           <button
             type="submit"
             disabled={!input.trim() || loading || isDone}
-            className="w-10 h-10 rounded-2xl bg-orange-500 flex items-center justify-center shrink-0 transition-all hover:bg-orange-400 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-10 h-10 rounded-2xl bg-[var(--brand-primary)] flex items-center justify-center shrink-0 transition-all hover:bg-[var(--brand-primary)] disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="Enviar"
           >
             {loading ? (

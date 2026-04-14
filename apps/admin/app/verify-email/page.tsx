@@ -40,7 +40,7 @@ function VerifyEmailContent() {
 
       {status === "loading" && (
         <div className="space-y-4">
-          <div className="w-16 h-16 mx-auto rounded-full border-4 border-orange-500/30 border-t-orange-500 animate-spin" />
+          <div className="w-16 h-16 mx-auto rounded-full border-4 border-[var(--brand-primary)]/30 border-t-[var(--brand-primary)] animate-spin" />
           <p className="text-gray-400 font-bold">Verificando tu cuenta...</p>
         </div>
       )}
@@ -71,7 +71,7 @@ function VerifyEmailContent() {
           </div>
           <button
             onClick={() => router.push("/onboarding")}
-            className="w-full py-4 rounded-2xl font-black bg-orange-500 hover:bg-orange-600 text-white transition-all active:scale-95"
+            className="w-full py-4 rounded-2xl font-black bg-[var(--brand-primary)] hover:bg-[var(--brand-primary)] text-white transition-all active:scale-95"
           >
             IR AL DASHBOARD →
           </button>
@@ -104,18 +104,18 @@ function VerifyEmailContent() {
 
 export default function VerifyEmailPage() {
   return (
-    <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-6"
+    <div className="min-h-screen bg-[var(--bg)] text-white flex flex-col items-center justify-center p-6"
       style={{ fontFamily: "'Inter', sans-serif" }}>
 
       <div className="mb-10 text-center">
         <h1 className="text-3xl font-black tracking-tighter">
-          MRTPV<span className="text-orange-500">REST</span>
+          MRTPV<span style={{color:"var(--brand-primary)"}}>REST</span>
         </h1>
       </div>
 
       <Suspense fallback={
         <div className="w-full max-w-md bg-[#111] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl text-center">
-          <div className="w-16 h-16 mx-auto rounded-full border-4 border-orange-500/30 border-t-orange-500 animate-spin" />
+          <div className="w-16 h-16 mx-auto rounded-full border-4 border-[var(--brand-primary)]/30 border-t-[var(--brand-primary)] animate-spin" />
         </div>
       }>
         <VerifyEmailContent />
