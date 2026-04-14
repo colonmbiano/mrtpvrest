@@ -1,19 +1,20 @@
 "use client";
-import { useTheme } from "@/lib/useTheme";
+import { useTheme } from "./ThemeProvider";
 
-export default function ThemeToggle({ size = "md" }: { size?: "sm" | "md" }) {
-  const { theme, toggle } = useTheme();
-  const sm = size === "sm";
+export function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
   return (
     <button
-      onClick={toggle}
-      title={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
-      className={`rounded-xl flex items-center justify-center transition-all ${sm ? "w-8 h-8 text-sm" : "w-10 h-10 text-lg"}`}
+      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      aria-label="Cambiar tema"
       style={{
-        background: "var(--surf2)",
-        border: "1px solid var(--border)",
-        color: "var(--muted)",
-      }}>
+        width: 34, height: 34, borderRadius: 8,
+        background: "var(--surf2)", border: "1px solid var(--border2)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: "pointer", color: "var(--muted)", transition: "all .15s",
+        fontSize: 15,
+      }}
+    >
       {theme === "dark" ? "☀️" : "🌙"}
     </button>
   );
