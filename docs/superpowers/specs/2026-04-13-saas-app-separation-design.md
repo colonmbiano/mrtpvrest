@@ -187,18 +187,35 @@ Migración: `npx prisma migrate dev --name add_accent_color_to_business`
 
 ### 4.2 Extracción del color — backend
 
-Al subir un logo (endpoint existente de `mi-marca`):
-1. Recibir imagen.
-2. Usar `colorthief` (Node.js) para extraer el color dominante en RGB.
-3. Convertir a HEX.
-4. Guardar en `Business.accentColor`.
+**Storage:** El proyecto ya usa **Cloudinary** (`apps/backend/src/services/cloudinary.service.js`). Las imágenes se reciben como buffer en memoria vía `multer.memoryStorage()` y se suben con `upload_stream`.
 
-```ts
-import ColorThief from 'colorthief';
-const color = await ColorThief.getColor(imageBuffer);
-const hex = `#${color.map(c => c.toString(16).padStart(2,'0')).join('')}`;
-await prisma.business.update({ where: { id }, data: { accentColor: hex } });
+**Flujo — la extracción ocurre sobre el buffer en memoria, ANTES de subir a Cloudinary:**
+
+1. Recibir imagen como `buffer` en memoria (multer — ya implementado).
+2. **Extraer color dominante del buffer con `colorthief`** — sin fetch externo, sin CORS.
+3. Convertir RGB → HEX.
+4. Subir imagen a Cloudinary y obtener `secure_url` (ya implementado).
+5. Guardar `secure_url` (logo) + `accentColor` (HEX) en `Business`.
+
+```js
+// En el endpoint de subida de logo (tenant.routes.js o upload.routes.js)
+const ColorThief = require('colorthief');
+
+// 1. Extraer color del buffer ANTES de subir
+const rgb = await ColorThief.getColor(req.file.buffer);
+const accentColor = '#' + rgb.map(c => c.toString(16).padStart(2, '0')).join('');
+
+// 2. Subir a Cloudinary (ya existente)
+const logoUrl = await uploadImage(req.file.buffer, 'logos');
+
+// 3. Persistir ambos
+await prisma.business.update({
+  where: { id: businessId },
+  data: { logoUrl, accentColor },
+});
 ```
+
+**No hay problema de CORS** — `colorthief` opera sobre el buffer Node.js en memoria, nunca realiza un fetch cross-origin desde el browser. Las URLs de Cloudinary (`res.cloudinary.com`) son HTTPS públicas, pero no se usan para la extracción de color.
 
 ### 4.3 Inyección en el frontend — ThemeProvider
 
