@@ -47,7 +47,8 @@ export default function SetupPage() {
   function handleStart() {
     if (!selectedLocationId) { setError("Selecciona una sucursal"); return; }
     localStorage.setItem("locationId", selectedLocationId);
-    router.push("/");
+    // Anchor device to this location and go to PIN login
+    router.push("/login");
   }
 
   return (
