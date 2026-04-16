@@ -145,7 +145,11 @@ export default function SaaSAdminPage() {
 
   if (loading) return (
     <div className="p-8 text-white bg-black min-h-screen font-syne flex items-center gap-3">
-      <span className="animate-spin text-2xl">⚙️</span> Cargando MRTPVREST...
+      <svg className="animate-spin" width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <circle cx="8" cy="8" r="6" strokeOpacity="0.2"/>
+        <path d="M8 2a6 6 0 016 6"/>
+      </svg>
+      Cargando MRTPVREST...
     </div>
   );
 
@@ -206,7 +210,15 @@ export default function SaaSAdminPage() {
                   <div className="bg-orange-500/10 p-3 rounded-2xl">
                     {t.logoUrl
                       ? <img src={t.logoUrl} className="w-10 h-10 object-contain" alt="Logo" />
-                      : <span className="text-3xl">🍔</span>}
+                      : (
+                        <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--brand-primary,#7c3aed)" }}>
+                          <rect x="2" y="3" width="12" height="11" rx="1"/>
+                          <rect x="5" y="9" width="2" height="5"/>
+                          <rect x="9" y="9" width="2" height="5"/>
+                          <rect x="5" y="5" width="2" height="2"/>
+                          <rect x="9" y="5" width="2" height="2"/>
+                        </svg>
+                      )}
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${t.isActive ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`}>
@@ -290,8 +302,12 @@ export default function SaaSAdminPage() {
                     </button>
                 }
                 <button onClick={() => handleDelete(t)}
-                  className="w-12 bg-white/5 hover:bg-red-500/20 hover:text-red-500 py-3 rounded-xl text-xs transition-all border border-white/5">
-                  🗑️
+                  className="w-12 bg-white/5 hover:bg-red-500/20 hover:text-red-500 py-3 rounded-xl text-xs transition-all border border-white/5 flex items-center justify-center">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="2 4 4 4 14 4"/>
+                    <path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1M6 7v5M10 7v5"/>
+                    <path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9"/>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -301,7 +317,14 @@ export default function SaaSAdminPage() {
 
       {tenants.length === 0 && (
         <div className="text-center py-32 text-gray-600">
-          <p className="text-6xl mb-4">🏪</p>
+          <div className="flex justify-center mb-4" style={{ opacity: 0.3 }}>
+            <svg width="56" height="56" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 6V5a1 1 0 011-1h12a1 1 0 011 1v1l-2 5H3L1 6z"/>
+              <line x1="1" y1="6" x2="15" y2="6"/>
+              <path d="M6 15v-5h4v5"/>
+              <rect x="1" y="11" width="14" height="4" rx="0.5"/>
+            </svg>
+          </div>
           <p className="font-black text-xl uppercase tracking-widest">Sin tenants registrados</p>
           <p className="text-sm mt-2">Registra la primera marca para comenzar.</p>
         </div>
