@@ -1,47 +1,75 @@
-@import url("https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500;600&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── TEMA OSCURO (default) ── */
+/* ── DARK THEME (default) ── */
 :root,
 [data-theme="dark"] {
   --bg:            #080810;
-  --surf:          #0e0e1a;
+  --surf:          #0e0e18;
   --surf2:         #13131f;
-  --border:        #1e1e30;
-  --border2:       #2a2a40;
-  --text:          #f0f0f8;
-  --muted:         #6b6b90;
-  --muted2:        #4a4a6a;
+  --surf3:         #191928;
+  --border:        #1c1c2e;
+  --border2:       #282840;
+  --text:          #eaeaf6;
+  --muted:         #6868a0;
+  --muted2:        #404060;
 
-  /* Acento dinámico — sobreescrito por ThemeProvider con color del logo */
+  /* Brand accent — overwritten by AccentInjector with logo color */
   --brand-primary:   #7c3aed;
   --brand-secondary: #9f67ff;
 
-  /* Semánticos */
+  /* Semantic colors */
   --green:  #10b981;
   --amber:  #f59e0b;
   --red:    #ef4444;
   --blue:   #3b82f6;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.35);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.45);
 }
 
-/* ── TEMA CLARO ── */
+/* ── LIGHT THEME ── */
 [data-theme="light"] {
-  --bg:            #ffffff;
-  --surf:          #f8fafc;
-  --surf2:         #f1f5f9;
-  --border:        #e2e8f0;
-  --border2:       #cbd5e1;
-  --text:          #0f172a;
-  --muted:         #64748b;
-  --muted2:        #94a3b8;
+  --bg:            #f4f4f0;
+  --surf:          #ffffff;
+  --surf2:         #f0f0ec;
+  --surf3:         #e8e8e4;
+  --border:        #dededa;
+  --border2:       #ccccc8;
+  --text:          #111118;
+  --muted:         #606078;
+  --muted2:        #9898a8;
 
   --brand-primary:   #7c3aed;
   --brand-secondary: #6d28d9;
 
-  --green:  #16a34a;
+  --green:  #059669;
   --amber:  #d97706;
   --red:    #dc2626;
   --blue:   #2563eb;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.07);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.10);
 }
+
+/* ── BASE ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Pulse animation for live indicators */
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+.animate-pulse { animation: pulse-live 2s ease-in-out infinite; }
+
+/* Monospace data values */
+.font-mono { font-family: 'DM Mono', monospace; }
