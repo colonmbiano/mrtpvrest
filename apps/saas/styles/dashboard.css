@@ -821,3 +821,637 @@ body {
   .db-content  { padding: 16px; }
   .db-topbar   { padding: 12px 16px; }
 }
+
+/* ═══════════════════════════════════════
+   OVERVIEW PAGE (ovw-*)
+═══════════════════════════════════════ */
+
+/* Page wrapper */
+.ovw-page {
+  padding: 0;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+/* ── Header ── */
+.ovw-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+}
+.ovw-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ovw-pulse-wrap {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+.ovw-pulse {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+  position: relative;
+  z-index: 1;
+}
+.ovw-pulse-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--green);
+  opacity: 0;
+  animation: ovw-ring 2.5s ease-out infinite;
+}
+@keyframes ovw-ring {
+  0%   { opacity: 0.7; transform: scale(0.6); }
+  100% { opacity: 0;   transform: scale(1.8); }
+}
+.ovw-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.4px;
+  line-height: 1.1;
+}
+.ovw-subtitle {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 2px;
+  text-transform: capitalize;
+}
+.ovw-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ovw-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--green-dim);
+  border: 1px solid rgba(16,185,129,.15);
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--green);
+  font-family: 'DM Mono', monospace;
+}
+.ovw-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-dot 2.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.ovw-theme-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.ovw-theme-btn:hover {
+  background: var(--surface3);
+  color: var(--text);
+}
+
+/* ── KPI Grid ── */
+.ovw-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  padding: 20px 28px;
+}
+.ovw-kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px 16px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.15s, transform 0.15s;
+  cursor: default;
+}
+.ovw-kpi:hover {
+  border-color: var(--border2);
+  transform: translateY(-1px);
+}
+.ovw-kpi::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  border-radius: 14px 14px 0 0;
+}
+.ovw-kpi-purple::after { background: linear-gradient(90deg, var(--orange), var(--purple)); }
+.ovw-kpi-green::after  { background: var(--green); }
+.ovw-kpi-blue::after   { background: var(--blue); }
+.ovw-kpi-amber::after  { background: var(--amber); }
+
+.ovw-kpi-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.ovw-kpi-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text3);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+.ovw-kpi-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ovw-icon-purple { background: var(--orange-dim); color: var(--orange); }
+.ovw-icon-green  { background: var(--green-dim);  color: var(--green);  }
+.ovw-icon-blue   { background: var(--blue-dim);   color: var(--blue);   }
+.ovw-icon-amber  { background: var(--amber-dim);  color: var(--amber);  }
+
+.ovw-kpi-value {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -1.5px;
+  color: var(--text);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  min-height: 32px;
+}
+.ovw-skeleton {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+.ovw-skeleton-val {
+  height: 32px;
+  width: 80px;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.ovw-kpi-footer {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+}
+.ovw-kpi-unit {
+  font-size: 11px;
+  color: var(--text3);
+  font-family: 'DM Mono', monospace;
+}
+.ovw-kpi-delta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'DM Mono', monospace;
+}
+.ovw-kpi-delta.up   { color: var(--green); }
+.ovw-kpi-delta.down { color: var(--red); }
+.ovw-kpi-delta-label {
+  font-weight: 400;
+  color: var(--text3);
+  margin-left: 2px;
+}
+
+/* ── Main Grid ── */
+.ovw-grid {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 16px;
+  padding: 0 28px 28px;
+  align-items: start;
+}
+.ovw-col-left, .ovw-col-right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Cards ── */
+.ovw-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.ovw-card-grow { flex: 1; }
+.ovw-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.ovw-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+.ovw-card-sub {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+/* ── Badges ── */
+.ovw-badge {
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+.ovw-badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.ovw-badge-green { background: var(--green-dim); color: var(--green); }
+.ovw-badge-blue  { background: var(--blue-dim);  color: var(--blue);  }
+.ovw-badge-amber { background: var(--amber-dim); color: var(--amber); }
+
+/* ── Plans Row ── */
+.ovw-plans-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 16px 20px;
+}
+.ovw-plan {
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 14px 14px 12px;
+  background: var(--surface2);
+  position: relative;
+  transition: border-color 0.15s;
+}
+.ovw-plan:hover { border-color: var(--border2); }
+.ovw-plan-featured {
+  border-color: var(--orange-glow);
+  background: var(--orange-dim);
+}
+.ovw-plan-tag {
+  position: absolute;
+  top: -9px; right: 12px;
+  background: var(--orange);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.ovw-plan-name {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--text3);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.ovw-plan-price {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -1.2px;
+  color: var(--text);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.ovw-plan-price span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text3);
+  letter-spacing: 0;
+}
+.ovw-plan-info {
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 4px;
+}
+.ovw-plan-subs {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.ovw-plan-subs-num {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+.ovw-plan-subs-label {
+  font-size: 10px;
+  color: var(--text3);
+}
+
+/* ── Price Editor ── */
+.ovw-price-editor {
+  padding: 14px 20px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--surface2);
+}
+.ovw-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text3);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.ovw-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.ovw-field { display: flex; flex-direction: column; gap: 5px; }
+.ovw-field-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text3);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.ovw-field-input-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+  height: 36px;
+}
+.ovw-field-input-wrap:focus-within { border-color: var(--orange); }
+.ovw-field-unit {
+  font-size: 10px;
+  color: var(--text3);
+  padding: 0 9px;
+  border-right: 1px solid var(--border);
+  font-family: 'DM Mono', monospace;
+  background: var(--surface2);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  user-select: none;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ovw-field-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 13px;
+  font-family: 'DM Mono', monospace;
+  font-weight: 600;
+  padding: 0 10px;
+  height: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.ovw-save-btn {
+  width: 100%;
+  height: 38px;
+  border-radius: 9px;
+  border: none;
+  background: var(--orange);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: background 0.15s, opacity 0.15s;
+  letter-spacing: -0.2px;
+}
+.ovw-save-btn:hover { background: var(--orange2); }
+.ovw-save-btn.loading { opacity: 0.7; cursor: not-allowed; }
+.ovw-save-btn svg {
+  animation: none;
+}
+.ovw-save-btn.loading svg {
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Toggles ── */
+.ovw-toggles { padding: 4px 20px 8px; }
+.ovw-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.ovw-toggle-row:last-child { border-bottom: none; }
+.ovw-toggle-info { flex: 1; min-width: 0; }
+.ovw-toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  display: block;
+}
+.ovw-toggle-desc {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 2px;
+  display: block;
+}
+.ovw-toggle {
+  width: 38px;
+  height: 22px;
+  border-radius: 22px;
+  border: 1px solid var(--border2);
+  background: var(--surface3);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+  outline: none;
+}
+.ovw-toggle:focus-visible {
+  box-shadow: 0 0 0 3px var(--orange-glow);
+}
+.ovw-toggle.on { border-color: transparent; }
+.ovw-toggle-green.on  { background: var(--green); }
+.ovw-toggle-blue.on   { background: var(--blue); }
+.ovw-toggle-red.on    { background: var(--red); }
+.ovw-toggle-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: left 0.2s cubic-bezier(.34,1.56,.64,1);
+  box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+.ovw-toggle.on .ovw-toggle-thumb { left: 18px; }
+
+/* ── Activity Feed ── */
+.ovw-activity { padding: 4px 20px 8px; }
+.ovw-activity-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ovw-activity-item:last-child { border-bottom: none; }
+.ovw-activity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ovw-dot-success { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+.ovw-dot-warning { background: var(--amber);  box-shadow: 0 0 6px var(--amber); }
+.ovw-dot-info    { background: var(--blue);   box-shadow: 0 0 6px var(--blue); }
+.ovw-dot-error   { background: var(--red);    box-shadow: 0 0 6px var(--red); }
+.ovw-activity-body {
+  flex: 1;
+  min-width: 0;
+}
+.ovw-activity-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ovw-activity-sub {
+  font-size: 11px;
+  color: var(--text3);
+  display: block;
+  margin-top: 1px;
+}
+.ovw-activity-time {
+  font-size: 10px;
+  color: var(--text3);
+  font-family: 'DM Mono', monospace;
+  flex-shrink: 0;
+}
+.ovw-activity-footer {
+  padding: 10px 20px 14px;
+  border-top: 1px solid var(--border);
+}
+.ovw-activity-link {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--orange);
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.ovw-activity-link:hover { opacity: 0.75; }
+
+/* ── Toast ── */
+.ovw-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--surface);
+  border: 1px solid rgba(16,185,129,.3);
+  color: var(--text);
+  padding: 11px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0;
+  transform: translateY(10px) scale(0.97);
+  transition: opacity 0.22s, transform 0.22s;
+  pointer-events: none;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: var(--shadow-md);
+}
+.ovw-toast.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.ovw-toast-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--green-dim);
+  border: 1px solid rgba(16,185,129,.25);
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1200px) {
+  .ovw-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .ovw-grid     { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  .ovw-kpi-grid { grid-template-columns: 1fr 1fr; padding: 14px 16px; }
+  .ovw-grid     { padding: 0 16px 20px; }
+  .ovw-header   { padding: 14px 16px; }
+  .ovw-plans-row { grid-template-columns: 1fr; }
+  .ovw-fields-grid { grid-template-columns: 1fr; }
+  .ovw-status-badge { display: none; }
+}
