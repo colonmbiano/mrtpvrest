@@ -3,6 +3,9 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 
+const EMPLOYEE_TOKEN_KEY = "tpv-employee-token";
+const EMPLOYEE_DATA_KEY = "tpv-employee";
+
 const STATIONS = [
   { value: "KITCHEN", label: "🍳 COCINA",   color: "#ef4444" },
   { value: "BAR",     label: "🍹 BARRA",    color: "#3b82f6" },
@@ -29,17 +32,43 @@ export default function KDSPage() {
   const [msgText, setMsgText]   = useState("");
   const [sending, setSending]   = useState(false);
   const [employee, setEmployee] = useState<any>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState("");
   const prevIds = useRef<string[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Verificar que hay un empleado KITCHEN logueado
   useEffect(() => {
-    const token = localStorage.getItem("accessToken");
+    const token = localStorage.getItem(EMPLOYEE_TOKEN_KEY) || localStorage.getItem("accessToken");
     const restId = localStorage.getItem("restaurantId");
     const locId = localStorage.getItem("locationId");
-    if (!token || !restId || !locId) { router.replace("/setup"); return; }
-    const empRaw = localStorage.getItem("kdsEmployee");
-    if (empRaw) setEmployee(JSON.parse(empRaw));
+    if (!restId || !locId) { router.replace("/setup"); return; }
+
+    const empRaw = localStorage.getItem("kdsEmployee") || localStorage.getItem(EMPLOYEE_DATA_KEY);
+    if (!token || !empRaw) {
+      setAuthError("Esta pantalla necesita una sesion de cocina activa. Vuelve al TPV y desbloquea con el PIN.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const parsedEmployee = JSON.parse(empRaw);
+      if (parsedEmployee?.role && parsedEmployee.role !== "KITCHEN") {
+        setAuthError("La sesion activa no corresponde a cocina.");
+        setLoading(false);
+        return;
+      }
+
+      localStorage.setItem("accessToken", token);
+      localStorage.setItem("kdsEmployee", JSON.stringify(parsedEmployee));
+      setEmployee(parsedEmployee);
+      setAuthReady(true);
+    } catch {
+      setAuthError("No pudimos recuperar la sesion del empleado de cocina.");
+      setLoading(false);
+      return;
+    }
+
     audioRef.current = new Audio("/notification.mp3");
   }, [router]);
 
@@ -79,11 +108,12 @@ export default function KDSPage() {
   }, [station]);
 
   useEffect(() => {
+    if (!authReady) return;
     setLoading(true);
     fetchOrders();
     const t = setInterval(fetchOrders, 12000);
     return () => clearInterval(t);
-  }, [fetchOrders]);
+  }, [authReady, fetchOrders]);
 
   async function toggleItem(orderId: string, itemId: string, done: boolean) {
     try {
@@ -116,11 +146,41 @@ export default function KDSPage() {
 
   function logout() {
     localStorage.removeItem("accessToken");
+    localStorage.removeItem(EMPLOYEE_TOKEN_KEY);
+    localStorage.removeItem(EMPLOYEE_DATA_KEY);
     localStorage.removeItem("kdsEmployee");
     router.replace("/");
   }
 
   const stationInfo = STATIONS.find(s => s.value === station)!;
+
+  if (authError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black p-6 text-white">
+        <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-[#111] p-8 text-center shadow-2xl">
+          <p className="text-xs font-black uppercase tracking-[0.25em] text-red-400">KDS bloqueado</p>
+          <h1 className="mt-4 text-3xl font-black">Sesion no disponible</h1>
+          <p className="mt-4 text-sm leading-6 text-white/60">{authError}</p>
+          <button
+            onClick={() => router.replace("/")}
+            className="mt-8 w-full rounded-2xl bg-red-500 px-6 py-4 text-sm font-black uppercase tracking-[0.2em] text-white"
+          >
+            Volver al TPV
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black text-white">
+        <div className="text-sm font-black uppercase tracking-[0.3em] text-white/40">
+          Cargando cocina...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-black text-white font-mono select-none">

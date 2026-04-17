@@ -8,6 +8,10 @@ import ShiftModal from "@/components/admin/ShiftModal";
 import { useRouter } from "next/navigation";
 
 const ACCENT = "#ff5c35";
+const EMPLOYEE_TOKEN_KEY = "tpv-employee-token";
+const EMPLOYEE_DATA_KEY = "tpv-employee";
+const PIN_MIN_LENGTH = 4;
+const PIN_MAX_LENGTH = 6;
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: "Pendiente", CONFIRMED: "Confirmado", PREPARING: "Preparando",
@@ -75,6 +79,7 @@ export default function TPVPage() {
   const [isGlobalLocked, setIsGlobalLocked]     = useState(true);
   const [currentEmployee, setCurrentEmployee]   = useState<any>(null);
   const [pinInput, setPinInput]                 = useState("");
+  const [pinError, setPinError]                 = useState("");
   const [isVerifyingPin, setIsVerifyingPin]     = useState(false);
 
   // Modales manager
@@ -91,6 +96,24 @@ export default function TPVPage() {
   const ticket  = tickets[activeTicket] || tickets[0];
   const isAdmin = ["ADMIN", "MANAGER", "OWNER"].includes(currentEmployee?.role);
 
+  const clearEmployeeSession = useCallback(() => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem(EMPLOYEE_TOKEN_KEY);
+    localStorage.removeItem(EMPLOYEE_DATA_KEY);
+    localStorage.removeItem("kdsEmployee");
+    setIsGlobalLocked(true);
+    setCurrentEmployee(null);
+    setActiveShift(null);
+    setShowManagerMenu(false);
+    setOrders([]);
+    setPendingCashOrders([]);
+    setSelectedOrder(null);
+    setAllItems([]);
+    setCategories([]);
+    setPinInput("");
+    setPinError("");
+  }, []);
+
   // ── SAAS INIT ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const restId = localStorage.getItem("restaurantId");
@@ -104,28 +127,102 @@ export default function TPVPage() {
         if (res.data.locationName)   setLocationName(res.data.locationName);
         if (res.data.location?.name) setLocationName(res.data.location.name);
       }).catch(() => {});
+
+      const storedToken = localStorage.getItem(EMPLOYEE_TOKEN_KEY) || localStorage.getItem("accessToken");
+      const storedEmployee = localStorage.getItem(EMPLOYEE_DATA_KEY);
+
+      if (!storedToken || !storedEmployee) return;
+
+      try {
+        const parsedEmployee = JSON.parse(storedEmployee);
+        localStorage.setItem("accessToken", storedToken);
+        setCurrentEmployee(parsedEmployee);
+        setPinError("");
+
+        if (parsedEmployee?.role === "WAITER") {
+          router.replace("/meseros");
+          return;
+        }
+
+        if (parsedEmployee?.role === "KITCHEN") {
+          localStorage.setItem("kdsEmployee", storedEmployee);
+          router.replace("/kds");
+          return;
+        }
+
+        setIsGlobalLocked(false);
+        api.get("/api/shifts/active")
+          .then(({ data }) => setActiveShift(data))
+          .catch(() => setActiveShift(null));
+      } catch {
+        clearEmployeeSession();
+      }
     }
-  }, [router]);
+  }, [clearEmployeeSession, router]);
 
   async function refreshShift() {
     try { const { data } = await api.get("/api/shifts/active"); setActiveShift(data); }
     catch { setActiveShift(null); }
   }
 
+  const unlockEmployeeSession = useCallback(async (employee: any, token: string) => {
+    localStorage.setItem("accessToken", token);
+    localStorage.setItem(EMPLOYEE_TOKEN_KEY, token);
+    localStorage.setItem(EMPLOYEE_DATA_KEY, JSON.stringify(employee));
+    setCurrentEmployee(employee);
+    setPinInput("");
+    setPinError("");
+
+    if (employee?.role === "WAITER") {
+      router.replace("/meseros");
+      return;
+    }
+
+    if (employee?.role === "KITCHEN") {
+      localStorage.setItem("kdsEmployee", JSON.stringify(employee));
+      router.replace("/kds");
+      return;
+    }
+
+    await refreshShift();
+    setIsGlobalLocked(false);
+  }, [router]);
+
   const handleVerifyGlobalPin = async (enteredPin: string) => {
+    if (enteredPin.length < PIN_MIN_LENGTH) {
+      setPinError("Ingresa al menos 4 digitos.");
+      return;
+    }
+
     setIsVerifyingPin(true);
+    setPinError("");
     try {
-      const { data } = await api.post("/api/employees/login", { pin: enteredPin });
-      localStorage.setItem("accessToken", data.token);
-      setCurrentEmployee(data.employee);
-      const role = data.employee?.role;
-      if (role === "WAITER")  { router.push("/meseros"); return; }
-      if (role === "KITCHEN") { localStorage.setItem("kdsEmployee", JSON.stringify(data.employee)); router.push("/kds"); return; }
-      try { const { data: shift } = await api.get("/api/shifts/active"); setActiveShift(shift); } catch { setActiveShift(null); }
-      setTimeout(() => setIsGlobalLocked(false), 100);
-      setPinInput("");
+      const restaurantId = localStorage.getItem("restaurantId");
+      const { data } = await api.post("/api/auth/pin", { pin: enteredPin, restaurantId });
+      const token = data.token || data.accessToken;
+      const employee = data.user || data.employee;
+      if (!token || !employee) throw new Error("Sesion incompleta");
+      await unlockEmployeeSession(employee, token);
     } catch { alert("PIN Incorrecto ❌"); setPinInput(""); }
     finally { setIsVerifyingPin(false); }
+  };
+
+  const appendPinDigit = (digit: string) => {
+    if (isVerifyingPin) return;
+    setPinError("");
+    setPinInput(prev => prev.length >= PIN_MAX_LENGTH ? prev : prev + digit);
+  };
+
+  const removeLastPinDigit = () => {
+    if (isVerifyingPin) return;
+    setPinError("");
+    setPinInput(prev => prev.slice(0, -1));
+  };
+
+  const clearPin = () => {
+    if (isVerifyingPin) return;
+    setPinError("");
+    setPinInput("");
   };
 
   const fetchOrders = useCallback(async () => {
@@ -344,6 +441,24 @@ export default function TPVPage() {
     p.name.toLowerCase().includes(settingsSearch.toLowerCase())
   );
 
+  if (isConfigured && isGlobalLocked) {
+    return (
+      <TPVLockScreen
+        accent={ACCENT}
+        restaurantName={restaurantName}
+        locationName={locationName}
+        pinInput={pinInput}
+        pinError={pinError}
+        isVerifyingPin={isVerifyingPin}
+        onDigit={appendPinDigit}
+        onBackspace={removeLastPinDigit}
+        onClear={clearPin}
+        onSubmit={() => handleVerifyGlobalPin(pinInput)}
+        onChangeLocation={() => router.push("/setup")}
+      />
+    );
+  }
+
   if (!isConfigured) return null;
 
   if (isGlobalLocked) {
@@ -439,7 +554,7 @@ export default function TPVPage() {
             </button>
           )}
           <button
-            onClick={() => { localStorage.removeItem("accessToken"); setIsGlobalLocked(true); setCurrentEmployee(null); setActiveShift(null); setShowManagerMenu(false); setOrders([]); setAllItems([]); setCategories([]); }}
+            onClick={clearEmployeeSession}
             className="w-8 h-8 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-colors"
             style={{ background: "var(--surf2)", border: "1px solid var(--border)" }} title="Bloquear Caja">
             🔒
@@ -980,7 +1095,7 @@ export default function TPVPage() {
               </button>
             </div>
             <div className="p-4 border-t border-[var(--border)] bg-[var(--bg)]">
-              <button onClick={() => { localStorage.removeItem("accessToken"); setIsGlobalLocked(true); setCurrentEmployee(null); setActiveShift(null); setShowManagerMenu(false); }}
+              <button onClick={clearEmployeeSession}
                 className="w-full py-3 rounded-xl flex items-center justify-center gap-2 font-bold text-red-500 bg-red-500/10 hover:bg-red-500/20 transition-colors">
                 🔒 Bloquear sesión
               </button>
@@ -988,6 +1103,164 @@ export default function TPVPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function TPVLockScreen({
+  accent,
+  restaurantName,
+  locationName,
+  pinInput,
+  pinError,
+  isVerifyingPin,
+  onDigit,
+  onBackspace,
+  onClear,
+  onSubmit,
+  onChangeLocation,
+}: {
+  accent: string;
+  restaurantName: string;
+  locationName: string;
+  pinInput: string;
+  pinError: string;
+  isVerifyingPin: boolean;
+  onDigit: (digit: string) => void;
+  onBackspace: () => void;
+  onClear: () => void;
+  onSubmit: () => void;
+  onChangeLocation: () => void;
+}) {
+  return (
+    <div
+      className="min-h-screen px-4 py-6 md:px-8"
+      style={{
+        background:
+          "radial-gradient(circle at top, rgba(255,92,53,0.2), transparent 34%), linear-gradient(180deg, #08080c 0%, #11111a 100%)",
+      }}
+    >
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl flex-col justify-center gap-6 lg:flex-row lg:items-stretch">
+        <div className="flex flex-1 flex-col justify-between rounded-[2rem] border border-white/10 bg-black/20 p-8 shadow-2xl backdrop-blur md:p-10">
+          <div>
+            <div
+              className="mb-5 inline-flex rounded-full border px-4 py-2 text-[11px] font-black uppercase tracking-[0.3em]"
+              style={{ borderColor: `${accent}66`, color: accent, background: `${accent}14` }}
+            >
+              TPV bloqueado
+            </div>
+            <h1 className="max-w-xl text-4xl font-black uppercase tracking-tight text-white md:text-6xl">
+              {restaurantName}
+            </h1>
+            {locationName && (
+              <p className="mt-4 text-base font-bold text-white/60 md:text-lg">
+                Sucursal: {locationName}
+              </p>
+            )}
+            <p className="mt-6 max-w-md text-sm leading-6 text-white/50 md:text-base">
+              Ingresa el PIN del empleado para abrir la caja. El teclado esta optimizado
+              para tablets y pantallas tactiles.
+            </p>
+          </div>
+
+          <div className="mt-10 flex flex-wrap gap-3 text-xs font-bold uppercase tracking-[0.2em] text-white/35">
+            <span className="rounded-full border border-white/10 px-3 py-2">Modo oscuro</span>
+            <span className="rounded-full border border-white/10 px-3 py-2">Acceso por PIN</span>
+            <span className="rounded-full border border-white/10 px-3 py-2">Sesion rapida</span>
+          </div>
+        </div>
+
+        <div className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-[#101018] p-5 shadow-2xl md:p-7">
+          <div className="rounded-[1.75rem] border border-white/10 bg-[#151520] p-5 md:p-7">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.25em] text-white/40">
+                  PIN del empleado
+                </p>
+                <h2 className="mt-2 text-2xl font-black text-white md:text-3xl">
+                  Desbloquear terminal
+                </h2>
+              </div>
+              <button
+                onClick={onChangeLocation}
+                className="rounded-2xl border border-white/10 px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-white/55 transition hover:bg-white/5"
+              >
+                Cambiar sucursal
+              </button>
+            </div>
+
+            <div className="mb-5 grid grid-cols-6 gap-3">
+              {Array.from({ length: PIN_MAX_LENGTH }).map((_, index) => {
+                const filled = index < pinInput.length;
+                return (
+                  <div
+                    key={index}
+                    className="flex h-16 items-center justify-center rounded-2xl border text-2xl font-black md:h-20 md:text-3xl"
+                    style={{
+                      borderColor: filled ? `${accent}99` : "rgba(255,255,255,0.08)",
+                      background: filled ? `${accent}22` : "rgba(255,255,255,0.03)",
+                      color: filled ? accent : "rgba(255,255,255,0.22)",
+                    }}
+                  >
+                    {filled ? "•" : ""}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mb-5 min-h-6 text-sm font-bold">
+              {pinError ? (
+                <span className="text-red-400">{pinError}</span>
+              ) : (
+                <span className="text-white/35">Usa un PIN de 4 a 6 digitos.</span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 md:gap-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
+                <button
+                  key={digit}
+                  disabled={isVerifyingPin}
+                  onClick={() => onDigit(String(digit))}
+                  className="min-h-[86px] rounded-[1.5rem] border border-white/10 bg-[#1b1b27] text-4xl font-black text-white shadow-lg transition active:scale-[0.98] disabled:opacity-50 md:min-h-[110px] md:text-5xl"
+                >
+                  {digit}
+                </button>
+              ))}
+              <button
+                disabled={isVerifyingPin}
+                onClick={onClear}
+                className="min-h-[86px] rounded-[1.5rem] border border-white/10 bg-[#191923] text-lg font-black uppercase tracking-[0.2em] text-white/65 transition active:scale-[0.98] disabled:opacity-50 md:min-h-[110px]"
+              >
+                C
+              </button>
+              <button
+                disabled={isVerifyingPin}
+                onClick={() => onDigit("0")}
+                className="min-h-[86px] rounded-[1.5rem] border border-white/10 bg-[#1b1b27] text-4xl font-black text-white shadow-lg transition active:scale-[0.98] disabled:opacity-50 md:min-h-[110px] md:text-5xl"
+              >
+                0
+              </button>
+              <button
+                disabled={isVerifyingPin}
+                onClick={onBackspace}
+                className="min-h-[86px] rounded-[1.5rem] border border-red-500/15 bg-red-500/10 text-2xl font-black text-red-400 transition active:scale-[0.98] disabled:opacity-50 md:min-h-[110px] md:text-3xl"
+              >
+                ⌫
+              </button>
+            </div>
+
+            <button
+              disabled={isVerifyingPin || pinInput.length < PIN_MIN_LENGTH}
+              onClick={onSubmit}
+              className="mt-5 min-h-[64px] w-full rounded-[1.5rem] text-lg font-black uppercase tracking-[0.22em] text-white transition disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ background: accent }}
+            >
+              {isVerifyingPin ? "Verificando..." : "Entrar al TPV"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
