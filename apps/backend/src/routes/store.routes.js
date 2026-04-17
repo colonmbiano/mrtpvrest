@@ -147,7 +147,17 @@ router.post('/orders', async (req, res) => {
     paymentMethod = 'CASH_ON_DELIVERY',
     notes,
     locationId: bodyLocationId,
+    source: rawSource,
+    tableNumber: rawTableNumber,
   } = req.body;
+
+  const VALID_ORDER_TYPES = ['DELIVERY', 'TAKEOUT', 'DINE_IN'];
+  const resolvedOrderType = VALID_ORDER_TYPES.includes(orderType) ? orderType : 'DELIVERY';
+  const VALID_SOURCES = ['ONLINE', 'KIOSK'];
+  const source = VALID_SOURCES.includes(rawSource) ? rawSource : 'ONLINE';
+  const tableNumber = resolvedOrderType === 'DINE_IN' && rawTableNumber
+    ? (Math.max(1, Math.min(999, parseInt(rawTableNumber) || 0)) || null)
+    : null;
 
   // Validaciones básicas
   if (!items || !Array.isArray(items) || items.length === 0) {
@@ -156,7 +166,7 @@ router.post('/orders', async (req, res) => {
   if (!customerName?.trim()) {
     return res.status(400).json({ error: 'El nombre del cliente es requerido.' });
   }
-  if (orderType === 'DELIVERY' && !deliveryAddress?.trim()) {
+  if (resolvedOrderType === 'DELIVERY' && !deliveryAddress?.trim()) {
     return res.status(400).json({ error: 'La dirección de entrega es requerida.' });
   }
 
@@ -199,9 +209,10 @@ router.post('/orders', async (req, res) => {
     );
 
     const subtotal    = itemsData.reduce((s, i) => s + i.subtotal, 0);
-    const deliveryFee = orderType === 'DELIVERY' ? (restaurant.deliveryFee || 0) : 0;
+    const deliveryFee = resolvedOrderType === 'DELIVERY' ? (restaurant.deliveryFee || 0) : 0;
     const total       = subtotal + deliveryFee;
-    const orderNumber = 'WEB-' + Date.now().toString().slice(-6);
+    const orderNumberPrefix = source === 'KIOSK' ? 'KIOSK-' : 'WEB-';
+    const orderNumber = orderNumberPrefix + Date.now().toString().slice(-6);
 
     const order = await prisma.order.create({
       data: {
@@ -209,17 +220,18 @@ router.post('/orders', async (req, res) => {
         locationId:      resolvedLocationId,
         orderNumber,
         status:          'PENDING',
-        orderType,
+        orderType:       resolvedOrderType,
+        tableNumber,
         paymentMethod,
         paymentStatus:   'PENDING',
         subtotal,
         deliveryFee,
         total,
         discount:        0,
-        source:          'ONLINE',
+        source,
         customerName:    customerName.trim(),
         customerPhone:   customerPhone?.trim() || null,
-        deliveryAddress: orderType === 'DELIVERY' ? deliveryAddress.trim() : null,
+        deliveryAddress: resolvedOrderType === 'DELIVERY' ? deliveryAddress.trim() : null,
         notes:           notes?.trim() || null,
         items: { create: itemsData },
       },
