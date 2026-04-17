@@ -1,0 +1,105 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900&family=DM+Mono:wght@400;500;700&family=Poppins:wght@400;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════
+   OLED PREMIUM (default)
+   ═══════════════════════════════════════════════════════════════ */
+:root,
+[data-kiosk-style="oled"] {
+  --bg:            #080810;
+  --surf:          #0e0e18;
+  --surf2:         #13131f;
+  --surf3:         #191928;
+  --border:        #1c1c2e;
+  --border2:       #282840;
+  --text:          #eaeaf6;
+  --muted:         #6868a0;
+  --brand-primary: #7c3aed;
+  --shadow-md:     0 4px 16px rgba(0,0,0,0.45);
+  --font-body:     'DM Sans', system-ui, sans-serif;
+  --font-mono:     'DM Mono', monospace;
+  --font-display:  'DM Sans', sans-serif;
+  --radius-sm:     8px;
+  --radius-md:     14px;
+  --radius-lg:     22px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FAST-FOOD POP
+   ═══════════════════════════════════════════════════════════════ */
+[data-kiosk-style="pop"] {
+  --bg:            #FFF8E7;
+  --surf:          #FFFFFF;
+  --surf2:         #FFFCED;
+  --surf3:         #FFE8B0;
+  --border:        #F0D99A;
+  --border2:       #E5C67F;
+  --text:          #1a1a1a;
+  --muted:         #666666;
+  --brand-primary: #DC2626;
+  --brand-secondary: #FFC72C;
+  --shadow-md:     0 4px 16px rgba(255, 180, 0, 0.25);
+  --font-body:     'Poppins', system-ui, sans-serif;
+  --font-mono:     'Poppins', monospace;
+  --font-display:  'Poppins', sans-serif;
+  --radius-sm:     12px;
+  --radius-md:     18px;
+  --radius-lg:     28px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BOUTIQUE RESTAURANT
+   ═══════════════════════════════════════════════════════════════ */
+[data-kiosk-style="boutique"] {
+  --bg:            #F5EFE4;
+  --surf:          #FFFCF5;
+  --surf2:         #EDE4D1;
+  --surf3:         #E0D4BB;
+  --border:        #C9A86B40;
+  --border2:       #C9A86B80;
+  --text:          #1F2D1F;
+  --muted:         #8a7a5a;
+  --brand-primary: #C9A86B;
+  --brand-secondary: #3E4A32;
+  --shadow-md:     0 4px 16px rgba(62, 74, 50, 0.15);
+  --font-body:     'Cormorant Garamond', Georgia, serif;
+  --font-mono:     'DM Mono', monospace;
+  --font-display:  'Cormorant Garamond', Georgia, serif;
+  --radius-sm:     2px;
+  --radius-md:     4px;
+  --radius-lg:     6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button { font-family: inherit; }
+
+::-webkit-scrollbar { width: 0; height: 0; }
+* { scrollbar-width: none; }
+
+@keyframes kiosk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.kiosk-pulse { animation: kiosk-pulse 2s ease-in-out infinite; }
