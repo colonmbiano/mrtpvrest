@@ -23,10 +23,12 @@ Crear una nueva aplicación en el monorepo (`apps/kiosk`) que permita a los come
 - Selector de estilo por tenant desde panel admin (`mi-marca`).
 - Ajuste mínimo de backend (`store.routes.js`) para aceptar `source: 'KIOSK'` y `tableNumber`.
 - Migración Prisma: añadir `kioskStyle` a `Restaurant`.
-- Pagos simulados ("Pagar en caja" / "Código QR" con modal placeholder).
+- Pagos: "Pagar en caja" (CASH, instantáneo) + "Pagar con tarjeta" (flujo con terminal física, v1 como stub 3s).
+- Configuración de terminal física 1:1 por kiosko (ID/IP en localStorage durante `/setup`).
+- Endpoint agnóstico `POST /api/payments/terminal/charge` con arquitectura de drivers (stub en v1).
 
 **Fuera del alcance:**
-- Integración real de pagos (Conekta/Stripe).
+- Drivers reales de terminal (Conekta/Clip/Mercado Pago/Stripe Terminal) — solo stub en v1; la arquitectura queda lista para añadirlos.
 - Modo kiosco del navegador / fullscreen managed.
 - Impresión de tickets al cliente (eso lo hace el TPV).
 - Detección de inactividad avanzada (cámara/proximidad).
@@ -75,7 +77,8 @@ apps/kiosk/
 │   │   ├── SetupGuard.tsx             # Redirige a /setup si no hay restaurantId
 │   │   ├── Icon.tsx                   # SVGs inline (no emoji, per design system)
 │   │   ├── Numpad.tsx                 # Teclado numérico táctil (mesa)
-│   │   └── VariantPicker.tsx          # Modal selección de variante/complementos
+│   │   ├── VariantPicker.tsx          # Modal selección de variante/complementos
+│   │   └── TerminalChargeModal.tsx    # Modal full-screen durante cobro con terminal
 │   └── lib/
 │       ├── api.ts                     # axios con x-restaurant-id / x-location-id headers
 │       ├── cart.ts                    # useReducer + sessionStorage persistence
@@ -112,19 +115,26 @@ El tenant elige el preset desde `apps/admin/app/(admin)/admin/mi-marca/page.tsx`
 3. `GET /api/tenant/me` devuelve tenant con campos `accentColor`, `kioskStyle`, y `locations: [{id, name, address}]`.
 4. UI muestra lista de sucursales del tenant (tarjetas grandes táctiles).
 5. Admin selecciona una sucursal.
-6. **Persistir en localStorage:**
+6. **Terminal de pagos física (1:1 con este kiosko):**
+   - UI muestra input "ID / IP de la terminal" (texto libre, opcional pero recomendado).
+   - Placeholder: `"Ej. 192.168.1.45 o TERM-001"`.
+   - Si queda vacío: el botón "Pagar con tarjeta" quedará deshabilitado en checkout con tooltip "Terminal no configurada".
+7. **Persistir en localStorage:**
    - `kiosk-restaurant-id` = `tenant.id`
    - `kiosk-restaurant-name` = `tenant.name`
    - `kiosk-location-id` = `location.id`
    - `kiosk-location-name` = `location.name`
+   - `kiosk-terminal-id` = input de terminal (string, opcional)
    - `mb-accent` = `tenant.accentColor` (si existe)
    - `kiosk-style` = `tenant.kioskStyle` (default `'oled'`)
-7. **Purga de credenciales (crítico):**
+8. **Purga de credenciales (crítico):**
    - `localStorage.removeItem('accessToken')`
    - `localStorage.removeItem('refreshToken')`
    - `localStorage.removeItem('user')`
    - `document.cookie = 'mb-role=; path=/; max-age=0; SameSite=Lax'`
-8. Redirect a `/`.
+9. Redirect a `/`.
+
+**Editar terminal después del setup:** desde la pantalla de "ya vinculado" (paso anterior), un botón "Cambiar terminal" permite actualizar solo `kiosk-terminal-id` sin re-autenticar.
 
 **Si ya hay `kiosk-restaurant-id` al cargar `/setup`**: mostrar banner "Este dispositivo ya está vinculado a {nombre}. ¿Desvincular?" con botón explícito (evita desvinculaciones accidentales).
 
@@ -187,7 +197,20 @@ El tenant elige el preset desde `apps/admin/app/(admin)/admin/mi-marca/page.tsx`
 
 **Botones de pago (abajo, full width):**
 - "💵 Pagar en caja" (primary) → POST orden con `paymentMethod: 'CASH'` → `/success`.
-- "📱 Código QR" (secondary) → modal con QR placeholder (SVG estático in-line con patrón QR genérico, ~300×300px) + texto "Escanea para pagar (simulado)" + botón "Listo" → POST con `paymentMethod: 'CARD'` → `/success`.
+- "💳 Pagar con tarjeta" (secondary, usa terminal física) → flujo en 3 pasos:
+  1. Crear la orden primero: `POST /api/store/orders` con `paymentMethod: 'CARD'` + `paymentStatus: 'PENDING'`.
+  2. Disparar cobro en la terminal: `POST /api/payments/terminal/charge` (ver §6.3).
+  3. Si `success: true` → `/success` con `orderNumber`. Si falla → mostrar error en modal con opciones "Reintentar" / "Pagar en caja".
+
+**UI durante el cargo (`TerminalChargeModal`):**
+- Overlay full-screen.
+- Ilustración/animación de "terminal + tarjeta" (SVG).
+- Texto grande: "Acerca o inserta tu tarjeta en la terminal".
+- Monto grande en DM Mono.
+- Spinner + mensaje "Esperando respuesta…".
+- Botón "Cancelar" pequeño (solo cancela la UI; no cancela el cobro si ya se envió — warning al usuario).
+
+**Si `kiosk-terminal-id` está vacío:** botón deshabilitado, tooltip "Terminal no configurada. Ve a /setup para añadirla."
 
 **Body del POST** (`/api/store/orders`):
 ```json
@@ -221,6 +244,7 @@ El tenant elige el preset desde `apps/admin/app/(admin)/admin/mi-marca/page.tsx`
 | `kiosk-restaurant-name` | localStorage | Setup → desvinculación | string |
 | `kiosk-location-id` | localStorage | Setup → desvinculación | string |
 | `kiosk-location-name` | localStorage | Setup → desvinculación | string |
+| `kiosk-terminal-id` | localStorage | Setup (opcional) → editable | string |
 | `mb-accent` | localStorage | Setup → desvinculación | string (hex) |
 | `kiosk-style` | localStorage | Setup → desvinculación | `'oled' \| 'pop' \| 'boutique'` |
 | `kiosk-cart` | sessionStorage | Menu → Success (se limpia) | `CartItem[]` |
@@ -281,6 +305,78 @@ Migración: `pnpm --filter @mrtpvrest/database prisma migrate dev --name add_res
 - `GET /api/store/info` → incluir `kioskStyle` (para re-sincronizar en cada idle si el admin lo cambió).
 - `PATCH /api/tenant/me` (o el endpoint existente que usa `mi-marca`) → aceptar `kioskStyle` en el body con la misma whitelist.
 
+### 6.3 Endpoint agnóstico de terminal de pagos (stub)
+
+**Nuevo archivo:** `apps/backend/src/routes/payments.routes.js`.
+
+**Nuevo endpoint:** `POST /api/payments/terminal/charge`.
+
+**Filosofía:** interfaz agnóstica de proveedor — el kiosko envía lo mínimo para que cualquier driver futuro (Conekta, Clip, Mercado Pago, Stripe Terminal) pueda implementarse detrás. En v1 es un **stub**: delay de 3s + respuesta simulada.
+
+**Request body:**
+```json
+{
+  "terminalId": "192.168.1.45",          // kiosk-terminal-id desde localStorage
+  "amount": 353.00,                      // en pesos MXN, 2 decimales
+  "currency": "MXN",
+  "orderId": "cuid_xxx",                 // Order.id ya creada en BD (paymentStatus: PENDING)
+  "orderNumber": "KIOSK-742193",         // para mostrar en pantalla si el driver lo soporta
+  "restaurantId": "...",                 // contexto tenant (ya viene por header también)
+  "locationId": "..."                    // contexto sucursal
+}
+```
+
+**Validaciones backend:**
+- `terminalId` no vacío.
+- `amount > 0` y ≤ 50,000 (sanity check).
+- `orderId` existe, pertenece al `restaurantId` del header, y su `paymentStatus === 'PENDING'`.
+
+**Comportamiento stub (v1):**
+1. Valida request.
+2. `await new Promise(r => setTimeout(r, 3000))` — simula comunicación con terminal.
+3. Actualiza la orden: `prisma.order.update({ where: { id: orderId }, data: { paymentStatus: 'PAID', paidAt: new Date() } })`.
+4. Emite `order:payment:confirmed` por Socket.io al restaurante.
+5. Responde:
+
+```json
+{
+  "success": true,
+  "transactionId": "STUB-<timestamp>",
+  "terminalId": "192.168.1.45",
+  "amount": 353.00,
+  "authorizationCode": "STUB000000",
+  "processedAt": "2026-04-17T18:23:45.123Z",
+  "provider": "stub"
+}
+```
+
+**Respuesta de error** (para ejercitar el flujo aunque el stub no la dispare por defecto):
+```json
+{
+  "success": false,
+  "errorCode": "TIMEOUT" | "DECLINED" | "NETWORK" | "INVALID_TERMINAL",
+  "message": "Mensaje legible para el usuario"
+}
+```
+
+**Capa de abstracción** (preparación para drivers reales):
+
+```
+apps/backend/src/services/payments/
+├── index.js              # export charge(provider, req)
+├── drivers/
+│   ├── stub.js           # único driver en v1 — delay + success
+│   ├── conekta.js        # placeholder (TBD en fase posterior)
+│   ├── clip.js           # placeholder
+│   └── mercadopago.js    # placeholder
+```
+
+El router en v1 siempre llama `charge('stub', payload)`. El selector de driver se añade después (por tenant, por env var, o por `Location.paymentProvider`).
+
+**Seguridad:** el endpoint requiere `x-restaurant-id` válido (helper `resolveStore` reutilizado). No requiere token — consistente con el resto de `/api/store/*` y `/api/payments/*` públicos del kiosko.
+
+**Registrar el router** en `apps/backend/src/server.js` o donde se monten las rutas: `app.use('/api/payments', paymentsRouter)`.
+
 ## 7. Cambios en `apps/admin`
 
 En `apps/admin/app/(admin)/admin/mi-marca/page.tsx`:
@@ -315,17 +411,20 @@ Preview cards: reutilizar los mockups HTML ya diseñados en la sesión (simplifi
 8. **TAKEOUT:** orden llega con `customerName` y sin `tableNumber`.
 9. **Selector de estilo:** cambiar de OLED → Pop desde `mi-marca`, recargar kiosko, cambia la paleta y tipografía.
 10. **Resincronización de estilo:** cambiar estilo mientras kiosko está en `/` (idle) → `GET /api/store/info` lo detecta y aplica sin recargar.
+11. **Pagar con tarjeta (stub):** tras 3s de delay el modal cierra y navega a `/success`. Orden queda con `paymentStatus: PAID`, `paidAt` seteado.
+12. **Terminal no configurada:** `/setup` sin terminal ID → botón "Pagar con tarjeta" deshabilitado en checkout.
+13. **Editar terminal:** volver a `/setup` con dispositivo ya vinculado → botón "Cambiar terminal" actualiza solo `kiosk-terminal-id` sin requerir re-login.
 
 ## 10. Orden de implementación sugerido
 
-1. **Backend** — migración Prisma + endpoints (`/api/store/orders` source/tableNumber, `/api/tenant/me` + `/api/store/info` kioskStyle).
+1. **Backend** — migración Prisma + endpoints (`/api/store/orders` source/tableNumber, `/api/tenant/me` + `/api/store/info` kioskStyle, `/api/payments/terminal/charge` stub con capa de drivers).
 2. **Admin** — selector de estilo en `mi-marca`.
 3. **Kiosk — Fase 1** — scaffold + layout base + ThemeProvider + Idle Screen + commit.
-4. **Kiosk — Fase 2a** — `/setup` (login + selector sucursal + purga token).
+4. **Kiosk — Fase 2a** — `/setup` (login + selector sucursal + input terminal + purga token).
 5. **Kiosk — Fase 2b** — `/order-type` + `/menu` (con carrito).
-6. **Kiosk — Fase 2c** — `/checkout` + `/success`.
+6. **Kiosk — Fase 2c** — `/checkout` (con `TerminalChargeModal`) + `/success`.
 7. **Kiosk — Fase 3** — 3 themes en CSS + `KioskStyleInjector`.
-8. **Testing manual end-to-end.**
+8. **Testing manual end-to-end** (incluye flujo de terminal stub con 3s de delay).
 
 ## 11. Decisiones tomadas durante el diseño
 
@@ -336,3 +435,6 @@ Preview cards: reutilizar los mockups HTML ya diseñados en la sesión (simplifi
 - OLED respeta `accentColor` del tenant; Pop y Boutique tienen paleta fija (híbrido).
 - Carrito en `sessionStorage` (no localStorage) — se pierde al reiniciar navegador, lo cual es correcto para un kiosko público.
 - Idle timeout 90s en flujos activos; Idle Screen no tiene timeout.
+- Terminal de pagos física: configuración 1:1 por dispositivo (cada kiosko → su propia terminal), no por sucursal, porque en una sucursal con varios kioskos cada uno debe disparar el cobro a su propia terminal.
+- Endpoint de terminal agnóstico (`/api/payments/terminal/charge`) con capa de drivers (`stub` en v1, Conekta/Clip/MP/Stripe como placeholders). El driver real se implementa en una fase posterior sin cambiar el contrato del frontend.
+- Orden creada ANTES de disparar el cobro (con `paymentStatus: PENDING`). Si el cobro falla, la orden queda como pendiente y el usuario puede reintentar o cambiar a efectivo.
