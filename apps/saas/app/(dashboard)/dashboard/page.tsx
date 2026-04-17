@@ -5,44 +5,84 @@ import MrrChart from "@/components/MrrChart";
 import api from "@/lib/api";
 
 // ── Icons ─────────────────────────────────────────────────────
+const IArrowUp = () => (
+  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="8" y1="13" x2="8" y2="3"/><polyline points="3 8 8 3 13 8"/>
+  </svg>
+);
+const IArrowDown = () => (
+  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="8" y1="3" x2="8" y2="13"/><polyline points="13 8 8 13 3 8"/>
+  </svg>
+);
 const ICheck = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="2.5 8 6.5 12 13.5 4"/>
   </svg>
 );
 const IMoon = () => (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
     <path d="M13.5 10A6 6 0 016 2.5a6 6 0 100 11 6 6 0 007.5-3.5z"/>
   </svg>
 );
 const ISun = () => (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
     <circle cx="8" cy="8" r="3"/>
     <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/>
   </svg>
 );
-const ITrendUp = () => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="2 11 6 7 9.5 9.5 14 4"/>
-    <polyline points="10 4 14 4 14 8"/>
+const IDollar = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <path d="M8 1v14M5 4.5h4.5a2 2 0 010 4H6a2 2 0 000 4H11"/>
   </svg>
 );
-const ITrendDown = () => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="2 5 6 9 9.5 6.5 14 12"/>
-    <polyline points="10 12 14 12 14 8"/>
+const IUsers = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="6" cy="5" r="2.5"/><path d="M1 14c0-3 2.2-5 5-5s5 2 5 5"/>
+    <path d="M11 7c1.5 0 3 .8 3 3"/>
+  </svg>
+);
+const ILayers = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="8 1 15 5 8 9 1 5"/>
+    <polyline points="1 10 8 14 15 10"/>
+    <polyline points="1 7 8 11 15 7"/>
+  </svg>
+);
+const IClock = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <circle cx="8" cy="8" r="6.5"/><polyline points="8 4.5 8 8 10.5 10.5"/>
+  </svg>
+);
+const ISave = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 14V3.5L4.5 1H13a1 1 0 011 1v12a1 1 0 01-1 1H3a1 1 0 01-1-1z"/>
+    <path d="M5 1v4h6V1"/><rect x="4" y="9" width="8" height="5" rx="0.5"/>
+  </svg>
+);
+const IZap = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="9 1 2 9 8 9 7 15 14 7 8 7"/>
+  </svg>
+);
+const ILoader = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3" opacity=".4"/>
+    <path d="M3.4 3.4l2.1 2.1M10.5 10.5l2.1 2.1" opacity=".7"/>
+    <path d="M3.4 12.6l2.1-2.1"/>
   </svg>
 );
 
 export default function SaasDashboardPage() {
   const { theme, setTheme } = useTheme();
   const [prices, setPrices] = useState({ basic: 2, pro: 5, unlimited: 20, trial: 15 });
+  const [saving, setSaving] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const [toggles, setToggles] = useState({
-    registro:     true,
-    trial:        true,
+    registro: true,
+    trial: true,
     mantenimiento: false,
-    whatsapp:     true,
+    whatsapp: true,
   });
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
@@ -64,13 +104,14 @@ export default function SaasDashboardPage() {
         ]);
         const tenants: any[] = tenantsRes.data;
         const active = tenants.filter((t: any) => t.subscription?.status === "ACTIVE").length;
-        const trial  = tenants.filter((t: any) => t.subscription?.status === "TRIAL").length;
+        const trial = tenants.filter((t: any) => t.subscription?.status === "TRIAL").length;
         setStats({
-          mrr:    mrrRes.data.mrr    || 0,
+          mrr: mrrRes.data.mrr || 0,
           growth: mrrRes.data.growth || 0,
           active,
           trial,
           total: tenants.length,
+          conversion: tenants.length > 0 ? Math.round((active / tenants.length) * 100) : 0,
         });
         if (plansRes.data.length > 0) {
           const p = plansRes.data.reduce((acc: any, plan: any) => {
@@ -89,272 +130,295 @@ export default function SaasDashboardPage() {
   }, []);
 
   const handleSave = async () => {
-    try { await api.put("/api/saas/plans/prices", prices); }
-    catch (err) { console.error("Error guardando ajustes", err); }
-    finally { showToast(); }
+    setSaving(true);
+    try {
+      await api.put("/api/saas/plans/prices", prices);
+    } catch (err) {
+      console.error("Error guardando ajustes", err);
+    } finally {
+      setSaving(false);
+      showToast();
+    }
   };
 
   const toggleFeature = (key: keyof typeof toggles) =>
     setToggles(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // ── Derived ──────────────────────────────────────────────────
-  const growth   = stats?.growth ?? 0;
+  const growth = stats?.growth ?? 0;
   const growthUp = growth >= 0;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
 
   const METRICS = [
     {
+      id: "mrr",
       label: "MRR Total",
-      value: loadingStats ? "—" : `$${(stats?.mrr || 0).toFixed(0)}`,
-      sub: "USD / mes",
-      delta: loadingStats ? null : `${growthUp ? "+" : ""}${growth.toFixed(1)}% vs mes ant.`,
-      deltaUp: growthUp,
-      accent: "var(--orange)",
+      value: loadingStats ? null : `$${(stats?.mrr || 0).toFixed(0)}`,
+      unit: "USD / mes",
+      delta: loadingStats ? null : `${growthUp ? "+" : ""}${growth.toFixed(1)}%`,
+      deltaLabel: "vs mes anterior",
+      up: growthUp,
+      icon: <IDollar />,
+      accent: "purple",
     },
     {
+      id: "active",
       label: "Marcas activas",
-      value: loadingStats ? "—" : String(stats?.active ?? 0),
-      sub: "suscripciones live",
-      delta: loadingStats ? null : `${stats?.total ?? 0} total registradas`,
-      deltaUp: true,
-      accent: "var(--green)",
+      value: loadingStats ? null : String(stats?.active ?? 0),
+      unit: "suscripciones live",
+      delta: loadingStats ? null : `${stats?.total ?? 0} totales`,
+      deltaLabel: "registradas",
+      up: true,
+      icon: <IUsers />,
+      accent: "green",
     },
     {
-      label: "Total marcas",
-      value: loadingStats ? "—" : String(stats?.total ?? 0),
-      sub: "en la plataforma",
-      delta: null,
-      deltaUp: true,
-      accent: "var(--blue)",
+      id: "conversion",
+      label: "Tasa conversión",
+      value: loadingStats ? null : `${stats?.conversion ?? 0}%`,
+      unit: "trial → activo",
+      delta: loadingStats ? null : `${stats?.trial ?? 0} en trial`,
+      deltaLabel: "por convertir",
+      up: (stats?.conversion ?? 0) > 50,
+      icon: <IZap />,
+      accent: "blue",
     },
     {
+      id: "trial",
       label: "En período prueba",
-      value: loadingStats ? "—" : String(stats?.trial ?? 0),
-      sub: "por convertir",
+      value: loadingStats ? null : String(stats?.trial ?? 0),
+      unit: "restaurantes",
       delta: null,
-      deltaUp: false,
-      accent: "var(--amber)",
+      deltaLabel: null,
+      up: false,
+      icon: <IClock />,
+      accent: "amber",
     },
   ];
 
   const TOGGLES = [
-    { key: "registro",      label: "Registro libre",       desc: "Nuevas marcas sin aprobación manual" },
-    { key: "trial",         label: "Trial automático",     desc: "Al registrarse inicia período gratis" },
-    { key: "mantenimiento", label: "Modo mantenimiento",   desc: "Bloquea acceso a todos los TPV" },
-    { key: "whatsapp",      label: "Notif. WhatsApp",      desc: "Whapi.cloud activo globalmente" },
-  ] as const;
+    { key: "registro" as const, label: "Registro libre", desc: "Nuevas marcas sin aprobación manual", accent: "green" },
+    { key: "trial" as const, label: "Trial automático", desc: "Al registrarse inicia período gratis", accent: "blue" },
+    { key: "mantenimiento" as const, label: "Modo mantenimiento", desc: "Bloquea acceso a todos los TPV", accent: "red" },
+    { key: "whatsapp" as const, label: "Notif. WhatsApp", desc: "Whapi.cloud activo globalmente", accent: "green" },
+  ];
 
   const ACTIVITY = [
-    { color: "var(--green)", text: <><strong>Tacos El Rey</strong> se suscribió al plan Pro</>,       time: "hace 4 min" },
-    { color: "var(--amber)", text: <><strong>Burger House MX</strong> — trial vence en 24 h</>,       time: "hace 1 h" },
-    { color: "var(--orange)", text: <>Precio Pro actualizado a <strong>$5 USD</strong></>,            time: "hace 3 h" },
-    { color: "var(--red)",   text: <><strong>Sushi Central</strong> canceló suscripción</>,           time: "ayer" },
+    { type: "success", text: "Tacos El Rey", sub: "se suscribió al plan Pro", time: "4 min" },
+    { type: "warning", text: "Burger House MX", sub: "trial vence en 24 h", time: "1 h" },
+    { type: "info", text: "Precio Pro", sub: "actualizado a $5 USD", time: "3 h" },
+    { type: "error", text: "Sushi Central", sub: "canceló suscripción", time: "ayer" },
+    { type: "success", text: "La Cazuela MX", sub: "completó onboarding", time: "ayer" },
+  ];
+
+  const PLANS = [
+    { name: "Basic", price: prices.basic, subs: 24, features: "Hasta 3 empleados", accent: "blue" },
+    { name: "Pro", price: prices.pro, subs: 31, features: "Hasta 10 empleados", accent: "purple", featured: true },
+    { name: "Unlimited", price: prices.unlimited, subs: 7, features: "Sin límites", accent: "green" },
   ];
 
   return (
-    <>
-      {/* ── Status bar ── */}
-      <div className="db-status-bar">
-        <div className="db-status-dot"/>
-        <span className="db-status-text">
-          Todos los servicios operativos — último check hace 2 min
-        </span>
-      </div>
-
-      {/* ── Topbar ── */}
-      <div className="db-topbar">
-        <div className="db-topbar-left">
-          <h1>Ajustes globales</h1>
-          <p>Configuración que aplica a todos los restaurantes en la plataforma</p>
-        </div>
-        <div className="db-topbar-right">
-          {/* Theme toggle */}
-          <div className="db-theme-toggle">
-            <div className={`db-theme-opt ${theme === "dark" ? "active" : ""}`}
-              onClick={() => setTheme("dark")} title="Tema oscuro">
-              <IMoon/>
-            </div>
-            <div className={`db-theme-opt ${theme === "light" ? "active" : ""}`}
-              onClick={() => setTheme("light")} title="Tema claro">
-              <ISun/>
-            </div>
+    <div className="ovw-page">
+      {/* ── Header ── */}
+      <header className="ovw-header">
+        <div className="ovw-header-left">
+          <div className="ovw-pulse-wrap">
+            <span className="ovw-pulse" />
+            <span className="ovw-pulse-ring" />
           </div>
-          {/* Tabs */}
-          <div className="db-tabs">
-            <div className="db-tab active">Planes</div>
-            <div className="db-tab">Integraciones</div>
-            <div className="db-tab">Seguridad</div>
+          <div>
+            <h1 className="ovw-title">Vista general</h1>
+            <p className="ovw-subtitle">{dateStr}</p>
           </div>
         </div>
+        <div className="ovw-header-right">
+          <div className="ovw-status-badge">
+            <span className="ovw-status-dot" />
+            Todos los servicios OK
+          </div>
+          <button
+            className="ovw-theme-btn"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            aria-label="Cambiar tema"
+          >
+            {theme === "dark" ? <ISun /> : <IMoon />}
+          </button>
+        </div>
+      </header>
+
+      {/* ── KPI Row ── */}
+      <div className="ovw-kpi-grid">
+        {METRICS.map((m) => (
+          <div key={m.id} className={`ovw-kpi ovw-kpi-${m.accent}`}>
+            <div className="ovw-kpi-top">
+              <span className="ovw-kpi-label">{m.label}</span>
+              <div className={`ovw-kpi-icon ovw-icon-${m.accent}`}>{m.icon}</div>
+            </div>
+            <div className="ovw-kpi-value">
+              {m.value === null ? (
+                <span className="ovw-skeleton ovw-skeleton-val" />
+              ) : (
+                m.value
+              )}
+            </div>
+            <div className="ovw-kpi-footer">
+              {m.delta ? (
+                <span className={`ovw-kpi-delta ${m.up ? "up" : "down"}`}>
+                  {m.up ? <IArrowUp /> : <IArrowDown />}
+                  {m.delta}
+                  <span className="ovw-kpi-delta-label">{m.deltaLabel}</span>
+                </span>
+              ) : (
+                <span className="ovw-kpi-unit">{m.unit}</span>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* ── Content ── */}
-      <div className="db-content">
+      {/* ── Main Grid ── */}
+      <div className="ovw-grid">
 
-        {/* ── KPI row ── */}
-        <div className="db-metrics">
-          {METRICS.map(m => (
-            <div key={m.label} className={`db-metric-card c-${
-              m.accent === "var(--orange)" ? "orange" :
-              m.accent === "var(--green)"  ? "green"  :
-              m.accent === "var(--blue)"   ? "blue"   : "amber"
-            }`}>
-              <div className="db-metric-label">{m.label}</div>
-              <div className="db-metric-value">{m.value}</div>
-              <div className="db-metric-footer">
-                {m.delta ? (
-                  <span className={`db-metric-delta ${m.deltaUp ? "db-delta-up" : "db-delta-down"}`}
-                    style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    {m.deltaUp ? <ITrendUp/> : <ITrendDown/>}
-                    {m.delta}
-                  </span>
-                ) : (
-                  <span className="db-metric-delta" style={{ color: "var(--text3)" }}>
-                    {m.sub}
-                  </span>
-                )}
-                <span className="db-metric-sub">{m.delta ? m.sub : ""}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+        {/* ── Col izquierda: planes + chart ── */}
+        <div className="ovw-col-left">
 
-        {/* ── Main grid ── */}
-        <div className="db-grid3">
-
-          {/* ── Planes config ── */}
-          <div className="db-card">
-            <div className="db-card-header">
+          {/* Plans config */}
+          <div className="ovw-card">
+            <div className="ovw-card-head">
               <div>
-                <div className="db-card-title">Configuración de planes</div>
-                <div className="db-card-sub">Precios visibles a nuevos restaurantes</div>
+                <p className="ovw-card-title">Planes de suscripción</p>
+                <p className="ovw-card-sub">Precios activos en la plataforma</p>
               </div>
-              <span className="db-badge db-badge-green">Live</span>
+              <span className="ovw-badge ovw-badge-green">Live</span>
             </div>
 
             {/* Plan cards */}
-            <div className="db-plans-grid">
-              {[
-                { name: "Basic",     price: prices.basic,     feat: "Hasta 3 empleados", subs: 24, featured: false },
-                { name: "Pro",       price: prices.pro,       feat: "Hasta 10 empleados", subs: 31, featured: true },
-                { name: "Unlimited", price: prices.unlimited, feat: "Sin límites",         subs: 7,  featured: false },
-              ].map(plan => (
-                <div key={plan.name} className={`db-plan-card${plan.featured ? " featured" : ""}`}>
-                  {plan.featured && <div className="db-plan-hot">Popular</div>}
-                  <div className="db-plan-name">{plan.name}</div>
-                  <div className="db-plan-price">
-                    ${plan.price}<span> /mes</span>
+            <div className="ovw-plans-row">
+              {PLANS.map((plan) => (
+                <div key={plan.name} className={`ovw-plan ${plan.featured ? "ovw-plan-featured" : ""}`}>
+                  {plan.featured && <div className="ovw-plan-tag">Popular</div>}
+                  <div className="ovw-plan-name">{plan.name}</div>
+                  <div className="ovw-plan-price">
+                    ${plan.price}<span>/mo</span>
                   </div>
-                  <div className="db-plan-feature-tag">{plan.feat}</div>
-                  <div className="db-plan-stat">
-                    <span className="db-plan-stat-label">Suscritos</span>
-                    <span className="db-plan-stat-val">{plan.subs}</span>
+                  <div className="ovw-plan-info">{plan.features}</div>
+                  <div className="ovw-plan-subs">
+                    <span className="ovw-plan-subs-num">{plan.subs}</span>
+                    <span className="ovw-plan-subs-label">suscritos</span>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Editar precios */}
-            <div style={{ borderTop: "1px solid var(--border)", padding: "14px 18px 18px" }}>
-              <div style={{
-                fontSize: 10, color: "var(--text3)", letterSpacing: 1.2,
-                textTransform: "uppercase", fontWeight: 700, marginBottom: 12,
-              }}>
-                Editar precios
-              </div>
-              <div className="db-settings-grid">
+            {/* Price editor */}
+            <div className="ovw-price-editor">
+              <p className="ovw-section-label">Editar precios</p>
+              <div className="ovw-fields-grid">
                 {([
-                  { label: "Plan Basic",    key: "basic",    prefix: "USD", step: 0.5 },
-                  { label: "Plan Pro",      key: "pro",      prefix: "USD", step: 0.5 },
-                  { label: "Plan Unlimited",key: "unlimited",prefix: "USD", step: 1 },
-                  { label: "Días de prueba",key: "trial",    prefix: "días",step: 1 },
-                ] as const).map(f => (
-                  <div key={f.key} className="db-field">
-                    <label htmlFor={`field-${f.key}`}>{f.label}</label>
-                    <div className="db-field-wrap">
-                      <span className="db-field-prefix">{f.prefix}</span>
+                  { label: "Basic", key: "basic" as const, unit: "USD", step: 0.5 },
+                  { label: "Pro", key: "pro" as const, unit: "USD", step: 0.5 },
+                  { label: "Unlimited", key: "unlimited" as const, unit: "USD", step: 1 },
+                  { label: "Días trial", key: "trial" as const, unit: "días", step: 1 },
+                ]).map((f) => (
+                  <div key={f.key} className="ovw-field">
+                    <label className="ovw-field-label" htmlFor={`f-${f.key}`}>{f.label}</label>
+                    <div className="ovw-field-input-wrap">
+                      <span className="ovw-field-unit">{f.unit}</span>
                       <input
-                        id={`field-${f.key}`}
+                        id={`f-${f.key}`}
                         type="number"
                         value={prices[f.key]}
                         min={0}
                         step={f.step}
-                        onChange={e => setPrices(p => ({ ...p, [f.key]: +e.target.value }))}
+                        onChange={(e) => setPrices((p) => ({ ...p, [f.key]: +e.target.value }))}
+                        className="ovw-field-input"
                       />
                     </div>
                   </div>
                 ))}
               </div>
               <button
-                className="db-btn db-btn-orange"
-                style={{ marginTop: 14, width: "100%" }}
+                className={`ovw-save-btn ${saving ? "loading" : ""}`}
                 onClick={handleSave}
+                disabled={saving}
               >
-                Guardar ajustes globales
+                {saving ? <ILoader /> : <ISave />}
+                {saving ? "Guardando…" : "Guardar cambios"}
               </button>
             </div>
           </div>
 
-          {/* ── Right column ── */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-
-            {/* Feature toggles */}
-            <div className="db-card">
-              <div className="db-card-header">
-                <div className="db-card-title">Funciones globales</div>
-                <span className="db-badge db-badge-blue">Sistema</span>
-              </div>
-              <div className="db-card-body" style={{ padding: "4px 18px 4px" }}>
-                {TOGGLES.map(({ key, label, desc }) => (
-                  <div key={key} className="db-toggle-row">
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="db-toggle-label">{label}</div>
-                      <div className="db-toggle-desc">{desc}</div>
-                    </div>
-                    <div
-                      className={`db-toggle ${toggles[key] ? "on" : ""}`}
-                      onClick={() => toggleFeature(key)}
-                      role="switch"
-                      aria-checked={toggles[key]}
-                      aria-label={label}
-                      tabIndex={0}
-                      onKeyDown={e => e.key === " " && toggleFeature(key)}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Activity feed */}
-            <div className="db-card" style={{ flex: 1 }}>
-              <div className="db-card-header">
-                <div className="db-card-title">Actividad reciente</div>
-                <span className="db-badge db-badge-green">Live</span>
-              </div>
-              <div className="db-activity-list">
-                {ACTIVITY.map((item, i) => (
-                  <div key={i} className="db-activity-item">
-                    <div className="db-activity-dot" style={{ background: item.color }}/>
-                    <div>
-                      <div className="db-activity-text">{item.text}</div>
-                      <span className="db-activity-time">{item.time}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
+          {/* MRR Chart */}
+          <MrrChart />
         </div>
 
-        {/* ── MRR Chart ── */}
-        <MrrChart />
+        {/* ── Col derecha: toggles + activity ── */}
+        <div className="ovw-col-right">
+
+          {/* Feature toggles */}
+          <div className="ovw-card">
+            <div className="ovw-card-head">
+              <div>
+                <p className="ovw-card-title">Funciones globales</p>
+                <p className="ovw-card-sub">Aplica a toda la plataforma</p>
+              </div>
+              <span className="ovw-badge ovw-badge-blue">Sistema</span>
+            </div>
+            <div className="ovw-toggles">
+              {TOGGLES.map(({ key, label, desc, accent }) => (
+                <div key={key} className="ovw-toggle-row">
+                  <div className="ovw-toggle-info">
+                    <span className="ovw-toggle-label">{label}</span>
+                    <span className="ovw-toggle-desc">{desc}</span>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={toggles[key]}
+                    aria-label={label}
+                    className={`ovw-toggle ${toggles[key] ? `on ovw-toggle-${accent}` : ""}`}
+                    onClick={() => toggleFeature(key)}
+                  >
+                    <span className="ovw-toggle-thumb" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Activity feed */}
+          <div className="ovw-card ovw-card-grow">
+            <div className="ovw-card-head">
+              <div>
+                <p className="ovw-card-title">Actividad reciente</p>
+                <p className="ovw-card-sub">Últimas acciones en la plataforma</p>
+              </div>
+              <span className="ovw-badge ovw-badge-green">Live</span>
+            </div>
+            <div className="ovw-activity">
+              {ACTIVITY.map((item, i) => (
+                <div key={i} className="ovw-activity-item">
+                  <div className={`ovw-activity-dot ovw-dot-${item.type}`} />
+                  <div className="ovw-activity-body">
+                    <span className="ovw-activity-name">{item.text}</span>
+                    <span className="ovw-activity-sub">{item.sub}</span>
+                  </div>
+                  <span className="ovw-activity-time">{item.time}</span>
+                </div>
+              ))}
+            </div>
+            <div className="ovw-activity-footer">
+              <a href="/logs" className="ovw-activity-link">Ver todos los logs →</a>
+            </div>
+          </div>
+
+        </div>
       </div>
 
       {/* ── Toast ── */}
-      <div className={`db-toast ${toastVisible ? "show" : ""}`}>
-        <ICheck/>
-        Ajustes guardados
+      <div className={`ovw-toast ${toastVisible ? "show" : ""}`} role="status" aria-live="polite">
+        <div className="ovw-toast-icon"><ICheck /></div>
+        Ajustes guardados correctamente
       </div>
-    </>
+    </div>
   );
 }
