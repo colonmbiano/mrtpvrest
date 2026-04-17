@@ -24,7 +24,10 @@
       "Bash(find ./apps -name \".eslintrc.json\" -exec echo \"=== {} ===\" \\\\; -exec cat {} \\\\;)",
       "Bash(xargs ls:*)",
       "Bash(git worktree:*)",
-      "Bash(npx pnpm@9.15.0 --filter @mrtpvrest/tpv build)"
+      "Bash(npx pnpm@9.15.0 --filter @mrtpvrest/tpv build)",
+      "Bash(claude plugin *)",
+      "Read(//c/Users/colon/.claude/marketplaces/**)",
+      "Read(//c/Users/colon/.claude/**)"
     ]
   }
 }
