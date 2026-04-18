@@ -141,6 +141,8 @@ export interface OrderItemDto {
   menuItem?: { name?: string; categoryId?: string | null } | null;
 }
 
+export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+
 /** Minimal Order shape we depend on. Extra fields pass through. */
 export interface OrderDto {
   id: string;
@@ -153,8 +155,10 @@ export interface OrderDto {
   total: number;
   subtotal: number;
   discount?: number;
-  paymentStatus?: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+  paymentStatus?: PaymentStatus;
+  paymentMethod?: PaymentMethod;
   cashCollected?: boolean;
+  paidAt?: string | null;
   notes?: string | null;
   createdAt: string;
   items?: OrderItemDto[];
@@ -185,6 +189,33 @@ export async function fetchActiveOrders(): Promise<OrderDto[]> {
   const { data } = await api.get<OrderDto[]>('/api/orders/admin');
   if (!Array.isArray(data)) return [];
   return data.filter(isActiveOrder);
+}
+
+/**
+ * Orders paid since a given cutoff (defaults to local midnight).
+ *
+ * Reuses GET /api/orders/admin (the backend returns the 200 most recent
+ * orders for the paired location) and filters client-side for paid tickets
+ * whose paidAt/createdAt falls on the current operating day. Good enough
+ * for a per-shift view; for long-running shifts that span days, pass an
+ * explicit `since` ISO string.
+ */
+export async function fetchTodayPaidOrders(since?: Date): Promise<OrderDto[]> {
+  const cutoff = since ?? startOfToday();
+  const { data } = await api.get<OrderDto[]>('/api/orders/admin');
+  if (!Array.isArray(data)) return [];
+  return data.filter((o) => {
+    if (o.paymentStatus !== 'PAID') return false;
+    const stampStr = o.paidAt ?? o.createdAt;
+    const stamp = new Date(stampStr).getTime();
+    return !Number.isNaN(stamp) && stamp >= cutoff.getTime();
+  });
+}
+
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
 // ─── Menu (categories + items) ─────────────────────────────────────────────
@@ -386,6 +417,27 @@ export async function confirmCashPayment(
   const { data } = await api.put<OrderDto>(
     `/api/orders/${orderId}/confirm-cash`,
     { collectedBy },
+  );
+  return data;
+}
+
+/**
+ * PUT /api/orders/:id/void-payment — reverts a PAID ticket back to pending.
+ *
+ * Requires ADMIN/SUPER_ADMIN role on the backend. Server clears
+ * cashCollected, cashCollectedAt/By, paidAt, resets paymentMethod to
+ * 'PENDING', and appends an audit line to the order's `notes`.
+ *
+ * Fails with:
+ *   - 400 "La orden no está pagada" if paymentStatus !== 'PAID'.
+ *   - 403 if the authenticated user isn't an admin (requireAdmin gate)
+ *     or the order belongs to a different restaurant.
+ *   - 404 if the id doesn't exist.
+ */
+export async function voidOrderPayment(orderId: string): Promise<OrderDto> {
+  const { data } = await api.put<OrderDto>(
+    `/api/orders/${orderId}/void-payment`,
+    {},
   );
   return data;
 }
