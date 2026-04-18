@@ -21,8 +21,8 @@ const ALLOWED_ORIGINS = [
   'https://tpv.mrtpvrest.com',            
   'http://localhost:3000',                
   'http://localhost:3001',
-  /\.vercel\.app$/,                       
-  /\.railway\.app$/                       
+  '/\.vercel\.app$/',                       
+  '/\.railway\.app$/',                       
 ];
 
 const corsOptions = {
