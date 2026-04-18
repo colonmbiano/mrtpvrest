@@ -23,17 +23,19 @@ export const api: AxiosInstance = axios.create({
 api.interceptors.request.use(async (config) => {
   // Prefer the employee session token once the employee has clocked in;
   // otherwise fall back to the device's accessToken (admin pairing token).
-  const [employeeToken, accessToken, locationId] = await Promise.all([
+  const [employeeToken, accessToken, locationId, restaurantId] = await Promise.all([
     getItem(StorageKeys.employeeToken),
     getItem(StorageKeys.accessToken),
     getItem(StorageKeys.locationId),
+    getItem(StorageKeys.restaurantId),
   ]);
   const token = employeeToken ?? accessToken;
 
   config.headers = config.headers ?? {};
   const headers = config.headers as Record<string, string>;
   if (token) headers.Authorization = `Bearer ${token}`;
-  // Backend tenant middleware reads x-location-id to scope multi-tenant queries.
+  // Backend tenant middleware reads both headers to scope multi-tenant queries.
+  if (restaurantId) headers['x-restaurant-id'] = restaurantId;
   if (locationId) headers['x-location-id'] = locationId;
 
   return config;
@@ -110,4 +112,57 @@ export async function employeePinLogin(
     { pin },
   );
   return data;
+}
+
+// ─── Orders (tickets) ──────────────────────────────────────────────────────
+
+/** Order status values used by the backend (`OrderStatus` enum). */
+export type OrderStatus =
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'PREPARING'
+  | 'READY'
+  | 'DELIVERED'
+  | 'CANCELLED';
+
+/** Minimal Order shape we depend on for the Dashboard. Extra fields pass through. */
+export interface OrderDto {
+  id: string;
+  orderNumber: string;
+  status: OrderStatus;
+  orderType: string; // 'DINE_IN' | 'TAKEOUT' | 'DELIVERY' | ...
+  source: string; // 'TPV' | 'WAITER' | 'ONLINE' | 'KIOSK' | ...
+  tableNumber: number | null;
+  customerName: string | null;
+  total: number;
+  subtotal: number;
+  createdAt: string;
+  items?: Array<{ id: string; quantity: number; name?: string }>;
+  [k: string]: unknown;
+}
+
+/**
+ * Orders we consider "active" — i.e. still in the kitchen/floor workflow.
+ * Mirrors the filter used by apps/tpv.
+ */
+export const INACTIVE_STATUSES: ReadonlySet<OrderStatus> = new Set([
+  'DELIVERED',
+  'CANCELLED',
+]);
+
+export function isActiveOrder(o: Pick<OrderDto, 'status'>): boolean {
+  return !INACTIVE_STATUSES.has(o.status);
+}
+
+/**
+ * GET /api/orders/admin — returns up to 200 orders for the paired location,
+ * most recent first. Requires an ADMIN/SUPER_ADMIN employee token.
+ *
+ * The server does NOT pre-filter by status (it returns everything for the
+ * location), so we filter client-side via `isActiveOrder`.
+ */
+export async function fetchActiveOrders(): Promise<OrderDto[]> {
+  const { data } = await api.get<OrderDto[]>('/api/orders/admin');
+  if (!Array.isArray(data)) return [];
+  return data.filter(isActiveOrder);
 }
