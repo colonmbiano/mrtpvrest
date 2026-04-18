@@ -187,6 +187,94 @@ export async function fetchActiveOrders(): Promise<OrderDto[]> {
   return data.filter(isActiveOrder);
 }
 
+// ─── Menu (categories + items) ─────────────────────────────────────────────
+
+export interface CategoryDto {
+  id: string;
+  name: string;
+  sortOrder?: number;
+  isActive?: boolean;
+  restaurantId?: string;
+}
+
+export interface MenuItemDto {
+  id: string;
+  name: string;
+  price: number;
+  description?: string | null;
+  imageUrl?: string | null;
+  categoryId: string;
+  isAvailable?: boolean;
+  isPromo?: boolean;
+  promoPrice?: number | null;
+  isPopular?: boolean;
+}
+
+/** Current sale price for a menu item (handles promos transparently). */
+export function effectivePrice(m: MenuItemDto): number {
+  if (m.isPromo && typeof m.promoPrice === 'number') return m.promoPrice;
+  return m.price;
+}
+
+/** GET /api/menu/categories — returns only active categories, sorted. */
+export async function fetchMenuCategories(): Promise<CategoryDto[]> {
+  const { data } = await api.get<CategoryDto[]>('/api/menu/categories');
+  return Array.isArray(data) ? data : [];
+}
+
+/** GET /api/menu/items[?categoryId=...] — only available items for location. */
+export async function fetchMenuItems(
+  categoryId?: string,
+): Promise<MenuItemDto[]> {
+  const { data } = await api.get<MenuItemDto[]>('/api/menu/items', {
+    params: categoryId ? { categoryId } : undefined,
+  });
+  return Array.isArray(data) ? data : [];
+}
+
+// ─── New Order (create ticket) ─────────────────────────────────────────────
+
+export type OrderType = 'DINE_IN' | 'TAKEOUT' | 'DELIVERY';
+export type PaymentMethod =
+  | 'CASH'
+  | 'CARD'
+  | 'TRANSFER'
+  | 'COURTESY'
+  | 'PENDING';
+
+export interface CreateTpvOrderItem {
+  menuItemId: string;
+  quantity: number;
+  notes?: string | null;
+}
+
+export interface CreateTpvOrderPayload {
+  items: CreateTpvOrderItem[];
+  orderType: OrderType;
+  tableNumber?: number | null;
+  paymentMethod?: PaymentMethod;
+  subtotal: number;
+  discount?: number;
+  total: number;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  status?: 'PREPARING' | 'CONFIRMED' | 'DELIVERED';
+}
+
+/**
+ * POST /api/orders/tpv — create a new ticket from the mobile POS.
+ *
+ * The server re-reads prices from the DB per item (defense in depth) but
+ * uses the client-provided subtotal/total for the order header. Requires
+ * ADMIN employee token. Responds 200 with the full Order object.
+ */
+export async function createTpvOrder(
+  payload: CreateTpvOrderPayload,
+): Promise<OrderDto> {
+  const { data } = await api.post<OrderDto>('/api/orders/tpv', payload);
+  return data;
+}
+
 /**
  * PUT /api/orders/:id/confirm-cash — marks an order as paid in cash:
  *   cashCollected = true, cashCollectedAt = now(),

@@ -214,18 +214,28 @@ export default function DashboardScreen({ navigation }: Props) {
 
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.greeting}>Hola, {employeeName}</Text>
           <Text style={styles.title}>Mesas activas</Text>
         </View>
-        <TouchableOpacity
-          onPress={handleEndShift}
-          hitSlop={12}
-          style={styles.endShiftBtn}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.endShiftText}>Cerrar turno</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('NewOrder')}
+            hitSlop={10}
+            style={styles.newOrderBtn}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.newOrderBtnText}>+ Nueva venta</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleEndShift}
+            hitSlop={12}
+            style={styles.endShiftBtn}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.endShiftText}>Cerrar turno</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Error banner */}
@@ -386,6 +396,22 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     letterSpacing: -0.5,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  newOrderBtn: {
+    backgroundColor: ACCENT,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  newOrderBtnText: {
+    color: '#000',
+    fontSize: 13,
+    fontWeight: '700',
   },
   endShiftBtn: {
     borderWidth: 1,

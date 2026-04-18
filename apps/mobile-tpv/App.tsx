@@ -7,6 +7,7 @@ import SetupScreen from './screens/SetupScreen';
 import PinScreen from './screens/PinScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import TableDetailScreen from './screens/TableDetailScreen';
+import NewOrderScreen from './screens/NewOrderScreen';
 import { clearEmployeeSession, getAuthSnapshot } from './lib/storage';
 import type { RootStackParamList } from './navigation/types';
 
@@ -78,6 +79,11 @@ export default function App() {
           name="TableDetail"
           component={TableDetailScreen}
           options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="NewOrder"
+          component={NewOrderScreen}
+          options={{ animation: 'slide_from_bottom' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
