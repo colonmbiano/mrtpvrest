@@ -228,6 +228,14 @@ export default function DashboardScreen({ navigation }: Props) {
             <Text style={styles.newOrderBtnText}>+ Nueva venta</Text>
           </TouchableOpacity>
           <TouchableOpacity
+            onPress={() => navigation.navigate('Shift')}
+            hitSlop={10}
+            style={styles.shiftBtn}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.shiftBtnText}>Corte de caja</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             onPress={handleEndShift}
             hitSlop={12}
             style={styles.endShiftBtn}
@@ -410,6 +418,18 @@ const styles = StyleSheet.create({
   },
   newOrderBtnText: {
     color: '#000',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  shiftBtn: {
+    borderWidth: 1,
+    borderColor: ACCENT,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  shiftBtnText: {
+    color: ACCENT,
     fontSize: 13,
     fontWeight: '700',
   },
