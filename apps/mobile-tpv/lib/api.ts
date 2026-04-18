@@ -197,6 +197,32 @@ export interface CategoryDto {
   restaurantId?: string;
 }
 
+/**
+ * A selectable variant of a menu item (e.g. size "Chico" / "Grande").
+ * Variants are mutually exclusive; when one is selected its `price` REPLACES
+ * the base item price (mirrors the pricing rule in apps/tpv).
+ */
+export interface MenuItemVariantDto {
+  id: string;
+  name: string;
+  price: number;
+  isAvailable?: boolean;
+  sortOrder?: number;
+}
+
+/**
+ * An optional, additive extra for a menu item (e.g. "Extra queso").
+ * Multiple complements can be selected; each one's `price` is added to the
+ * per-unit line total.
+ */
+export interface MenuItemComplementDto {
+  id: string;
+  name: string;
+  price: number;
+  isAvailable?: boolean;
+  sortOrder?: number;
+}
+
 export interface MenuItemDto {
   id: string;
   name: string;
@@ -208,12 +234,57 @@ export interface MenuItemDto {
   isPromo?: boolean;
   promoPrice?: number | null;
   isPopular?: boolean;
+  /** Size/flavor picker (radio). May be empty. */
+  variants?: MenuItemVariantDto[];
+  /** Checkbox-style extras. May be empty. */
+  complements?: MenuItemComplementDto[];
 }
 
 /** Current sale price for a menu item (handles promos transparently). */
 export function effectivePrice(m: MenuItemDto): number {
   if (m.isPromo && typeof m.promoPrice === 'number') return m.promoPrice;
   return m.price;
+}
+
+/** True when the item requires the modifier modal (has any variant/complement). */
+export function hasModifiers(m: MenuItemDto): boolean {
+  return (
+    (Array.isArray(m.variants) && m.variants.some((v) => v.isAvailable !== false)) ||
+    (Array.isArray(m.complements) && m.complements.some((c) => c.isAvailable !== false))
+  );
+}
+
+/**
+ * Compute the per-unit price for a menu item with optional variant and
+ * complements.
+ *
+ * Pricing rule (matches apps/tpv):
+ *   base = variant.price if a variant is chosen, else effectivePrice(item)
+ *   unit = base + sum(complement.price)
+ */
+export function computeUnitPrice(
+  item: MenuItemDto,
+  variant: MenuItemVariantDto | null,
+  complements: MenuItemComplementDto[],
+): number {
+  const base = variant ? variant.price : effectivePrice(item);
+  const extras = complements.reduce((s, c) => s + (c.price ?? 0), 0);
+  return base + extras;
+}
+
+/**
+ * Human-readable summary of selected modifiers, used both as the cart
+ * line subtitle and as the `notes` payload sent to the backend. The
+ * backend stores this verbatim on the OrderItem for the kitchen ticket.
+ */
+export function buildModifierNotes(
+  variant: MenuItemVariantDto | null,
+  complements: MenuItemComplementDto[],
+): string {
+  const parts: string[] = [];
+  if (variant) parts.push(variant.name);
+  for (const c of complements) parts.push(`+ ${c.name}`);
+  return parts.join(', ');
 }
 
 /** GET /api/menu/categories — returns only active categories, sorted. */
