@@ -1,0 +1,284 @@
+<h2>4 direcciones de estilo para el Kiosko</h2>
+<p class="subtitle">Cada mockup muestra la pantalla de <b>menú</b> (la más representativa) en un lenguaje visual distinto. Pensado para pedestal táctil vertical 1080×1920.</p>
+
+<style>
+  .styles-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:22px; margin-top:14px; }
+  .style-card { border-radius:16px; overflow:hidden; border:1px solid #e5e7eb; background:#fff;
+                box-shadow:0 6px 20px rgba(0,0,0,0.08); }
+  .style-meta { padding:14px 16px; display:flex; flex-direction:column; gap:4px;
+                background:#fafafa; border-bottom:1px solid #e5e7eb; }
+  .style-meta .name { font-weight:900; font-size:16px; letter-spacing:-0.01em; }
+  .style-meta .tag { font-size:11px; color:#666; font-family:'DM Mono', monospace; text-transform:uppercase; letter-spacing:.1em; }
+  .style-meta .pal { display:flex; gap:6px; margin-top:2px; }
+  .style-meta .sw { width:18px; height:18px; border-radius:5px; border:1px solid rgba(0,0,0,0.1); }
+
+  .mockup-wrap { padding:18px; background:#f1f1f3; display:flex; justify-content:center; }
+  .screen { width:100%; max-width:320px; aspect-ratio: 9 / 16; border-radius:20px; overflow:hidden;
+            display:flex; flex-direction:column; position:relative;
+            box-shadow:0 12px 40px rgba(0,0,0,0.25); }
+
+  /* ═══════ STYLE 1: OLED PREMIUM (propuesta actual) ═══════ */
+  .s1 { background:#080810; color:#eaeaf6; font-family:'DM Sans', sans-serif; padding:14px; }
+  .s1 .head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .s1 .head .t { font-size:13px; font-weight:800; }
+  .s1 .head .r { font-size:9px; color:#6868a0; font-family:'DM Mono', monospace; }
+  .s1 .row { flex:1; display:grid; grid-template-columns:30% 70%; gap:8px; min-height:0; }
+  .s1 .cats { display:flex; flex-direction:column; gap:5px; }
+  .s1 .cat { padding:9px 8px; border-radius:10px; background:#0e0e18; border:1px solid #1c1c2e; font-size:9px; font-weight:700; }
+  .s1 .cat.on { background:#ff5c35; color:#080810; border-color:#ff5c35; }
+  .s1 .grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .s1 .c { background:#0e0e18; border:1px solid #1c1c2e; border-radius:10px; padding:6px; display:flex; flex-direction:column; gap:4px; }
+  .s1 .c .ph { aspect-ratio:4/3; border-radius:6px; background:linear-gradient(135deg,#1c1c2e,#13131f); }
+  .s1 .c .n { font-size:9px; font-weight:700; }
+  .s1 .c .p { font-size:10px; font-weight:900; color:#ff5c35; font-family:'DM Mono', monospace; }
+  .s1 .bar { margin-top:8px; background:#ff5c35; border-radius:12px; padding:9px 10px; display:flex; justify-content:space-between; color:#080810; font-weight:800; font-size:11px; }
+
+  /* ═══════ STYLE 2: FAST-FOOD POP (McDonald's / BK) ═══════ */
+  .s2 { background:#FFF8E7; color:#1a1a1a; font-family:'Poppins', 'DM Sans', sans-serif; padding:14px; }
+  .s2 .banner { background:linear-gradient(135deg,#FFC72C,#FF8C00); border-radius:14px; padding:10px 12px; margin-bottom:10px;
+                display:flex; justify-content:space-between; align-items:center; }
+  .s2 .banner .t { font-weight:900; font-size:14px; letter-spacing:-.01em; }
+  .s2 .banner .r { font-size:9px; font-weight:800; background:#fff; padding:3px 8px; border-radius:999px; }
+  .s2 .row { flex:1; display:grid; grid-template-columns:30% 70%; gap:8px; min-height:0; }
+  .s2 .cats { display:flex; flex-direction:column; gap:6px; }
+  .s2 .cat { padding:9px 8px; border-radius:14px; background:#fff; border:2px solid transparent;
+             font-size:9px; font-weight:800; text-align:center; box-shadow:0 2px 0 #FFC72C40; }
+  .s2 .cat.on { background:#DC2626; color:#fff; }
+  .s2 .grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  .s2 .c { background:#fff; border-radius:14px; padding:6px; display:flex; flex-direction:column; gap:4px;
+           box-shadow:0 2px 0 rgba(0,0,0,0.06); border:1px solid #ffe4a0; }
+  .s2 .c .ph { aspect-ratio:4/3; border-radius:10px; background:linear-gradient(135deg,#FFD700,#FF8C00); }
+  .s2 .c .n { font-size:10px; font-weight:900; }
+  .s2 .c .p { font-size:11px; font-weight:900; color:#DC2626; }
+  .s2 .bar { margin-top:8px; background:#DC2626; border-radius:999px; padding:10px 14px;
+             display:flex; justify-content:space-between; color:#fff; font-weight:900; font-size:11px; }
+
+  /* ═══════ STYLE 3: BOUTIQUE RESTAURANT (editorial, cálido) ═══════ */
+  .s3 { background:#F5EFE4; color:#1F2D1F; font-family:'Cormorant Garamond', Georgia, serif; padding:14px; }
+  .s3 .head { display:flex; flex-direction:column; align-items:center; margin-bottom:12px;
+              padding-bottom:8px; border-bottom:1px solid #C9A86B; }
+  .s3 .head .t { font-weight:700; font-size:18px; letter-spacing:-.01em; font-style:italic; }
+  .s3 .head .r { font-size:8px; letter-spacing:.2em; text-transform:uppercase; color:#8a7a5a; font-family:'DM Mono', monospace; }
+  .s3 .row { flex:1; display:grid; grid-template-columns:30% 70%; gap:10px; min-height:0; }
+  .s3 .cats { display:flex; flex-direction:column; gap:2px; border-right:1px solid #C9A86B40; padding-right:8px; }
+  .s3 .cat { padding:7px 4px; font-size:10px; font-weight:600; letter-spacing:.05em; }
+  .s3 .cat.on { color:#C9A86B; font-style:italic; border-left:2px solid #C9A86B; padding-left:8px; }
+  .s3 .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .s3 .c { background:#FFFCF5; border:1px solid #C9A86B40; border-radius:2px; padding:7px;
+           display:flex; flex-direction:column; gap:4px; }
+  .s3 .c .ph { aspect-ratio:4/3; background:linear-gradient(135deg,#3E4A32,#1F2D1F); }
+  .s3 .c .n { font-size:10px; font-weight:600; font-style:italic; }
+  .s3 .c .p { font-size:11px; font-weight:700; color:#C9A86B; font-family:'DM Mono', monospace; }
+  .s3 .bar { margin-top:10px; background:#1F2D1F; border-radius:0; padding:10px 12px;
+             display:flex; justify-content:space-between; color:#C9A86B; font-weight:600; font-size:11px;
+             letter-spacing:.1em; text-transform:uppercase; font-family:'DM Mono', monospace; }
+
+  /* ═══════ STYLE 4: NEO-BRUTALIST (flat + shadows bold) ═══════ */
+  .s4 { background:#FFFEF2; color:#000; font-family:'Space Grotesk', 'DM Sans', sans-serif; padding:14px; }
+  .s4 .head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;
+              background:#000; color:#FFFEF2; padding:8px 10px; border-radius:6px; border:2px solid #000;
+              box-shadow:4px 4px 0 #A3E635; }
+  .s4 .head .t { font-weight:900; font-size:13px; text-transform:uppercase; letter-spacing:-.01em; }
+  .s4 .head .r { font-size:9px; font-weight:700; background:#A3E635; color:#000; padding:3px 7px; border:2px solid #000; border-radius:4px; }
+  .s4 .row { flex:1; display:grid; grid-template-columns:32% 68%; gap:8px; min-height:0; }
+  .s4 .cats { display:flex; flex-direction:column; gap:6px; }
+  .s4 .cat { padding:9px 8px; border-radius:4px; background:#fff; border:2px solid #000;
+             font-size:9px; font-weight:800; text-transform:uppercase; }
+  .s4 .cat.on { background:#A3E635; box-shadow:3px 3px 0 #000; }
+  .s4 .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .s4 .c { background:#fff; border:2px solid #000; border-radius:6px; padding:5px; display:flex; flex-direction:column; gap:4px;
+           box-shadow:3px 3px 0 #000; }
+  .s4 .c .ph { aspect-ratio:4/3; border-radius:3px; background:#FCA5A5; border:2px solid #000; }
+  .s4 .c .n { font-size:9px; font-weight:800; text-transform:uppercase; }
+  .s4 .c .p { font-size:11px; font-weight:900; font-family:'Space Mono', monospace; background:#A3E635; border:1.5px solid #000;
+              padding:1px 5px; border-radius:3px; display:inline-block; align-self:flex-start; }
+  .s4 .bar { margin-top:8px; background:#000; color:#A3E635; border-radius:6px; padding:10px 12px;
+             display:flex; justify-content:space-between; font-weight:900; font-size:11px;
+             text-transform:uppercase; box-shadow:4px 4px 0 #A3E635; border:2px solid #000; }
+</style>
+
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Poppins:wght@700;800;900&family=Space+Grotesk:wght@700;800;900&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
+
+<div class="styles-grid">
+
+  <!-- STYLE 1 -->
+  <div class="style-card">
+    <div class="style-meta">
+      <div class="name">A · OLED Premium <span style="color:#ff5c35;font-size:11px">(propuesta actual)</span></div>
+      <div class="tag">dark · DM Sans · minimal · techy</div>
+      <div class="pal">
+        <div class="sw" style="background:#080810"></div>
+        <div class="sw" style="background:#0e0e18"></div>
+        <div class="sw" style="background:#ff5c35"></div>
+        <div class="sw" style="background:#eaeaf6"></div>
+        <div class="sw" style="background:#6868a0"></div>
+      </div>
+    </div>
+    <div class="mockup-wrap">
+      <div class="screen s1">
+        <div class="head"><div class="t">Elige tus productos</div><div class="r">🍽 Aquí</div></div>
+        <div class="row">
+          <div class="cats">
+            <div class="cat">Entradas</div>
+            <div class="cat on">Burgers</div>
+            <div class="cat">Pizzas</div>
+            <div class="cat">Bebidas</div>
+            <div class="cat">Postres</div>
+          </div>
+          <div class="grid">
+            <div class="c"><div class="ph"></div><div class="n">Clásica</div><div class="p">$129</div></div>
+            <div class="c"><div class="ph"></div><div class="n">BBQ</div><div class="p">$149</div></div>
+            <div class="c"><div class="ph"></div><div class="n">Doble Queso</div><div class="p">$179</div></div>
+            <div class="c"><div class="ph"></div><div class="n">Vegetariana</div><div class="p">$139</div></div>
+          </div>
+        </div>
+        <div class="bar"><span>3 productos · $457</span><span>CONTINUAR →</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STYLE 2 -->
+  <div class="style-card">
+    <div class="style-meta">
+      <div class="name">B · Fast-Food Pop</div>
+      <div class="tag">light · Poppins · McDonald's / BK vibe</div>
+      <div class="pal">
+        <div class="sw" style="background:#FFF8E7"></div>
+        <div class="sw" style="background:#FFC72C"></div>
+        <div class="sw" style="background:#FF8C00"></div>
+        <div class="sw" style="background:#DC2626"></div>
+        <div class="sw" style="background:#1a1a1a"></div>
+      </div>
+    </div>
+    <div class="mockup-wrap">
+      <div class="screen s2">
+        <div class="banner"><div class="t">¡Arma tu orden!</div><div class="r">🍽 AQUÍ</div></div>
+        <div class="row">
+          <div class="cats">
+            <div class="cat">Entradas</div>
+            <div class="cat on">BURGERS</div>
+            <div class="cat">Pizzas</div>
+            <div class="cat">Bebidas</div>
+            <div class="cat">Postres</div>
+          </div>
+          <div class="grid">
+            <div class="c"><div class="ph"></div><div class="n">Clásica</div><div class="p">$129</div></div>
+            <div class="c"><div class="ph"></div><div class="n">BBQ</div><div class="p">$149</div></div>
+            <div class="c"><div class="ph"></div><div class="n">Doble Queso</div><div class="p">$179</div></div>
+            <div class="c"><div class="ph"></div><div class="n">Vegetariana</div><div class="p">$139</div></div>
+          </div>
+        </div>
+        <div class="bar"><span>3 productos · $457</span><span>CONTINUAR →</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STYLE 3 -->
+  <div class="style-card">
+    <div class="style-meta">
+      <div class="name">C · Boutique Restaurant</div>
+      <div class="tag">cream · Cormorant · editorial · cálido</div>
+      <div class="pal">
+        <div class="sw" style="background:#F5EFE4"></div>
+        <div class="sw" style="background:#1F2D1F"></div>
+        <div class="sw" style="background:#C9A86B"></div>
+        <div class="sw" style="background:#3E4A32"></div>
+        <div class="sw" style="background:#8a7a5a"></div>
+      </div>
+    </div>
+    <div class="mockup-wrap">
+      <div class="screen s3">
+        <div class="head"><div class="t">Nuestra Carta</div><div class="r">— Mesa · DINE_IN —</div></div>
+        <div class="row">
+          <div class="cats">
+            <div class="cat">Entradas</div>
+            <div class="cat on">Principales</div>
+            <div class="cat">Pastas</div>
+            <div class="cat">Vinos</div>
+            <div class="cat">Postres</div>
+          </div>
+          <div class="grid">
+            <div class="c"><div class="ph"></div><div class="n">Ribeye Angus</div><div class="p">$489</div></div>
+            <div class="c"><div class="ph"></div><div class="n">Salmón grillé</div><div class="p">$389</div></div>
+            <div class="c"><div class="ph"></div><div class="n">Risotto trufa</div><div class="p">$349</div></div>
+            <div class="c"><div class="ph"></div><div class="n">Cordero braseado</div><div class="p">$529</div></div>
+          </div>
+        </div>
+        <div class="bar"><span>3 platos · $1,227</span><span>Continuar →</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STYLE 4 -->
+  <div class="style-card">
+    <div class="style-meta">
+      <div class="name">D · Neo-Brutalist</div>
+      <div class="tag">flat · Space Grotesk · bold · shadows duros</div>
+      <div class="pal">
+        <div class="sw" style="background:#FFFEF2"></div>
+        <div class="sw" style="background:#000000"></div>
+        <div class="sw" style="background:#A3E635"></div>
+        <div class="sw" style="background:#FCA5A5"></div>
+        <div class="sw" style="background:#60A5FA"></div>
+      </div>
+    </div>
+    <div class="mockup-wrap">
+      <div class="screen s4">
+        <div class="head"><div class="t">MENÚ</div><div class="r">🍽 AQUÍ</div></div>
+        <div class="row">
+          <div class="cats">
+            <div class="cat">Entradas</div>
+            <div class="cat on">Burgers</div>
+            <div class="cat">Pizzas</div>
+            <div class="cat">Bebidas</div>
+            <div class="cat">Postres</div>
+          </div>
+          <div class="grid">
+            <div class="c"><div class="ph"></div><div class="n">Clásica</div><div class="p">$129</div></div>
+            <div class="c"><div class="ph"></div><div class="n">BBQ</div><div class="p">$149</div></div>
+            <div class="c"><div class="ph"></div><div class="n">Doble Queso</div><div class="p">$179</div></div>
+            <div class="c"><div class="ph"></div><div class="n">Vegetariana</div><div class="p">$139</div></div>
+          </div>
+        </div>
+        <div class="bar"><span>3 PRODUCTOS · $457</span><span>CONTINUAR →</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:24px">
+  <h3>¿Cuál de los 4 estilos quieres?</h3>
+  <p class="subtitle">Haz clic en la opción que prefieras, o dime en terminal cuál + qué ajustar.</p>
+  <div class="options">
+    <div class="option" data-choice="a" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>OLED Premium</h3>
+        <p>Dark, DM Sans, acento naranja. Minimalista y consistente con admin/saas.</p>
+      </div>
+    </div>
+    <div class="option" data-choice="b" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Fast-Food Pop</h3>
+        <p>Amarillos/rojos, Poppins bold. Si el restaurante es casual/hamburguesas/pizzas.</p>
+      </div>
+    </div>
+    <div class="option" data-choice="c" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>Boutique Restaurant</h3>
+        <p>Crema/verde/dorado, Cormorant serif. Para steakhouse, fine dining.</p>
+      </div>
+    </div>
+    <div class="option" data-choice="d" onclick="toggleSelect(this)">
+      <div class="letter">D</div>
+      <div class="content">
+        <h3>Neo-Brutalist</h3>
+        <p>Flat colors, borders gruesos, sombras duras. Muy brandable y moderno.</p>
+      </div>
+    </div>
+  </div>
+</div>
