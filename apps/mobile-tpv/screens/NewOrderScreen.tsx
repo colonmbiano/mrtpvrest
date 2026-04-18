@@ -29,6 +29,7 @@ import {
 } from '../lib/api';
 import type { RootStackParamList } from '../navigation/types';
 import ItemModifierModal, {
+  ModifierPreload,
   ModifierSelection,
 } from '../components/ItemModifierModal';
 
@@ -40,8 +41,9 @@ const ACCENT = '#F5C842';
  * One line in the in-memory cart.
  *
  * `unitPrice` is captured when the line is created and stays stable even
- * if the upstream menu price changes mid-ticket. `variant` and `complements`
- * are kept both for display and as part of the merge key.
+ * if the upstream menu price changes mid-ticket. `variant`, `complements`
+ * and `manualNote` are kept both for display and as part of the merge key.
+ * `notes` is the rendered summary ("Grande, + Extra queso · Nota: ...").
  */
 interface CartLine {
   menuItem: MenuItemDto;
@@ -50,6 +52,7 @@ interface CartLine {
   quantity: number;
   unitPrice: number;
   notes: string;
+  manualNote: string;
 }
 
 function currency(n: number): string {
@@ -60,18 +63,30 @@ function currency(n: number): string {
 }
 
 /**
+ * Normalise a free-form note for use as a merge key. Whitespace is
+ * collapsed and the text is lowercased so "Bien cocida" and " bien  cocida "
+ * merge, but "Bien cocida" and "Término medio" stay as separate lines.
+ */
+function normalizeNoteKey(note: string): string {
+  return note.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
  * Stable signature used to decide whether two cart lines represent the
  * exact same customised item and can be merged by incrementing qty.
- * Two burgers with different modifiers MUST stay as separate lines.
+ * Two burgers with different modifiers OR different manual notes MUST
+ * stay as separate lines.
  */
 function lineSignature(
   menuItemId: string,
   variant: MenuItemVariantDto | null,
   complements: MenuItemComplementDto[],
+  manualNote: string,
 ): string {
   const variantKey = variant?.id ?? '∅';
   const complementKey = [...complements.map((c) => c.id)].sort().join('|');
-  return `${menuItemId}::${variantKey}::${complementKey}`;
+  const noteKey = normalizeNoteKey(manualNote);
+  return `${menuItemId}::${variantKey}::${complementKey}::${noteKey}`;
 }
 
 export default function NewOrderScreen({ navigation }: Props) {
@@ -89,8 +104,16 @@ export default function NewOrderScreen({ navigation }: Props) {
   // Cart state
   const [cart, setCart] = useState<CartLine[]>([]);
 
-  // Modifier modal state
-  const [modifierItem, setModifierItem] = useState<MenuItemDto | null>(null);
+  /**
+   * Discriminated state for the modifier modal so we can tell "Adding a
+   * fresh line" apart from "Editing an existing line at index N". In edit
+   * mode the modal receives a preload and the confirm handler either
+   * replaces the line or merges it with another existing match.
+   */
+  type ModalState =
+    | { kind: 'add'; item: MenuItemDto }
+    | { kind: 'edit'; item: MenuItemDto; lineIdx: number; preload: ModifierPreload };
+  const [modalState, setModalState] = useState<ModalState | null>(null);
 
   // Submit modal state
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
@@ -149,11 +172,12 @@ export default function NewOrderScreen({ navigation }: Props) {
   // ── Cart ops ───────────────────────────────────────────────────────────
   /**
    * Tap handler from the product grid. If the item has any variant or
-   * complement configured, defer to the modal. Otherwise add immediately.
+   * complement configured, defer to the modal in "add" mode. Otherwise
+   * add immediately with no modifiers.
    */
   function onProductTap(m: MenuItemDto) {
     if (hasModifiers(m)) {
-      setModifierItem(m);
+      setModalState({ kind: 'add', item: m });
       return;
     }
     addCustomisedToCart({
@@ -163,20 +187,52 @@ export default function NewOrderScreen({ navigation }: Props) {
       quantity: 1,
       unitPrice: effectivePrice(m),
       notes: '',
+      manualNote: '',
+    });
+  }
+
+  /**
+   * Tap-to-edit from the cart pane. Opens the modifier modal preloaded
+   * with the current line's state. Works even for items originally added
+   * without modifiers — the modal will just show the note input.
+   */
+  function handleEditLine(idx: number) {
+    setCart((prevCart) => {
+      const line = prevCart[idx];
+      if (!line) return prevCart;
+      setModalState({
+        kind: 'edit',
+        item: line.menuItem,
+        lineIdx: idx,
+        preload: {
+          variantId: line.variant?.id ?? null,
+          complementIds: line.complements.map((c) => c.id),
+          quantity: line.quantity,
+          manualNote: line.manualNote,
+        },
+      });
+      return prevCart;
     });
   }
 
   /**
    * Merge-or-append a (possibly customised) line into the cart.
    * Two lines merge iff their signature (menuItemId + variantId +
-   * sorted complementIds) matches exactly; otherwise a new line is pushed.
+   * sorted complementIds + normalised manualNote) matches exactly;
+   * otherwise a new line is pushed.
    */
-  function addCustomisedToCart(line: Omit<CartLine, 'notes'> & { notes: string }) {
+  function addCustomisedToCart(line: CartLine) {
     setCart((prev) => {
-      const sig = lineSignature(line.menuItem.id, line.variant, line.complements);
+      const sig = lineSignature(
+        line.menuItem.id,
+        line.variant,
+        line.complements,
+        line.manualNote,
+      );
       const idx = prev.findIndex(
         (l) =>
-          lineSignature(l.menuItem.id, l.variant, l.complements) === sig,
+          lineSignature(l.menuItem.id, l.variant, l.complements, l.manualNote) ===
+          sig,
       );
       if (idx >= 0) {
         const next = [...prev];
@@ -190,17 +246,68 @@ export default function NewOrderScreen({ navigation }: Props) {
     });
   }
 
+  /**
+   * Replace `cart[editingIdx]` with `line`, and — if the new line's
+   * signature collides with another existing line — merge the two into
+   * a single row. Preserves the position of the kept line to minimise
+   * UI jank.
+   */
+  function replaceOrMergeEditedLine(editingIdx: number, line: CartLine) {
+    setCart((prev) => {
+      const newSig = lineSignature(
+        line.menuItem.id,
+        line.variant,
+        line.complements,
+        line.manualNote,
+      );
+      const collisionIdx = prev.findIndex(
+        (l, i) =>
+          i !== editingIdx &&
+          lineSignature(
+            l.menuItem.id,
+            l.variant,
+            l.complements,
+            l.manualNote,
+          ) === newSig,
+      );
+
+      if (collisionIdx === -1) {
+        // No merge: just replace the edited line in place.
+        const next = [...prev];
+        next[editingIdx] = line;
+        return next;
+      }
+
+      // Merge: quantities add, the edited line is removed, the
+      // collision line keeps its position.
+      const merged: CartLine = {
+        ...prev[collisionIdx],
+        quantity: prev[collisionIdx].quantity + line.quantity,
+      };
+      return prev
+        .map((l, i) => (i === collisionIdx ? merged : l))
+        .filter((_, i) => i !== editingIdx);
+    });
+  }
+
   function handleModifierConfirm(selection: ModifierSelection) {
-    if (!modifierItem) return;
-    addCustomisedToCart({
-      menuItem: modifierItem,
+    if (!modalState) return;
+    const line: CartLine = {
+      menuItem: modalState.item,
       variant: selection.variant,
       complements: selection.complements,
       quantity: selection.quantity,
       unitPrice: selection.unitPrice,
       notes: selection.notes,
-    });
-    setModifierItem(null);
+      manualNote: selection.manualNote,
+    };
+
+    if (modalState.kind === 'edit') {
+      replaceOrMergeEditedLine(modalState.lineIdx, line);
+    } else {
+      addCustomisedToCart(line);
+    }
+    setModalState(null);
   }
 
   function updateQuantity(idx: number, delta: number) {
@@ -328,6 +435,7 @@ export default function NewOrderScreen({ navigation }: Props) {
       totals={totals}
       onInc={(idx) => updateQuantity(idx, +1)}
       onDec={(idx) => updateQuantity(idx, -1)}
+      onEdit={handleEditLine}
       onClear={clearCart}
       onSubmit={handleOpenSubmit}
     />
@@ -352,11 +460,14 @@ export default function NewOrderScreen({ navigation }: Props) {
         </View>
       )}
 
-      {/* Modifier picker (variant + complements) */}
+      {/* Modifier picker (variant + complements + manual note).
+          Reused for both "add" (from menu) and "edit" (from cart tap). */}
       <ItemModifierModal
-        item={modifierItem}
-        visible={!!modifierItem}
-        onClose={() => setModifierItem(null)}
+        item={modalState?.item ?? null}
+        visible={!!modalState}
+        mode={modalState?.kind === 'edit' ? 'edit' : 'add'}
+        preload={modalState?.kind === 'edit' ? modalState.preload : null}
+        onClose={() => setModalState(null)}
         onConfirm={handleModifierConfirm}
       />
 
@@ -539,6 +650,7 @@ function CartPane({
   totals,
   onInc,
   onDec,
+  onEdit,
   onClear,
   onSubmit,
 }: {
@@ -546,6 +658,7 @@ function CartPane({
   totals: { subtotal: number; total: number; itemCount: number };
   onInc: (idx: number) => void;
   onDec: (idx: number) => void;
+  onEdit: (idx: number) => void;
   onClear: () => void;
   onSubmit: () => void;
 }) {
@@ -570,7 +683,13 @@ function CartPane({
       ) : (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: 8 }}>
           {cart.map((line, idx) => (
-            <View key={`${line.menuItem.id}-${idx}`} style={styles.cartLine}>
+            <TouchableOpacity
+              key={`${line.menuItem.id}-${idx}`}
+              style={styles.cartLine}
+              onPress={() => onEdit(idx)}
+              activeOpacity={0.7}
+              accessibilityLabel={`Editar ${line.menuItem.name}`}
+            >
               <View style={{ flex: 1 }}>
                 <Text style={styles.cartLineName} numberOfLines={2}>
                   {line.menuItem.name}
@@ -581,7 +700,7 @@ function CartPane({
                   </Text>
                 )}
                 <Text style={styles.cartLineMeta}>
-                  {currency(line.unitPrice)} c/u
+                  {currency(line.unitPrice)} c/u · toca para editar
                 </Text>
               </View>
               <View style={styles.qtyControls}>
@@ -604,7 +723,7 @@ function CartPane({
               <Text style={styles.cartLineSubtotal}>
                 {currency(line.unitPrice * line.quantity)}
               </Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
       )}
