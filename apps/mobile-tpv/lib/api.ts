@@ -21,11 +21,21 @@ export const api: AxiosInstance = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-  const token = await getItem(StorageKeys.accessToken);
-  if (token) {
-    config.headers = config.headers ?? {};
-    (config.headers as Record<string, string>).Authorization = `Bearer ${token}`;
-  }
+  // Prefer the employee session token once the employee has clocked in;
+  // otherwise fall back to the device's accessToken (admin pairing token).
+  const [employeeToken, accessToken, locationId] = await Promise.all([
+    getItem(StorageKeys.employeeToken),
+    getItem(StorageKeys.accessToken),
+    getItem(StorageKeys.locationId),
+  ]);
+  const token = employeeToken ?? accessToken;
+
+  config.headers = config.headers ?? {};
+  const headers = config.headers as Record<string, string>;
+  if (token) headers.Authorization = `Bearer ${token}`;
+  // Backend tenant middleware reads x-location-id to scope multi-tenant queries.
+  if (locationId) headers['x-location-id'] = locationId;
+
   return config;
 });
 
@@ -70,5 +80,34 @@ export async function login(
     email,
     password,
   });
+  return data;
+}
+
+export interface EmployeeDto {
+  id: string;
+  name: string;
+  role: string;
+  photo?: string | null;
+  locationId: string;
+  [k: string]: unknown;
+}
+
+export interface EmployeeLoginResponse {
+  employee: EmployeeDto;
+  token: string;
+}
+
+/**
+ * POST /api/employees/login — verifies a PIN against the currently-paired
+ * location. The x-location-id header is injected automatically by the
+ * request interceptor. Throws on 401 (wrong PIN) or network errors.
+ */
+export async function employeePinLogin(
+  pin: string,
+): Promise<EmployeeLoginResponse> {
+  const { data } = await api.post<EmployeeLoginResponse>(
+    '/api/employees/login',
+    { pin },
+  );
   return data;
 }

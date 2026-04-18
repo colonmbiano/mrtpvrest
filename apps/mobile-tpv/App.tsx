@@ -5,7 +5,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import SetupScreen from './screens/SetupScreen';
 import PinScreen from './screens/PinScreen';
-import { getAuthSnapshot } from './lib/storage';
+import DashboardScreen from './screens/DashboardScreen';
+import { clearEmployeeSession, getAuthSnapshot } from './lib/storage';
 import type { RootStackParamList } from './navigation/types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -33,10 +34,14 @@ export default function App() {
   const [initialRoute, setInitialRoute] = useState<InitialRoute | null>(null);
 
   useEffect(() => {
-    // Bootstrap: decide whether this device is already paired.
-    // A device is "fully paired" only when we have an accessToken AND a locationId.
+    // Bootstrap:
+    //  1. Always clear any leftover employee session — each cold start
+    //     must require a fresh PIN entry (POS security model).
+    //  2. Decide whether this device is already paired.
+    //     "Fully paired" == has accessToken AND locationId.
     (async () => {
       try {
+        await clearEmployeeSession();
         const snap = await getAuthSnapshot();
         const paired = !!snap.accessToken && !!snap.locationId;
         setInitialRoute(paired ? 'Pin' : 'Setup');
@@ -67,6 +72,7 @@ export default function App() {
       >
         <Stack.Screen name="Setup" component={SetupScreen} />
         <Stack.Screen name="Pin" component={PinScreen} />
+        <Stack.Screen name="Dashboard" component={DashboardScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
