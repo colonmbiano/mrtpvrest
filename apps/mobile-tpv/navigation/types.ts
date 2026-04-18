@@ -6,4 +6,5 @@ export type RootStackParamList = {
   Setup: undefined;
   Pin: undefined;
   Dashboard: undefined;
+  TableDetail: { tableNumber: number };
 };
