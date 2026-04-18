@@ -15,8 +15,10 @@ import { StatusBar } from 'expo-status-bar';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import {
+  addItemsToOrder,
   CategoryDto,
   createTpvOrder,
+  CreateTpvOrderItem,
   CreateTpvOrderPayload,
   effectivePrice,
   fetchMenuCategories,
@@ -89,7 +91,14 @@ function lineSignature(
   return `${menuItemId}::${variantKey}::${complementKey}::${noteKey}`;
 }
 
-export default function NewOrderScreen({ navigation }: Props) {
+export default function NewOrderScreen({ navigation, route }: Props) {
+  // When `orderId` is passed, the screen is in "round mode": items are
+  // appended to an existing open ticket via POST /api/orders/:id/items.
+  // No tableNumber prompt, no order-type toggle — the parent order owns
+  // those attributes.
+  const roundOrderId = route.params?.orderId ?? null;
+  const isRoundMode = !!roundOrderId;
+
   // Responsive: side-by-side on landscape tablet, stacked otherwise.
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height && width >= 720;
@@ -329,14 +338,35 @@ export default function NewOrderScreen({ navigation }: Props) {
     setCart([]);
   }
 
+  /** Shared mapping from the local cart to the wire payload. */
+  function buildPayloadItems(): CreateTpvOrderItem[] {
+    return cart.map((l) => ({
+      menuItemId: l.menuItem.id,
+      quantity: l.quantity,
+      // Backend stores `notes` verbatim on OrderItem for the kitchen
+      // ticket — we encode variant + complements + manualNote here
+      // because variantId / modifier IDs are silently dropped by both
+      // POST /api/orders/tpv and POST /api/orders/:id/items.
+      notes: l.notes.length > 0 ? l.notes : null,
+    }));
+  }
+
   // ── Submit ─────────────────────────────────────────────────────────────
   function handleOpenSubmit() {
     if (cart.length === 0) return;
+
+    // Round mode skips the table/type modal — the parent order owns those.
+    if (isRoundMode) {
+      void submitRound();
+      return;
+    }
+
     setTableInput('');
     setOrderType('DINE_IN');
     setSubmitModalOpen(true);
   }
 
+  /** Create a brand-new ticket (POST /api/orders/tpv). */
   async function handleConfirmSubmit() {
     if (submitting) return;
 
@@ -349,14 +379,7 @@ export default function NewOrderScreen({ navigation }: Props) {
     }
 
     const payload: CreateTpvOrderPayload = {
-      items: cart.map((l) => ({
-        menuItemId: l.menuItem.id,
-        quantity: l.quantity,
-        // Backend stores `notes` verbatim on the OrderItem for the kitchen
-        // ticket — encode variant + complements here since variantId and
-        // modifier IDs are silently dropped by POST /api/orders/tpv.
-        notes: l.notes.length > 0 ? l.notes : null,
-      })),
+      items: buildPayloadItems(),
       orderType,
       tableNumber: orderType === 'DINE_IN' ? parsedTable : null,
       paymentMethod: 'PENDING', // paid later via confirm-cash
@@ -382,6 +405,37 @@ export default function NewOrderScreen({ navigation }: Props) {
     } catch (e: any) {
       const msg =
         e?.response?.data?.error ?? e?.message ?? 'Error al enviar comanda';
+      Alert.alert('Error', msg);
+    } finally {
+      if (mountedRef.current) setSubmitting(false);
+    }
+  }
+
+  /** Append items to an existing ticket (POST /api/orders/:id/items). */
+  async function submitRound() {
+    if (submitting || !roundOrderId) return;
+
+    setSubmitting(true);
+    try {
+      const updated = await addItemsToOrder(roundOrderId, buildPayloadItems());
+      if (!mountedRef.current) return;
+      clearCart();
+      Alert.alert(
+        'Ronda enviada',
+        `${totals.itemCount} artículo${
+          totals.itemCount === 1 ? '' : 's'
+        } agregado${totals.itemCount === 1 ? '' : 's'} al ticket #${updated.orderNumber}.`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }],
+      );
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const serverMsg = e?.response?.data?.error;
+      const msg =
+        status === 400 && serverMsg
+          ? serverMsg
+          : status === 404
+            ? 'La comanda ya no existe o fue cerrada.'
+            : serverMsg ?? e?.message ?? 'Error al enviar la ronda';
       Alert.alert('Error', msg);
     } finally {
       if (mountedRef.current) setSubmitting(false);
@@ -426,6 +480,7 @@ export default function NewOrderScreen({ navigation }: Props) {
       onSelectCategory={setSelectedCategoryId}
       onAddToCart={onProductTap}
       onBack={() => navigation.goBack()}
+      title={isRoundMode ? 'Agregar ronda' : 'Nueva venta'}
     />
   );
 
@@ -438,6 +493,8 @@ export default function NewOrderScreen({ navigation }: Props) {
       onEdit={handleEditLine}
       onClear={clearCart}
       onSubmit={handleOpenSubmit}
+      submitLabel={isRoundMode ? 'Enviar ronda a cocina' : 'Enviar a cocina'}
+      submitting={submitting && isRoundMode}
     />
   );
 
@@ -560,6 +617,7 @@ function MenuPane({
   onSelectCategory,
   onAddToCart,
   onBack,
+  title,
 }: {
   categories: CategoryDto[];
   items: MenuItemDto[];
@@ -567,6 +625,7 @@ function MenuPane({
   onSelectCategory: (id: string) => void;
   onAddToCart: (m: MenuItemDto) => void;
   onBack: () => void;
+  title: string;
 }) {
   return (
     <View style={{ flex: 1 }}>
@@ -574,7 +633,7 @@ function MenuPane({
         <TouchableOpacity onPress={onBack} hitSlop={14}>
           <Text style={styles.paneBackText}>‹ Atrás</Text>
         </TouchableOpacity>
-        <Text style={styles.paneTitle}>Nueva venta</Text>
+        <Text style={styles.paneTitle}>{title}</Text>
         <View style={{ width: 60 }} />
       </View>
 
@@ -653,6 +712,8 @@ function CartPane({
   onEdit,
   onClear,
   onSubmit,
+  submitLabel,
+  submitting,
 }: {
   cart: CartLine[];
   totals: { subtotal: number; total: number; itemCount: number };
@@ -661,6 +722,8 @@ function CartPane({
   onEdit: (idx: number) => void;
   onClear: () => void;
   onSubmit: () => void;
+  submitLabel: string;
+  submitting: boolean;
 }) {
   return (
     <View style={styles.cartPane}>
@@ -738,15 +801,22 @@ function CartPane({
           <Text style={styles.totalValueBold}>{currency(totals.total)}</Text>
         </View>
         <TouchableOpacity
-          style={[styles.submitBtn, cart.length === 0 && styles.submitBtnDisabled]}
+          style={[
+            styles.submitBtn,
+            (cart.length === 0 || submitting) && styles.submitBtnDisabled,
+          ]}
           onPress={onSubmit}
-          disabled={cart.length === 0}
+          disabled={cart.length === 0 || submitting}
           activeOpacity={0.85}
         >
-          <Text style={styles.submitBtnText}>
-            Enviar a cocina
-            {totals.itemCount > 0 ? ` · ${totals.itemCount}` : ''}
-          </Text>
+          {submitting ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <Text style={styles.submitBtnText}>
+              {submitLabel}
+              {totals.itemCount > 0 ? ` · ${totals.itemCount}` : ''}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
