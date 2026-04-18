@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import SetupScreen from './screens/SetupScreen';
 import PinScreen from './screens/PinScreen';
 import DashboardScreen from './screens/DashboardScreen';
+import TableDetailScreen from './screens/TableDetailScreen';
 import { clearEmployeeSession, getAuthSnapshot } from './lib/storage';
 import type { RootStackParamList } from './navigation/types';
 
@@ -73,6 +74,11 @@ export default function App() {
         <Stack.Screen name="Setup" component={SetupScreen} />
         <Stack.Screen name="Pin" component={PinScreen} />
         <Stack.Screen name="Dashboard" component={DashboardScreen} />
+        <Stack.Screen
+          name="TableDetail"
+          component={TableDetailScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
