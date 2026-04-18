@@ -17,13 +17,13 @@ const server = http.createServer(app)
 
 // CORS
 const ALLOWED_ORIGINS = [
-   'https://admin.mrtpvrest.com',
-  'https://mrtpvrest.com',
-  'colonmbianos-projects.vercel.app',
-  'localhost',
-  '127.0.0.1',
-   /\.railway\.app$/,
-   /\.vercel\.app$/,
+  'https://admin.mrtpvrest.com',          // <-- IMPORTANTE: con https://
+  'https://www.mrtpvrest.com',            // Por si acaso entran con www
+  'https://tpv.mrtpvrest.com',            // Tu TPV
+  'http://localhost:3000',                // Para cuando desarrollas local
+  'http://localhost:3001',
+  /\.vercel\.app$/,                       // Permite cualquier subdominio de Vercel
+  /\.railway\.app$/                       // Permite cualquier subdominio de Railway
 ];
 
 const corsOptions = {
