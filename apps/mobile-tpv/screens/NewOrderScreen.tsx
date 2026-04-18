@@ -21,20 +21,35 @@ import {
   effectivePrice,
   fetchMenuCategories,
   fetchMenuItems,
+  hasModifiers,
+  MenuItemComplementDto,
   MenuItemDto,
+  MenuItemVariantDto,
   OrderType,
 } from '../lib/api';
 import type { RootStackParamList } from '../navigation/types';
+import ItemModifierModal, {
+  ModifierSelection,
+} from '../components/ItemModifierModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NewOrder'>;
 
 const ACCENT = '#F5C842';
 
-/** One line in the in-memory cart. We keep the full menu item for display. */
+/**
+ * One line in the in-memory cart.
+ *
+ * `unitPrice` is captured when the line is created and stays stable even
+ * if the upstream menu price changes mid-ticket. `variant` and `complements`
+ * are kept both for display and as part of the merge key.
+ */
 interface CartLine {
   menuItem: MenuItemDto;
+  variant: MenuItemVariantDto | null;
+  complements: MenuItemComplementDto[];
   quantity: number;
-  notes?: string | null;
+  unitPrice: number;
+  notes: string;
 }
 
 function currency(n: number): string {
@@ -42,6 +57,21 @@ function currency(n: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+/**
+ * Stable signature used to decide whether two cart lines represent the
+ * exact same customised item and can be merged by incrementing qty.
+ * Two burgers with different modifiers MUST stay as separate lines.
+ */
+function lineSignature(
+  menuItemId: string,
+  variant: MenuItemVariantDto | null,
+  complements: MenuItemComplementDto[],
+): string {
+  const variantKey = variant?.id ?? '∅';
+  const complementKey = [...complements.map((c) => c.id)].sort().join('|');
+  return `${menuItemId}::${variantKey}::${complementKey}`;
 }
 
 export default function NewOrderScreen({ navigation }: Props) {
@@ -58,6 +88,9 @@ export default function NewOrderScreen({ navigation }: Props) {
 
   // Cart state
   const [cart, setCart] = useState<CartLine[]>([]);
+
+  // Modifier modal state
+  const [modifierItem, setModifierItem] = useState<MenuItemDto | null>(null);
 
   // Submit modal state
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
@@ -108,27 +141,66 @@ export default function NewOrderScreen({ navigation }: Props) {
   }, [items, selectedCategoryId]);
 
   const totals = useMemo(() => {
-    const subtotal = cart.reduce(
-      (s, l) => s + effectivePrice(l.menuItem) * l.quantity,
-      0,
-    );
+    const subtotal = cart.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
     const itemCount = cart.reduce((s, l) => s + l.quantity, 0);
     return { subtotal, total: subtotal, itemCount }; // no discount for MVP
   }, [cart]);
 
   // ── Cart ops ───────────────────────────────────────────────────────────
-  function addToCart(m: MenuItemDto) {
+  /**
+   * Tap handler from the product grid. If the item has any variant or
+   * complement configured, defer to the modal. Otherwise add immediately.
+   */
+  function onProductTap(m: MenuItemDto) {
+    if (hasModifiers(m)) {
+      setModifierItem(m);
+      return;
+    }
+    addCustomisedToCart({
+      menuItem: m,
+      variant: null,
+      complements: [],
+      quantity: 1,
+      unitPrice: effectivePrice(m),
+      notes: '',
+    });
+  }
+
+  /**
+   * Merge-or-append a (possibly customised) line into the cart.
+   * Two lines merge iff their signature (menuItemId + variantId +
+   * sorted complementIds) matches exactly; otherwise a new line is pushed.
+   */
+  function addCustomisedToCart(line: Omit<CartLine, 'notes'> & { notes: string }) {
     setCart((prev) => {
+      const sig = lineSignature(line.menuItem.id, line.variant, line.complements);
       const idx = prev.findIndex(
-        (l) => l.menuItem.id === m.id && !l.notes, // merge only when no custom notes
+        (l) =>
+          lineSignature(l.menuItem.id, l.variant, l.complements) === sig,
       );
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
+        next[idx] = {
+          ...next[idx],
+          quantity: next[idx].quantity + line.quantity,
+        };
         return next;
       }
-      return [...prev, { menuItem: m, quantity: 1 }];
+      return [...prev, line];
     });
+  }
+
+  function handleModifierConfirm(selection: ModifierSelection) {
+    if (!modifierItem) return;
+    addCustomisedToCart({
+      menuItem: modifierItem,
+      variant: selection.variant,
+      complements: selection.complements,
+      quantity: selection.quantity,
+      unitPrice: selection.unitPrice,
+      notes: selection.notes,
+    });
+    setModifierItem(null);
   }
 
   function updateQuantity(idx: number, delta: number) {
@@ -173,7 +245,10 @@ export default function NewOrderScreen({ navigation }: Props) {
       items: cart.map((l) => ({
         menuItemId: l.menuItem.id,
         quantity: l.quantity,
-        notes: l.notes ?? null,
+        // Backend stores `notes` verbatim on the OrderItem for the kitchen
+        // ticket — encode variant + complements here since variantId and
+        // modifier IDs are silently dropped by POST /api/orders/tpv.
+        notes: l.notes.length > 0 ? l.notes : null,
       })),
       orderType,
       tableNumber: orderType === 'DINE_IN' ? parsedTable : null,
@@ -242,7 +317,7 @@ export default function NewOrderScreen({ navigation }: Props) {
       items={filteredItems}
       selectedCategoryId={selectedCategoryId}
       onSelectCategory={setSelectedCategoryId}
-      onAddToCart={addToCart}
+      onAddToCart={onProductTap}
       onBack={() => navigation.goBack()}
     />
   );
@@ -276,6 +351,14 @@ export default function NewOrderScreen({ navigation }: Props) {
           </View>
         </View>
       )}
+
+      {/* Modifier picker (variant + complements) */}
+      <ItemModifierModal
+        item={modifierItem}
+        visible={!!modifierItem}
+        onClose={() => setModifierItem(null)}
+        onConfirm={handleModifierConfirm}
+      />
 
       {/* Submit modal */}
       <Modal
@@ -486,39 +569,43 @@ function CartPane({
         </View>
       ) : (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: 8 }}>
-          {cart.map((line, idx) => {
-            const price = effectivePrice(line.menuItem);
-            return (
-              <View key={`${line.menuItem.id}-${idx}`} style={styles.cartLine}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cartLineName} numberOfLines={2}>
-                    {line.menuItem.name}
+          {cart.map((line, idx) => (
+            <View key={`${line.menuItem.id}-${idx}`} style={styles.cartLine}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cartLineName} numberOfLines={2}>
+                  {line.menuItem.name}
+                </Text>
+                {!!line.notes && (
+                  <Text style={styles.cartLineModifiers} numberOfLines={3}>
+                    {line.notes}
                   </Text>
-                  <Text style={styles.cartLineMeta}>{currency(price)} c/u</Text>
-                </View>
-                <View style={styles.qtyControls}>
-                  <TouchableOpacity
-                    style={styles.qtyBtn}
-                    onPress={() => onDec(idx)}
-                    hitSlop={6}
-                  >
-                    <Text style={styles.qtyBtnText}>−</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.qtyValue}>{line.quantity}</Text>
-                  <TouchableOpacity
-                    style={styles.qtyBtn}
-                    onPress={() => onInc(idx)}
-                    hitSlop={6}
-                  >
-                    <Text style={styles.qtyBtnText}>+</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.cartLineSubtotal}>
-                  {currency(price * line.quantity)}
+                )}
+                <Text style={styles.cartLineMeta}>
+                  {currency(line.unitPrice)} c/u
                 </Text>
               </View>
-            );
-          })}
+              <View style={styles.qtyControls}>
+                <TouchableOpacity
+                  style={styles.qtyBtn}
+                  onPress={() => onDec(idx)}
+                  hitSlop={6}
+                >
+                  <Text style={styles.qtyBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.qtyValue}>{line.quantity}</Text>
+                <TouchableOpacity
+                  style={styles.qtyBtn}
+                  onPress={() => onInc(idx)}
+                  hitSlop={6}
+                >
+                  <Text style={styles.qtyBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.cartLineSubtotal}>
+                {currency(line.unitPrice * line.quantity)}
+              </Text>
+            </View>
+          ))}
         </ScrollView>
       )}
 
@@ -693,6 +780,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+    marginBottom: 2,
+  },
+  cartLineModifiers: {
+    color: '#888',
+    fontSize: 11,
+    lineHeight: 15,
     marginBottom: 2,
   },
   cartLineMeta: { color: '#888', fontSize: 11 },
