@@ -1,0 +1,272 @@
+<h2>Flujo visual del Kiosko (apps/kiosk)</h2>
+<p class="subtitle">6 pantallas táctiles verticales (1080×1920 aprox). Paleta OLED oscura + acento <code>--brand-primary</code> (aquí <code>#ff5c35</code> de ejemplo).</p>
+
+<style>
+  .ks-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:18px; margin-top:12px; }
+  .ks { position:relative; border-radius:22px; overflow:hidden; aspect-ratio: 9 / 16;
+        background:#080810; color:#eaeaf6; font-family:'DM Sans', sans-serif;
+        border:1px solid #1c1c2e; box-shadow:0 10px 40px rgba(0,0,0,0.6); }
+  .ks-label { position:absolute; top:10px; left:12px; z-index:10; font-size:10px;
+              font-family:'DM Mono', monospace; letter-spacing:.12em; text-transform:uppercase;
+              color:#ff5c35; background:rgba(8,8,16,.85); padding:4px 8px; border-radius:6px;
+              border:1px solid #1c1c2e; }
+  .ks-inner { position:absolute; inset:0; display:flex; flex-direction:column; padding:14px; }
+  .chip { display:inline-block; padding:2px 6px; border-radius:6px; font-family:'DM Mono', monospace;
+          font-size:9px; letter-spacing:.1em; text-transform:uppercase;
+          background:#13131f; border:1px solid #1c1c2e; color:#6868a0; }
+  .acc { color:#ff5c35; }
+
+  /* === IDLE === */
+  .idle { justify-content:center; align-items:center; text-align:center; gap:18px;
+          background:radial-gradient(circle at center, #191928 0%, #080810 70%); }
+  .idle .logo { width:70px; height:70px; border-radius:20px; background:#ff5c35;
+                display:flex; align-items:center; justify-content:center; font-weight:900; color:#080810; font-size:32px; }
+  .idle .title { font-size:20px; font-weight:800; margin-top:6px; }
+  .idle .cta { font-size:14px; font-weight:700; color:#ff5c35;
+               border:2px dashed #ff5c35; padding:10px 18px; border-radius:999px;
+               animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+  .idle .foot { position:absolute; bottom:14px; left:0; right:0; text-align:center; font-size:9px; color:#6868a0; font-family:'DM Mono', monospace; }
+
+  /* === ORDER TYPE === */
+  .ot { gap:12px; }
+  .ot .top { font-size:14px; font-weight:800; text-align:center; margin:6px 0 10px; }
+  .ot .sub { text-align:center; font-size:10px; color:#6868a0; margin-bottom:8px; }
+  .ot .btns { flex:1; display:grid; grid-template-rows:1fr 1fr; gap:12px; }
+  .ot .btn { border:3px solid #ff5c35; border-radius:18px; background:#0e0e18;
+             display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
+  .ot .btn .ic { width:46px; height:46px; border-radius:14px; background:#ff5c3520;
+                 display:flex; align-items:center; justify-content:center; }
+  .ot .btn .lbl { font-size:14px; font-weight:800; }
+  .ot .btn .hint { font-size:9px; color:#6868a0; }
+
+  /* === MENU === */
+  .menu-row { flex:1; display:grid; grid-template-columns:32% 68%; gap:8px; min-height:0; }
+  .menu-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .menu-head .r { font-size:10px; font-family:'DM Mono', monospace; color:#6868a0; }
+  .menu-head .t { font-size:12px; font-weight:700; }
+  .cats { display:flex; flex-direction:column; gap:5px; }
+  .cat { padding:10px 8px; border-radius:10px; background:#0e0e18; border:1px solid #1c1c2e;
+         font-size:10px; font-weight:700; }
+  .cat.active { background:#ff5c35; color:#080810; border-color:#ff5c35; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr; gap:6px; align-content:start; }
+  .card { background:#0e0e18; border:1px solid #1c1c2e; border-radius:10px; padding:6px;
+          display:flex; flex-direction:column; gap:4px; }
+  .card .ph { aspect-ratio: 4 / 3; border-radius:8px;
+              background:linear-gradient(135deg,#1c1c2e,#13131f); }
+  .card .nm { font-size:9px; font-weight:700; }
+  .card .pr { font-size:10px; font-weight:900; color:#ff5c35; font-family:'DM Mono', monospace; }
+  .card .plus { align-self:flex-end; width:18px; height:18px; border-radius:6px; background:#ff5c35;
+                color:#080810; font-weight:900; font-size:14px; line-height:18px; text-align:center; }
+  .cart-bar { margin-top:8px; background:#ff5c35; border-radius:12px; padding:8px 10px;
+              display:flex; justify-content:space-between; align-items:center; color:#080810; font-weight:800; font-size:11px; }
+
+  /* === CHECKOUT === */
+  .co { gap:8px; }
+  .co .cols { flex:1; display:grid; grid-template-columns:55% 45%; gap:8px; min-height:0; }
+  .co .sum { background:#0e0e18; border:1px solid #1c1c2e; border-radius:12px; padding:10px;
+             display:flex; flex-direction:column; gap:6px; font-size:9px; }
+  .co .sum-row { display:flex; justify-content:space-between; color:#eaeaf6; }
+  .co .sum-row.muted { color:#6868a0; }
+  .co .sum-total { margin-top:auto; display:flex; justify-content:space-between; align-items:baseline;
+                   padding-top:6px; border-top:1px solid #1c1c2e; }
+  .co .sum-total .n { font-family:'DM Mono', monospace; font-size:16px; font-weight:900; color:#ff5c35; }
+  .co .right { display:flex; flex-direction:column; gap:6px; }
+  .co .lbl { font-size:8px; letter-spacing:.12em; text-transform:uppercase; color:#6868a0; font-family:'DM Mono', monospace; }
+  .co .display { background:#0e0e18; border:2px solid #ff5c35; border-radius:10px;
+                 height:42px; display:flex; align-items:center; justify-content:center;
+                 font-family:'DM Mono', monospace; font-weight:900; font-size:22px; color:#ff5c35; }
+  .numpad { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
+  .numpad .k { background:#0e0e18; border:1px solid #1c1c2e; border-radius:8px;
+               padding:8px 0; text-align:center; font-weight:800; font-size:14px;
+               font-family:'DM Mono', monospace; }
+  .numpad .k.ok { background:#ff5c35; color:#080810; border-color:#ff5c35; }
+  .pay { margin-top:6px; display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .pay .p { padding:8px 6px; border-radius:10px; font-size:10px; font-weight:800; text-align:center; }
+  .pay .p.primary { background:#ff5c35; color:#080810; }
+  .pay .p.ghost { background:#0e0e18; border:1px solid #1c1c2e; color:#eaeaf6; }
+
+  /* === SUCCESS === */
+  .sx { justify-content:center; align-items:center; gap:14px; text-align:center; }
+  .sx .check { width:72px; height:72px; border-radius:50%; background:#10b98120; border:3px solid #10b981;
+               display:flex; align-items:center; justify-content:center; font-size:34px; color:#10b981; font-weight:900; }
+  .sx .ord { font-family:'DM Mono', monospace; font-size:22px; font-weight:900; color:#eaeaf6; letter-spacing:.05em; }
+  .sx .ord .num { color:#ff5c35; }
+  .sx .msg { font-size:11px; color:#6868a0; max-width:80%; }
+  .sx .timer { font-family:'DM Mono', monospace; font-size:10px; color:#ff5c35; }
+  .sx .new { padding:10px 18px; border:2px solid #ff5c35; color:#ff5c35; border-radius:999px;
+             font-size:10px; font-weight:800; }
+
+  /* === SETUP === */
+  .st { gap:8px; }
+  .st .logo-row { display:flex; gap:8px; align-items:center; margin-bottom:6px; }
+  .st .logo-row .b { width:30px; height:30px; border-radius:8px; background:#ff5c35; color:#080810;
+                     display:flex; align-items:center; justify-content:center; font-weight:900; font-size:14px; }
+  .st h1 { font-size:14px; font-weight:800; margin:0; }
+  .st h1 + .hint { font-size:9px; color:#6868a0; }
+  .st .field { margin-top:6px; }
+  .st .inp { background:#0e0e18; border:1px solid #1c1c2e; border-radius:10px; padding:10px;
+             font-size:10px; color:#eaeaf6; }
+  .st .locs { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+  .st .loc { background:#0e0e18; border:1px solid #1c1c2e; border-radius:10px; padding:10px;
+             display:flex; justify-content:space-between; align-items:center; font-size:10px; }
+  .st .loc.sel { border-color:#ff5c35; background:#ff5c3510; }
+  .st .loc .nm { font-weight:800; }
+  .st .loc .ad { font-size:8px; color:#6868a0; }
+  .st .warn { margin-top:auto; padding:8px; border:1px solid #1c1c2e; border-radius:10px;
+              font-size:9px; color:#6868a0; background:#0e0e18; }
+</style>
+
+<div class="ks-grid">
+
+  <!-- 1 · IDLE -->
+  <div class="ks">
+    <span class="ks-label">1 · /</span>
+    <div class="ks-inner idle">
+      <div class="logo">M</div>
+      <div class="title">MASTERBURGUERS</div>
+      <div class="chip">Sucursal Centro</div>
+      <div style="height:40px"></div>
+      <div class="cta">TOCA PARA ORDENAR</div>
+      <div class="foot">cualquier zona de la pantalla • 90s idle timeout</div>
+    </div>
+  </div>
+
+  <!-- 2 · ORDER TYPE -->
+  <div class="ks">
+    <span class="ks-label">2 · /order-type</span>
+    <div class="ks-inner ot">
+      <div class="top">¿Cómo prefieres tu orden?</div>
+      <div class="sub">Elige una opción para continuar</div>
+      <div class="btns">
+        <div class="btn">
+          <div class="ic"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ff5c35" stroke-width="1.5"><path d="M3 11l6 6 12-12"/><circle cx="12" cy="12" r="9"/></svg></div>
+          <div class="lbl">Comer aquí</div>
+          <div class="hint">DINE_IN · te preguntamos mesa</div>
+        </div>
+        <div class="btn">
+          <div class="ic"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ff5c35" stroke-width="1.5"><path d="M4 7h16l-1.5 12a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2L4 7z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg></div>
+          <div class="lbl">Para llevar</div>
+          <div class="hint">TAKEOUT · solo tu nombre</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3 · SETUP -->
+  <div class="ks">
+    <span class="ks-label">/setup (solo admin)</span>
+    <div class="ks-inner st">
+      <div class="logo-row"><div class="b">K</div><div><h1>Vincular kiosko</h1><div class="hint">admin login + sucursal</div></div></div>
+      <div class="chip">1 · Credenciales</div>
+      <div class="inp">admin@rest.com</div>
+      <div class="inp">••••••••</div>
+      <div class="chip" style="margin-top:4px">2 · Elige sucursal</div>
+      <div class="locs">
+        <div class="loc"><div><div class="nm">Centro</div><div class="ad">Av. Juárez 120</div></div><span class="chip">📍</span></div>
+        <div class="loc sel"><div><div class="nm">Plaza del Sol</div><div class="ad">Av. López Mateos 2375</div></div><span class="chip acc">✓</span></div>
+      </div>
+      <div class="warn">Al vincular: se guardan IDs y se <b>borra el token</b> inmediatamente.</div>
+    </div>
+  </div>
+
+  <!-- 4 · MENU -->
+  <div class="ks">
+    <span class="ks-label">4 · /menu</span>
+    <div class="ks-inner">
+      <div class="menu-head"><div class="t">Elige tus productos</div><div class="r">🍽 Aquí</div></div>
+      <div class="menu-row">
+        <div class="cats">
+          <div class="cat">Entradas</div>
+          <div class="cat active">Hamburguesas</div>
+          <div class="cat">Pizzas</div>
+          <div class="cat">Bebidas</div>
+          <div class="cat">Postres</div>
+        </div>
+        <div class="grid3">
+          <div class="card"><div class="ph"></div><div class="nm">Burger Clásica</div><div class="pr">$129</div><div class="plus">+</div></div>
+          <div class="card"><div class="ph"></div><div class="nm">Burger BBQ</div><div class="pr">$149</div><div class="plus">+</div></div>
+          <div class="card"><div class="ph"></div><div class="nm">Doble Queso</div><div class="pr">$179</div><div class="plus">+</div></div>
+          <div class="card"><div class="ph"></div><div class="nm">Vegetariana</div><div class="pr">$139</div><div class="plus">+</div></div>
+        </div>
+      </div>
+      <div class="cart-bar"><span>3 productos · $457</span><span>CONTINUAR →</span></div>
+    </div>
+  </div>
+
+  <!-- 5 · CHECKOUT -->
+  <div class="ks">
+    <span class="ks-label">5 · /checkout?t=dine_in</span>
+    <div class="ks-inner co">
+      <div class="menu-head"><div class="t">Confirmar orden</div><div class="r">🍽 Aquí</div></div>
+      <div class="cols">
+        <div class="sum">
+          <div class="sum-row"><span>1× Burger Clásica</span><span>$129</span></div>
+          <div class="sum-row"><span>1× Doble Queso</span><span>$179</span></div>
+          <div class="sum-row"><span>1× Coca 600ml</span><span>$45</span></div>
+          <div class="sum-row muted"><span>Subtotal</span><span>$353</span></div>
+          <div class="sum-total"><span class="lbl">Total</span><span class="n">$353</span></div>
+        </div>
+        <div class="right">
+          <div class="lbl">Número de mesa</div>
+          <div class="display">12</div>
+          <div class="numpad">
+            <div class="k">1</div><div class="k">2</div><div class="k">3</div>
+            <div class="k">4</div><div class="k">5</div><div class="k">6</div>
+            <div class="k">7</div><div class="k">8</div><div class="k">9</div>
+            <div class="k">⌫</div><div class="k">0</div><div class="k ok">✓</div>
+          </div>
+        </div>
+      </div>
+      <div class="pay">
+        <div class="p primary">💵 Pagar en caja</div>
+        <div class="p ghost">📱 Código QR</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6 · SUCCESS -->
+  <div class="ks">
+    <span class="ks-label">6 · /success</span>
+    <div class="ks-inner sx">
+      <div class="check">✓</div>
+      <div class="ord">ORDEN <span class="num">#KIOSK-742193</span></div>
+      <div class="msg">Tu orden llegará a la <b>mesa 12</b>.<br>Pasa por la caja a pagar.</div>
+      <div class="timer">Volviendo al inicio en 8s…</div>
+      <div class="new">NUEVA ORDEN</div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:18px; font-size:12px; color:var(--text-muted, #666);">
+  <b>Notas:</b> el acento naranja (<code>#ff5c35</code>) viene del tenant actual — en producción se aplica automáticamente vía <code>--brand-primary</code>. Todas las pantallas son verticales para pedestal táctil (no responsive mobile).
+</div>
+
+<div class="section" style="margin-top:20px">
+  <h3>¿Qué opinas?</h3>
+  <p class="subtitle">Marca la opción que mejor refleja tu intención, o escribe cambios en la terminal.</p>
+  <div class="options">
+    <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Apruebo — implementa así</h3>
+        <p>El flujo, paleta y layouts te cuadran. Procede a escribir el spec.</p>
+      </div>
+    </div>
+    <div class="option" data-choice="tweaks" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Casi — con ajustes</h3>
+        <p>Dímelos en terminal (textos, proporciones, colores, etc.).</p>
+      </div>
+    </div>
+    <div class="option" data-choice="rework" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>Quiero explorar otra dirección</h3>
+        <p>Ej.: layout horizontal, modo claro, otra estética.</p>
+      </div>
+    </div>
+  </div>
+</div>
