@@ -8,11 +8,15 @@ import * as SecureStore from 'expo-secure-store';
  * SecureStore keys must match /^[A-Za-z0-9._-]+$/.
  */
 export const StorageKeys = {
+  // Admin device-pairing tokens (long-lived, per-device).
   accessToken: 'mrtpv.accessToken',
   refreshToken: 'mrtpv.refreshToken',
   restaurantId: 'mrtpv.restaurantId',
   restaurantSlug: 'mrtpv.restaurantSlug',
   locationId: 'mrtpv.locationId',
+  // Employee session (short-lived, per-shift, reset on each cold start).
+  employeeToken: 'mrtpv.employeeToken',
+  employee: 'mrtpv.employee', // serialized JSON of the employee record
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];
@@ -65,6 +69,28 @@ export async function saveLoginPayload(payload: {
 
 export async function saveLocationId(locationId: string): Promise<void> {
   await setItem(StorageKeys.locationId, locationId);
+}
+
+/**
+ * Persist an employee session after a successful PIN login.
+ * `employee` is stringified before storing because SecureStore only
+ * accepts string values.
+ */
+export async function saveEmployeeSession(payload: {
+  token: string;
+  employee: Record<string, unknown>;
+}): Promise<void> {
+  await Promise.all([
+    setItem(StorageKeys.employeeToken, payload.token),
+    setItem(StorageKeys.employee, JSON.stringify(payload.employee)),
+  ]);
+}
+
+export async function clearEmployeeSession(): Promise<void> {
+  await Promise.all([
+    deleteItem(StorageKeys.employeeToken),
+    deleteItem(StorageKeys.employee),
+  ]);
 }
 
 /**
