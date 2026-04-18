@@ -7,5 +7,9 @@ export type RootStackParamList = {
   Pin: undefined;
   Dashboard: undefined;
   TableDetail: { tableNumber: number };
-  NewOrder: undefined;
+  /**
+   * `orderId` switches the screen into "round mode" — it adds items to an
+   * existing open order instead of creating a new one. Omit for a fresh sale.
+   */
+  NewOrder: { orderId?: string } | undefined;
 };
