@@ -17,7 +17,7 @@ const server = http.createServer(app)
 
 const ALLOWED_ORIGINS = [
   'https://admin.mrtpvrest.com',          // <-- IMPORTANTE: con https://
-  'https://www.mrtpvrest.com',            
+  'https://api.mrtpvrest.com',            
   'https://tpv.mrtpvrest.com',            
   'http://localhost:3000',                
   'http://localhost:3001',
@@ -137,7 +137,7 @@ const { startTrialExpiryJob } = require('./jobs/trialExpiry.job')
 startTrialExpiryJob()
 
 const PORT = process.env.PORT || 3001
-server.listen(PORT,'0.0.0.0' () => {
+server.listen(PORT,'0.0.0.0', () => {
   console.log('┌─────────────────────────────────┐')
   console.log('│       MRTPVREST SAAS API        │')
   console.log('│  Puerto: ' + PORT + '                    │')
