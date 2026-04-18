@@ -266,6 +266,58 @@ router.put('/:id/confirm-cash', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── PUT /:id/void-payment — Anular un cobro (solo ADMIN) ──────────────
+// Revierte un pago marcado como PAID: deja la orden como pendiente de cobro
+// y conserva una nota de auditoría con el nombre del admin que anuló.
+router.put('/:id/void-payment', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+
+    const existing = await prisma.order.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Orden no encontrada' });
+    if (existing.restaurantId !== restaurantId) {
+      return res.status(403).json({ error: 'La orden pertenece a otro restaurante' });
+    }
+    if (existing.paymentStatus !== 'PAID') {
+      return res.status(400).json({ error: 'La orden no está pagada' });
+    }
+
+    // Registrar auditoría en `notes` — el schema no tiene un log dedicado
+    // para anulaciones de pago, así que preservamos la traza aquí.
+    const voidedBy =
+      req.user?.name || req.user?.email || `empleado#${req.user?.id}`;
+    const stamp = new Date().toISOString();
+    const auditNote = `[Cobro anulado por ${voidedBy} el ${stamp}]`;
+    const notes = existing.notes ? `${existing.notes}\n${auditNote}` : auditNote;
+
+    const updated = await prisma.order.update({
+      where: { id },
+      data: {
+        paymentStatus: 'PENDING',
+        cashCollected: false,
+        cashCollectedAt: null,
+        cashCollectedBy: null,
+        paidAt: null,
+        paymentMethod: 'PENDING',
+        notes,
+      },
+      include: {
+        user: { select: { name: true, phone: true } },
+        items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
+      }
+    });
+
+    const io = req.app.get('io');
+    if (io && existing.locationId) {
+      io.to(`restaurant:${restaurantId}:location:${existing.locationId}:admins`)
+        .emit('order:updated', updated);
+    }
+
+    res.json(updated);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── CHAT DE PEDIDO ──
 
 router.get('/:id/messages', async (req, res) => {
