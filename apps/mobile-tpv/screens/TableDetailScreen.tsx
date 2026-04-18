@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import {
@@ -95,6 +96,14 @@ export default function TableDetailScreen({ route, navigation }: Props) {
     void load();
   }, [load]);
 
+  // Re-fetch whenever the screen regains focus (e.g. after returning from
+  // NewOrderScreen in round-mode, so the new items appear immediately).
+  useFocusEffect(
+    useCallback(() => {
+      void load({ silent: true });
+    }, [load]),
+  );
+
   const totals = useMemo(() => {
     const list = orders ?? [];
     return {
@@ -110,6 +119,40 @@ export default function TableDetailScreen({ route, navigation }: Props) {
 
   function handleBack() {
     navigation.goBack();
+  }
+
+  /**
+   * Navigate to NewOrderScreen in round-mode (add items to an existing
+   * open ticket). If the table has multiple active tickets, ask the
+   * operator which one to add to; with a single ticket we go straight.
+   */
+  function handleAddRound() {
+    if (!orders || orders.length === 0) return;
+
+    if (orders.length === 1) {
+      navigation.navigate('NewOrder', { orderId: orders[0].id });
+      return;
+    }
+
+    // Pick which open ticket the round belongs to. Ordered by most recent
+    // first since that's typically the "active" ticket the mesero means.
+    const choices = [...orders].sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+    Alert.alert(
+      'Agregar a la cuenta',
+      '¿A qué comanda se va la nueva ronda?',
+      [
+        ...choices.slice(0, 3).map((o) => ({
+          text: `#${o.orderNumber} · ${currency(o.total)}`,
+          onPress: () =>
+            navigation.navigate('NewOrder', { orderId: o.id }),
+        })),
+        { text: 'Cancelar', style: 'cancel' as const },
+      ],
+    );
   }
 
   function handleCobrar() {
@@ -212,6 +255,16 @@ export default function TableDetailScreen({ route, navigation }: Props) {
               <TicketCard key={o.id} order={o} />
             ))}
           </ScrollView>
+
+          {/* Floating "+ Agregar a la cuenta" — sits above the Cobrar bar. */}
+          <TouchableOpacity
+            style={styles.fab}
+            onPress={handleAddRound}
+            activeOpacity={0.85}
+            accessibilityLabel="Agregar ronda a la cuenta"
+          >
+            <Text style={styles.fabText}>+ Agregar a la cuenta</Text>
+          </TouchableOpacity>
 
           {/* Sticky bottom bar with totals + Cobrar button */}
           <View style={styles.footer}>
@@ -457,6 +510,30 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+
+  // FAB (add-round)
+  fab: {
+    position: 'absolute',
+    alignSelf: 'center',
+    bottom: 128, // above the sticky footer
+    backgroundColor: '#141414',
+    borderWidth: 2,
+    borderColor: ACCENT,
+    borderRadius: 999,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  fabText: {
+    color: ACCENT,
+    fontSize: 15,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
