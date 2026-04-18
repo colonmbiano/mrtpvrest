@@ -347,6 +347,31 @@ export async function createTpvOrder(
 }
 
 /**
+ * POST /api/orders/:id/items — append a round of items to an already-open
+ * ticket (same table, new order-in-the-order).
+ *
+ * The server re-prices each item from DB and recomputes subtotal/total on
+ * the order header. Use this instead of createTpvOrder when the table
+ * already has an active ticket and the mesero is taking a follow-up round
+ * of drinks / postres / etc.
+ *
+ * Fails with:
+ *   - 400 if the order is already PAID or in DELIVERED/CANCELLED state.
+ *   - 403 if the order belongs to a different location than the device.
+ *   - 404 if the id doesn't exist.
+ */
+export async function addItemsToOrder(
+  orderId: string,
+  items: CreateTpvOrderItem[],
+): Promise<OrderDto> {
+  const { data } = await api.post<OrderDto>(
+    `/api/orders/${orderId}/items`,
+    { items },
+  );
+  return data;
+}
+
+/**
  * PUT /api/orders/:id/confirm-cash — marks an order as paid in cash:
  *   cashCollected = true, cashCollectedAt = now(),
  *   paymentStatus = 'PAID', paidAt = now().
