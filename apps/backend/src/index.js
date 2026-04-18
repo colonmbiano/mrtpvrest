@@ -17,8 +17,8 @@ const server = http.createServer(app)
 
 // CORS
 const ALLOWED_ORIGINS = [
-  'https://admin.mrtpvrest.com',          // <-- IMPORTANTE: con https://
-  'https://www.mrtpvrest.com',            // Por si acaso entran con www
+  'https://www.mrtpvrest.com',          // <-- IMPORTANTE: con https://
+  'https://api.mrtpvrest.com',            // Por si acaso entran con www
   'https://tpv.mrtpvrest.com',            // Tu TPV
   'http://localhost:3000',                // Para cuando desarrollas local
   'http://localhost:3001',
