@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { fetchActiveOrders, OrderDto, OrderStatus } from '../lib/api';
@@ -132,6 +133,14 @@ export default function DashboardScreen({ navigation }: Props) {
     return () => clearInterval(id);
   }, [load]);
 
+  // Re-fetch whenever the Dashboard regains focus (e.g. after paying a table
+  // in TableDetail, so the cleared table disappears immediately).
+  useFocusEffect(
+    useCallback(() => {
+      void load({ silent: true });
+    }, [load]),
+  );
+
   // ── Derived state ──────────────────────────────────────────────────────
   const { tableGroups, nonTableOrders } = useMemo(() => {
     const groups = new Map<number, TableGroup>();
@@ -186,17 +195,7 @@ export default function DashboardScreen({ navigation }: Props) {
   }
 
   function handleTablePress(group: TableGroup) {
-    // Real detail screen comes in the next cycle. For now, summarise.
-    const lines = group.orders
-      .map(
-        (o) =>
-          `#${o.orderNumber} · ${STATUS_META[o.status].label} · ${currency(o.total)}`,
-      )
-      .join('\n');
-    Alert.alert(
-      `Mesa ${group.tableNumber}`,
-      `${group.orders.length} ticket(s) · Total ${currency(group.total)}\n\n${lines}`,
-    );
+    navigation.navigate('TableDetail', { tableNumber: group.tableNumber });
   }
 
   function handleLooseOrderPress(o: OrderDto) {

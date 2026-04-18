@@ -125,7 +125,23 @@ export type OrderStatus =
   | 'DELIVERED'
   | 'CANCELLED';
 
-/** Minimal Order shape we depend on for the Dashboard. Extra fields pass through. */
+/**
+ * Shape of a single line item inside an Order.
+ * Matches the OrderItem model + the `menuItem` relation the backend includes
+ * on both GET /api/orders/admin and GET /api/orders/:id.
+ */
+export interface OrderItemDto {
+  id: string;
+  menuItemId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  subtotal: number;
+  notes?: string | null;
+  menuItem?: { name?: string; categoryId?: string | null } | null;
+}
+
+/** Minimal Order shape we depend on. Extra fields pass through. */
 export interface OrderDto {
   id: string;
   orderNumber: string;
@@ -136,8 +152,12 @@ export interface OrderDto {
   customerName: string | null;
   total: number;
   subtotal: number;
+  discount?: number;
+  paymentStatus?: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+  cashCollected?: boolean;
+  notes?: string | null;
   createdAt: string;
-  items?: Array<{ id: string; quantity: number; name?: string }>;
+  items?: OrderItemDto[];
   [k: string]: unknown;
 }
 
@@ -165,4 +185,23 @@ export async function fetchActiveOrders(): Promise<OrderDto[]> {
   const { data } = await api.get<OrderDto[]>('/api/orders/admin');
   if (!Array.isArray(data)) return [];
   return data.filter(isActiveOrder);
+}
+
+/**
+ * PUT /api/orders/:id/confirm-cash — marks an order as paid in cash:
+ *   cashCollected = true, cashCollectedAt = now(),
+ *   paymentStatus = 'PAID', paidAt = now().
+ *
+ * Only requires a valid authenticated token (no ADMIN gate). This is the
+ * canonical "cobrar" flow mirrored from apps/tpv.
+ */
+export async function confirmCashPayment(
+  orderId: string,
+  collectedBy = 'MOBILE_TPV',
+): Promise<OrderDto> {
+  const { data } = await api.put<OrderDto>(
+    `/api/orders/${orderId}/confirm-cash`,
+    { collectedBy },
+  );
+  return data;
 }
