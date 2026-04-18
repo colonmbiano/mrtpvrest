@@ -17,9 +17,8 @@ const server = http.createServer(app)
 
 // CORS
 const ALLOWED_ORIGINS = [
-  'mrtpvrest.com',
-  'admin.mrtpvrest.com',
-  'mrtpvrest.com',
+   'https://admin.mrtpvrest.com',
+  'https://mrtpvrest.com',
   'colonmbianos-projects.vercel.app',
   'localhost',
   '127.0.0.1',
