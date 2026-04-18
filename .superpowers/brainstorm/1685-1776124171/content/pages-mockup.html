@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockups — Dark Purple Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#080810; --surf:#0e0e1a; --surf2:#13131f;
+    --border:#1e1e30; --border2:#2a2a40;
+    --purple:#7c3aed; --purple2:#9f67ff;
+    --green:#10b981; --amber:#f59e0b; --red:#ef4444; --blue:#3b82f6;
+    --text:#f0f0f8; --muted:#6b6b90; --muted2:#4a4a6a;
+    --orange:#ff5c35;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: #050508;
+    color: #f0f0f8;
+    font-family: 'DM Sans', sans-serif;
+    padding: 32px 24px;
+    min-height: 100vh;
+  }
+  h1 { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: #f0f0f8; margin-bottom: 6px; }
+  .subtitle { color: #6b6b90; font-size: 13px; margin-bottom: 32px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 28px; flex-wrap: wrap; }
+  .tab {
+    padding: 8px 18px; border-radius: 8px; font-size: 12px; font-weight: 700;
+    cursor: pointer; border: 1px solid #2a2a40; color: #6b6b90;
+    background: transparent; transition: all .15s;
+  }
+  .tab.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+  .page-preview { display: none; }
+  .page-preview.active { display: block; }
+
+  /* ─── FRAME ─── */
+  .frame {
+    border: 1px solid #2a2a40;
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--bg);
+    box-shadow: 0 0 60px rgba(124,58,237,0.08);
+  }
+  .frame-bar {
+    height: 32px; background: var(--surf2); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 7px; padding: 0 14px;
+  }
+  .dot-r { width:9px;height:9px;border-radius:50%;background:#ef4444;opacity:.7; }
+  .dot-y { width:9px;height:9px;border-radius:50%;background:#f59e0b;opacity:.7; }
+  .dot-g { width:9px;height:9px;border-radius:50%;background:#10b981;opacity:.7; }
+  .frame-url { flex:1;text-align:center;font-size:10px;color:#4a4a6a;font-family:monospace; }
+
+  /* ─── LOGIN (split) ─── */
+  .login-split { display: grid; grid-template-columns: 1.3fr 1fr; height: 480px; }
+  .login-left {
+    background: var(--surf); border-right: 1px solid var(--border);
+    padding: 40px 36px; display: flex; flex-direction: column; justify-content: space-between;
+    position: relative; overflow: hidden;
+  }
+  .login-left::before {
+    content: ''; position: absolute; top: -20%; left: -20%;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .logo-row { display: flex; align-items: center; gap: 10px; }
+  .logo-mark { width:34px;height:34px;background:linear-gradient(135deg,#7c3aed,#9f67ff);border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:11px;color:#fff; }
+  .logo-name { font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--text);letter-spacing:-0.5px; }
+  .logo-name span { color:var(--purple2); }
+  .login-hero { position: relative; z-index: 1; }
+  .login-hero h2 { font-family:'Syne',sans-serif;font-weight:800;font-size:28px;color:var(--text);line-height:1.15;letter-spacing:-1px;margin-bottom:10px; }
+  .login-hero h2 em { font-style:normal;color:var(--purple2); }
+  .login-hero p { font-size:13px;color:var(--muted);line-height:1.6;max-width:280px; }
+  .login-stats { display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding-top:20px;border-top:1px solid var(--border); }
+  .stat-n { font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text); }
+  .stat-l { font-size:10px;color:var(--muted);margin-top:2px; }
+  .login-right { background:var(--bg); padding:40px 32px; display:flex;flex-direction:column;justify-content:center; }
+  .form-title { font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px; }
+  .form-sub { font-size:12px;color:var(--muted);margin-bottom:24px; }
+  .field-label { font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px; }
+  .fake-input {
+    width:100%;padding:10px 14px;border:1px solid var(--border2);border-radius:9px;
+    background:var(--surf);color:var(--muted2);font-size:12px;margin-bottom:14px;
+  }
+  .fake-btn {
+    width:100%;padding:11px;background:var(--purple);border-radius:9px;
+    font-family:'Syne',sans-serif;font-weight:800;font-size:12px;color:#fff;
+    text-align:center;margin-top:4px;
+    box-shadow:0 4px 20px rgba(124,58,237,0.35);
+  }
+  .divider { display:flex;align-items:center;gap:10px;margin:16px 0; }
+  .divider-line { flex:1;height:1px;background:var(--border); }
+  .divider-text { font-size:10px;color:var(--muted2); }
+  .link-text { text-align:center;font-size:11px;color:var(--muted); }
+  .link-text a { color:var(--purple2); }
+
+  /* ─── REGISTER ─── */
+  .register-wrap { height: 480px; display:flex;align-items:center;justify-content:center;background:var(--bg); }
+  .register-card {
+    width:420px;background:var(--surf);border:1px solid var(--border2);border-radius:20px;padding:32px;
+    box-shadow:0 0 40px rgba(124,58,237,0.07);
+  }
+  .rc-logo { display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:20px; }
+  .stepper { display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:24px; }
+  .step { display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:99px;font-size:10px;font-weight:700; }
+  .step.active { background:rgba(124,58,237,0.15);color:var(--purple2); }
+  .step.done { background:rgba(16,185,129,0.12);color:#10b981; }
+  .step.inactive { background:var(--surf2);color:var(--muted);border:1px solid var(--border); }
+  .step-dot { width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800; }
+  .step.active .step-dot { background:var(--purple);color:#fff; }
+  .step.done .step-dot { background:#10b981;color:#fff; }
+  .step.inactive .step-dot { background:var(--border2);color:var(--muted); }
+  .connector { width:24px;height:2px;border-radius:2px;background:var(--border2); }
+  .rc-title { font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px; }
+  .rc-sub { font-size:12px;color:var(--muted);margin-bottom:20px; }
+  .plan-box { background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.2);border-radius:10px;padding:12px 14px;margin:14px 0; }
+  .plan-tag { font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:3px; }
+  .plan-val { font-size:13px;font-weight:700;color:var(--text); }
+  .plan-val span { color:var(--purple2); }
+
+  /* ─── ONBOARDING ─── */
+  .ob-wrap { height:480px;display:grid;grid-template-columns:220px 1fr;background:var(--bg); }
+  .ob-side { background:var(--surf);border-right:1px solid var(--border);padding:24px 20px;display:flex;flex-direction:column;gap:20px; }
+  .ob-logo { margin-bottom:4px; }
+  .ob-modules { }
+  .ob-mod-label { font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px; }
+  .ob-mod-badge { display:inline-block;padding:3px 8px;border-radius:99px;font-size:9px;font-weight:700;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);color:#10b981;margin:2px; }
+  .ob-footer { margin-top:auto;font-size:10px;color:var(--muted2); }
+  .ob-main { display:flex;flex-direction:column; }
+  .ob-messages { flex:1;padding:20px 24px;overflow:hidden;display:flex;flex-direction:column;gap:12px; }
+  .bubble-ai { display:flex;align-items:flex-end;gap:8px; }
+  .bubble-av { width:24px;height:24px;border-radius:50%;background:rgba(124,58,237,0.2);border:1px solid rgba(124,58,237,0.3);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:var(--purple2);flex-shrink:0; }
+  .bubble-text { max-width:75%;padding:10px 14px;border-radius:14px;border-bottom-left-radius:4px;font-size:11px;color:#d0d0e8;line-height:1.5;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08); }
+  .bubble-user { display:flex;align-items:flex-end;justify-content:flex-end; }
+  .bubble-user .bubble-text { background:var(--purple);color:#fff;border:none;border-bottom-right-radius:4px;border-bottom-left-radius:14px; }
+  .ob-input-area { padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px; }
+  .ob-input { flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border2);border-radius:14px;padding:9px 14px;font-size:11px;color:var(--muted2); }
+  .ob-send { width:34px;height:34px;border-radius:10px;background:var(--purple);display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+
+  /* ─── SAAS DASHBOARD ─── */
+  .saas-wrap { height:480px;display:grid;grid-template-columns:200px 1fr;background:var(--bg); }
+  .saas-side { background:var(--surf);border-right:1px solid var(--border);padding:20px 16px;display:flex;flex-direction:column;gap:4px; }
+  .saas-logo { display:flex;align-items:center;gap:8px;margin-bottom:24px; }
+  .saas-badge { font-size:8px;font-weight:700;background:rgba(124,58,237,0.15);color:var(--purple2);padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.5px; }
+  .nav-item { display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;font-size:11px;color:var(--muted);cursor:pointer; }
+  .nav-item.active { background:rgba(124,58,237,0.1);color:var(--purple2); }
+  .nav-dot { width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.6; }
+  .saas-main { padding:20px;overflow:hidden;display:flex;flex-direction:column;gap:14px; }
+  .saas-header { display:flex;align-items:center;justify-content:space-between; }
+  .saas-title { font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:var(--text); }
+  .live-badge { display:flex;align-items:center;gap:4px;font-size:9px;color:var(--green);background:rgba(16,185,129,0.1);padding:3px 8px;border-radius:99px; }
+  .live-dot { width:4px;height:4px;border-radius:50%;background:var(--green); }
+  .metrics { display:grid;grid-template-columns:repeat(4,1fr);gap:8px; }
+  .metric { background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:10px; }
+  .metric-label { font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px; }
+  .metric-val { font-family:'Syne',sans-serif;font-size:17px;font-weight:800; }
+  .metric-delta { font-size:8px;margin-top:2px; }
+  .up { color:var(--green); } .down { color:var(--red); }
+  .c-purple { color:var(--purple2); } .c-green { color:var(--green); } .c-blue { color:var(--blue); } .c-amber { color:var(--amber); }
+  .saas-grid { display:grid;grid-template-columns:1.4fr 1fr;gap:10px;flex:1; }
+  .mini-card { background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:12px; }
+  .mini-card-title { font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px; }
+  .bars { display:flex;align-items:flex-end;gap:3px;height:50px; }
+  .bar { flex:1;border-radius:3px 3px 0 0;background:var(--purple);opacity:.6; }
+  .bar.hl { opacity:1; }
+  .activity { display:flex;flex-direction:column;gap:7px; }
+  .act-item { display:flex;align-items:flex-start;gap:8px; }
+  .act-dot { width:6px;height:6px;border-radius:50%;margin-top:3px;flex-shrink:0; }
+  .act-text { font-size:9px;color:#9090b0;line-height:1.4; }
+  .act-time { font-size:8px;color:var(--muted2);margin-top:1px; }
+
+  /* ─── NAV TABS ─── */
+  .page-nav { margin-bottom: 8px; }
+  .note { margin-top:16px;padding:12px 16px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.15);border-radius:10px;font-size:11px;color:#9090b0;line-height:1.5; }
+  .note strong { color:var(--purple2); }
+</style>
+</head>
+<body>
+<h1>Mockups — Dark Purple Design System</h1>
+<p class="subtitle">Vista previa de cada página con el estilo de la landing. Navega con las pestañas.</p>
+
+<div class="tabs">
+  <div class="tab active" onclick="show('login')">Login (admin)</div>
+  <div class="tab" onclick="show('register')">Registro</div>
+  <div class="tab" onclick="show('onboarding')">Onboarding / Setup</div>
+  <div class="tab" onclick="show('saas')">SaaS Dashboard</div>
+</div>
+
+<!-- LOGIN -->
+<div class="page-preview active" id="pg-login">
+  <div class="frame">
+    <div class="frame-bar">
+      <div class="dot-r"></div><div class="dot-y"></div><div class="dot-g"></div>
+      <div class="frame-url">admin.mrtpvrest.com/login</div>
+    </div>
+    <div class="login-split">
+      <div class="login-left">
+        <div>
+          <div class="logo-row" style="margin-bottom:32px">
+            <div class="logo-mark">MR</div>
+            <span class="logo-name">MRTPV<span>REST</span></span>
+          </div>
+          <div class="login-hero">
+            <h2>Gestiona tu restaurante<br><em>sin complicaciones.</em></h2>
+            <p style="margin-top:10px">TPV, cocina, delivery y tienda online. Todo sincronizado en tiempo real.</p>
+          </div>
+        </div>
+        <div class="login-stats">
+          <div><div class="stat-n">+500</div><div class="stat-l">Restaurantes activos</div></div>
+          <div><div class="stat-n">$29</div><div class="stat-l">Desde por mes</div></div>
+          <div><div class="stat-n">15d</div><div class="stat-l">Prueba gratis</div></div>
+        </div>
+      </div>
+      <div class="login-right">
+        <div class="form-title">Bienvenido de nuevo</div>
+        <div class="form-sub">Ingresa a tu panel de administración</div>
+        <div class="field-label">Correo electrónico</div>
+        <div class="fake-input">tu@restaurante.com</div>
+        <div class="field-label">Contraseña</div>
+        <div class="fake-input">••••••••</div>
+        <div class="fake-btn">Entrar al panel →</div>
+        <div class="divider"><div class="divider-line"></div><div class="divider-text">¿nuevo aquí?</div><div class="divider-line"></div></div>
+        <div class="link-text">Crear cuenta gratis — <a>15 días sin tarjeta</a></div>
+      </div>
+    </div>
+  </div>
+  <div class="note">Layout split conservado. <strong>Panel izquierdo oscuro con glow purple</strong> + stats. Panel derecho con fondo <code>#080810</code>. Acento purple en botón y links.</div>
+</div>
+
+<!-- REGISTER -->
+<div class="page-preview" id="pg-register">
+  <div class="frame">
+    <div class="frame-bar">
+      <div class="dot-r"></div><div class="dot-y"></div><div class="dot-g"></div>
+      <div class="frame-url">admin.mrtpvrest.com/register</div>
+    </div>
+    <div class="register-wrap">
+      <div class="register-card">
+        <div class="rc-logo">
+          <div class="logo-mark">MR</div>
+          <span class="logo-name">MRTPV<span>REST</span></span>
+        </div>
+        <p style="text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:16px">Empieza tu prueba de 15 días</p>
+        <div class="stepper">
+          <div class="step active"><div class="step-dot">1</div> TU RESTAURANTE</div>
+          <div class="connector"></div>
+          <div class="step inactive"><div class="step-dot">2</div> TU CUENTA</div>
+        </div>
+        <div class="rc-title">Tu restaurante</div>
+        <div class="rc-sub">Cuéntanos sobre tu negocio para empezar.</div>
+        <div class="field-label">Nombre del negocio</div>
+        <div class="fake-input" style="background:var(--surf2);border-color:var(--border2);color:var(--muted2);margin-bottom:10px">Ej: Tacos El Gordo</div>
+        <div class="field-label">Tu nombre completo</div>
+        <div class="fake-input" style="background:var(--surf2);border-color:var(--border2);color:var(--muted2)">Ej: Juan García</div>
+        <div class="plan-box">
+          <div class="plan-tag">Plan incluido</div>
+          <div class="plan-val"><span>15 días gratis</span> · Plan Básico</div>
+        </div>
+        <div class="fake-btn" style="margin-top:10px">CONTINUAR →</div>
+      </div>
+    </div>
+  </div>
+  <div class="note">Tarjeta centrada sobre fondo oscuro. <strong>Stepper con acento purple</strong> (activo) y verde (completado). Plan-box con borde purple sutil.</div>
+</div>
+
+<!-- ONBOARDING -->
+<div class="page-preview" id="pg-onboarding">
+  <div class="frame">
+    <div class="frame-bar">
+      <div class="dot-r"></div><div class="dot-y"></div><div class="dot-g"></div>
+      <div class="frame-url">admin.mrtpvrest.com/onboarding</div>
+    </div>
+    <div class="ob-wrap">
+      <div class="ob-side">
+        <div class="ob-logo">
+          <div class="logo-row">
+            <div class="logo-mark">MR</div>
+            <span class="logo-name" style="font-size:13px">MRTPV<span>REST</span></span>
+          </div>
+        </div>
+        <div class="ob-modules">
+          <div class="ob-mod-label">Módulos activos</div>
+          <span class="ob-mod-badge">POS</span>
+          <span class="ob-mod-badge">KDS</span>
+          <span class="ob-mod-badge">Delivery</span>
+        </div>
+        <div class="ob-footer">Configurando: Tacos El Gordo</div>
+      </div>
+      <div class="ob-main">
+        <div class="ob-messages">
+          <div class="bubble-ai">
+            <div class="bubble-av">AI</div>
+            <div class="bubble-text">¡Hola! Soy tu asistente de configuración. ¿Cuál es el nombre de tu negocio?</div>
+          </div>
+          <div class="bubble-user">
+            <div class="bubble-text">Tacos El Gordo</div>
+          </div>
+          <div class="bubble-ai">
+            <div class="bubble-av">AI</div>
+            <div class="bubble-text">¡Excelente! ¿Qué tipo de servicio ofreces principalmente — local, para llevar o delivery?</div>
+          </div>
+        </div>
+        <div class="ob-input-area">
+          <div class="ob-input">Escribe tu respuesta…</div>
+          <div class="ob-send">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.269 20.876L5.999 12zm0 0h7.5"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note">Misma estructura de chat. <strong>Avatar AI cambia de naranja → purple</strong>. Burbujas de usuario en purple (antes naranja). Sidebar con módulos activos en verde. Fondo ya era oscuro.</div>
+</div>
+
+<!-- SAAS DASHBOARD -->
+<div class="page-preview" id="pg-saas">
+  <div class="frame">
+    <div class="frame-bar">
+      <div class="dot-r"></div><div class="dot-y"></div><div class="dot-g"></div>
+      <div class="frame-url">saas.mrtpvrest.com/dashboard</div>
+    </div>
+    <div class="saas-wrap">
+      <div class="saas-side">
+        <div class="saas-logo">
+          <div class="logo-mark">MR</div>
+          <div>
+            <span class="logo-name" style="font-size:12px;display:block">MRTPV<span>REST</span></span>
+            <span class="saas-badge">SaaS Central</span>
+          </div>
+        </div>
+        <div class="nav-item active"><div class="nav-dot"></div> Dashboard</div>
+        <div class="nav-item"><div class="nav-dot"></div> Marcas</div>
+        <div class="nav-item"><div class="nav-dot"></div> Facturación</div>
+        <div class="nav-item"><div class="nav-dot"></div> API Keys</div>
+        <div class="nav-item"><div class="nav-dot"></div> Logs</div>
+        <div class="nav-item"><div class="nav-dot"></div> Ajustes</div>
+      </div>
+      <div class="saas-main">
+        <div class="saas-header">
+          <div class="saas-title">Dashboard</div>
+          <div class="live-badge"><div class="live-dot"></div> En vivo</div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">MRR total</div><div class="metric-val c-purple">$4,280</div><div class="metric-delta up">▲ +18%</div></div>
+          <div class="metric"><div class="metric-label">Marcas activas</div><div class="metric-val c-green">62</div><div class="metric-delta up">▲ +5</div></div>
+          <div class="metric"><div class="metric-label">Total marcas</div><div class="metric-val c-blue">81</div><div class="metric-delta" style="color:#6b6b90">→ activas+trial</div></div>
+          <div class="metric"><div class="metric-label">En trial</div><div class="metric-val c-amber">19</div><div class="metric-delta" style="color:#f59e0b">→ por convertir</div></div>
+        </div>
+        <div class="saas-grid">
+          <div class="mini-card">
+            <div class="mini-card-title">MRR por mes</div>
+            <div class="bars">
+              <div class="bar" style="height:30%"></div>
+              <div class="bar" style="height:45%"></div>
+              <div class="bar" style="height:60%"></div>
+              <div class="bar" style="height:52%"></div>
+              <div class="bar" style="height:75%"></div>
+              <div class="bar hl" style="height:90%"></div>
+            </div>
+          </div>
+          <div class="mini-card">
+            <div class="mini-card-title">Actividad reciente</div>
+            <div class="activity">
+              <div class="act-item"><div class="act-dot" style="background:#10b981"></div><div><div class="act-text"><strong>Tacos El Rey</strong> — suscripción Pro</div><div class="act-time">hace 4 min</div></div></div>
+              <div class="act-item"><div class="act-dot" style="background:#f59e0b"></div><div><div class="act-text"><strong>Burger House</strong> — trial vence en 24h</div><div class="act-time">hace 1h</div></div></div>
+              <div class="act-item"><div class="act-dot" style="background:#ef4444"></div><div><div class="act-text"><strong>Sushi Central</strong> — canceló</div><div class="act-time">ayer</div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note">SaaS dashboard en <code>saas.mrtpvrest.com</code>. <strong>Sidebar con badge "SaaS Central"</strong>. Métricas con acento purple (MRR), verde (activas), azul, amber. Gráfico de barras en purple.</div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.page-preview').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('pg-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
