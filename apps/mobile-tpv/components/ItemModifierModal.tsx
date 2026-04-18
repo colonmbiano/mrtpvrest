@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -23,15 +26,33 @@ export interface ModifierSelection {
   complements: MenuItemComplementDto[];
   quantity: number;
   unitPrice: number;
+  /** Human-readable summary: variant + complements + manualNote joined. */
   notes: string;
+  /** Raw free-form text typed by the operator ("Bien cocida", etc.). */
+  manualNote: string;
+}
+
+/**
+ * State the modal should start from when opened to EDIT an existing
+ * cart line. When absent the modal opens in "add" mode with defaults.
+ */
+export interface ModifierPreload {
+  variantId: string | null;
+  complementIds: string[];
+  quantity: number;
+  manualNote: string;
 }
 
 interface Props {
   /** Item being customised; when null, the modal is inert. */
   item: MenuItemDto | null;
   visible: boolean;
+  /** Optional starting state (edit mode). When null, fresh defaults are used. */
+  preload?: ModifierPreload | null;
+  /** Controls CTA label and tone; defaults to "add". */
+  mode?: 'add' | 'edit';
   onClose: () => void;
-  /** Fired with the final selection when the user taps "Agregar". */
+  /** Fired with the final selection when the user taps "Agregar" / "Guardar". */
   onConfirm: (selection: ModifierSelection) => void;
 }
 
@@ -54,12 +75,15 @@ function currency(n: number): string {
 export default function ItemModifierModal({
   item,
   visible,
+  preload,
+  mode = 'add',
   onClose,
   onConfirm,
 }: Props) {
   const [variantId, setVariantId] = useState<string | null>(null);
   const [complementIds, setComplementIds] = useState<string[]>([]);
   const [quantity, setQuantity] = useState(1);
+  const [manualNote, setManualNote] = useState('');
 
   const availableVariants = useMemo(
     () => (item?.variants ?? []).filter((v) => v.isAvailable !== false),
@@ -70,13 +94,28 @@ export default function ItemModifierModal({
     [item],
   );
 
-  // Reset state whenever the target item changes (or modal reopens).
+  /**
+   * Initialise state every time a fresh "open" happens. We key the reset
+   * on (item, visible) because the parent may reuse the same `item` for
+   * both an edit and a subsequent add — toggling `visible` re-seeds.
+   */
   useEffect(() => {
-    if (!item) return;
-    setQuantity(1);
-    setComplementIds([]);
-    setVariantId(availableVariants[0]?.id ?? null);
-  }, [item, availableVariants]);
+    if (!item || !visible) return;
+    if (preload) {
+      setVariantId(preload.variantId);
+      setComplementIds([...preload.complementIds]);
+      setQuantity(Math.max(1, preload.quantity));
+      setManualNote(preload.manualNote ?? '');
+    } else {
+      setVariantId(availableVariants[0]?.id ?? null);
+      setComplementIds([]);
+      setQuantity(1);
+      setManualNote('');
+    }
+    // We deliberately read `preload` only at open time; further changes are
+    // the user's edits in this modal instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item, visible]);
 
   const selectedVariant = useMemo<MenuItemVariantDto | null>(() => {
     if (!variantId) return null;
@@ -105,6 +144,20 @@ export default function ItemModifierModal({
     setQuantity((q) => Math.max(1, q + delta));
   }
 
+  /**
+   * Build the human-readable summary used both as the cart-line subtitle
+   * and as the OrderItem.notes sent to the backend. Manual note gets its
+   * own segment so the kitchen sees it as a distinct instruction.
+   */
+  function buildFinalNotes(): string {
+    const structured = buildModifierNotes(selectedVariant, selectedComplements);
+    const trimmed = manualNote.trim();
+    if (structured && trimmed) return `${structured} · Nota: ${trimmed}`;
+    if (structured) return structured;
+    if (trimmed) return `Nota: ${trimmed}`;
+    return '';
+  }
+
   function handleConfirm() {
     if (!item) return;
     onConfirm({
@@ -112,9 +165,12 @@ export default function ItemModifierModal({
       complements: selectedComplements,
       quantity,
       unitPrice,
-      notes: buildModifierNotes(selectedVariant, selectedComplements),
+      notes: buildFinalNotes(),
+      manualNote: manualNote.trim(),
     });
   }
+
+  const ctaLabel = mode === 'edit' ? 'Guardar cambios' : 'Agregar al ticket';
 
   return (
     <Modal
@@ -123,7 +179,10 @@ export default function ItemModifierModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.card}>
           {item && (
             <>
@@ -208,6 +267,23 @@ export default function ItemModifierModal({
                       Este producto no tiene opciones configuradas.
                     </Text>
                   )}
+
+                {/* Manual free-form note */}
+                <Text style={[styles.sectionLabel, { marginTop: 18 }]}>
+                  Notas para cocina
+                </Text>
+                <TextInput
+                  style={styles.noteInput}
+                  value={manualNote}
+                  onChangeText={setManualNote}
+                  placeholder="Notas especiales (ej. Alergia, término de la carne...)"
+                  placeholderTextColor="#555"
+                  multiline
+                  numberOfLines={2}
+                  maxLength={140}
+                  returnKeyType="done"
+                  blurOnSubmit
+                />
               </ScrollView>
 
               {/* Quantity */}
@@ -239,13 +315,13 @@ export default function ItemModifierModal({
                 activeOpacity={0.85}
               >
                 <Text style={styles.confirmBtnText}>
-                  Agregar al ticket · {currency(total)}
+                  {ctaLabel} · {currency(total)}
                 </Text>
               </TouchableOpacity>
             </>
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -379,6 +455,19 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     paddingVertical: 24,
+  },
+
+  noteInput: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    color: '#FFFFFF',
+    fontSize: 14,
+    minHeight: 64,
+    textAlignVertical: 'top',
   },
 
   qtyBar: {
