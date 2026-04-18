@@ -17,12 +17,12 @@ const server = http.createServer(app)
 
 // CORS
 const ALLOWED_ORIGINS = [
-  'mrtpvrest.com',
-  'admin.mrtpvrest.com',
-  'mrtpvrest.com',
-  'colonmbianos-projects.vercel.app',
-  'localhost',
-  '127.0.0.1',
+  'https://mrtpvrest.com',
+  'https://admin.mrtpvrest.com',
+  'https://colonmbianos-projects.vercel.app',
+  'http://localhost:3000', // El que usas para correr Next.js local
+  'http://localhost:8081', // El que usará Expo/Android en la web
+  'http://127.0.0.1:3000'
 ];
 
 const corsOptions = {
