@@ -8,6 +8,7 @@ import PinScreen from './screens/PinScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import TableDetailScreen from './screens/TableDetailScreen';
 import NewOrderScreen from './screens/NewOrderScreen';
+import ShiftScreen from './screens/ShiftScreen';
 import { clearEmployeeSession, getAuthSnapshot } from './lib/storage';
 import type { RootStackParamList } from './navigation/types';
 
@@ -84,6 +85,11 @@ export default function App() {
           name="NewOrder"
           component={NewOrderScreen}
           options={{ animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen
+          name="Shift"
+          component={ShiftScreen}
+          options={{ animation: 'slide_from_right' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
