@@ -22,7 +22,8 @@ const ALLOWED_ORIGINS = [
   'colonmbianos-projects.vercel.app',
   'localhost',
   '127.0.0.1',
-   /\.railway\.app$/
+   /\.railway\.app$/,
+   /\.vercel\.app$/,
 ];
 
 const corsOptions = {
