@@ -7,4 +7,5 @@ export type RootStackParamList = {
   Pin: undefined;
   Dashboard: undefined;
   TableDetail: { tableNumber: number };
+  NewOrder: undefined;
 };
