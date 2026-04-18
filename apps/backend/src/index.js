@@ -15,26 +15,21 @@ const app = express()
 app.set('trust proxy', 1)
 const server = http.createServer(app)
 
-// CORS
 const ALLOWED_ORIGINS = [
-  'https://www.mrtpvrest.com',          // <-- IMPORTANTE: con https://
-  'https://api.mrtpvrest.com',            // Por si acaso entran con www
-  'https://tpv.mrtpvrest.com',            // Tu TPV
-  'http://localhost:3000',                // Para cuando desarrollas local
+  'https://admin.mrtpvrest.com',          // <-- IMPORTANTE: con https://
+  'https://www.mrtpvrest.com',            
+  'https://tpv.mrtpvrest.com',            
+  'http://localhost:3000',                
   'http://localhost:3001',
-  /\.vercel\.app$/,                       // Permite cualquier subdominio de Vercel
-  /\.railway\.app$/                       // Permite cualquier subdominio de Railway
+  /\.vercel\.app$/,                       
+  /\.railway\.app$/                       
 ];
 
 const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || ALLOWED_ORIGINS.some(o => origin.includes(o))) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS: origen no permitido — ${origin}`));
-    }
-  },
+  // Pasamos el arreglo directo. cors sabe cómo evaluar Strings y Regex.
+  origin: ALLOWED_ORIGINS, 
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 };
 
 // Socket.io
@@ -65,11 +60,13 @@ io.on('connection', (socket) => {
 // Middlewares base
 app.use(helmet())
 app.use(compression())
-app.use(cors(corsOptions))
+// 1. Aplicamos CORS
+app.use(cors(corsOptions));
+// 2. Respondemos automáticamente a TODAS las peticiones OPTIONS (Preflight)
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ limit: '50mb', extended: true }))
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
-
 
 // Rutas públicas (sin tenantMiddleware)
 app.use('/api/public', require('./routes/menu.routes'))
@@ -140,7 +137,7 @@ const { startTrialExpiryJob } = require('./jobs/trialExpiry.job')
 startTrialExpiryJob()
 
 const PORT = process.env.PORT || 3001
-server.listen(PORT, () => {
+server.listen(PORT,'0.0.0.0' () => {
   console.log('┌─────────────────────────────────┐')
   console.log('│       MRTPVREST SAAS API        │')
   console.log('│  Puerto: ' + PORT + '                    │')
