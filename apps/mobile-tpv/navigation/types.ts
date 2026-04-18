@@ -12,4 +12,6 @@ export type RootStackParamList = {
    * existing open order instead of creating a new one. Omit for a fresh sale.
    */
   NewOrder: { orderId?: string } | undefined;
+  /** Shift summary + paid-ticket audit (admin can void payments). */
+  Shift: undefined;
 };
