@@ -93,6 +93,7 @@ app.use(rateLimit({
 // Rutas
 app.use('/api/auth',         require('./routes/auth.routes'))
 app.use('/api/tenant',       require('./routes/tenant.routes'))
+app.use('/api/locations',    require('./routes/locations.routes'))
 app.use('/api/menu',         require('./routes/menu.routes'))
 app.use('/api/shifts',       shiftsRoutes);
 app.use('/api/orders',       require('./routes/orders.routes'))
