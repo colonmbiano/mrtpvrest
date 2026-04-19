@@ -21,7 +21,21 @@ const authenticate = async (req, res, next) => {
       // Intentar buscar como empleado si no es usuario
       const emp = await prisma.employee.findUnique({
         where: { id },
-        select: { id: true, name: true, role: true, isActive: true, locationId: true },
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          isActive: true,
+          locationId: true,
+          canCharge: true,
+          canDiscount: true,
+          canModifyTickets: true,
+          canDeleteTickets: true,
+          canConfigSystem: true,
+          canTakeDelivery: true,
+          canTakeTakeout: true,
+          canManageShifts: true,
+        },
       });
       if (emp) user = { ...emp, email: null, isEmployee: true };
     }
