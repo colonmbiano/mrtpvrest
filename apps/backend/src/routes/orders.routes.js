@@ -35,6 +35,7 @@ async function discountInventory(prisma, items, orderId, restaurantId, locationI
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { requireActiveShift } = require('../middleware/shift.middleware');
 const router = express.Router();
 
 
@@ -86,7 +87,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // ── POST /tpv — Crear pedido ──────────────────────────────────────────
-router.post('/tpv', authenticate, requireAdmin, async (req, res) => {
+router.post('/tpv', authenticate, requireAdmin, requireActiveShift, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
@@ -113,6 +114,7 @@ router.post('/tpv', authenticate, requireAdmin, async (req, res) => {
       data: {
         restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId,
         locationId: req.locationId,
+        shiftId: req.shiftId,
         orderNumber,
         status: status || 'CONFIRMED',
         orderType: orderType || 'TAKEOUT',
