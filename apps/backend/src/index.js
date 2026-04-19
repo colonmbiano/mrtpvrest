@@ -16,13 +16,12 @@ app.set('trust proxy', 1)
 const server = http.createServer(app)
 
 const ALLOWED_ORIGINS = [
-  'https://admin.mrtpvrest.com',          // <-- IMPORTANTE: con https://
-  'https://api.mrtpvrest.com',            
-  'https://tpv.mrtpvrest.com',            
-  'http://localhost:3000',                
-  'http://localhost:3001',
-  '/\.vercel\.app$/',                       
-  '/\.railway\.app$/',                       
+  'https://mrtpvrest.com',
+  'https://admin.mrtpvrest.com',
+  'https://colonmbianos-projects.vercel.app',
+  'http://localhost:3000', // El que usas para correr Next.js local
+  'http://localhost:8081', // El que usará Expo/Android en la web
+  'http://127.0.0.1:3000'
 ];
 
 const corsOptions = {
