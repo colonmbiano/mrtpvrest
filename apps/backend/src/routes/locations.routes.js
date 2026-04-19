@@ -10,6 +10,32 @@ const router = express.Router()
 const VALID_BUSINESS_TYPES = ['RESTAURANT', 'RETAIL', 'BAR', 'CAFE']
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/locations — Listar todas las sucursales del usuario/marca
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/', authenticate, async (req, res) => {
+  try {
+    const locations = await prisma.location.findMany({
+      where: {
+        restaurantId: req.user.restaurantId,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        address: true,
+        phone: true,
+        isActive: true,
+        businessType: true,
+      },
+    })
+    res.json(locations)
+  } catch (err) {
+    console.error('GET /locations:', err)
+    res.status(500).json({ error: 'Error al obtener sucursales' })
+  }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/locations/:id — Detalles de la sucursal (incluye businessType)
 // Requiere autenticación. Sólo la sucursal del restaurante del usuario.
 // ─────────────────────────────────────────────────────────────────────────────
