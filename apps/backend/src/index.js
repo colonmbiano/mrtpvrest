@@ -15,25 +15,24 @@ const app = express()
 app.set('trust proxy', 1)
 const server = http.createServer(app)
 
-// CORS
 const ALLOWED_ORIGINS = [
   'https://mrtpvrest.com',
   'https://admin.mrtpvrest.com',
-  'https://colonmbianos-projects.vercel.app',
-  'http://localhost:3000', // El que usas para correr Next.js local
-  'http://localhost:8081', // El que usará Expo/Android en la web
-  'http://127.0.0.1:3000'
+  'https://api.mrtpvrest.com',
+  'https://tpv.mrtpvrest.com',
+  'http://localhost:3000',                // Next.js local
+  'http://localhost:3001',
+  'http://localhost:8081',                // Expo/Android web
+  'http://127.0.0.1:3000',
+  '/\.vercel\.app$/',
+  '/\.railway\.app$/',
 ];
 
 const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || ALLOWED_ORIGINS.some(o => origin.includes(o))) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS: origen no permitido — ${origin}`));
-    }
-  },
+  // Pasamos el arreglo directo. cors sabe cómo evaluar Strings y Regex.
+  origin: ALLOWED_ORIGINS, 
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 };
 
 // Socket.io
@@ -64,11 +63,13 @@ io.on('connection', (socket) => {
 // Middlewares base
 app.use(helmet())
 app.use(compression())
-app.use(cors(corsOptions))
+// 1. Aplicamos CORS
+app.use(cors(corsOptions));
+// 2. Respondemos automáticamente a TODAS las peticiones OPTIONS (Preflight)
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ limit: '50mb', extended: true }))
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
-
 
 // Rutas públicas (sin tenantMiddleware)
 app.use('/api/public', require('./routes/menu.routes'))
@@ -139,7 +140,7 @@ const { startTrialExpiryJob } = require('./jobs/trialExpiry.job')
 startTrialExpiryJob()
 
 const PORT = process.env.PORT || 3001
-server.listen(PORT, () => {
+server.listen(PORT,'0.0.0.0', () => {
   console.log('┌─────────────────────────────────┐')
   console.log('│       MRTPVREST SAAS API        │')
   console.log('│  Puerto: ' + PORT + '                    │')
