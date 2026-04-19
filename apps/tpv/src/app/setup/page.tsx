@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   "https://master-burguers-production.up.railway.app";
-const ACCENT = "#ff5c35";
+const ACCENT = "#F5C842";
 
 type Location = {
   id: string;
