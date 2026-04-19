@@ -5,6 +5,10 @@ import KDSMessages from "@/components/admin/KDSMessages";
 import IngredientShortageModal from "@/components/admin/IngredientShortageModal";
 import DeliveryAssignModal from "@/components/admin/DeliveryAssignModal";
 import ShiftModal from "@/components/admin/ShiftModal";
+import RetailLayout from "@/components/layouts/RetailLayout";
+import BarLayout from "@/components/layouts/BarLayout";
+import CafeLayout from "@/components/layouts/CafeLayout";
+import { useLocation } from "@/hooks/useLocation";
 import { useRouter } from "next/navigation";
 
 const ACCENT = "#ff5c35";
@@ -35,6 +39,9 @@ type MobileTab = "menu" | "ticket" | "orders";
 
 export default function TPVPage() {
   const router = useRouter();
+
+  // Cerebro Adaptativo: tipo de negocio por sucursal
+  const { businessType, loading: locLoading } = useLocation();
 
   // SAAS
   const [restaurantName, setRestaurantName] = useState("MRTPVREST");
@@ -515,6 +522,15 @@ export default function TPVPage() {
         </div>
       </div>
     );
+  }
+
+  // ── Cerebro Adaptativo: switch de modo ────────────────────────────────────
+  // Para modos distintos a RESTAURANT renderizamos placeholders. Cuando la
+  // sucursal es RESTAURANT (default) caemos al TPV clásico debajo.
+  if (!locLoading) {
+    if (businessType === "RETAIL") return <RetailLayout />;
+    if (businessType === "BAR")    return <BarLayout />;
+    if (businessType === "CAFE")   return <CafeLayout />;
   }
 
   // ── TPV PRINCIPAL ──────────────────────────────────────────────────────────
