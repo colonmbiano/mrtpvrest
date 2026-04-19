@@ -199,6 +199,13 @@ model Restaurant {
 // SUCURSAL (LOCATION) - EL LUGAR FÍSICO
 // ─────────────────────────────────────────────────────────────────────────────
 
+enum BusinessType {
+  RESTAURANT
+  RETAIL
+  BAR
+  CAFE
+}
+
 model Location {
   id           String     @id @default(cuid())
   restaurantId String
@@ -209,6 +216,9 @@ model Location {
   address      String?
   phone        String?
   isActive     Boolean    @default(true)
+
+  // Cerebro Adaptativo: tipo de negocio por sucursal
+  businessType BusinessType @default(RESTAURANT)
 
   // Configuración de Ticket por sucursal
   ticketConfig TicketConfig?
