@@ -3,11 +3,27 @@ const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
 const router = express.Router();
 
-// ── GET turno activo actual ───────────────────────────────────────────────
-router.get('/active', authenticate, async (req, res) => {
+// Gate: solo empleados/usuarios con permiso pueden abrir/cerrar turnos
+const requireCanManageShifts = (req, res, next) => {
+  if (req.user?.role === 'ADMIN' || req.user?.role === 'SUPER_ADMIN') return next();
+  if (req.user?.canManageShifts === true) return next();
+  return res.status(403).json({
+    error: 'No tienes permisos para gestionar turnos de caja',
+    code: 'CANNOT_MANAGE_SHIFTS',
+  });
+};
+
+// Asegura que la sucursal esté identificada en el request
+const requireLocation = (req, res, next) => {
+  if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+  next();
+};
+
+// ── GET turno activo actual de la sucursal ───────────────────────────────
+router.get('/active', authenticate, requireLocation, async (req, res) => {
   try {
     const shift = await prisma.cashShift.findFirst({
-      where: { isOpen: true },
+      where: { isOpen: true, locationId: req.locationId },
       include: { expenses: { orderBy: { createdAt: 'desc' } } },
       orderBy: { openedAt: 'desc' }
     });
@@ -15,19 +31,23 @@ router.get('/active', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── POST abrir turno ──────────────────────────────────────────────────────
-router.post('/open', authenticate, async (req, res) => {
+// ── POST abrir turno (solo en la sucursal del request) ───────────────────
+router.post('/open', authenticate, requireLocation, requireCanManageShifts, async (req, res) => {
   try {
     const { openingFloat, employeeId, employeeName } = req.body;
-    // Cerrar cualquier turno abierto antes
+
+    // Cerrar cualquier turno abierto previo en ESTA sucursal
     await prisma.cashShift.updateMany({
-      where: { isOpen: true },
+      where: { isOpen: true, locationId: req.locationId },
       data: { isOpen: false, closedAt: new Date() }
     });
+
     const shift = await prisma.cashShift.create({
       data: {
-        employeeId: employeeId || 'unknown',
-        employeeName: employeeName || 'Cajero',
+        locationId: req.locationId,
+        employeeId: employeeId || req.user.id,
+        employeeName: employeeName || req.user.name || 'Cajero',
+        openedById: req.user.id,
         openingFloat: openingFloat || 0,
         isOpen: true,
       },
@@ -37,24 +57,29 @@ router.post('/open', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── POST cerrar turno ─────────────────────────────────────────────────────
-router.post('/:id/close', authenticate, async (req, res) => {
+// ── POST cerrar turno (solo el de la sucursal del request) ───────────────
+router.post('/:id/close', authenticate, requireLocation, requireCanManageShifts, async (req, res) => {
   try {
     const { closingFloat, notes } = req.body;
     const shiftId = req.params.id;
 
-    // Obtener todas las órdenes del turno
-    const shift = await prisma.cashShift.findUnique({
-      where: { id: shiftId },
+    const shift = await prisma.cashShift.findFirst({
+      where: { id: shiftId, locationId: req.locationId },
       include: { expenses: true }
     });
-    if (!shift) return res.status(404).json({ error: 'Turno no encontrado' });
+    if (!shift) return res.status(404).json({ error: 'Turno no encontrado en esta sucursal' });
 
+    // Solo órdenes de este turno (scoped por shiftId con fallback temporal)
     const orders = await prisma.order.findMany({
       where: {
+        locationId: req.locationId,
         status: 'DELIVERED',
-        createdAt: { gte: shift.openedAt },
-        source: { in: ['TPV', 'WAITER', 'ONLINE'] }
+        OR: [
+          { shiftId: shift.id },
+          // Fallback para órdenes antiguas sin shiftId, dentro de la ventana del turno
+          { shiftId: null, createdAt: { gte: shift.openedAt } },
+        ],
+        source: { in: ['TPV', 'WAITER', 'ONLINE'] },
       }
     });
 
@@ -79,6 +104,7 @@ router.post('/:id/close', authenticate, async (req, res) => {
       data: {
         isOpen: false,
         closedAt: new Date(),
+        closedById: req.user.id,
         closingFloat: closingFloat || 0,
         notes: notes || null,
         ...totals,
@@ -92,10 +118,18 @@ router.post('/:id/close', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── POST agregar gasto al turno ───────────────────────────────────────────
-router.post('/:id/expenses', authenticate, async (req, res) => {
+// ── POST agregar gasto al turno (scoped a sucursal) ──────────────────────
+router.post('/:id/expenses', authenticate, requireLocation, async (req, res) => {
   try {
     const { description, amount, category } = req.body;
+
+    // Validar que el turno pertenece a esta sucursal
+    const shift = await prisma.cashShift.findFirst({
+      where: { id: req.params.id, locationId: req.locationId },
+      select: { id: true },
+    });
+    if (!shift) return res.status(404).json({ error: 'Turno no encontrado en esta sucursal' });
+
     const expense = await prisma.shiftExpense.create({
       data: {
         shiftId: req.params.id,
@@ -108,18 +142,26 @@ router.post('/:id/expenses', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── DELETE gasto ──────────────────────────────────────────────────────────
-router.delete('/expenses/:id', authenticate, async (req, res) => {
+// ── DELETE gasto (validado por sucursal del turno padre) ─────────────────
+router.delete('/expenses/:id', authenticate, requireLocation, async (req, res) => {
   try {
+    const expense = await prisma.shiftExpense.findUnique({
+      where: { id: req.params.id },
+      include: { shift: { select: { locationId: true } } },
+    });
+    if (!expense || expense.shift?.locationId !== req.locationId) {
+      return res.status(404).json({ error: 'Gasto no encontrado' });
+    }
     await prisma.shiftExpense.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── GET historial de turnos (admin) ──────────────────────────────────────
-router.get('/', authenticate, requireAdmin, async (req, res) => {
+// ── GET historial de turnos de la sucursal (admin) ───────────────────────
+router.get('/', authenticate, requireAdmin, requireLocation, async (req, res) => {
   try {
     const shifts = await prisma.cashShift.findMany({
+      where: { locationId: req.locationId },
       orderBy: { openedAt: 'desc' },
       take: 100,
       include: { expenses: true }
@@ -128,11 +170,11 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── GET un turno específico ───────────────────────────────────────────────
-router.get('/:id', authenticate, async (req, res) => {
+// ── GET un turno específico (scoped a sucursal) ──────────────────────────
+router.get('/:id', authenticate, requireLocation, async (req, res) => {
   try {
-    const shift = await prisma.cashShift.findUnique({
-      where: { id: req.params.id },
+    const shift = await prisma.cashShift.findFirst({
+      where: { id: req.params.id, locationId: req.locationId },
       include: { expenses: { orderBy: { createdAt: 'desc' } } }
     });
     if (!shift) return res.status(404).json({ error: 'No encontrado' });
