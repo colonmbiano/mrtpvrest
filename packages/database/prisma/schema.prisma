@@ -261,6 +261,7 @@ model User {
   orders        Order[]
   loyalty       LoyaltyAccount?
   refreshTokens RefreshToken[]
+  landingEdits  LandingContent[] @relation("LandingContentUpdater")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1024,4 +1025,18 @@ model KdsMessage {
   message   String
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LANDING CMS — singleton JSON blob, edited by SUPER_ADMIN
+// ─────────────────────────────────────────────────────────────────────────────
+
+model LandingContent {
+  id        String   @id @default("landing")   // always "landing"
+  content   Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+  updater   User?    @relation("LandingContentUpdater", fields: [updatedBy], references: [id])
+
+  @@map("landing_content")
 }
