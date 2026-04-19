@@ -80,7 +80,57 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
     res.json(emp);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// PUT actualizar empleado
+router.put('/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, phone, pin, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays, isActive,
+      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout } = req.body;
 
+    // 1. Verificar que el empleado exista en esta sucursal
+    const existing = await prisma.employee.findUnique({
+      where: { id: req.params.id, locationId: req.locationId }
+    });
+    if (!existing) return res.status(404).json({ error: 'Empleado no encontrado' });
+
+    // 2. Preparar los datos a actualizar
+    const updateData = {
+      name, phone, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays,
+      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout
+    };
+
+    // Actualizar estado activo/inactivo si se envía
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    // 3. Manejar el cambio de PIN de forma segura (si viene en el body)
+    if (pin && pin.trim() !== '') {
+      if (!/^\d{4,6}$/.test(pin)) return res.status(400).json({ error: 'El PIN debe ser numérico de 4 a 6 dígitos' });
+      
+      // Evitar PINes duplicados en la misma marca (ignorando al empleado actual)
+      const sameRestaurantEmps = await prisma.employee.findMany({
+        where: { 
+          location: { restaurantId: req.user?.restaurantId || req.restaurantId },
+          id: { not: req.params.id } 
+        },
+        select: { pin: true }
+      });
+      
+      for (const e of sameRestaurantEmps) {
+        const isDup = e.pin.startsWith('$2') ? await bcrypt.compare(pin, e.pin) : e.pin === pin;
+        if (isDup) return res.status(400).json({ error: 'Este PIN ya está en uso' });
+      }
+      
+      updateData.pin = await bcrypt.hash(pin, 10);
+    }
+
+    // 4. Guardar en BD
+    const emp = await prisma.employee.update({
+      where: { id: req.params.id },
+      data: updateData
+    });
+
+    res.json(emp);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // POST login con PIN
 router.post('/login', async (req, res) => {
   try {
