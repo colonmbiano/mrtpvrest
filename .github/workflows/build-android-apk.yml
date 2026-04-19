@@ -53,6 +53,8 @@ jobs:
       - name: Build Next.js static export + Capacitor sync
         working-directory: apps/tpv
         run: pnpm run build:apk
+        env:
+          NEXT_PUBLIC_API_URL: https://master-burguers-production.up.railway.app
 
       - name: Gradle cache
         uses: actions/cache@v4
