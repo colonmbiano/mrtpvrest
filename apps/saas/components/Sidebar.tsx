@@ -64,80 +64,112 @@ const sysItems = [
   { href: "/api-keys",  label: "API Keys",    icon: <IconKey /> },
 ];
 
+import { useState } from "react";
+
+// ... (iconos se mantienen igual)
+
 export default function Sidebar() {
   const pathname = usePathname();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const toggleMenu = () => setIsOpen(!isOpen);
+  const closeMenu = () => setIsOpen(false);
 
   return (
-    <aside className="db-sidebar">
-      {/* ── Logo ── */}
-      <div className="db-logo">
-        <div className="db-logo-mark">
+    <>
+      {/* ── Mobile Header ── */}
+      <div className="md:hidden flex items-center justify-between p-4 bg-[var(--surf)] border-b border-[var(--border)] sticky top-0 z-50">
+        <div className="db-logo-mark !m-0 !text-xl">
           MRTPV<span>REST</span>
         </div>
-        <div className="db-logo-sub">Global Dashboard</div>
-        <div style={{
-          marginTop: 8,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 5,
-          padding: '3px 8px',
-          borderRadius: 6,
-          fontSize: 9,
-          fontWeight: 700,
-          letterSpacing: '0.5px',
-          textTransform: 'uppercase' as const,
-          background: 'var(--orange-dim)',
-          color: 'var(--orange)',
-          border: '1px solid var(--orange-glow)',
-        }}>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--orange)', display: 'inline-block' }} />
-          SaaS Central
-        </div>
-      </div>
-
-      {/* ── Navigation ── */}
-      <nav className="db-nav">
-        {navItems.map((item) => (
-          <Link key={item.href} href={item.href}
-            className={`db-nav-item ${pathname === item.href ? "active" : ""}`}>
-            {item.icon}
-            {item.label}
-          </Link>
-        ))}
-
-        <div className="db-nav-section">Negocio</div>
-        {negoItems.map((item) => (
-          <Link key={item.href} href={item.href}
-            className={`db-nav-item ${pathname === item.href ? "active" : ""}`}>
-            {item.icon}
-            {item.label}
-          </Link>
-        ))}
-
-        <div className="db-nav-section">Sistema</div>
-        {sysItems.map((item) => (
-          <Link key={item.href} href={item.href}
-            className={`db-nav-item ${pathname === item.href ? "active" : ""}`}>
-            {item.icon}
-            {item.label}
-          </Link>
-        ))}
-      </nav>
-
-      {/* ── Footer ── */}
-      <div className="db-sidebar-footer">
-        <div className="db-user-pill">
-          <div className="db-avatar">SA</div>
-          <div className="db-user-info">
-            <p>Super Admin</p>
-            <span>Acceso global</span>
-          </div>
-        </div>
-        <button onClick={logout} className="db-logout-btn">
-          <IconLogOut />
-          Cerrar sesión
+        <button onClick={toggleMenu} className="p-2 text-[var(--text)]">
+          {isOpen ? (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          ) : (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          )}
         </button>
       </div>
-    </aside>
+
+      {/* ── Overlay ── */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={closeMenu}
+        />
+      )}
+
+      <aside className={`db-sidebar ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 fixed md:sticky top-0 left-0 h-screen z-50`}>
+        {/* ── Logo ── */}
+        <div className="db-logo hidden md:block">
+          <div className="db-logo-mark">
+            MRTPV<span>REST</span>
+          </div>
+          <div className="db-logo-sub">Global Dashboard</div>
+          <div style={{
+            marginTop: 8,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '3px 8px',
+            borderRadius: 6,
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: '0.5px',
+            textTransform: 'uppercase' as const,
+            background: 'var(--orange-dim)',
+            color: 'var(--orange)',
+            border: '1px solid var(--orange-glow)',
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--orange)', display: 'inline-block' }} />
+            SaaS Central
+          </div>
+        </div>
+
+        {/* ── Navigation ── */}
+        <nav className="db-nav">
+          {navItems.map((item) => (
+            <Link key={item.href} href={item.href} onClick={closeMenu}
+              className={`db-nav-item ${pathname === item.href ? "active" : ""}`}>
+              {item.icon}
+              {item.label}
+            </Link>
+          ))}
+
+          <div className="db-nav-section">Negocio</div>
+          {negoItems.map((item) => (
+            <Link key={item.href} href={item.href} onClick={closeMenu}
+              className={`db-nav-item ${pathname === item.href ? "active" : ""}`}>
+              {item.icon}
+              {item.label}
+            </Link>
+          ))}
+
+          <div className="db-nav-section">Sistema</div>
+          {sysItems.map((item) => (
+            <Link key={item.href} href={item.href} onClick={closeMenu}
+              className={`db-nav-item ${pathname === item.href ? "active" : ""}`}>
+              {item.icon}
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+
+        {/* ── Footer ── */}
+        <div className="db-sidebar-footer">
+          <div className="db-user-pill">
+            <div className="db-avatar">SA</div>
+            <div className="db-user-info">
+              <p>Super Admin</p>
+              <span>Acceso global</span>
+            </div>
+          </div>
+          <button onClick={() => { logout(); closeMenu(); }} className="db-logout-btn">
+            <IconLogOut />
+            Cerrar sesión
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }
