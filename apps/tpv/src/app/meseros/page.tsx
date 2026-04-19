@@ -3,6 +3,9 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import api from "@/lib/api";
 import { useRouter } from "next/navigation";
 
+const EMPLOYEE_TOKEN_KEY = "tpv-employee-token";
+const EMPLOYEE_DATA_KEY = "tpv-employee";
+
 const STATUS_LABELS: Record<string,string> = {
   PENDING:"Pendiente", CONFIRMED:"Confirmado", PREPARING:"Preparando",
   READY:"Listo ✅", DELIVERED:"Entregado", CANCELLED:"Cancelado",
@@ -22,6 +25,7 @@ export default function WaiterAppTPV() {
   const [shift, setShift]             = useState<any>(null);
   const [pin, setPin]                 = useState("");
   const [pinError, setPinError]       = useState("");
+  const [guardMessage, setGuardMessage] = useState("");
   const [orders, setOrders]           = useState<any[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
@@ -45,7 +49,34 @@ export default function WaiterAppTPV() {
     const restId = localStorage.getItem("restaurantId");
     const locId = localStorage.getItem("locationId");
     if (!restId || !locId) {
-      router.push("/setup");
+      router.replace("/setup");
+      return;
+    }
+
+    const storedToken = localStorage.getItem(EMPLOYEE_TOKEN_KEY) || localStorage.getItem("accessToken");
+    const storedEmployee = localStorage.getItem(EMPLOYEE_DATA_KEY);
+
+    if (!storedToken || !storedEmployee) {
+      setGuardMessage("Primero desbloquea la terminal en TPV con el PIN del mesero.");
+      return;
+    }
+
+    try {
+      const parsedEmployee = JSON.parse(storedEmployee);
+      if (parsedEmployee?.role && parsedEmployee.role !== "WAITER") {
+        setGuardMessage("La sesion activa no pertenece a un mesero.");
+        return;
+      }
+
+      localStorage.setItem("accessToken", storedToken);
+      setWaiter(parsedEmployee);
+      setScreen("home");
+
+      api.get(`/api/waiters/${parsedEmployee.id}/shift`)
+        .then(({ data }) => setShift(data))
+        .catch(() => setShift(null));
+    } catch {
+      setGuardMessage("No pudimos recuperar la sesion del mesero. Vuelve al TPV e intenta otra vez.");
     }
   }, [router]);
 
@@ -94,7 +125,11 @@ export default function WaiterAppTPV() {
   async function endShift() {
     if (!confirm("¿Terminar turno?")) return;
     await api.post(`/api/waiters/${waiter.id}/shift/end`);
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem(EMPLOYEE_TOKEN_KEY);
+    localStorage.removeItem(EMPLOYEE_DATA_KEY);
     setShift(null); setWaiter(null); setScreen("login"); setPin("");
+    router.replace("/");
   }
 
   // ── TICKET ──
@@ -135,6 +170,22 @@ export default function WaiterAppTPV() {
   }
 
   if (!mounted) return null;
+
+  if (guardMessage) return (
+    <div className="min-h-screen flex items-center justify-center bg-black p-8 font-syne text-white">
+      <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#111] p-8 text-center shadow-2xl">
+        <p className="text-xs font-black uppercase tracking-[0.25em] text-orange-400">Meseros bloqueado</p>
+        <h1 className="mt-4 text-3xl font-black">Sesion requerida</h1>
+        <p className="mt-4 text-sm leading-6 text-white/60">{guardMessage}</p>
+        <button
+          onClick={() => router.replace("/")}
+          className="mt-8 w-full rounded-2xl bg-orange-500 px-6 py-4 text-sm font-black uppercase tracking-[0.18em] text-white"
+        >
+          Volver al TPV
+        </button>
+      </div>
+    </div>
+  );
 
   // ── LOGIN SCREEN ──
   if (screen === "login") return (
