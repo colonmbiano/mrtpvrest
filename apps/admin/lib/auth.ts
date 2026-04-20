@@ -13,8 +13,12 @@ export function getToken() {
 
 export function logout() {
   localStorage.removeItem("accessToken");
+  localStorage.removeItem("refreshToken");
   localStorage.removeItem("user");
   localStorage.removeItem("mb-role");
+  localStorage.removeItem("restaurantId");
+  localStorage.removeItem("locationId");
+  localStorage.removeItem("mb-accent");
   document.cookie = "mb-role=; path=/; max-age=0; SameSite=Lax";
   window.location.href = "/login";
 }
