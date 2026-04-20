@@ -77,6 +77,48 @@ router.get('/top-items', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al obtener top platillos' }) }
 })
 
+// GET /api/reports/top-products?period=HOY|7D|30D|AÑO&limit=5
+// Usado por el widget "Top del día" del admin dashboard.
+router.get('/top-products', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const period = String(req.query.period || 'HOY').toUpperCase();
+    const limit  = Math.min(parseInt(req.query.limit) || 5, 20);
+    const locationId = req.headers['x-location-id'] || req.query.locationId || undefined;
+
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    if (period === '7D')  from.setDate(from.getDate() - 6);
+    if (period === '30D') from.setDate(from.getDate() - 29);
+    if (period === 'AÑO' || period === 'ANIO' || period === 'ANO') {
+      from.setMonth(0, 1);
+    }
+
+    const orderWhere = {
+      restaurantId,
+      status: { not: 'CANCELLED' },
+      createdAt: { gte: from },
+      ...(locationId ? { locationId } : {}),
+    };
+
+    const items = await prisma.orderItem.groupBy({
+      by: ['name'],
+      where: { order: orderWhere },
+      _sum: { quantity: true, subtotal: true },
+      orderBy: { _sum: { quantity: 'desc' } },
+      take: limit,
+    });
+
+    res.json(items.map(i => ({
+      name: i.name,
+      quantity: i._sum.quantity || 0,
+      total: i._sum.subtotal || 0,
+    })));
+  } catch (e) { res.status(500).json({ error: 'Error al obtener top productos' }); }
+});
+
 // GET /api/reports/by-day?days=30 — ventas agrupadas por día
 router.get('/by-day', authenticate, requireAdmin, async (req, res) => {
   try {
