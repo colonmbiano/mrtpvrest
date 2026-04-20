@@ -102,6 +102,7 @@ export default function RestaurantDashboard() {
   const [userName,    setUserName]    = useState("Admin");
   const [locationName, setLocationName] = useState("");
   const [locationsCount, setLocationsCount] = useState<number | null>(null);
+  const [salesByDay, setSalesByDay] = useState<{ date: string; revenue: number; orders: number }[]>([]);
   const router = useRouter();
 
   const prevIds  = useRef<Set<string>>(new Set());
@@ -160,6 +161,13 @@ export default function RestaurantDashboard() {
     } catch { setTopProducts([]); }
   }, []);
 
+  const fetchSalesByDay = useCallback(async () => {
+    try {
+      const { data } = await api.get("/api/reports/by-day", { params: { days: 7 } });
+      setSalesByDay(Array.isArray(data) ? data : []);
+    } catch { setSalesByDay([]); }
+  }, []);
+
   useEffect(() => {
     const u = getUser();
     const display = u?.name
@@ -183,10 +191,10 @@ export default function RestaurantDashboard() {
   }, []);
 
   useEffect(() => {
-    fetchOrders(); fetchShift(); fetchStaff(); fetchInventoryAlerts();
+    fetchOrders(); fetchShift(); fetchStaff(); fetchInventoryAlerts(); fetchSalesByDay();
     const t = setInterval(fetchOrders, 15000);
     return () => clearInterval(t);
-  }, [fetchOrders, fetchShift, fetchStaff, fetchInventoryAlerts]);
+  }, [fetchOrders, fetchShift, fetchStaff, fetchInventoryAlerts, fetchSalesByDay]);
 
   useEffect(() => {
     fetchTopProducts(period);
@@ -331,10 +339,13 @@ export default function RestaurantDashboard() {
             <h1 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 32, color: V.txHi, letterSpacing: "-.02em", lineHeight: 1.1 }}>
               {greeting}, {userName}.
             </h1>
-            <div style={{ fontSize: 13, color: V.txMut, marginTop: 4, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 13, color: V.txMut, marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ textTransform: "capitalize" }}>{dateLabel}</span>
               {locationName && <><span>·</span><span>{locationName}</span></>}
               {shift && <><span>·</span><span style={{ color: "var(--green, #10b981)" }}>● Turno activo</span></>}
+              <span style={{ marginLeft: "auto", fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, opacity: 0.7 }}>
+                build {(process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || "dev").slice(0, 7)}
+              </span>
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -398,66 +409,76 @@ export default function RestaurantDashboard() {
 
         {/* ── Chart + Live orders ── */}
         <div style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr", gap: 14, marginBottom: 14 }}>
-          {/* Sales chart */}
+          {/* Sales chart — real data from /api/reports/by-day?days=7 */}
           <div style={card}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <div>
-                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi, letterSpacing: "-.01em" }}>Ventas por día</div>
-                <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>Últimos 7 días · $72,840 acumulado</div>
-              </div>
-              <div style={{ display: "flex", gap: 18 }}>
-                {[["#9472ff","Esta semana"],["#6e6e92","Semana ant."]].map(([c, l]) => (
-                  <div key={l} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: V.txMid }}>
-                    <div style={{ width: 8, height: 8, borderRadius: 2, background: c }} />
-                    {l}
+            {(() => {
+              const total = salesByDay.reduce((s, d) => s + (d.revenue || 0), 0);
+              const hasData = salesByDay.some(d => (d.revenue || 0) > 0);
+              const max = Math.max(1, ...salesByDay.map(d => d.revenue || 0));
+              const DOW = ["DOM","LUN","MAR","MIE","JUE","VIE","SÁB"];
+              const n = salesByDay.length;
+              const pts: [number, number][] = salesByDay.map((d, i) => {
+                const x = 90 + (n > 1 ? i * (660 / (n - 1)) : 330);
+                const y = 220 - ((d.revenue || 0) / max) * 170;
+                return [x, y];
+              });
+              const linePath = pts.length
+                ? `M ${pts.map(p => `${p[0]},${p[1]}`).join(" L ")}`
+                : "";
+              const fillPath = pts.length
+                ? `${linePath} L ${pts[pts.length - 1]![0]},220 L ${pts[0]![0]},220 Z`
+                : "";
+              return (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                    <div>
+                      <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi, letterSpacing: "-.01em" }}>Ventas por día</div>
+                      <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>Últimos 7 días · {fmtMoney(total)} acumulado</div>
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ position: "relative", height: 260 }}>
-              <svg viewBox="0 0 800 260" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }}>
-                <defs>
-                  <linearGradient id="ch-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#9472ff" stopOpacity=".35" />
-                    <stop offset="100%" stopColor="#9472ff" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <g stroke="rgba(255,255,255,.06)" strokeWidth="1">
-                  <line x1="40" y1="40"  x2="780" y2="40"  />
-                  <line x1="40" y1="100" x2="780" y2="100" />
-                  <line x1="40" y1="160" x2="780" y2="160" />
-                  <line x1="40" y1="220" x2="780" y2="220" />
-                </g>
-                <g fontFamily="DM Mono" fontSize="10" fill="#9494b8">
-                  <text x="32" y="44"  textAnchor="end">$15k</text>
-                  <text x="32" y="104" textAnchor="end">$10k</text>
-                  <text x="32" y="164" textAnchor="end">$5k</text>
-                  <text x="32" y="224" textAnchor="end">$0</text>
-                </g>
-                <g fontFamily="DM Mono" fontSize="10" fill="#9494b8">
-                  {["LUN","MAR","MIE","JUE","VIE","SÁB","DOM"].map((d, i) => (
-                    <text key={d} x={90 + i * 110} y="244" textAnchor="middle">{d}</text>
-                  ))}
-                </g>
-                <path d="M 90,168 L 200,158 L 310,148 L 420,132 L 530,108 L 640,88 L 750,128" stroke="#6e6e92" strokeWidth="1.5" fill="none" strokeDasharray="4 4" />
-                {([[90,168],[200,158],[310,148],[420,132],[530,108],[640,88],[750,128]] as [number,number][]).map(([x,y], i) => (
-                  <circle key={i} cx={x} cy={y} r="2.5" fill="#6e6e92" />
-                ))}
-                <path d="M 90,152 L 200,140 L 310,120 L 420,108 L 530,82 L 640,58 L 750,74 L 750,220 L 90,220 Z" fill="url(#ch-grad)" />
-                <path d="M 90,152 L 200,140 L 310,120 L 420,108 L 530,82 L 640,58 L 750,74" stroke="#9472ff" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                {([[90,152],[200,140],[310,120],[420,108],[530,82],[750,74]] as [number,number][]).map(([x,y], i) => (
-                  <circle key={i} cx={x} cy={y} r="4" fill="#9472ff" />
-                ))}
-                <circle cx="640" cy="58" r="5" fill="#fff" stroke="#9472ff" strokeWidth="2.5" />
-                <g transform="translate(580, 20)">
-                  <rect width="130" height="44" rx="8" fill="#15152a" stroke="rgba(124,58,237,.3)" />
-                  <text x="12" y="18" fontFamily="DM Mono" fontSize="10" fill="#9494b8" letterSpacing=".1em">SÁB · HOY</text>
-                  <text x="12" y="36" fontFamily="Syne" fontSize="15" fontWeight="800" fill="#fff">
-                    {ventas > 0 ? fmtMoney(ventas) : "$12,480"}
-                  </text>
-                </g>
-              </svg>
-            </div>
+                  <div style={{ position: "relative", height: 260 }}>
+                    {!hasData && (
+                      <div style={{
+                        position: "absolute", inset: 0, display: "grid", placeItems: "center",
+                        color: V.txMut, fontSize: 13, textAlign: "center", zIndex: 1,
+                      }}>
+                        Aún no hay ventas en los últimos 7 días.
+                      </div>
+                    )}
+                    <svg viewBox="0 0 800 260" preserveAspectRatio="none" style={{ width: "100%", height: "100%", opacity: hasData ? 1 : 0.25 }}>
+                      <defs>
+                        <linearGradient id="ch-grad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#9472ff" stopOpacity=".35" />
+                          <stop offset="100%" stopColor="#9472ff" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <g stroke="rgba(255,255,255,.06)" strokeWidth="1">
+                        <line x1="40" y1="50"  x2="780" y2="50"  />
+                        <line x1="40" y1="135" x2="780" y2="135" />
+                        <line x1="40" y1="220" x2="780" y2="220" />
+                      </g>
+                      <g fontFamily="DM Mono" fontSize="10" fill="#9494b8">
+                        <text x="32" y="54"  textAnchor="end">{fmtMoney(max)}</text>
+                        <text x="32" y="139" textAnchor="end">{fmtMoney(Math.round(max / 2))}</text>
+                        <text x="32" y="224" textAnchor="end">$0</text>
+                      </g>
+                      <g fontFamily="DM Mono" fontSize="10" fill="#9494b8">
+                        {salesByDay.map((d, i) => {
+                          const x = 90 + (n > 1 ? i * (660 / (n - 1)) : 330);
+                          const dow = DOW[new Date(d.date + "T00:00:00").getDay()] ?? "";
+                          return <text key={d.date} x={x} y="244" textAnchor="middle">{dow}</text>;
+                        })}
+                      </g>
+                      {hasData && fillPath && <path d={fillPath} fill="url(#ch-grad)" />}
+                      {hasData && linePath && <path d={linePath} stroke="#9472ff" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
+                      {hasData && pts.map(([x, y], i) => (
+                        <circle key={i} cx={x} cy={y} r="4" fill="#9472ff" />
+                      ))}
+                    </svg>
+                  </div>
+                </>
+              );
+            })()}
           </div>
 
           {/* Live orders */}
