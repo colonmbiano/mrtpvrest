@@ -1,6 +1,11 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
+
+type TopProduct = { name: string; quantity: number; total: number };
+type StaffMember = { id: string; name: string; role: string; tables: string[]; startAt: string };
+type InventoryAlert = { id: string; name: string; unit: string; stock: number; minStock: number };
 
 type Order = {
   id: string;
@@ -63,29 +68,6 @@ const CHAN_COLORS: Record<string, string> = {
 };
 const DONUT_DEFAULTS = ["#9472ff", "#7c3aed", "#b89eff", "#dcd0ff"];
 
-const TOP_ITEMS = [
-  { rank: "01", name: "Tacos al pastor",     pct: "100%", val: "$2,880", cnt: "36 ×" },
-  { rank: "02", name: "Horchata 500ml",       pct: "68%",  val: "$1,960", cnt: "49 ×" },
-  { rank: "03", name: "Sopa de tortilla",     pct: "54%",  val: "$1,520", cnt: "16 ×" },
-  { rank: "04", name: "Quesadilla champiñón", pct: "42%",  val: "$1,200", cnt: "16 ×" },
-  { rank: "05", name: "Flan casero",          pct: "28%",  val: "$820",   cnt: "14 ×" },
-];
-
-const STAFF = [
-  { init: "CR", grad: "135deg,#7c3aed,#ec4899", name: "Carlos Ruiz",   meta: "GERENTE · 6h 18m",           dot: "var(--green, #10b981)" },
-  { init: "MG", grad: "135deg,#f59e0b,#dc2626", name: "María García",  meta: "MESERA · 4h 02m · M2, M6",   dot: "var(--green, #10b981)" },
-  { init: "JT", grad: "135deg,#10b981,#047857", name: "José Torres",   meta: "COCINA · 6h 18m",            dot: "var(--green, #10b981)" },
-  { init: "JL", grad: "135deg,#3b82f6,#1e40af", name: "Juan López",    meta: "REPARTO · 2h 40m · En ruta", dot: "#b89eff" },
-  { init: "PS", grad: "135deg,#a855f7,#6b21a8", name: "Pedro Sánchez", meta: "CAJA · 6h 18m · $18,420",   dot: "var(--green, #10b981)" },
-];
-
-const INV_ALERTS = [
-  { name: "Trompo pastor",    sku: "SKU-0184", pct: 12, val: "1.2 kg", min: "MIN 10kg", color: "var(--red, #ef4444)"  },
-  { name: "Tortilla de maíz", sku: "SKU-0091", pct: 22, val: "220 pz", min: "MIN 1000", color: "var(--red, #ef4444)"  },
-  { name: "Piña",             sku: "SKU-0203", pct: 35, val: "3.5 kg", min: "MIN 10kg", color: "var(--amber, #f59e0b)" },
-  { name: "Queso panela",     sku: "SKU-0047", pct: 42, val: "2.1 kg", min: "MIN 5kg",  color: "var(--amber, #f59e0b)" },
-];
-
 const MOCK_ORDERS: Order[] = [
   { id: "5821", orderNumber: 5821, status: "READY" as Order["status"],      total: 260, createdAt: new Date().toISOString(), items: [{ quantity: 2, menuItem: { name: "Pastor" } }], orderType: "MESA", tableNumber: "2" },
   { id: "5822", orderNumber: 5822, status: "PREPARING" as Order["status"],  total: 420, createdAt: new Date().toISOString(), items: [{ quantity: 3, menuItem: { name: "items" } }],  orderType: "DELIVERY" },
@@ -120,6 +102,11 @@ export default function RestaurantDashboard() {
   const [now, setNow]         = useState<Date | null>(null);
   const [shift, setShift]     = useState<any>(null);
   const [period, setPeriod]   = useState<Period>("7D");
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [activeStaff, setActiveStaff] = useState<StaffMember[]>([]);
+  const [invAlerts,   setInvAlerts]   = useState<InventoryAlert[]>([]);
+  const [userName,    setUserName]    = useState("Admin");
+  const [locationName, setLocationName] = useState("");
 
   const prevIds  = useRef<Set<string>>(new Set());
   const audioCtx = useRef<AudioContext | null>(null);
@@ -160,11 +147,50 @@ export default function RestaurantDashboard() {
     catch { setShift(null); }
   }, []);
 
+  const fetchStaff = useCallback(async () => {
+    try { const { data } = await api.get("/api/shifts/staff-active"); setActiveStaff(Array.isArray(data) ? data : []); }
+    catch { setActiveStaff([]); }
+  }, []);
+
+  const fetchInventoryAlerts = useCallback(async () => {
+    try { const { data } = await api.get("/api/inventory/alerts"); setInvAlerts(Array.isArray(data) ? data : []); }
+    catch { setInvAlerts([]); }
+  }, []);
+
+  const fetchTopProducts = useCallback(async (p: Period) => {
+    try {
+      const { data } = await api.get("/api/reports/top-products", { params: { period: p, limit: 5 } });
+      setTopProducts(Array.isArray(data) ? data : []);
+    } catch { setTopProducts([]); }
+  }, []);
+
   useEffect(() => {
-    fetchOrders(); fetchShift();
+    const u = getUser();
+    const display = u?.name
+      ? String(u.name).split(" ")[0]
+      : u?.email
+        ? String(u.email).split("@")[0]
+        : null;
+    if (display) setUserName(display);
+    (async () => {
+      try {
+        const { data } = await api.get("/api/admin/locations");
+        const activeId = typeof window !== "undefined" ? localStorage.getItem("locationId") : null;
+        const active = Array.isArray(data) ? (data.find((l: any) => l.id === activeId) || data[0]) : null;
+        if (active?.name) setLocationName(active.name);
+      } catch { /* empty */ }
+    })();
+  }, []);
+
+  useEffect(() => {
+    fetchOrders(); fetchShift(); fetchStaff(); fetchInventoryAlerts();
     const t = setInterval(fetchOrders, 15000);
     return () => clearInterval(t);
-  }, [fetchOrders, fetchShift]);
+  }, [fetchOrders, fetchShift, fetchStaff, fetchInventoryAlerts]);
+
+  useEffect(() => {
+    fetchTopProducts(period);
+  }, [period, fetchTopProducts]);
 
   // Derived stats
   const todayStr   = new Date().toDateString();
@@ -268,12 +294,11 @@ export default function RestaurantDashboard() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 20, marginBottom: 24, borderBottom: `1px solid ${V.bd1}` }}>
           <div>
             <h1 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 32, color: V.txHi, letterSpacing: "-.02em", lineHeight: 1.1 }}>
-              {greeting}, Carlos.
+              {greeting}, {userName}.
             </h1>
             <div style={{ fontSize: 13, color: V.txMut, marginTop: 4, display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ textTransform: "capitalize" }}>{dateLabel}</span>
-              <span>·</span>
-              <span>Cantina del Valle · Polanco</span>
+              {locationName && <><span>·</span><span>{locationName}</span></>}
               {shift && <><span>·</span><span style={{ color: "var(--green, #10b981)" }}>● Turno activo</span></>}
             </div>
           </div>
@@ -449,21 +474,32 @@ export default function RestaurantDashboard() {
               </div>
               <button style={{ display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: V.surf1, border: `1px solid ${V.bd1}`, color: V.txMid, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Ver todo →</button>
             </div>
-            {TOP_ITEMS.map((it, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "24px 1fr auto", gap: 12, alignItems: "center", padding: "10px 0", borderTop: i > 0 ? `1px solid ${V.bd1}` : "none" }}>
-                <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 14, color: V.txDim, textAlign: "center" }}>{it.rank}</span>
-                <div>
-                  <div style={{ fontSize: 13, color: V.tx, fontWeight: 500 }}>{it.name}</div>
-                  <div style={{ height: 3, background: V.surf2, borderRadius: 2, overflow: "hidden", marginTop: 4 }}>
-                    <div style={{ height: "100%", width: it.pct, background: "linear-gradient(90deg,#7c3aed,#b89eff)", borderRadius: 2 }} />
-                  </div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: V.txHi, fontWeight: 600 }}>{it.val}</div>
-                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txMut }}>{it.cnt}</div>
-                </div>
+            {topProducts.length === 0 && (
+              <div style={{ padding: "24px 0", textAlign: "center", color: V.txMut, fontSize: 12 }}>
+                Sin ventas registradas en este período.
               </div>
-            ))}
+            )}
+            {(() => {
+              const maxQty = topProducts.reduce((m, it) => Math.max(m, it.quantity || 0), 0) || 1;
+              return topProducts.map((it, i) => {
+                const pct = Math.round(((it.quantity || 0) / maxQty) * 100);
+                return (
+                  <div key={`${it.name}-${i}`} style={{ display: "grid", gridTemplateColumns: "24px 1fr auto", gap: 12, alignItems: "center", padding: "10px 0", borderTop: i > 0 ? `1px solid ${V.bd1}` : "none" }}>
+                    <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 14, color: V.txDim, textAlign: "center" }}>{String(i + 1).padStart(2, "0")}</span>
+                    <div>
+                      <div style={{ fontSize: 13, color: V.tx, fontWeight: 500 }}>{it.name}</div>
+                      <div style={{ height: 3, background: V.surf2, borderRadius: 2, overflow: "hidden", marginTop: 4 }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: "linear-gradient(90deg,#7c3aed,#b89eff)", borderRadius: 2 }} />
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: V.txHi, fontWeight: 600 }}>{fmtMoney(it.total || 0)}</div>
+                      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txMut }}>{it.quantity || 0} ×</div>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
 
           {/* Hourly distribution */}
@@ -522,25 +558,54 @@ export default function RestaurantDashboard() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <div>
                 <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi }}>Turno actual</div>
-                <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>5 personas · abierto 11:00</div>
+                <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>
+                  {activeStaff.length > 0
+                    ? `${activeStaff.length} ${activeStaff.length === 1 ? "persona" : "personas"} · abierto ${new Date(activeStaff[0].startAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}`
+                    : "Sin personal activo"}
+                </div>
               </div>
-              <span style={{ padding: "3px 8px", borderRadius: 999, fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".06em", display: "inline-flex", alignItems: "center", gap: 5, background: V.okS, color: V.ok }}>
+              <span style={{ padding: "3px 8px", borderRadius: 999, fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".06em", display: "inline-flex", alignItems: "center", gap: 5, background: activeStaff.length > 0 ? V.okS : V.surf2, color: activeStaff.length > 0 ? V.ok : V.txMut }}>
                 <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor" }} />
-                ACTIVO
+                {activeStaff.length > 0 ? "ACTIVO" : "SIN TURNO"}
               </span>
             </div>
-            {STAFF.map((s, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "32px 1fr auto", gap: 10, alignItems: "center", padding: "8px 0", borderTop: i > 0 ? `1px solid ${V.bd1}` : "none" }}>
-                <div style={{ width: 32, height: 32, borderRadius: 10, background: `linear-gradient(${s.grad})`, color: "#fff", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 12, display: "grid", placeItems: "center" }}>
-                  {s.init}
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: V.tx, fontWeight: 500 }}>{s.name}</div>
-                  <div style={{ fontSize: 10, color: V.txMut, fontFamily: "'DM Mono',monospace" }}>{s.meta}</div>
-                </div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: s.dot }}>●</div>
+            {activeStaff.length === 0 && (
+              <div style={{ padding: "24px 0", textAlign: "center", color: V.txMut, fontSize: 12 }}>
+                Abre un turno en la TPV para ver el personal activo aquí.
               </div>
-            ))}
+            )}
+            {activeStaff.map((s, i) => {
+              const initials = s.name.split(" ").filter(Boolean).map(p => p[0]).slice(0, 2).join("").toUpperCase() || "??";
+              const GRAD_BY_ROLE: Record<string, string> = {
+                MANAGER:  "135deg,#7c3aed,#ec4899",
+                GERENTE:  "135deg,#7c3aed,#ec4899",
+                WAITER:   "135deg,#f59e0b,#dc2626",
+                MESERA:   "135deg,#f59e0b,#dc2626",
+                MESERO:   "135deg,#f59e0b,#dc2626",
+                KITCHEN:  "135deg,#10b981,#047857",
+                COCINA:   "135deg,#10b981,#047857",
+                DELIVERY: "135deg,#3b82f6,#1e40af",
+                REPARTO:  "135deg,#3b82f6,#1e40af",
+                CASHIER:  "135deg,#a855f7,#6b21a8",
+                CAJA:     "135deg,#a855f7,#6b21a8",
+              };
+              const grad = GRAD_BY_ROLE[s.role?.toUpperCase?.() || ""] || "135deg,#6b7280,#374151";
+              const mins = Math.max(0, Math.floor((Date.now() - new Date(s.startAt).getTime()) / 60000));
+              const dur = `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m`;
+              const tables = s.tables?.length ? ` · ${s.tables.join(", ")}` : "";
+              return (
+                <div key={s.id} style={{ display: "grid", gridTemplateColumns: "32px 1fr auto", gap: 10, alignItems: "center", padding: "8px 0", borderTop: i > 0 ? `1px solid ${V.bd1}` : "none" }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 10, background: `linear-gradient(${grad})`, color: "#fff", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 12, display: "grid", placeItems: "center" }}>
+                    {initials}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: V.tx, fontWeight: 500 }}>{s.name}</div>
+                    <div style={{ fontSize: 10, color: V.txMut, fontFamily: "'DM Mono',monospace" }}>{(s.role || "").toUpperCase()} · {dur}{tables}</div>
+                  </div>
+                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: V.ok }}>●</div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -605,26 +670,39 @@ export default function RestaurantDashboard() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <div>
                 <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: "var(--red, #ef4444)" }}>⚠ Inventario bajo</div>
-                <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>4 ingredientes críticos</div>
+                <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>
+                  {invAlerts.length > 0
+                    ? `${invAlerts.length} ${invAlerts.length === 1 ? "ingrediente crítico" : "ingredientes críticos"}`
+                    : "Stock en orden"}
+                </div>
               </div>
               <button style={{ display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: V.errS, border: "1px solid rgba(239,68,68,.3)", color: "var(--red, #ef4444)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Reponer</button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {INV_ALERTS.map((item, i) => (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 60px auto", gap: 10, alignItems: "center", padding: "10px 12px", background: V.surf2, borderRadius: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: V.tx }}>{item.name}</div>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txMut, letterSpacing: ".08em" }}>{item.sku}</div>
-                  </div>
-                  <div style={{ height: 4, background: V.surf3, borderRadius: 2, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${item.pct}%`, background: item.color }} />
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 14, fontWeight: 800, color: item.color }}>{item.val}</div>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: V.txMut }}>{item.min}</div>
-                  </div>
+              {invAlerts.length === 0 && (
+                <div style={{ padding: "24px 0", textAlign: "center", color: V.txMut, fontSize: 12 }}>
+                  No hay ingredientes por debajo del mínimo.
                 </div>
-              ))}
+              )}
+              {invAlerts.slice(0, 4).map((item) => {
+                const pct = item.minStock > 0 ? Math.min(100, Math.round((item.stock / item.minStock) * 100)) : 0;
+                const color = pct < 25 ? "var(--red, #ef4444)" : "var(--amber, #f59e0b)";
+                return (
+                  <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr 60px auto", gap: 10, alignItems: "center", padding: "10px 12px", background: V.surf2, borderRadius: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: V.tx }}>{item.name}</div>
+                      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txMut, letterSpacing: ".08em" }}>{pct}% DISPONIBLE</div>
+                    </div>
+                    <div style={{ height: 4, background: V.surf3, borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${pct}%`, background: color }} />
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 14, fontWeight: 800, color }}>{item.stock} {item.unit}</div>
+                      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: V.txMut }}>MIN {item.minStock} {item.unit}</div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             <button style={{ width: "100%", marginTop: 14, padding: "9px 16px", borderRadius: 10, background: "var(--red, #ef4444)", color: "#fff", border: "none", fontWeight: 600, fontSize: 13, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", boxShadow: "0 4px 14px rgba(239,68,68,.3)" }}>
               Generar orden de compra →
