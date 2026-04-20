@@ -249,10 +249,12 @@ router.post('/import-menu', _menuUpload.single('menu'), async (req, res) => {
   if (!req.file)    return res.status(400).json({ error: 'Se requiere un archivo en el campo "menu"' })
 
   try {
+    const { resolveAiKey } = require('../services/ai-key.service')
+    const { apiKey } = await resolveAiKey({ restaurantId })
     const base64 = req.file.buffer.toString('base64')
     // scanMenuFromImages expects an array of base64 strings
     // NOTE: the service hardcodes image/jpeg as mimeType; PDF support requires a future service update
-    const result = await scanMenuFromImages([base64])
+    const result = await scanMenuFromImages([base64], apiKey)
 
     const { categories = [], items = [] } = result
 
@@ -287,6 +289,12 @@ router.post('/import-menu', _menuUpload.single('menu'), async (req, res) => {
 
     res.json({ ok: true, categories: categories.length, items: created.length })
   } catch (e) {
+    if (e?.code === 'AI_KEY_REQUIRED') {
+      return res.status(402).json({ error: e.message, code: 'AI_KEY_REQUIRED', action: 'configure_ai_key' })
+    }
+    if (e?.code === 'AI_KEY_CORRUPTED') {
+      return res.status(409).json({ error: e.message, code: 'AI_KEY_CORRUPTED' })
+    }
     console.error('POST /tenant/import-menu:', e)
     res.status(500).json({ error: 'Error al importar el menú' })
   }

@@ -91,9 +91,18 @@ router.post('/chat', async (req, res) => {
     return res.status(400).json({ error: 'El campo "message" es requerido' })
   }
 
-  const apiKey = process.env.GOOGLE_AI_API_KEY
-  if (!apiKey) {
-    return res.status(500).json({ error: 'GOOGLE_AI_API_KEY no configurada' })
+  let apiKey
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId
+    ;({ apiKey } = await require('../services/ai-key.service').resolveAiKey({ restaurantId }))
+  } catch (err) {
+    if (err.code === 'AI_KEY_REQUIRED') {
+      return res.status(402).json({ error: err.message, code: 'AI_KEY_REQUIRED', action: 'configure_ai_key' })
+    }
+    if (err.code === 'AI_KEY_CORRUPTED') {
+      return res.status(409).json({ error: err.message, code: 'AI_KEY_CORRUPTED' })
+    }
+    return res.status(500).json({ error: err.message || 'No se pudo resolver la API key' })
   }
 
   let aiJson

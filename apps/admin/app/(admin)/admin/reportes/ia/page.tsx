@@ -197,10 +197,15 @@ export default function ReportesIAPage() {
         return next;
       });
     } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || "No pude completar la consulta.";
+      const status = err?.response?.status;
+      const data = err?.response?.data;
+      const needsKey = status === 402 || data?.code === "AI_KEY_REQUIRED";
+      const msg = needsKey
+        ? `⚠ ${data?.error || "Configura tu API key de Google AI Studio para activar el asistente."} → [Ir a Integraciones](/admin/integraciones)`
+        : `⚠ ${data?.error || err?.message || "No pude completar la consulta."}`;
       setMsgs(m => {
         const next = [...m];
-        next[next.length - 1] = { role: "ai", text: `⚠ ${msg}` };
+        next[next.length - 1] = { role: "ai", text: msg };
         return next;
       });
       // No persistir el turno fallido en el historial de la API.
