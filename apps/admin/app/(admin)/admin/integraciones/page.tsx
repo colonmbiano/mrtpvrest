@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import api from "@/lib/api";
+import AiKeyCard from "@/components/AiKeyCard";
 
 function safeParseConfig(raw: any): Record<string, any> {
   if (!raw) return {};
@@ -89,6 +90,8 @@ export default function IntegrationsPage() {
         <h1 className="text-4xl font-black mb-2 uppercase tracking-tighter">Conexiones & APIs</h1>
         <p className="text-gray-500">Configura tus pasarelas de pago y servicios externos sin código.</p>
       </div>
+
+      <AiKeyCard />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {Object.keys(types).map((key) => {
