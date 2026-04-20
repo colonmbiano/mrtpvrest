@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 
@@ -68,13 +69,6 @@ const CHAN_COLORS: Record<string, string> = {
 };
 const DONUT_DEFAULTS = ["#9472ff", "#7c3aed", "#b89eff", "#dcd0ff"];
 
-const MOCK_ORDERS: Order[] = [
-  { id: "5821", orderNumber: 5821, status: "READY" as Order["status"],      total: 260, createdAt: new Date().toISOString(), items: [{ quantity: 2, menuItem: { name: "Pastor" } }], orderType: "MESA", tableNumber: "2" },
-  { id: "5822", orderNumber: 5822, status: "PREPARING" as Order["status"],  total: 420, createdAt: new Date().toISOString(), items: [{ quantity: 3, menuItem: { name: "items" } }],  orderType: "DELIVERY" },
-  { id: "5823", orderNumber: 5823, status: "DELIVERING" as Order["status"], total: 340, createdAt: new Date().toISOString(), items: [],                                               orderType: "DELIVERY" },
-  { id: "5824", orderNumber: 5824, status: "PENDING" as Order["status"],    total: 180, createdAt: new Date().toISOString(), items: [{ quantity: 1, menuItem: { name: "Quesadilla" } }], orderType: "MESA", tableNumber: "8" },
-];
-
 function StatusChip({ s }: { s: string }) {
   type Pair = [string, string];
   const MAP: Record<string, Pair> = {
@@ -107,6 +101,8 @@ export default function RestaurantDashboard() {
   const [invAlerts,   setInvAlerts]   = useState<InventoryAlert[]>([]);
   const [userName,    setUserName]    = useState("Admin");
   const [locationName, setLocationName] = useState("");
+  const [locationsCount, setLocationsCount] = useState<number | null>(null);
+  const router = useRouter();
 
   const prevIds  = useRef<Set<string>>(new Set());
   const audioCtx = useRef<AudioContext | null>(null);
@@ -175,10 +171,14 @@ export default function RestaurantDashboard() {
     (async () => {
       try {
         const { data } = await api.get("/api/admin/locations");
+        const list = Array.isArray(data) ? data : [];
+        setLocationsCount(list.length);
         const activeId = typeof window !== "undefined" ? localStorage.getItem("locationId") : null;
-        const active = Array.isArray(data) ? (data.find((l: any) => l.id === activeId) || data[0]) : null;
+        const active = list.find((l: any) => l.id === activeId) || list[0] || null;
         if (active?.name) setLocationName(active.name);
-      } catch { /* empty */ }
+      } catch {
+        setLocationsCount(0);
+      }
     })();
   }, []);
 
@@ -210,9 +210,7 @@ export default function RestaurantDashboard() {
     acc[ch] = (acc[ch] || 0) + (o.total || 0);
     return acc;
   }, {});
-  const effectiveChan: Record<string, number> = Object.keys(channelMap).length
-    ? channelMap
-    : { Mesa: 5240, Delivery: 3490, Pickup: 2250, Kiosko: 1500 };
+  const effectiveChan: Record<string, number> = channelMap;
   const chanKeys = Object.keys(effectiveChan);
   const chanVals = chanKeys.map(k => effectiveChan[k]);
   const chanSum  = chanVals.reduce((a, b) => a + b, 0) || 1;
@@ -244,7 +242,7 @@ export default function RestaurantDashboard() {
   })();
   const dateLabel = now?.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" }) ?? "";
 
-  const displayOrders = active.length > 0 ? active : MOCK_ORDERS;
+  const displayOrders = active;
 
   const card: React.CSSProperties = {
     background: V.surf1,
@@ -256,34 +254,71 @@ export default function RestaurantDashboard() {
   const KPIS = [
     {
       label: "Ventas de hoy",
-      value: ventas > 0 ? fmtMoney(ventas) : "$12,480", cents: ventas > 0 ? "" : ".50",
-      delta: "↑ 18.2%", up: true, sub: "vs sábado anterior",
-      spark: "M0,24 L25,22 L50,20 L75,14 L100,16 L125,11 L150,9 L175,12 L200,7 L225,5 L250,8 L275,4 L300,2",
-      fill:  "M0,24 L25,22 L50,20 L75,14 L100,16 L125,11 L150,9 L175,12 L200,7 L225,5 L250,8 L275,4 L300,2 L300,30 L0,30 Z",
-      color: "#9472ff",
+      value: ventas > 0 ? fmtMoney(ventas) : "$0", cents: "",
+      delta: delivered.length > 0 ? `${delivered.length} entregados` : "Sin entregas", up: true, sub: "hoy",
+      spark: "", fill: "", color: "#9472ff",
     },
     {
       label: "Pedidos",
-      value: today.length > 0 ? String(today.length) : "87", cents: "",
-      delta: `↑ ${active.length} en vivo`, up: true, sub: "activos ahora",
-      spark: "M0,20 L30,22 L60,15 L90,18 L120,12 L150,14 L180,9 L210,11 L240,6 L270,8 L300,4",
-      fill: "", color: "var(--green, #10b981)",
+      value: String(today.length), cents: "",
+      delta: `${active.length} en vivo`, up: true, sub: active.length ? "activos ahora" : "sin pedidos activos",
+      spark: "", fill: "", color: "var(--green, #10b981)",
     },
     {
       label: "Ticket promedio",
-      value: ticket > 0 ? fmtMoney(ticket) : "$143", cents: ticket > 0 ? "" : ".45",
-      delta: "↑ 2.1%", up: true, sub: "vs periodo ant.",
-      spark: "M0,10 L30,8 L60,12 L90,9 L120,14 L150,11 L180,16 L210,13 L240,18 L270,15 L300,20",
-      fill: "", color: "var(--amber, #f59e0b)",
+      value: ticket > 0 ? fmtMoney(ticket) : "—", cents: "",
+      delta: delivered.length ? `${delivered.length} pedidos` : "—", up: true, sub: "hoy",
+      spark: "", fill: "", color: "var(--amber, #f59e0b)",
     },
     {
       label: "Tiempo prep. prom.",
-      value: active.length > 0 ? espStr : "6:42", cents: "",
-      delta: "↑ 8s mejor", up: true, sub: "meta: < 7:00",
-      spark: "M0,12 L30,14 L60,11 L90,13 L120,10 L150,15 L180,9 L210,11 L240,8 L270,10 L300,7",
-      fill: "", color: "#b89eff",
+      value: active.length > 0 ? espStr : "—", cents: "",
+      delta: active.length ? `${active.length} activos` : "—", up: true, sub: "tiempo en espera",
+      spark: "", fill: "", color: "#b89eff",
     },
   ];
+
+  // Empty state: sin sucursales → CTA para crear la primera, no renderizar el layout
+  if (locationsCount === 0) {
+    return (
+      <div style={{
+        minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 24, color: V.tx, fontFamily: "'DM Sans',sans-serif",
+      }}>
+        <div style={{
+          maxWidth: 520, textAlign: "center",
+          background: V.surf1, border: `1px solid ${V.bd1}`,
+          borderRadius: 24, padding: 48,
+        }}>
+          <div style={{
+            width: 72, height: 72, margin: "0 auto 24px",
+            background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.25)",
+            borderRadius: 18, display: "grid", placeItems: "center",
+            fontSize: 32,
+          }}>🏪</div>
+          <h1 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 26, color: V.txHi, letterSpacing: "-.02em", marginBottom: 8 }}>
+            Aún no tienes sucursales
+          </h1>
+          <p style={{ color: V.txMut, fontSize: 14, lineHeight: 1.6, marginBottom: 28 }}>
+            Para empezar a operar necesitas crear tu primera sucursal. Ahí se registran pedidos, turnos, inventario y empleados.
+          </p>
+          <button
+            onClick={() => router.push("/admin/configurar-negocio")}
+            style={{
+              padding: "14px 28px", borderRadius: 12,
+              background: "var(--brand-primary, #7c3aed)",
+              color: "#fff", border: "none",
+              fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 15,
+              cursor: "pointer",
+              boxShadow: "0 6px 24px rgba(124,58,237,.35)",
+            }}
+          >
+            Crear mi primera sucursal →
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -431,15 +466,20 @@ export default function RestaurantDashboard() {
               <div>
                 <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi }}>En vivo</div>
                 <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>
-                  {loading ? "Cargando…" : `${active.length || MOCK_ORDERS.length} pedidos activos`}
+                  {loading ? "Cargando…" : `${active.length} ${active.length === 1 ? "pedido activo" : "pedidos activos"}`}
                 </div>
               </div>
-              <span style={{ padding: "3px 8px", borderRadius: 999, fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".06em", display: "inline-flex", alignItems: "center", gap: 5, background: V.okS, color: V.ok }}>
+              <span style={{ padding: "3px 8px", borderRadius: 999, fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".06em", display: "inline-flex", alignItems: "center", gap: 5, background: active.length ? V.okS : V.surf2, color: active.length ? V.ok : V.txMut }}>
                 <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor" }} />
-                OPERANDO
+                {active.length ? "OPERANDO" : "SIN ACTIVIDAD"}
               </span>
             </div>
             <div className="db-scroll" style={{ maxHeight: 310, overflowY: "auto" }}>
+              {!loading && displayOrders.length === 0 && (
+                <div style={{ padding: "32px 0", textAlign: "center", color: V.txMut, fontSize: 12 }}>
+                  Los pedidos que se creen en la TPV aparecerán aquí en tiempo real.
+                </div>
+              )}
               {displayOrders.map((o, i) => (
                 <div key={o.id} style={{ display: "grid", gridTemplateColumns: "52px 1fr auto auto", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: i < displayOrders.length - 1 ? `1px solid ${V.bd1}` : "none" }}>
                   <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: "#b89eff", fontWeight: 600 }}>
@@ -540,16 +580,30 @@ export default function RestaurantDashboard() {
               })}
             </svg>
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, paddingTop: 12, borderTop: `1px solid ${V.bd1}` }}>
-              {[
-                { label: "PICO",         val: "19:00" },
-                { label: "PEDIDOS PICO", val: "18" },
-                { label: "MÁS LENTO",    val: "16:00" },
-              ].map(s => (
-                <div key={s.label}>
-                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, letterSpacing: ".1em" }}>{s.label}</div>
-                  <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 800, color: V.txHi, marginTop: 2 }}>{s.val}</div>
-                </div>
-              ))}
+              {(() => {
+                const hasData = hourBuckets.some(d => d.v > 0);
+                if (!hasData) {
+                  return (
+                    <div style={{ color: V.txMut, fontSize: 12, fontFamily: "'DM Mono',monospace" }}>
+                      Aún no hay pedidos hoy.
+                    </div>
+                  );
+                }
+                const sorted = [...hourBuckets].sort((a, b) => b.v - a.v);
+                const peak = sorted[0];
+                const slowest = [...hourBuckets].filter(d => d.v > 0).sort((a, b) => a.v - b.v)[0] || hourBuckets[0];
+                const stats = [
+                  { label: "PICO",         val: peak ? `${peak.h}:00` : "—" },
+                  { label: "PEDIDOS PICO", val: peak ? String(peak.v) : "—" },
+                  { label: "MÁS LENTO",    val: slowest ? `${slowest.h}:00` : "—" },
+                ];
+                return stats.map(s => (
+                  <div key={s.label}>
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, letterSpacing: ".1em" }}>{s.label}</div>
+                    <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 800, color: V.txHi, marginTop: 2 }}>{s.val}</div>
+                  </div>
+                ));
+              })()}
             </div>
           </div>
 
@@ -632,7 +686,7 @@ export default function RestaurantDashboard() {
                 ))}
                 <text x="60" y="56" textAnchor="middle" fontFamily="DM Mono" fontSize="9" fill="#9494b8" letterSpacing=".1em">TOTAL</text>
                 <text x="60" y="72" textAnchor="middle" fontFamily="Syne" fontWeight="800" fontSize="16" fill="#fff">
-                  {ventas > 0 ? `$${Math.round(ventas / 1000)}k` : "$12.4k"}
+                  {ventas > 0 ? `$${Math.round(ventas / 1000)}k` : "$0"}
                 </text>
               </svg>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 22px" }}>
@@ -651,17 +705,39 @@ export default function RestaurantDashboard() {
               </div>
             </div>
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${V.bd1}`, display: "flex", gap: 16 }}>
-              {[
-                { label: "TARJETA",   val: "$8,120", sub: "65% · 58 trans." },
-                { label: "EFECTIVO",  val: "$3,240", sub: "26% · 22 trans." },
-                { label: "TRANSFER.", val: "$1,120", sub: "9% · 7 trans." },
-              ].map(p => (
-                <div key={p.label} style={{ flex: 1, padding: 12, background: V.surf2, borderRadius: 10 }}>
-                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txMut, letterSpacing: ".12em" }}>{p.label}</div>
-                  <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 20, fontWeight: 800, color: V.txHi, marginTop: 4 }}>{p.val}</div>
-                  <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>{p.sub}</div>
-                </div>
-              ))}
+              {(() => {
+                const pm: Record<string, { total: number; count: number }> = {};
+                for (const o of delivered) {
+                  const k = (o as any).paymentMethod || "OTRO";
+                  pm[k] = pm[k] || { total: 0, count: 0 };
+                  pm[k].total += o.total || 0;
+                  pm[k].count += 1;
+                }
+                const group = (labels: string[]) => labels.reduce(
+                  (acc, k) => ({ total: acc.total + (pm[k]?.total || 0), count: acc.count + (pm[k]?.count || 0) }),
+                  { total: 0, count: 0 }
+                );
+                const card = group(["CARD", "CARD_PRESENT"]);
+                const cash = group(["CASH", "CASH_ON_DELIVERY"]);
+                const transfer = group(["TRANSFER", "SPEI", "OXXO"]);
+                const totalSum = Math.max(1, ventas);
+                const rows = [
+                  { label: "TARJETA",   ...card },
+                  { label: "EFECTIVO",  ...cash },
+                  { label: "TRANSFER.", ...transfer },
+                ];
+                return rows.map(p => (
+                  <div key={p.label} style={{ flex: 1, padding: 12, background: V.surf2, borderRadius: 10 }}>
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txMut, letterSpacing: ".12em" }}>{p.label}</div>
+                    <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 20, fontWeight: 800, color: V.txHi, marginTop: 4 }}>
+                      {p.total > 0 ? fmtMoney(p.total) : "—"}
+                    </div>
+                    <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>
+                      {p.count > 0 ? `${Math.round((p.total / totalSum) * 100)}% · ${p.count} trans.` : "sin ventas"}
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           </div>
 
