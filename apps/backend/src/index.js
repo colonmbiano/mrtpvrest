@@ -16,10 +16,6 @@ app.set('trust proxy', 1)
 const server = http.createServer(app)
 
 const ALLOWED_ORIGINS = [
-  'https://mrtpvrest.com',
-  'https://admin.mrtpvrest.com',
-  'https://api.mrtpvrest.com',
-  'https://tpv.mrtpvrest.com',
   'https://colonmbianos-projects.vercel.app',
   'http://localhost',
   'http://localhost:3000',
@@ -29,6 +25,7 @@ const ALLOWED_ORIGINS = [
   'http://127.0.0.1:3000',
   /\.vercel\.app$/,
   /\.railway\.app$/,
+  /^https:\/\/([a-z0-9-]+\.)?mrtpvrest\.com$/,
 ];
 
 const corsOptions = {

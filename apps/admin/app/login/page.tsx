@@ -38,6 +38,10 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    // Defensa: descartar contexto stale para que el interceptor no inyecte
+    // un x-restaurant-id ajeno en la propia llamada de login.
+    localStorage.removeItem("restaurantId");
+    localStorage.removeItem("locationId");
     try {
       const { data } = await api.post("/api/auth/login", { email, password });
       localStorage.setItem("accessToken",  data.accessToken);

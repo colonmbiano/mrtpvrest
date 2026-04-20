@@ -75,20 +75,17 @@ const SECTIONS = [
       { href: "/admin/rastreo",           icon: <IMapPin />, label: "Rastreo GPS" },
     ],
   },
-  {
-    key: "saas",
-    label: "Plataforma",
-    icon: <ILayoutDash />,
-    accent: "#7c3aed",
-    items: [
-      { href: "/admin/saas", icon: <ILayoutDash />, label: "Super-admin ✦" },
-    ],
-  },
+  // NOTA: la sección "Plataforma / Super-admin" NO va aquí. El panel SaaS
+  // es independiente del admin de negocio y solo debe aparecer para usuarios
+  // con role SUPER_ADMIN. Eso lo renderiza el bloque condicional
+  // `{superAdmin && (...)}` más abajo en el árbol.
 ];
 
 // ─────────────────────────────────────────────────────────────
 
-export default function Sidebar() {
+type SidebarProps = { isOpen?: boolean; onClose?: () => void };
+
+export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
   const path = usePathname();
   const [user, setUser]             = useState<any>(null);
   const [superAdmin, setSuperAdmin] = useState(false);
@@ -104,25 +101,34 @@ export default function Sidebar() {
     setUser(currentUser);
     setSuperAdmin(isSuperAdmin());
     if (currentUser) {
+      // Desacoplamos los dos requests: si uno falla (p. ej. /api/admin/config
+      // tras una migración pendiente), el otro debe seguir funcionando. Antes
+      // un Promise.all rechazaba ambos y el selector quedaba en "Sin sucursales"
+      // aunque /api/admin/locations respondiera OK.
       (async () => {
         try {
-          const [locRes, brandRes] = await Promise.all([
-            api.get("/api/admin/locations"),
-            api.get("/api/admin/config"),
-          ]);
-          setLocations(locRes.data);
-          setBrand({ name: brandRes.data.name || "", logoUrl: brandRes.data.logoUrl || null });
+          const { data } = await api.get("/api/admin/locations");
+          const list = Array.isArray(data) ? data : [];
+          setLocations(list);
           const saved = localStorage.getItem("locationId");
-          if (saved && locRes.data.some((l: any) => l.id === saved)) {
+          if (saved && list.some((l: any) => l.id === saved)) {
             setActiveLocationId(saved);
-          } else if (locRes.data.length > 0) {
-            localStorage.setItem("locationId", locRes.data[0].id);
-            setActiveLocationId(locRes.data[0].id);
+          } else if (list.length > 0) {
+            localStorage.setItem("locationId", list[0].id);
+            setActiveLocationId(list[0].id);
           }
         } catch {
-          /* mantener vacío */
+          setLocations([]);
         } finally {
           setIsLoadingLocations(false);
+        }
+      })();
+      (async () => {
+        try {
+          const { data } = await api.get("/api/admin/config");
+          setBrand({ name: data.name || "", logoUrl: data.logoUrl || null });
+        } catch {
+          /* sin config todavía: se dejan los defaults del sidebar */
         }
       })();
     } else {
@@ -159,7 +165,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="fixed left-0 top-0 h-full w-56 flex flex-col z-40"
+      className={`fixed left-0 top-0 h-full w-56 flex flex-col z-40 transition-transform duration-200 md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
       style={{ background: "var(--surf)", borderRight: "1px solid var(--border)" }}
     >
       {/* ── Logo + sucursal ── */}
@@ -183,6 +189,20 @@ export default function Sidebar() {
               Control Panel
             </div>
           </div>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar menú"
+              className="md:hidden ml-auto w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--muted)" }}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="3" y1="3" x2="13" y2="13"/>
+                <line x1="13" y1="3" x2="3" y2="13"/>
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Sucursal selector */}
@@ -209,6 +229,18 @@ export default function Sidebar() {
             </select>
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)", fontSize: 8 }}>▼</div>
           </div>
+          <Link
+            href="/admin/configurar-negocio"
+            className="mt-2 flex items-center justify-center gap-1.5 w-full rounded-lg px-3 py-2 text-[11px] font-bold transition-all"
+            style={{
+              background: locations.length === 0 && !isLoadingLocations ? "var(--brand-primary, #7c3aed)" : "transparent",
+              color: locations.length === 0 && !isLoadingLocations ? "#fff" : "var(--brand-primary, #7c3aed)",
+              border: `1px dashed ${locations.length === 0 && !isLoadingLocations ? "transparent" : "var(--brand-primary, #7c3aed)"}`,
+            }}
+          >
+            <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
+            <span>Añadir sucursal</span>
+          </Link>
         </div>
       </div>
 
