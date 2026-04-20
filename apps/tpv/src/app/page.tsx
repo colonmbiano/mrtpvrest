@@ -5,9 +5,17 @@ import KDSMessages from "@/components/admin/KDSMessages";
 import IngredientShortageModal from "@/components/admin/IngredientShortageModal";
 import DeliveryAssignModal from "@/components/admin/DeliveryAssignModal";
 import ShiftModal from "@/components/admin/ShiftModal";
+import RetailLayout from "@/components/layouts/RetailLayout";
+import BarLayout from "@/components/layouts/BarLayout";
+import CafeLayout from "@/components/layouts/CafeLayout";
+import { useLocation } from "@/hooks/useLocation";
 import { useRouter } from "next/navigation";
 
-const ACCENT = "#ff5c35";
+const ACCENT = "#F5C842";
+const EMPLOYEE_TOKEN_KEY = "tpv-employee-token";
+const EMPLOYEE_DATA_KEY = "tpv-employee";
+const PIN_MIN_LENGTH = 4;
+const PIN_MAX_LENGTH = 6;
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: "Pendiente", CONFIRMED: "Confirmado", PREPARING: "Preparando",
@@ -27,10 +35,12 @@ const PAY_METHODS = [
   { value: "COURTESY", label: "🎁 Cortesía" },
 ];
 
-type MobileTab = "menu" | "ticket" | "orders";
 
 export default function TPVPage() {
   const router = useRouter();
+
+  // Cerebro Adaptativo: tipo de negocio por sucursal
+  const { businessType, loading: locLoading } = useLocation();
 
   // SAAS
   const [restaurantName, setRestaurantName] = useState("MRTPVREST");
@@ -75,6 +85,7 @@ export default function TPVPage() {
   const [isGlobalLocked, setIsGlobalLocked]     = useState(true);
   const [currentEmployee, setCurrentEmployee]   = useState<any>(null);
   const [pinInput, setPinInput]                 = useState("");
+  const [pinError, setPinError]                 = useState("");
   const [isVerifyingPin, setIsVerifyingPin]     = useState(false);
 
   // Modales manager
@@ -86,10 +97,30 @@ export default function TPVPage() {
   const [activeShift, setActiveShift] = useState<any>(null);
 
   // Mobile nav
-  const [mobileTab, setMobileTab] = useState<MobileTab>("menu");
+  // Drawers móviles
+  const [ticketDrawerOpen, setTicketDrawerOpen] = useState(false);
+  const [ordersDrawerOpen, setOrdersDrawerOpen] = useState(false);
 
   const ticket  = tickets[activeTicket] || tickets[0];
   const isAdmin = ["ADMIN", "MANAGER", "OWNER"].includes(currentEmployee?.role);
+
+  const clearEmployeeSession = useCallback(() => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem(EMPLOYEE_TOKEN_KEY);
+    localStorage.removeItem(EMPLOYEE_DATA_KEY);
+    localStorage.removeItem("kdsEmployee");
+    setIsGlobalLocked(true);
+    setCurrentEmployee(null);
+    setActiveShift(null);
+    setShowManagerMenu(false);
+    setOrders([]);
+    setPendingCashOrders([]);
+    setSelectedOrder(null);
+    setAllItems([]);
+    setCategories([]);
+    setPinInput("");
+    setPinError("");
+  }, []);
 
   // ── SAAS INIT ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -104,28 +135,102 @@ export default function TPVPage() {
         if (res.data.locationName)   setLocationName(res.data.locationName);
         if (res.data.location?.name) setLocationName(res.data.location.name);
       }).catch(() => {});
+
+      const storedToken = localStorage.getItem(EMPLOYEE_TOKEN_KEY) || localStorage.getItem("accessToken");
+      const storedEmployee = localStorage.getItem(EMPLOYEE_DATA_KEY);
+
+      if (!storedToken || !storedEmployee) return;
+
+      try {
+        const parsedEmployee = JSON.parse(storedEmployee);
+        localStorage.setItem("accessToken", storedToken);
+        setCurrentEmployee(parsedEmployee);
+        setPinError("");
+
+        if (parsedEmployee?.role === "WAITER") {
+          router.replace("/meseros");
+          return;
+        }
+
+        if (parsedEmployee?.role === "KITCHEN") {
+          localStorage.setItem("kdsEmployee", storedEmployee);
+          router.replace("/kds");
+          return;
+        }
+
+        setIsGlobalLocked(false);
+        api.get("/api/shifts/active")
+          .then(({ data }) => setActiveShift(data))
+          .catch(() => setActiveShift(null));
+      } catch {
+        clearEmployeeSession();
+      }
     }
-  }, [router]);
+  }, [clearEmployeeSession, router]);
 
   async function refreshShift() {
     try { const { data } = await api.get("/api/shifts/active"); setActiveShift(data); }
     catch { setActiveShift(null); }
   }
 
+  const unlockEmployeeSession = useCallback(async (employee: any, token: string) => {
+    localStorage.setItem("accessToken", token);
+    localStorage.setItem(EMPLOYEE_TOKEN_KEY, token);
+    localStorage.setItem(EMPLOYEE_DATA_KEY, JSON.stringify(employee));
+    setCurrentEmployee(employee);
+    setPinInput("");
+    setPinError("");
+
+    if (employee?.role === "WAITER") {
+      router.replace("/meseros");
+      return;
+    }
+
+    if (employee?.role === "KITCHEN") {
+      localStorage.setItem("kdsEmployee", JSON.stringify(employee));
+      router.replace("/kds");
+      return;
+    }
+
+    await refreshShift();
+    setIsGlobalLocked(false);
+  }, [router]);
+
   const handleVerifyGlobalPin = async (enteredPin: string) => {
+    if (enteredPin.length < PIN_MIN_LENGTH) {
+      setPinError("Ingresa al menos 4 digitos.");
+      return;
+    }
+
     setIsVerifyingPin(true);
+    setPinError("");
     try {
-      const { data } = await api.post("/api/employees/login", { pin: enteredPin });
-      localStorage.setItem("accessToken", data.token);
-      setCurrentEmployee(data.employee);
-      const role = data.employee?.role;
-      if (role === "WAITER")  { router.push("/meseros"); return; }
-      if (role === "KITCHEN") { localStorage.setItem("kdsEmployee", JSON.stringify(data.employee)); router.push("/kds"); return; }
-      try { const { data: shift } = await api.get("/api/shifts/active"); setActiveShift(shift); } catch { setActiveShift(null); }
-      setTimeout(() => setIsGlobalLocked(false), 100);
-      setPinInput("");
+      const restaurantId = localStorage.getItem("restaurantId");
+      const { data } = await api.post("/api/auth/pin", { pin: enteredPin, restaurantId });
+      const token = data.token || data.accessToken;
+      const employee = data.user || data.employee;
+      if (!token || !employee) throw new Error("Sesion incompleta");
+      await unlockEmployeeSession(employee, token);
     } catch { alert("PIN Incorrecto ❌"); setPinInput(""); }
     finally { setIsVerifyingPin(false); }
+  };
+
+  const appendPinDigit = (digit: string) => {
+    if (isVerifyingPin) return;
+    setPinError("");
+    setPinInput(prev => prev.length >= PIN_MAX_LENGTH ? prev : prev + digit);
+  };
+
+  const removeLastPinDigit = () => {
+    if (isVerifyingPin) return;
+    setPinError("");
+    setPinInput(prev => prev.slice(0, -1));
+  };
+
+  const clearPin = () => {
+    if (isVerifyingPin) return;
+    setPinError("");
+    setPinInput("");
   };
 
   const fetchOrders = useCallback(async () => {
@@ -344,6 +449,24 @@ export default function TPVPage() {
     p.name.toLowerCase().includes(settingsSearch.toLowerCase())
   );
 
+  if (isConfigured && isGlobalLocked) {
+    return (
+      <TPVLockScreen
+        accent={ACCENT}
+        restaurantName={restaurantName}
+        locationName={locationName}
+        pinInput={pinInput}
+        pinError={pinError}
+        isVerifyingPin={isVerifyingPin}
+        onDigit={appendPinDigit}
+        onBackspace={removeLastPinDigit}
+        onClear={clearPin}
+        onSubmit={() => handleVerifyGlobalPin(pinInput)}
+        onChangeLocation={() => router.push("/setup")}
+      />
+    );
+  }
+
   if (!isConfigured) return null;
 
   if (isGlobalLocked) {
@@ -402,7 +525,248 @@ export default function TPVPage() {
     );
   }
 
+  // ── Cerebro Adaptativo: switch de modo ────────────────────────────────────
+  // Para modos distintos a RESTAURANT renderizamos placeholders. Cuando la
+  // sucursal es RESTAURANT (default) caemos al TPV clásico debajo.
+  if (!locLoading) {
+    if (businessType === "RETAIL") return <RetailLayout />;
+    if (businessType === "BAR")    return <BarLayout />;
+    if (businessType === "CAFE")   return <CafeLayout />;
+  }
+
   // ── TPV PRINCIPAL ──────────────────────────────────────────────────────────
+
+  // Ticket pane reutilizado en sidebar md+ y en bottom-sheet mobile
+  const ticketPane = (
+    <div className="flex flex-col h-full min-h-0 overflow-hidden" style={{ background: "var(--surf)" }}>
+      {/* Pestañas de tickets */}
+      <div className="flex items-center gap-1 px-2 pt-2 overflow-x-auto flex-shrink-0 border-b scrollbar-hide" style={{ borderColor: "var(--border)" }}>
+        {tickets.map((t: any, idx: number) => (
+          <div key={t.id} className="flex items-center gap-0.5 flex-shrink-0">
+            <button onClick={() => setActiveTicket(idx)}
+              className="px-4 min-h-[44px] rounded-t-xl text-xs font-bold select-none"
+              style={{ background: activeTicket === idx ? ACCENT : "var(--surf2)", color: activeTicket === idx ? "#000" : "var(--muted)" }}>
+              {t.name || `T${idx + 1}`}
+            </button>
+            <button onClick={() => closeTicket(idx)} className="text-xs px-2 min-h-[44px] select-none" style={{ color: "var(--muted)" }}>✕</button>
+          </div>
+        ))}
+        <button onClick={addNewTicket} className="px-3 min-h-[44px] rounded-xl text-base font-black flex-shrink-0 ml-1 select-none"
+          style={{ background: "var(--surf2)", color: "var(--muted)" }}>+</button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 pb-6 space-y-2 scrollbar-hide">
+        {!activeShift && (
+          <div className="rounded-xl p-3 flex items-center justify-between"
+            style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
+            <span className="text-xs font-bold select-none" style={{ color: "#ef4444" }}>🔴 Sin turno abierto</span>
+            <button onClick={() => setShowShiftModal(true)}
+              className="text-xs font-black px-4 min-h-[44px] rounded-xl select-none"
+              style={{ background: "#ef4444", color: "#fff" }}>Abrir turno</button>
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input value={ticket.name} onChange={e => updateTicket({ name: e.target.value })}
+            placeholder="Nombre" className="flex-1 px-3 py-3 rounded-xl text-sm outline-none"
+            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
+          <input value={ticket.phone} onChange={e => updateTicket({ phone: e.target.value })}
+            placeholder="Tel" type="tel" className="w-28 px-3 py-3 rounded-xl text-sm outline-none"
+            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
+        </div>
+        <div className="flex gap-1.5">
+          {[{ t: "TAKEOUT", l: "🥡 Llevar" }, { t: "DINE_IN", l: "🪑 Mesa" }, { t: "DELIVERY", l: "🛵 Domicilio" }].map(({ t, l }) => (
+            <button key={t} onClick={() => updateTicket({ type: t })}
+              className="flex-1 min-h-[48px] rounded-xl text-xs font-bold select-none"
+              style={{
+                background: ticket.type === t ? ACCENT : "var(--surf2)",
+                color: ticket.type === t ? "#fff" : "var(--muted)",
+                border: ticket.type === t ? `2px solid ${ACCENT}` : "1px solid var(--border)",
+              }}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {ticket.type === "DINE_IN" && (
+          <input value={ticket.table} onChange={e => updateTicket({ table: e.target.value })}
+            placeholder="# Mesa" type="number" inputMode="numeric" className="w-full px-3 py-3 rounded-xl text-base font-bold outline-none text-center"
+            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
+        )}
+        {ticket.type === "DELIVERY" && (
+          <input value={ticket.address} onChange={e => updateTicket({ address: e.target.value })}
+            placeholder="📍 Dirección de entrega" className="w-full px-3 py-3 rounded-xl text-sm outline-none"
+            style={{ background: "var(--surf2)", border: `1px solid ${ACCENT}55`, color: "var(--text)" }} />
+        )}
+        {ticket.items.length === 0 ? (
+          <div className="text-center py-10 text-xs select-none" style={{ color: "var(--muted)" }}>Sin productos</div>
+        ) : ticket.items.map((item: any, idx: number) => (
+          <div key={idx} className="flex items-start gap-2 py-2 border-b" style={{ borderColor: "var(--border)" }}>
+            <div className="flex-1 text-xs min-w-0 select-none">
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="font-medium">{item.name}</span>
+                {item.variantName && <span className="font-bold" style={{ color: ACCENT }}>({item.variantName})</span>}
+                {item.isPromo && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{ background: ACCENT + "22", color: ACCENT }}>PROMO</span>}
+              </div>
+              {item.notes && <div className="text-[10px]" style={{ color: "var(--muted)" }}>{item.notes}</div>}
+              {item.isPromo && item.originalPrice && (
+                <div className="text-[10px]" style={{ color: "var(--muted)" }}>Normal: <span className="line-through">${item.originalPrice}</span></div>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <button onClick={() => changeQty(idx, -1)} className="w-10 h-10 rounded-lg text-base font-black flex items-center justify-center select-none" style={{ background: "var(--surf2)" }}>−</button>
+              <span className="text-sm font-bold w-6 text-center">{item.quantity}</span>
+              <button onClick={() => changeQty(idx, 1)} className="w-10 h-10 rounded-lg text-base font-black flex items-center justify-center select-none" style={{ background: "var(--surf2)" }}>+</button>
+            </div>
+            <div className="flex flex-col items-end flex-shrink-0">
+              <span className="text-xs font-black select-none" style={{ color: ACCENT }}>${item.subtotal.toFixed(0)}</span>
+              <button onClick={() => removeFromTicket(idx)} className="text-xs mt-1 px-1 select-none" style={{ color: "#ef4444" }}>✕</button>
+            </div>
+          </div>
+        ))}
+        {ticket.items.length > 0 && (
+          <div className="space-y-2 pt-2">
+            <div className="flex justify-between text-xs select-none" style={{ color: "var(--muted)" }}><span>Subtotal</span><span>${subtotal.toFixed(0)}</span></div>
+            {discountAmt > 0 && <div className="flex justify-between text-xs select-none" style={{ color: "#22c55e" }}><span>Descuento</span><span>−${discountAmt.toFixed(0)}</span></div>}
+            <div className="flex justify-between font-black text-2xl py-1 select-none"><span>Total</span><span style={{ color: ACCENT }}>${total.toFixed(0)}</span></div>
+            <button onClick={sendToKitchen} className="w-full min-h-[48px] rounded-xl text-sm font-bold border select-none"
+              style={{ borderColor: "var(--border)", color: "var(--muted)" }}>🍳 Enviar a cocina</button>
+            <div className="grid grid-cols-2 gap-2">
+              {PAY_METHODS.map(m => (
+                <button key={m.value} onClick={() => chargeTicket(m.value)}
+                  className="min-h-[56px] rounded-xl text-sm font-black select-none"
+                  style={{
+                    background: activeShift ? ACCENT : "var(--surf2)",
+                    color: activeShift ? "#fff" : "var(--muted)",
+                    border: activeShift ? `2px solid ${ACCENT}` : "1px solid var(--border)",
+                  }}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Orders pane reutilizado en drawer
+  const ordersPane = (
+    <div className="flex flex-col h-full min-h-0 overflow-hidden" style={{ background: "var(--surf)" }}>
+      <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0" style={{ borderColor: "var(--border)" }}>
+        <span className="text-xs font-black tracking-widest uppercase select-none" style={{ color: "var(--muted)" }}>Pedidos activos</span>
+        {orders.length > 0 && <span className="text-xs font-black px-2.5 py-0.5 rounded-full select-none" style={{ background: ACCENT, color: "#fff" }}>{orders.length}</span>}
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-hide">
+        {orders.length === 0 ? (
+          <div className="text-center py-16 text-sm select-none" style={{ color: "var(--muted)" }}>Sin pedidos activos</div>
+        ) : orders.map((order: any) => {
+          const sc = STATUS_COLORS[order.status] || "#888";
+          const isSel = selectedOrder?.id === order.id;
+          return (
+            <div key={order.id} className="rounded-xl border overflow-hidden"
+              style={{ borderColor: isSel ? ACCENT : "var(--border)", background: isSel ? ACCENT + "14" : "var(--surf2)" }}>
+              <button className="w-full px-4 py-3 flex items-center justify-between text-left select-none min-h-[56px]"
+                onClick={() => setSelectedOrder(isSel ? null : order)}>
+                <div className="min-w-0">
+                  <div className="text-sm font-bold truncate">
+                    {order.customerName || order.user?.name || "Sin nombre"}
+                    {order.tableNumber && <span style={{ color: "#8b5cf6" }}> · Mesa {order.tableNumber}</span>}
+                  </div>
+                  <div className="text-[10px]" style={{ color: "var(--muted)" }}>{order.orderNumber}</div>
+                </div>
+                <div className="text-right flex-shrink-0 ml-2">
+                  <div className="text-[10px] px-2 py-0.5 rounded-full font-bold mb-1 whitespace-nowrap" style={{ background: sc + "18", color: sc }}>{STATUS_LABELS[order.status]}</div>
+                  <div className="text-sm font-black" style={{ color: ACCENT }}>${Number(order.total).toFixed(0)}</div>
+                </div>
+              </button>
+              {isSel && (
+                <div className="px-4 pb-3 border-t" style={{ borderColor: "var(--border)" }}>
+                  <div className="my-3 space-y-1 text-xs select-none">
+                    {(order.items || []).map((item: any, i: number) => (
+                      <div key={i} className="flex justify-between"><span>{item.quantity}x {item.name}</span><span>${Number(item.subtotal).toFixed(0)}</span></div>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    {(() => { const nextStatus = NEXT_STATUS[order.status]; return nextStatus && (
+                      <button onClick={() => updateOrderStatus(order.id, nextStatus)} disabled={updatingOrder === order.id}
+                        className="w-full min-h-[48px] rounded-xl text-xs font-bold select-none"
+                        style={{ background: ACCENT, color: "#fff" }}>
+                        {updatingOrder === order.id ? "..." : `→ ${STATUS_LABELS[nextStatus]}`}
+                      </button>
+                    ); })()}
+                    <button onClick={() => { setPayModal(order); setPayMethod("CASH"); setCashReceived(""); }}
+                      className="w-full min-h-[48px] rounded-xl text-xs font-bold select-none"
+                      style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}>
+                      💵 Cobrar ticket
+                    </button>
+                    <button onClick={() => updateOrderStatus(order.id, "CANCELLED")}
+                      className="w-full min-h-[48px] rounded-xl text-xs font-bold select-none"
+                      style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
+                      Cancelar pedido
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // Menú grid reutilizado
+  const menuPane = (
+    <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
+      {/* Categorías: chips horizontal (< lg) */}
+      <div className="flex gap-2 overflow-x-auto px-3 py-2 flex-shrink-0 border-b scrollbar-hide whitespace-nowrap lg:hidden" style={{ borderColor: "var(--border)" }}>
+        {[{ id: "all", name: "Todo" }, ...categories].map(cat => (
+          <button key={cat.id} onClick={() => setSelectedCat(cat.id)}
+            className="px-4 min-h-[44px] rounded-xl text-xs font-bold flex-shrink-0 select-none"
+            style={{
+              background: selectedCat === cat.id ? ACCENT : "var(--surf)",
+              color: selectedCat === cat.id ? "#000" : "var(--muted)",
+              border: selectedCat === cat.id ? `2px solid ${ACCENT}` : "1px solid var(--border)",
+            }}>
+            {cat.name}
+          </button>
+        ))}
+      </div>
+      {/* Menu grid */}
+      <div className="flex-1 overflow-y-auto p-3 pb-28 md:pb-3 scrollbar-hide">
+        {allItems.length === 0 ? (
+          <div className="flex items-center justify-center h-full flex-col gap-3 select-none" style={{ color: "var(--muted)" }}>
+            <div className="text-4xl animate-spin">🍔</div>
+            <div className="text-sm">Cargando menú...</div>
+          </div>
+        ) : (
+          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
+            {filteredItems.map((item: any) => (
+              <button key={item.id} onClick={() => handleItemClick(item)}
+                className="relative rounded-2xl p-4 text-left border active:scale-95 transition-transform select-none min-h-[120px]"
+                style={{ background: "var(--surf)", borderColor: "var(--border)", opacity: activeShift ? 1 : 0.5 }}>
+                {item.isPromo && item.promoPrice && (
+                  <span className="absolute top-2 right-2 text-[9px] font-black px-1.5 py-0.5 rounded-full z-10"
+                    style={{ background: ACCENT, color: "#fff" }}>% OFF</span>
+                )}
+                {item.imageUrl && <img src={item.imageUrl} alt="" className="w-full h-20 object-cover rounded-lg mb-2 pointer-events-none" />}
+                <div className="text-sm font-bold leading-tight mb-1 line-clamp-2">{item.name}</div>
+                {item.isPromo && item.promoPrice ? (
+                  <div className="flex items-baseline gap-1 flex-wrap">
+                    <span className="text-[10px] line-through" style={{ color: "var(--muted)" }}>${item.price}</span>
+                    <span className="text-sm font-black" style={{ color: ACCENT }}>${item.promoPrice}</span>
+                  </div>
+                ) : (
+                  <div className="text-sm font-black" style={{ color: ACCENT }}>${item.price}</div>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const ticketCount = ticket.items.reduce((s: number, i: any) => s + i.quantity, 0);
+
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: "var(--bg)" }}>
 
@@ -413,13 +777,23 @@ export default function TPVPage() {
           <span className="text-sm font-black tracking-tight truncate" style={{ color: ACCENT }}>{restaurantName}</span>
           {locationName && <span className="text-[9px] font-bold uppercase tracking-widest truncate mt-0.5" style={{ color: "var(--muted)" }}>{locationName}</span>}
         </div>
-        <div className={`flex-1 min-w-0 ${mobileTab !== "menu" ? "hidden md:block" : ""}`}>
+        <div className="flex-1 min-w-0">
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar producto..."
-            className="w-full px-3 py-1.5 rounded-xl text-sm outline-none"
+            className="w-full px-3 py-2 rounded-xl text-sm outline-none select-none"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }} />
         </div>
-        {mobileTab !== "menu" && <div className="flex-1 md:hidden" />}
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          <button onClick={() => setOrdersDrawerOpen(true)}
+            className="relative flex items-center gap-1.5 px-3 h-10 rounded-xl text-xs font-bold select-none"
+            style={{ background: "var(--surf2)", color: "var(--text)", border: "1px solid var(--border)" }}>
+            <span className="text-sm">📋</span>
+            <span className="hidden sm:inline">Pedidos</span>
+            {orders.length > 0 && (
+              <span className="ml-0.5 text-[10px] font-black rounded-full min-w-[18px] h-[18px] inline-flex items-center justify-center px-1" style={{ background: ACCENT, color: "#fff" }}>
+                {orders.length}
+              </span>
+            )}
+          </button>
           <KDSMessages />
           <button onClick={() => setShowShiftModal(true)}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold"
@@ -439,7 +813,7 @@ export default function TPVPage() {
             </button>
           )}
           <button
-            onClick={() => { localStorage.removeItem("accessToken"); setIsGlobalLocked(true); setCurrentEmployee(null); setActiveShift(null); setShowManagerMenu(false); setOrders([]); setAllItems([]); setCategories([]); }}
+            onClick={clearEmployeeSession}
             className="w-8 h-8 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-colors"
             style={{ background: "var(--surf2)", border: "1px solid var(--border)" }} title="Bloquear Caja">
             🔒
@@ -447,468 +821,93 @@ export default function TPVPage() {
         </div>
       </header>
 
-      {/* ── MOBILE LAYOUT ── */}
-      <div className="flex flex-col flex-1 overflow-hidden min-h-0 md:hidden">
+      {/* ── LAYOUT PRINCIPAL RESPONSIVE (mobile → tablet → desktop) ── */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
 
-        {/* Menú tab */}
-        {mobileTab === "menu" && (
-          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-            {/* Categorías */}
-            <div className="flex gap-1.5 overflow-x-auto px-3 py-2 flex-shrink-0 border-b" style={{ borderColor: "var(--border)" }}>
-              {[{ id: "all", name: "Todo" }, ...categories].map(cat => (
-                <button key={cat.id} onClick={() => setSelectedCat(cat.id)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold flex-shrink-0 transition-colors"
-                  style={{ background: selectedCat === cat.id ? ACCENT : "var(--surf)", color: selectedCat === cat.id ? "#000" : "var(--muted)", border: "1px solid var(--border)" }}>
-                  {cat.name}
-                </button>
-              ))}
-            </div>
-            {/* Grid */}
-            <div className="flex-1 overflow-y-auto p-3 pb-20">
-              {allItems.length === 0 ? (
-                <div className="flex items-center justify-center h-full flex-col gap-3" style={{ color: "var(--muted)" }}>
-                  <div className="text-4xl animate-spin">🍔</div>
-                  <div className="text-sm">Cargando menú...</div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {filteredItems.map((item: any) => (
-                    <button key={item.id} onClick={() => handleItemClick(item)}
-                      className="relative rounded-xl p-3 text-left border transition-all active:scale-95"
-                      style={{ background: "var(--surf)", borderColor: "var(--border)", opacity: activeShift ? 1 : 0.5 }}>
-                      {item.isPromo && item.promoPrice && (
-                        <span className="absolute top-1.5 right-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full z-10"
-                          style={{ background: ACCENT, color: "#fff" }}>% OFF</span>
-                      )}
-                      {item.imageUrl && <img src={item.imageUrl} alt="" className="w-full h-20 object-cover rounded-lg mb-2" />}
-                      <div className="text-xs font-bold leading-tight mb-1 line-clamp-2">{item.name}</div>
-                      {item.isPromo && item.promoPrice ? (
-                        <div className="flex items-baseline gap-1 flex-wrap">
-                          <span className="text-[10px] line-through" style={{ color: "var(--muted)" }}>${item.price}</span>
-                          <span className="text-xs font-black" style={{ color: ACCENT }}>${item.promoPrice}</span>
-                        </div>
-                      ) : (
-                        <div className="text-xs font-black" style={{ color: ACCENT }}>${item.price}</div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Ticket tab */}
-        {mobileTab === "ticket" && (
-          <div className="flex flex-col flex-1 min-h-0 overflow-hidden" style={{ background: "var(--surf)" }}>
-            {/* Tabs de tickets */}
-            <div className="flex items-center gap-0.5 px-2 pt-2 overflow-x-auto flex-shrink-0 border-b" style={{ borderColor: "var(--border)" }}>
-              {tickets.map((t: any, idx: number) => (
-                <div key={t.id} className="flex items-center gap-0.5 flex-shrink-0">
-                  <button onClick={() => setActiveTicket(idx)}
-                    className="px-3 py-1.5 rounded-t-xl text-xs font-bold transition-colors"
-                    style={{ background: activeTicket === idx ? ACCENT : "var(--surf2)", color: activeTicket === idx ? "#000" : "var(--muted)" }}>
-                    {t.name || `T${idx + 1}`}
-                  </button>
-                  <button onClick={() => closeTicket(idx)} className="text-[10px] px-1" style={{ color: "var(--muted)" }}>✕</button>
-                </div>
-              ))}
-              <button onClick={addNewTicket} className="px-2 py-1.5 rounded-xl text-xs font-bold flex-shrink-0 ml-1"
-                style={{ background: "var(--surf2)", color: "var(--muted)" }}>+</button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3 pb-20 space-y-2">
-              {!activeShift && (
-                <div className="rounded-xl p-3 flex items-center justify-between"
-                  style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
-                  <span className="text-xs font-bold" style={{ color: "#ef4444" }}>🔴 Sin turno abierto</span>
-                  <button onClick={() => setShowShiftModal(true)}
-                    className="text-xs font-black px-3 py-1.5 rounded-xl min-h-[44px]"
-                    style={{ background: "#ef4444", color: "#fff" }}>Abrir turno</button>
-                </div>
-              )}
-              <div className="flex gap-2">
-                <input value={ticket.name} onChange={e => updateTicket({ name: e.target.value })}
-                  placeholder="Nombre" className="flex-1 px-3 py-2 rounded-xl text-xs outline-none"
-                  style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
-                <input value={ticket.phone} onChange={e => updateTicket({ phone: e.target.value })}
-                  placeholder="Tel" type="tel" className="w-28 px-3 py-2 rounded-xl text-xs outline-none"
-                  style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
-              </div>
-              <div className="flex gap-1.5">
-                {[{ t: "TAKEOUT", l: "🥡 Llevar" }, { t: "DINE_IN", l: "🪑 Mesa" }, { t: "DELIVERY", l: "🛵 Domicilio" }].map(({ t, l }) => (
-                  <button key={t} onClick={() => updateTicket({ type: t })}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-bold min-h-[44px] transition-colors"
-                    style={{ background: ticket.type === t ? ACCENT : "var(--surf2)", color: ticket.type === t ? "#fff" : "var(--muted)" }}>
-                    {l}
-                  </button>
-                ))}
-              </div>
-              {ticket.type === "DINE_IN" && (
-                <input value={ticket.table} onChange={e => updateTicket({ table: e.target.value })}
-                  placeholder="# Mesa" type="number" className="w-full px-3 py-2 rounded-xl text-xs outline-none text-center"
-                  style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
-              )}
-              {ticket.type === "DELIVERY" && (
-                <input value={ticket.address} onChange={e => updateTicket({ address: e.target.value })}
-                  placeholder="📍 Dirección de entrega" className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                  style={{ background: "var(--surf2)", border: `1px solid ${ACCENT}55`, color: "var(--text)" }} />
-              )}
-              {ticket.items.length === 0 ? (
-                <div className="text-center py-10 text-xs" style={{ color: "var(--muted)" }}>Sin productos</div>
-              ) : ticket.items.map((item: any, idx: number) => (
-                <div key={idx} className="flex items-start gap-2 py-2 border-b" style={{ borderColor: "var(--border)" }}>
-                  <div className="flex-1 text-xs min-w-0">
-                    <div className="flex items-center gap-1 flex-wrap">
-                      <span className="font-medium">{item.name}</span>
-                      {item.variantName && <span className="font-bold" style={{ color: ACCENT }}>({item.variantName})</span>}
-                      {item.isPromo && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{ background: ACCENT + "22", color: ACCENT }}>PROMO</span>}
-                    </div>
-                    {item.notes && <div className="text-[10px]" style={{ color: "var(--muted)" }}>{item.notes}</div>}
-                    {item.isPromo && item.originalPrice && (
-                      <div className="text-[10px]" style={{ color: "var(--muted)" }}>Normal: <span className="line-through">${item.originalPrice}</span></div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => changeQty(idx, -1)} className="w-7 h-7 rounded-lg text-sm font-black flex items-center justify-center" style={{ background: "var(--surf2)" }}>−</button>
-                    <span className="text-xs font-bold w-5 text-center">{item.quantity}</span>
-                    <button onClick={() => changeQty(idx, 1)} className="w-7 h-7 rounded-lg text-sm font-black flex items-center justify-center" style={{ background: "var(--surf2)" }}>+</button>
-                  </div>
-                  <div className="flex flex-col items-end flex-shrink-0">
-                    <span className="text-xs font-black" style={{ color: ACCENT }}>${item.subtotal.toFixed(0)}</span>
-                    <button onClick={() => removeFromTicket(idx)} className="text-[10px] mt-0.5" style={{ color: "#ef4444" }}>✕</button>
-                  </div>
-                </div>
-              ))}
-              {ticket.items.length > 0 && (
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex justify-between text-xs" style={{ color: "var(--muted)" }}><span>Subtotal</span><span>${subtotal.toFixed(0)}</span></div>
-                  {discountAmt > 0 && <div className="flex justify-between text-xs" style={{ color: "#22c55e" }}><span>Descuento</span><span>−${discountAmt.toFixed(0)}</span></div>}
-                  <div className="flex justify-between font-black text-xl py-1"><span>Total</span><span style={{ color: ACCENT }}>${total.toFixed(0)}</span></div>
-                  <button onClick={sendToKitchen} className="w-full py-3 rounded-xl text-xs font-bold border min-h-[44px]"
-                    style={{ borderColor: "var(--border)", color: "var(--muted)" }}>🍳 Enviar a cocina</button>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {PAY_METHODS.map(m => (
-                      <button key={m.value} onClick={() => chargeTicket(m.value)}
-                        className="py-3 rounded-xl text-xs font-black min-h-[44px] transition-colors"
-                        style={{ background: activeShift ? ACCENT : "var(--surf2)", color: activeShift ? "#fff" : "var(--muted)" }}>
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Pedidos tab */}
-        {mobileTab === "orders" && (
-          <div className="flex flex-col flex-1 min-h-0 overflow-hidden" style={{ background: "var(--surf)" }}>
-            <div className="flex items-center justify-between px-3 py-2 border-b flex-shrink-0" style={{ borderColor: "var(--border)" }}>
-              <span className="text-[10px] font-black tracking-widest uppercase" style={{ color: "var(--muted)" }}>Pedidos activos</span>
-              {orders.length > 0 && <span className="text-xs font-black px-2 py-0.5 rounded-full" style={{ background: ACCENT, color: "#fff" }}>{orders.length}</span>}
-            </div>
-            <div className="flex-1 overflow-y-auto p-2 pb-20">
-              {orders.length === 0 ? (
-                <div className="text-center py-12 text-xs" style={{ color: "var(--muted)" }}>Sin pedidos activos</div>
-              ) : orders.map((order: any) => {
-                const sc   = STATUS_COLORS[order.status] || "#888";
-                const isSel = selectedOrder?.id === order.id;
-                return (
-                  <div key={order.id} className="rounded-xl border mb-2 overflow-hidden"
-                    style={{ borderColor: isSel ? ACCENT : "var(--border)", background: isSel ? ACCENT + "08" : "var(--surf2)" }}>
-                    <button className="w-full px-3 py-2.5 flex items-center justify-between text-left"
-                      onClick={() => setSelectedOrder(isSel ? null : order)}>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold truncate">
-                          {order.customerName || order.user?.name || "Sin nombre"}
-                          {order.tableNumber && <span style={{ color: "#8b5cf6" }}> · Mesa {order.tableNumber}</span>}
-                        </div>
-                        <div className="text-[10px]" style={{ color: "var(--muted)" }}>{order.orderNumber}</div>
-                      </div>
-                      <div className="text-right flex-shrink-0 ml-2">
-                        <div className="text-[10px] px-1.5 py-0.5 rounded-full font-bold mb-1" style={{ background: sc + "18", color: sc }}>{STATUS_LABELS[order.status]}</div>
-                        <div className="text-xs font-black" style={{ color: ACCENT }}>${Number(order.total).toFixed(0)}</div>
-                      </div>
-                    </button>
-                    {isSel && (
-                      <div className="px-3 pb-3 border-t" style={{ borderColor: "var(--border)" }}>
-                        <div className="my-2 space-y-0.5 text-xs">
-                          {(order.items || []).map((item: any, i: number) => (
-                            <div key={i} className="flex justify-between"><span>{item.quantity}x {item.name}</span><span>${Number(item.subtotal).toFixed(0)}</span></div>
-                          ))}
-                        </div>
-                        <div className="space-y-1.5">
-                          {(() => { const nextStatus = NEXT_STATUS[order.status]; return nextStatus && (
-                            <button onClick={() => updateOrderStatus(order.id, nextStatus)} disabled={updatingOrder === order.id}
-                              className="w-full py-2.5 rounded-xl text-xs font-bold min-h-[44px]"
-                              style={{ background: ACCENT, color: "#fff" }}>
-                              {updatingOrder === order.id ? "..." : `→ ${STATUS_LABELS[nextStatus]}`}
-                            </button>
-                          ); })()}
-                          <button onClick={() => { setPayModal(order); setPayMethod("CASH"); setCashReceived(""); }}
-                            className="w-full py-2.5 rounded-xl text-xs font-bold min-h-[44px]"
-                            style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}>
-                            💵 Cobrar ticket
-                          </button>
-                          <button onClick={() => updateOrderStatus(order.id, "CANCELLED")}
-                            className="w-full py-2.5 rounded-xl text-xs font-bold"
-                            style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
-                            Cancelar pedido
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Bottom nav */}
-        <nav className="flex-shrink-0 flex border-t" style={{ background: "var(--surf)", borderColor: "var(--border)" }}>
-          {([
-            { tab: "menu"   as MobileTab, icon: "🍔", label: "Menú",    badge: 0 },
-            { tab: "ticket" as MobileTab, icon: "🧾", label: "Ticket",  badge: ticket.items.length },
-            { tab: "orders" as MobileTab, icon: "📋", label: "Pedidos", badge: orders.length },
-          ] as const).map(({ tab, icon, label, badge }) => (
-            <button key={tab} onClick={() => setMobileTab(tab)}
-              className="flex-1 flex flex-col items-center justify-center py-3 gap-0.5 text-[10px] font-bold relative transition-colors"
-              style={{ color: mobileTab === tab ? ACCENT : "var(--muted)" }}>
-              <span className="text-xl leading-none">{icon}</span>
-              <span>{label}{badge > 0 ? ` ${badge}` : ""}</span>
-              {mobileTab === tab && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full" style={{ background: ACCENT }} />}
+        {/* Sidebar de Categorías — solo lg+ */}
+        <aside className="hidden lg:flex lg:flex-col lg:w-52 xl:w-56 flex-shrink-0 border-r overflow-y-auto scrollbar-hide p-3 gap-1.5"
+          style={{ borderColor: "var(--border)", background: "var(--surf)" }}>
+          {[{ id: "all", name: "Todo" }, ...categories].map(cat => (
+            <button key={cat.id} onClick={() => setSelectedCat(cat.id)}
+              className="w-full text-left px-4 min-h-[48px] rounded-xl text-sm font-bold flex-shrink-0 select-none"
+              style={{
+                background: selectedCat === cat.id ? ACCENT : "var(--surf2)",
+                color: selectedCat === cat.id ? "#000" : "var(--muted)",
+                border: selectedCat === cat.id ? `2px solid ${ACCENT}` : "1px solid var(--border)",
+              }}>
+              {cat.name}
             </button>
           ))}
-        </nav>
+        </aside>
+
+        {/* Menú (todas las pantallas) */}
+        {menuPane}
+
+        {/* Ticket inline — md+ */}
+        <aside className="hidden md:flex md:flex-col flex-shrink-0 border-l overflow-hidden md:w-[340px] lg:w-[360px] xl:w-[380px]"
+          style={{ borderColor: "var(--border)", background: "var(--surf)" }}>
+          {ticketPane}
+        </aside>
+
       </div>
 
-      {/* ── DESKTOP LAYOUT ── */}
-      <div className="hidden md:flex flex-1 overflow-hidden min-h-0">
+      {/* FAB mobile: Ver Orden (N) · $X */}
+      <button
+        onClick={() => setTicketDrawerOpen(true)}
+        className="md:hidden fixed bottom-4 left-4 right-4 h-14 rounded-2xl shadow-2xl flex items-center justify-between px-5 font-black text-sm z-40 select-none active:scale-[0.98] transition-transform"
+        style={{ background: ACCENT, color: "#fff" }}
+      >
+        <span className="flex items-center gap-2">
+          <span className="text-lg">🧾</span>
+          <span>Ver Orden ({ticketCount})</span>
+        </span>
+        <span className="text-base font-black">${total.toFixed(0)}</span>
+      </button>
 
-        {/* Col 1: Menú */}
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          <div className="flex gap-1.5 overflow-x-auto px-3 py-2 flex-shrink-0 border-b" style={{ borderColor: "var(--border)" }}>
-            {[{ id: "all", name: "Todo" }, ...categories].map(cat => (
-              <button key={cat.id} onClick={() => setSelectedCat(cat.id)}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold flex-shrink-0 transition-colors"
-                style={{ background: selectedCat === cat.id ? ACCENT : "var(--surf)", color: selectedCat === cat.id ? "#000" : "var(--muted)", border: "1px solid var(--border)" }}>
-                {cat.name}
-              </button>
-            ))}
-          </div>
-          <div className="flex-1 overflow-y-auto p-3">
-            {allItems.length === 0 ? (
-              <div className="flex items-center justify-center h-full flex-col gap-3" style={{ color: "var(--muted)" }}>
-                <div className="text-4xl animate-spin">🍔</div>
-                <div className="text-sm">Cargando menú...</div>
-              </div>
-            ) : (
-              <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))" }}>
-                {filteredItems.map((item: any) => (
-                  <button key={item.id} onClick={() => handleItemClick(item)}
-                    className="relative rounded-xl p-2.5 text-left border transition-all active:scale-95 hover:border-[#ff5c35]/40"
-                    style={{ background: "var(--surf)", borderColor: "var(--border)", opacity: activeShift ? 1 : 0.5 }}>
-                    {item.isPromo && item.promoPrice && (
-                      <span className="absolute top-1.5 right-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full z-10"
-                        style={{ background: ACCENT, color: "#fff" }}>% OFF</span>
-                    )}
-                    {item.imageUrl && <img src={item.imageUrl} alt="" className="w-full h-16 object-cover rounded-lg mb-2" />}
-                    <div className="text-xs font-bold leading-tight mb-1 line-clamp-2">{item.name}</div>
-                    {item.isPromo && item.promoPrice ? (
-                      <div className="flex items-baseline gap-1 flex-wrap">
-                        <span className="text-[10px] line-through" style={{ color: "var(--muted)" }}>${item.price}</span>
-                        <span className="text-xs font-black" style={{ color: ACCENT }}>${item.promoPrice}</span>
-                      </div>
-                    ) : (
-                      <div className="text-xs font-black" style={{ color: ACCENT }}>${item.price}</div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+      {/* Bottom Sheet mobile: Ticket */}
+      {ticketDrawerOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col" onClick={() => setTicketDrawerOpen(false)}>
+          <div className="flex-1" style={{ background: "rgba(0,0,0,0.65)" }} />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="sheet-enter rounded-t-3xl shadow-2xl flex flex-col overflow-hidden relative"
+            style={{ background: "var(--surf)", height: "88vh", borderTop: `1px solid var(--border)` }}
+          >
+            <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0 relative">
+              <div className="w-10 h-1 rounded-full absolute left-1/2 -translate-x-1/2 top-2" style={{ background: "var(--border)" }} />
+              <span className="text-xs font-black uppercase tracking-widest select-none mt-2" style={{ color: "var(--muted)" }}>Orden actual</span>
+              <button onClick={() => setTicketDrawerOpen(false)}
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-lg select-none"
+                style={{ background: "var(--surf2)", color: "var(--muted)" }}>✕</button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {ticketPane}
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Col 2: Ticket */}
-        <div className="flex flex-col flex-shrink-0 overflow-hidden border-l" style={{ width: "360px", borderColor: "var(--border)", background: "var(--surf)" }}>
-          <div className="flex items-center gap-0.5 px-2 pt-2 overflow-x-auto flex-shrink-0 border-b" style={{ borderColor: "var(--border)" }}>
-            {tickets.map((t: any, idx: number) => (
-              <div key={t.id} className="flex items-center gap-0.5 flex-shrink-0">
-                <button onClick={() => setActiveTicket(idx)}
-                  className="px-3 py-1.5 rounded-t-xl text-xs font-bold transition-colors"
-                  style={{ background: activeTicket === idx ? ACCENT : "var(--surf2)", color: activeTicket === idx ? "#000" : "var(--muted)" }}>
-                  {t.name || `T${idx + 1}`}
-                </button>
-                <button onClick={() => closeTicket(idx)} className="text-[10px] px-1" style={{ color: "var(--muted)" }}>✕</button>
-              </div>
-            ))}
-            <button onClick={addNewTicket} className="px-2 py-1.5 rounded-xl text-xs font-bold flex-shrink-0 ml-1"
-              style={{ background: "var(--surf2)", color: "var(--muted)" }}>+</button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {!activeShift && (
-              <div className="rounded-xl p-3 flex items-center justify-between"
-                style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
-                <span className="text-xs font-bold" style={{ color: "#ef4444" }}>🔴 Sin turno abierto</span>
-                <button onClick={() => setShowShiftModal(true)}
-                  className="text-xs font-black px-3 py-1.5 rounded-xl min-h-[44px]"
-                  style={{ background: "#ef4444", color: "#fff" }}>Abrir turno</button>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <input value={ticket.name} onChange={e => updateTicket({ name: e.target.value })}
-                placeholder="Nombre" className="flex-1 px-3 py-2 rounded-xl text-xs outline-none"
-                style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
-              <input value={ticket.phone} onChange={e => updateTicket({ phone: e.target.value })}
-                placeholder="Tel" type="tel" className="w-28 px-3 py-2 rounded-xl text-xs outline-none"
-                style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
+      {/* Drawer de Pedidos (todas las resoluciones) */}
+      {ordersDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex" onClick={() => setOrdersDrawerOpen(false)}>
+          <div className="flex-1" style={{ background: "rgba(0,0,0,0.65)" }} />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md h-full shadow-2xl flex flex-col overflow-hidden"
+            style={{ background: "var(--surf)", borderLeft: `1px solid var(--border)` }}
+          >
+            <div className="flex items-center justify-between px-4 h-14 flex-shrink-0 border-b" style={{ borderColor: "var(--border)" }}>
+              <span className="text-sm font-black uppercase tracking-widest select-none">📋 Pedidos</span>
+              <button onClick={() => setOrdersDrawerOpen(false)}
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-lg select-none"
+                style={{ background: "var(--surf2)", color: "var(--muted)" }}>✕</button>
             </div>
-            <div className="flex gap-1.5">
-              {[{ t: "TAKEOUT", l: "🥡 Llevar" }, { t: "DINE_IN", l: "🪑 Mesa" }, { t: "DELIVERY", l: "🛵 Domicilio" }].map(({ t, l }) => (
-                <button key={t} onClick={() => updateTicket({ type: t })}
-                  className="flex-1 py-2.5 rounded-xl text-xs font-bold min-h-[44px] transition-colors"
-                  style={{ background: ticket.type === t ? ACCENT : "var(--surf2)", color: ticket.type === t ? "#fff" : "var(--muted)" }}>
-                  {l}
-                </button>
-              ))}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {ordersPane}
             </div>
-            {ticket.type === "DINE_IN" && (
-              <input value={ticket.table} onChange={e => updateTicket({ table: e.target.value })}
-                placeholder="# Mesa" type="number" className="w-full px-3 py-2 rounded-xl text-xs outline-none text-center"
-                style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
-            )}
-            {ticket.type === "DELIVERY" && (
-              <input value={ticket.address} onChange={e => updateTicket({ address: e.target.value })}
-                placeholder="📍 Dirección de entrega" className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                style={{ background: "var(--surf2)", border: `1px solid ${ACCENT}55`, color: "var(--text)" }} />
-            )}
-            {ticket.items.length === 0 ? (
-              <div className="text-center py-8 text-xs" style={{ color: "var(--muted)" }}>Sin productos</div>
-            ) : ticket.items.map((item: any, idx: number) => (
-              <div key={idx} className="flex items-start gap-2 py-2 border-b" style={{ borderColor: "var(--border)" }}>
-                <div className="flex-1 text-xs min-w-0">
-                  <div className="flex items-center gap-1 flex-wrap">
-                    <span className="font-medium">{item.name}</span>
-                    {item.variantName && <span className="font-bold" style={{ color: ACCENT }}>({item.variantName})</span>}
-                    {item.isPromo && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{ background: ACCENT + "22", color: ACCENT }}>PROMO</span>}
-                  </div>
-                  {item.notes && <div className="text-[10px]" style={{ color: "var(--muted)" }}>{item.notes}</div>}
-                  {item.isPromo && item.originalPrice && (
-                    <div className="text-[10px]" style={{ color: "var(--muted)" }}>Normal: <span className="line-through">${item.originalPrice}</span></div>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => changeQty(idx, -1)} className="w-7 h-7 rounded-lg text-sm font-black flex items-center justify-center" style={{ background: "var(--surf2)" }}>−</button>
-                  <span className="text-xs font-bold w-5 text-center">{item.quantity}</span>
-                  <button onClick={() => changeQty(idx, 1)} className="w-7 h-7 rounded-lg text-sm font-black flex items-center justify-center" style={{ background: "var(--surf2)" }}>+</button>
-                </div>
-                <div className="flex flex-col items-end flex-shrink-0">
-                  <span className="text-xs font-black" style={{ color: ACCENT }}>${item.subtotal.toFixed(0)}</span>
-                  <button onClick={() => removeFromTicket(idx)} className="text-[10px] mt-0.5" style={{ color: "#ef4444" }}>✕</button>
-                </div>
-              </div>
-            ))}
-            {ticket.items.length > 0 && (
-              <div className="space-y-1.5 pt-1">
-                <div className="flex justify-between text-xs" style={{ color: "var(--muted)" }}><span>Subtotal</span><span>${subtotal.toFixed(0)}</span></div>
-                {discountAmt > 0 && <div className="flex justify-between text-xs" style={{ color: "#22c55e" }}><span>Descuento</span><span>−${discountAmt.toFixed(0)}</span></div>}
-                <div className="flex justify-between font-black text-xl py-1"><span>Total</span><span style={{ color: ACCENT }}>${total.toFixed(0)}</span></div>
-                <button onClick={sendToKitchen} className="w-full py-3 rounded-xl text-xs font-bold border min-h-[44px] hover:bg-white/5 transition-colors"
-                  style={{ borderColor: "var(--border)", color: "var(--muted)" }}>🍳 Enviar a cocina</button>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {PAY_METHODS.map(m => (
-                    <button key={m.value} onClick={() => chargeTicket(m.value)}
-                      className="py-3 rounded-xl text-xs font-black min-h-[44px] transition-colors"
-                      style={{ background: activeShift ? ACCENT : "var(--surf2)", color: activeShift ? "#fff" : "var(--muted)" }}>
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
-
-        {/* Col 3: Pedidos (colapsable) */}
-        {showPanel ? (
-          <div className="flex flex-col flex-shrink-0 overflow-hidden border-l" style={{ width: "280px", borderColor: "var(--border)", background: "var(--surf)" }}>
-            <div className="flex items-center justify-between px-3 py-2 border-b flex-shrink-0" style={{ borderColor: "var(--border)" }}>
-              <span className="text-[10px] font-black tracking-widest uppercase" style={{ color: "var(--muted)" }}>Pedidos activos</span>
-              <div className="flex items-center gap-1.5">
-                {orders.length > 0 && <span className="text-xs font-black px-2 py-0.5 rounded-full" style={{ background: ACCENT, color: "#fff" }}>{orders.length}</span>}
-                <button onClick={() => setShowPanel(false)}
-                  className="w-6 h-6 rounded-lg flex items-center justify-center text-xs"
-                  style={{ background: "var(--surf2)", color: "var(--muted)" }}>›</button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-2">
-              {orders.length === 0 ? (
-                <div className="text-center py-12 text-xs" style={{ color: "var(--muted)" }}>Sin pedidos activos</div>
-              ) : orders.map((order: any) => {
-                const sc   = STATUS_COLORS[order.status] || "#888";
-                const isSel = selectedOrder?.id === order.id;
-                return (
-                  <div key={order.id} className="rounded-xl border mb-2 overflow-hidden"
-                    style={{ borderColor: isSel ? ACCENT : "var(--border)", background: isSel ? ACCENT + "08" : "var(--surf2)" }}>
-                    <button className="w-full px-3 py-2.5 flex items-center justify-between text-left"
-                      onClick={() => setSelectedOrder(isSel ? null : order)}>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold truncate">
-                          {order.customerName || order.user?.name || "Sin nombre"}
-                          {order.tableNumber && <span style={{ color: "#8b5cf6" }}> · Mesa {order.tableNumber}</span>}
-                        </div>
-                        <div className="text-[10px]" style={{ color: "var(--muted)" }}>{order.orderNumber}</div>
-                      </div>
-                      <div className="text-right flex-shrink-0 ml-2">
-                        <div className="text-[10px] px-1.5 py-0.5 rounded-full font-bold mb-1 whitespace-nowrap" style={{ background: sc + "18", color: sc }}>{STATUS_LABELS[order.status]}</div>
-                        <div className="text-xs font-black" style={{ color: ACCENT }}>${Number(order.total).toFixed(0)}</div>
-                      </div>
-                    </button>
-                    {isSel && (
-                      <div className="px-3 pb-3 border-t" style={{ borderColor: "var(--border)" }}>
-                        <div className="my-2 space-y-0.5 text-xs">
-                          {(order.items || []).map((item: any, i: number) => (
-                            <div key={i} className="flex justify-between"><span>{item.quantity}x {item.name}</span><span>${Number(item.subtotal).toFixed(0)}</span></div>
-                          ))}
-                        </div>
-                        <div className="space-y-1.5">
-                          {(() => { const nextStatus = NEXT_STATUS[order.status]; return nextStatus && (
-                            <button onClick={() => updateOrderStatus(order.id, nextStatus)} disabled={updatingOrder === order.id}
-                              className="w-full py-2.5 rounded-xl text-xs font-bold min-h-[44px]"
-                              style={{ background: ACCENT, color: "#fff" }}>
-                              {updatingOrder === order.id ? "..." : `→ ${STATUS_LABELS[nextStatus]}`}
-                            </button>
-                          ); })()}
-                          <button onClick={() => { setPayModal(order); setPayMethod("CASH"); setCashReceived(""); }}
-                            className="w-full py-2.5 rounded-xl text-xs font-bold min-h-[44px]"
-                            style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}>
-                            💵 Cobrar ticket
-                          </button>
-                          <button onClick={() => updateOrderStatus(order.id, "CANCELLED")}
-                            className="w-full py-2.5 rounded-xl text-xs font-bold"
-                            style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
-                            Cancelar pedido
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <button onClick={() => setShowPanel(true)}
-            className="flex-shrink-0 flex flex-col items-center justify-center border-l gap-2 hover:bg-white/5 transition-colors"
-            style={{ width: "44px", borderColor: "var(--border)", background: "var(--surf)", color: "var(--muted)" }}>
-            <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: "11px", fontWeight: "bold" }}>
-              📋 {orders.length}
-            </span>
-          </button>
-        )}
-      </div>
+      )}
 
       {/* ── MODALES ── */}
       {payModal && (
@@ -980,7 +979,7 @@ export default function TPVPage() {
               </button>
             </div>
             <div className="p-4 border-t border-[var(--border)] bg-[var(--bg)]">
-              <button onClick={() => { localStorage.removeItem("accessToken"); setIsGlobalLocked(true); setCurrentEmployee(null); setActiveShift(null); setShowManagerMenu(false); }}
+              <button onClick={clearEmployeeSession}
                 className="w-full py-3 rounded-xl flex items-center justify-center gap-2 font-bold text-red-500 bg-red-500/10 hover:bg-red-500/20 transition-colors">
                 🔒 Bloquear sesión
               </button>
@@ -988,6 +987,164 @@ export default function TPVPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function TPVLockScreen({
+  accent,
+  restaurantName,
+  locationName,
+  pinInput,
+  pinError,
+  isVerifyingPin,
+  onDigit,
+  onBackspace,
+  onClear,
+  onSubmit,
+  onChangeLocation,
+}: {
+  accent: string;
+  restaurantName: string;
+  locationName: string;
+  pinInput: string;
+  pinError: string;
+  isVerifyingPin: boolean;
+  onDigit: (digit: string) => void;
+  onBackspace: () => void;
+  onClear: () => void;
+  onSubmit: () => void;
+  onChangeLocation: () => void;
+}) {
+  return (
+    <div
+      className="min-h-screen px-4 py-6 md:px-8"
+      style={{
+        background:
+          "radial-gradient(circle at top, rgba(255,92,53,0.2), transparent 34%), linear-gradient(180deg, #08080c 0%, #11111a 100%)",
+      }}
+    >
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl flex-col justify-center gap-6 lg:flex-row lg:items-stretch">
+        <div className="flex flex-1 flex-col justify-between rounded-[2rem] border border-white/10 bg-black/20 p-8 shadow-2xl backdrop-blur md:p-10">
+          <div>
+            <div
+              className="mb-5 inline-flex rounded-full border px-4 py-2 text-[11px] font-black uppercase tracking-[0.3em]"
+              style={{ borderColor: `${accent}66`, color: accent, background: `${accent}14` }}
+            >
+              TPV bloqueado
+            </div>
+            <h1 className="max-w-xl text-4xl font-black uppercase tracking-tight text-white md:text-6xl">
+              {restaurantName}
+            </h1>
+            {locationName && (
+              <p className="mt-4 text-base font-bold text-white/60 md:text-lg">
+                Sucursal: {locationName}
+              </p>
+            )}
+            <p className="mt-6 max-w-md text-sm leading-6 text-white/50 md:text-base">
+              Ingresa el PIN del empleado para abrir la caja. El teclado esta optimizado
+              para tablets y pantallas tactiles.
+            </p>
+          </div>
+
+          <div className="mt-10 flex flex-wrap gap-3 text-xs font-bold uppercase tracking-[0.2em] text-white/35">
+            <span className="rounded-full border border-white/10 px-3 py-2">Modo oscuro</span>
+            <span className="rounded-full border border-white/10 px-3 py-2">Acceso por PIN</span>
+            <span className="rounded-full border border-white/10 px-3 py-2">Sesion rapida</span>
+          </div>
+        </div>
+
+        <div className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-[#101018] p-5 shadow-2xl md:p-7">
+          <div className="rounded-[1.75rem] border border-white/10 bg-[#151520] p-5 md:p-7">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.25em] text-white/40">
+                  PIN del empleado
+                </p>
+                <h2 className="mt-2 text-2xl font-black text-white md:text-3xl">
+                  Desbloquear terminal
+                </h2>
+              </div>
+              <button
+                onClick={onChangeLocation}
+                className="rounded-2xl border border-white/10 px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-white/55 transition hover:bg-white/5"
+              >
+                Cambiar sucursal
+              </button>
+            </div>
+
+            <div className="mb-5 grid grid-cols-6 gap-3">
+              {Array.from({ length: PIN_MAX_LENGTH }).map((_, index) => {
+                const filled = index < pinInput.length;
+                return (
+                  <div
+                    key={index}
+                    className="flex h-16 items-center justify-center rounded-2xl border text-2xl font-black md:h-20 md:text-3xl"
+                    style={{
+                      borderColor: filled ? `${accent}99` : "rgba(255,255,255,0.08)",
+                      background: filled ? `${accent}22` : "rgba(255,255,255,0.03)",
+                      color: filled ? accent : "rgba(255,255,255,0.22)",
+                    }}
+                  >
+                    {filled ? "•" : ""}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mb-5 min-h-6 text-sm font-bold">
+              {pinError ? (
+                <span className="text-red-400">{pinError}</span>
+              ) : (
+                <span className="text-white/35">Usa un PIN de 4 a 6 digitos.</span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 md:gap-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
+                <button
+                  key={digit}
+                  disabled={isVerifyingPin}
+                  onClick={() => onDigit(String(digit))}
+                  className="min-h-[86px] rounded-[1.5rem] border border-white/10 bg-[#1b1b27] text-4xl font-black text-white shadow-lg transition active:scale-[0.98] disabled:opacity-50 md:min-h-[110px] md:text-5xl"
+                >
+                  {digit}
+                </button>
+              ))}
+              <button
+                disabled={isVerifyingPin}
+                onClick={onClear}
+                className="min-h-[86px] rounded-[1.5rem] border border-white/10 bg-[#191923] text-lg font-black uppercase tracking-[0.2em] text-white/65 transition active:scale-[0.98] disabled:opacity-50 md:min-h-[110px]"
+              >
+                C
+              </button>
+              <button
+                disabled={isVerifyingPin}
+                onClick={() => onDigit("0")}
+                className="min-h-[86px] rounded-[1.5rem] border border-white/10 bg-[#1b1b27] text-4xl font-black text-white shadow-lg transition active:scale-[0.98] disabled:opacity-50 md:min-h-[110px] md:text-5xl"
+              >
+                0
+              </button>
+              <button
+                disabled={isVerifyingPin}
+                onClick={onBackspace}
+                className="min-h-[86px] rounded-[1.5rem] border border-red-500/15 bg-red-500/10 text-2xl font-black text-red-400 transition active:scale-[0.98] disabled:opacity-50 md:min-h-[110px] md:text-3xl"
+              >
+                ⌫
+              </button>
+            </div>
+
+            <button
+              disabled={isVerifyingPin || pinInput.length < PIN_MIN_LENGTH}
+              onClick={onSubmit}
+              className="mt-5 min-h-[64px] w-full rounded-[1.5rem] text-lg font-black uppercase tracking-[0.22em] text-white transition disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ background: accent }}
+            >
+              {isVerifyingPin ? "Verificando..." : "Entrar al TPV"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

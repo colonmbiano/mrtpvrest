@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { logout } from "@/lib/auth";
 
@@ -49,95 +50,153 @@ const IconLogOut = () => (
     <path d="M14 8H6"/>
   </svg>
 );
+const IconMenu = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
+    <line x1="3" y1="6" x2="21" y2="6" />
+    <line x1="3" y1="12" x2="21" y2="12" />
+    <line x1="3" y1="18" x2="21" y2="18" />
+  </svg>
+);
+const IconClose = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
 
 // ── Nav structure ─────────────────────────────────────────────
 const navItems = [
-  { href: "/dashboard", label: "Overview",    icon: <IconGrid /> },
+  { href: "/dashboard", label: "Vista general", icon: <IconGrid /> },
 ];
 const negoItems = [
-  { href: "/marcas",    label: "Marcas",      icon: <IconStar /> },
-  { href: "/ajustes",   label: "Ajustes",     icon: <IconSettings /> },
+  { href: "/marcas",      label: "Marcas",      icon: <IconStar /> },
+  { href: "/ajustes",     label: "Planes",      icon: <IconSettings /> },
   { href: "/facturacion", label: "Facturación", icon: <IconReceipt /> },
 ];
 const sysItems = [
-  { href: "/logs",      label: "Logs",        icon: <IconTerminal /> },
-  { href: "/api-keys",  label: "API Keys",    icon: <IconKey /> },
+  { href: "/logs",     label: "Logs",     icon: <IconTerminal /> },
+  { href: "/api-keys", label: "API Keys", icon: <IconKey /> },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [isOpen, setIsOpen] = useState(false);
+  const close = () => setIsOpen(false);
+
+  useEffect(() => { close(); }, [pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = isOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [isOpen]);
 
   return (
-    <aside className="db-sidebar">
-      {/* ── Logo ── */}
-      <div className="db-logo">
-        <div className="db-logo-mark">
+    <>
+      {/* ── Mobile top bar (solo visible en <md) ── */}
+      <header className="db-mobile-header">
+        <div className="db-logo-mark db-logo-mark--compact">
           MRTPV<span>REST</span>
         </div>
-        <div className="db-logo-sub">Global Dashboard</div>
-        <div style={{
-          marginTop: 8,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 5,
-          padding: '3px 8px',
-          borderRadius: 6,
-          fontSize: 9,
-          fontWeight: 700,
-          letterSpacing: '0.5px',
-          textTransform: 'uppercase' as const,
-          background: 'var(--orange-dim)',
-          color: 'var(--orange)',
-          border: '1px solid var(--orange-glow)',
-        }}>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--orange)', display: 'inline-block' }} />
-          SaaS Central
+        <button
+          type="button"
+          aria-label="Abrir menú"
+          aria-expanded={isOpen}
+          className="db-hamburger"
+          onClick={() => setIsOpen(true)}
+        >
+          <IconMenu />
+        </button>
+      </header>
+
+      {/* ── Overlay móvil ── */}
+      {isOpen && <div className="db-drawer-overlay" onClick={close} aria-hidden="true" />}
+
+      <aside className={`db-sidebar ${isOpen ? "is-open" : ""}`}>
+        {/* Header interno del drawer en móvil */}
+        <div className="db-drawer-head">
+          <div className="db-logo-mark db-logo-mark--compact">
+            MRTPV<span>REST</span>
+          </div>
+          <button
+            type="button"
+            aria-label="Cerrar menú"
+            className="db-hamburger"
+            onClick={close}
+          >
+            <IconClose />
+          </button>
         </div>
-      </div>
 
-      {/* ── Navigation ── */}
-      <nav className="db-nav">
-        {navItems.map((item) => (
-          <Link key={item.href} href={item.href}
-            className={`db-nav-item ${pathname === item.href ? "active" : ""}`}>
-            {item.icon}
-            {item.label}
-          </Link>
-        ))}
-
-        <div className="db-nav-section">Negocio</div>
-        {negoItems.map((item) => (
-          <Link key={item.href} href={item.href}
-            className={`db-nav-item ${pathname === item.href ? "active" : ""}`}>
-            {item.icon}
-            {item.label}
-          </Link>
-        ))}
-
-        <div className="db-nav-section">Sistema</div>
-        {sysItems.map((item) => (
-          <Link key={item.href} href={item.href}
-            className={`db-nav-item ${pathname === item.href ? "active" : ""}`}>
-            {item.icon}
-            {item.label}
-          </Link>
-        ))}
-      </nav>
-
-      {/* ── Footer ── */}
-      <div className="db-sidebar-footer">
-        <div className="db-user-pill">
-          <div className="db-avatar">SA</div>
-          <div className="db-user-info">
-            <p>Super Admin</p>
-            <span>Acceso global</span>
+        {/* ── Logo (solo desktop) ── */}
+        <div className="db-logo">
+          <div className="db-logo-mark">
+            MRTPV<span>REST</span>
+          </div>
+          <div className="db-logo-sub">Global Dashboard</div>
+          <div style={{
+            marginTop: 8,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            padding: "3px 8px",
+            borderRadius: 6,
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: "0.5px",
+            textTransform: "uppercase" as const,
+            background: "var(--orange-dim)",
+            color: "var(--orange)",
+            border: "1px solid var(--orange-glow)",
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--orange)", display: "inline-block" }} />
+            SaaS Central
           </div>
         </div>
-        <button onClick={logout} className="db-logout-btn">
-          <IconLogOut />
-          Cerrar sesión
-        </button>
-      </div>
-    </aside>
+
+        {/* ── Navigation ── */}
+        <nav className="db-nav">
+          {navItems.map((item) => (
+            <Link key={item.href} href={item.href} onClick={close}
+              className={`db-nav-item ${pathname === item.href ? "active" : ""}`}>
+              {item.icon}
+              {item.label}
+            </Link>
+          ))}
+
+          <div className="db-nav-section">Negocio</div>
+          {negoItems.map((item) => (
+            <Link key={item.href} href={item.href} onClick={close}
+              className={`db-nav-item ${pathname === item.href ? "active" : ""}`}>
+              {item.icon}
+              {item.label}
+            </Link>
+          ))}
+
+          <div className="db-nav-section">Sistema</div>
+          {sysItems.map((item) => (
+            <Link key={item.href} href={item.href} onClick={close}
+              className={`db-nav-item ${pathname === item.href ? "active" : ""}`}>
+              {item.icon}
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+
+        {/* ── Footer ── */}
+        <div className="db-sidebar-footer">
+          <div className="db-user-pill">
+            <div className="db-avatar">SA</div>
+            <div className="db-user-info">
+              <p>Super Admin</p>
+              <span>Acceso global</span>
+            </div>
+          </div>
+          <button onClick={() => { logout(); close(); }} className="db-logout-btn">
+            <IconLogOut />
+            Cerrar sesión
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

@@ -1,21 +1,26 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+
 import axios from "axios";
+import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://master-burguers-production.up.railway.app";
-const ACCENT = "#ff5c35";
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  "https://master-burguers-production.up.railway.app";
+const ACCENT = "#F5C842";
 
-type Location = { id: string; name: string; address: string | null };
+type Location = {
+  id: string;
+  name: string;
+  address: string | null;
+};
+
 type Restaurant = {
   id: string;
   name: string;
-  slug: string;
   accentColor: string | null;
   locations: Location[];
 };
-
-type Step = "login" | "pick" | "terminal" | "saving";
 
 export default function SetupPage() {
   const router = useRouter();
@@ -23,76 +28,71 @@ export default function SetupPage() {
   const [alreadyLinked, setAlreadyLinked] = useState<null | {
     restaurantName: string;
     locationName: string;
-    terminalId: string | null;
   }>(null);
-
-  const [step, setStep] = useState<Step>("login");
+  const [step, setStep] = useState<"login" | "pick" | "terminal" | "saving">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const [authToken, setAuthToken] = useState<string | null>(null);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [picked, setPicked] = useState<{ restaurant: Restaurant; location: Location } | null>(null);
   const [terminalId, setTerminalId] = useState("");
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const rid = localStorage.getItem("restaurantId");
-    const lid = localStorage.getItem("locationId");
-    if (rid && lid) {
-      setAlreadyLinked({
-        restaurantName: localStorage.getItem("restaurantName") || "",
-        locationName: localStorage.getItem("locationName") || "",
-        terminalId: localStorage.getItem("terminalId"),
-      });
-      setTerminalId(localStorage.getItem("terminalId") || "");
-    }
+    const restaurantId = localStorage.getItem("restaurantId");
+    const locationId = localStorage.getItem("locationId");
+    if (!restaurantId || !locationId) return;
+    setAlreadyLinked({
+      restaurantName: localStorage.getItem("restaurantName") || "Restaurante",
+      locationName: localStorage.getItem("locationName") || "Sucursal",
+    });
+    setTerminalId(localStorage.getItem("terminalId") || "");
   }, []);
 
-  async function login(e: React.FormEvent) {
-    e.preventDefault();
+  async function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setLoading(true);
     setError("");
+
     try {
       const { data } = await axios.post(`${API_URL}/api/auth/login`, { email, password });
-      const accessToken: string = data.accessToken;
-      setAuthToken(accessToken);
-
-      const meRes = await axios.get(`${API_URL}/api/tenant/me`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+      const authed = axios.create({
+        baseURL: API_URL,
+        headers: { Authorization: `Bearer ${data.accessToken}` },
       });
 
-      const tenant = meRes.data;
-      let rs: Restaurant[] = Array.isArray(tenant?.restaurants)
-        ? tenant.restaurants
-        : tenant?.id
-          ? [{ id: tenant.id, name: tenant.name, slug: tenant.slug, accentColor: tenant.accentColor ?? null, locations: tenant.locations || [] }]
-          : [];
+      const me = await authed.get("/api/tenant/me");
+      const tenantRestaurants: Restaurant[] = (me.data.restaurants || []).map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        accentColor: r.accentColor || null,
+        locations: Array.isArray(r.locations) ? r.locations : [],
+      }));
 
-      if (rs.length === 0) throw new Error("Este usuario no tiene restaurantes");
+      await Promise.all(
+        tenantRestaurants.map(async (r) => {
+          if (r.locations.length > 0) return;
+          try {
+            const res = await authed.get(`/api/tenant/restaurants/${r.id}/locations`);
+            r.locations = res.data || [];
+          } catch {
+            r.locations = [];
+          }
+        }),
+      );
 
-      const needLocations = rs.some((r) => !Array.isArray((r as any).locations));
-      if (needLocations) {
-        await Promise.all(
-          rs.map(async (r) => {
-            try {
-              const locs = await axios.get(`${API_URL}/api/tenant/restaurants/${r.id}/locations`, {
-                headers: { Authorization: `Bearer ${accessToken}` },
-              });
-              (r as any).locations = Array.isArray(locs.data) ? locs.data : locs.data?.locations || [];
-            } catch {
-              (r as any).locations = [];
-            }
-          })
-        );
+      if (tenantRestaurants.every((r) => r.locations.length === 0)) {
+        throw new Error("No encontramos sucursales activas para esta cuenta.");
       }
 
-      setRestaurants(rs);
+      setRestaurants(tenantRestaurants);
       setStep("pick");
     } catch (err: any) {
-      setError(err?.response?.data?.error || err.message || "No se pudo iniciar sesión");
+      setError(
+        err?.response?.data?.error ||
+          err?.message ||
+          "No se pudo iniciar sesión.",
+      );
     } finally {
       setLoading(false);
     }
@@ -103,7 +103,7 @@ export default function SetupPage() {
     setStep("terminal");
   }
 
-  async function finishSetup() {
+  function finishSetup() {
     if (!picked) return;
     setStep("saving");
     const { restaurant, location } = picked;
@@ -123,13 +123,18 @@ export default function SetupPage() {
       localStorage.setItem("mb-accent", restaurant.accentColor);
     }
 
-    // The setup session used an ADMIN token; wipe it so the PIN login owns the session.
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
-    document.cookie = "mb-role=; path=/; max-age=0; SameSite=Lax";
 
-    router.replace("/login");
+    router.replace("/");
+  }
+
+  function saveTerminalOnly() {
+    const v = terminalId.trim();
+    if (v) localStorage.setItem("terminalId", v);
+    else localStorage.removeItem("terminalId");
+    router.replace("/");
   }
 
   function unlink() {
@@ -147,16 +152,12 @@ export default function SetupPage() {
     ].forEach((k) => localStorage.removeItem(k));
     document.cookie = "mb-role=; path=/; max-age=0; SameSite=Lax";
     setAlreadyLinked(null);
-    setStep("login");
+    setRestaurants([]);
     setEmail("");
     setPassword("");
-  }
-
-  function saveTerminalOnly() {
-    const v = terminalId.trim();
-    if (v) localStorage.setItem("terminalId", v);
-    else localStorage.removeItem("terminalId");
-    router.replace("/login");
+    setTerminalId("");
+    setError("");
+    setStep("login");
   }
 
   if (alreadyLinked && step === "login") {
@@ -164,7 +165,7 @@ export default function SetupPage() {
       <Page>
         <Card>
           <H1>Dispositivo vinculado</H1>
-          <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
+          <p className="mt-2 mb-6 text-sm" style={{ color: "var(--muted)" }}>
             <b>{alreadyLinked.restaurantName}</b> — {alreadyLinked.locationName}
           </p>
 
@@ -180,7 +181,7 @@ export default function SetupPage() {
             <button
               onClick={unlink}
               className="text-sm"
-              style={{ color: "#ef4444", background: "none", border: "none", cursor: "pointer" }}
+              style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}
             >
               Desvincular TPV
             </button>
@@ -243,7 +244,11 @@ export default function SetupPage() {
                     key={loc.id}
                     onClick={() => pickLocation(r, loc)}
                     className="block w-full text-left p-5 mb-3 rounded-2xl border"
-                    style={{ background: "var(--surf2, var(--bg))", borderColor: "var(--border)", cursor: "pointer" }}
+                    style={{
+                      background: "var(--surf2, var(--bg))",
+                      borderColor: "var(--border)",
+                      cursor: "pointer",
+                    }}
                   >
                     <div className="text-xl font-extrabold" style={{ color: "var(--text)" }}>
                       {loc.name}
@@ -253,13 +258,12 @@ export default function SetupPage() {
                     </div>
                   </button>
                 ))
-              )
+              ),
             )}
             <button
               onClick={() => {
                 setStep("login");
                 setRestaurants([]);
-                setAuthToken(null);
               }}
               className="mt-3 text-sm"
               style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer" }}
@@ -273,9 +277,13 @@ export default function SetupPage() {
           <>
             <H1>Terminal de pagos</H1>
             <p className="mt-2 mb-6 text-sm" style={{ color: "var(--muted)" }}>
-              Introduce el ID o IP de la terminal física asignada a este TPV. Es opcional — si lo dejas vacío, los pagos con tarjeta deberán cobrarse manualmente.
+              Introduce el ID o IP de la terminal física asignada a este TPV. Es opcional — si lo
+              dejas vacío, los pagos con tarjeta deberán cobrarse manualmente.
             </p>
-            <div className="mb-4 p-3 rounded-xl" style={{ background: "var(--surf2, var(--bg))", border: "1px solid var(--border)" }}>
+            <div
+              className="mb-4 p-3 rounded-xl"
+              style={{ background: "var(--surf2, var(--bg))", border: "1px solid var(--border)" }}
+            >
               <div className="text-xs uppercase tracking-wider" style={{ color: "var(--muted)" }}>
                 Vinculando
               </div>
@@ -324,7 +332,10 @@ function Page({ children }: { children: React.ReactNode }) {
           <h1 className="text-4xl font-black tracking-tighter" style={{ color: ACCENT }}>
             MRTPVREST
           </h1>
-          <p className="text-xs mt-1 font-medium uppercase tracking-widest" style={{ color: "var(--muted)" }}>
+          <p
+            className="text-xs mt-1 font-medium uppercase tracking-widest"
+            style={{ color: "var(--muted)" }}
+          >
             Configuración de dispositivo
           </p>
         </div>
@@ -374,14 +385,20 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
         background: "var(--surf2, var(--bg))",
         color: "var(--text)",
         border: "1px solid var(--border2, var(--border))",
+        ...props.style,
       }}
     />
   );
 }
 
-function PrimaryButton({ children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+function PrimaryButton({
+  children,
+  onClick,
+  ...rest
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
+      onClick={onClick}
       {...rest}
       className="w-full mt-6 py-4 rounded-2xl font-black uppercase text-base"
       style={{
