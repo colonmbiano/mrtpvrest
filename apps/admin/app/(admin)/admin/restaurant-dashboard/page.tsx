@@ -29,6 +29,25 @@ function fmtMoney(n: number) {
   return "$" + n.toLocaleString("es-MX", { maximumFractionDigits: 0 });
 }
 
+function toCsv(rows: (string | number)[][]) {
+  const esc = (v: string | number) => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return rows.map(r => r.map(esc).join(",")).join("\n");
+}
+
+function downloadFile(name: string, content: string, mime = "text/csv;charset=utf-8") {
+  if (typeof window === "undefined") return;
+  const blob = new Blob([content], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 const CSS = `
 @keyframes db-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 .db-scroll::-webkit-scrollbar { width:5px; }
@@ -265,24 +284,28 @@ export default function RestaurantDashboard() {
       value: ventas > 0 ? fmtMoney(ventas) : "$0", cents: "",
       delta: delivered.length > 0 ? `${delivered.length} entregados` : "Sin entregas", up: true, sub: "hoy",
       spark: "", fill: "", color: "#9472ff",
+      href: "/admin/reportes",
     },
     {
       label: "Pedidos",
       value: String(today.length), cents: "",
       delta: `${active.length} en vivo`, up: true, sub: active.length ? "activos ahora" : "sin pedidos activos",
       spark: "", fill: "", color: "var(--green, #10b981)",
+      href: "/admin/pedidos",
     },
     {
       label: "Ticket promedio",
       value: ticket > 0 ? fmtMoney(ticket) : "—", cents: "",
       delta: delivered.length ? `${delivered.length} pedidos` : "—", up: true, sub: "hoy",
       spark: "", fill: "", color: "var(--amber, #f59e0b)",
+      href: "/admin/reportes",
     },
     {
       label: "Tiempo prep. prom.",
       value: active.length > 0 ? espStr : "—", cents: "",
       delta: active.length ? `${active.length} activos` : "—", up: true, sub: "tiempo en espera",
       spark: "", fill: "", color: "#b89eff",
+      href: "/admin/pedidos",
     },
   ];
 
@@ -363,10 +386,29 @@ export default function RestaurantDashboard() {
                 </button>
               ))}
             </div>
-            <button style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10, background: V.surf1, border: `1px solid ${V.bd1}`, color: V.txMid, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+            <button
+              onClick={() => {
+                const header = ["#", "Fecha", "Canal", "Cliente/Mesa", "Estado", "Total"];
+                const rows = orders.map(o => [
+                  o.orderNumber ?? o.id.slice(-4),
+                  new Date(o.createdAt).toISOString(),
+                  o.orderType || "",
+                  o.customer?.name || (o.orderType === "MESA" ? `Mesa ${(o as any).tableNumber || ""}` : ""),
+                  o.status,
+                  o.total || 0,
+                ]);
+                const csv = toCsv([header, ...rows]);
+                const stamp = new Date().toISOString().slice(0, 10);
+                downloadFile(`dashboard-${stamp}.csv`, csv);
+              }}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10, background: V.surf1, border: `1px solid ${V.bd1}`, color: V.txMid, fontSize: 12, fontWeight: 500, cursor: "pointer" }}
+            >
               Exportar
             </button>
-            <button style={{ padding: "9px 16px", borderRadius: 10, background: "var(--brand-primary,#7c3aed)", color: "#fff", border: "none", fontWeight: 600, fontSize: 13, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", boxShadow: "0 4px 14px rgba(124,58,237,.35)" }}>
+            <button
+              onClick={() => router.push("/admin/pedidos?new=1")}
+              style={{ padding: "9px 16px", borderRadius: 10, background: "var(--brand-primary,#7c3aed)", color: "#fff", border: "none", fontWeight: 600, fontSize: 13, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", boxShadow: "0 4px 14px rgba(124,58,237,.35)" }}
+            >
               + Nueva venta
             </button>
           </div>
@@ -375,7 +417,14 @@ export default function RestaurantDashboard() {
         {/* ── KPI Grid ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 24 }}>
           {KPIS.map((k, i) => (
-            <div key={i} style={{ ...card, position: "relative", overflow: "hidden" }}>
+            <div
+              key={i}
+              role="button"
+              tabIndex={0}
+              onClick={() => router.push(k.href)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); router.push(k.href); } }}
+              style={{ ...card, position: "relative", overflow: "hidden", cursor: "pointer" }}
+            >
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txMut, letterSpacing: ".14em", textTransform: "uppercase", marginBottom: 8 }}>
                 {k.label}
               </div>
@@ -502,7 +551,14 @@ export default function RestaurantDashboard() {
                 </div>
               )}
               {displayOrders.map((o, i) => (
-                <div key={o.id} style={{ display: "grid", gridTemplateColumns: "52px 1fr auto auto", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: i < displayOrders.length - 1 ? `1px solid ${V.bd1}` : "none" }}>
+                <div
+                  key={o.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/admin/pedidos?id=${o.id}`)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); router.push(`/admin/pedidos?id=${o.id}`); } }}
+                  style={{ display: "grid", gridTemplateColumns: "52px 1fr auto auto", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: i < displayOrders.length - 1 ? `1px solid ${V.bd1}` : "none", cursor: "pointer" }}
+                >
                   <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: "#b89eff", fontWeight: 600 }}>
                     #{o.orderNumber || o.id.slice(-4)}
                   </span>
@@ -533,7 +589,10 @@ export default function RestaurantDashboard() {
                 <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi }}>Top del día</div>
                 <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>Más vendidos</div>
               </div>
-              <button style={{ display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: V.surf1, border: `1px solid ${V.bd1}`, color: V.txMid, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Ver todo →</button>
+              <button
+                onClick={() => router.push("/admin/reportes")}
+                style={{ display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: V.surf1, border: `1px solid ${V.bd1}`, color: V.txMid, fontSize: 12, fontWeight: 500, cursor: "pointer" }}
+              >Ver todo →</button>
             </div>
             {topProducts.length === 0 && (
               <div style={{ padding: "24px 0", textAlign: "center", color: V.txMut, fontSize: 12 }}>
@@ -773,7 +832,10 @@ export default function RestaurantDashboard() {
                     : "Stock en orden"}
                 </div>
               </div>
-              <button style={{ display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: V.errS, border: "1px solid rgba(239,68,68,.3)", color: "var(--red, #ef4444)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Reponer</button>
+              <button
+                onClick={() => router.push("/admin/inventario")}
+                style={{ display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: V.errS, border: "1px solid rgba(239,68,68,.3)", color: "var(--red, #ef4444)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
+              >Reponer</button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {invAlerts.length === 0 && (
@@ -801,7 +863,10 @@ export default function RestaurantDashboard() {
                 );
               })}
             </div>
-            <button style={{ width: "100%", marginTop: 14, padding: "9px 16px", borderRadius: 10, background: "var(--red, #ef4444)", color: "#fff", border: "none", fontWeight: 600, fontSize: 13, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", boxShadow: "0 4px 14px rgba(239,68,68,.3)" }}>
+            <button
+              onClick={() => router.push("/admin/inventario/proveedores")}
+              style={{ width: "100%", marginTop: 14, padding: "9px 16px", borderRadius: 10, background: "var(--red, #ef4444)", color: "#fff", border: "none", fontWeight: 600, fontSize: 13, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", boxShadow: "0 4px 14px rgba(239,68,68,.3)" }}
+            >
               Generar orden de compra →
             </button>
           </div>
