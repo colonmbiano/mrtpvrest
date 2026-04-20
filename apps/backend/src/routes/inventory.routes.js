@@ -36,6 +36,23 @@ router.put('/suppliers/:id', authenticate, requireAdmin, async (req, res) => {
 
 // ── INGREDIENTES (Nivel Sucursal) ─────────────────────────────────────────
 
+// GET /api/inventory/alerts — ingredientes con stock <= minStock (widget dashboard)
+router.get('/alerts', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+    const items = await prisma.ingredient.findMany({
+      where: { locationId, minStock: { gt: 0 } },
+      select: { id: true, name: true, unit: true, stock: true, minStock: true },
+      orderBy: { name: 'asc' },
+    });
+    const alerts = items
+      .filter(i => i.stock <= i.minStock)
+      .sort((a, b) => (a.stock / (a.minStock || 1)) - (b.stock / (b.minStock || 1)));
+    res.json(alerts);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/ingredients', authenticate, requireAdmin, async (req, res) => {
   try {
     const locationId = req.headers['x-location-id'] || req.query.locationId;

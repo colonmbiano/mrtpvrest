@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import api from "@/lib/api";
 
 /* ── CSS injected once ─────────────────────────────────────── */
 const CSS = `
@@ -138,10 +139,7 @@ const SAVED = [
 /* ── Chat messages ─────────────────────────────────────────── */
 type Msg = { role: "ai" | "user"; text: string; chart?: boolean; tools?: string[] };
 const INIT_MSGS: Msg[] = [
-  { role: "ai",   text: "¡Hola! Soy Mesero, tu asistente de datos. Puedo generar reportes, detectar anomalías, predecir ventas o crear alertas. ¿Por dónde empezamos?", tools: [] },
-  { role: "user", text: "Compara ventas por sede este mes vs el anterior" },
-  { role: "ai",   text: "Perfecto. Generando reporte comparativo. Dame un segundo.", tools: ["Consultando sales (18 mar → 18 abr)", "Agregando por sede y calculando delta", "Generando gráfico & tabla"], chart: true },
-  { role: "user", text: "¿Por qué Del Valle está cayendo?" },
+  { role: "ai", text: "Hola, soy Mesero. Puedo consultar ventas, productos top, inventario bajo y personal activo de tu sucursal activa. ¿Qué quieres saber?", tools: [] },
 ];
 
 /* ════════════════════════════════════════════════════════════ */
@@ -156,10 +154,65 @@ export default function ReportesIAPage() {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [msgs]);
 
-  function sendChat(text: string) {
-    if (!text.trim()) return;
-    setMsgs(m => [...m, { role: "user", text }, { role: "ai", text: "Analizando…", tools: ["Procesando consulta"] }]);
+  const [sending, setSending] = useState(false);
+  // Historial en formato de la API (role "user"|"assistant" + content string|blocks).
+  // Lo mantenemos separado de `msgs` (que es solo para la UI) para poder pasar el
+  // ida-y-vuelta completo con tool_use/tool_result al backend.
+  const apiHistoryRef = useRef<{ role: "user" | "assistant"; content: unknown }[]>([]);
+
+  async function sendChat(text: string) {
+    const clean = text.trim();
+    if (!clean || sending) return;
+    setSending(true);
     setChatMsg("");
+    setMsgs(m => [...m, { role: "user", text: clean }, { role: "ai", text: "Analizando…", tools: ["Consultando datos"] }]);
+
+    try {
+      apiHistoryRef.current.push({ role: "user", content: clean });
+      const { data } = await api.post("/api/ai/assistant", { messages: apiHistoryRef.current });
+      const history = Array.isArray(data?.messages) ? data.messages : [];
+      apiHistoryRef.current = history;
+
+      // Última respuesta del asistente: juntar todos los bloques `text`.
+      const last = [...history].reverse().find((m: any) => m.role === "assistant");
+      let reply = "No recibí una respuesta.";
+      const tools: string[] = [];
+      if (last && Array.isArray(last.content)) {
+        const texts = last.content.filter((b: any) => b.type === "text").map((b: any) => b.text).filter(Boolean);
+        if (texts.length) reply = texts.join("\n\n");
+      } else if (typeof last?.content === "string") {
+        reply = last.content;
+      }
+      // Herramientas invocadas en toda la cadena (para mostrar el pipeline).
+      for (const m of history) {
+        if (m.role !== "assistant" || !Array.isArray(m.content)) continue;
+        for (const b of m.content) {
+          if (b?.type === "tool_use" && b?.name) tools.push(String(b.name));
+        }
+      }
+
+      setMsgs(m => {
+        const next = [...m];
+        next[next.length - 1] = { role: "ai", text: reply, tools: tools.length ? tools : undefined };
+        return next;
+      });
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const data = err?.response?.data;
+      const needsKey = status === 402 || data?.code === "AI_KEY_REQUIRED";
+      const msg = needsKey
+        ? `⚠ ${data?.error || "Configura tu API key de Google AI Studio para activar el asistente."} → [Ir a Integraciones](/admin/integraciones)`
+        : `⚠ ${data?.error || err?.message || "No pude completar la consulta."}`;
+      setMsgs(m => {
+        const next = [...m];
+        next[next.length - 1] = { role: "ai", text: msg };
+        return next;
+      });
+      // No persistir el turno fallido en el historial de la API.
+      apiHistoryRef.current = apiHistoryRef.current.slice(0, -1);
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
