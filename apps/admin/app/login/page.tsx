@@ -51,8 +51,27 @@ export default function LoginPage() {
         return;
       }
 
-      const tenantRes = await api.get("/api/tenant/me");
-      const tenant = tenantRes.data;
+      // Si el usuario no tiene restaurante asociado → forzar onboarding
+      if (!data.user?.restaurantId) {
+        router.push("/admin/configurar-negocio");
+        return;
+      }
+
+      let tenant: any = null;
+      try {
+        const tenantRes = await api.get("/api/tenant/me");
+        tenant = tenantRes.data;
+      } catch {
+        // Si no se puede resolver el tenant, enviamos a onboarding
+        router.push("/admin/configurar-negocio");
+        return;
+      }
+
+      // Si el tenant no tiene restaurantes/sucursales → forzar onboarding
+      if (!tenant?.restaurants || tenant.restaurants.length === 0) {
+        router.push("/admin/configurar-negocio");
+        return;
+      }
 
       // Guardar accentColor para ThemeProvider
       if (tenant.accentColor) {
