@@ -19,6 +19,41 @@ const requireLocation = (req, res, next) => {
   next();
 };
 
+// ── GET staff clock-in activo de la sucursal (widget "Turno actual") ─────
+// Devuelve empleados con EmployeeShift abierto (endAt = null) en esta sucursal.
+router.get('/staff-active', authenticate, requireLocation, async (req, res) => {
+  try {
+    const shifts = await prisma.employeeShift.findMany({
+      where: {
+        endAt: null,
+        employee: { locationId: req.locationId },
+      },
+      include: { employee: { select: { id: true, name: true, role: true, tables: true } } },
+      orderBy: { startAt: 'asc' },
+      take: 20,
+    });
+    res.json(shifts.map(s => ({
+      id: s.employee.id,
+      name: s.employee.name,
+      role: s.employee.role,
+      tables: s.employee.tables,
+      startAt: s.startAt,
+    })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Alias histórico — el frontend del admin llama a /api/shifts/current
+router.get('/current', authenticate, requireLocation, async (req, res) => {
+  try {
+    const shift = await prisma.cashShift.findFirst({
+      where: { isOpen: true, locationId: req.locationId },
+      include: { expenses: { orderBy: { createdAt: 'desc' } } },
+      orderBy: { openedAt: 'desc' }
+    });
+    res.json(shift || null);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── GET turno activo actual de la sucursal ───────────────────────────────
 router.get('/active', authenticate, requireLocation, async (req, res) => {
   try {
