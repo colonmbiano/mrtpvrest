@@ -10,7 +10,6 @@
       "db:seed": "node ../../packages/database/prisma/seed.js"
    },
    "dependencies": {
-      "@anthropic-ai/sdk": "^0.88.0",
       "@google/generative-ai": "^0.24.1",
       "@mrtpvrest/database": "workspace:*",
       "@prisma/client": "^5.10.0",

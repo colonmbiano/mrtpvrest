@@ -52,7 +52,7 @@ router.post('/assistant', authenticate, requireAdmin, async (req, res) => {
     res.json(result);
   } catch (error) {
     if (error.code === 'ASSISTANT_UNCONFIGURED') {
-      return res.status(503).json({ error: 'El asistente IA no está configurado en el servidor.' });
+      return res.status(503).json({ error: 'El asistente IA no está configurado en el servidor (falta GOOGLE_AI_API_KEY).' });
     }
     if (error.code === 'BAD_REQUEST') {
       return res.status(400).json({ error: error.message });
