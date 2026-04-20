@@ -21,13 +21,26 @@ router.get('/me', async (req, res) => {
   if (!tenantId) return res.status(400).json({ error: 'Este usuario no está asociado a ningún tenant' })
 
   try {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      include: {
-        subscription: { include: { plan: true } },
-        restaurants:  { select: { id: true, slug: true, name: true } },
-      }
-    })
+    let tenant = null
+    try {
+      tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        include: {
+          subscription: { include: { plan: true } },
+          restaurants:  { select: { id: true, slug: true, name: true } },
+        }
+      })
+    } catch (primaryErr) {
+      // Si falla el include (p. ej. una columna nueva aún no migrada en
+      // producción), reintentamos sin la relación de restaurants para que
+      // al menos devolvamos la info del tenant y el cliente pueda navegar.
+      console.error('GET /tenant/me include failed, retrying without restaurants:', primaryErr.message)
+      tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        include: { subscription: { include: { plan: true } } },
+      })
+    }
+
     if (!tenant) return res.status(404).json({ error: 'Tenant no encontrado' })
 
     const sub = tenant.subscription
@@ -47,7 +60,7 @@ router.get('/me', async (req, res) => {
       businessType:   tenant.businessType,
       isOnboarded:     tenant.isOnboarded,
       emailVerifiedAt: tenant.emailVerifiedAt,
-      restaurants:     tenant.restaurants,
+      restaurants:     Array.isArray(tenant.restaurants) ? tenant.restaurants : [],
       subscription: sub ? {
         status:      sub.status,
         plan:        sub.plan?.displayName,
