@@ -1,45 +1,35 @@
-// Claude-powered admin assistant for the restaurant dashboard.
-// Read-only MVP: 4 tools that query aggregated data scoped to the current
-// restaurantId + locationId of the request.
-//
-// Model: claude-opus-4-7 with adaptive thinking.
-// Prompt caching: the frozen system block + tool schemas get cached
-// (render order is tools -> system -> messages, breakpoint on block[0]).
-// The per-request context (restaurant name, location, today) lives in a
-// second, non-cached system block so it doesn't invalidate the prefix.
-//
-// Agentic loop: manual, stops on stop_reason === 'end_turn' or a hard
-// iteration cap (MAX_ITERATIONS) for safety.
+// Asistente administrativo para el dashboard, basado en Gemini Flash (gratuito
+// dentro de la cuota). Expone runAssistant({ messages, restaurantId, locationId })
+// con 4 herramientas read-only (function calling) que consultan Prisma scoped.
 
-const Anthropic = require('@anthropic-ai/sdk').default || require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 const { prisma } = require('@mrtpvrest/database');
 
-const MODEL = 'claude-opus-4-7';
-const MAX_TOKENS = 8000;
-const MAX_ITERATIONS = 8;
+const MODEL = 'gemini-flash-latest';
+const MAX_ITERATIONS = 6;
 
 const SYSTEM_PROMPT = `Eres el asistente administrativo de MRTPVREST, un SaaS de gestión de restaurantes.
-Tu rol es ayudar al dueño/gerente a entender su operación respondiendo en español neutro, con cifras concretas.
+Ayudas al dueño/gerente a entender su operación respondiendo en español neutro, con cifras concretas.
 
 Reglas:
-- Usa SIEMPRE las herramientas disponibles para obtener datos actualizados antes de responder a preguntas sobre ventas, productos, inventario o personal. Nunca inventes cifras.
-- Si el usuario hace una pregunta de saludo o fuera de alcance, responde brevemente sin llamar herramientas.
-- Cuando presentes resultados, usa formato claro: viñetas para listas, moneda en pesos (usa el símbolo $ y agrupa miles), y resalta la cifra principal en negrita con **markdown**.
-- Si una herramienta devuelve un array vacío, di honestamente "no hay datos" y sugiere la acción (p.ej. "aún no hay ventas registradas hoy" o "ningún ingrediente por debajo del mínimo").
-- No puedes modificar datos; esta versión es solo de lectura.
-- Mantén las respuestas concisas (bajo 120 palabras a menos que pidan un resumen extenso).`;
+- Usa SIEMPRE las herramientas para obtener datos actualizados antes de responder preguntas sobre ventas, productos, inventario o personal. Nunca inventes cifras.
+- Si el usuario saluda o pregunta algo fuera de alcance, responde breve sin llamar herramientas.
+- Presenta resultados claros: viñetas para listas, moneda en pesos con símbolo $ y agrupación de miles, y resalta la cifra principal con **markdown**.
+- Si una herramienta devuelve lista vacía, di honestamente "no hay datos" y sugiere la acción (p. ej. "aún no hay ventas hoy" o "ningún ingrediente por debajo del mínimo").
+- Esta versión es sólo de lectura, no puedes modificar datos.
+- Respuestas concisas (bajo 120 palabras salvo que pidan un resumen extenso).`;
 
-const TOOLS = [
+const functionDeclarations = [
   {
     name: 'get_sales_summary',
-    description: 'Devuelve el resumen de ventas (ingresos totales, número de pedidos, ticket promedio) del período indicado, para el restaurante actual. Excluye pedidos cancelados.',
-    input_schema: {
-      type: 'object',
+    description: 'Devuelve ingresos totales, número de pedidos y ticket promedio del período indicado, para el restaurante actual. Excluye pedidos cancelados.',
+    parameters: {
+      type: SchemaType.OBJECT,
       properties: {
         period: {
-          type: 'string',
+          type: SchemaType.STRING,
           enum: ['HOY', '7D', '30D', 'AÑO'],
-          description: 'Período a consultar. HOY = hoy, 7D = últimos 7 días, 30D = últimos 30 días, AÑO = año en curso.',
+          description: 'HOY = hoy, 7D = últimos 7 días, 30D = últimos 30 días, AÑO = año en curso.',
         },
       },
       required: ['period'],
@@ -47,20 +37,18 @@ const TOOLS = [
   },
   {
     name: 'get_top_products',
-    description: 'Lista los productos más vendidos en el período, ordenados por cantidad vendida descendente. Devuelve nombre, cantidad vendida y monto total.',
-    input_schema: {
-      type: 'object',
+    description: 'Lista los productos más vendidos en el período, ordenados por cantidad descendente. Devuelve nombre, cantidad vendida y monto total.',
+    parameters: {
+      type: SchemaType.OBJECT,
       properties: {
         period: {
-          type: 'string',
+          type: SchemaType.STRING,
           enum: ['HOY', '7D', '30D', 'AÑO'],
           description: 'Período a consultar.',
         },
         limit: {
-          type: 'integer',
-          minimum: 1,
-          maximum: 20,
-          description: 'Cantidad de productos a devolver (por defecto 5).',
+          type: SchemaType.INTEGER,
+          description: 'Cantidad de productos a devolver (1–20, por defecto 5).',
         },
       },
       required: ['period'],
@@ -68,15 +56,15 @@ const TOOLS = [
   },
   {
     name: 'get_inventory_alerts',
-    description: 'Lista ingredientes de la sucursal activa cuyo stock está en o por debajo del stock mínimo (minStock). Devuelve nombre, unidad, stock actual y stock mínimo. Si no hay una sucursal activa, devuelve un error.',
-    input_schema: { type: 'object', properties: {} },
+    description: 'Lista ingredientes de la sucursal activa cuyo stock está en o por debajo del stock mínimo. Devuelve nombre, unidad, stock actual y stock mínimo. Requiere sucursal activa.',
+    parameters: { type: SchemaType.OBJECT, properties: {} },
   },
   {
     name: 'get_active_staff',
-    description: 'Lista empleados con turno activo (EmployeeShift.endAt = null) en la sucursal activa: nombre, rol, mesas asignadas, y hora de inicio del turno. Si no hay una sucursal activa, devuelve un error.',
-    input_schema: { type: 'object', properties: {} },
+    description: 'Lista empleados con turno activo (EmployeeShift abierto) en la sucursal activa: nombre, rol, mesas y hora de inicio. Requiere sucursal activa.',
+    parameters: { type: SchemaType.OBJECT, properties: {} },
   },
-].sort((a, b) => a.name.localeCompare(b.name));
+];
 
 function periodRange(period) {
   const from = new Date();
@@ -88,22 +76,21 @@ function periodRange(period) {
   return from;
 }
 
-async function execTool(name, input, { restaurantId, locationId }) {
+async function execTool(name, args, { restaurantId, locationId }) {
   if (name === 'get_sales_summary') {
-    const from = periodRange(input.period);
-    const where = {
-      restaurantId,
-      status: { not: 'CANCELLED' },
-      createdAt: { gte: from },
-    };
+    const from = periodRange(args.period);
     const agg = await prisma.order.aggregate({
-      where,
+      where: {
+        restaurantId,
+        status: { not: 'CANCELLED' },
+        createdAt: { gte: from },
+      },
       _sum: { total: true },
       _count: { id: true },
       _avg: { total: true },
     });
     return {
-      period: input.period,
+      period: args.period,
       totalRevenue: Math.round(agg._sum.total || 0),
       totalOrders: agg._count.id || 0,
       averageTicket: Math.round(agg._avg.total || 0),
@@ -111,8 +98,8 @@ async function execTool(name, input, { restaurantId, locationId }) {
   }
 
   if (name === 'get_top_products') {
-    const from = periodRange(input.period);
-    const limit = Math.min(Math.max(parseInt(input.limit) || 5, 1), 20);
+    const from = periodRange(args.period);
+    const limit = Math.min(Math.max(parseInt(args.limit) || 5, 1), 20);
     const items = await prisma.orderItem.groupBy({
       by: ['name'],
       where: {
@@ -165,15 +152,6 @@ async function execTool(name, input, { restaurantId, locationId }) {
   return { error: `Herramienta desconocida: ${name}` };
 }
 
-function getClient() {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    const err = new Error('ANTHROPIC_API_KEY no está configurada en el backend.');
-    err.code = 'ASSISTANT_UNCONFIGURED';
-    throw err;
-  }
-  return new Anthropic();
-}
-
 async function buildContextBlock({ restaurantId, locationId }) {
   const [restaurant, location] = await Promise.all([
     restaurantId
@@ -187,107 +165,121 @@ async function buildContextBlock({ restaurantId, locationId }) {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
   return [
-    'Contexto de esta sesión:',
+    'Contexto de la sesión:',
     `- Restaurante: ${restaurant?.name || '(sin nombre)'}`,
-    `- Sucursal activa: ${location?.name || '(ninguna — algunas herramientas no estarán disponibles)'}`,
+    `- Sucursal activa: ${location?.name || '(ninguna — herramientas por sucursal no disponibles)'}`,
     `- Fecha actual: ${today}`,
   ].join('\n');
 }
 
-async function runAssistant({ messages, restaurantId, locationId }) {
-  const client = getClient();
+function toText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
+      .map((b) => b.text)
+      .join('\n\n');
+  }
+  return '';
+}
 
+async function runAssistant({ messages, restaurantId, locationId }) {
+  if (!process.env.GOOGLE_AI_API_KEY) {
+    const err = new Error('GOOGLE_AI_API_KEY no está configurada en el backend.');
+    err.code = 'ASSISTANT_UNCONFIGURED';
+    throw err;
+  }
   if (!Array.isArray(messages) || messages.length === 0) {
-    throw Object.assign(new Error('Se requiere un arreglo `messages` no vacío.'), { code: 'BAD_REQUEST' });
+    const err = new Error('Se requiere un arreglo `messages` no vacío.');
+    err.code = 'BAD_REQUEST';
+    throw err;
+  }
+  const lastUser = messages[messages.length - 1];
+  if (lastUser.role !== 'user') {
+    const err = new Error('El último mensaje debe tener role="user".');
+    err.code = 'BAD_REQUEST';
+    throw err;
   }
 
   const contextBlock = await buildContextBlock({ restaurantId, locationId });
 
-  // Normalize: client sends [{role, content: string|array}]. Keep tool_use /
-  // tool_result blocks intact if they arrive (multi-turn after a prior call).
-  const convo = messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
+  const model = genAI.getGenerativeModel({
+    model: MODEL,
+    systemInstruction: `${SYSTEM_PROMPT}\n\n${contextBlock}`,
+    tools: [{ functionDeclarations }],
+  });
 
-  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-    let response;
-    try {
-      response = await client.messages.create({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        thinking: { type: 'adaptive' },
-        system: [
-          { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
-          { type: 'text', text: contextBlock },
-        ],
-        tools: TOOLS,
-        messages: convo,
-      });
-    } catch (error) {
-      if (error instanceof Anthropic.APIError) {
-        const wrapped = new Error(error.message || 'Error al consultar Claude');
-        wrapped.status = error.status;
-        wrapped.code = error.status === 429 ? 'RATE_LIMIT' : 'UPSTREAM';
-        throw wrapped;
-      }
-      throw error;
-    }
-
-    // Append assistant turn (preserve full content — tool_use blocks included).
-    convo.push({ role: 'assistant', content: response.content });
-
-    if (response.stop_reason === 'end_turn' || response.stop_reason === 'stop_sequence') {
-      return { messages: convo, usage: response.usage };
-    }
-
-    if (response.stop_reason !== 'tool_use') {
-      // max_tokens / refusal / pause_turn (not expected here): stop gracefully.
-      return { messages: convo, usage: response.usage, stopReason: response.stop_reason };
-    }
-
-    const toolUses = response.content.filter((b) => b.type === 'tool_use');
-    const toolResults = [];
-    for (const tu of toolUses) {
-      let payload;
-      try {
-        payload = await execTool(tu.name, tu.input || {}, { restaurantId, locationId });
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: tu.id,
-          content: JSON.stringify(payload),
-        });
-      } catch (err) {
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: tu.id,
-          content: `Error ejecutando ${tu.name}: ${err.message}`,
-          is_error: true,
-        });
-      }
-    }
-    convo.push({ role: 'user', content: toolResults });
+  // Traducir historial al formato de Gemini (solo turnos previos — el último
+  // mensaje del usuario se envía con sendMessage).
+  const history = [];
+  for (let i = 0; i < messages.length - 1; i++) {
+    const m = messages[i];
+    const text = toText(m.content);
+    if (!text) continue;
+    history.push({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text }],
+    });
   }
 
-  // Iteration cap reached — append a synthetic user note so the last assistant
-  // message isn't a dangling tool_use.
-  convo.push({
-    role: 'user',
-    content: `Se alcanzó el límite de ${MAX_ITERATIONS} iteraciones. Resume lo que sepas hasta ahora.`,
-  });
-  const final = await getClient().messages.create({
-    model: MODEL,
-    max_tokens: MAX_TOKENS,
-    thinking: { type: 'adaptive' },
-    system: [
-      { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
-      { type: 'text', text: contextBlock },
-    ],
-    tools: TOOLS,
-    messages: convo,
-  });
-  convo.push({ role: 'assistant', content: final.content });
-  return { messages: convo, usage: final.usage, stopReason: 'iteration_limit' };
+  const chat = model.startChat({ history });
+
+  const userText = toText(lastUser.content);
+  let next = userText;
+  const toolsUsed = [];
+  let finalText = '';
+  let usage = null;
+
+  try {
+    for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+      const result = await chat.sendMessage(next);
+      const response = result.response;
+      usage = response.usageMetadata || usage;
+      const calls = typeof response.functionCalls === 'function' ? response.functionCalls() : null;
+
+      if (!calls || calls.length === 0) {
+        finalText = response.text() || '';
+        break;
+      }
+
+      const parts = [];
+      for (const call of calls) {
+        toolsUsed.push(call.name);
+        let payload;
+        try {
+          payload = await execTool(call.name, call.args || {}, { restaurantId, locationId });
+        } catch (err) {
+          payload = { error: err.message };
+        }
+        parts.push({
+          functionResponse: {
+            name: call.name,
+            response: { result: payload },
+          },
+        });
+      }
+      next = parts;
+    }
+  } catch (err) {
+    const wrapped = new Error(err.message || 'Error al consultar Gemini');
+    wrapped.code = 'UPSTREAM';
+    wrapped.status = err.status || 500;
+    throw wrapped;
+  }
+
+  if (!finalText) finalText = 'Se alcanzó el límite de iteraciones del asistente.';
+
+  // Devolver el historial completo en el mismo formato del frontend
+  // (bloques tipo Anthropic) para que la UI pueda mostrar texto + pipeline.
+  const assistantContent = [{ type: 'text', text: finalText }];
+  for (const name of toolsUsed) assistantContent.push({ type: 'tool_use', name });
+
+  return {
+    messages: [...messages, { role: 'assistant', content: assistantContent }],
+    toolsUsed,
+    usage,
+  };
 }
 
 module.exports = { runAssistant };
