@@ -75,15 +75,10 @@ const SECTIONS = [
       { href: "/admin/rastreo",           icon: <IMapPin />, label: "Rastreo GPS" },
     ],
   },
-  {
-    key: "saas",
-    label: "Plataforma",
-    icon: <ILayoutDash />,
-    accent: "#7c3aed",
-    items: [
-      { href: "/admin/saas", icon: <ILayoutDash />, label: "Super-admin ✦" },
-    ],
-  },
+  // NOTA: la sección "Plataforma / Super-admin" NO va aquí. El panel SaaS
+  // es independiente del admin de negocio y solo debe aparecer para usuarios
+  // con role SUPER_ADMIN. Eso lo renderiza el bloque condicional
+  // `{superAdmin && (...)}` más abajo en el árbol.
 ];
 
 // ─────────────────────────────────────────────────────────────
