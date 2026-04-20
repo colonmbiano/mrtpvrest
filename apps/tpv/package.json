@@ -6,15 +6,23 @@
     "dev": "next dev -p 3005",
     "build": "next build",
     "start": "next start -p 3005",
-    "lint": "next lint"
+    "lint": "next lint",
+    "build:apk": "CAPACITOR_BUILD=true next build && npx cap sync android",
+    "apk:debug": "CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleDebug && cd .. && echo \"APK -> android/app/build/outputs/apk/debug/app-debug.apk\"",
+    "apk:release": "CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleRelease && cd .. && echo \"APK -> android/app/build/outputs/apk/release/app-release-unsigned.apk\"",
+    "cap:open": "npx cap open android",
+    "cap:sync": "npx cap sync android"
   },
   "dependencies": {
+    "@capacitor/core": "^8.3.1",
     "axios": "^1.13.6",
     "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/cli": "^8.3.1",
     "@mrtpvrest/config": "workspace:*",
     "@types/node": "^20",
     "@types/react": "^18",

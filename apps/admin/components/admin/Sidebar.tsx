@@ -46,6 +46,7 @@ const SECTIONS = [
       { href: "/admin/restaurant-dashboard", icon: <IUniverse />,  label: "Rest. Dashboard" },
       { href: "/admin/mi-marca",             icon: <IBuilding />,  label: "Mi Marca" },
       { href: "/admin/reportes",             icon: <ITrending />,  label: "Reportes" },
+      { href: "/admin/reportes/ia",          icon: <ILayoutDash />, label: "Reportes IA ✦" },
       { href: "/admin/integraciones",        icon: <IPlug />,      label: "Integraciones" },
     ],
   },
@@ -72,6 +73,15 @@ const SECTIONS = [
       { href: "/admin/turnos",            icon: <IClock />,  label: "Turnos de caja" },
       { href: "/admin/caja-repartidores", icon: <IWallet />, label: "Caja Rep." },
       { href: "/admin/rastreo",           icon: <IMapPin />, label: "Rastreo GPS" },
+    ],
+  },
+  {
+    key: "saas",
+    label: "Plataforma",
+    icon: <ILayoutDash />,
+    accent: "#7c3aed",
+    items: [
+      { href: "/admin/saas", icon: <ILayoutDash />, label: "Super-admin ✦" },
     ],
   },
 ];
