@@ -1,10 +1,11 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 /**
- * Servicio de IA consolidado para Menú e Inventario
+ * Servicio de IA consolidado para Menú e Inventario.
+ * La apiKey se resuelve por request (BYOK) vía resolveAiKey({ restaurantId }).
  */
-async function getGeminiModel(json = false) {
-  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
+function getGeminiModel(apiKey, json = false) {
+  const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({
     model: "gemini-flash-latest",
     ...(json && { generationConfig: { responseMimeType: "application/json" } }),
@@ -14,9 +15,9 @@ async function getGeminiModel(json = false) {
 /**
  * Escanea imágenes de un MENÚ
  */
-async function scanMenuFromImages(base64Images) {
+async function scanMenuFromImages(base64Images, apiKey) {
   try {
-    const model = await getGeminiModel();
+    const model = getGeminiModel(apiKey);
     const prompt = `Analiza estas imágenes de un menú de restaurante. Extrae platos, precios, descripciones y categorías. Devuelve un JSON: { "categories": [], "items": [{ "name": "", "price": 0, "description": "", "category": "" }] }. Solo JSON puro.`;
     const imageParts = base64Images.map(base64 => ({ inlineData: { data: base64, mimeType: "image/jpeg" } }));
     const result = await model.generateContent([prompt, ...imageParts]);
@@ -31,9 +32,9 @@ async function scanMenuFromImages(base64Images) {
 /**
  * Escanea imágenes de INVENTARIO / FACTURAS / LISTAS DE COMPRAS
  */
-async function scanInventoryFromImages(base64Images) {
+async function scanInventoryFromImages(base64Images, apiKey) {
   try {
-    const model = await getGeminiModel(true);
+    const model = getGeminiModel(apiKey, true);
     const prompt = `Eres un asistente de inventario para restaurantes. Analiza esta foto de un ticket, factura o lista de compras.
 
 Por cada producto que identifiques, extrae EXACTAMENTE estos 3 datos:

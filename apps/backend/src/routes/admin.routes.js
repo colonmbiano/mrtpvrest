@@ -307,4 +307,111 @@ router.delete('/tenants/:id', authenticate, requireSuperAdmin, async (req, res) 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BYOK — API key de Google AI Studio del cliente
+// ─────────────────────────────────────────────────────────────────────────────
+
+const { encryptSecret, decryptSecret, maskSecret } = require('../lib/secret-crypto');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+// GET /api/admin/ai-key — estado: si hay key, muestra máscara + validación
+router.get('/ai-key', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const r = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: {
+        aiApiKey: true,
+        aiKeyValidatedAt: true,
+        tenant: { select: { subscription: { select: { status: true, trialEndsAt: true } } } },
+      },
+    });
+    if (!r) return res.status(404).json({ error: 'Restaurante no encontrado' });
+    const sub = r.tenant?.subscription;
+    const trialActive = sub?.status === 'TRIAL' && sub.trialEndsAt && new Date(sub.trialEndsAt) > new Date();
+    let masked = null;
+    let decryptable = true;
+    if (r.aiApiKey) {
+      try {
+        const plain = decryptSecret(r.aiApiKey);
+        if (!plain) decryptable = false;
+        else masked = maskSecret(plain);
+      } catch {
+        decryptable = false;
+      }
+    }
+    res.json({
+      configured: Boolean(r.aiApiKey),
+      decryptable,
+      masked,
+      validatedAt: r.aiKeyValidatedAt,
+      trialActive,
+      trialEndsAt: sub?.trialEndsAt || null,
+      subscriptionStatus: sub?.status || null,
+    });
+  } catch (e) {
+    console.error('GET /admin/ai-key:', e);
+    res.status(500).json({ error: e.message || 'Error' });
+  }
+});
+
+// POST /api/admin/ai-key — guarda nueva key (previa validación contra Gemini)
+router.post('/ai-key', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { apiKey } = req.body || {};
+    if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length < 20) {
+      return res.status(400).json({ error: 'API key inválida.' });
+    }
+    const trimmed = apiKey.trim();
+
+    // Validar contra Gemini con una llamada trivial
+    try {
+      const probe = new GoogleGenerativeAI(trimmed).getGenerativeModel({ model: 'gemini-flash-latest' });
+      const result = await probe.generateContent('ping');
+      if (!result?.response) throw new Error('Respuesta vacía de Gemini');
+    } catch (probeErr) {
+      const msg = probeErr?.message || 'La API key no fue aceptada por Google AI Studio.';
+      return res.status(422).json({ error: `No pude validar la API key: ${msg}`, code: 'KEY_INVALID' });
+    }
+
+    // Cifrar y persistir
+    let encrypted;
+    try {
+      encrypted = encryptSecret(trimmed);
+    } catch (e) {
+      if (e.code === 'CRYPTO_UNCONFIGURED') {
+        return res.status(503).json({ error: 'Cifrado no configurado en el servidor (falta AI_ENCRYPTION_KEY).' });
+      }
+      throw e;
+    }
+    await prisma.restaurant.update({
+      where: { id: restaurantId },
+      data: { aiApiKey: encrypted, aiKeyValidatedAt: new Date() },
+    });
+    res.json({ ok: true, masked: maskSecret(trimmed), validatedAt: new Date() });
+  } catch (e) {
+    console.error('POST /admin/ai-key:', e);
+    res.status(500).json({ error: e.message || 'Error al guardar la API key' });
+  }
+});
+
+// DELETE /api/admin/ai-key — remueve la key del restaurante
+router.delete('/ai-key', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    await prisma.restaurant.update({
+      where: { id: restaurantId },
+      data: { aiApiKey: null, aiKeyValidatedAt: null },
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /admin/ai-key:', e);
+    res.status(500).json({ error: e.message || 'Error' });
+  }
+});
+
 module.exports = router
