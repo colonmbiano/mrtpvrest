@@ -1,5 +1,6 @@
 const express = require('express');
 const { scanMenuFromImages, scanInventoryFromImages } = require('../services/ai.service');
+const { runAssistant } = require('../services/assistant.service');
 const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
 const router = express.Router();
 const multer = require('multer');
@@ -34,6 +35,33 @@ router.post('/scan-inventory', authenticate, requireAdmin, upload.array('images'
   } catch (error) {
     console.error('Error en AI Inventory Route:', error.message);
     res.status(500).json({ error: 'Hubo un problema al procesar el inventario con IA.' });
+  }
+});
+
+// POST /api/ai/assistant — chat con el asistente administrativo (Claude)
+// Body: { messages: [{ role: "user"|"assistant", content: string|Array }] }
+// Responde con { messages, usage } incluyendo la respuesta final del asistente.
+router.post('/assistant', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const locationId = req.headers['x-location-id'] || req.query.locationId || null;
+
+    const { messages } = req.body || {};
+    const result = await runAssistant({ messages, restaurantId, locationId });
+    res.json(result);
+  } catch (error) {
+    if (error.code === 'ASSISTANT_UNCONFIGURED') {
+      return res.status(503).json({ error: 'El asistente IA no está configurado en el servidor.' });
+    }
+    if (error.code === 'BAD_REQUEST') {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error.code === 'RATE_LIMIT') {
+      return res.status(429).json({ error: 'Demasiadas peticiones al asistente. Intenta en un momento.' });
+    }
+    console.error('Error en AI Assistant Route:', error);
+    res.status(500).json({ error: 'Hubo un problema al procesar la solicitud.' });
   }
 });
 
