@@ -4,6 +4,7 @@
 
 const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 const { prisma } = require('@mrtpvrest/database');
+const { resolveAiKey } = require('./ai-key.service');
 
 const MODEL = 'gemini-flash-latest';
 const MAX_ITERATIONS = 6;
@@ -184,11 +185,6 @@ function toText(content) {
 }
 
 async function runAssistant({ messages, restaurantId, locationId }) {
-  if (!process.env.GOOGLE_AI_API_KEY) {
-    const err = new Error('GOOGLE_AI_API_KEY no está configurada en el backend.');
-    err.code = 'ASSISTANT_UNCONFIGURED';
-    throw err;
-  }
   if (!Array.isArray(messages) || messages.length === 0) {
     const err = new Error('Se requiere un arreglo `messages` no vacío.');
     err.code = 'BAD_REQUEST';
@@ -201,9 +197,12 @@ async function runAssistant({ messages, restaurantId, locationId }) {
     throw err;
   }
 
+  // BYOK: key del cliente, o de la plataforma durante trial, o 402.
+  const { apiKey } = await resolveAiKey({ restaurantId });
+
   const contextBlock = await buildContextBlock({ restaurantId, locationId });
 
-  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
+  const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
     model: MODEL,
     systemInstruction: `${SYSTEM_PROMPT}\n\n${contextBlock}`,
