@@ -88,7 +88,9 @@ const SECTIONS = [
 
 // ─────────────────────────────────────────────────────────────
 
-export default function Sidebar() {
+type SidebarProps = { isOpen?: boolean; onClose?: () => void };
+
+export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
   const path = usePathname();
   const [user, setUser]             = useState<any>(null);
   const [superAdmin, setSuperAdmin] = useState(false);
@@ -159,7 +161,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="fixed left-0 top-0 h-full w-56 flex flex-col z-40"
+      className={`fixed left-0 top-0 h-full w-56 flex flex-col z-40 transition-transform duration-200 md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
       style={{ background: "var(--surf)", borderRight: "1px solid var(--border)" }}
     >
       {/* ── Logo + sucursal ── */}
@@ -183,6 +185,20 @@ export default function Sidebar() {
               Control Panel
             </div>
           </div>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar menú"
+              className="md:hidden ml-auto w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--muted)" }}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="3" y1="3" x2="13" y2="13"/>
+                <line x1="13" y1="3" x2="3" y2="13"/>
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Sucursal selector */}
