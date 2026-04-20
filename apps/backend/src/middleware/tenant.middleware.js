@@ -43,6 +43,7 @@ const tenantMiddleware = async (req, res, next) => {
   // ── RUTAS GLOBALES (sin validación de tenant) ─────────────────────────────
   const globalPaths = [
     '/api/auth',
+    '/api/tenant',
     '/health',
     '/api/admin/setup',
     '/api/admin/tenants',
