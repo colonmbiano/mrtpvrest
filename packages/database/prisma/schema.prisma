@@ -153,6 +153,13 @@ model GlobalConfig {
   trialDays          Int      @default(15)
   currency           String   @default("USD")
   supportEmail       String?
+
+  // Feature flags globales (visibles en dashboard SaaS)
+  openRegistration Boolean @default(true)
+  autoTrial        Boolean @default(true)
+  maintenanceMode  Boolean @default(false)
+  whatsappEnabled  Boolean @default(true)
+
   updatedAt          DateTime @updatedAt
 
   @@map("global_configs")
