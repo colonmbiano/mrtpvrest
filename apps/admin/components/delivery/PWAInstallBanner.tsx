@@ -1,21 +1,53 @@
 "use client";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 export default function PWAInstallBanner() {
+  const pathname = usePathname();
   const [prompt, setPrompt] = useState<any>(null);
   const [installed, setInstalled] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
-    // Registrar service worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw-delivery.js')
+    // El service worker /sw-delivery.js es específico para la app del repartidor.
+    // Antes se registraba en cualquier ruta con scope '/', interceptando y
+    // cacheando TODAS las páginas del dominio (admin, onboarding, register...),
+    // lo que hacía que los bundles nuevos de Next.js no llegaran al navegador.
+    //
+    // Solución: solo registrarlo cuando estamos bajo /repartidor, y DESREGISTRAR
+    // cualquier SW activo cuando navegamos fuera de ahí. Esto destraba usuarios
+    // que tengan un SW cacheando JS viejo de antes de este fix.
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+
+    const isDeliveryRoute = pathname?.startsWith("/repartidor") ?? false;
+
+    if (isDeliveryRoute) {
+      navigator.serviceWorker.register('/sw-delivery.js', { scope: '/repartidor/' })
         .then(reg => console.log('SW registrado:', reg.scope))
         .catch(err => console.log('SW error:', err));
+    } else {
+      // Limpia SW viejos que pudieron quedar registrados con scope '/'
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => {
+          const scope = reg.scope || "";
+          if (scope.endsWith("/repartidor/") || scope.includes("/repartidor")) return; // conservar
+          reg.unregister().catch(() => {});
+        });
+      }).catch(() => {});
+
+      // Purgar caches viejos dejados por el SW global
+      if ("caches" in window) {
+        caches.keys().then(keys => {
+          keys.forEach(k => {
+            if (k === "delivery-v1") caches.delete(k).catch(() => {});
+          });
+        }).catch(() => {});
+      }
     }
 
-    // Capturar evento de instalación
+    // Capturar evento de instalación (solo si estamos en ruta delivery)
     const handler = (e: any) => {
+      if (!isDeliveryRoute) return;
       e.preventDefault();
       setPrompt(e);
       setShowBanner(true);
@@ -28,7 +60,7 @@ export default function PWAInstallBanner() {
     }
 
     return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
+  }, [pathname]);
 
   async function install() {
     if (!prompt) return;
