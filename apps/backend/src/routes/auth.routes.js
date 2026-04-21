@@ -105,7 +105,7 @@ const registerLimiter = rateLimit({
 })
 
 router.post('/register-tenant', registerLimiter, async (req, res) => {
-  const { restaurantName, ownerName, email, password } = req.body
+  const { restaurantName, ownerName, email, password, planId: requestedPlanId } = req.body
 
   if (!restaurantName || !ownerName || !email || !password) {
     return res.status(400).json({ error: 'restaurantName, ownerName, email y password son requeridos' })
@@ -131,8 +131,13 @@ router.post('/register-tenant', registerLimiter, async (req, res) => {
     if (emailTaken) return res.status(409).json({ error: 'Ya existe una cuenta con ese email' })
     if (slugTaken)  return res.status(409).json({ error: 'Ese nombre de restaurante ya está registrado' })
 
-    // Buscamos el plan BASIC (o el primero activo si no existe)
-    let plan = await prisma.plan.findFirst({ where: { name: 'BASIC', isActive: true } })
+    // Resolución de plan: el solicitado por el cliente si es válido; si no,
+    // BASIC; si tampoco, el primer activo más barato. Si no hay ninguno, 500.
+    let plan = null
+    if (requestedPlanId) {
+      plan = await prisma.plan.findFirst({ where: { id: requestedPlanId, isActive: true } })
+    }
+    if (!plan) plan = await prisma.plan.findFirst({ where: { name: 'BASIC', isActive: true } })
     if (!plan) plan = await prisma.plan.findFirst({ where: { isActive: true }, orderBy: { price: 'asc' } })
     if (!plan) return res.status(500).json({ error: 'No hay planes activos configurados' })
 
