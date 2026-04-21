@@ -89,6 +89,7 @@ export default function SetupPage() {
       });
 
       const role = data?.user?.role;
+      const userRestaurantId = data?.user?.restaurantId;
       let tenantRestaurants: Restaurant[] = [];
 
       if (role === "SUPER_ADMIN") {
@@ -116,29 +117,24 @@ export default function SetupPage() {
         }
         tenantRestaurants = Array.from(byRestaurant.values())
           .filter(r => r.locations.length > 0);
+      } else if (userRestaurantId) {
+        // Admin de marca. No dependemos de /api/tenant/me (que requiere
+        // user.tenantId — algunos admins legacy lo tienen NULL). Resolvemos
+        // directo con los endpoints que sólo necesitan user.restaurantId.
+        const [cfgRes, locRes] = await Promise.all([
+          authed.get("/api/admin/config").catch(() => ({ data: { name: "Mi marca", logoUrl: null } })),
+          authed.get("/api/admin/locations").catch(() => ({ data: [] })),
+        ]);
+        tenantRestaurants = [{
+          id:          userRestaurantId,
+          name:        cfgRes.data?.name || "Mi marca",
+          accentColor: cfgRes.data?.accentColor || null,
+          locations:   (locRes.data || [])
+            .filter((l: any) => l.isActive !== false)
+            .map((l: any) => ({ id: l.id, name: l.name, address: l.address || null })),
+        }];
       } else {
-        // Flujo normal: admin de marca. `/api/tenant/me` trae solo sus
-        // restaurants (y fallback a /api/tenant/restaurants/:id/locations si
-        // el include no devolvió las sucursales).
-        const me = await authed.get("/api/tenant/me");
-        tenantRestaurants = (me.data.restaurants || []).map((r: any) => ({
-          id:          r.id,
-          name:        r.name,
-          accentColor: r.accentColor || null,
-          locations:   Array.isArray(r.locations) ? r.locations : [],
-        }));
-
-        await Promise.all(
-          tenantRestaurants.map(async (r) => {
-            if (r.locations.length > 0) return;
-            try {
-              const res = await authed.get(`/api/tenant/restaurants/${r.id}/locations`);
-              r.locations = res.data || [];
-            } catch {
-              r.locations = [];
-            }
-          }),
-        );
+        throw new Error("Este usuario no tiene un restaurante asignado. Revisa con tu administrador.");
       }
 
       if (tenantRestaurants.length === 0 || tenantRestaurants.every((r) => r.locations.length === 0)) {
