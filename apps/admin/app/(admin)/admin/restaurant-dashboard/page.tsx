@@ -20,11 +20,42 @@ type Order = {
   customer?: { name: string };
 };
 
-function minutesSince(d: string) {
-  if (!d) return 0;
-  const ms = Date.now() - new Date(d).getTime();
-  return isNaN(ms) ? 0 : Math.floor(ms / 60000);
-}
+type LocationOption = { id: string; name: string };
+
+type DashboardStats = {
+  period: string;
+  sales:         { value: number; prev: number; delta: number };
+  orders:        { value: number; prev: number; delta: number };
+  averageTicket: { value: number; prev: number; delta: number };
+  prepMinutes:   { value: number; activeCount: number };
+};
+
+type SalesByDay = {
+  days: number;
+  series: { date: string; revenue: number; orders: number }[];
+  totals: {
+    current:  { revenue: number; orders: number };
+    previous: { revenue: number; orders: number };
+    delta: number;
+  };
+};
+
+type ChannelsPayments = {
+  period: string;
+  total: number;
+  totalOrders: number;
+  channels: { key: string; total: number; count: number; pct: number }[];
+  payments: { key: string; total: number; count: number; pct: number }[];
+};
+
+type HourlyDistribution = {
+  period: string;
+  total: number;
+  buckets: { hour: number; count: number }[];
+};
+
+type ActiveShiftResp = { shift: any; staff: StaffMember[] };
+
 function fmtMoney(n: number) {
   return "$" + n.toLocaleString("es-MX", { maximumFractionDigits: 0 });
 }
@@ -113,19 +144,26 @@ export default function RestaurantDashboard() {
   const [orders, setOrders]   = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow]         = useState<Date | null>(null);
-  const [shift, setShift]     = useState<any>(null);
-  const [period, setPeriod]   = useState<Period>("7D");
+  const [period, setPeriod]   = useState<Period>("HOY");
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [activeStaff, setActiveStaff] = useState<StaffMember[]>([]);
+  const [shift, setShift]             = useState<any>(null);
   const [invAlerts,   setInvAlerts]   = useState<InventoryAlert[]>([]);
   const [userName,    setUserName]    = useState("Admin");
-  const [locationName, setLocationName] = useState("");
-  const [locationsCount, setLocationsCount] = useState<number | null>(null);
-  const [salesByDay, setSalesByDay] = useState<{ date: string; revenue: number; orders: number }[]>([]);
+  const [locations, setLocations]     = useState<LocationOption[]>([]);
+  const [activeLocationId, setActiveLocationId] = useState<string>("");
+  const [locationsLoaded, setLocationsLoaded]   = useState(false);
+  const [stats, setStats]                     = useState<DashboardStats | null>(null);
+  const [salesByDay, setSalesByDay]           = useState<SalesByDay | null>(null);
+  const [channelsData, setChannelsData]       = useState<ChannelsPayments | null>(null);
+  const [hourlyData, setHourlyData]           = useState<HourlyDistribution | null>(null);
   const router = useRouter();
 
   const prevIds  = useRef<Set<string>>(new Set());
   const audioCtx = useRef<AudioContext | null>(null);
+
+  const locationName = locations.find(l => l.id === activeLocationId)?.name || "";
+  const locationsCount = locationsLoaded ? locations.length : null;
 
   useEffect(() => {
     setNow(new Date());
@@ -146,9 +184,9 @@ export default function RestaurantDashboard() {
     osc.start(); osc.stop(ctx.currentTime + 0.4);
   }
 
-  const fetchOrders = useCallback(async () => {
+  const fetchLiveOrders = useCallback(async () => {
     try {
-      const { data } = await api.get("/api/orders/admin");
+      const { data } = await api.get("/api/dashboard/live-orders");
       const arr: Order[] = Array.isArray(data) ? data : [];
       setOrders(arr);
       const newIds = new Set<string>(arr.map(o => o.id));
@@ -158,35 +196,59 @@ export default function RestaurantDashboard() {
     setLoading(false);
   }, []);
 
-  const fetchShift = useCallback(async () => {
-    try { const { data } = await api.get("/api/shifts/current"); setShift(data?.id ? data : null); }
-    catch { setShift(null); }
-  }, []);
-
-  const fetchStaff = useCallback(async () => {
-    try { const { data } = await api.get("/api/shifts/staff-active"); setActiveStaff(Array.isArray(data) ? data : []); }
-    catch { setActiveStaff([]); }
-  }, []);
-
-  const fetchInventoryAlerts = useCallback(async () => {
-    try { const { data } = await api.get("/api/inventory/alerts"); setInvAlerts(Array.isArray(data) ? data : []); }
-    catch { setInvAlerts([]); }
-  }, []);
-
-  const fetchTopProducts = useCallback(async (p: Period) => {
+  const fetchStats = useCallback(async (p: Period) => {
     try {
-      const { data } = await api.get("/api/reports/top-products", { params: { period: p, limit: 5 } });
-      setTopProducts(Array.isArray(data) ? data : []);
-    } catch { setTopProducts([]); }
+      const { data } = await api.get("/api/dashboard/stats", { params: { period: p } });
+      setStats(data || null);
+    } catch { setStats(null); }
   }, []);
 
   const fetchSalesByDay = useCallback(async () => {
     try {
-      const { data } = await api.get("/api/reports/by-day", { params: { days: 7 } });
-      setSalesByDay(Array.isArray(data) ? data : []);
-    } catch { setSalesByDay([]); }
+      const { data } = await api.get("/api/dashboard/sales-by-day", { params: { days: 7 } });
+      setSalesByDay(data && Array.isArray(data.series) ? data : null);
+    } catch { setSalesByDay(null); }
   }, []);
 
+  const fetchTopProducts = useCallback(async (p: Period) => {
+    try {
+      const { data } = await api.get("/api/dashboard/top-items", { params: { period: p, limit: 5 } });
+      setTopProducts(Array.isArray(data) ? data : []);
+    } catch { setTopProducts([]); }
+  }, []);
+
+  const fetchActiveShift = useCallback(async () => {
+    try {
+      const { data } = await api.get<ActiveShiftResp>("/api/dashboard/active-shift");
+      setShift(data?.shift?.id ? data.shift : null);
+      setActiveStaff(Array.isArray(data?.staff) ? data.staff : []);
+    } catch {
+      setShift(null); setActiveStaff([]);
+    }
+  }, []);
+
+  const fetchInventoryAlerts = useCallback(async () => {
+    try {
+      const { data } = await api.get("/api/dashboard/low-inventory");
+      setInvAlerts(Array.isArray(data) ? data : []);
+    } catch { setInvAlerts([]); }
+  }, []);
+
+  const fetchChannelsPayments = useCallback(async (p: Period) => {
+    try {
+      const { data } = await api.get("/api/dashboard/channels-payments", { params: { period: p } });
+      setChannelsData(data || null);
+    } catch { setChannelsData(null); }
+  }, []);
+
+  const fetchHourly = useCallback(async (p: Period) => {
+    try {
+      const { data } = await api.get("/api/dashboard/hourly-distribution", { params: { period: p } });
+      setHourlyData(data || null);
+    } catch { setHourlyData(null); }
+  }, []);
+
+  // Bootstrap: usuario + lista de sucursales + sucursal activa
   useEffect(() => {
     const u = getUser();
     const display = u?.name
@@ -195,68 +257,96 @@ export default function RestaurantDashboard() {
         ? String(u.email).split("@")[0]
         : null;
     if (display) setUserName(display);
+
     (async () => {
       try {
         const { data } = await api.get("/api/admin/locations");
-        const list = Array.isArray(data) ? data : [];
-        setLocationsCount(list.length);
-        const activeId = typeof window !== "undefined" ? localStorage.getItem("locationId") : null;
-        const active = list.find((l: any) => l.id === activeId) || list[0] || null;
-        if (active?.name) setLocationName(active.name);
+        const list: LocationOption[] = Array.isArray(data) ? data : [];
+        setLocations(list);
+        const saved = typeof window !== "undefined" ? localStorage.getItem("locationId") : null;
+        const valid = saved && list.some(l => l.id === saved) ? saved : (list[0]?.id || "");
+        if (valid && valid !== saved && typeof window !== "undefined") {
+          localStorage.setItem("locationId", valid);
+        }
+        setActiveLocationId(valid);
       } catch {
-        setLocationsCount(0);
+        setLocations([]);
+        setActiveLocationId("");
+      } finally {
+        setLocationsLoaded(true);
       }
     })();
   }, []);
 
+  // Cambiar de sucursal: persiste en localStorage y re-fetch todo (sin reload).
+  const handleLocationChange = useCallback((id: string) => {
+    if (!id || id === activeLocationId) return;
+    if (typeof window !== "undefined") localStorage.setItem("locationId", id);
+    setActiveLocationId(id);
+  }, [activeLocationId]);
+
+  // Fetch dependiente de sucursal + polling para "En vivo"
   useEffect(() => {
-    fetchOrders(); fetchShift(); fetchStaff(); fetchInventoryAlerts(); fetchSalesByDay();
-    const t = setInterval(fetchOrders, 15000);
+    if (!activeLocationId) return;
+    fetchLiveOrders();
+    fetchActiveShift();
+    fetchInventoryAlerts();
+    fetchSalesByDay();
+    const t = setInterval(fetchLiveOrders, 15000);
     return () => clearInterval(t);
-  }, [fetchOrders, fetchShift, fetchStaff, fetchInventoryAlerts, fetchSalesByDay]);
+  }, [activeLocationId, fetchLiveOrders, fetchActiveShift, fetchInventoryAlerts, fetchSalesByDay]);
 
+  // Fetch dependiente del período (KPIs, top productos, canales, distribución)
   useEffect(() => {
+    if (!activeLocationId) return;
+    fetchStats(period);
     fetchTopProducts(period);
-  }, [period, fetchTopProducts]);
+    fetchChannelsPayments(period);
+    fetchHourly(period);
+  }, [activeLocationId, period, fetchStats, fetchTopProducts, fetchChannelsPayments, fetchHourly]);
 
-  // Derived stats
-  const todayStr   = new Date().toDateString();
-  const today      = orders.filter(o => new Date(o.createdAt).toDateString() === todayStr);
-  const delivered  = today.filter(o => o.status === "DELIVERED");
-  const ventas     = delivered.reduce((s, o) => s + (o.total || 0), 0);
-  const ticket     = delivered.length ? Math.round(ventas / delivered.length) : 0;
-  const active     = orders.filter(o => !["DELIVERED","CANCELLED"].includes(o.status));
-  const espera     = active.length ? active.reduce((s, o) => s + minutesSince(o.createdAt), 0) / active.length : 0;
-  const espMin     = Math.floor(espera);
-  const espSec     = Math.round((espera - espMin) * 60);
-  const espStr     = `${espMin}:${String(espSec).padStart(2, "0")}`;
+  // KPIs desde backend (con deltas vs periodo anterior)
+  const ventas         = stats?.sales.value ?? 0;
+  const ventasDelta    = stats?.sales.delta ?? 0;
+  const ventasPrev     = stats?.sales.prev ?? 0;
+  const ordersCount    = stats?.orders.value ?? 0;
+  const ordersDelta    = stats?.orders.delta ?? 0;
+  const ticket         = stats?.averageTicket.value ?? 0;
+  const ticketDelta    = stats?.averageTicket.delta ?? 0;
+  const prepMin        = stats?.prepMinutes.value ?? 0;
+  const activeCount    = stats?.prepMinutes.activeCount ?? 0;
+  const prepMinInt     = Math.floor(prepMin);
+  const prepSec        = Math.round((prepMin - prepMinInt) * 60);
+  const espStr         = `${prepMinInt}:${String(prepSec).padStart(2, "0")}`;
+  const active         = orders; // /api/dashboard/live-orders ya devuelve sólo activos
 
-  // Channel breakdown
-  const channelMap = orders.reduce((acc: Record<string, number>, o) => {
-    const ch = o.orderType || "TPV";
-    acc[ch] = (acc[ch] || 0) + (o.total || 0);
-    return acc;
-  }, {});
-  const effectiveChan: Record<string, number> = channelMap;
-  const chanKeys = Object.keys(effectiveChan);
-  const chanVals = chanKeys.map(k => effectiveChan[k]);
-  const chanSum  = chanVals.reduce((a, b) => a + b, 0) || 1;
+  // Donut de canales (desde /api/dashboard/channels-payments)
   const CIRC = 2 * Math.PI * 48;
+  const chanEntries = channelsData?.channels ?? [];
+  const chanSum = chanEntries.reduce((s, c) => s + c.total, 0) || 1;
   let cumOffset = 0;
-  const donutSegs = chanKeys.map((k, i) => {
-    const pct = chanVals[i] / chanSum;
-    const len = pct * CIRC;
-    const seg = { key: k, pct: Math.round(pct * 100), len, offset: cumOffset, color: CHAN_COLORS[k] || DONUT_DEFAULTS[i % 4] };
+  const donutSegs = chanEntries.map((c, i) => {
+    const len = (c.total / chanSum) * CIRC;
+    const seg = {
+      key: c.key,
+      pct: c.pct,
+      total: c.total,
+      count: c.count,
+      len,
+      offset: cumOffset,
+      color: CHAN_COLORS[c.key] || DONUT_DEFAULTS[i % DONUT_DEFAULTS.length],
+    };
     cumOffset += len;
     return seg;
   });
 
-  // Hourly chart data
+  // Distribución por hora (desde /api/dashboard/hourly-distribution)
+  // La gráfica muestra 12 horas centradas en el rango operativo 10–21h.
   const hourBuckets = (() => {
-    const map: Record<number, number> = {};
-    orders.filter(o => new Date(o.createdAt).toDateString() === todayStr)
-      .forEach(o => { const h = new Date(o.createdAt).getHours(); map[h] = (map[h] || 0) + 1; });
-    return Array.from({ length: 12 }, (_, i) => ({ h: i + 10, v: map[i + 10] || 0 }));
+    const raw = hourlyData?.buckets ?? [];
+    const byHour: Record<number, number> = {};
+    for (const b of raw) byHour[b.hour] = b.count;
+    return Array.from({ length: 12 }, (_, i) => ({ h: i + 10, v: byHour[i + 10] || 0 }));
   })();
   const maxHour = Math.max(...hourBuckets.map(d => d.v), 1);
 
@@ -278,32 +368,48 @@ export default function RestaurantDashboard() {
     padding: 20,
   };
 
+  const periodSub: Record<Period, string> = {
+    "HOY": "hoy",
+    "7D": "últimos 7 días",
+    "30D": "últimos 30 días",
+    "AÑO": "este año",
+  };
+  const deltaLabel = (d: number, prev: number) => {
+    if (!stats) return "—";
+    if (prev === 0 && d === 0) return "Sin datos previos";
+    const sign = d > 0 ? "↑" : d < 0 ? "↓" : "";
+    return `${sign} ${Math.abs(d)}% vs ant.`;
+  };
   const KPIS = [
     {
-      label: "Ventas de hoy",
+      label: period === "HOY" ? "Ventas de hoy" : `Ventas (${period})`,
       value: ventas > 0 ? fmtMoney(ventas) : "$0", cents: "",
-      delta: delivered.length > 0 ? `${delivered.length} entregados` : "Sin entregas", up: true, sub: "hoy",
+      delta: deltaLabel(ventasDelta, ventasPrev), up: ventasDelta >= 0, sub: periodSub[period],
       spark: "", fill: "", color: "#9472ff",
       href: "/admin/reportes",
     },
     {
       label: "Pedidos",
-      value: String(today.length), cents: "",
-      delta: `${active.length} en vivo`, up: true, sub: active.length ? "activos ahora" : "sin pedidos activos",
+      value: String(ordersCount), cents: "",
+      delta: deltaLabel(ordersDelta, stats?.orders.prev ?? 0),
+      up: ordersDelta >= 0,
+      sub: activeCount ? `${activeCount} activos ahora` : periodSub[period],
       spark: "", fill: "", color: "var(--green, #10b981)",
       href: "/admin/pedidos",
     },
     {
       label: "Ticket promedio",
       value: ticket > 0 ? fmtMoney(ticket) : "—", cents: "",
-      delta: delivered.length ? `${delivered.length} pedidos` : "—", up: true, sub: "hoy",
+      delta: deltaLabel(ticketDelta, stats?.averageTicket.prev ?? 0),
+      up: ticketDelta >= 0,
+      sub: periodSub[period],
       spark: "", fill: "", color: "var(--amber, #f59e0b)",
       href: "/admin/reportes",
     },
     {
       label: "Tiempo prep. prom.",
-      value: active.length > 0 ? espStr : "—", cents: "",
-      delta: active.length ? `${active.length} activos` : "—", up: true, sub: "tiempo en espera",
+      value: activeCount > 0 ? espStr : "—", cents: "",
+      delta: activeCount ? `${activeCount} activos` : "—", up: true, sub: "tiempo en espera",
       spark: "", fill: "", color: "#b89eff",
       href: "/admin/pedidos",
     },
@@ -371,7 +477,40 @@ export default function RestaurantDashboard() {
               </span>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            {locations.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: V.txDim, letterSpacing: ".14em" }}>
+                  SUCURSAL ACTIVA
+                </span>
+                <div style={{ position: "relative" }}>
+                  <select
+                    value={activeLocationId}
+                    onChange={e => handleLocationChange(e.target.value)}
+                    style={{
+                      appearance: "none",
+                      WebkitAppearance: "none",
+                      MozAppearance: "none",
+                      padding: "7px 28px 7px 12px",
+                      borderRadius: 10,
+                      background: V.surf2,
+                      border: `1px solid ${V.bd1}`,
+                      color: V.txHi,
+                      fontFamily: "'DM Sans',sans-serif",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      minWidth: 150,
+                    }}
+                  >
+                    {locations.map(l => (
+                      <option key={l.id} value={l.id}>{l.name}</option>
+                    ))}
+                  </select>
+                  <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: V.txMut, fontSize: 8, pointerEvents: "none" }}>▼</span>
+                </div>
+              </div>
+            )}
             <div style={{ display: "inline-flex", background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 8, padding: 2 }}>
               {(["HOY", "7D", "30D", "AÑO"] as Period[]).map(p => (
                 <button key={p} onClick={() => setPeriod(p)} style={{
@@ -388,18 +527,30 @@ export default function RestaurantDashboard() {
             </div>
             <button
               onClick={() => {
-                const header = ["#", "Fecha", "Canal", "Cliente/Mesa", "Estado", "Total"];
-                const rows = orders.map(o => [
-                  o.orderNumber ?? o.id.slice(-4),
-                  new Date(o.createdAt).toISOString(),
-                  o.orderType || "",
-                  o.customer?.name || (o.orderType === "MESA" ? `Mesa ${(o as any).tableNumber || ""}` : ""),
-                  o.status,
-                  o.total || 0,
-                ]);
-                const csv = toCsv([header, ...rows]);
+                const rows: (string | number)[][] = [];
+                rows.push(["Dashboard — export", new Date().toISOString()]);
+                rows.push(["Sucursal", locationName || "—"]);
+                rows.push(["Periodo", period]);
+                rows.push([]);
+                rows.push(["KPI", "Valor", "Periodo anterior", "Delta %"]);
+                if (stats) {
+                  rows.push(["Ventas",         stats.sales.value,         stats.sales.prev,         stats.sales.delta]);
+                  rows.push(["Pedidos",        stats.orders.value,        stats.orders.prev,        stats.orders.delta]);
+                  rows.push(["Ticket promedio", stats.averageTicket.value, stats.averageTicket.prev, stats.averageTicket.delta]);
+                  rows.push(["Tiempo prep (min)", stats.prepMinutes.value, "", ""]);
+                }
+                if (salesByDay?.series?.length) {
+                  rows.push([]);
+                  rows.push(["Fecha", "Ventas", "Pedidos"]);
+                  for (const d of salesByDay.series) rows.push([d.date, d.revenue, d.orders]);
+                }
+                if (channelsData?.channels?.length) {
+                  rows.push([]);
+                  rows.push(["Canal", "Total", "Pedidos", "%"]);
+                  for (const c of channelsData.channels) rows.push([c.key, c.total, c.count, c.pct]);
+                }
                 const stamp = new Date().toISOString().slice(0, 10);
-                downloadFile(`dashboard-${stamp}.csv`, csv);
+                downloadFile(`dashboard-${period.toLowerCase()}-${stamp}.csv`, toCsv(rows));
               }}
               style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10, background: V.surf1, border: `1px solid ${V.bd1}`, color: V.txMid, fontSize: 12, fontWeight: 500, cursor: "pointer" }}
             >
@@ -458,15 +609,18 @@ export default function RestaurantDashboard() {
 
         {/* ── Chart + Live orders ── */}
         <div style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr", gap: 14, marginBottom: 14 }}>
-          {/* Sales chart — real data from /api/reports/by-day?days=7 */}
+          {/* Sales chart — /api/dashboard/sales-by-day */}
           <div style={card}>
             {(() => {
-              const total = salesByDay.reduce((s, d) => s + (d.revenue || 0), 0);
-              const hasData = salesByDay.some(d => (d.revenue || 0) > 0);
-              const max = Math.max(1, ...salesByDay.map(d => d.revenue || 0));
+              const series = salesByDay?.series ?? [];
+              const total  = salesByDay?.totals.current.revenue ?? 0;
+              const prev   = salesByDay?.totals.previous.revenue ?? 0;
+              const delta  = salesByDay?.totals.delta ?? 0;
+              const hasData = series.some(d => (d.revenue || 0) > 0);
+              const max = Math.max(1, ...series.map(d => d.revenue || 0));
               const DOW = ["DOM","LUN","MAR","MIE","JUE","VIE","SÁB"];
-              const n = salesByDay.length;
-              const pts: [number, number][] = salesByDay.map((d, i) => {
+              const n = series.length;
+              const pts: [number, number][] = series.map((d, i) => {
                 const x = 90 + (n > 1 ? i * (660 / (n - 1)) : 330);
                 const y = 220 - ((d.revenue || 0) / max) * 170;
                 return [x, y];
@@ -477,12 +631,21 @@ export default function RestaurantDashboard() {
               const fillPath = pts.length
                 ? `${linePath} L ${pts[pts.length - 1]![0]},220 L ${pts[0]![0]},220 Z`
                 : "";
+              const deltaSign = delta > 0 ? "↑" : delta < 0 ? "↓" : "";
+              const deltaColor = delta >= 0 ? V.ok : V.err;
               return (
                 <>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                     <div>
                       <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi, letterSpacing: "-.01em" }}>Ventas por día</div>
-                      <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>Últimos 7 días · {fmtMoney(total)} acumulado</div>
+                      <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>
+                        Últimos 7 días · {fmtMoney(total)} acumulado
+                        {prev > 0 && (
+                          <span style={{ color: deltaColor, marginLeft: 8, fontFamily: "'DM Mono',monospace" }}>
+                            {deltaSign} {Math.abs(delta)}% vs 7 días previos
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div style={{ position: "relative", height: 260 }}>
@@ -512,7 +675,7 @@ export default function RestaurantDashboard() {
                         <text x="32" y="224" textAnchor="end">$0</text>
                       </g>
                       <g fontFamily="DM Mono" fontSize="10" fill="#9494b8">
-                        {salesByDay.map((d, i) => {
+                        {series.map((d, i) => {
                           const x = 90 + (n > 1 ? i * (660 / (n - 1)) : 330);
                           const dow = DOW[new Date(d.date + "T00:00:00").getDay()] ?? "";
                           return <text key={d.date} x={x} y="244" textAnchor="middle">{dow}</text>;
@@ -586,8 +749,10 @@ export default function RestaurantDashboard() {
           <div style={card}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <div>
-                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi }}>Top del día</div>
-                <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>Más vendidos</div>
+                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi }}>
+                  {period === "HOY" ? "Top del día" : `Top · ${period}`}
+                </div>
+                <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>Más vendidos · {periodSub[period]}</div>
               </div>
               <button
                 onClick={() => router.push("/admin/reportes")}
@@ -626,7 +791,9 @@ export default function RestaurantDashboard() {
           <div style={card}>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi }}>Distribución por hora</div>
-              <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>Hoy · pedidos por hora</div>
+              <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>
+                {periodSub[period]} · {hourlyData?.total ?? 0} pedidos
+              </div>
             </div>
             <svg viewBox="0 0 400 200" style={{ width: "100%", height: 200, display: "block" }} preserveAspectRatio="xMidYMid meet">
               <defs>
@@ -665,7 +832,7 @@ export default function RestaurantDashboard() {
                 if (!hasData) {
                   return (
                     <div style={{ color: V.txMut, fontSize: 12, fontFamily: "'DM Mono',monospace" }}>
-                      Aún no hay pedidos hoy.
+                      Sin pedidos · {periodSub[period]}.
                     </div>
                   );
                 }
@@ -750,7 +917,7 @@ export default function RestaurantDashboard() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <div>
                 <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi }}>Canales &amp; pagos</div>
-                <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>Cómo llegan y cómo pagan hoy</div>
+                <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>Cómo llegan y cómo pagan · {periodSub[period]}</div>
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 32, alignItems: "center" }}>
@@ -766,11 +933,16 @@ export default function RestaurantDashboard() {
                 ))}
                 <text x="60" y="56" textAnchor="middle" fontFamily="DM Mono" fontSize="9" fill="#9494b8" letterSpacing=".1em">TOTAL</text>
                 <text x="60" y="72" textAnchor="middle" fontFamily="Syne" fontWeight="800" fontSize="16" fill="#fff">
-                  {ventas > 0 ? `$${Math.round(ventas / 1000)}k` : "$0"}
+                  {(channelsData?.total ?? 0) > 0 ? `$${Math.round((channelsData?.total ?? 0) / 1000)}k` : "$0"}
                 </text>
               </svg>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 22px" }}>
-                {donutSegs.slice(0, 4).map((seg, i) => (
+                {donutSegs.length === 0 && (
+                  <div style={{ gridColumn: "1 / -1", color: V.txMut, fontSize: 12 }}>
+                    Sin ventas registradas en este período.
+                  </div>
+                )}
+                {donutSegs.slice(0, 4).map(seg => (
                   <div key={seg.key}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                       <div style={{ width: 10, height: 10, borderRadius: 2, background: seg.color }} />
@@ -778,7 +950,7 @@ export default function RestaurantDashboard() {
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                       <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 22, fontWeight: 800, color: V.txHi }}>{seg.pct}%</span>
-                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: V.txMut }}>{fmtMoney(chanVals[i] || 0)}</span>
+                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: V.txMut }}>{fmtMoney(seg.total)}</span>
                     </div>
                   </div>
                 ))}
@@ -787,24 +959,21 @@ export default function RestaurantDashboard() {
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${V.bd1}`, display: "flex", gap: 16 }}>
               {(() => {
                 const pm: Record<string, { total: number; count: number }> = {};
-                for (const o of delivered) {
-                  const k = (o as any).paymentMethod || "OTRO";
-                  pm[k] = pm[k] || { total: 0, count: 0 };
-                  pm[k].total += o.total || 0;
-                  pm[k].count += 1;
+                for (const p of channelsData?.payments ?? []) {
+                  pm[p.key] = { total: p.total, count: p.count };
                 }
                 const group = (labels: string[]) => labels.reduce(
                   (acc, k) => ({ total: acc.total + (pm[k]?.total || 0), count: acc.count + (pm[k]?.count || 0) }),
                   { total: 0, count: 0 }
                 );
-                const card = group(["CARD", "CARD_PRESENT"]);
-                const cash = group(["CASH", "CASH_ON_DELIVERY"]);
-                const transfer = group(["TRANSFER", "SPEI", "OXXO"]);
-                const totalSum = Math.max(1, ventas);
+                const cardPay = group(["CARD", "CARD_PRESENT", "CREDIT_CARD", "DEBIT_CARD"]);
+                const cashPay = group(["CASH", "CASH_ON_DELIVERY"]);
+                const tranPay = group(["TRANSFER", "SPEI", "OXXO"]);
+                const totalSum = Math.max(1, channelsData?.total ?? 0);
                 const rows = [
-                  { label: "TARJETA",   ...card },
-                  { label: "EFECTIVO",  ...cash },
-                  { label: "TRANSFER.", ...transfer },
+                  { label: "TARJETA",   ...cardPay },
+                  { label: "EFECTIVO",  ...cashPay },
+                  { label: "TRANSFER.", ...tranPay },
                 ];
                 return rows.map(p => (
                   <div key={p.label} style={{ flex: 1, padding: 12, background: V.surf2, borderRadius: 10 }}>
