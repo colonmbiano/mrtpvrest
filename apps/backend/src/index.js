@@ -116,6 +116,7 @@ app.use('/api/admin',        require('./routes/admin.routes'))
 app.use('/api/saas',         require('./routes/saas.routes'))
 app.use('/api/ai',           require('./routes/ai.routes'));
 app.use('/api/onboarding',   require('./routes/onboarding.routes'));
+app.use('/api/tpv/config',   require('./routes/tpv-config.routes'));
 
 app.get('/health', (req, res) => {
   res.json({
