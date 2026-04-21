@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import api from "@/lib/api";
 import KDSMessages from "@/components/admin/KDSMessages";
 import IngredientShortageModal from "@/components/admin/IngredientShortageModal";
@@ -9,9 +9,10 @@ import RetailLayout from "@/components/layouts/RetailLayout";
 import BarLayout from "@/components/layouts/BarLayout";
 import CafeLayout from "@/components/layouts/CafeLayout";
 import { useLocation } from "@/hooks/useLocation";
+import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { useRouter } from "next/navigation";
 
-const ACCENT = "#F5C842";
+const DEFAULT_ACCENT = "#F5C842";
 const EMPLOYEE_TOKEN_KEY = "tpv-employee-token";
 const EMPLOYEE_DATA_KEY = "tpv-employee";
 const PIN_MIN_LENGTH = 4;
@@ -36,11 +37,24 @@ const PAY_METHODS = [
 ];
 
 
+const ALL_ORDER_TYPES: { t: string; l: string }[] = [
+  { t: "TAKEOUT",  l: "🥡 Llevar" },
+  { t: "DINE_IN",  l: "🪑 Mesa" },
+  { t: "DELIVERY", l: "🛵 Domicilio" },
+];
+
 export default function TPVPage() {
   const router = useRouter();
 
   // Cerebro Adaptativo: tipo de negocio por sucursal
   const { businessType, loading: locLoading } = useLocation();
+
+  // TpvRemoteConfig — branding, orderTypes permitidos, idle lock, etc.
+  const remoteConfig = useTpvConfig();
+  const ACCENT = remoteConfig.accentColor || DEFAULT_ACCENT;
+  const orderTypeTabs = ALL_ORDER_TYPES.filter(({ t }) =>
+    remoteConfig.allowedOrderTypes.includes(t as any),
+  );
 
   // SAAS
   const [restaurantName, setRestaurantName] = useState("MRTPVREST");
@@ -55,8 +69,18 @@ export default function TPVPage() {
   const [settingsSearch, setSettingsSearch] = useState("");
 
   // Tickets
-  const emptyTicket = () => ({ id: Date.now(), name: "", phone: "", type: "TAKEOUT", table: "", address: "", items: [], discount: 0, discountType: "percent" });
-  const [tickets, setTickets]           = useState<any[]>([{ id: 1, name: "", phone: "", type: "TAKEOUT", table: "", address: "", items: [], discount: 0, discountType: "percent" }]);
+  const defaultOrderType = orderTypeTabs[0]?.t || "TAKEOUT";
+  const emptyTicket = () => ({ id: Date.now(), name: "", phone: "", type: defaultOrderType, table: "", address: "", items: [], discount: 0, discountType: "percent" });
+  const [tickets, setTickets]           = useState<any[]>(() => [{ id: 1, name: "", phone: "", type: "TAKEOUT", table: "", address: "", items: [], discount: 0, discountType: "percent" }]);
+
+  // Si el tipo del ticket activo ya no está permitido (ej. la sucursal desactivó
+  // TAKEOUT desde el dashboard), lo re-alineamos al primer tipo válido.
+  useEffect(() => {
+    if (orderTypeTabs.length === 0) return;
+    setTickets(ts => ts.map(t =>
+      remoteConfig.allowedOrderTypes.includes(t.type) ? t : { ...t, type: defaultOrderType }
+    ));
+  }, [remoteConfig.allowedOrderTypes.join(","), defaultOrderType]); // eslint-disable-line react-hooks/exhaustive-deps
   const [activeTicket, setActiveTicket] = useState(0);
   const [variantModal, setVariantModal]   = useState<any>(null);
   const [modifierModal, setModifierModal] = useState<any>(null);
@@ -121,6 +145,28 @@ export default function TPVPage() {
     setPinInput("");
     setPinError("");
   }, []);
+
+  // Auto-lock por inactividad — controlado por TpvRemoteConfig.lockTimeoutSec.
+  // 0 o estando ya bloqueado → no arma el timer.
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const timeoutSec = remoteConfig.lockTimeoutSec;
+    if (!timeoutSec || timeoutSec <= 0) return;
+    if (isGlobalLocked) return;
+
+    const reset = () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => clearEmployeeSession(), timeoutSec * 1000);
+    };
+    const events: (keyof WindowEventMap)[] = ["pointerdown", "keydown", "touchstart"];
+    events.forEach(ev => window.addEventListener(ev, reset, { passive: true }));
+    reset();
+
+    return () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      events.forEach(ev => window.removeEventListener(ev, reset));
+    };
+  }, [remoteConfig.lockTimeoutSec, isGlobalLocked, clearEmployeeSession]);
 
   // ── SAAS INIT ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -205,8 +251,7 @@ export default function TPVPage() {
     setIsVerifyingPin(true);
     setPinError("");
     try {
-      const restaurantId = localStorage.getItem("restaurantId");
-      const { data } = await api.post("/api/auth/pin", { pin: enteredPin, restaurantId });
+      const { data } = await api.post("/api/employees/login", { pin: enteredPin });
       const token = data.token || data.accessToken;
       const employee = data.user || data.employee;
       if (!token || !employee) throw new Error("Sesion incompleta");
@@ -574,7 +619,7 @@ export default function TPVPage() {
             style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
         </div>
         <div className="flex gap-1.5">
-          {[{ t: "TAKEOUT", l: "🥡 Llevar" }, { t: "DINE_IN", l: "🪑 Mesa" }, { t: "DELIVERY", l: "🛵 Domicilio" }].map(({ t, l }) => (
+          {orderTypeTabs.map(({ t, l }) => (
             <button key={t} onClick={() => updateTicket({ type: t })}
               className="flex-1 min-h-[48px] rounded-xl text-xs font-bold select-none"
               style={{
