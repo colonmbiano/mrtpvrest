@@ -104,7 +104,9 @@ const registerLimiter = rateLimit({
   message: { error: 'Demasiados registros desde esta IP. Intenta en 1 hora.' },
 })
 
-router.post('/register-tenant', registerLimiter, async (req, res) => {
+// POST /api/auth/register-tenant (canónico)
+// POST /api/auth/register (alias retrocompatible — clientes antiguos)
+router.post(['/register-tenant', '/register'], registerLimiter, async (req, res) => {
   const { restaurantName, ownerName, email, password, planId: requestedPlanId } = req.body
 
   if (!restaurantName || !ownerName || !email || !password) {
