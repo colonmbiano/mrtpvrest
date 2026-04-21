@@ -8,7 +8,8 @@
     "db:generate": "prisma generate --schema=./prisma/schema.prisma",
     "db:push": "prisma db push --schema=./prisma/schema.prisma",
     "db:migrate": "prisma migrate deploy --schema=./prisma/schema.prisma",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.js",
+    "db:extend-trial": "node prisma/extend-trial.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

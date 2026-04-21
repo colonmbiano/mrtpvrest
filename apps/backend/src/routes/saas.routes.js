@@ -389,6 +389,55 @@ router.patch('/tenants/:id/plan', async (req, res) => {
   }
 });
 
+// POST /api/saas/tenants/:id/gift-days — regalar N días (extiende trial o período pagado)
+router.post('/tenants/:id/gift-days', async (req, res) => {
+  const days = Number(req.body?.days);
+  if (!Number.isFinite(days) || days <= 0 || days > 365) {
+    return res.status(400).json({ error: 'days debe ser un número entre 1 y 365' });
+  }
+
+  try {
+    const sub = await prisma.subscription.findUnique({ where: { tenantId: req.params.id } });
+    if (!sub) return res.status(404).json({ error: 'Suscripción no encontrada' });
+
+    const ms = days * 86400000;
+    const now = Date.now();
+
+    // Extender currentPeriodEnd desde su valor actual (o desde hoy si ya venció)
+    const periodBase = sub.currentPeriodEnd && new Date(sub.currentPeriodEnd).getTime() > now
+      ? new Date(sub.currentPeriodEnd) : new Date();
+    const newPeriodEnd = new Date(periodBase.getTime() + ms);
+
+    const data = { currentPeriodEnd: newPeriodEnd };
+
+    if (sub.status === 'TRIAL') {
+      // Mantener TRIAL y extender trialEndsAt también
+      const trialBase = sub.trialEndsAt && new Date(sub.trialEndsAt).getTime() > now
+        ? new Date(sub.trialEndsAt) : new Date();
+      data.trialEndsAt = new Date(trialBase.getTime() + ms);
+    } else if (['EXPIRED', 'SUSPENDED', 'PAST_DUE'].includes(sub.status)) {
+      // Reactivar al regalar días
+      data.status = 'ACTIVE';
+    }
+
+    const updated = await prisma.subscription.update({
+      where: { tenantId: req.params.id },
+      data,
+    });
+
+    res.json({
+      ok: true,
+      status: updated.status,
+      trialEndsAt: updated.trialEndsAt,
+      currentPeriodEnd: updated.currentPeriodEnd,
+      daysGifted: days,
+    });
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Tenant no encontrado' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/saas/tenants/:id/invoices  — historial de facturas
 router.get('/tenants/:id/invoices', async (req, res) => {
   try {
@@ -441,10 +490,35 @@ router.get('/mrr', authenticate, requireSuperAdmin, async (req, res) => {
       byPlan[key].mrr   += s.priceSnapshot;
     }
 
+    // Growth MoM basado en facturas pagadas. Si aún no hay historia suficiente, devolvemos null.
+    const now = new Date();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+    const [thisAgg, lastAgg] = await Promise.all([
+      prisma.invoice.aggregate({
+        _sum: { amount: true },
+        where: { status: 'PAID', paidAt: { gte: thisMonthStart } },
+      }),
+      prisma.invoice.aggregate({
+        _sum: { amount: true },
+        where: { status: 'PAID', paidAt: { gte: lastMonthStart, lt: thisMonthStart } },
+      }),
+    ]);
+
+    const thisRevenue = thisAgg._sum.amount || 0;
+    const lastRevenue = lastAgg._sum.amount || 0;
+    const growth = lastRevenue > 0
+      ? Math.round(((thisRevenue - lastRevenue) / lastRevenue) * 1000) / 10
+      : null;
+
     res.json({
       mrr:          Math.round(total * 100) / 100,
       activeCount:  active.length,
       byPlan,
+      growth,
+      revenueThisMonth: Math.round(thisRevenue * 100) / 100,
+      revenueLastMonth: Math.round(lastRevenue * 100) / 100,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -676,6 +750,129 @@ router.delete('/api-keys/:id', authenticate, requireSuperAdmin, async (req, res)
     res.json({ ok: true, id: updated.id });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'API key no encontrada' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TPV REMOTE CONFIG — gestión desde el dashboard SaaS (SUPER_ADMIN)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ALLOWED_ORDER_TYPES = ['DINE_IN', 'TAKEOUT', 'DELIVERY'];
+
+function sanitizeTpvPayload(body) {
+  const data = {};
+  if (body.apiUrl !== undefined) {
+    const v = typeof body.apiUrl === 'string' ? body.apiUrl.trim() : '';
+    data.apiUrl = v ? v : null;
+  }
+  if (body.allowedOrderTypes !== undefined) {
+    const arr = Array.isArray(body.allowedOrderTypes) ? body.allowedOrderTypes : [];
+    const filtered = arr.filter(t => ALLOWED_ORDER_TYPES.includes(t));
+    data.allowedOrderTypes = filtered.length > 0 ? filtered : ALLOWED_ORDER_TYPES;
+  }
+  if (body.lockTimeoutSec !== undefined) {
+    const n = Number(body.lockTimeoutSec);
+    if (!Number.isFinite(n) || n < 0 || n > 86400) {
+      throw new Error('lockTimeoutSec debe ser un entero entre 0 y 86400');
+    }
+    data.lockTimeoutSec = Math.floor(n);
+  }
+  if (body.accentColor !== undefined) {
+    const v = typeof body.accentColor === 'string' ? body.accentColor.trim() : '';
+    if (v && !/^#[0-9a-fA-F]{3,8}$/.test(v)) {
+      throw new Error('accentColor debe ser hex (ej. #F5C842)');
+    }
+    data.accentColor = v || null;
+  }
+  if (body.extra !== undefined) {
+    if (body.extra !== null && typeof body.extra !== 'object') {
+      throw new Error('extra debe ser un objeto JSON');
+    }
+    data.extra = body.extra ?? {};
+  }
+  return data;
+}
+
+// GET /api/saas/tpv-configs — lista todas las sucursales con su config (o defaults)
+router.get('/tpv-configs', async (req, res) => {
+  try {
+    const locations = await prisma.location.findMany({
+      where: { isActive: true },
+      include: {
+        tpvConfig: true,
+        restaurant: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            logoUrl: true,
+            accentColor: true,
+            tenant: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: [{ restaurant: { name: 'asc' } }, { name: 'asc' }],
+    });
+
+    res.json(locations.map(l => ({
+      locationId:   l.id,
+      locationName: l.name,
+      locationSlug: l.slug,
+      businessType: l.businessType,
+      restaurantId:   l.restaurant.id,
+      restaurantName: l.restaurant.name,
+      restaurantSlug: l.restaurant.slug,
+      tenantId:       l.restaurant.tenant?.id || null,
+      tenantName:     l.restaurant.tenant?.name || null,
+      config: l.tpvConfig
+        ? {
+            apiUrl:            l.tpvConfig.apiUrl,
+            allowedOrderTypes: l.tpvConfig.allowedOrderTypes,
+            lockTimeoutSec:    l.tpvConfig.lockTimeoutSec,
+            accentColor:       l.tpvConfig.accentColor,
+            extra:             l.tpvConfig.extra ?? {},
+            updatedAt:         l.tpvConfig.updatedAt,
+          }
+        : null,
+    })));
+  } catch (e) {
+    if (e?.code === 'P2021' || /does not exist/i.test(e?.message || '')) return res.json([]);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/saas/tpv-configs/:locationId — upsert de la config de una sucursal
+router.put('/tpv-configs/:locationId', async (req, res) => {
+  try {
+    const location = await prisma.location.findUnique({
+      where: { id: req.params.locationId },
+      select: { id: true },
+    });
+    if (!location) return res.status(404).json({ error: 'Sucursal no encontrada' });
+
+    let data;
+    try { data = sanitizeTpvPayload(req.body || {}); }
+    catch (err) { return res.status(400).json({ error: err.message }); }
+
+    const saved = await prisma.tpvRemoteConfig.upsert({
+      where:  { locationId: location.id },
+      update: data,
+      create: { locationId: location.id, ...data },
+    });
+    res.json(saved);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/saas/tpv-configs/:locationId — vuelve a defaults
+router.delete('/tpv-configs/:locationId', async (req, res) => {
+  try {
+    await prisma.tpvRemoteConfig.delete({ where: { locationId: req.params.locationId } });
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.code === 'P2025') return res.json({ ok: true }); // ya no existía, idempotente
     res.status(500).json({ error: e.message });
   }
 });
