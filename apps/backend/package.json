@@ -7,7 +7,8 @@
       "start": "node src/index.js",
       "build": "prisma generate --schema=../../packages/database/prisma/schema.prisma",
       "db:migrate": "npx prisma migrate dev --schema=../../packages/database/prisma/schema.prisma",
-      "db:seed": "node ../../packages/database/prisma/seed.js"
+      "db:seed": "node ../../packages/database/prisma/seed.js",
+      "trial:extend": "node ../../scripts/extend-trial.js"
    },
    "dependencies": {
       "@google/generative-ai": "^0.24.1",
