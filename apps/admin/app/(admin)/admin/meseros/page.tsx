@@ -30,7 +30,9 @@ export default function WaiterApp() {
   const [categories, setCategories]   = useState<any[]>([]);
   const [allItems, setAllItems]       = useState<any[]>([]);
   const [selectedCat, setSelectedCat] = useState("all");
-  const [tickets, setTickets]         = useState<any[]>([{id:1,name:"",phone:"",type:"DINE_IN",table:"",items:[]}]);
+  const [tickets, setTickets]         = useState<any[]>(() => [
+    { id: `local-${Date.now()}`, name: "", phone: "", type: "DINE_IN", table: "", items: [] },
+  ]);
   const [activeTicket, setActiveTicket] = useState(0);
   const [variantModal, setVariantModal] = useState<any>(null);
   const [modModal, setModModal]       = useState<any>(null);

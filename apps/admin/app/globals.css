@@ -26,6 +26,12 @@
   --red:    #ef4444;
   --blue:   #3b82f6;
 
+  /* Accent aliases used across the admin UI */
+  --gold:   #f5a623;
+  --orange: #f59e0b;
+  --yellow: #facc15;
+  --accent: var(--brand-primary);
+
   /* Shadows */
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.35);
   --shadow-md: 0 4px 16px rgba(0,0,0,0.45);
@@ -51,6 +57,11 @@
   --red:    #dc2626;
   --blue:   #2563eb;
 
+  --gold:   #d97706;
+  --orange: #d97706;
+  --yellow: #ca8a04;
+  --accent: var(--brand-primary);
+
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.07);
   --shadow-md: 0 4px 16px rgba(0,0,0,0.10);
 }
@@ -60,6 +71,8 @@
 
 body {
   font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

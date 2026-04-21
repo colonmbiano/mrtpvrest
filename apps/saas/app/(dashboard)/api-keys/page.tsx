@@ -1,34 +1,42 @@
 "use client";
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import api from "@/lib/api";
 
 interface ApiKey {
-  id: string; name: string; key: string; scopes: string[];
-  createdAt: string; lastUsed: string | null; active: boolean;
+  id: string;
+  tenantId: string | null;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  active: boolean;
+  lastUsedAt: string | null;
+  createdAt: string;
+  requests24h: number;
+  // Sólo presente justo tras crearla (one-time reveal).
+  key?: string;
 }
 
 const SCOPES = ["orders:read","orders:write","menu:read","menu:write","reports:read","webhooks"];
 
-function genKey() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  const part = (n: number) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-  return `mrtp_${part(8)}_${part(16)}_${part(8)}`;
-}
-
-function mask(key: string) {
-  return key.slice(0, 12) + "••••••••••••••••" + key.slice(-4);
+function mask(prefix: string) {
+  return `${prefix}${"•".repeat(16)}`;
 }
 
 export default function ApiKeysPage() {
-  const [keys,     setKeys]     = useState<ApiKey[]>([
-    { id:"1", name:"Producción TPV", key: genKey(), scopes:["orders:read","orders:write","menu:read"], createdAt: new Date(Date.now()-15*86400000).toISOString(), lastUsed: new Date(Date.now()-3600000).toISOString(), active:true },
-    { id:"2", name:"Integración Rappi", key: genKey(), scopes:["orders:read","webhooks"], createdAt: new Date(Date.now()-5*86400000).toISOString(), lastUsed: null, active:true },
-  ]);
-  const [showNew,   setShowNew]   = useState(false);
-  const [newName,   setNewName]   = useState("");
+  const [keys, setKeys]         = useState<ApiKey[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string>("");
+
+  const [showNew, setShowNew]     = useState(false);
+  const [newName, setNewName]     = useState("");
   const [newScopes, setNewScopes] = useState<string[]>(["orders:read"]);
-  const [revealed,  setRevealed]  = useState<string | null>(null);
-  const [copied,    setCopied]    = useState<string | null>(null);
-  const [toast,     setToast]     = useState("");
+  const [creating, setCreating]   = useState(false);
+
+  // Para mostrar la key recién creada (one-time reveal)
+  const [createdKey, setCreatedKey] = useState<{ key: string; name: string } | null>(null);
+
+  const [copied, setCopied]     = useState<string | null>(null);
+  const [toast, setToast]       = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function showToast(msg: string) {
@@ -36,18 +44,51 @@ export default function ApiKeysPage() {
     setToast(msg); timer.current = setTimeout(() => setToast(""), 2500);
   }
 
-  function createKey() {
-    if (!newName.trim() || newScopes.length === 0) return;
-    const key: ApiKey = { id: Date.now().toString(), name: newName, key: genKey(),
-      scopes: newScopes, createdAt: new Date().toISOString(), lastUsed: null, active: true };
-    setKeys(prev => [key, ...prev]);
-    setShowNew(false); setNewName(""); setNewScopes(["orders:read"]);
-    showToast("API Key creada");
+  async function load() {
+    setLoading(true); setError("");
+    try {
+      const { data } = await api.get<ApiKey[]>("/api/saas/api-keys");
+      setKeys(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      setError(e?.response?.data?.error || "Error al cargar API keys");
+      setKeys([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function revokeKey(id: string) {
-    setKeys(prev => prev.map(k => k.id === id ? { ...k, active: false } : k));
-    showToast("API Key revocada");
+  useEffect(() => { load(); }, []);
+
+  async function createKey() {
+    if (!newName.trim() || newScopes.length === 0 || creating) return;
+    setCreating(true);
+    try {
+      const { data } = await api.post<ApiKey>("/api/saas/api-keys", {
+        name: newName,
+        scopes: newScopes,
+      });
+      setShowNew(false);
+      setNewName("");
+      setNewScopes(["orders:read"]);
+      if (data.key) setCreatedKey({ key: data.key, name: data.name });
+      showToast("API Key creada");
+      load();
+    } catch (e: any) {
+      showToast(e?.response?.data?.error || "Error al crear la key");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function revokeKey(id: string) {
+    if (!confirm("¿Revocar esta API key? La acción es inmediata.")) return;
+    try {
+      await api.delete(`/api/saas/api-keys/${id}`);
+      showToast("API Key revocada");
+      load();
+    } catch (e: any) {
+      showToast(e?.response?.data?.error || "Error al revocar");
+    }
   }
 
   function copyKey(id: string, key: string) {
@@ -61,11 +102,18 @@ export default function ApiKeysPage() {
   }
 
   function timeAgo(iso: string) {
-    const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
-    const h = Math.floor((Date.now() - new Date(iso).getTime()) / 3600000);
-    if (h < 1) return "hace <1h"; if (h < 24) return `hace ${h}h`; if (d < 7) return `hace ${d}d`;
-    return new Date(iso).toLocaleDateString("es-MX", { day:"2-digit", month:"short" });
+    const ms = Date.now() - new Date(iso).getTime();
+    const h = Math.floor(ms / 3_600_000);
+    const d = Math.floor(ms / 86_400_000);
+    if (h < 1) return "hace <1h";
+    if (h < 24) return `hace ${h}h`;
+    if (d < 7)  return `hace ${d}d`;
+    return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
   }
+
+  const activeKeys  = keys.filter(k => k.active);
+  const revokedKeys = keys.filter(k => !k.active);
+  const uniqueScopes = new Set(keys.flatMap(k => k.scopes)).size;
 
   return (
     <>
@@ -83,10 +131,10 @@ export default function ApiKeysPage() {
         {/* METRICS */}
         <div className="db-metrics">
           {[
-            { l:"Keys activas",   v: keys.filter(k=>k.active).length,  c:"c-green", s:"en uso" },
-            { l:"Keys totales",   v: keys.length,                        c:"c-blue",  s:"creadas" },
-            { l:"Revocadas",      v: keys.filter(k=>!k.active).length,  c:"c-orange",s:"inactivas" },
-            { l:"Scopes únicos",  v: new Set(keys.flatMap(k=>k.scopes)).size, c:"c-amber", s:"permisos" },
+            { l:"Keys activas",  v: activeKeys.length,  c:"c-green",  s:"en uso" },
+            { l:"Keys totales",  v: keys.length,        c:"c-blue",   s:"creadas" },
+            { l:"Revocadas",     v: revokedKeys.length, c:"c-orange", s:"inactivas" },
+            { l:"Scopes únicos", v: uniqueScopes,       c:"c-amber",  s:"permisos" },
           ].map(({l,v,c,s}) => (
             <div key={l} className={`db-metric-card ${c}`}>
               <div className="db-metric-label">{l}</div>
@@ -100,41 +148,46 @@ export default function ApiKeysPage() {
         <div className="db-card">
           <div className="db-card-header">
             <div className="db-card-title">API Keys</div>
-            <span className="db-badge db-badge-amber" style={{ fontSize:9 }}>Datos locales — backend pendiente</span>
+            {error && <span className="db-badge db-badge-red" style={{ fontSize:9 }}>{error}</span>}
           </div>
           <table className="db-brands-table">
             <thead>
-              <tr><th>Nombre</th><th>Key</th><th>Scopes</th><th>Creada</th><th>Último uso</th><th>Estado</th><th>Acciones</th></tr>
+              <tr>
+                <th>Nombre</th><th>Key</th><th>Scopes</th>
+                <th>Creada</th><th>Último uso</th><th>Estado</th><th>Acciones</th>
+              </tr>
             </thead>
             <tbody>
+              {loading && (
+                <tr><td colSpan={7} style={{ padding: 36, textAlign: "center", color: "var(--text3)" }}>Cargando…</td></tr>
+              )}
+              {!loading && keys.length === 0 && (
+                <tr><td colSpan={7} style={{ padding: 36, textAlign: "center", color: "var(--text3)" }}>
+                  Sin API keys emitidas. Crea la primera con “+ Nueva API Key”.
+                </td></tr>
+              )}
               {keys.map(k => (
                 <tr key={k.id} style={{ opacity: k.active ? 1 : 0.45 }}>
                   <td style={{ fontWeight:500 }}>{k.name}</td>
                   <td>
                     <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                       <span style={{ fontFamily:"DM Mono,monospace", fontSize:11, color:"var(--text3)" }}>
-                        {revealed === k.id ? k.key : mask(k.key)}
+                        {mask(k.prefix)}
                       </span>
-                      <button className="db-btn" style={{ padding:"2px 7px", fontSize:10 }}
-                        onClick={() => setRevealed(prev => prev === k.id ? null : k.id)}>
-                        {revealed === k.id ? "Ocultar" : "Ver"}
-                      </button>
-                      <button className="db-btn" style={{ padding:"2px 7px", fontSize:10, color: copied===k.id ? "var(--green)" : "var(--text2)" }}
-                        onClick={() => copyKey(k.id, k.key)}>
-                        {copied === k.id ? "✓" : "Copiar"}
-                      </button>
                     </div>
                   </td>
                   <td>
                     <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
-                      {k.scopes.map(s => (
-                        <span key={s} className="db-badge db-badge-blue" style={{ fontSize:9 }}>{s}</span>
-                      ))}
+                      {k.scopes.length === 0
+                        ? <span style={{ fontSize: 11, color: "var(--text3)" }}>—</span>
+                        : k.scopes.map(s => (
+                          <span key={s} className="db-badge db-badge-blue" style={{ fontSize:9 }}>{s}</span>
+                        ))}
                     </div>
                   </td>
                   <td style={{ fontSize:11, fontFamily:"DM Mono,monospace", color:"var(--text3)" }}>{timeAgo(k.createdAt)}</td>
                   <td style={{ fontSize:11, fontFamily:"DM Mono,monospace", color:"var(--text3)" }}>
-                    {k.lastUsed ? timeAgo(k.lastUsed) : "Nunca"}
+                    {k.lastUsedAt ? timeAgo(k.lastUsedAt) : "Nunca"}
                   </td>
                   <td>
                     <span className={`db-badge ${k.active ? "db-badge-green" : "db-badge-red"}`}>
@@ -188,10 +241,10 @@ export default function ApiKeysPage() {
                 </p>
               </div>
               <div style={{ display:"flex", gap:8 }}>
-                <button className="db-btn" style={{ flex:1 }} onClick={() => setShowNew(false)}>Cancelar</button>
+                <button className="db-btn" style={{ flex:1 }} onClick={() => setShowNew(false)} disabled={creating}>Cancelar</button>
                 <button className="db-btn db-btn-orange" style={{ flex:1 }} onClick={createKey}
-                  disabled={!newName.trim() || newScopes.length === 0}>
-                  Generar key
+                  disabled={!newName.trim() || newScopes.length === 0 || creating}>
+                  {creating ? "Generando…" : "Generar key"}
                 </button>
               </div>
             </div>
@@ -199,7 +252,39 @@ export default function ApiKeysPage() {
         </div>
       )}
 
-      <div className={`db-toast ${toast?"show":""}`}>{toast}</div>
+      {/* ONE-TIME REVEAL */}
+      {createdKey && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:60 }}>
+          <div className="db-card" style={{ width:520 }}>
+            <div className="db-card-header">
+              <div className="db-card-title">Clave generada: {createdKey.name}</div>
+            </div>
+            <div className="db-card-body" style={{ display:"flex", flexDirection:"column", gap:14 }}>
+              <p style={{ fontSize:12, color:"var(--text2)", lineHeight:1.5 }}>
+                Copia la clave ahora. No volverá a mostrarse — si la pierdes, tendrás que revocarla y emitir una nueva.
+              </p>
+              <div style={{
+                background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+                padding:"10px 12px", fontFamily:"DM Mono,monospace", fontSize:12, color:"var(--text)", wordBreak:"break-all"
+              }}>
+                {createdKey.key}
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button className="db-btn" style={{ flex:1 }}
+                  onClick={() => copyKey("__new", createdKey.key)}>
+                  {copied === "__new" ? "Copiado ✓" : "Copiar clave"}
+                </button>
+                <button className="db-btn db-btn-orange" style={{ flex:1 }}
+                  onClick={() => { setCreatedKey(null); setCopied(null); }}>
+                  Listo
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={`db-toast ${toast ? "show" : ""}`}>{toast}</div>
     </>
   );
 }
