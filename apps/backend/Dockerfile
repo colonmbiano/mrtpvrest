@@ -19,4 +19,7 @@ RUN pnpm --filter @mrtpvrest/database exec prisma generate
 
 EXPOSE 3000
 
-CMD ["node", "apps/backend/src/index.js"]
+# Aplica migraciones pendientes antes de arrancar. `prisma migrate deploy` es
+# idempotente: solo corre las que aún no están en _prisma_migrations. Si falla,
+# el deploy falla ruidosamente y el server no levanta con schema inconsistente.
+CMD ["sh", "-c", "pnpm --filter @mrtpvrest/database exec prisma migrate deploy && node apps/backend/src/index.js"]
