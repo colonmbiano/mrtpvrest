@@ -88,27 +88,60 @@ export default function SetupPage() {
         headers: { Authorization: `Bearer ${data.accessToken}` },
       });
 
-      const me = await authed.get("/api/tenant/me");
-      const tenantRestaurants: Restaurant[] = (me.data.restaurants || []).map((r: any) => ({
-        id: r.id,
-        name: r.name,
-        accentColor: r.accentColor || null,
-        locations: Array.isArray(r.locations) ? r.locations : [],
-      }));
+      const role = data?.user?.role;
+      let tenantRestaurants: Restaurant[] = [];
 
-      await Promise.all(
-        tenantRestaurants.map(async (r) => {
-          if (r.locations.length > 0) return;
-          try {
-            const res = await authed.get(`/api/tenant/restaurants/${r.id}/locations`);
-            r.locations = res.data || [];
-          } catch {
-            r.locations = [];
+      if (role === "SUPER_ADMIN") {
+        // El dueño de la plataforma no está ligado a un tenant; listamos todas
+        // las sucursales cross-tenant para que pueda vincular el TPV a
+        // cualquier marca sin pedir credenciales al cliente.
+        const res = await authed.get("/api/saas/tpv-configs");
+        const byRestaurant = new Map<string, Restaurant>();
+        for (const row of res.data || []) {
+          if (!byRestaurant.has(row.restaurantId)) {
+            byRestaurant.set(row.restaurantId, {
+              id:          row.restaurantId,
+              name:        row.tenantName && row.tenantName !== row.restaurantName
+                             ? `${row.restaurantName} · ${row.tenantName}`
+                             : row.restaurantName,
+              accentColor: null,
+              locations:   [],
+            });
           }
-        }),
-      );
+          byRestaurant.get(row.restaurantId)!.locations.push({
+            id:      row.locationId,
+            name:    row.locationName,
+            address: null,
+          });
+        }
+        tenantRestaurants = Array.from(byRestaurant.values())
+          .filter(r => r.locations.length > 0);
+      } else {
+        // Flujo normal: admin de marca. `/api/tenant/me` trae solo sus
+        // restaurants (y fallback a /api/tenant/restaurants/:id/locations si
+        // el include no devolvió las sucursales).
+        const me = await authed.get("/api/tenant/me");
+        tenantRestaurants = (me.data.restaurants || []).map((r: any) => ({
+          id:          r.id,
+          name:        r.name,
+          accentColor: r.accentColor || null,
+          locations:   Array.isArray(r.locations) ? r.locations : [],
+        }));
 
-      if (tenantRestaurants.every((r) => r.locations.length === 0)) {
+        await Promise.all(
+          tenantRestaurants.map(async (r) => {
+            if (r.locations.length > 0) return;
+            try {
+              const res = await authed.get(`/api/tenant/restaurants/${r.id}/locations`);
+              r.locations = res.data || [];
+            } catch {
+              r.locations = [];
+            }
+          }),
+        );
+      }
+
+      if (tenantRestaurants.length === 0 || tenantRestaurants.every((r) => r.locations.length === 0)) {
         throw new Error("No encontramos sucursales activas para esta cuenta.");
       }
 
