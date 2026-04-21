@@ -1,13 +1,15 @@
-﻿import axios from "axios";
+import axios from "axios";
+import { getApiUrl } from "@/lib/config";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.mrtpvrest.com";
-
-const api = axios.create({ baseURL: API_URL });
+// La baseURL se resuelve en cada request (no en módulo-load) para que cambios
+// desde /setup o desde la config remota se apliquen sin reiniciar la app.
+const api = axios.create();
 
 api.interceptors.request.use((config) => {
+  config.baseURL = getApiUrl();
+
   if (typeof window !== "undefined") {
     // LEER DINÁMICAMENTE (SaaS Mode)
-    // Estos valores se guardarán cuando el cliente inicie sesión o configure su sucursal
     const restaurantId = localStorage.getItem("restaurantId");
     const locationId = localStorage.getItem("locationId");
     const token = localStorage.getItem("accessToken");

@@ -269,6 +269,10 @@ model Location {
   // Configuración de Ticket por sucursal
   ticketConfig TicketConfig?
 
+  // Configuración remota del TPV (OTA) — override de comportamiento y branding
+  // sin necesidad de reconstruir el APK.
+  tpvConfig TpvRemoteConfig?
+
   // Operación Local
   orders            Order[]
   employees         Employee[]
@@ -1108,4 +1112,35 @@ model LandingContent {
   updater   User?    @relation("LandingContentUpdater", fields: [updatedBy], references: [id])
 
   @@map("landing_content")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TPV REMOTE CONFIG — configuración servida al APK TPV en tiempo de ejecución.
+// Permite mover comportamiento y branding por sucursal sin reconstruir el APK.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TpvRemoteConfig {
+  id         String   @id @default(cuid())
+  locationId String   @unique
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  // Nivel 1 — override de la URL del backend (null = usar el default baked del APK)
+  apiUrl String?
+
+  // Tipos de orden que la sucursal acepta (subset de DINE_IN / TAKEOUT / DELIVERY)
+  allowedOrderTypes Json @default("[\"DINE_IN\",\"TAKEOUT\",\"DELIVERY\"]")
+
+  // Segundos de inactividad antes de auto-bloquear la caja (0 = desactivado)
+  lockTimeoutSec Int @default(0)
+
+  // Color de acento del TPV (hex). Si null, usa el accent del Restaurant.
+  accentColor String?
+
+  // Expansión futura sin migrar schema
+  extra Json @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tpv_remote_configs")
 }
