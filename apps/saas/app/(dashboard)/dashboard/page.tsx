@@ -73,22 +73,69 @@ const ILoader = () => (
   </svg>
 );
 
+interface PlanRow { id: string; name?: string; displayName: string; price: number; trialDays?: number }
+type ActivityEntry = { type: string; text: string; sub: string; time: string; ts: number };
+
+function buildDashboardActivity(tenants: any[]): ActivityEntry[] {
+  const out: ActivityEntry[] = [];
+  const now = Date.now();
+  function rel(iso: string) {
+    const d = now - new Date(iso).getTime();
+    const m = Math.floor(d / 60000); const h = Math.floor(d / 3600000); const days = Math.floor(d / 86400000);
+    if (m < 1) return "ahora"; if (m < 60) return `${m} min`; if (h < 24) return `${h} h`;
+    if (days < 7) return `${days}d`; return new Date(iso).toLocaleDateString("es-MX", { day:"2-digit", month:"short" });
+  }
+  for (const t of tenants) {
+    out.push({
+      type: "success",
+      text: t.name,
+      sub: `se registró · plan ${t.subscription?.plan?.displayName ?? "—"}`,
+      time: rel(t.createdAt),
+      ts: new Date(t.createdAt).getTime(),
+    });
+    const status = t.subscription?.status;
+    const trialEndsAt = t.subscription?.trialEndsAt;
+    if (status === "TRIAL" && trialEndsAt) {
+      const days = Math.ceil((new Date(trialEndsAt).getTime() - now) / 86400000);
+      if (days >= 0 && days <= 3) {
+        out.push({ type: "warning", text: t.name, sub: `trial vence en ${days}d`, time: rel(new Date().toISOString()), ts: now });
+      }
+    }
+    if (status === "EXPIRED") {
+      out.push({ type: "error", text: t.name, sub: "trial expirado sin conversión", time: rel(trialEndsAt ?? t.createdAt), ts: new Date(trialEndsAt ?? t.createdAt).getTime() });
+    }
+    if (status === "SUSPENDED") {
+      out.push({ type: "error", text: t.name, sub: "cuenta suspendida", time: rel(trialEndsAt ?? t.createdAt), ts: new Date(trialEndsAt ?? t.createdAt).getTime() });
+    }
+    if (status === "CANCELLED") {
+      out.push({ type: "error", text: t.name, sub: "canceló suscripción", time: rel(trialEndsAt ?? t.createdAt), ts: new Date(trialEndsAt ?? t.createdAt).getTime() });
+    }
+  }
+  return out.sort((a, b) => b.ts - a.ts).slice(0, 5);
+}
+
 export default function SaasDashboardPage() {
   const { theme, setTheme } = useTheme();
-  const [prices, setPrices] = useState({ basic: 2, pro: 5, unlimited: 20, trial: 15 });
+  const [plans, setPlans] = useState<PlanRow[]>([]);
+  const [prices, setPrices] = useState<Record<string, number>>({});
+  const [planSubs, setPlanSubs] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState("Ajustes guardados correctamente");
   const [toggles, setToggles] = useState({
-    registro: true,
-    trial: true,
-    mantenimiento: false,
-    whatsapp: true,
+    openRegistration: true,
+    autoTrial: true,
+    maintenanceMode: false,
+    whatsappEnabled: true,
   });
+  const [togglesLoaded, setTogglesLoaded] = useState(false);
   const [stats, setStats] = useState<any>(null);
+  const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function showToast() {
+  function showToast(msg?: string) {
+    if (msg) setToastMsg(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToastVisible(true);
     toastTimer.current = setTimeout(() => setToastVisible(false), 2500);
@@ -97,31 +144,44 @@ export default function SaasDashboardPage() {
   useEffect(() => {
     async function fetchAll() {
       try {
-        const [mrrRes, tenantsRes, plansRes] = await Promise.all([
-          api.get("/api/saas/mrr").catch(() => ({ data: { mrr: 0, growth: 0 } })),
+        const [mrrRes, tenantsRes, plansRes, configRes] = await Promise.all([
+          api.get("/api/saas/mrr").catch(() => ({ data: { mrr: 0, growth: null, byPlan: {} } })),
           api.get("/api/saas/tenants").catch(() => ({ data: [] })),
           api.get("/api/saas/plans").catch(() => ({ data: [] })),
+          api.get("/api/admin/global-config").catch(() => ({ data: null })),
         ]);
         const tenants: any[] = tenantsRes.data;
         const active = tenants.filter((t: any) => t.subscription?.status === "ACTIVE").length;
-        const trial = tenants.filter((t: any) => t.subscription?.status === "TRIAL").length;
+        const trial  = tenants.filter((t: any) => t.subscription?.status === "TRIAL").length;
         setStats({
           mrr: mrrRes.data.mrr || 0,
-          growth: mrrRes.data.growth || 0,
+          growth: mrrRes.data.growth,
           active,
           trial,
           total: tenants.length,
           conversion: tenants.length > 0 ? Math.round((active / tenants.length) * 100) : 0,
         });
-        if (plansRes.data.length > 0) {
-          const p = plansRes.data.reduce((acc: any, plan: any) => {
-            if (plan.name?.toLowerCase().includes("basic")) acc.basic = plan.price;
-            if (plan.name?.toLowerCase().includes("pro") || plan.name?.toLowerCase().includes("standard")) acc.pro = plan.price;
-            if (plan.name?.toLowerCase().includes("unlim") || plan.name?.toLowerCase().includes("premium")) acc.unlimited = plan.price;
-            return acc;
-          }, { basic: 2, pro: 5, unlimited: 20, trial: 15 });
-          setPrices(p);
+        setActivity(buildDashboardActivity(tenants));
+
+        const byPlan: Record<string, { count: number }> = mrrRes.data.byPlan || {};
+        const planRows: PlanRow[] = plansRes.data;
+        setPlans(planRows);
+        setPrices(Object.fromEntries(planRows.map(p => [p.id, p.price])));
+        setPlanSubs(
+          Object.fromEntries(
+            planRows.map(p => [p.id, byPlan[(p.name || p.displayName || "").toUpperCase()]?.count ?? 0])
+          )
+        );
+
+        if (configRes.data) {
+          setToggles({
+            openRegistration: !!configRes.data.openRegistration,
+            autoTrial:        !!configRes.data.autoTrial,
+            maintenanceMode:  !!configRes.data.maintenanceMode,
+            whatsappEnabled:  !!configRes.data.whatsappEnabled,
+          });
         }
+        setTogglesLoaded(true);
       } finally {
         setLoadingStats(false);
       }
@@ -132,20 +192,36 @@ export default function SaasDashboardPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.put("/api/saas/plans/prices", prices);
-    } catch (err) {
-      console.error("Error guardando ajustes", err);
+      await Promise.all(
+        plans.map(p => {
+          const next = prices[p.id];
+          if (next == null || next === p.price) return null;
+          return api.patch(`/api/saas/plans/${p.id}`, { price: next });
+        }).filter(Boolean) as Promise<any>[]
+      );
+      showToast("Precios actualizados");
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || "Error al guardar precios");
     } finally {
       setSaving(false);
-      showToast();
     }
   };
 
-  const toggleFeature = (key: keyof typeof toggles) =>
-    setToggles(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggleFeature = async (key: keyof typeof toggles) => {
+    if (!togglesLoaded) return;
+    const next = { ...toggles, [key]: !toggles[key] };
+    setToggles(next);
+    try {
+      await api.put("/api/admin/global-config", { [key]: next[key] });
+    } catch (err: any) {
+      setToggles(toggles); // revert
+      showToast(err?.response?.data?.error || "Error al guardar toggle");
+    }
+  };
 
-  const growth = stats?.growth ?? 0;
-  const growthUp = growth >= 0;
+  const growth: number | null = stats?.growth ?? null;
+  const hasGrowth = typeof growth === "number";
+  const growthUp = hasGrowth && growth >= 0;
   const now = new Date();
   const dateStr = now.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
 
@@ -155,8 +231,8 @@ export default function SaasDashboardPage() {
       label: "MRR Total",
       value: loadingStats ? null : `$${(stats?.mrr || 0).toFixed(0)}`,
       unit: "USD / mes",
-      delta: loadingStats ? null : `${growthUp ? "+" : ""}${growth.toFixed(1)}%`,
-      deltaLabel: "vs mes anterior",
+      delta: loadingStats ? null : (hasGrowth ? `${growthUp ? "+" : ""}${growth!.toFixed(1)}%` : "—"),
+      deltaLabel: hasGrowth ? "vs mes anterior" : "sin historia",
       up: growthUp,
       icon: <IDollar />,
       accent: "purple",
@@ -197,25 +273,22 @@ export default function SaasDashboardPage() {
   ];
 
   const TOGGLES = [
-    { key: "registro" as const, label: "Registro libre", desc: "Nuevas marcas sin aprobación manual", accent: "green" },
-    { key: "trial" as const, label: "Trial automático", desc: "Al registrarse inicia período gratis", accent: "blue" },
-    { key: "mantenimiento" as const, label: "Modo mantenimiento", desc: "Bloquea acceso a todos los TPV", accent: "red" },
-    { key: "whatsapp" as const, label: "Notif. WhatsApp", desc: "Whapi.cloud activo globalmente", accent: "green" },
+    { key: "openRegistration" as const, label: "Registro libre",      desc: "Nuevas marcas sin aprobación manual", accent: "green" },
+    { key: "autoTrial" as const,        label: "Trial automático",     desc: "Al registrarse inicia período gratis", accent: "blue" },
+    { key: "maintenanceMode" as const,  label: "Modo mantenimiento",   desc: "Bloquea acceso a todos los TPV",       accent: "red" },
+    { key: "whatsappEnabled" as const,  label: "Notif. WhatsApp",      desc: "Whapi.cloud activo globalmente",       accent: "green" },
   ];
 
-  const ACTIVITY = [
-    { type: "success", text: "Tacos El Rey", sub: "se suscribió al plan Pro", time: "4 min" },
-    { type: "warning", text: "Burger House MX", sub: "trial vence en 24 h", time: "1 h" },
-    { type: "info", text: "Precio Pro", sub: "actualizado a $5 USD", time: "3 h" },
-    { type: "error", text: "Sushi Central", sub: "canceló suscripción", time: "ayer" },
-    { type: "success", text: "La Cazuela MX", sub: "completó onboarding", time: "ayer" },
-  ];
-
-  const PLANS = [
-    { name: "Basic", price: prices.basic, subs: 24, features: "Hasta 3 empleados", accent: "blue" },
-    { name: "Pro", price: prices.pro, subs: 31, features: "Hasta 10 empleados", accent: "purple", featured: true },
-    { name: "Unlimited", price: prices.unlimited, subs: 7, features: "Sin límites", accent: "green" },
-  ];
+  const PLAN_ACCENTS = ["blue", "purple", "green", "amber"] as const;
+  const PLANS = plans.map((p, i) => ({
+    id: p.id,
+    name: p.displayName,
+    price: prices[p.id] ?? p.price,
+    subs: planSubs[p.id] ?? 0,
+    features: "",
+    accent: PLAN_ACCENTS[i % PLAN_ACCENTS.length],
+    featured: i === 1,
+  }));
 
   return (
     <div className="ovw-page">
@@ -294,14 +367,19 @@ export default function SaasDashboardPage() {
 
             {/* Plan cards */}
             <div className="ovw-plans-row">
-              {PLANS.map((plan) => (
-                <div key={plan.name} className={`ovw-plan ${plan.featured ? "ovw-plan-featured" : ""}`}>
+              {PLANS.length === 0 ? (
+                <div className="ovw-plan" style={{ opacity: 0.5 }}>
+                  <div className="ovw-plan-name">Sin planes</div>
+                  <div className="ovw-plan-info">Crea un plan en Ajustes</div>
+                </div>
+              ) : PLANS.map((plan) => (
+                <div key={plan.id} className={`ovw-plan ${plan.featured ? "ovw-plan-featured" : ""}`}>
                   {plan.featured && <div className="ovw-plan-tag">Popular</div>}
                   <div className="ovw-plan-name">{plan.name}</div>
                   <div className="ovw-plan-price">
                     ${plan.price}<span>/mo</span>
                   </div>
-                  <div className="ovw-plan-info">{plan.features}</div>
+                  {plan.features && <div className="ovw-plan-info">{plan.features}</div>}
                   <div className="ovw-plan-subs">
                     <span className="ovw-plan-subs-num">{plan.subs}</span>
                     <span className="ovw-plan-subs-label">suscritos</span>
@@ -314,23 +392,18 @@ export default function SaasDashboardPage() {
             <div className="ovw-price-editor">
               <p className="ovw-section-label">Editar precios</p>
               <div className="ovw-fields-grid">
-                {([
-                  { label: "Basic", key: "basic" as const, unit: "USD", step: 0.5 },
-                  { label: "Pro", key: "pro" as const, unit: "USD", step: 0.5 },
-                  { label: "Unlimited", key: "unlimited" as const, unit: "USD", step: 1 },
-                  { label: "Días trial", key: "trial" as const, unit: "días", step: 1 },
-                ]).map((f) => (
-                  <div key={f.key} className="ovw-field">
-                    <label className="ovw-field-label" htmlFor={`f-${f.key}`}>{f.label}</label>
+                {plans.map((p) => (
+                  <div key={p.id} className="ovw-field">
+                    <label className="ovw-field-label" htmlFor={`f-${p.id}`}>{p.displayName}</label>
                     <div className="ovw-field-input-wrap">
-                      <span className="ovw-field-unit">{f.unit}</span>
+                      <span className="ovw-field-unit">USD</span>
                       <input
-                        id={`f-${f.key}`}
+                        id={`f-${p.id}`}
                         type="number"
-                        value={prices[f.key]}
+                        value={prices[p.id] ?? p.price}
                         min={0}
-                        step={f.step}
-                        onChange={(e) => setPrices((p) => ({ ...p, [f.key]: +e.target.value }))}
+                        step={0.5}
+                        onChange={(e) => setPrices((prev) => ({ ...prev, [p.id]: +e.target.value }))}
                         className="ovw-field-input"
                       />
                     </div>
@@ -340,7 +413,7 @@ export default function SaasDashboardPage() {
               <button
                 className={`ovw-save-btn ${saving ? "loading" : ""}`}
                 onClick={handleSave}
-                disabled={saving}
+                disabled={saving || plans.length === 0}
               >
                 {saving ? <ILoader /> : <ISave />}
                 {saving ? "Guardando…" : "Guardar cambios"}
@@ -395,7 +468,15 @@ export default function SaasDashboardPage() {
               <span className="ovw-badge ovw-badge-green">Live</span>
             </div>
             <div className="ovw-activity">
-              {ACTIVITY.map((item, i) => (
+              {activity.length === 0 ? (
+                <div className="ovw-activity-item" style={{ opacity: 0.5 }}>
+                  <div className="ovw-activity-body">
+                    <span className="ovw-activity-sub">
+                      {loadingStats ? "Cargando eventos…" : "Sin eventos recientes"}
+                    </span>
+                  </div>
+                </div>
+              ) : activity.map((item, i) => (
                 <div key={i} className="ovw-activity-item">
                   <div className={`ovw-activity-dot ovw-dot-${item.type}`} />
                   <div className="ovw-activity-body">
@@ -417,7 +498,7 @@ export default function SaasDashboardPage() {
       {/* ── Toast ── */}
       <div className={`ovw-toast ${toastVisible ? "show" : ""}`} role="status" aria-live="polite">
         <div className="ovw-toast-icon"><ICheck /></div>
-        Ajustes guardados correctamente
+        {toastMsg}
       </div>
     </div>
   );

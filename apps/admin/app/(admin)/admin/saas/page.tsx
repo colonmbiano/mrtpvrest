@@ -102,65 +102,38 @@ function TenantLogo({ name, size = 32 }: { name: string; size?: number }) {
   );
 }
 
-/* ── Mock data ───────────────────────────────────────────────── */
-const HEALTH = [
-  { label: "API uptime",     value: "99.98%", pct: 99.98, color: V.ok   },
-  { label: "p95 latencia",   value: "142 ms", pct: 24,    color: V.ok   },
-  { label: "Error rate",     value: "0.12%",  pct: 4,     color: V.ok   },
-  { label: "Cola de jobs",   value: "18 pend.",pct: 18,   color: V.warn },
-  { label: "DB conexiones",  value: "84/200", pct: 42,    color: V.ok   },
-];
-const TOP_TENANTS = [
-  { initials: "LC", name: "La Casona Gastro",  sub: "ENTERPRISE · 12 sedes", mrr: "$2,480", grad: LOGO_GRADS[0] },
-  { initials: "TB", name: "Tacos Bravo",        sub: "ENTERPRISE · 8 sedes",  mrr: "$1,940", grad: LOGO_GRADS[1] },
-  { initials: "CV", name: "Cantina del Valle",  sub: "PRO · 3 sedes",         mrr: "$680",   grad: LOGO_GRADS[2] },
-  { initials: "PV", name: "Pizza Venecia",      sub: "PRO · 5 sedes",         mrr: "$620",   grad: LOGO_GRADS[3] },
-  { initials: "SF", name: "Sushi Fusion",       sub: "PRO · 4 sedes",         mrr: "$580",   grad: LOGO_GRADS[4] },
-];
-const NEW_TENANTS = [
-  { initials: "MT", name: "Mama Teresa",       sub: "Hace 2 días",  status: "TRIAL",  grad: LOGO_GRADS[5] },
-  { initials: "EL", name: "El Fogón",          sub: "Hace 4 días",  status: "ACTIVE", grad: LOGO_GRADS[6] },
-  { initials: "RZ", name: "Ramen Zen",         sub: "Hace 6 días",  status: "TRIAL",  grad: LOGO_GRADS[7] },
-  { initials: "BC", name: "Birria Cienfuegos", sub: "Hace 8 días",  status: "ACTIVE", grad: LOGO_GRADS[8] },
-  { initials: "CM", name: "Café Matcha",       sub: "Hace 11 días", status: "TRIAL",  grad: LOGO_GRADS[9] },
-];
-const LOGS = [
-  { time: "14:32:08.412", level: "ERROR", msg: "[sushifusion] payment.intent.failed — card_declined · INV-20840",           ctx: "billing · stripe" },
-  { time: "14:31:44.102", level: "INFO",  msg: "[lacasona] order.created #42108 — 4 items · $1,280",                        ctx: "orders · tpv-03"  },
-  { time: "14:30:22.887", level: "WARN",  msg: "[cantina] inventory.low threshold — Trompo pastor at 12%",                  ctx: "inventory"         },
-  { time: "14:29:12.544", level: "OK",    msg: "[mamateresa] tenant.created — trial started · starter plan",                ctx: "onboarding"        },
-  { time: "14:28:08.221", level: "INFO",  msg: "[tacosbravo] employee.login — maria.r@... · sede 03",                      ctx: "auth"              },
-  { time: "14:27:33.102", level: "ERROR", msg: "[system] webhook.delivery_failed — pizzavenecia · retry 2/3",               ctx: "webhooks"          },
-  { time: "14:26:18.748", level: "INFO",  msg: "[elfogon] menu.updated — 3 items agregados, 1 precio actualizado",          ctx: "menu · admin"      },
-  { time: "14:25:02.330", level: "OK",    msg: "[pizzavenecia] invoice.paid — INV-20839 · $620",                            ctx: "billing"           },
-  { time: "14:24:44.112", level: "WARN",  msg: "[ramenzen] api.rate_limit_approaching — 820/1000 req/min",                  ctx: "api"               },
-  { time: "14:23:12.998", level: "INFO",  msg: "[cantina] shift.opened — carlos.r · $5,200 efectivo inicial",               ctx: "tpv · caja-01"    },
-  { time: "14:22:05.441", level: "INFO",  msg: "[lacasona] delivery.completed — juan.lopez · 8 min · $340",                ctx: "delivery"          },
-  { time: "14:21:33.877", level: "ERROR", msg: "[birria] printer.timeout — kitchen-01 offline 30s",                         ctx: "hardware"          },
-  { time: "14:20:18.204", level: "OK",    msg: "[tacosbravo] backup.completed — 2.4 GB · daily",                            ctx: "system"            },
-];
+/* ── Log level styling (not data) ────────────────────────────── */
 const LOG_COLORS: Record<string, { bg: string; color: string }> = {
   ERROR: { bg: V.errS,  color: V.err  },
   WARN:  { bg: V.warnS, color: V.warn },
   INFO:  { bg: V.infoS, color: V.info },
   OK:    { bg: V.okS,   color: V.ok   },
 };
-const API_KEYS = [
-  { initials: "LC", name: "La Casona Gastro", sub: "12 sedes", key: "mrt_live_lc_48Kz…", scope: "read:* write:orders", used: "Hace 2 min",  reqs: "12,480", status: "ACTIVE", grad: LOGO_GRADS[0] },
-  { initials: "TB", name: "Tacos Bravo",       sub: "8 sedes",  key: "mrt_live_tb_9Qp…", scope: "read:* write:*",      used: "Hace 8 min",  reqs: "8,240",  status: "ACTIVE", grad: LOGO_GRADS[1] },
-  { initials: "PV", name: "Pizza Venecia",     sub: "5 sedes",  key: "mrt_live_pv_2Hx…", scope: "read:menu write:orders", used: "Hace 22 min", reqs: "3,420", status: "ACTIVE", grad: LOGO_GRADS[3] },
-  { initials: "RZ", name: "Ramen Zen",         sub: "1 sede",   key: "mrt_test_rz_7Yt…", scope: "test · read-only",    used: "Ayer",        reqs: "820",    status: "TEST",   grad: LOGO_GRADS[7] },
-  { initials: "BH", name: "Bar Hemingway",     sub: "(revocado)",key: "mrt_live_bh_0Lm…", scope: "—",                   used: "Hace 14 días",reqs: "0",      status: "CANCELLED", grad: "linear-gradient(135deg,#64748b,#334155)" },
-];
-const INVOICES = [
-  { num: "INV-20842", initials: "LC", name: "La Casona Gastro", sub: "ENTERPRISE · mensual", amount: "$2,480", status: "ACTIVE",   date: "18 abr 2026", grad: LOGO_GRADS[0] },
-  { num: "INV-20841", initials: "TB", name: "Tacos Bravo",      sub: "ENTERPRISE · mensual", amount: "$1,940", status: "ACTIVE",   date: "18 abr 2026", grad: LOGO_GRADS[1] },
-  { num: "INV-20840", initials: "SF", name: "Sushi Fusion",     sub: "PRO · mensual",        amount: "$580",   status: "PAST_DUE", date: "15 abr 2026", grad: LOGO_GRADS[4] },
-  { num: "INV-20839", initials: "PV", name: "Pizza Venecia",    sub: "PRO · mensual",        amount: "$620",   status: "ACTIVE",   date: "15 abr 2026", grad: LOGO_GRADS[3] },
-  { num: "INV-20838", initials: "CV", name: "Cantina del Valle",sub: "PRO · mensual",        amount: "$680",   status: "ACTIVE",   date: "14 abr 2026", grad: LOGO_GRADS[2] },
-  { num: "INV-20837", initials: "EL", name: "El Fogón",         sub: "PRO · mensual",        amount: "$420",   status: "ACTIVE",   date: "12 abr 2026", grad: LOGO_GRADS[6] },
-  { num: "INV-20836", initials: "BH", name: "Bar Hemingway",    sub: "STARTER · cancelado",  amount: "$89",    status: "CANCELLED",date: "4 abr 2026",  grad: "linear-gradient(135deg,#64748b,#334155)" },
-];
+
+/* ── Helpers ─────────────────────────────────────────────────── */
+function daysAgoLabel(iso: string): string {
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (d <= 0) return "Hoy";
+  if (d === 1) return "Hace 1 día";
+  return `Hace ${d} días`;
+}
+function currency(n: number): string {
+  return `$${(n ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+function formatTime(iso: string): string {
+  try { return new Date(iso).toLocaleTimeString("es-MX", { hour12: false }); }
+  catch { return iso; }
+}
+function EmptyRow({ cols, text = "Sin datos" }: { cols: number; text?: string }) {
+  return (
+    <tr><td colSpan={cols} style={{ padding: 48, textAlign: "center", color: V.txMut }}>{text}</td></tr>
+  );
+}
+function EmptyBlock({ text = "Sin datos" }: { text?: string }) {
+  return (
+    <div style={{ padding: "40px 12px", textAlign: "center", color: V.txMut, fontSize: 13 }}>{text}</div>
+  );
+}
 
 /* ── th helper ───────────────────────────────────────────────── */
 const TH = ({ children }: { children: React.ReactNode }) => (
@@ -190,6 +163,22 @@ export default function SaaSAdminPage() {
   const [mrr, setMrr]         = useState<MRR | null>(null);
   const [loading, setLoading] = useState(true);
 
+  /* Plataforma */
+  type HealthMetric = { label: string; value: string; pct: number; color: string };
+  type Health = { tenantCount: number; activeSubscriptions: number; orders24h: number; gmv24h: number; metrics: HealthMetric[] };
+  type TopTenant = { id: string; name: string; plan: string | null; planDisplay: string | null; restaurants: number; mrr: number; logoUrl: string | null };
+  type NewTenant = { id: string; name: string; createdAt: string; subscription: { status: string; plan?: { name: string; displayName: string } | null } | null };
+  type LogEntry = { id: string; tenantId: string | null; level: string; message: string; context: string | null; createdAt: string };
+  type InvoiceRow = { id: string; amount: number; status: string; createdAt: string; subscription?: { plan?: { displayName: string; name: string } | null; tenant?: { id: string; name: string; slug: string; logoUrl: string | null } | null } };
+  type ApiKeyRow = { id: string; tenantId: string | null; name: string; prefix: string; scopes: string[]; active: boolean; lastUsedAt: string | null; requests24h: number; createdAt: string };
+
+  const [health, setHealth]     = useState<Health | null>(null);
+  const [topTenants, setTopTenants] = useState<TopTenant[]>([]);
+  const [newSignups, setNewSignups] = useState<NewTenant[]>([]);
+  const [logs, setLogs]         = useState<LogEntry[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [apiKeys, setApiKeys]   = useState<ApiKeyRow[]>([]);
+
   /* Modal */
   const [showModal, setShowModal] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
@@ -197,16 +186,25 @@ export default function SaaSAdminPage() {
 
   const load = async () => {
     try {
-      const [tRes, pRes, mRes] = await Promise.all([
-        api.get("/api/saas/tenants"),
-        api.get("/api/saas/plans"),
-        api.get("/api/saas/mrr"),
+      const safe = <T,>(p: Promise<{ data: T }>, fallback: T): Promise<T> =>
+        p.then(r => r.data).catch(() => fallback);
+
+      const [t, pl, m, h, tt, nt, lg, inv, ak] = await Promise.all([
+        safe<Tenant[]>(api.get("/api/saas/tenants"),      []),
+        safe<Plan[]>(api.get("/api/saas/plans"),          []),
+        safe<MRR>(api.get("/api/saas/mrr"),               { mrr: 0, activeCount: 0, byPlan: {} }),
+        safe<Health>(api.get("/api/saas/health"),         { tenantCount: 0, activeSubscriptions: 0, orders24h: 0, gmv24h: 0, metrics: [] }),
+        safe<TopTenant[]>(api.get("/api/saas/top-tenants?limit=5"), []),
+        safe<NewTenant[]>(api.get("/api/saas/new-tenants?days=30&limit=5"), []),
+        safe<LogEntry[]>(api.get("/api/saas/logs?limit=100"), []),
+        safe<InvoiceRow[]>(api.get("/api/saas/invoices?limit=60"),  []),
+        safe<ApiKeyRow[]>(api.get("/api/saas/api-keys"),   []),
       ]);
-      setTenants(tRes.data);
-      setPlans(pRes.data);
-      setMrr(mRes.data);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+
+      setTenants(t); setPlans(pl); setMrr(m);
+      setHealth(h); setTopTenants(tt); setNewSignups(nt);
+      setLogs(lg); setInvoices(inv); setApiKeys(ak);
+    } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
 
@@ -250,13 +248,15 @@ export default function SaaSAdminPage() {
     t.slug.toLowerCase().includes(search.toLowerCase()) ||
     (t.domain ?? "").toLowerCase().includes(search.toLowerCase())
   );
-  const filteredLogs = LOGS.filter(l =>
-    !logSearch || l.msg.toLowerCase().includes(logSearch.toLowerCase()) || l.ctx.includes(logSearch)
+  const filteredLogs = logs.filter(l =>
+    !logSearch ||
+    l.message.toLowerCase().includes(logSearch.toLowerCase()) ||
+    (l.context ?? "").toLowerCase().includes(logSearch.toLowerCase())
   );
 
   const TABS: { id: Tab; label: string; count?: number }[] = [
     { id: "overview", label: "Overview" },
-    { id: "tenants",  label: "Tenants",  count: tenants.length || 148 },
+    { id: "tenants",  label: "Tenants",  count: tenants.length },
     { id: "billing",  label: "Billing"  },
     { id: "plans",    label: "Planes"   },
     { id: "logs",     label: "Logs & Audit" },
@@ -324,21 +324,27 @@ export default function SaaSAdminPage() {
       {/* ═══ OVERVIEW ═══════════════════════════════════════════ */}
       {tab === "overview" && (
         <>
-          {/* KPI grid */}
+          {/* KPI grid — métricas reales */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 24 }}>
-            {[
-              { label: "MRR",           value: `$${mrrVal.toLocaleString("es-MX",{minimumFractionDigits:0})}`, cents: ".00", delta: "↑ 12.4%", up: true,  sub: `ARR $${Math.round(mrrVal*12/1000)}k`, sparkColor: "#9472ff", sparkPath: "M0,22 L25,20 L50,18 L75,14 L100,16 L125,11 L150,9 L175,12 L200,7 L225,5 L250,8 L275,4 L300,2" },
-              { label: "Tenants activos",value: String(activeVal), cents: "", delta: "↑ 9 netos", up: true, sub: "+12 / -3 este mes", sparkColor: "#10b981", sparkPath: "M0,18 L30,20 L60,15 L90,16 L120,12 L150,14 L180,9 L210,11 L240,6 L270,8 L300,4" },
-              { label: "Net churn · 30d",value: "2.1", cents: "%",  delta: "↓ 0.4pp", up: false, sub: "meta < 3%", sparkColor: "#f59e0b", sparkPath: "M0,8 L30,10 L60,7 L90,9 L120,6 L150,8 L180,5 L210,7 L240,4 L270,6 L300,3" },
-              { label: "Trial → paid",   value: "62", cents: "%",   delta: "↑ 4pp",   up: true,  sub: "23 en trial ahora", sparkColor: "#b89eff", sparkPath: "M0,16 L30,14 L60,17 L90,13 L120,15 L150,10 L180,12 L210,8 L240,10 L270,6 L300,5" },
-            ].map(k => (
+            {(() => {
+              const trialCount = tenants.filter(t => t.subscription?.status === "TRIAL").length;
+              return [
+                { label: "MRR",             value: `$${mrrVal.toLocaleString("es-MX",{minimumFractionDigits:0})}`, cents: ".00", delta: "",  up: true,  sub: `ARR $${Math.round(mrrVal*12/1000)}k`, sparkColor: "#9472ff", sparkPath: "M0,22 L25,20 L50,18 L75,14 L100,16 L125,11 L150,9 L175,12 L200,7 L225,5 L250,8 L275,4 L300,2" },
+                { label: "Tenants activos", value: String(activeVal), cents: "", delta: "", up: true,  sub: `${tenants.length} totales`, sparkColor: "#10b981", sparkPath: "M0,18 L30,20 L60,15 L90,16 L120,12 L150,14 L180,9 L210,11 L240,6 L270,8 L300,4" },
+                { label: "En trial",        value: String(trialCount), cents: "", delta: "", up: true,  sub: trialCount === 0 ? "ninguno vigente" : "vigentes", sparkColor: "#b89eff", sparkPath: "M0,16 L30,14 L60,17 L90,13 L120,15 L150,10 L180,12 L210,8 L240,10 L270,6 L300,5" },
+                { label: "Sedes totales",   value: String(tenants.reduce((s, t) => s + (t._count?.locations ?? 0), 0)), cents: "", delta: "", up: true, sub: `${tenants.reduce((s, t) => s + (t._count?.users ?? 0), 0)} usuarios`, sparkColor: "#f59e0b", sparkPath: "M0,8 L30,10 L60,7 L90,9 L120,6 L150,8 L180,5 L210,7 L240,4 L270,6 L300,3" },
+              ];
+            })().map(k => (
               <div key={k.label} style={{ ...card(), padding: "18px 20px" }}>
                 <div style={{ ...mono, fontSize: 10, color: V.txMut, letterSpacing: ".14em", textTransform: "uppercase", marginBottom: 8 }}>{k.label}</div>
                 <div style={{ ...display, fontWeight: 800, fontSize: 36, color: V.txHi, letterSpacing: "-.02em", lineHeight: 1 }}>
                   {k.value}<span style={{ fontSize: 18, color: V.txMut, fontWeight: 600 }}>{k.cents}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
-                  <span style={{ ...mono, display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: k.up ? V.okS : V.errS, color: k.up ? V.ok : V.err }}>{k.delta}</span>
+                  {k.delta
+                    ? <span style={{ ...mono, display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: k.up ? V.okS : V.errS, color: k.up ? V.ok : V.err }}>{k.delta}</span>
+                    : <span />
+                  }
                   <span style={{ fontSize: 11, color: V.txMut }}>{k.sub}</span>
                 </div>
                 <svg viewBox="0 0 300 28" preserveAspectRatio="none" style={{ width: "100%", height: 28, marginTop: 10 }}>
@@ -410,26 +416,32 @@ export default function SaaSAdminPage() {
                 </span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {HEALTH.map(h => (
-                  <div key={h.label}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, color: V.txMid }}>{h.label}</span>
-                      <span style={{ ...mono, color: V.txHi, fontWeight: 600 }}>{h.value}</span>
+                {(health?.metrics ?? []).length === 0
+                  ? <EmptyBlock text="Sin métricas de salud disponibles" />
+                  : (health?.metrics ?? []).map(h => (
+                    <div key={h.label}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: V.txMid }}>{h.label}</span>
+                        <span style={{ ...mono, color: V.txHi, fontWeight: 600 }}>{h.value}</span>
+                      </div>
+                      <div style={{ height: 4, background: V.surf2, borderRadius: 2, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${h.pct}%`, background: h.color }} />
+                      </div>
                     </div>
-                    <div style={{ height: 4, background: V.surf2, borderRadius: 2, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${h.pct}%`, background: h.color }} />
-                    </div>
-                  </div>
-                ))}
+                  ))}
               </div>
               <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${V.bd1}`, display: "flex", justifyContent: "space-between" }}>
                 <div>
                   <div style={{ ...mono, fontSize: 10, color: V.txDim, letterSpacing: ".1em" }}>PEDIDOS · 24H</div>
-                  <div style={{ ...display, fontSize: 22, fontWeight: 800, color: V.txHi, marginTop: 2 }}>42,108</div>
+                  <div style={{ ...display, fontSize: 22, fontWeight: 800, color: V.txHi, marginTop: 2 }}>
+                    {(health?.orders24h ?? 0).toLocaleString("es-MX")}
+                  </div>
                 </div>
                 <div>
                   <div style={{ ...mono, fontSize: 10, color: V.txDim, letterSpacing: ".1em" }}>GMV · 24H</div>
-                  <div style={{ ...display, fontSize: 22, fontWeight: 800, color: V.txHi, marginTop: 2 }}>$3.4M</div>
+                  <div style={{ ...display, fontSize: 22, fontWeight: 800, color: V.txHi, marginTop: 2 }}>
+                    {currency(health?.gmv24h ?? 0)}
+                  </div>
                 </div>
               </div>
             </div>
@@ -450,9 +462,9 @@ export default function SaaSAdminPage() {
                 <text x="60" y="72" textAnchor="middle" fontFamily="Syne" fontWeight="800" fontSize="18" fill="#fff">{activeVal}</text>
               </svg>
               <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-                {[{ color: "#3b82f6", label: "Starter", n: mrr?.byPlan?.STARTER?.count ?? 59 },
-                  { color: "#9472ff", label: "Pro",     n: mrr?.byPlan?.PRO?.count ?? 67 },
-                  { color: "#7c3aed", label: "Enterprise", n: mrr?.byPlan?.ENTERPRISE?.count ?? 22 }].map(p => (
+                {[{ color: "#3b82f6", label: "Starter",    n: mrr?.byPlan?.STARTER?.count    ?? 0 },
+                  { color: "#9472ff", label: "Pro",        n: mrr?.byPlan?.PRO?.count        ?? 0 },
+                  { color: "#7c3aed", label: "Enterprise", n: mrr?.byPlan?.ENTERPRISE?.count ?? 0 }].map(p => (
                   <div key={p.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 10, height: 10, borderRadius: 2, background: p.color }} />
@@ -469,16 +481,20 @@ export default function SaaSAdminPage() {
               <div style={{ ...display, fontWeight: 700, fontSize: 15, color: V.txHi, marginBottom: 4 }}>Top tenants · MRR</div>
               <div style={{ fontSize: 11, color: V.txMut, marginBottom: 14 }}>Este mes</div>
               <div style={{ display: "flex", flexDirection: "column" }}>
-                {TOP_TENANTS.map((t, i) => (
-                  <div key={t.name} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "center", padding: "10px 0", borderBottom: i < TOP_TENANTS.length - 1 ? `1px solid ${V.bd1}` : "none" }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 9, background: t.grad, display: "grid", placeItems: "center", color: "#fff", ...display, fontWeight: 800, fontSize: 12, flexShrink: 0 }}>{t.initials}</div>
-                    <div>
-                      <div style={{ color: V.tx, fontWeight: 600, fontSize: 13 }}>{t.name}</div>
-                      <div style={{ ...mono, fontSize: 10, color: V.txMut }}>{t.sub}</div>
+                {topTenants.length === 0
+                  ? <EmptyBlock text="Sin tenants activos todavía" />
+                  : topTenants.map((t, i) => (
+                    <div key={t.id} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "center", padding: "10px 0", borderBottom: i < topTenants.length - 1 ? `1px solid ${V.bd1}` : "none" }}>
+                      <TenantLogo name={t.name} size={32} />
+                      <div>
+                        <div style={{ color: V.tx, fontWeight: 600, fontSize: 13 }}>{t.name}</div>
+                        <div style={{ ...mono, fontSize: 10, color: V.txMut }}>
+                          {(t.planDisplay || t.plan || "—")} · {t.restaurants} {t.restaurants === 1 ? "marca" : "marcas"}
+                        </div>
+                      </div>
+                      <Num>{currency(t.mrr)}</Num>
                     </div>
-                    <Num>{t.mrr}</Num>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
 
@@ -487,21 +503,23 @@ export default function SaaSAdminPage() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                 <div>
                   <div style={{ ...display, fontWeight: 700, fontSize: 15, color: V.txHi }}>Nuevos · 30 días</div>
-                  <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>12 signups</div>
+                  <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>{newSignups.length} signups</div>
                 </div>
-                <StatusChip status="ACTIVE" />
+                {newSignups.length > 0 && <StatusChip status={newSignups[0].subscription?.status ?? "TRIAL"} />}
               </div>
               <div style={{ display: "flex", flexDirection: "column" }}>
-                {NEW_TENANTS.map((t, i) => (
-                  <div key={t.name} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "center", padding: "10px 0", borderBottom: i < NEW_TENANTS.length - 1 ? `1px solid ${V.bd1}` : "none" }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 9, background: t.grad, display: "grid", placeItems: "center", color: "#fff", ...display, fontWeight: 800, fontSize: 12 }}>{t.initials}</div>
-                    <div>
-                      <div style={{ color: V.tx, fontWeight: 600, fontSize: 13 }}>{t.name}</div>
-                      <div style={{ ...mono, fontSize: 10, color: V.txMut }}>{t.sub}</div>
+                {newSignups.length === 0
+                  ? <EmptyBlock text="Sin signups en los últimos 30 días" />
+                  : newSignups.map((t, i) => (
+                    <div key={t.id} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "center", padding: "10px 0", borderBottom: i < newSignups.length - 1 ? `1px solid ${V.bd1}` : "none" }}>
+                      <TenantLogo name={t.name} size={32} />
+                      <div>
+                        <div style={{ color: V.tx, fontWeight: 600, fontSize: 13 }}>{t.name}</div>
+                        <div style={{ ...mono, fontSize: 10, color: V.txMut }}>{daysAgoLabel(t.createdAt)}</div>
+                      </div>
+                      <StatusChip status={t.subscription?.status ?? "TRIAL"} />
                     </div>
-                    <StatusChip status={t.status} />
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           </div>
@@ -574,12 +592,19 @@ export default function SaaSAdminPage() {
       {tab === "billing" && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 24 }}>
-            {[
-              { label: "Cobrado · mes", value: "$46,120", delta: "↑ 14%",  up: true,  sub: "142 facturas"  },
-              { label: "Vencido",       value: "$2,480",  delta: "↑ $620", up: false, sub: "6 tenants", color: V.warn },
-              { label: "Dunning activo",value: "8",       delta: "",        up: true,  sub: "3 retries hoy" },
-              { label: "Refunds · mes", value: "$340",    delta: "",        up: true,  sub: "2 casos"       },
-            ].map(k => (
+            {(() => {
+              const paid     = invoices.filter(i => i.status === "PAID");
+              const failed   = invoices.filter(i => i.status === "FAILED");
+              const pending  = invoices.filter(i => i.status === "PENDING");
+              const refunded = invoices.filter(i => i.status === "REFUNDED");
+              const sum = (arr: InvoiceRow[]) => arr.reduce((s, r) => s + (r.amount || 0), 0);
+              return [
+                { label: "Cobrado · mes", value: currency(sum(paid)),     delta: "", up: true,  sub: `${paid.length} facturas`  },
+                { label: "Vencido",       value: currency(sum(failed)),   delta: "", up: false, sub: `${failed.length} casos`, color: V.warn },
+                { label: "Dunning activo",value: String(pending.length),  delta: "", up: true,  sub: `${pending.length} pendientes` },
+                { label: "Refunds · mes", value: currency(sum(refunded)), delta: "", up: true,  sub: `${refunded.length} casos` },
+              ];
+            })().map(k => (
               <div key={k.label} style={{ ...card(), padding: "18px 20px" }}>
                 <div style={{ ...mono, fontSize: 10, color: V.txMut, letterSpacing: ".14em", textTransform: "uppercase", marginBottom: 8 }}>{k.label}</div>
                 <div style={{ ...display, fontWeight: 800, fontSize: 32, color: k.color ?? V.txHi, letterSpacing: "-.02em", lineHeight: 1 }}>{k.value}</div>
@@ -605,24 +630,33 @@ export default function SaaSAdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {INVOICES.map(inv => (
-                  <tr key={inv.num} className="sa-tr">
-                    <TD><span style={{ ...mono, color: V.iris3 }}>{inv.num}</span></TD>
-                    <TD>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 26, height: 26, borderRadius: 7, background: inv.grad, display: "grid", placeItems: "center", color: "#fff", ...display, fontWeight: 800, fontSize: 10, flexShrink: 0 }}>{inv.initials}</div>
-                        <div>
-                          <div style={{ color: V.tx, fontWeight: 600, fontSize: 13 }}>{inv.name}</div>
-                          <div style={{ ...mono, fontSize: 10, color: V.txMut }}>{inv.sub}</div>
+                {invoices.length === 0 && <EmptyRow cols={6} text="Sin facturas emitidas" />}
+                {invoices.map(inv => {
+                  const tenantName = inv.subscription?.tenant?.name ?? "—";
+                  const planLine   = inv.subscription?.plan?.displayName ?? "—";
+                  return (
+                    <tr key={inv.id} className="sa-tr">
+                      <TD><span style={{ ...mono, color: V.iris3 }}>{inv.id.slice(0, 10).toUpperCase()}</span></TD>
+                      <TD>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <TenantLogo name={tenantName} size={26} />
+                          <div>
+                            <div style={{ color: V.tx, fontWeight: 600, fontSize: 13 }}>{tenantName}</div>
+                            <div style={{ ...mono, fontSize: 10, color: V.txMut }}>{planLine}</div>
+                          </div>
                         </div>
-                      </div>
-                    </TD>
-                    <TD><Num>{inv.amount}</Num></TD>
-                    <TD><StatusChip status={inv.status} /></TD>
-                    <TD><span style={{ ...mono, fontSize: 11, color: V.txMut }}>{inv.date}</span></TD>
-                    <TD right><span style={{ color: V.txMut }}>↓</span></TD>
-                  </tr>
-                ))}
+                      </TD>
+                      <TD><Num>{currency(inv.amount)}</Num></TD>
+                      <TD><StatusChip status={inv.status} /></TD>
+                      <TD>
+                        <span style={{ ...mono, fontSize: 11, color: V.txMut }}>
+                          {new Date(inv.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+                        </span>
+                      </TD>
+                      <TD right><span style={{ color: V.txMut }}>↓</span></TD>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -633,15 +667,15 @@ export default function SaaSAdminPage() {
       {tab === "plans" && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
-            {(plans.length > 0 ? plans : [
-              { id: "s", name: "STARTER",    displayName: "Starter",    price: 89,  maxLocations: 1, maxEmployees: 10, hasKDS: false, hasLoyalty: false, hasInventory: false, hasReports: false },
-              { id: "p", name: "PRO",        displayName: "Pro",        price: 249, maxLocations: 8, maxEmployees: 999, hasKDS: true, hasLoyalty: true, hasInventory: true, hasReports: true },
-              { id: "e", name: "ENTERPRISE", displayName: "Enterprise", price: 0,   maxLocations: 999, maxEmployees: 999, hasKDS: true, hasLoyalty: true, hasInventory: true, hasReports: true },
-            ] as Plan[]).slice(0, 3).map((p, i) => {
+            {plans.length === 0 && (
+              <div style={{ gridColumn: "1 / -1" }}>
+                <EmptyBlock text="Sin planes configurados. Crea uno desde el catálogo de planes del SaaS." />
+              </div>
+            )}
+            {plans.slice(0, 3).map((p, i) => {
               const isPro = p.name.toUpperCase() === "PRO";
-              const byP = mrr?.byPlan?.[p.name] ?? { count: [59,67,22][i], mrr: [5251,16683,26686][i] };
-              const churn = ["3.4%","1.8%","0.4%"][i];
-              const churnColor = i === 0 ? V.warn : V.ok;
+              const byP = mrr?.byPlan?.[p.name.toUpperCase()] ?? { count: 0, mrr: 0 };
+              const churnColor = V.ok;
               return (
                 <div key={p.id} style={{
                   ...card(), padding: 24, position: "relative",
@@ -674,7 +708,7 @@ export default function SaaSAdminPage() {
                     ))}
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 14, marginTop: 14, borderTop: `1px solid ${V.bd1}` }}>
-                    {[{ n: String(byP.count), l: "TENANTS" }, { n: `$${byP.mrr.toLocaleString("es-MX")}`, l: "MRR TOTAL" }, { n: churn, l: "CHURN", color: churnColor }].map(s => (
+                    {[{ n: String(byP.count), l: "TENANTS" }, { n: `$${byP.mrr.toLocaleString("es-MX")}`, l: "MRR TOTAL" }, { n: "—", l: "CHURN", color: churnColor }].map(s => (
                       <div key={s.l}>
                         <div style={{ ...display, fontWeight: 800, color: s.color ?? V.txHi, fontSize: 18 }}>{s.n}</div>
                         <div style={{ ...mono, fontSize: 9, color: V.txMut, letterSpacing: ".1em", marginTop: 2 }}>{s.l}</div>
@@ -728,14 +762,19 @@ export default function SaaSAdminPage() {
             <div style={{ display: "grid", gridTemplateColumns: "110px 80px 1fr 140px", gap: 14, padding: "10px 20px", background: V.surf2, fontSize: 10, color: V.txDim, letterSpacing: ".12em", textTransform: "uppercase" }}>
               <div>Tiempo</div><div>Nivel</div><div>Mensaje</div><div>Contexto</div>
             </div>
+            {filteredLogs.length === 0 && (
+              <div style={{ padding: 48, textAlign: "center", color: V.txMut, fontSize: 13 }}>
+                Sin eventos registrados
+              </div>
+            )}
             {filteredLogs.map((l, i) => {
               const lc = LOG_COLORS[l.level] ?? { bg: V.surf2, color: V.txMut };
               return (
-                <div key={i} className="sa-tr" style={{ display: "grid", gridTemplateColumns: "110px 80px 1fr 140px", gap: 14, padding: "10px 20px", borderBottom: i < filteredLogs.length - 1 ? `1px solid ${V.bd1}` : "none", fontSize: 12, alignItems: "center", cursor: "default" }}>
-                  <span style={{ color: V.txMut, fontSize: 11 }}>{l.time}</span>
+                <div key={l.id ?? i} className="sa-tr" style={{ display: "grid", gridTemplateColumns: "110px 80px 1fr 140px", gap: 14, padding: "10px 20px", borderBottom: i < filteredLogs.length - 1 ? `1px solid ${V.bd1}` : "none", fontSize: 12, alignItems: "center", cursor: "default" }}>
+                  <span style={{ color: V.txMut, fontSize: 11 }}>{formatTime(l.createdAt)}</span>
                   <span style={{ background: lc.bg, color: lc.color, fontSize: 10, fontWeight: 700, letterSpacing: ".08em", padding: "2px 7px", borderRadius: 5, textAlign: "center" }}>{l.level}</span>
-                  <span style={{ color: V.txMid }}>{l.msg.replace(/\[(\w+)\]/, (_, t) => `[${t}]`)}</span>
-                  <span style={{ color: V.txDim, fontSize: 10, textAlign: "right" }}>{l.ctx}</span>
+                  <span style={{ color: V.txMid }}>{l.message}</span>
+                  <span style={{ color: V.txDim, fontSize: 10, textAlign: "right" }}>{l.context ?? ""}</span>
                 </div>
               );
             })}
@@ -762,25 +801,29 @@ export default function SaaSAdminPage() {
               <tr><TH>Tenant</TH><TH>Key (prefix)</TH><TH>Ámbito</TH><TH>Último uso</TH><TH>Req · 24h</TH><TH>Estado</TH><TH> </TH></tr>
             </thead>
             <tbody>
-              {API_KEYS.map(k => (
-                <tr key={k.key} className="sa-tr">
-                  <TD>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 9, background: k.grad, display: "grid", placeItems: "center", color: "#fff", ...display, fontWeight: 800, fontSize: 12, flexShrink: 0 }}>{k.initials}</div>
-                      <div>
-                        <div style={{ color: V.tx, fontWeight: 600, fontSize: 13 }}>{k.name}</div>
-                        <div style={{ ...mono, fontSize: 10, color: V.txMut }}>{k.sub}</div>
+              {apiKeys.length === 0 && <EmptyRow cols={7} text="Sin API keys emitidas" />}
+              {apiKeys.map(k => {
+                const tenant = tenants.find(t => t.id === k.tenantId);
+                return (
+                  <tr key={k.id} className="sa-tr">
+                    <TD>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <TenantLogo name={tenant?.name ?? k.name} size={32} />
+                        <div>
+                          <div style={{ color: V.tx, fontWeight: 600, fontSize: 13 }}>{k.name}</div>
+                          <div style={{ ...mono, fontSize: 10, color: V.txMut }}>{tenant?.name ?? "Plataforma"}</div>
+                        </div>
                       </div>
-                    </div>
-                  </TD>
-                  <TD><span style={{ ...mono, color: V.iris3 }}>{k.key}</span></TD>
-                  <TD><span style={{ ...mono, fontSize: 11, color: k.scope.includes("test") ? V.warn : V.txMid }}>{k.scope}</span></TD>
-                  <TD><span style={{ ...mono, fontSize: 11, color: V.txMut }}>{k.used}</span></TD>
-                  <TD><Num>{k.reqs}</Num></TD>
-                  <TD><StatusChip status={k.status} /></TD>
-                  <TD right><span style={{ color: V.txMut, cursor: "pointer" }}>⋯</span></TD>
-                </tr>
-              ))}
+                    </TD>
+                    <TD><span style={{ ...mono, color: V.iris3 }}>{k.prefix}…</span></TD>
+                    <TD><span style={{ ...mono, fontSize: 11, color: V.txMid }}>{k.scopes.join(" ") || "—"}</span></TD>
+                    <TD><span style={{ ...mono, fontSize: 11, color: V.txMut }}>{k.lastUsedAt ? daysAgoLabel(k.lastUsedAt) : "Nunca"}</span></TD>
+                    <TD><Num>{k.requests24h.toLocaleString("es-MX")}</Num></TD>
+                    <TD><StatusChip status={k.active ? "ACTIVE" : "CANCELLED"} /></TD>
+                    <TD right><span style={{ color: V.txMut, cursor: "pointer" }}>⋯</span></TD>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
