@@ -159,6 +159,46 @@ model GlobalConfig {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SAAS API KEYS (emitidas por SUPER_ADMIN a tenants / integraciones)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SaasApiKey {
+  id        String    @id @default(cuid())
+  tenantId  String?
+  name      String
+  prefix    String    @unique // primeros chars de la key (para mostrar)
+  hash      String    // hash completo de la key (no reversible)
+  scopes    String[]  @default([])
+  active    Boolean   @default(true)
+  lastUsedAt DateTime?
+  revokedAt DateTime?
+  requests24h Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@map("saas_api_keys")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SAAS PLATFORM LOGS (auditoría cross-tenant visible a SUPER_ADMIN)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SaasLog {
+  id        String   @id @default(cuid())
+  tenantId  String?
+  level     String   @default("INFO") // INFO | WARN | ERROR | OK
+  message   String
+  context   String?  // e.g. "billing · stripe"
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([tenantId])
+  @@map("saas_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ENTIDAD MAESTRA: RESTAURANTE (LA MARCA)
 // ─────────────────────────────────────────────────────────────────────────────
 
