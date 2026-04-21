@@ -423,20 +423,20 @@ router.delete('/tenants/:id', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // GET /api/saas/mrr
-router.get('/mrr', async (req, res) => {
+router.get('/mrr', authenticate, requireSuperAdmin, async (req, res) => {
   try {
     const active = await prisma.subscription.findMany({
       where: { status: { in: ['ACTIVE', 'PAST_DUE'] } },
-      select: { priceSnapshot: true, planId: true, plan: { select: { displayName: true } } }
+      select: { priceSnapshot: true, planId: true, plan: { select: { displayName: true, name: true } } }
     });
 
     const total = active.reduce((sum, s) => sum + s.priceSnapshot, 0);
 
-    // Desglose por plan
+    // Desglose por plan — keyed por `name` (STARTER/PRO/ENTERPRISE) y displayName
     const byPlan = {};
     for (const s of active) {
-      const key = s.plan.displayName;
-      if (!byPlan[key]) byPlan[key] = { count: 0, mrr: 0 };
+      const key = (s.plan?.name || s.plan?.displayName || 'UNKNOWN').toUpperCase();
+      if (!byPlan[key]) byPlan[key] = { count: 0, mrr: 0, displayName: s.plan?.displayName };
       byPlan[key].count += 1;
       byPlan[key].mrr   += s.priceSnapshot;
     }
@@ -447,6 +447,235 @@ router.get('/mrr', async (req, res) => {
       byPlan,
     });
   } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLATAFORMA — métricas globales (SUPER_ADMIN)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/saas/health — snapshot de la plataforma
+router.get('/health', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const [tenantCount, activeSub, orderCount24h, revenue24hAgg] = await Promise.all([
+      prisma.tenant.count(),
+      prisma.subscription.count({ where: { status: { in: ['ACTIVE', 'TRIAL'] } } }),
+      prisma.order.count({ where: { createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
+      prisma.order.aggregate({
+        _sum: { total: true },
+        where: { createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, paymentStatus: 'PAID' },
+      }),
+    ]);
+
+    res.json({
+      tenantCount,
+      activeSubscriptions: activeSub,
+      orders24h: orderCount24h,
+      gmv24h: Math.round((revenue24hAgg._sum.total || 0) * 100) / 100,
+      // Health checks reales — si más adelante se agregan sondas, se integran aquí.
+      metrics: [],
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/saas/top-tenants?limit=5 — tenants con mayor MRR
+router.get('/top-tenants', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 5, 50);
+
+    const subs = await prisma.subscription.findMany({
+      where: { status: { in: ['ACTIVE', 'PAST_DUE'] } },
+      orderBy: { priceSnapshot: 'desc' },
+      take: limit,
+      include: {
+        plan: { select: { name: true, displayName: true } },
+        tenant: {
+          select: {
+            id: true, name: true, slug: true, logoUrl: true,
+            _count: { select: { restaurants: true } },
+          }
+        }
+      }
+    });
+
+    const result = subs
+      .filter(s => s.tenant)
+      .map(s => ({
+        id: s.tenant.id,
+        name: s.tenant.name,
+        slug: s.tenant.slug,
+        logoUrl: s.tenant.logoUrl,
+        plan: s.plan?.name || null,
+        planDisplay: s.plan?.displayName || null,
+        restaurants: s.tenant._count.restaurants,
+        mrr: s.priceSnapshot,
+      }));
+
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/saas/new-tenants?days=30&limit=5 — signups recientes
+router.get('/new-tenants', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const days  = Math.min(parseInt(req.query.days,  10) || 30, 365);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 5,  50);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const tenants = await prisma.tenant.findMany({
+      where: { createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        id: true, name: true, slug: true, logoUrl: true, createdAt: true,
+        subscription: { select: { status: true, plan: { select: { name: true, displayName: true } } } },
+      }
+    });
+
+    res.json(tenants);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/saas/invoices?limit=60 — facturas recientes cross-tenant
+router.get('/invoices', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 60, 500);
+
+    const invoices = await prisma.invoice.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        subscription: {
+          include: {
+            plan: { select: { name: true, displayName: true } },
+            tenant: { select: { id: true, name: true, slug: true, logoUrl: true } }
+          }
+        }
+      }
+    });
+
+    res.json(invoices);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SAAS LOGS — visible al SUPER_ADMIN cross-tenant
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/saas/logs?level=&tenantId=&limit=100
+router.get('/logs', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    const where = {};
+    if (req.query.level)    where.level    = String(req.query.level).toUpperCase();
+    if (req.query.tenantId) where.tenantId = String(req.query.tenantId);
+
+    const logs = await prisma.saasLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    res.json(logs);
+  } catch (e) {
+    // Si el modelo aún no existe en la base (migración pendiente), degradamos a lista vacía.
+    if (e?.code === 'P2021' || /does not exist/i.test(e?.message || '')) return res.json([]);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SAAS API KEYS — CRUD (SUPER_ADMIN)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const crypto = require('crypto');
+
+function generateApiKey() {
+  const raw = crypto.randomBytes(24).toString('base64url');
+  return `mrtp_${raw}`;
+}
+function hashKey(key) {
+  return crypto.createHash('sha256').update(key).digest('hex');
+}
+
+// GET /api/saas/api-keys
+router.get('/api-keys', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const keys = await prisma.saasApiKey.findMany({ orderBy: { createdAt: 'desc' } });
+    res.json(keys.map(k => ({
+      id: k.id,
+      tenantId: k.tenantId,
+      name: k.name,
+      prefix: k.prefix,
+      scopes: k.scopes,
+      active: k.active,
+      lastUsedAt: k.lastUsedAt,
+      revokedAt: k.revokedAt,
+      requests24h: k.requests24h,
+      createdAt: k.createdAt,
+    })));
+  } catch (e) {
+    if (e?.code === 'P2021' || /does not exist/i.test(e?.message || '')) return res.json([]);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/saas/api-keys — emite una nueva key. La key en claro sólo se devuelve aquí.
+router.post('/api-keys', authenticate, requireSuperAdmin, async (req, res) => {
+  const { name, tenantId, scopes } = req.body;
+  if (!name) return res.status(400).json({ error: 'name es requerido' });
+
+  try {
+    const key    = generateApiKey();
+    const prefix = key.slice(0, 14);
+    const hash   = hashKey(key);
+
+    const created = await prisma.saasApiKey.create({
+      data: {
+        name,
+        tenantId: tenantId || null,
+        prefix,
+        hash,
+        scopes: Array.isArray(scopes) ? scopes : [],
+        active: true,
+      }
+    });
+
+    res.status(201).json({
+      id: created.id,
+      name: created.name,
+      tenantId: created.tenantId,
+      prefix: created.prefix,
+      scopes: created.scopes,
+      active: created.active,
+      createdAt: created.createdAt,
+      // Sólo se muestra una vez.
+      key,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/saas/api-keys/:id — revoca (soft) y marca inactivo
+router.delete('/api-keys/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const updated = await prisma.saasApiKey.update({
+      where: { id: req.params.id },
+      data:  { active: false, revokedAt: new Date() },
+    });
+    res.json({ ok: true, id: updated.id });
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'API key no encontrada' });
     res.status(500).json({ error: e.message });
   }
 });
