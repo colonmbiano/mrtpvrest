@@ -146,4 +146,14 @@ router.get('/by-day', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al generar reporte por día' }) }
 })
 
+// GET /api/reports/saved — reportes guardados por el usuario. Devuelve [] hasta
+// que exista el modelo de persistencia; el frontend renderiza empty-state.
+router.get('/saved', authenticate, requireAdmin, async (req, res) => {
+  try {
+    res.json([]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router

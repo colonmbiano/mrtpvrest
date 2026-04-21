@@ -30,9 +30,18 @@ router.get('/global-config', authenticate, requireSuperAdmin, async (req, res) =
 
 router.put('/global-config', authenticate, requireSuperAdmin, async (req, res) => {
   try {
-    const config = await prisma.globalConfig.update({
-      where: { id: 'saas-config' },
-      data: req.body
+    const allowed = [
+      'basicPlanPrice', 'proPlanPrice', 'unlimitedPlanPrice', 'trialDays',
+      'currency', 'supportEmail',
+      'openRegistration', 'autoTrial', 'maintenanceMode', 'whatsappEnabled',
+    ];
+    const data = {};
+    for (const f of allowed) if (req.body[f] !== undefined) data[f] = req.body[f];
+
+    const config = await prisma.globalConfig.upsert({
+      where:  { id: 'saas-config' },
+      update: data,
+      create: { id: 'saas-config', ...data },
     });
     res.json(config);
   } catch (e) { res.status(500).json({ error: e.message }); }

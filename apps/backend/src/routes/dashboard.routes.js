@@ -446,4 +446,76 @@ router.get('/low-inventory', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
+// ── GET /api/dashboard/sales-by-location?period=HOY|7D|30D|AÑO ─────────────
+// Agregado de ventas por sucursal en el período; devuelve `[]` cuando aún no
+// hay pedidos para que el frontend renderice "Sin datos" sin fallbacks falsos.
+router.get('/sales-by-location', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = requireRestaurant(req, res);
+    if (!restaurantId) return;
+    const { from, to, prevFrom, prevTo } = getPeriodRange(req.query.period);
+
+    const locations = await prisma.location.findMany({
+      where:  { restaurantId, isActive: true },
+      select: { id: true, name: true, slug: true },
+    });
+    if (locations.length === 0) return res.json([]);
+
+    const baseWhere = { restaurantId, status: { not: 'CANCELLED' } };
+
+    const [curr, prev] = await Promise.all([
+      prisma.order.groupBy({
+        by: ['locationId'],
+        where: { ...baseWhere, createdAt: { gte: from, lte: to } },
+        _sum:   { total: true },
+        _count: { id: true },
+        _avg:   { total: true },
+      }),
+      prisma.order.groupBy({
+        by: ['locationId'],
+        where: { ...baseWhere, createdAt: { gte: prevFrom, lte: prevTo } },
+        _sum:   { total: true },
+      }),
+    ]);
+
+    const byId      = Object.fromEntries(curr.map(r => [r.locationId, r]));
+    const prevById  = Object.fromEntries(prev.map(r => [r.locationId, r]));
+
+    const result = locations.map(loc => {
+      const c = byId[loc.id];
+      const p = prevById[loc.id];
+      const currSales = c?._sum.total || 0;
+      const prevSales = p?._sum.total || 0;
+      return {
+        id:        loc.id,
+        name:      loc.name,
+        slug:      loc.slug,
+        sales:     currSales,
+        orders:    c?._count.id || 0,
+        avgTicket: Math.round(c?._avg.total || 0),
+        delta:     pctDelta(currSales, prevSales),
+      };
+    }).sort((a, b) => b.sales - a.sales);
+
+    res.json(result);
+  } catch (e) {
+    console.error('dashboard/sales-by-location', e);
+    res.status(500).json({ error: 'Error al calcular ventas por sucursal' });
+  }
+});
+
+// ── GET /api/dashboard/insights?period=30D ─────────────────────────────────
+// Devuelve insights detectados automáticamente. Hoy se entrega vacío para que
+// el frontend muestre empty-state; cuando el pipeline de análisis esté activo
+// se poblará desde el mismo endpoint.
+router.get('/insights', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = requireRestaurant(req, res);
+    if (!restaurantId) return;
+    res.json([]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

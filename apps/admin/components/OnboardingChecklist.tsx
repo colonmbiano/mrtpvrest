@@ -58,7 +58,7 @@ export default function OnboardingChecklist() {
 
   return (
     <div className="rounded-2xl border overflow-hidden mb-6"
-      style={{ background: "var(--surface)", borderColor: "var(--border)" }}>
+      style={{ background: "var(--surf)", borderColor: "var(--border)" }}>
 
       {/* Header */}
       <button onClick={() => setCollapsed(c => !c)}

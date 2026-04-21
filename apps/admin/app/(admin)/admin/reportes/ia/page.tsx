@@ -81,60 +81,29 @@ const CHIPS = [
   { icon: "⚠", text: "Mermas y margen",           q: "¿Dónde estoy perdiendo margen por mermas?" },
 ];
 
-/* ── Insight cards data ────────────────────────────────────── */
-const INSIGHTS = [
-  {
-    kind: "ANOMALÍA · ALTA", variant: "warn" as const,
-    title: "Coca-Cola 600ml cayó 34% esta semana",
-    body: "Las ventas bajaron de 482 a 318 unidades. El patrón se concentra en Polanco y Reforma. Posible causa: quiebre de stock los sábados.",
-    cta: "Investigar",
-  },
-  {
-    kind: "OPORTUNIDAD", variant: "ok" as const,
-    title: "Mesa 7 y 12 tienen ticket 28% más alto",
-    body: "Las mesas junto a la ventana generan $640 de ticket promedio vs $500 del resto. Sugerencia: replicar la vista o priorizarlas.",
-    cta: "Ver análisis",
-  },
-  {
-    kind: "PREDICCIÓN", variant: "info" as const,
-    title: "Sábado pronóstico: +22% vs promedio",
-    body: "Con base en clima y tendencia, estimamos $184,000 en ventas. Recomendación: +2 meseros en turno noche y reforzar stock de carnes.",
-    cta: "Aplicar sugerencia",
-  },
-];
-
+/* ── Insight card color tokens (styling, not data) ────────────── */
 const INSIGHT_COLORS = {
   warn: { border: "rgba(245,158,11,.25)", bg: "rgba(245,158,11,.06)", icon: V.warn, iconBg: V.warnS, kind: V.warn },
   ok:   { border: "rgba(16,185,129,.25)", bg: "rgba(16,185,129,.06)", icon: V.ok,   iconBg: V.okS,   kind: V.ok   },
   info: { border: "rgba(124,58,237,.25)", bg: "rgba(124,58,237,.06)", icon: V.iris3, iconBg: V.irisS, kind: V.iris3 },
+} as const;
+
+type Insight = {
+  kind: string;
+  variant: keyof typeof INSIGHT_COLORS;
+  title: string;
+  body: string;
+  cta: string;
 };
 
-/* ── KPI strip ─────────────────────────────────────────────── */
-const KPIS = [
-  { label: "Ventas totales",  value: "$2.14", sml: "M",   up: true,  delta: "↑ 12.4%", sub: "vs $1.90M" },
-  { label: "Pedidos",         value: "4,218", sml: "",    up: true,  delta: "↑ 8.1%",  sub: "vs 3,902"  },
-  { label: "Ticket promedio", value: "$508",  sml: "",    up: true,  delta: "↑ 4.0%",  sub: "vs $488"   },
-  { label: "Margen bruto",    value: "62.4",  sml: "%",   up: false, delta: "↓ 1.1pp", sub: "vs 63.5%"  },
-];
-
-/* ── Table rows ─────────────────────────────────────────────── */
-const SEDES = [
-  { name: "Polanco",   ventas: "$284,120", delta: "↑ 28%", up: true,  pct: 94, pedidos: 512, ticket: "$554", margen: "64.2%", ok: true  },
-  { name: "Santa Fe",  ventas: "$248,640", delta: "↑ 21%", up: true,  pct: 82, pedidos: 472, ticket: "$527", margen: "63.8%", ok: true  },
-  { name: "Reforma",   ventas: "$212,880", delta: "↑ 14%", up: true,  pct: 55, pedidos: 418, ticket: "$509", margen: "62.1%", ok: false },
-  { name: "Condesa",   ventas: "$196,420", delta: "↑ 11%", up: true,  pct: 42, pedidos: 388, ticket: "$506", margen: "62.8%", ok: false },
-  { name: "Roma Norte",ventas: "$178,840", delta: "↑ 7%",  up: true,  pct: 28, pedidos: 362, ticket: "$494", margen: "61.9%", ok: false },
-  { name: "Coyoacán",  ventas: "$132,180", delta: "↓ 6%",  up: false, pct: 18, pedidos: 298, ticket: "$444", margen: "59.1%", ok: false, alert: true },
-  { name: "Del Valle", ventas: "$118,920", delta: "↓ 9%",  up: false, pct: 14, pedidos: 272, ticket: "$437", margen: "58.4%", ok: false, alert: true },
-];
-
-/* ── Saved reports ─────────────────────────────────────────── */
-const SAVED = [
-  { title: "Ventas mensuales por sede",    tag: "EN VIVO",  tagColor: V.iris3,  tagBg: V.irisS, sub: "Actualizado hace 2 min · Diego A.", active: true  },
-  { title: "Mermas & costo de mat. prima", tag: "SEMANAL",  tagColor: "var(--blue)", tagBg: "rgba(59,130,246,.14)", sub: "Lunes 7:00 AM · Email a 4 personas" },
-  { title: "Ranking de meseros · propinas",tag: "MENSUAL",  tagColor: V.ok,  tagBg: V.okS, sub: "Día 1 de cada mes · 3 sedes activas" },
-  { title: "Clientes nuevos vs recurrentes",tag:"AD HOC",   tagColor: V.warn, tagBg: V.warnS, sub: "Guardado hace 8 días · v1" },
-];
+type StatsResponse = {
+  sales:         { value: number; prev: number; delta: number };
+  orders:        { value: number; prev: number; delta: number };
+  averageTicket: { value: number; prev: number; delta: number };
+  prepMinutes:   { value: number; activeCount: number };
+};
+type SedeRow = { id: string; name: string; slug: string; sales: number; orders: number; avgTicket: number; delta: number };
+type SavedReport = { id: string; title: string; tag: string; tagColor: string; tagBg: string; sub: string; active?: boolean };
 
 /* ── Chat messages ─────────────────────────────────────────── */
 type Msg = { role: "ai" | "user"; text: string; chart?: boolean; tools?: string[] };
@@ -149,6 +118,45 @@ export default function ReportesIAPage() {
   const [msgs, setMsgs] = useState<Msg[]>(INIT_MSGS);
   const [period, setPeriod] = useState<"HOY"|"7D"|"30D"|"TRIM"|"AÑO">("30D");
   const chatRef = useRef<HTMLDivElement>(null);
+
+  // Datos reales del dashboard (sin fallbacks mock)
+  const [stats, setStats]       = useState<StatsResponse | null>(null);
+  const [sedes, setSedes]       = useState<SedeRow[]>([]);
+  const [insights, setInsights] = useState<Insight[]>([]);
+  const [saved, setSaved]       = useState<SavedReport[]>([]);
+  const [topItems, setTopItems] = useState<Array<{ id: string; name: string; quantity: number; revenue: number }>>([]);
+  const [loading, setLoading]   = useState(true);
+
+  useEffect(() => {
+    let cancel = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const safe = <T,>(p: Promise<{ data: T }>, fallback: T): Promise<T> =>
+          p.then(r => r.data).catch(() => fallback);
+
+        const [s, loc, ins, sv, items] = await Promise.all([
+          safe<StatsResponse>(api.get(`/api/dashboard/stats?period=${period}`), null as any),
+          safe<SedeRow[]>(api.get(`/api/dashboard/sales-by-location?period=${period}`), []),
+          safe<Insight[]>(api.get(`/api/dashboard/insights?period=${period}`), []),
+          safe<SavedReport[]>(api.get(`/api/reports/saved`), []),
+          safe<Array<{ id: string; name: string; quantity: number; revenue: number }>>(
+            api.get(`/api/dashboard/top-items?period=${period}&limit=5`), []
+          ),
+        ]);
+        if (cancel) return;
+        setStats(s);
+        setSedes(loc);
+        setInsights(ins);
+        setSaved(sv);
+        setTopItems(items);
+      } finally {
+        if (!cancel) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancel = true; };
+  }, [period]);
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
@@ -234,10 +242,9 @@ export default function ReportesIAPage() {
                 Reportes · Asistente IA
               </h1>
               <div style={{ fontSize: 13, color: V.txMut, marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
-                La Casona Gastro&nbsp;
-                <span style={monoTag()}>12 sedes</span>
+                <span style={monoTag()}>{sedes.length} {sedes.length === 1 ? "sede" : "sedes"}</span>
                 <span style={{ color: V.txDim }}>·</span>
-                <span>Última sincronización <span style={{ fontFamily: "'DM Mono',monospace", color: V.txMid }}>hace 2 min</span></span>
+                <span>Período <span style={{ fontFamily: "'DM Mono',monospace", color: V.txMid }}>{period}</span></span>
               </div>
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
@@ -335,9 +342,14 @@ export default function ReportesIAPage() {
             </div>
             <button style={btn(false, true)}>Ver todos →</button>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
-            {INSIGHTS.map(ins => {
-              const col = INSIGHT_COLORS[ins.variant];
+          <div style={{ display: "grid", gridTemplateColumns: insights.length === 0 ? "1fr" : "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
+            {insights.length === 0 && (
+              <div style={{ ...card(), padding: "32px 20px", textAlign: "center", color: V.txMut, fontSize: 13 }}>
+                {loading ? "Analizando datos del período…" : "Aún no hay insights automáticos para este período."}
+              </div>
+            )}
+            {insights.map(ins => {
+              const col = INSIGHT_COLORS[ins.variant] ?? INSIGHT_COLORS.info;
               return (
                 <div key={ins.title} style={{
                   ...card(),
@@ -371,11 +383,11 @@ export default function ReportesIAPage() {
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: V.irisS, color: V.iris3, padding: "2px 8px", borderRadius: 5, fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 600, letterSpacing: ".06em" }}>✨ GENERADO POR MESERO</span>
                   <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, letterSpacing: ".1em" }}>HACE 2 MIN · 30 DÍAS</span>
                 </div>
-                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, color: V.txHi }}>Ventas mensuales por sede · comparativo vs mes anterior</div>
+                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, color: V.txHi }}>Ventas por sucursal · período {period}</div>
                 <div style={{ fontSize: 12, color: V.txMut, marginTop: 2, display: "flex", alignItems: "center", gap: 8 }}>
-                  <span>18 mar — 18 abr 2026</span>
+                  <span>{sedes.length} {sedes.length === 1 ? "sede" : "sedes"}</span>
                   <span style={{ color: V.txDim }}>·</span>
-                  <span>12 sedes · 4,218 pedidos</span>
+                  <span>{stats ? `${stats.orders.value.toLocaleString("es-MX")} pedidos` : "sin pedidos"}</span>
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
@@ -385,25 +397,39 @@ export default function ReportesIAPage() {
               </div>
             </div>
 
-            {/* KPI strip */}
+            {/* KPI strip — datos reales del período */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", borderBottom: `1px solid ${V.bd1}` }}>
-              {KPIS.map((k, i) => (
-                <div key={k.label} style={{ padding: "16px 22px", borderRight: i < 3 ? `1px solid ${V.bd1}` : "none" }}>
-                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, letterSpacing: ".14em", textTransform: "uppercase" as const, marginBottom: 6 }}>{k.label}</div>
-                  <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 24, color: V.txHi, lineHeight: 1, letterSpacing: "-.02em" }}>
-                    {k.value}<span style={{ fontSize: 13, color: V.txMut, fontWeight: 600 }}>{k.sml}</span>
+              {(() => {
+                const fmt = (n: number) =>
+                  n >= 1_000_000 ? `$${(n/1_000_000).toFixed(2)}` :
+                  n >= 1_000     ? `$${(n/1_000).toFixed(1)}`     :
+                                   `$${n.toLocaleString("es-MX", { maximumFractionDigits: 0 })}`;
+                const sml = (n: number) => n >= 1_000_000 ? "M" : n >= 1_000 ? "k" : "";
+                const fmtPct = (d: number) => `${d >= 0 ? "↑" : "↓"} ${Math.abs(d).toFixed(1)}%`;
+                const rows = [
+                  { label: "Ventas totales",  value: stats ? fmt(stats.sales.value)             : "—", sml: stats ? sml(stats.sales.value) : "",  up: (stats?.sales.delta        ?? 0) >= 0, delta: stats ? fmtPct(stats.sales.delta)          : "",  sub: stats ? `vs ${fmt(stats.sales.prev)}`           : "sin datos" },
+                  { label: "Pedidos",         value: stats ? stats.orders.value.toLocaleString("es-MX") : "—", sml: "",                            up: (stats?.orders.delta       ?? 0) >= 0, delta: stats ? fmtPct(stats.orders.delta)         : "",  sub: stats ? `vs ${stats.orders.prev.toLocaleString("es-MX")}` : "sin datos" },
+                  { label: "Ticket promedio", value: stats ? `$${stats.averageTicket.value}` : "—",       sml: "",                                 up: (stats?.averageTicket.delta?? 0) >= 0, delta: stats ? fmtPct(stats.averageTicket.delta) : "",  sub: stats ? `vs $${stats.averageTicket.prev}`       : "sin datos" },
+                  { label: "Prep. activa",    value: stats ? `${stats.prepMinutes.value}` : "—",          sml: "min",                              up: true,                                  delta: "",                                              sub: stats ? `${stats.prepMinutes.activeCount} activos` : "sin datos" },
+                ];
+                return rows.map((k, i) => (
+                  <div key={k.label} style={{ padding: "16px 22px", borderRight: i < 3 ? `1px solid ${V.bd1}` : "none" }}>
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, letterSpacing: ".14em", textTransform: "uppercase" as const, marginBottom: 6 }}>{k.label}</div>
+                    <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 24, color: V.txHi, lineHeight: 1, letterSpacing: "-.02em" }}>
+                      {k.value}<span style={{ fontSize: 13, color: V.txMut, fontWeight: 600 }}>{k.sml}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                      {k.delta ? <span style={delta(k.up)}>{k.delta}</span> : <span />}
+                      <span style={{ fontSize: 11, color: V.txMut }}>{k.sub}</span>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                    <span style={delta(k.up)}>{k.delta}</span>
-                    <span style={{ fontSize: 11, color: V.txMut }}>{k.sub}</span>
-                  </div>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
 
             {/* Report body */}
             <div style={{ padding: 22 }}>
-              {/* AI Summary */}
+              {/* AI Summary — se genera bajo demanda desde el chat de Mesero */}
               <div style={{ background: `linear-gradient(180deg,rgba(124,58,237,.05),transparent),${V.surf2}`, border: `1px solid rgba(124,58,237,.2)`, borderRadius: 12, padding: "16px 18px", marginBottom: 18 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                   <div style={{ width: 22, height: 22, borderRadius: 6, background: "rgba(124,58,237,.25)", color: "#dcd0ff", display: "grid", placeItems: "center" }}>
@@ -411,14 +437,11 @@ export default function ReportesIAPage() {
                   </div>
                   <h5 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 13, color: V.txHi }}>Resumen ejecutivo · Mesero</h5>
                 </div>
-                <p style={{ fontSize: 13, color: V.txMid, lineHeight: 1.6, marginBottom: 8 }}>
-                  Tuviste un mes <strong style={{ color: V.ok }}>fuerte</strong>: las ventas totales subieron <strong style={{ color: V.iris3, fontFamily: "'DM Mono',monospace" }}>12.4%</strong> impulsadas por <strong style={{ color: V.txHi }}>Polanco</strong> (+28%) y <strong style={{ color: V.txHi }}>Santa Fe</strong> (+21%). El ticket promedio creció $20 gracias al nuevo menú degustación.
-                </p>
-                <p style={{ fontSize: 13, color: V.txMid, lineHeight: 1.6, marginBottom: 8 }}>
-                  Sin embargo, el <strong style={{ color: V.err }}>margen cayó 1.1pp</strong> por alza en costos de carnes. <strong style={{ color: V.txHi }}>Coyoacán</strong> y <strong style={{ color: V.txHi }}>Del Valle</strong> están por debajo del promedio — los horarios de corte podrían estar sobrecargados en el shift de noche.
-                </p>
                 <p style={{ fontSize: 13, color: V.txMid, lineHeight: 1.6 }}>
-                  <strong style={{ color: V.txHi }}>Sugerencias:</strong> 1) revisar proveedor de res para recuperar 0.8pp · 2) replicar el menú degustación en 3 sedes · 3) agendar coaching con el encargado de Coyoacán.
+                  {stats
+                    ? `En el período actual se registraron ${stats.orders.value.toLocaleString("es-MX")} pedidos y $${stats.sales.value.toLocaleString("es-MX",{maximumFractionDigits:0})} en ventas, con ticket promedio de $${stats.averageTicket.value}. Usa el chat de Mesero para generar un análisis detallado sobre este reporte.`
+                    : "Aún no hay datos suficientes para generar un resumen. Pregúntale a Mesero desde el panel derecho cuando quieras un análisis personalizado."
+                  }
                 </p>
               </div>
 
@@ -493,30 +516,57 @@ export default function ReportesIAPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {SEDES.map(s => (
-                        <tr key={s.name} style={{ background: s.alert ? "rgba(239,68,68,.04)" : "transparent" }}>
-                          <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}`, color: V.txMid }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <div style={{ width: 6, height: 6, borderRadius: "50%", background: s.alert ? V.warn : s.ok ? V.ok : V.iris4, flexShrink: 0 }} />
-                              <span style={{ color: V.txHi, fontWeight: 600 }}>{s.name}</span>
-                              {s.alert && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, background: V.warnS, color: V.warn, padding: "2px 6px", borderRadius: 4, letterSpacing: ".08em" }}>ATENCIÓN</span>}
-                            </div>
+                      {sedes.length === 0 && (
+                        <tr>
+                          <td colSpan={7} style={{ padding: 32, textAlign: "center", color: V.txMut, fontSize: 13 }}>
+                            {loading ? "Cargando ventas por sucursal…" : "Sin pedidos en este período"}
                           </td>
-                          <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}><span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>{s.ventas}</span></td>
-                          <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}`, minWidth: 180 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <div style={{ flex: 1, height: 4, background: V.surf3, borderRadius: 2 }}>
-                                <div style={{ width: `${s.pct}%`, height: 4, background: s.up ? V.ok : V.err, borderRadius: 2 }} />
-                              </div>
-                              <span style={delta(s.up)}>{s.delta}</span>
-                            </div>
-                          </td>
-                          <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}><span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>{s.pedidos}</span></td>
-                          <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}><span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>{s.ticket}</span></td>
-                          <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}><span style={{ fontFamily: "'DM Mono',monospace", color: s.alert ? V.warn : s.ok ? V.ok : V.txHi, fontWeight: 600 }}>{s.margen}</span></td>
-                          <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}`, textAlign: "right", color: V.txMut }}>→</td>
                         </tr>
-                      ))}
+                      )}
+                      {(() => {
+                        const maxSales = Math.max(1, ...sedes.map(s => s.sales));
+                        return sedes.map(s => {
+                          const up    = s.delta >= 0;
+                          const alert = s.delta <= -10;
+                          const pct   = Math.min(100, Math.round((s.sales / maxSales) * 100));
+                          return (
+                            <tr key={s.id} style={{ background: alert ? "rgba(239,68,68,.04)" : "transparent" }}>
+                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}`, color: V.txMid }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: alert ? V.warn : up ? V.ok : V.iris4, flexShrink: 0 }} />
+                                  <span style={{ color: V.txHi, fontWeight: 600 }}>{s.name}</span>
+                                  {alert && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, background: V.warnS, color: V.warn, padding: "2px 6px", borderRadius: 4, letterSpacing: ".08em" }}>ATENCIÓN</span>}
+                                </div>
+                              </td>
+                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}>
+                                <span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>
+                                  ${s.sales.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
+                                </span>
+                              </td>
+                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}`, minWidth: 180 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                  <div style={{ flex: 1, height: 4, background: V.surf3, borderRadius: 2 }}>
+                                    <div style={{ width: `${pct}%`, height: 4, background: up ? V.ok : V.err, borderRadius: 2 }} />
+                                  </div>
+                                  <span style={delta(up)}>{up ? "↑" : "↓"} {Math.abs(s.delta).toFixed(1)}%</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}>
+                                <span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>{s.orders.toLocaleString("es-MX")}</span>
+                              </td>
+                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}>
+                                <span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>
+                                  ${s.avgTicket.toLocaleString("es-MX")}
+                                </span>
+                              </td>
+                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}>
+                                <span style={{ fontFamily: "'DM Mono',monospace", color: V.txMut, fontWeight: 600 }}>—</span>
+                              </td>
+                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}`, textAlign: "right", color: V.txMut }}>→</td>
+                            </tr>
+                          );
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -531,24 +581,26 @@ export default function ReportesIAPage() {
                     Top productos del período
                   </h3>
                   <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 12, padding: "6px 16px" }}>
-                    {[
-                      { rank: "01", name: "Tacos al pastor · orden",    qty: "820 unidades", revenue: "$98,400", up: true,  pct: "↑ 18%" },
-                      { rank: "02", name: "Mole poblano · plato",        qty: "412 unidades", revenue: "$82,400", up: true,  pct: "↑ 24%" },
-                      { rank: "03", name: "Menú degustación · 2p",       qty: "98 reservas",  revenue: "$78,400", up: true,  pct: "↑ 142%" },
-                      { rank: "04", name: "Margarita frozen",            qty: "612 unidades", revenue: "$61,200", up: true,  pct: "↑ 9%"  },
-                      { rank: "05", name: "Coca-Cola 600ml",             qty: "1,240 uds",    revenue: "$34,720", up: false, pct: "↓ 14%" },
-                    ].map((p, i) => (
-                      <div key={p.rank} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: i < 4 ? `1px solid ${V.bd1}` : "none" }}>
+                    {topItems.length === 0 && (
+                      <div style={{ padding: "28px 0", textAlign: "center", color: V.txMut, fontSize: 13 }}>
+                        {loading ? "Cargando top productos…" : "Sin pedidos suficientes para el ranking"}
+                      </div>
+                    )}
+                    {topItems.map((p, i) => (
+                      <div key={p.id ?? p.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: i < topItems.length - 1 ? `1px solid ${V.bd1}` : "none" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: V.txDim, width: 20 }}>{p.rank}</span>
+                          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: V.txDim, width: 20 }}>
+                            {String(i + 1).padStart(2, "0")}
+                          </span>
                           <div>
                             <div style={{ color: V.tx, fontWeight: 600, fontSize: 13 }}>{p.name}</div>
-                            <div style={{ fontSize: 11, color: V.txMut }}>{p.qty}</div>
+                            <div style={{ fontSize: 11, color: V.txMut }}>{p.quantity.toLocaleString("es-MX")} unidades</div>
                           </div>
                         </div>
                         <div style={{ textAlign: "right" }}>
-                          <div style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>{p.revenue}</div>
-                          <span style={{ ...delta(p.up), fontSize: 10 }}>{p.pct}</span>
+                          <div style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>
+                            ${p.revenue.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -591,8 +643,13 @@ export default function ReportesIAPage() {
             <button style={btn(false, true)}>+ Nuevo reporte</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
-            {SAVED.map(s => (
-              <div key={s.title} style={{
+            {saved.length === 0 && (
+              <div style={{ gridColumn: "1 / -1", border: `1px dashed ${V.bd1}`, borderRadius: 12, padding: "28px 20px", textAlign: "center", color: V.txMut, fontSize: 13 }}>
+                Aún no has guardado reportes. Usa “+ Nuevo reporte” para crear el primero.
+              </div>
+            )}
+            {saved.map(s => (
+              <div key={s.id ?? s.title} style={{
                 background: s.active ? `linear-gradient(90deg,rgba(124,58,237,.08),transparent)` : V.surf1,
                 border: `1px solid ${s.active ? V.iris5 : V.bd1}`,
                 borderRadius: 12, padding: "14px 16px", cursor: "pointer",
