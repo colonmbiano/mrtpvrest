@@ -680,4 +680,127 @@ router.delete('/api-keys/:id', authenticate, requireSuperAdmin, async (req, res)
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TPV REMOTE CONFIG — gestión desde el dashboard SaaS (SUPER_ADMIN)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ALLOWED_ORDER_TYPES = ['DINE_IN', 'TAKEOUT', 'DELIVERY'];
+
+function sanitizeTpvPayload(body) {
+  const data = {};
+  if (body.apiUrl !== undefined) {
+    const v = typeof body.apiUrl === 'string' ? body.apiUrl.trim() : '';
+    data.apiUrl = v ? v : null;
+  }
+  if (body.allowedOrderTypes !== undefined) {
+    const arr = Array.isArray(body.allowedOrderTypes) ? body.allowedOrderTypes : [];
+    const filtered = arr.filter(t => ALLOWED_ORDER_TYPES.includes(t));
+    data.allowedOrderTypes = filtered.length > 0 ? filtered : ALLOWED_ORDER_TYPES;
+  }
+  if (body.lockTimeoutSec !== undefined) {
+    const n = Number(body.lockTimeoutSec);
+    if (!Number.isFinite(n) || n < 0 || n > 86400) {
+      throw new Error('lockTimeoutSec debe ser un entero entre 0 y 86400');
+    }
+    data.lockTimeoutSec = Math.floor(n);
+  }
+  if (body.accentColor !== undefined) {
+    const v = typeof body.accentColor === 'string' ? body.accentColor.trim() : '';
+    if (v && !/^#[0-9a-fA-F]{3,8}$/.test(v)) {
+      throw new Error('accentColor debe ser hex (ej. #F5C842)');
+    }
+    data.accentColor = v || null;
+  }
+  if (body.extra !== undefined) {
+    if (body.extra !== null && typeof body.extra !== 'object') {
+      throw new Error('extra debe ser un objeto JSON');
+    }
+    data.extra = body.extra ?? {};
+  }
+  return data;
+}
+
+// GET /api/saas/tpv-configs — lista todas las sucursales con su config (o defaults)
+router.get('/tpv-configs', async (req, res) => {
+  try {
+    const locations = await prisma.location.findMany({
+      where: { isActive: true },
+      include: {
+        tpvConfig: true,
+        restaurant: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            logoUrl: true,
+            accentColor: true,
+            tenant: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: [{ restaurant: { name: 'asc' } }, { name: 'asc' }],
+    });
+
+    res.json(locations.map(l => ({
+      locationId:   l.id,
+      locationName: l.name,
+      locationSlug: l.slug,
+      businessType: l.businessType,
+      restaurantId:   l.restaurant.id,
+      restaurantName: l.restaurant.name,
+      restaurantSlug: l.restaurant.slug,
+      tenantId:       l.restaurant.tenant?.id || null,
+      tenantName:     l.restaurant.tenant?.name || null,
+      config: l.tpvConfig
+        ? {
+            apiUrl:            l.tpvConfig.apiUrl,
+            allowedOrderTypes: l.tpvConfig.allowedOrderTypes,
+            lockTimeoutSec:    l.tpvConfig.lockTimeoutSec,
+            accentColor:       l.tpvConfig.accentColor,
+            extra:             l.tpvConfig.extra ?? {},
+            updatedAt:         l.tpvConfig.updatedAt,
+          }
+        : null,
+    })));
+  } catch (e) {
+    if (e?.code === 'P2021' || /does not exist/i.test(e?.message || '')) return res.json([]);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/saas/tpv-configs/:locationId — upsert de la config de una sucursal
+router.put('/tpv-configs/:locationId', async (req, res) => {
+  try {
+    const location = await prisma.location.findUnique({
+      where: { id: req.params.locationId },
+      select: { id: true },
+    });
+    if (!location) return res.status(404).json({ error: 'Sucursal no encontrada' });
+
+    let data;
+    try { data = sanitizeTpvPayload(req.body || {}); }
+    catch (err) { return res.status(400).json({ error: err.message }); }
+
+    const saved = await prisma.tpvRemoteConfig.upsert({
+      where:  { locationId: location.id },
+      update: data,
+      create: { locationId: location.id, ...data },
+    });
+    res.json(saved);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/saas/tpv-configs/:locationId — vuelve a defaults
+router.delete('/tpv-configs/:locationId', async (req, res) => {
+  try {
+    await prisma.tpvRemoteConfig.delete({ where: { locationId: req.params.locationId } });
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.code === 'P2025') return res.json({ ok: true }); // ya no existía, idempotente
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
