@@ -53,23 +53,43 @@ export default function MarcasPage() {
   useEffect(() => { load(); }, []);
 
   async function changeStatus(id: string, status: string) {
-    await api.patch(`/api/saas/tenants/${id}/status`, { status }).catch(() => null);
-    await load(); showToast(`Estado → ${status}`);
+    try {
+      await api.patch(`/api/saas/tenants/${id}/status`, { status });
+      showToast(`Estado → ${status}`);
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || "Error al cambiar estado");
+    }
+    await load();
   }
   async function changePlan() {
     if (!planModal || !newPlanId) return;
-    await api.patch(`/api/saas/tenants/${planModal.id}/plan`, { planId: newPlanId }).catch(() => null);
-    setPlanModal(null); await load(); showToast("Plan actualizado");
+    try {
+      await api.patch(`/api/saas/tenants/${planModal.id}/plan`, { planId: newPlanId });
+      showToast("Plan actualizado");
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || "Error al cambiar plan");
+    }
+    setPlanModal(null); await load();
   }
   async function extendTrial() {
     if (!trialModal) return;
-    await api.put(`/api/saas/tenants/${trialModal.id}/plan`, { extendDays }).catch(() => null);
-    setTrialModal(null); setExtendDays(7); await load(); showToast(`+${extendDays} días agregados`);
+    try {
+      await api.post(`/api/saas/tenants/${trialModal.id}/gift-days`, { days: extendDays });
+      showToast(`+${extendDays} días agregados`);
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || "Error al regalar días");
+    }
+    setTrialModal(null); setExtendDays(7); await load();
   }
   async function deleteTenant() {
     if (!delConfirm) return;
-    await api.delete(`/api/saas/tenants/${delConfirm.id}`).catch(() => null);
-    setDelConfirm(null); await load(); showToast("Marca eliminada");
+    try {
+      await api.delete(`/api/saas/tenants/${delConfirm.id}`);
+      showToast("Marca eliminada");
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || "Error al eliminar marca");
+    }
+    setDelConfirm(null); await load();
   }
 
   const filtered = tenants.filter(t => {
