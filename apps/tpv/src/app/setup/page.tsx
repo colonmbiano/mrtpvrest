@@ -121,10 +121,20 @@ export default function SetupPage() {
         // Admin de marca. No dependemos de /api/tenant/me (que requiere
         // user.tenantId — algunos admins legacy lo tienen NULL). Resolvemos
         // directo con los endpoints que sólo necesitan user.restaurantId.
-        const [cfgRes, locRes] = await Promise.all([
-          authed.get("/api/admin/config").catch(() => ({ data: { name: "Mi marca", logoUrl: null } })),
-          authed.get("/api/admin/locations").catch(() => ({ data: [] })),
-        ]);
+        // No silenciamos los errores: si el server da 4xx/5xx queremos verlo
+        // en pantalla en vez de degradar a "sin sucursales" misterioso.
+        const cfgRes = await authed.get("/api/admin/config")
+          .catch((err: any) => {
+            const status = err?.response?.status;
+            const msg    = err?.response?.data?.error || err?.message || "request failed";
+            throw new Error(`/api/admin/config → ${status || "?"} · ${msg}`);
+          });
+        const locRes = await authed.get("/api/admin/locations")
+          .catch((err: any) => {
+            const status = err?.response?.status;
+            const msg    = err?.response?.data?.error || err?.message || "request failed";
+            throw new Error(`/api/admin/locations → ${status || "?"} · ${msg}`);
+          });
         tenantRestaurants = [{
           id:          userRestaurantId,
           name:        cfgRes.data?.name || "Mi marca",
@@ -134,7 +144,7 @@ export default function SetupPage() {
             .map((l: any) => ({ id: l.id, name: l.name, address: l.address || null })),
         }];
       } else {
-        throw new Error("Este usuario no tiene un restaurante asignado. Revisa con tu administrador.");
+        throw new Error(`Tu sesión no trae restaurantId. user.role=${role || "?"}, user.id=${data?.user?.id || "?"}. Revisa que tu cuenta tenga un restaurante asignado.`);
       }
 
       if (tenantRestaurants.length === 0 || tenantRestaurants.every((r) => r.locations.length === 0)) {
