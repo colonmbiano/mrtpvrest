@@ -148,7 +148,7 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
     trialEndsAt.setDate(trialEndsAt.getDate() + plan.trialDays)
     const passwordHash = await bcrypt.hash(password, 12)
 
-    const { tenant, restaurant, user } = await prisma.$transaction(async (tx) => {
+    const { tenant, restaurant, user, location } = await prisma.$transaction(async (tx) => {
       // 1. Tenant
       const t = await tx.tenant.create({
         data: {
@@ -192,6 +192,19 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
         }
       })
 
+      // 3.5. Location default "Principal" — sin esto, el onboarding y el TPV
+      // no tienen sucursal que seleccionar y quedan bloqueados pidiendo al
+      // usuario que "inicie sesión de nuevo".
+      const loc = await tx.location.create({
+        data: {
+          restaurantId: r.id,
+          name:         'Principal',
+          slug:         'principal',
+          isActive:     true,
+          ticketConfig: { create: { businessName: restaurantName } },
+        }
+      })
+
       // 4. User ADMIN ligado a Tenant + Restaurant
       const u = await tx.user.create({
         data: {
@@ -205,7 +218,7 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
         }
       })
 
-      return { tenant: t, restaurant: r, user: u }
+      return { tenant: t, restaurant: r, user: u, location: loc }
     })
 
     const { accessToken, refreshToken } = generateTokens(user.id, restaurant.id, user.role, tenant.id)
@@ -249,6 +262,11 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
         id:   restaurant.id,
         slug: restaurant.slug,
       },
+      location: location ? {
+        id:   location.id,
+        name: location.name,
+        slug: location.slug,
+      } : null,
       subscription: {
         status:     'TRIAL',
         trialEndsAt,
