@@ -251,8 +251,7 @@ export default function TPVPage() {
     setIsVerifyingPin(true);
     setPinError("");
     try {
-      const restaurantId = localStorage.getItem("restaurantId");
-      const { data } = await api.post("/api/auth/pin", { pin: enteredPin, restaurantId });
+      const { data } = await api.post("/api/employees/login", { pin: enteredPin });
       const token = data.token || data.accessToken;
       const employee = data.user || data.employee;
       if (!token || !employee) throw new Error("Sesion incompleta");
