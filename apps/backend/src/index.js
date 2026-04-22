@@ -15,22 +15,47 @@ const app = express()
 app.set('trust proxy', 1)
 const server = http.createServer(app)
 
-const ALLOWED_ORIGINS = [
+// CORS whitelist — URLs explícitas (audit M6). Se quitaron los patrones
+// wildcard *.vercel.app y *.railway.app que aceptaban cualquier proyecto
+// ajeno en esas plataformas. En dev se aceptan localhost + capacitor;
+// en prod solo dominios oficiales + CORS_ORIGINS (extensión por env,
+// separado por coma).
+const PROD_ORIGINS = [
+  /^https:\/\/([a-z0-9-]+\.)?mrtpvrest\.com$/,
+  'https://mrtpvrest-admin.vercel.app',
+  'https://mrtpvrest-tpv.vercel.app',
+  'https://mrtpvrest-client.vercel.app',
+  'https://mrtpvrest-landing.vercel.app',
+  'https://mrtpvrest-saas.vercel.app',
+  'https://mrtpvrest-kiosk.vercel.app',
   'https://colonmbianos-projects.vercel.app',
+];
+
+const DEV_ORIGINS = [
   'http://localhost',
   'http://localhost:3000',
   'http://localhost:3001',
+  'http://localhost:3002',
+  'http://localhost:3005',
+  'http://localhost:3006',
   'http://localhost:8081',
-  'capacitor://localhost',
   'http://127.0.0.1:3000',
-  /\.vercel\.app$/,
-  /\.railway\.app$/,
-  /^https:\/\/([a-z0-9-]+\.)?mrtpvrest\.com$/,
+  'capacitor://localhost',
+];
+
+const EXTRA_ORIGINS = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+const ALLOWED_ORIGINS = [
+  ...PROD_ORIGINS,
+  ...(process.env.NODE_ENV === 'production' ? [] : DEV_ORIGINS),
+  ...EXTRA_ORIGINS,
 ];
 
 const corsOptions = {
-  // Pasamos el arreglo directo. cors sabe cómo evaluar Strings y Regex.
-  origin: ALLOWED_ORIGINS, 
+  origin: ALLOWED_ORIGINS,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 };
