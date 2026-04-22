@@ -201,7 +201,7 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
           name:         'Principal',
           slug:         'principal',
           isActive:     true,
-          ticketConfig: { create: { businessName: restaurantName } },
+          ticketConfig: { create: { businessName: restaurantName, header: restaurantName } },
         }
       })
 
