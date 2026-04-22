@@ -3,6 +3,9 @@ const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const router  = express.Router()
 
+// Tenant de sistema — se excluye del listado visible de marcas.
+const PLATFORM_TENANT_SLUG = 'mrtpvrest-platform'
+
 // Middleware para verificar si es SUPER_ADMIN (Tú)
 const requireSuperAdmin = (req, res, next) => {
   if (req.user && req.user.role === 'SUPER_ADMIN') {
@@ -169,6 +172,7 @@ router.delete('/locations/:id', authenticate, requireTenantAccess, requireAdmin,
 router.get('/tenants', authenticate, requireSuperAdmin, async (req, res) => {
   try {
     const tenants = await prisma.tenant.findMany({
+      where: { slug: { not: PLATFORM_TENANT_SLUG } },
       include: {
         subscription: { include: { plan: true } },
         restaurants: {
