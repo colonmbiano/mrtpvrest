@@ -2,6 +2,11 @@ const router  = require('express').Router();
 const prisma   = require('@mrtpvrest/database').prisma;
 const { authenticate, requireSuperAdmin } = require('../middleware/auth.middleware');
 
+// Tenant de sistema — contenedor del SUPER_ADMIN de plataforma. Se excluye
+// de toda lista / métrica visible a clientes o super-admins del SaaS.
+const PLATFORM_TENANT_SLUG = 'mrtpvrest-platform';
+const excludePlatform = { slug: { not: PLATFORM_TENANT_SLUG } };
+
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS PÚBLICAS (sin auth)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,6 +108,7 @@ router.patch('/plans/:id', async (req, res) => {
 router.get('/tenants', async (req, res) => {
   try {
     const tenants = await prisma.tenant.findMany({
+      where: excludePlatform,
       include: {
         subscription: { include: { plan: true } },
         restaurants:  { select: { id: true, slug: true, name: true, isActive: true } },
@@ -410,8 +416,8 @@ router.get('/mrr', authenticate, requireSuperAdmin, async (req, res) => {
 router.get('/health', authenticate, requireSuperAdmin, async (req, res) => {
   try {
     const [tenantCount, activeSub, orderCount24h, revenue24hAgg] = await Promise.all([
-      prisma.tenant.count(),
-      prisma.subscription.count({ where: { status: { in: ['ACTIVE', 'TRIAL'] } } }),
+      prisma.tenant.count({ where: excludePlatform }),
+      prisma.subscription.count({ where: { status: { in: ['ACTIVE', 'TRIAL'] }, tenant: excludePlatform } }),
       prisma.order.count({ where: { createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
       prisma.order.aggregate({
         _sum: { total: true },
@@ -438,7 +444,7 @@ router.get('/top-tenants', authenticate, requireSuperAdmin, async (req, res) => 
     const limit = Math.min(parseInt(req.query.limit, 10) || 5, 50);
 
     const subs = await prisma.subscription.findMany({
-      where: { status: { in: ['ACTIVE', 'PAST_DUE'] } },
+      where: { status: { in: ['ACTIVE', 'PAST_DUE'] }, tenant: excludePlatform },
       orderBy: { priceSnapshot: 'desc' },
       take: limit,
       include: {
@@ -479,7 +485,7 @@ router.get('/new-tenants', authenticate, requireSuperAdmin, async (req, res) => 
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     const tenants = await prisma.tenant.findMany({
-      where: { createdAt: { gte: since } },
+      where: { createdAt: { gte: since }, ...excludePlatform },
       orderBy: { createdAt: 'desc' },
       take: limit,
       select: {
