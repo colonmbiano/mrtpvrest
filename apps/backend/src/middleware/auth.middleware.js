@@ -77,4 +77,35 @@ const requireRole = (...roles) => (req, res, next) => {
   return res.status(403).json({ error: `Acceso restringido. Roles permitidos: ${roles.join(', ')}` });
 };
 
-module.exports = { authenticate, requireAdmin, requireSuperAdmin, requireRole }
+// Aislamiento tenant — garantiza que el JWT del usuario pertenezca al mismo
+// tenant que el recurso que va a tocar. Debe ir después de `authenticate` y
+// de `tenantMiddleware` (que adjunta `req.restaurant`). SUPER_ADMIN puede
+// cruzar tenants explícitamente.
+const requireTenantAccess = (req, res, next) => {
+  if (req.user?.role === 'SUPER_ADMIN') return next();
+
+  const userTenantId = req.user?.tenantId;
+  if (!userTenantId) {
+    return res.status(403).json({ error: 'Usuario sin tenant asignado' });
+  }
+
+  const resourceTenantId =
+    req.restaurant?.tenantId ||
+    req.tenant?.id ||
+    req.tenant?.tenantId ||
+    null;
+
+  if (resourceTenantId && resourceTenantId !== userTenantId) {
+    return res.status(403).json({ error: 'Acceso cruzado entre tenants no permitido' });
+  }
+
+  next();
+};
+
+module.exports = {
+  authenticate,
+  requireAdmin,
+  requireSuperAdmin,
+  requireRole,
+  requireTenantAccess,
+};
