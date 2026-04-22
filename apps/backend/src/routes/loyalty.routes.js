@@ -5,8 +5,10 @@ const router  = express.Router()
 
 router.get('/points', authenticate, requireTenantAccess, async (req, res) => {
   try {
+    const restaurantId = req.user.restaurantId
+    if (!restaurantId) return res.status(400).json({ error: 'Usuario sin restaurante' })
     const loyalty = await prisma.loyaltyAccount.findUnique({
-      where: { userId: req.user.id },
+      where: { userId_restaurantId: { userId: req.user.id, restaurantId } },
       include: { transactions: { orderBy: { createdAt: 'desc' }, take: 10 } },
     })
     if (!loyalty) return res.status(404).json({ error: 'Cuenta de lealtad no encontrada' })
@@ -30,6 +32,7 @@ router.post('/coupon/validate', authenticate, requireTenantAccess, async (req, r
 router.get('/customers', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const accounts = await prisma.loyaltyAccount.findMany({
+      where: { restaurantId: req.user.restaurantId },
       orderBy: { totalEarned: 'desc' },
       take: 50,
       include: { user: { select: { id: true, name: true, email: true, phone: true, createdAt: true } } },
