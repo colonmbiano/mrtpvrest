@@ -1,6 +1,7 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { notifyLowStock } = require('../services/notifications.service');
 const router = express.Router();
 
 // ── PROVEEDORES (Nivel Marca) ─────────────────────────────────────────────
@@ -266,6 +267,8 @@ router.post('/movements', authenticate, requireTenantAccess, requireAdmin, async
     ]);
 
     const lowStock = updated.minStock > 0 && updated.stock <= updated.minStock;
+
+    if (lowStock) notifyLowStock(updated, locationId).catch(() => {});
 
     res.status(201).json({ movement, ingredient: updated, lowStock });
   } catch (e) {
