@@ -694,11 +694,12 @@ export default function DeliveryApp() {
             const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
             for (let i = 6; i >= 0; i--) {
               const d = new Date(); d.setDate(d.getDate() - i);
-              days[dayNames[d.getDay()]] = 0;
+              const dayKey = dayNames[d.getDay()];
+              if (dayKey) days[dayKey] = 0;
             }
             history.filter(o => o.status === "DELIVERED").forEach((o: any) => {
               const key = dayNames[new Date(o.createdAt).getDay()];
-              if (days[key] !== undefined) days[key]++;
+              if (key && days[key] !== undefined) days[key]++;
             });
             const max = Math.max(...Object.values(days), 1);
             return (

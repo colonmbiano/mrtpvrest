@@ -114,18 +114,21 @@ export default function MenuPage() {
     if (!files || files.length === 0) return;
 
     const fileNames = Array.from(files).map(f => f.name);
-    setScanState({ active: true, currentFile: fileNames[0], current: 1, total: files.length, error: null });
+    setScanState({ active: true, currentFile: fileNames[0] ?? '', current: 1, total: files.length, error: null });
 
     // Cicla entre los nombres de archivo mientras espera la respuesta de la IA
     let fileIdx = 0;
     const cycleInterval = setInterval(() => {
       fileIdx = (fileIdx + 1) % fileNames.length;
-      setScanState(p => (!p.error ? { ...p, currentFile: fileNames[fileIdx], current: fileIdx + 1 } : p));
+      setScanState(p => (!p.error ? { ...p, currentFile: fileNames[fileIdx] ?? '', current: fileIdx + 1 } : p));
     }, 1200);
 
     try {
       const fd = new FormData();
-      for (let i = 0; i < files.length; i++) fd.append("images", files[i]);
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (f) fd.append("images", f);
+      }
 
       const { data } = await api.post("/api/ai/scan-menu", fd, {
         headers: { "Content-Type": "multipart/form-data" }

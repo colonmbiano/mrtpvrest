@@ -88,7 +88,8 @@ export default function ImprimorasPage() {
       pc.onicecandidate = (e) => {
         if (e.candidate) {
           const ip = e.candidate.candidate.match(/([0-9]{1,3}(.[0-9]{1,3}){3})/);
-          if (ip && !ip[1].startsWith('127')) { setLocalIP(ip[1]); pc.close(); }
+          const ipMatch = ip?.[1];
+          if (ipMatch && !ipMatch.startsWith('127')) { setLocalIP(ipMatch); pc.close(); }
         }
       };
     } catch {}

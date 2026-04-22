@@ -94,7 +94,10 @@ export default function InventarioPage() {
     setIsScanning(true);
     try {
       const fd = new FormData();
-      for (let i = 0; i < files.length; i++) fd.append("images", files[i]);
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (f) fd.append("images", f);
+      }
       const { data } = await api.post("/api/ai/scan-inventory", fd, {
         headers: { "Content-Type": "multipart/form-data" }
       });
