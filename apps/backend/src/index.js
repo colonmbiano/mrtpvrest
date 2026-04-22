@@ -8,8 +8,11 @@ const helmet      = require('helmet')
 const compression = require('compression')
 const morgan      = require('morgan')
 const rateLimit   = require('express-rate-limit')
+const sentry      = require('./lib/sentry');
 const shiftsRoutes = require('./routes/shifts.routes');
 const tenantMiddleware = require('./middleware/tenant.middleware');
+
+sentry.init();
 
 const app = express()
 app.set('trust proxy', 1)
@@ -86,6 +89,8 @@ io.on('connection', (socket) => {
 })
 
 // Middlewares base
+// Sentry requestHandler debe ir ANTES que cualquier otro middleware/router.
+app.use(sentry.requestHandler())
 app.use(helmet())
 app.use(compression())
 // 1. Aplicamos CORS
@@ -155,6 +160,9 @@ app.get('/health', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({ error: 'Ruta no encontrada: ' + req.method + ' ' + req.path })
 })
+
+// Sentry errorHandler debe ir ANTES del handler de errores de la app.
+app.use(sentry.errorHandler())
 
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack)
