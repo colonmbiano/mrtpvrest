@@ -139,7 +139,7 @@ export default function MenuPage() {
 
       // Fase 2: importar categorías
       setScanState(p => ({ ...p, currentFile: 'Creando categorías...', current: 0, total: aiItems?.length || 0 }));
-      let currentCats = [...cats];
+      const currentCats = [...cats];
       if (aiCats) {
         for (const catName of aiCats) {
           const exists = currentCats.find(c => c.name.toLowerCase() === catName.toLowerCase());
@@ -328,7 +328,7 @@ export default function MenuPage() {
   }
 
   function toggleSelect(id: string) {
-    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelectedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
   function toggleSelectAll() {
     setSelectedIds(selectedIds.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map(i => i.id)));
