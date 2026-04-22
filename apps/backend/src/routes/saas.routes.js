@@ -1,146 +1,23 @@
 const router  = require('express').Router();
 const prisma   = require('@mrtpvrest/database').prisma;
-const bcrypt   = require('bcryptjs');
-const jwt      = require('jsonwebtoken');
 const { authenticate, requireSuperAdmin } = require('../middleware/auth.middleware');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS PÚBLICAS (sin auth)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// POST /api/saas/register — Onboarding público
-router.post('/register', async (req, res) => {
-  const {
-    restaurantName, slug, phone, address, logoUrl,
-    planId, adminName, email, password
-  } = req.body;
-
-  if (!restaurantName || !slug || !planId || !adminName || !email || !password) {
-    return res.status(400).json({
-      error: 'Campos requeridos: restaurantName, slug, planId, adminName, email, password'
-    });
-  }
-  if (password.length < 8) {
-    return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
-  }
-
-  try {
-    const existing = await prisma.restaurant.findUnique({ where: { slug: slug.toLowerCase() } });
-    if (existing) {
-      return res.status(409).json({ error: 'El slug ya está en uso. Elige otro nombre.' });
-    }
-
-    const plan = await prisma.plan.findUnique({ where: { id: planId } });
-    if (!plan || !plan.isActive) {
-      return res.status(404).json({ error: 'Plan no encontrado o inactivo' });
-    }
-
-    const emailTaken = await prisma.user.findUnique({ where: { email } });
-    if (emailTaken) {
-      return res.status(409).json({ error: 'Ya existe una cuenta con ese email' });
-    }
-
-    const now         = new Date();
-    const trialEndsAt = new Date(now);
-    trialEndsAt.setDate(trialEndsAt.getDate() + plan.trialDays);
-
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    const [restaurant, user] = await prisma.$transaction(async (tx) => {
-      const rest = await tx.restaurant.create({
-        data: {
-          slug:     slug.toLowerCase(),
-          name:     restaurantName,
-          logoUrl:  logoUrl || null,
-          isActive: true,
-          config: {
-            create: {
-              phone:             phone   || '',
-              address:           address || '',
-              estimatedDelivery: 40,
-              isOpen:            true,
-              pointsPerTen:      1,
-              pointsValuePesos:  0.10,
-            }
-          },
-          subscription: {
-            create: {
-              planId,
-              status:             'TRIAL',
-              trialEndsAt,
-              currentPeriodStart: now,
-              currentPeriodEnd:   trialEndsAt,
-              priceSnapshot:      plan.price,
-              paymentGateway:     'MANUAL',
-            }
-          }
-        }
-      });
-
-      const usr = await tx.user.create({
-        data: {
-          restaurantId: rest.id,
-          name:         adminName,
-          email:        email.toLowerCase(),
-          passwordHash,
-          role:         'ADMIN',
-          isActive:     true,
-        }
-      });
-
-      return [rest, usr];
-    });
-
-    const accessToken  = jwt.sign(
-      { userId: user.id, restaurantId: restaurant.id },
-      process.env.JWT_SECRET,
-      { expiresIn: '365d' }
-    );
-    const refreshToken = jwt.sign(
-      { userId: user.id },
-      process.env.JWT_REFRESH_SECRET,
-      { expiresIn: '365d' }
-    );
-
-    await prisma.refreshToken.create({
-      data: {
-        token:     refreshToken,
-        userId:    user.id,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      }
-    });
-
-    res.status(201).json({
-      user: {
-        id:             user.id,
-        name:           user.name,
-        email:          user.email,
-        role:           user.role,
-        restaurantId:   restaurant.id,
-        restaurantSlug: restaurant.slug,
-      },
-      accessToken,
-      refreshToken,
-      restaurant: {
-        id:   restaurant.id,
-        slug: restaurant.slug,
-        name: restaurant.name,
-        subscription: {
-          status:    'TRIAL',
-          trialEndsAt,
-          plan:      plan.displayName,
-          trialDays: plan.trialDays,
-        }
-      }
-    });
-
-  } catch (e) {
-    if (e.code === 'P2002') {
-      return res.status(409).json({ error: 'El slug o email ya está registrado' });
-    }
-    console.error('Error en /saas/register:', e);
-    res.status(500).json({ error: 'Error al registrar. Intenta de nuevo.' });
-  }
+// POST /api/saas/register — DEPRECATED.
+// Creaba Restaurant huérfano (sin tenantId) y con `subscription` en Restaurant
+// en vez de en Tenant. Tras el NOT NULL en Restaurant.tenantId/User.tenantId
+// (audit C2a) dejó de funcionar. El onboarding canónico vive en
+// POST /api/auth/register-tenant (con alias /api/auth/register).
+router.post('/register', (req, res) => {
+  res.status(410).json({
+    error: 'Endpoint deprecado',
+    code: 'ENDPOINT_DEPRECATED',
+    redirect: '/api/auth/register-tenant',
+    message: 'Use POST /api/auth/register-tenant para el onboarding de tenant.',
+  });
 });
 
 // GET /api/saas/plans — público (usado en onboarding sin token)
