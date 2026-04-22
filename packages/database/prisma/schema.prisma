@@ -682,9 +682,9 @@ model TicketConfig {
   locationId String?   @unique
   location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  businessName        String  @default("Master Burger's")
-  header              String  @default("Master Burger's")
-  subheader           String  @default("A chuparse los dedos")
+  businessName        String
+  header              String  @default("")
+  subheader           String  @default("")
   footer              String  @default("Gracias por su preferencia")
   showLogo            Boolean @default(true)
   showAddress         Boolean @default(true)
