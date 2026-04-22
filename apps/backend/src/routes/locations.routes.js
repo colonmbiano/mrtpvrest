@@ -4,6 +4,7 @@
 const express = require('express')
 const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
+const log = require('../lib/logger')('locations')
 
 const router = express.Router()
 
@@ -44,7 +45,7 @@ router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
 
     res.json(location)
   } catch (err) {
-    console.error('GET /locations/:id:', err)
+    log.error('location.get.failed', { err, id: req.params.id, userId: req.user?.id })
     res.status(500).json({ error: 'Error al obtener la sucursal' })
   }
 })
@@ -89,9 +90,15 @@ router.put('/:id/business-type', authenticate, requireTenantAccess, requireAdmin
       },
     })
 
+    log.info('location.businessType.changed', {
+      id: updated.id,
+      restaurantId: updated.restaurantId,
+      businessType: updated.businessType,
+      actor: req.user?.id,
+    })
     res.json(updated)
   } catch (err) {
-    console.error('PUT /locations/:id/business-type:', err)
+    log.error('location.businessType.failed', { err, id: req.params.id, userId: req.user?.id })
     res.status(500).json({ error: 'Error al actualizar el tipo de negocio' })
   }
 })
