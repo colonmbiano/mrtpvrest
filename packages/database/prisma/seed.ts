@@ -4,21 +4,80 @@ import 'dotenv/config'
 
 const prisma = new PrismaClient()
 
-const TENANT_SLUG = 'master-burgers-colo'
-const TENANT_NAME = "Master Burger's"
-const RESTAURANT_SLUG = 'master-burgers-colo-rest'
-const ADMIN_EMAIL = 'admin@mrtpvrest.com'
-const ADMIN_PASSWORD = 'Admin1234!'
+const PLATFORM = {
+  tenantSlug: 'mrtpvrest-platform',
+  tenantName: 'MRTPVREST Platform',
+  restaurantSlug: 'mrtpvrest-platform-system',
+  superEmail: 'super@mrtpvrest.com',
+  superPassword: 'SuperAdmin1234!',
+}
 
-async function main() {
-  console.log('🌱 Seeding initial tenant, restaurant and super-admin...\n')
+const CUSTOMER = {
+  tenantSlug: 'master-burgers-colo',
+  tenantName: "Master Burger's Colo",
+  restaurantSlug: 'master-burgers-colo-rest',
+  adminEmail: 'admin@mrtpvrest.com',
+  adminPassword: 'Admin1234!',
+}
 
+async function seedPlatform() {
   const tenant = await prisma.tenant.upsert({
-    where: { slug: TENANT_SLUG },
+    where: { slug: PLATFORM.tenantSlug },
     create: {
-      name: TENANT_NAME,
-      slug: TENANT_SLUG,
-      ownerEmail: ADMIN_EMAIL,
+      name: PLATFORM.tenantName,
+      slug: PLATFORM.tenantSlug,
+      ownerEmail: PLATFORM.superEmail,
+      businessType: 'PLATFORM',
+      isOnboarded: true,
+      onboardingDone: true,
+    },
+    update: {},
+  })
+
+  const restaurant = await prisma.restaurant.upsert({
+    where: { slug: PLATFORM.restaurantSlug },
+    create: {
+      tenantId: tenant.id,
+      slug: PLATFORM.restaurantSlug,
+      name: PLATFORM.tenantName,
+      businessType: 'PLATFORM',
+      isActive: false,
+    },
+    update: {},
+  })
+
+  const passwordHash = await bcrypt.hash(PLATFORM.superPassword, 12)
+  const user = await prisma.user.upsert({
+    where: { email: PLATFORM.superEmail },
+    create: {
+      name: 'Super Admin',
+      email: PLATFORM.superEmail,
+      passwordHash,
+      role: Role.SUPER_ADMIN,
+      tenantId: tenant.id,
+      restaurantId: restaurant.id,
+      isActive: true,
+    },
+    update: {
+      role: Role.SUPER_ADMIN,
+      tenantId: tenant.id,
+      restaurantId: restaurant.id,
+      isActive: true,
+    },
+  })
+
+  console.log(`✅ Platform tenant: ${tenant.name} (${tenant.id})`)
+  console.log(`✅ Platform restaurant: ${restaurant.name} (${restaurant.id})`)
+  console.log(`✅ SUPER_ADMIN: ${user.email} / ${PLATFORM.superPassword}`)
+}
+
+async function seedCustomer() {
+  const tenant = await prisma.tenant.upsert({
+    where: { slug: CUSTOMER.tenantSlug },
+    create: {
+      name: CUSTOMER.tenantName,
+      slug: CUSTOMER.tenantSlug,
+      ownerEmail: CUSTOMER.adminEmail,
       businessType: 'RESTAURANT',
       isOnboarded: true,
       onboardingDone: true,
@@ -34,41 +93,49 @@ async function main() {
       themeConfig: { theme: 'STREET_FOOD', primaryColor: '#FF5733' },
     },
   })
-  console.log(`✅ Tenant: ${tenant.name} (${tenant.id})`)
 
   const restaurant = await prisma.restaurant.upsert({
-    where: { slug: RESTAURANT_SLUG },
+    where: { slug: CUSTOMER.restaurantSlug },
     create: {
       tenantId: tenant.id,
-      slug: RESTAURANT_SLUG,
-      name: TENANT_NAME,
+      slug: CUSTOMER.restaurantSlug,
+      name: CUSTOMER.tenantName,
       businessType: 'RESTAURANT',
       isActive: true,
     },
     update: {},
   })
-  console.log(`✅ Restaurant: ${restaurant.name} (${restaurant.id})`)
 
-  const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12)
+  const passwordHash = await bcrypt.hash(CUSTOMER.adminPassword, 12)
   const admin = await prisma.user.upsert({
-    where: { email: ADMIN_EMAIL },
+    where: { email: CUSTOMER.adminEmail },
     create: {
-      name: 'Super Admin',
-      email: ADMIN_EMAIL,
+      name: 'Admin Master Burgers',
+      email: CUSTOMER.adminEmail,
       passwordHash,
-      role: Role.SUPER_ADMIN,
+      role: Role.ADMIN,
       tenantId: tenant.id,
       restaurantId: restaurant.id,
       isActive: true,
     },
     update: {
-      role: Role.SUPER_ADMIN,
+      role: Role.ADMIN,
       tenantId: tenant.id,
       restaurantId: restaurant.id,
       isActive: true,
     },
   })
-  console.log(`✅ User SUPER_ADMIN: ${admin.email} / ${ADMIN_PASSWORD}`)
+
+  console.log(`✅ Customer tenant: ${tenant.name} (${tenant.id})`)
+  console.log(`✅ Customer restaurant: ${restaurant.name} (${restaurant.id})`)
+  console.log(`✅ ADMIN: ${admin.email} / ${CUSTOMER.adminPassword}`)
+}
+
+async function main() {
+  console.log('🌱 Seeding platform + customer tenants...\n')
+  await seedPlatform()
+  console.log()
+  await seedCustomer()
   console.log('\n🌱 Done.')
 }
 
