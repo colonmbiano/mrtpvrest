@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { logout, getUser, isSuperAdmin } from "@/lib/auth";
+import { logout, getUser } from "@/lib/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import api from "@/lib/api";
 
@@ -31,7 +31,6 @@ const IUsers     = ({ size }: IconProps) => ic(<><circle cx="6" cy="6" r="3"/><p
 const IClock     = ({ size }: IconProps) => ic(<><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></>, size);
 const IWallet    = ({ size }: IconProps) => ic(<><rect x="1" y="5" width="14" height="9" rx="1"/><path d="M4 5V4a2 2 0 012-2h7a2 2 0 012 2v1"/><circle cx="12" cy="10" r="1" fill="currentColor" stroke="none"/></>, size);
 const IMapPin    = ({ size }: IconProps) => ic(<><path d="M8 14s5-4 5-8A5 5 0 003 6c0 4 5 8 5 8z"/><circle cx="8" cy="6" r="2"/></>, size);
-const IStore     = ({ size }: IconProps) => ic(<><path d="M1 6V5a1 1 0 011-1h12a1 1 0 011 1v1l-2 5H3L1 6z"/><line x1="1" y1="6" x2="15" y2="6"/><path d="M6 15v-5h4v5"/><rect x="1" y="11" width="14" height="4" rx="0.5"/></>, size);
 const ILayoutDash = ({ size }: IconProps) => ic(<><rect x="1" y="1" width="6" height="8" rx="1"/><rect x="9" y="1" width="6" height="4" rx="1"/><rect x="9" y="7" width="6" height="8" rx="1"/><rect x="1" y="11" width="6" height="4" rx="1"/></>, size);
 
 // ── Nav sections ──────────────────────────────────────────────
@@ -75,10 +74,9 @@ const SECTIONS = [
       { href: "/admin/rastreo",           icon: <IMapPin />, label: "Rastreo GPS" },
     ],
   },
-  // NOTA: la sección "Plataforma / Super-admin" NO va aquí. El panel SaaS
-  // es independiente del admin de negocio y solo debe aparecer para usuarios
-  // con role SUPER_ADMIN. Eso lo renderiza el bloque condicional
-  // `{superAdmin && (...)}` más abajo en el árbol.
+  // NOTA: la sección "Plataforma / Super-admin" vive en apps/saas
+  // (saas.mrtpvrest.com). El middleware de admin redirige a SUPER_ADMIN
+  // fuera de esta app al loguearse, así que no se renderiza nada aquí.
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -88,7 +86,6 @@ type SidebarProps = { isOpen?: boolean; onClose?: () => void };
 export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
   const path = usePathname();
   const [user, setUser]             = useState<any>(null);
-  const [superAdmin, setSuperAdmin] = useState(false);
   const [locations, setLocations]   = useState<any[]>([]);
   const [activeLocationId, setActiveLocationId] = useState<string>("");
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
@@ -99,7 +96,6 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
   useEffect(() => {
     const currentUser = getUser();
     setUser(currentUser);
-    setSuperAdmin(isSuperAdmin());
     if (currentUser) {
       // Desacoplamos los dos requests: si uno falla (p. ej. /api/admin/config
       // tras una migración pendiente), el otro debe seguir funcionando. Antes
@@ -323,44 +319,6 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
           );
         })}
 
-        {/* Super Admin section */}
-        {superAdmin && (
-          <div className="mt-2">
-            <div
-              className="rounded-xl overflow-hidden"
-              style={{ border: "1px solid rgba(124,58,237,0.2)" }}
-            >
-              <button
-                onClick={() => toggle("saas")}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-all"
-                style={{ background: path.startsWith("/admin/saas") ? "rgba(124,58,237,0.08)" : "transparent" }}
-              >
-                <span style={{ color: "var(--brand-primary)", opacity: 0.9 }}>
-                  <IStore />
-                </span>
-                <span className="flex-1 text-[10px] font-black uppercase tracking-widest" style={{ color: "var(--brand-primary)" }}>
-                  MRTPVREST
-                </span>
-                <span className="text-[9px] font-black px-1.5 py-0.5 rounded" style={{ background: "var(--brand-primary)", color: "#fff" }}>SA</span>
-              </button>
-              {open["saas"] && (
-                <div className="ml-4 pl-3 flex flex-col gap-0.5 pb-2" style={{ borderLeft: "1px solid rgba(124,58,237,0.2)" }}>
-                  <Link
-                    href="/admin/saas"
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-bold transition-all"
-                    style={{
-                      color: path === "/admin/saas" ? "var(--brand-primary)" : "var(--muted)",
-                      background: path === "/admin/saas" ? "rgba(124,58,237,0.1)" : "transparent",
-                    }}
-                  >
-                    <span style={{ opacity: 0.7 }}><ILayoutDash /></span>
-                    <span>Tenants / MRR</span>
-                  </Link>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </nav>
 
       {/* ── User footer ── */}
