@@ -125,8 +125,16 @@ router.post('/locations', authenticate, requireAdmin, async (req, res) => {
     if (restaurant._count.locations >= restaurant.maxLocations) {
       return res.status(403).json({ error: `Límite de sucursales alcanzado (${restaurant.maxLocations}).` });
     }
+    // Tomamos businessName del restaurant padre — nunca usar mocks.
     const location = await prisma.location.create({
-      data: { restaurantId: req.user.restaurantId, name, slug: slug.toLowerCase(), address, phone, ticketConfig: { create: { businessName: name } } }
+      data: {
+        restaurantId: req.user.restaurantId,
+        name,
+        slug: slug.toLowerCase(),
+        address,
+        phone,
+        ticketConfig: { create: { businessName: restaurant.name, header: restaurant.name } },
+      },
     });
     res.json(location);
   } catch (e) { res.status(500).json({ error: e.message }); }
