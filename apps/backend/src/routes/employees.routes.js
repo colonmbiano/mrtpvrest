@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 const ROLE_DEFAULTS = {
@@ -13,7 +13,7 @@ const ROLE_DEFAULTS = {
 };
 
 // GET todos los empleados (Filtrado por Sucursal)
-router.get('/', authenticate, requireAdmin, async (req, res) => {
+router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const employees = await prisma.employee.findMany({
       where: { locationId: req.locationId }, // Cambio: locationId
@@ -27,7 +27,7 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
 });
 
 // GET un empleado
-router.get('/:id', authenticate, requireAdmin, async (req, res) => {
+router.get('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const emp = await prisma.employee.findUnique({
       where: { id: req.params.id, locationId: req.locationId },
@@ -39,7 +39,7 @@ router.get('/:id', authenticate, requireAdmin, async (req, res) => {
 });
 
 // POST crear empleado
-router.post('/', authenticate, requireAdmin, async (req, res) => {
+router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
@@ -81,7 +81,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // PUT actualizar empleado
-router.put('/:id', authenticate, requireAdmin, async (req, res) => {
+router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name, phone, pin, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays, isActive,
       canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout } = req.body;

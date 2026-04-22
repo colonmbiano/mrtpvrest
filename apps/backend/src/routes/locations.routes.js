@@ -3,7 +3,7 @@
 
 const express = require('express')
 const prisma  = require('@mrtpvrest/database').prisma
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware')
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 
 const router = express.Router()
 
@@ -12,7 +12,7 @@ const VALID_BUSINESS_TYPES = ['RESTAURANT', 'RETAIL', 'BAR', 'CAFE']
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/locations — Listar todas las sucursales del usuario/marca
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, requireTenantAccess, async (req, res) => {
   try {
     const locations = await prisma.location.findMany({
       where: {
@@ -39,7 +39,7 @@ router.get('/', authenticate, async (req, res) => {
 // GET /api/locations/:id — Detalles de la sucursal (incluye businessType)
 // Requiere autenticación. Sólo la sucursal del restaurante del usuario.
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/:id', authenticate, async (req, res) => {
+router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
   try {
     const { id } = req.params
     const location = await prisma.location.findUnique({
@@ -76,7 +76,7 @@ router.get('/:id', authenticate, async (req, res) => {
 // PUT /api/locations/:id/business-type — Cambia el modo de la sucursal
 // Sólo ADMIN / SUPER_ADMIN. Acepta: RESTAURANT | RETAIL | BAR | CAFE
 // ─────────────────────────────────────────────────────────────────────────────
-router.put('/:id/business-type', authenticate, requireAdmin, async (req, res) => {
+router.put('/:id/business-type', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params
     const { businessType } = req.body || {}

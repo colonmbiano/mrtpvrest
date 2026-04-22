@@ -1,6 +1,6 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const router = express.Router();
@@ -82,7 +82,7 @@ router.post('/:driverId/collect', async (req, res) => {
 });
 
 // ── POST solicitar corte de caja ──────────────────────────────────────────
-router.post('/:driverId/cut', authenticate, requireAdmin, async (req, res) => {
+router.post('/:driverId/cut', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { driverId } = req.params;
     const { notes } = req.body;
@@ -128,7 +128,7 @@ router.post('/:driverId/cut', authenticate, requireAdmin, async (req, res) => {
 });
 
 // ── GET historial de cortes (admin) ──────────────────────────────────────
-router.get('/cuts', authenticate, requireAdmin, async (req, res) => {
+router.get('/cuts', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const cuts = await prisma.driverCashCut.findMany({
       orderBy: { createdAt: 'desc' }, take: 50
@@ -138,7 +138,7 @@ router.get('/cuts', authenticate, requireAdmin, async (req, res) => {
 });
 
 // ── GET resumen de todos los repartidores hoy (admin) ────────────────────
-router.get('/summary/today', authenticate, requireAdmin, async (req, res) => {
+router.get('/summary/today', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const from = new Date(); from.setHours(0,0,0,0);
     const movements = await prisma.driverCashMovement.findMany({

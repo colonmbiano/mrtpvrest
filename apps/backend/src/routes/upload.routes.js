@@ -1,6 +1,6 @@
 const express  = require('express');
 const { upload, uploadImage } = require('../services/cloudinary.service');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // Middleware para permitir ADMIN o SUPER_ADMIN
@@ -12,7 +12,7 @@ const requireStaffOrSuper = (req, res, next) => {
   }
 };
 
-router.post('/image', authenticate, requireStaffOrSuper, upload.single('image'), async (req, res) => {
+router.post('/image', authenticate, requireTenantAccess, requireStaffOrSuper, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No se recibio imagen' });
 
