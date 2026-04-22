@@ -277,6 +277,12 @@ export default function RegisterPage() {
               style={{ width: "100%", padding: "12px", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer", border: "1px solid var(--border2)", background: "var(--surf2)", color: "var(--muted)", opacity: (resending || resendDone) ? 0.6 : 1 }}>
               {resendDone ? "✓ Correo reenviado" : resending ? "Enviando..." : "No llegó el correo — Reenviar"}
             </button>
+            <p style={{ marginTop: 20, fontSize: 13, color: "var(--muted)" }}>
+              ¿Ya activaste tu cuenta?{" "}
+              <Link href="/login" style={{ color: "var(--brand-primary)", fontWeight: 700, textDecoration: "none" }}>
+                Ir a iniciar sesión →
+              </Link>
+            </p>
           </div>
         )}
 
