@@ -108,7 +108,7 @@ export default function EmpleadosPage() {
   // ... (Resto del componente igual) ...
 
   function toggleSelect(id: string) {
-    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelectedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
   function toggleSelectAll() {
     setSelectedIds(selectedIds.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map((e: any) => e.id)));
