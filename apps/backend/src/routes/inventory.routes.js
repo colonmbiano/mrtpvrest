@@ -172,12 +172,106 @@ router.post('/bulk-confirm', authenticate, requireTenantAccess, requireAdmin, as
   }
 });
 
+// ── MOVIMIENTOS DE INVENTARIO (IN / OUT / ADJUST) ─────────────────────────
+//
+// Movimientos quedan asociados al ingrediente; el scope por sucursal se
+// resuelve via ingredient.locationId. Actualizamos el stock del ingrediente
+// atómicamente en la misma transacción.
+
+const MOVEMENT_TYPES = new Set(['IN', 'OUT', 'ADJUST']);
+
 router.get('/movements', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
-  res.json([]); // TODO: Implementar lógica de movimientos
+  try {
+    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const take = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    const where = { ingredient: { locationId } };
+    if (req.query.ingredientId) where.ingredientId = String(req.query.ingredientId);
+    if (req.query.type && MOVEMENT_TYPES.has(String(req.query.type).toUpperCase())) {
+      where.type = String(req.query.type).toUpperCase();
+    }
+
+    const movements = await prisma.inventoryMovement.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take,
+      include: {
+        ingredient: { select: { id: true, name: true, unit: true, stock: true, minStock: true } },
+      },
+    });
+    res.json(movements);
+  } catch (e) {
+    console.error('GET /inventory/movements:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
-router.get('/alerts', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
-  res.json([]); // TODO: Implementar lógica de alertas
+router.post('/movements', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const { ingredientId, type, quantity, reason, orderId } = req.body || {};
+    const typeU = String(type || '').toUpperCase();
+    const qty = Number(quantity);
+
+    if (!ingredientId) return res.status(400).json({ error: 'ingredientId requerido' });
+    if (!MOVEMENT_TYPES.has(typeU)) {
+      return res.status(400).json({ error: `type inválido. Valores: ${[...MOVEMENT_TYPES].join(', ')}` });
+    }
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return res.status(400).json({ error: 'quantity debe ser un número positivo' });
+    }
+
+    const ingredient = await prisma.ingredient.findUnique({
+      where: { id: ingredientId },
+      select: { id: true, locationId: true, stock: true, minStock: true, name: true, unit: true },
+    });
+    if (!ingredient || ingredient.locationId !== locationId) {
+      return res.status(404).json({ error: 'Ingrediente no encontrado en esta sucursal' });
+    }
+
+    // Delta final aplicado al stock según el tipo.
+    // ADJUST interpreta quantity como stock absoluto nuevo; IN suma; OUT resta.
+    let stockUpdate;
+    let movementQty = qty;
+    if (typeU === 'IN') {
+      stockUpdate = { stock: { increment: qty } };
+    } else if (typeU === 'OUT') {
+      if (ingredient.stock - qty < 0) {
+        return res.status(409).json({ error: 'Stock insuficiente', current: ingredient.stock });
+      }
+      stockUpdate = { stock: { decrement: qty } };
+    } else { // ADJUST
+      stockUpdate = { stock: qty };
+      movementQty = qty - ingredient.stock; // delta registrado
+    }
+
+    const [movement, updated] = await prisma.$transaction([
+      prisma.inventoryMovement.create({
+        data: {
+          ingredientId,
+          type: typeU,
+          quantity: movementQty,
+          reason: reason || '',
+          orderId: orderId || null,
+        },
+      }),
+      prisma.ingredient.update({
+        where: { id: ingredientId },
+        data: stockUpdate,
+        select: { id: true, name: true, unit: true, stock: true, minStock: true },
+      }),
+    ]);
+
+    const lowStock = updated.minStock > 0 && updated.stock <= updated.minStock;
+
+    res.status(201).json({ movement, ingredient: updated, lowStock });
+  } catch (e) {
+    console.error('POST /inventory/movements:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── RECETAS (Nivel Marca) ──────────────────────────────────────────────────
