@@ -326,7 +326,7 @@ model User {
 
   addresses     Address[]
   orders        Order[]
-  loyalty       LoyaltyAccount?
+  loyalty       LoyaltyAccount[]
   refreshTokens RefreshToken[]
   landingEdits  LandingContent[] @relation("LandingContentUpdater")
 
@@ -585,7 +585,7 @@ model LoyaltyAccount {
   id           String               @id @default(cuid())
   restaurantId String
   restaurant   Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  userId       String               @unique
+  userId       String
   user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   points       Int                  @default(0)
   totalEarned  Int                  @default(0)
@@ -596,6 +596,7 @@ model LoyaltyAccount {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([userId, restaurantId])
   @@map("loyalty_accounts")
 }
 

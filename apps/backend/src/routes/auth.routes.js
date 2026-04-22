@@ -88,10 +88,17 @@ router.get('/me', authenticate, async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: { id: true, name: true, email: true, phone: true, role: true, restaurantId: true,
-        loyalty: { select: { points: true, tier: true, qrCode: true, totalEarned: true } },
+        // Loyalty es ahora array (una cuenta por restaurant). Devolvemos
+        // la del restaurant del usuario si existe.
+        loyalty: {
+          where: req.user.restaurantId ? { restaurantId: req.user.restaurantId } : undefined,
+          select: { points: true, tier: true, qrCode: true, totalEarned: true, restaurantId: true },
+          take: 1,
+        },
       },
     })
-    res.json(user)
+    const payload = user ? { ...user, loyalty: user.loyalty?.[0] || null } : null
+    res.json(payload)
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener perfil' })
   }

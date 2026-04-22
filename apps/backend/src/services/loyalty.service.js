@@ -12,23 +12,26 @@ function getTier(totalEarned) {
 
 async function addLoyaltyPoints(userId, order) {
   try {
-    const config = await prisma.restaurantConfig.findUnique({ where: { id: 'main' } })
+    const restaurantId = order.restaurantId
+    if (!restaurantId) return
+    const config = await prisma.restaurantConfig.findUnique({ where: { restaurantId } })
     const pointsPerTen = config?.pointsPerTen || 1
     const base = order.subtotal - order.discount
     const pointsEarned = Math.floor(base / 10) * pointsPerTen
     if (pointsEarned <= 0) return
-    const loyalty = await prisma.loyaltyAccount.findUnique({ where: { userId } })
+    const key = { userId_restaurantId: { userId, restaurantId } }
+    const loyalty = await prisma.loyaltyAccount.findUnique({ where: key })
     if (!loyalty) return
     const newTotal = loyalty.totalEarned + pointsEarned
     const newTier  = getTier(newTotal)
     await prisma.$transaction([
       prisma.loyaltyAccount.update({
-        where: { userId },
+        where: key,
         data: { points: { increment: pointsEarned }, totalEarned: { increment: pointsEarned }, tier: newTier },
       }),
       prisma.loyaltyTransaction.create({
         data: {
-          account:     { connect: { userId } },
+          accountId:   loyalty.id,
           type:        'EARNED',
           points:      pointsEarned,
           description: `Puntos por pedido ${order.orderNumber}`,
@@ -37,7 +40,7 @@ async function addLoyaltyPoints(userId, order) {
       }),
       prisma.order.update({ where: { id: order.id }, data: { pointsEarned } }),
     ])
-    console.log(`Puntos agregados: ${pointsEarned} a usuario ${userId}`)
+    console.log(`Puntos agregados: ${pointsEarned} a usuario ${userId} (rest ${restaurantId})`)
   } catch (error) {
     console.error('Error al agregar puntos:', error)
   }
