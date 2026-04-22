@@ -7,6 +7,7 @@ const prisma     = require('@mrtpvrest/database').prisma
 const { authenticate } = require('../middleware/auth.middleware')
 const rateLimit  = require('express-rate-limit')
 const { sendEmail, verificationEmailHtml } = require('../utils/mailer')
+const log = require('../lib/logger')('auth')
 
 const router = express.Router()
 
@@ -58,7 +59,7 @@ router.post('/login', loginLimiter, async (req, res) => {
       refreshToken
     })
   } catch (error) {
-    console.error('Error Login:', error);
+    log.error('login.failed', { err: error, email: req.body?.email })
     res.status(500).json({ error: 'Error al iniciar sesion' })
   }
 })
@@ -248,13 +249,23 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
       }
     })
 
+    log.info('register.tenant.ok', {
+      tenantId: tenant.id,
+      restaurantId: restaurant.id,
+      userId: user.id,
+      locationId: location?.id || null,
+      planId: plan.id,
+      planName: plan.name,
+      email: email.toLowerCase(),
+    })
+
     // Enviar email (sin bloquear la respuesta)
     const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/verify-email?token=${verificationToken}`
     sendEmail(
       email.toLowerCase(),
       `Verifica tu cuenta de ${restaurantName} — MRTPVREST`,
       verificationEmailHtml(ownerName, restaurantName, verifyUrl)
-    ).catch(err => console.error('[register-tenant] Error enviando email:', err.message))
+    ).catch(err => log.error('register.email.failed', { tenantId: tenant.id, err }))
 
     res.status(201).json({
       user: {
@@ -289,7 +300,7 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
     })
   } catch (e) {
     if (e.code === 'P2002') return res.status(409).json({ error: 'El email o nombre ya está registrado' })
-    console.error('Error en /auth/register-tenant:', e)
+    log.error('register.tenant.failed', { err: e, email: req.body?.email })
     res.status(500).json({ error: 'Error al registrar. Intenta de nuevo.' })
   }
 })
