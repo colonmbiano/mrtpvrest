@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSaasUrl } from "@/lib/config";
 
 // Public paths — always allowed
 const PUBLIC_PATHS = ["/login", "/register", "/verify-email", "/onboarding", "/_next", "/favicon", "/logo", "/api", "/.well-known"];
@@ -19,10 +20,11 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // SUPER_ADMIN ya no tiene panel aquí → redirigir a saas app
+  // SUPER_ADMIN ya no tiene panel aquí → redirigir a la app SaaS.
+  // getSaasUrl aplica fallback prod (saas.mrtpvrest.com); nunca envía a
+  // localhost en producción.
   if (role === "SUPER_ADMIN") {
-    const saasUrl = process.env.NEXT_PUBLIC_SAAS_URL || "http://localhost:3005";
-    return NextResponse.redirect(new URL("/dashboard", saasUrl));
+    return NextResponse.redirect(new URL("/dashboard", getSaasUrl()));
   }
 
   // ADMIN / KITCHEN: solo acceden a rutas /admin
