@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "@/lib/api";
+import { getApiUrl } from "@/lib/config";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,7 +25,7 @@ export default function LoginPage() {
     setResending(true);
     try {
       const token = localStorage.getItem("accessToken");
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/auth/resend-verification`, {
+      await fetch(`${getApiUrl()}/api/auth/resend-verification`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });

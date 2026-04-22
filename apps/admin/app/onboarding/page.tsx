@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getApiUrl } from "@/lib/config";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API = getApiUrl();
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 

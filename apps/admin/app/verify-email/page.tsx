@@ -4,8 +4,9 @@ export const dynamic = "force-dynamic";
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { getApiUrl } from "@/lib/config";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API = getApiUrl();
 
 function VerifyEmailContent() {
   const router       = useRouter();

@@ -1,8 +1,7 @@
 ﻿import axios from "axios";
+import { getApiUrl } from "./config";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.mrtpvrest.com";
-
-const api = axios.create({ baseURL: API_URL });
+const api = axios.create({ baseURL: getApiUrl() });
 
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
