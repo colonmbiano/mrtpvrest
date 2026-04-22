@@ -63,7 +63,9 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
 })
 
-// NUEVA RUTA: Obtener sucursales para el "Registro de App" (Usado por TPV y Delivery)
+// DEPRECATED alias (audit M1). Canónico: GET /api/admin/locations.
+// Mantenido para compatibilidad con APK mobile-tpv ya distribuida.
+// Responde el mismo payload reducido (id/name/slug) que el mobile consume.
 router.get('/my-locations', authenticate, async (req, res) => {
   try {
     if (!req.user.restaurantId) {
@@ -73,6 +75,8 @@ router.get('/my-locations', authenticate, async (req, res) => {
       where: { restaurantId: req.user.restaurantId },
       select: { id: true, name: true, slug: true }
     });
+    res.set('Deprecation', 'true');
+    res.set('Link', '</api/admin/locations>; rel="successor-version"');
     res.json(locations);
   } catch (error) {
     res.status(500).json({ error: 'Error al listar sucursales' });
