@@ -141,7 +141,7 @@ export default function BannersPage() {
     const parts: string[] = [];
     try {
       const days: number[] = JSON.parse(banner.scheduleDays || "[]");
-      if (days.length > 0) parts.push(days.map(d => DAYS[d].label).join(", "));
+      if (days.length > 0) parts.push(days.map(d => DAYS[d]?.label ?? "").filter(Boolean).join(", "));
     } catch {}
     if (banner.scheduleStart && banner.scheduleEnd)
       parts.push(`${banner.scheduleStart} - ${banner.scheduleEnd}`);

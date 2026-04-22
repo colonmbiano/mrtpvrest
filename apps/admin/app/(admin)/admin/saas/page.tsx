@@ -80,7 +80,8 @@ function StatusChip({ status }: { status?: string }) {
 }
 function PlanPill({ name }: { name?: string }) {
   const upper = (name ?? "STARTER").toUpperCase();
-  const s = PLAN_STYLE[upper] ?? PLAN_STYLE.STARTER;
+  const fallback = { bg: V.surf2, color: V.txMid };
+  const s = PLAN_STYLE[upper] ?? PLAN_STYLE.STARTER ?? fallback;
   return <span style={{ ...mono, padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, letterSpacing: ".04em", background: s.bg, color: s.color }}>{upper}</span>;
 }
 
@@ -387,12 +388,17 @@ export default function SaaSAdminPage() {
                 {[
                   [72,180,40], [132,165,55], [192,148,72], [252,132,88], [312,112,108],
                   [372,95,125], [432,82,138], [492,70,150], [552,58,162], [612,52,168], [672,45,175],
-                ].map(([tx,y,h]) => (
-                  <g key={tx} transform={`translate(${tx},0)`}>
-                    <rect y={y} width="26" height={h} fill="#10b981" opacity=".9" rx="2"/>
-                    {h > 55 && <rect y={y-14} width="26" height="12" fill="#9472ff" rx="2"/>}
-                  </g>
-                ))}
+                ].map(([tx,y,h]) => {
+                  const tX = tx ?? 0;
+                  const yV = y ?? 0;
+                  const hV = h ?? 0;
+                  return (
+                    <g key={tX} transform={`translate(${tX},0)`}>
+                      <rect y={yV} width="26" height={hV} fill="#10b981" opacity=".9" rx="2"/>
+                      {hV > 55 && <rect y={yV-14} width="26" height="12" fill="#9472ff" rx="2"/>}
+                    </g>
+                  );
+                })}
                 <g transform="translate(732,0)"><rect y="42" width="26" height="178" fill="#b89eff" rx="2"/></g>
                 <path d="M 85,180 L 145,155 L 205,136 L 265,118 L 325,95 L 385,70 L 445,62 L 505,42 L 565,34 L 625,22 L 685,18 L 745,22" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round"/>
                 <circle cx="745" cy="22" r="4" fill="#fff" stroke="#b89eff" strokeWidth="2"/>
@@ -505,7 +511,7 @@ export default function SaaSAdminPage() {
                   <div style={{ ...display, fontWeight: 700, fontSize: 15, color: V.txHi }}>Nuevos · 30 días</div>
                   <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>{newSignups.length} signups</div>
                 </div>
-                {newSignups.length > 0 && <StatusChip status={newSignups[0].subscription?.status ?? "TRIAL"} />}
+                {newSignups[0] && <StatusChip status={newSignups[0].subscription?.status ?? "TRIAL"} />}
               </div>
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {newSignups.length === 0
