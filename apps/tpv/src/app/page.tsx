@@ -5,6 +5,9 @@ import KDSMessages from "@/components/admin/KDSMessages";
 import IngredientShortageModal from "@/components/admin/IngredientShortageModal";
 import DeliveryAssignModal from "@/components/admin/DeliveryAssignModal";
 import ShiftModal from "@/components/admin/ShiftModal";
+import TPVConfigModal from "@/components/admin/TPVConfigModal";
+import DriversPanel from "@/components/admin/DriversPanel";
+import TablesFloorPlan from "@/components/admin/TablesFloorPlan";
 import RetailLayout from "@/components/layouts/RetailLayout";
 import BarLayout from "@/components/layouts/BarLayout";
 import CafeLayout from "@/components/layouts/CafeLayout";
@@ -70,8 +73,11 @@ export default function TPVPage() {
 
   // Tickets
   const defaultOrderType = orderTypeTabs[0]?.t || "TAKEOUT";
-  const emptyTicket = () => ({ id: Date.now(), name: "", phone: "", type: defaultOrderType, table: "", address: "", items: [], discount: 0, discountType: "percent" });
-  const [tickets, setTickets]           = useState<any[]>(() => [{ id: 1, name: "", phone: "", type: "TAKEOUT", table: "", address: "", items: [], discount: 0, discountType: "percent" }]);
+  // tableId/tableName tagueamos la mesa elegida via el planímetro (Dine-in).
+  // El campo legacy `table` (string) se mantiene por compatibilidad con código
+  // que sólo lee tableNumber.
+  const emptyTicket = () => ({ id: Date.now(), name: "", phone: "", type: defaultOrderType, table: "", tableId: "", tableName: "", address: "", items: [], discount: 0, discountType: "percent" });
+  const [tickets, setTickets]           = useState<any[]>(() => [{ id: 1, name: "", phone: "", type: "TAKEOUT", table: "", tableId: "", tableName: "", address: "", items: [], discount: 0, discountType: "percent" }]);
 
   // Si el tipo del ticket activo ya no está permitido (ej. la sucursal desactivó
   // TAKEOUT desde el dashboard), lo re-alineamos al primer tipo válido.
@@ -114,6 +120,9 @@ export default function TPVPage() {
 
   // Modales manager
   const [showManagerMenu, setShowManagerMenu]     = useState(false);
+  const [showDriversPanel, setShowDriversPanel]   = useState(false);
+  const [showTablesFloor, setShowTablesFloor]     = useState(false);
+  const [showTablePicker, setShowTablePicker]     = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showShiftModal, setShowShiftModal]       = useState(false);
 
@@ -396,11 +405,13 @@ export default function TPVPage() {
     try {
       const { data: order } = await api.post("/api/orders/tpv", {
         items: ticket.items.map((i: any) => ({ menuItemId: i.menuItemId, quantity: i.quantity, notes: i.notes })),
-        orderType: ticket.type, tableNumber: ticket.table ? Number(ticket.table) : null,
+        orderType: ticket.type,
+        tableNumber: ticket.table ? Number(ticket.table) : null,
+        tableId: ticket.tableId || null,
         paymentMethod: "PENDING", subtotal, discount: discountAmt, total,
         customerName: ticket.name || null, customerPhone: ticket.phone || null,
         deliveryAddress: ticket.type === "DELIVERY" ? (ticket.address || null) : null,
-        source: "TPV", status: "PREPARING",
+        source: "TPV", status: ticket.tableId ? undefined : "PREPARING",
       });
       closeTicket(activeTicket); fetchOrders();
       alert(`✅ Pedido enviado a cocina: ${order.orderNumber}`);
@@ -413,7 +424,9 @@ export default function TPVPage() {
     try {
       await api.post("/api/orders/tpv", {
         items: ticket.items.map((i: any) => ({ menuItemId: i.menuItemId, quantity: i.quantity, notes: i.notes })),
-        orderType: ticket.type, tableNumber: ticket.table ? Number(ticket.table) : null,
+        orderType: ticket.type,
+        tableNumber: ticket.table ? Number(ticket.table) : null,
+        tableId: ticket.tableId || null,
         paymentMethod, subtotal, discount: discountAmt, total,
         customerName: ticket.name || null, customerPhone: ticket.phone || null,
         deliveryAddress: ticket.type === "DELIVERY" ? (ticket.address || null) : null,
@@ -632,9 +645,29 @@ export default function TPVPage() {
           ))}
         </div>
         {ticket.type === "DINE_IN" && (
-          <input value={ticket.table} onChange={e => updateTicket({ table: e.target.value })}
-            placeholder="# Mesa" type="number" inputMode="numeric" className="w-full px-3 py-3 rounded-xl text-base font-bold outline-none text-center"
-            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
+          <button
+            type="button"
+            onClick={() => setShowTablePicker(true)}
+            className="w-full px-3 py-3 rounded-xl text-sm font-bold outline-none text-center flex items-center justify-center gap-2"
+            style={{
+              background: "var(--surf2)",
+              border: ticket.tableId ? `2px solid ${ACCENT}` : "1px solid var(--border)",
+              color: "var(--text)",
+            }}
+          >
+            <span>🪑</span>
+            <span>{ticket.tableName ? `Mesa: ${ticket.tableName}` : "Seleccionar mesa"}</span>
+            {ticket.tableId && (
+              <span
+                onClick={ev => { ev.stopPropagation(); updateTicket({ tableId: "", tableName: "", table: "" }); }}
+                className="ml-2 text-xs opacity-70 hover:opacity-100"
+                role="button"
+                aria-label="Quitar mesa"
+              >
+                ✕
+              </span>
+            )}
+          </button>
         )}
         {ticket.type === "DELIVERY" && (
           <input value={ticket.address} onChange={e => updateTicket({ address: e.target.value })}
@@ -1014,6 +1047,30 @@ export default function TPVPage() {
                   </div>
                 </div>
               </button>
+              <button onClick={() => { setShowManagerMenu(false); setShowSettingsModal(true); }}
+                className="w-full flex items-center gap-4 px-6 py-4 hover:bg-[var(--surf2)] transition-colors text-left border-b border-[var(--border)]/50">
+                <span className="text-2xl">🖨️</span>
+                <div>
+                  <div className="font-bold text-sm text-white">Configuración TPV</div>
+                  <div className="text-xs text-[var(--muted)]">Impresoras, ticket, cocina, display</div>
+                </div>
+              </button>
+              <button onClick={() => { setShowManagerMenu(false); setShowDriversPanel(true); }}
+                className="w-full flex items-center gap-4 px-6 py-4 hover:bg-[var(--surf2)] transition-colors text-left border-b border-[var(--border)]/50">
+                <span className="text-2xl">🚴</span>
+                <div>
+                  <div className="font-bold text-sm text-white">Repartidores activos</div>
+                  <div className="text-xs text-[var(--muted)]">Estado online, rutas, distancia al local</div>
+                </div>
+              </button>
+              <button onClick={() => { setShowManagerMenu(false); setShowTablesFloor(true); }}
+                className="w-full flex items-center gap-4 px-6 py-4 hover:bg-[var(--surf2)] transition-colors text-left border-b border-[var(--border)]/50">
+                <span className="text-2xl">🪑</span>
+                <div>
+                  <div className="font-bold text-sm text-white">Mesas (planímetro)</div>
+                  <div className="text-xs text-[var(--muted)]">Layout, estado y limpieza</div>
+                </div>
+              </button>
               <button onClick={() => router.push("/setup")}
                 className="w-full flex items-center gap-4 px-6 py-4 hover:bg-[var(--surf2)] transition-colors text-left border-b border-[var(--border)]/50">
                 <span className="text-2xl">🔧</span>
@@ -1032,6 +1089,34 @@ export default function TPVPage() {
           </div>
         </div>
       )}
+
+      {showSettingsModal && (
+        <TPVConfigModal onClose={() => setShowSettingsModal(false)} />
+      )}
+
+      <DriversPanel
+        open={showDriversPanel}
+        onClose={() => setShowDriversPanel(false)}
+        accent={ACCENT}
+      />
+
+      <TablesFloorPlan
+        open={showTablesFloor}
+        mode="manage"
+        onClose={() => setShowTablesFloor(false)}
+        accent={ACCENT}
+      />
+
+      <TablesFloorPlan
+        open={showTablePicker}
+        mode="pick"
+        accent={ACCENT}
+        onClose={() => setShowTablePicker(false)}
+        onPick={(t) => {
+          updateTicket({ tableId: t.id, tableName: t.name, table: String(t.name).replace(/\D/g, "") || "" });
+          setShowTablePicker(false);
+        }}
+      />
     </div>
   );
 }

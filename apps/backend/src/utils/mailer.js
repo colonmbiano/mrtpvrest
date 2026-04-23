@@ -5,7 +5,11 @@
 
 const { Resend } = require('resend')
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+let resend = null
+function getResend() {
+  if (!resend) resend = new Resend(process.env.RESEND_API_KEY)
+  return resend
+}
 
 async function sendEmail(to, subject, html) {
   if (!process.env.RESEND_API_KEY) {
@@ -13,7 +17,7 @@ async function sendEmail(to, subject, html) {
     return
   }
   const from = `${process.env.SMTP_FROM_NAME || 'MRTPVREST'} <${process.env.SMTP_FROM_EMAIL || 'noreply@mrtpvrest.com'}>`
-  const { data, error } = await resend.emails.send({ from, to, subject, html })
+  const { data, error } = await getResend().emails.send({ from, to, subject, html })
   if (error) throw new Error(error.message)
   console.log(`[mailer] Enviado → ${to} (id: ${data.id})`)
   return data

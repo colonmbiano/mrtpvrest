@@ -17,6 +17,10 @@ const CMD = {
   LINE:        '--------------------------------\n',
   LINE_DOUBLE: '================================\n',
   LF:          '\n',
+  // ESC p m t1 t2 — pulso al cajón de dinero. m=0 → conector "drawer 1",
+  // t1=25 (on = 25 × 2ms = 50ms), t2=250 (off). Compatible con la mayoría
+  // de impresoras térmicas ESC/POS (Epson, Star, Bixolon, genéricas chinas).
+  DRAWER_KICK: ESC + 'p' + '\x00' + '\x19' + '\xFA',
 };
 
 function printToIp(ip, port, data) {
@@ -321,4 +325,56 @@ async function printOrderToStation(order, printerId) {
   }
 }
 
-module.exports = { printOrderTicket, printBillTicket, printOrderToStation, printTest, printToIp, buildKitchenTicket, buildCashierTicket };
+// ── IMPRIMIR SOLO LOS ITEMS DE UNA RONDA (Dine-in) ────────────────────────
+// Variante de printOrderTicket que filtra por roundId antes de despachar a
+// las impresoras de cocina. Útil cuando una mesa pide una segunda ronda y
+// queremos que cocina sólo vea lo nuevo, no la cuenta entera otra vez.
+async function printOrderRoundTicket(order, roundId) {
+  if (!roundId) return printOrderTicket(order);
+  const filtered = {
+    ...order,
+    items: (order.items || []).filter(it => it.roundId === roundId),
+  };
+  if (filtered.items.length === 0) return;
+  return printOrderTicket(filtered);
+}
+
+// ── ABRIR CAJÓN DEL DINERO ────────────────────────────────────────────────
+// Manda el comando ESC/POS drawer-kick a una impresora por IP. Safe: inicializa
+// el puerto primero para evitar estados corruptos del printer.
+async function kickDrawer(ip, port) {
+  const payload = CMD.INIT + CMD.DRAWER_KICK;
+  return printToIp(ip, port, payload);
+}
+
+// Intenta abrir el cajón conectado a la impresora de caja (CASHIER + supports
+// CashDrawer = true) de una sucursal. No-op si no hay impresora apta. No
+// lanza: log-and-swallow, porque un cobro no debe fallar porque el cajón
+// esté desconectado.
+async function kickCashDrawerForLocation(locationId) {
+  if (!locationId) return { ok: false, reason: 'no_location' };
+  try {
+    const printer = await prisma.printer.findFirst({
+      where: {
+        locationId,
+        isActive: true,
+        type: 'CASHIER',
+        supportsCashDrawer: true,
+        connectionType: 'NETWORK',
+        ip: { not: null },
+      },
+    });
+    if (!printer) return { ok: false, reason: 'no_printer' };
+    await kickDrawer(printer.ip, printer.port);
+    return { ok: true, printerId: printer.id };
+  } catch (e) {
+    console.error('[printer] kickCashDrawerForLocation error:', e.message);
+    return { ok: false, reason: 'error', error: e.message };
+  }
+}
+
+module.exports = {
+  printOrderTicket, printOrderRoundTicket, printBillTicket, printOrderToStation,
+  printTest, printToIp, buildKitchenTicket, buildCashierTicket,
+  kickDrawer, kickCashDrawerForLocation,
+};

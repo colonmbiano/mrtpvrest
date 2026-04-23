@@ -45,6 +45,9 @@ model Tenant {
   subscription Subscription?
   restaurants  Restaurant[]
   users        User[]
+  vehicles     Vehicle[]
+  rides        Ride[]
+  expenses     Expense[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -299,6 +302,7 @@ model Location {
   cashShifts        CashShift[]
   externalOrders    ExternalOrder[]
   pushSubscriptions PushSubscription[]
+  tables            Table[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -467,6 +471,12 @@ enum OrderStatus {
   ON_THE_WAY
   DELIVERED
   CANCELLED
+  // OPEN = cuenta abierta (dine-in): la mesa acumula rondas hasta que se cobra.
+  // Se añadió al final del enum a propósito: PostgreSQL ordena los valores de
+  // un enum por declaración, así que cualquier código/SQL existente que
+  // dependiera del orden PENDING < CONFIRMED < ... < CANCELLED se mantiene
+  // intacto.
+  OPEN
 }
 
 enum PaymentMethod {
@@ -519,7 +529,12 @@ model Order {
   notes String?
 
   orderType        String    @default("DELIVERY")
+  // tableNumber es el número plano legado (lo siguen enviando orders antiguos
+  // y el flujo Quick Service). tableId es la nueva FK opcional al modelo Table
+  // para Dine-in con cuentas abiertas. Ambos conviven por compatibilidad.
   tableNumber      Int?
+  tableId          String?
+  table            Table?    @relation(fields: [tableId], references: [id], onDelete: SetNull)
   source           String    @default("ONLINE")
   deliveryDriverId String?
   deliveryAddress  String?
@@ -540,10 +555,12 @@ model Order {
 
   items         OrderItem[]
   statusHistory OrderStatusHistory[]
+  rounds        OrderRound[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([tableId])
   @@map("orders")
 }
 
@@ -560,6 +577,13 @@ model OrderItem {
   notes      String?
   modifiers  OrderItemModifier[]
 
+  // Agrupación por ronda de comanda. Nullable para ítems creados antes de
+  // introducir el concepto (y para el flujo Quick Service que manda todo en
+  // una sola ronda implícita).
+  roundId String?
+  round   OrderRound? @relation(fields: [roundId], references: [id], onDelete: SetNull)
+
+  @@index([roundId])
   @@map("order_items")
 }
 
@@ -723,10 +747,27 @@ model Printer {
   locationId String?
   location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  name       String
-  ip         String
-  port       Int      @default(9100)
-  type       String   @default("KITCHEN")
+  name           String
+  // type = rol de la impresora (KITCHEN/BAR/FRYER/CASHIER). Lo mantenemos como
+  // String libre por retrocompatibilidad con datos existentes.
+  type           String            @default("KITCHEN")
+  // connectionType = transporte físico. NETWORK es el único funcionalmente
+  // operativo hoy; USB/BLUETOOTH se guardan para UI pero requieren un plugin
+  // nativo de Capacitor (próxima iteración).
+  connectionType PrinterConnection @default(NETWORK)
+
+  // Campos específicos por transporte. Todos nullable porque sólo el relevante
+  // al connectionType se llena.
+  ip               String? // NETWORK: IP del print-server embebido
+  port             Int     @default(9100)
+  usbPort          String? // USB: device path (p. ej. /dev/usb/lp0)
+  bluetoothAddress String? // BLUETOOTH: MAC del dispositivo
+
+  // ¿Esta impresora tiene un cajón de dinero conectado al puerto drawer?
+  // Cuando es true + type=CASHIER, el backend le manda ESC/POS kick al
+  // confirmar un cobro en efectivo.
+  supportsCashDrawer Boolean @default(false)
+
   isActive   Boolean  @default(true)
   categories String[]
   createdAt  DateTime @default(now())
@@ -1160,4 +1201,148 @@ model TpvRemoteConfig {
   updatedAt DateTime @updatedAt
 
   @@map("tpv_remote_configs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOGÍSTICA & FLOTA — vehículos, turnos (Ride) y gastos operativos (FASE 4).
+// Gateado en UI por Tenant.hasDelivery. Entidades scopeadas por tenantId.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum VehicleType {
+  MOTO
+  CARRO
+  BICI
+}
+
+enum ExpenseCategory {
+  GASOLINA
+  REFACCION
+  PONCHADURA
+  OTROS
+}
+
+model Vehicle {
+  id       String      @id @default(cuid())
+  tenantId String
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name     String // ej. "Moto A"
+  plate    String?
+  type     VehicleType @default(MOTO)
+  isActive Boolean     @default(true)
+
+  rides Ride[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@map("vehicles")
+}
+
+model Ride {
+  id         String @id @default(cuid())
+  tenantId   String
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Nota: la .md menciona `userId`; en este codebase los repartidores son
+  // Employee (no User), así que referenciamos Employee.id por consistencia
+  // con el resto del stack (PIN login, CashShift, etc.). Se mantiene como
+  // String sin FK dura para evitar bloquear borrado de empleados históricos.
+  employeeId String
+
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+
+  startTime    DateTime  @default(now())
+  endTime      DateTime?
+  startMileage Int?
+  endMileage   Int?
+
+  expenses Expense[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([vehicleId])
+  @@index([employeeId])
+  @@map("rides")
+}
+
+model Expense {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  rideId String?
+  ride   Ride?   @relation(fields: [rideId], references: [id], onDelete: SetNull)
+
+  amount      Decimal         @db.Decimal(10, 2)
+  category    ExpenseCategory
+  description String?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([rideId])
+  @@map("expenses")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DINE-IN — Mesas físicas + rondas de comanda para cuentas abiertas.
+// Las tablas son del local (Location), no del restaurante padre: dos sucursales
+// de la misma marca tienen layouts y números distintos.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  DIRTY
+}
+
+enum PrinterConnection {
+  NETWORK
+  USB
+  BLUETOOTH
+}
+
+model Table {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  name     String // "Mesa 1", "Barra 3", "Terraza A"
+  // Coordenadas del mapa editable del TPV. En la misma unidad que la UI del
+  // planímetro (píxeles o % del canvas, según implemente el front). Default 0
+  // para que mesas creadas por API sin layout no rompan.
+  x        Float       @default(0)
+  y        Float       @default(0)
+  status   TableStatus @default(AVAILABLE)
+  isActive Boolean     @default(true)
+
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Dos mesas dentro del mismo local no pueden llamarse igual.
+  @@unique([locationId, name])
+  @@index([locationId])
+  @@map("tables")
+}
+
+model OrderRound {
+  id              String   @id @default(cuid())
+  orderId         String
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // 1 = primera comanda, 2 = segunda ronda, etc. Único por orden.
+  roundNumber     Int
+  sentToKitchenAt DateTime @default(now())
+
+  items OrderItem[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([orderId, roundNumber])
+  @@index([orderId])
+  @@map("order_rounds")
 }

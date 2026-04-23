@@ -65,8 +65,10 @@ router.post('/login', loginLimiter, async (req, res) => {
 })
 
 // DEPRECATED alias (audit M1). Canónico: GET /api/admin/locations.
-// Mantenido para compatibilidad con APK mobile-tpv ya distribuida.
-// Responde el mismo payload reducido (id/name/slug) que el mobile consume.
+// El código fuente del app mobile-tpv (Expo/React Native) se retiró del
+// monorepo, pero este endpoint se preserva para APKs históricos ya
+// distribuidos que siguen pegándole desde campo.
+// Responde el mismo payload reducido (id/name/slug) que el mobile consumía.
 router.get('/my-locations', authenticate, async (req, res) => {
   try {
     if (!req.user.restaurantId) {

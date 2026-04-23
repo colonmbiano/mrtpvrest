@@ -46,6 +46,7 @@ const SECTIONS = [
       { href: "/admin/mi-marca",             icon: <IBuilding />,  label: "Mi Marca" },
       { href: "/admin/reportes",             icon: <ITrending />,  label: "Reportes" },
       { href: "/admin/reportes/ia",          icon: <ILayoutDash />, label: "Reportes IA ✦" },
+      { href: "/admin/tickets",              icon: <IFolder />,    label: "Config. Tickets" },
       { href: "/admin/integraciones",        icon: <IPlug />,      label: "Integraciones" },
     ],
   },
@@ -72,6 +73,7 @@ const SECTIONS = [
       { href: "/admin/turnos",            icon: <IClock />,  label: "Turnos de caja" },
       { href: "/admin/caja-repartidores", icon: <IWallet />, label: "Caja Rep." },
       { href: "/admin/rastreo",           icon: <IMapPin />, label: "Rastreo GPS" },
+      { href: "/admin/logistica",         icon: <IMapPin />, label: "Logística & Flota" },
     ],
   },
   // NOTA: la sección "Plataforma / Super-admin" vive en apps/saas
