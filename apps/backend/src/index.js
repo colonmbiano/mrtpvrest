@@ -105,7 +105,7 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 app.use('/api/public', require('./routes/menu.routes'))
 app.use('/api/store',  require('./routes/store.routes'))
 app.use('/api/payments/terminal', require('./routes/terminal.routes'))
-app.use('/api/kiosk/mp-webhook',  require('./routes/kiosk-webhook.routes'))
+app.use('/api/kiosk/webhook',     require('./routes/kiosk-webhook.routes'))
 
 // --- MIDDLEWARE DE SAAS (TENANT) ---
 app.use(tenantMiddleware);

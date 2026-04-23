@@ -553,9 +553,10 @@ model Order {
 
   conektaOrderId   String?
   conektaChargeId  String?
-  mpPreferenceId   String?
-  mpPaymentId      String?
-  mpStatus         String?
+  paymentProvider        String?  // MERCADOPAGO | STRIPE | CONEKTA | ...
+  paymentProviderRef     String?  // ID de checkout/preferencia
+  paymentProviderId      String?  // ID del pago después de cobrar
+  paymentProviderStatus  String?  // status crudo de la pasarela
   estimatedMinutes Int?
 
   shiftId String?

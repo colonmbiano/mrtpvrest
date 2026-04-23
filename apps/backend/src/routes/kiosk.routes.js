@@ -1,41 +1,13 @@
-// routes/kiosk.routes.js — API del Kiosko de pedidos (MercadoPago QR)
+// routes/kiosk.routes.js — API del Kiosko de pedidos (pasarela agnóstica)
 require('dotenv').config()
 const express = require('express')
 const router  = express.Router()
 const { prisma } = require('@mrtpvrest/database')
 const { requireModule, MODULES } = require('../lib/modules')
-
-// MercadoPago SDK v2
-const { MercadoPagoConfig, Preference } = require('mercadopago')
-
-/**
- * Obtiene el cliente MP con el accessToken configurado por el restaurante.
- * Cae al env var global solo si el restaurante no tiene integración activa.
- */
-async function getMPClientForRestaurant(restaurantId) {
-  const integration = await prisma.integrationConfig.findUnique({
-    where: { restaurantId_type: { restaurantId, type: 'MERCADOPAGO' } },
-  })
-
-  let accessToken = null
-
-  if (integration?.enabled && integration.config) {
-    try {
-      const cfg = typeof integration.config === 'string'
-        ? JSON.parse(integration.config)
-        : integration.config
-      accessToken = cfg.accessToken || null
-    } catch (_) {}
-  }
-
-  if (!accessToken) accessToken = process.env.MP_ACCESS_TOKEN
-  if (!accessToken) throw new Error('MercadoPago no configurado para este restaurante. Ve a Admin → Integraciones → MercadoPago.')
-
-  return {
-    client: new MercadoPagoConfig({ accessToken }),
-    mode:   integration?.mode ?? 'sandbox',
-  }
-}
+const {
+  resolveProviderForRestaurant,
+  SUPPORTED_KEYS,
+} = require('../lib/payment-providers')
 
 // ─── Middleware: solo restaurantes con módulo KIOSK activo ──────────────────
 router.use(requireModule(MODULES.MODULE_KIOSK))
@@ -84,9 +56,25 @@ router.get('/menu', async (req, res) => {
 router.post('/orders', async (req, res) => {
   try {
     const { restaurantId } = req
-    const { items, tableNumber, customerName, customerPhone, notes, locationId } = req.body
+    const {
+      items,
+      tableNumber,
+      customerName,
+      customerPhone,
+      notes,
+      locationId,
+      paymentProvider,  // opcional: forzar una pasarela específica
+    } = req.body
 
     if (!items?.length) return res.status(400).json({ error: 'El carrito está vacío' })
+
+    // Resolver pasarela ANTES de crear la orden (si no hay pasarela, no sirve)
+    const resolved = await resolveProviderForRestaurant(restaurantId, paymentProvider)
+    if (!resolved) {
+      return res.status(400).json({
+        error: 'Este restaurante no tiene una pasarela de pago activa. Configúrala en Admin → Integraciones.',
+      })
+    }
 
     // Calcular totales
     let subtotal = 0
@@ -125,82 +113,71 @@ router.post('/orders', async (req, res) => {
 
     const orderNumber = `K-${Date.now()}`
 
-    // Crear orden con paymentMethod QR_CODE
+    // Crear orden con paymentMethod QR_CODE (provider-agnostic)
     const order = await prisma.order.create({
       data: {
         restaurantId,
         locationId:    locationId || null,
         orderNumber,
-        status:        'PENDING',
-        paymentMethod: 'QR_CODE',
-        paymentStatus: 'PENDING',
-        orderType:     'KIOSK',
-        source:        'KIOSK',
-        tableNumber:   tableNumber || null,
-        customerName:  customerName || null,
-        customerPhone: customerPhone || null,
-        notes:         notes || null,
+        status:          'PENDING',
+        paymentMethod:   'QR_CODE',
+        paymentStatus:   'PENDING',
+        paymentProvider: resolved.key,
+        orderType:       'KIOSK',
+        source:          'KIOSK',
+        tableNumber:     tableNumber || null,
+        customerName:    customerName || null,
+        customerPhone:   customerPhone || null,
+        notes:           notes || null,
         subtotal,
         total: subtotal,
         items: { create: orderItems },
       },
     })
 
-    // Obtener config del restaurante para la URL de retorno
-    const tpvConfig = await prisma.tpvRemoteConfig.findFirst({
-      where: { restaurantId },
-    }).catch(() => null)
+    // Resolver URL de retorno del kiosko
+    const backUrl = `${process.env.TPV_URL || 'https://tpv.masterburguers.com'}/kiosk`
+    const notificationUrl = `${process.env.BACKEND_URL || ''}/api/kiosk/webhook/${resolved.key.toLowerCase()}`
 
-    const backUrl = tpvConfig?.kioskUrl
-      || process.env.TPV_URL
-      || 'https://tpv.masterburguers.com'
-
-    // Crear preferencia de pago en MercadoPago usando token del restaurante
-    let initPoint    = null
-    let mpPreferenceId = null
+    // Crear checkout en la pasarela
+    let checkoutUrl = null
+    let providerRef = null
 
     try {
-      const { client } = await getMPClientForRestaurant(restaurantId)
-      const preference = new Preference(client)
-
-      const prefData = await preference.create({
-        body: {
-          external_reference: order.id,
-          items: orderItems.map((oi, idx) => ({
-            id:         items[idx]?.menuItemId ?? oi.menuItemId,
-            title:      oi.name,
-            quantity:   oi.quantity,
-            unit_price: oi.price,
-            currency_id: 'MXN',
-          })),
-          back_urls: {
-            success: `${backUrl}/kiosk?status=success&orderId=${order.id}`,
-            failure: `${backUrl}/kiosk?status=failure&orderId=${order.id}`,
-            pending: `${backUrl}/kiosk?status=pending&orderId=${order.id}`,
-          },
-          auto_return:          'approved',
-          notification_url:     `${process.env.BACKEND_URL}/api/kiosk/mp-webhook`,
-          statement_descriptor: 'KIOSKO',
-        },
+      const result = await resolved.provider.createCheckout({
+        order,
+        items: orderItems.map((oi, idx) => ({
+          id:        items[idx]?.menuItemId ?? oi.menuItemId,
+          title:     oi.name,
+          quantity:  oi.quantity,
+          unitPrice: oi.price,
+        })),
+        backUrl,
+        notificationUrl,
+        currency: 'MXN',
       })
-
-      initPoint      = prefData.init_point
-      mpPreferenceId = prefData.id
+      checkoutUrl = result.checkoutUrl
+      providerRef = result.providerRef
 
       await prisma.order.update({
         where: { id: order.id },
-        data:  { mpPreferenceId: prefData.id },
+        data:  { paymentProviderRef: providerRef },
       })
-    } catch (mpErr) {
-      console.error('[kiosk] MercadoPago preference error:', mpErr.message)
-      // Orden creada; link de pago fallido no bloquea la respuesta
+    } catch (payErr) {
+      console.error(`[kiosk] ${resolved.key} checkout error:`, payErr.message)
+      // Orden queda creada pero sin link; el usuario puede reintentar
     }
 
     // Notificar cocina vía socket
     const io = req.app.get('io')
     if (io) io.to(`restaurant:${restaurantId}`).emit('new:order', { orderId: order.id, source: 'KIOSK' })
 
-    res.status(201).json({ order, initPoint, mpPreferenceId })
+    res.status(201).json({
+      order,
+      checkoutUrl,
+      providerRef,
+      provider: resolved.key,
+    })
   } catch (err) {
     console.error('[kiosk] POST /orders error:', err)
     res.status(500).json({ error: 'Error al crear la orden' })
@@ -221,20 +198,17 @@ router.get('/orders/:id', async (req, res) => {
   }
 })
 
-// ─── GET /api/kiosk/mp-config ───────────────────────────────────────────────
-// Devuelve si el restaurante tiene MP activo (sin exponer el token)
-router.get('/mp-config', async (req, res) => {
+// ─── GET /api/kiosk/providers ───────────────────────────────────────────────
+// Devuelve la(s) pasarelas activas para este restaurante (sin exponer tokens)
+router.get('/providers', async (req, res) => {
   try {
-    const integration = await prisma.integrationConfig.findUnique({
-      where:  { restaurantId_type: { restaurantId: req.restaurantId, type: 'MERCADOPAGO' } },
-      select: { enabled: true, mode: true },
+    const integrations = await prisma.integrationConfig.findMany({
+      where: { restaurantId: req.restaurantId, enabled: true, type: { in: SUPPORTED_KEYS } },
+      select: { type: true, mode: true },
     })
-    res.json({
-      configured: !!integration?.enabled,
-      mode:       integration?.mode ?? null,
-    })
+    res.json({ providers: integrations })
   } catch (err) {
-    res.status(500).json({ error: 'Error al verificar configuración MP' })
+    res.status(500).json({ error: 'Error al listar pasarelas' })
   }
 })
 
