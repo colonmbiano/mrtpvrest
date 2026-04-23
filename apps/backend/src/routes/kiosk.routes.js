@@ -8,16 +8,39 @@ const { requireModule, MODULES } = require('../lib/modules')
 // MercadoPago SDK v2
 const { MercadoPagoConfig, Preference } = require('mercadopago')
 
-function getMPClient() {
-  if (!process.env.MP_ACCESS_TOKEN) throw new Error('MP_ACCESS_TOKEN no configurado')
-  return new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN })
+/**
+ * Obtiene el cliente MP con el accessToken configurado por el restaurante.
+ * Cae al env var global solo si el restaurante no tiene integración activa.
+ */
+async function getMPClientForRestaurant(restaurantId) {
+  const integration = await prisma.integrationConfig.findUnique({
+    where: { restaurantId_type: { restaurantId, type: 'MERCADOPAGO' } },
+  })
+
+  let accessToken = null
+
+  if (integration?.enabled && integration.config) {
+    try {
+      const cfg = typeof integration.config === 'string'
+        ? JSON.parse(integration.config)
+        : integration.config
+      accessToken = cfg.accessToken || null
+    } catch (_) {}
+  }
+
+  if (!accessToken) accessToken = process.env.MP_ACCESS_TOKEN
+  if (!accessToken) throw new Error('MercadoPago no configurado para este restaurante. Ve a Admin → Integraciones → MercadoPago.')
+
+  return {
+    client: new MercadoPagoConfig({ accessToken }),
+    mode:   integration?.mode ?? 'sandbox',
+  }
 }
 
 // ─── Middleware: solo restaurantes con módulo KIOSK activo ──────────────────
 router.use(requireModule(MODULES.MODULE_KIOSK))
 
 // ─── GET /api/kiosk/menu ────────────────────────────────────────────────────
-// Devuelve categorías + items activos del restaurante (mismo filtro que la tienda pública)
 router.get('/menu', async (req, res) => {
   try {
     const { restaurantId } = req
@@ -58,7 +81,6 @@ router.get('/menu', async (req, res) => {
 })
 
 // ─── POST /api/kiosk/orders ─────────────────────────────────────────────────
-// Crea la orden en estado PENDING y devuelve el link de pago QR de MP
 router.post('/orders', async (req, res) => {
   try {
     const { restaurantId } = req
@@ -72,7 +94,7 @@ router.post('/orders', async (req, res) => {
 
     for (const item of items) {
       const menuItem = await prisma.menuItem.findUnique({
-        where: { id: item.menuItemId },
+        where:   { id: item.menuItemId },
         include: { modifierGroups: { include: { modifiers: true } } },
       })
       if (!menuItem || !menuItem.isActive) {
@@ -97,13 +119,13 @@ router.post('/orders', async (req, res) => {
         price:      menuItem.price,
         quantity:   item.quantity || 1,
         notes:      item.notes || null,
-        modifiers: { create: modItems },
+        modifiers:  { create: modItems },
       })
     }
 
     const orderNumber = `K-${Date.now()}`
 
-    // Crear orden en BD con paymentMethod QR_CODE
+    // Crear orden con paymentMethod QR_CODE
     const order = await prisma.order.create({
       data: {
         restaurantId,
@@ -124,37 +146,37 @@ router.post('/orders', async (req, res) => {
       },
     })
 
-    // Crear preferencia de pago en MercadoPago
-    let initPoint = null
+    // Obtener config del restaurante para la URL de retorno
+    const tpvConfig = await prisma.tpvRemoteConfig.findFirst({
+      where: { restaurantId },
+    }).catch(() => null)
+
+    const backUrl = tpvConfig?.kioskUrl
+      || process.env.TPV_URL
+      || 'https://tpv.masterburguers.com'
+
+    // Crear preferencia de pago en MercadoPago usando token del restaurante
+    let initPoint    = null
     let mpPreferenceId = null
 
     try {
-      const mp = getMPClient()
-      const preference = new Preference(mp)
-
-      const backUrl = process.env.TPV_URL
-        ? `${process.env.TPV_URL}/kiosk`
-        : 'https://tpv.masterburguers.com/kiosk'
+      const { client } = await getMPClientForRestaurant(restaurantId)
+      const preference = new Preference(client)
 
       const prefData = await preference.create({
         body: {
           external_reference: order.id,
-          items: items.map((item, idx) => ({
-            id:          item.menuItemId,
-            title:       orderItems[idx]?.name ?? 'Producto',
-            quantity:    item.quantity || 1,
-            unit_price:  orderItems[idx]
-              ? (orderItems[idx].price + (item.modifiers?.reduce((s, m) => {
-                  // precio de modifiers ya acumulado en subtotal, aproximamos
-                  return s
-                }, 0)))
-              : 0,
+          items: orderItems.map((oi, idx) => ({
+            id:         items[idx]?.menuItemId ?? oi.menuItemId,
+            title:      oi.name,
+            quantity:   oi.quantity,
+            unit_price: oi.price,
             currency_id: 'MXN',
           })),
           back_urls: {
-            success: `${backUrl}?status=success&orderId=${order.id}`,
-            failure: `${backUrl}?status=failure&orderId=${order.id}`,
-            pending: `${backUrl}?status=pending&orderId=${order.id}`,
+            success: `${backUrl}/kiosk?status=success&orderId=${order.id}`,
+            failure: `${backUrl}/kiosk?status=failure&orderId=${order.id}`,
+            pending: `${backUrl}/kiosk?status=pending&orderId=${order.id}`,
           },
           auto_return:          'approved',
           notification_url:     `${process.env.BACKEND_URL}/api/kiosk/mp-webhook`,
@@ -162,7 +184,7 @@ router.post('/orders', async (req, res) => {
         },
       })
 
-      initPoint    = prefData.init_point
+      initPoint      = prefData.init_point
       mpPreferenceId = prefData.id
 
       await prisma.order.update({
@@ -171,14 +193,12 @@ router.post('/orders', async (req, res) => {
       })
     } catch (mpErr) {
       console.error('[kiosk] MercadoPago preference error:', mpErr.message)
-      // Seguimos: la orden queda creada, el link de pago falla sin bloquear
+      // Orden creada; link de pago fallido no bloquea la respuesta
     }
 
-    // Emitir socket para cocina
+    // Notificar cocina vía socket
     const io = req.app.get('io')
-    if (io) {
-      io.to(`restaurant:${restaurantId}`).emit('new:order', { orderId: order.id, source: 'KIOSK' })
-    }
+    if (io) io.to(`restaurant:${restaurantId}`).emit('new:order', { orderId: order.id, source: 'KIOSK' })
 
     res.status(201).json({ order, initPoint, mpPreferenceId })
   } catch (err) {
@@ -191,13 +211,30 @@ router.post('/orders', async (req, res) => {
 router.get('/orders/:id', async (req, res) => {
   try {
     const order = await prisma.order.findFirst({
-      where: { id: req.params.id, restaurantId: req.restaurantId },
+      where:   { id: req.params.id, restaurantId: req.restaurantId },
       include: { items: { include: { modifiers: true } } },
     })
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' })
     res.json(order)
   } catch (err) {
     res.status(500).json({ error: 'Error al obtener la orden' })
+  }
+})
+
+// ─── GET /api/kiosk/mp-config ───────────────────────────────────────────────
+// Devuelve si el restaurante tiene MP activo (sin exponer el token)
+router.get('/mp-config', async (req, res) => {
+  try {
+    const integration = await prisma.integrationConfig.findUnique({
+      where:  { restaurantId_type: { restaurantId: req.restaurantId, type: 'MERCADOPAGO' } },
+      select: { enabled: true, mode: true },
+    })
+    res.json({
+      configured: !!integration?.enabled,
+      mode:       integration?.mode ?? null,
+    })
+  } catch (err) {
+    res.status(500).json({ error: 'Error al verificar configuración MP' })
   }
 })
 
