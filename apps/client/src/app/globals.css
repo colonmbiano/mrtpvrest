@@ -10,3 +10,6 @@ body { font-family: "Inter", system-ui, sans-serif; background: #f8f8f6; color: 
 
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
