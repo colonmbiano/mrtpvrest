@@ -2,7 +2,7 @@ const express = require('express');
 const { scanMenuFromImages, scanInventoryFromImages } = require('../services/ai.service');
 const { runAssistant } = require('../services/assistant.service');
 const { resolveAiKey } = require('../services/ai-key.service');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
 const multer = require('multer');
 
@@ -30,7 +30,7 @@ const upload = multer({
 });
 
 // Escanear MENÚ (Platos y Precios)
-router.post('/scan-menu', authenticate, requireAdmin, upload.array('images', 10), async (req, res) => {
+router.post('/scan-menu', authenticate, requireTenantAccess, requireAdmin, upload.array('images', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No se recibieron imágenes.' });
     const restaurantId = req.user?.restaurantId || req.restaurantId;
@@ -47,7 +47,7 @@ router.post('/scan-menu', authenticate, requireAdmin, upload.array('images', 10)
 });
 
 // Escanear INVENTARIO (Facturas y Listas de Stock)
-router.post('/scan-inventory', authenticate, requireAdmin, upload.array('images', 10), async (req, res) => {
+router.post('/scan-inventory', authenticate, requireTenantAccess, requireAdmin, upload.array('images', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No se recibieron imágenes.' });
     const restaurantId = req.user?.restaurantId || req.restaurantId;
@@ -66,7 +66,7 @@ router.post('/scan-inventory', authenticate, requireAdmin, upload.array('images'
 // POST /api/ai/assistant — chat con el asistente administrativo (Claude)
 // Body: { messages: [{ role: "user"|"assistant", content: string|Array }] }
 // Responde con { messages, usage } incluyendo la respuesta final del asistente.
-router.post('/assistant', authenticate, requireAdmin, async (req, res) => {
+router.post('/assistant', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });

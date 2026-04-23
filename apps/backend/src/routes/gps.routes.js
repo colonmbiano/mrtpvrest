@@ -1,6 +1,6 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // Punto de origen del negocio (actualizable desde admin)
@@ -83,7 +83,7 @@ router.post('/:driverId/location', async (req, res) => {
 });
 
 // ── GET ubicación actual de todos los repartidores (admin) ────────────────
-router.get('/live', authenticate, requireAdmin, async (req, res) => {
+router.get('/live', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const drivers = await prisma.employee.findMany({
       where: { role: 'DELIVERY', isActive: true }
@@ -109,7 +109,7 @@ router.get('/live', authenticate, requireAdmin, async (req, res) => {
 });
 
 // ── GET historial de puntos de una ruta ───────────────────────────────────
-router.get('/:driverId/route/:routeId/points', authenticate, requireAdmin, async (req, res) => {
+router.get('/:driverId/route/:routeId/points', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const route = await prisma.driverRoute.findUnique({ where: { id: req.params.routeId } });
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
@@ -125,7 +125,7 @@ router.get('/:driverId/route/:routeId/points', authenticate, requireAdmin, async
 });
 
 // ── GET historial de rutas de un repartidor ───────────────────────────────
-router.get('/:driverId/routes', authenticate, requireAdmin, async (req, res) => {
+router.get('/:driverId/routes', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const routes = await prisma.driverRoute.findMany({
       where: { driverId: req.params.driverId },
@@ -137,7 +137,7 @@ router.get('/:driverId/routes', authenticate, requireAdmin, async (req, res) => 
 });
 
 // ── PUT actualizar coordenadas del restaurante ────────────────────────────
-router.put('/origin', authenticate, requireAdmin, async (req, res) => {
+router.put('/origin', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { lat, lng } = req.body;
     // Guardar en config (simplificado)

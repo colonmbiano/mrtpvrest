@@ -1,10 +1,10 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // GET todas las impresoras (Filtrado por Sucursal)
-router.get('/', authenticate, requireAdmin, async (req, res) => {
+router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const printers = await prisma.printer.findMany({
       where: { locationId: req.locationId },
@@ -15,7 +15,7 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
 });
 
 // POST crear impresora (Asignada a Sucursal)
-router.post('/', authenticate, requireAdmin, async (req, res) => {
+router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
     const printer = await prisma.printer.create({
@@ -26,7 +26,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
 });
 
 // PUT actualizar impresora (Seguro por Sucursal)
-router.put('/:id', authenticate, requireAdmin, async (req, res) => {
+router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const printer = await prisma.printer.update({
       where: { id: req.params.id, locationId: req.locationId },
@@ -37,7 +37,7 @@ router.put('/:id', authenticate, requireAdmin, async (req, res) => {
 });
 
 // DELETE impresora
-router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
+router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     await prisma.printer.delete({
       where: { id: req.params.id, locationId: req.locationId }

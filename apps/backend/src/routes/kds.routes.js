@@ -1,6 +1,9 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
+const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
+
+router.use(authenticate, requireTenantAccess);
 
 // GET pedidos activos para una estación
 router.get('/orders/:station', async (req, res) => {

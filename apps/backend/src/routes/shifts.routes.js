@@ -1,6 +1,6 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // Gate: solo empleados/usuarios con permiso pueden abrir/cerrar turnos
@@ -21,7 +21,7 @@ const requireLocation = (req, res, next) => {
 
 // ── GET staff clock-in activo de la sucursal (widget "Turno actual") ─────
 // Devuelve empleados con EmployeeShift abierto (endAt = null) en esta sucursal.
-router.get('/staff-active', authenticate, requireLocation, async (req, res) => {
+router.get('/staff-active', authenticate, requireTenantAccess, requireLocation, async (req, res) => {
   try {
     const shifts = await prisma.employeeShift.findMany({
       where: {
@@ -43,7 +43,7 @@ router.get('/staff-active', authenticate, requireLocation, async (req, res) => {
 });
 
 // Alias histórico — el frontend del admin llama a /api/shifts/current
-router.get('/current', authenticate, requireLocation, async (req, res) => {
+router.get('/current', authenticate, requireTenantAccess, requireLocation, async (req, res) => {
   try {
     const shift = await prisma.cashShift.findFirst({
       where: { isOpen: true, locationId: req.locationId },
@@ -55,7 +55,7 @@ router.get('/current', authenticate, requireLocation, async (req, res) => {
 });
 
 // ── GET turno activo actual de la sucursal ───────────────────────────────
-router.get('/active', authenticate, requireLocation, async (req, res) => {
+router.get('/active', authenticate, requireTenantAccess, requireLocation, async (req, res) => {
   try {
     const shift = await prisma.cashShift.findFirst({
       where: { isOpen: true, locationId: req.locationId },
@@ -67,7 +67,7 @@ router.get('/active', authenticate, requireLocation, async (req, res) => {
 });
 
 // ── POST abrir turno (solo en la sucursal del request) ───────────────────
-router.post('/open', authenticate, requireLocation, requireCanManageShifts, async (req, res) => {
+router.post('/open', authenticate, requireTenantAccess, requireLocation, requireCanManageShifts, async (req, res) => {
   try {
     const { openingFloat, employeeId, employeeName } = req.body;
 
@@ -93,7 +93,7 @@ router.post('/open', authenticate, requireLocation, requireCanManageShifts, asyn
 });
 
 // ── POST cerrar turno (solo el de la sucursal del request) ───────────────
-router.post('/:id/close', authenticate, requireLocation, requireCanManageShifts, async (req, res) => {
+router.post('/:id/close', authenticate, requireTenantAccess, requireLocation, requireCanManageShifts, async (req, res) => {
   try {
     const { closingFloat, notes } = req.body;
     const shiftId = req.params.id;
@@ -154,7 +154,7 @@ router.post('/:id/close', authenticate, requireLocation, requireCanManageShifts,
 });
 
 // ── POST agregar gasto al turno (scoped a sucursal) ──────────────────────
-router.post('/:id/expenses', authenticate, requireLocation, async (req, res) => {
+router.post('/:id/expenses', authenticate, requireTenantAccess, requireLocation, async (req, res) => {
   try {
     const { description, amount, category } = req.body;
 
@@ -178,7 +178,7 @@ router.post('/:id/expenses', authenticate, requireLocation, async (req, res) => 
 });
 
 // ── DELETE gasto (validado por sucursal del turno padre) ─────────────────
-router.delete('/expenses/:id', authenticate, requireLocation, async (req, res) => {
+router.delete('/expenses/:id', authenticate, requireTenantAccess, requireLocation, async (req, res) => {
   try {
     const expense = await prisma.shiftExpense.findUnique({
       where: { id: req.params.id },
@@ -193,7 +193,7 @@ router.delete('/expenses/:id', authenticate, requireLocation, async (req, res) =
 });
 
 // ── GET historial de turnos de la sucursal (admin) ───────────────────────
-router.get('/', authenticate, requireAdmin, requireLocation, async (req, res) => {
+router.get('/', authenticate, requireTenantAccess, requireAdmin, requireLocation, async (req, res) => {
   try {
     const shifts = await prisma.cashShift.findMany({
       where: { locationId: req.locationId },
@@ -206,7 +206,7 @@ router.get('/', authenticate, requireAdmin, requireLocation, async (req, res) =>
 });
 
 // ── GET un turno específico (scoped a sucursal) ──────────────────────────
-router.get('/:id', authenticate, requireLocation, async (req, res) => {
+router.get('/:id', authenticate, requireTenantAccess, requireLocation, async (req, res) => {
   try {
     const shift = await prisma.cashShift.findFirst({
       where: { id: req.params.id, locationId: req.locationId },

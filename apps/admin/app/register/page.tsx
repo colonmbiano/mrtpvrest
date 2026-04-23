@@ -1,8 +1,23 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "@/lib/api";
+
+interface Plan {
+  id: string;
+  name: string;
+  displayName: string;
+  price: number;
+  trialDays: number;
+  maxLocations: number;
+  maxEmployees: number;
+  hasKDS: boolean;
+  hasLoyalty: boolean;
+  hasInventory: boolean;
+  hasReports: boolean;
+  hasAPIAccess: boolean;
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -19,8 +34,27 @@ export default function RegisterPage() {
   const [resendDone, setResendDone]           = useState(false);
   const [emailDomain, setEmailDomain]         = useState("");
 
-  const canNext1 = restaurantName.trim().length > 0 && ownerName.trim().length > 0;
+  const [plans, setPlans]               = useState<Plan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [selectedPlanId, setSelectedPlanId] = useState<string>("");
+
+  useEffect(() => {
+    api.get<Plan[]>("/api/saas/plans")
+      .then(r => {
+        const list = r.data || [];
+        setPlans(list);
+        // Pre-selecciona BASIC si existe, si no el más barato
+        const basic = list.find(p => p.name === "BASIC");
+        setSelectedPlanId((basic || list[0])?.id || "");
+      })
+      .catch(() => setPlans([]))
+      .finally(() => setPlansLoading(false));
+  }, []);
+
+  const canNext1 = restaurantName.trim().length > 0 && ownerName.trim().length > 0 && selectedPlanId.length > 0;
   const canNext2 = email.trim().length > 0 && password.length >= 8 && terms;
+
+  const selectedPlan = plans.find(p => p.id === selectedPlanId) || null;
 
   const handleResend = async () => {
     setResending(true);
@@ -37,11 +71,12 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
     try {
-      await api.post("/api/auth/register", {
+      await api.post("/api/auth/register-tenant", {
         restaurantName,
         ownerName,
         email,
         password,
+        planId: selectedPlanId || undefined,
       });
       const domain = email.split("@")[1];
       if (domain) setEmailDomain(domain);
@@ -64,7 +99,11 @@ export default function RegisterPage() {
             MRTPV<span style={{ color: "var(--brand-primary)" }}>REST</span>
           </span>
         </div>
-        <p style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.8px" }}>EMPIEZA TU PRUEBA DE 15 DÍAS</p>
+        <p style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.8px" }}>
+          {selectedPlan && selectedPlan.trialDays > 0
+            ? `EMPIEZA TU PRUEBA DE ${selectedPlan.trialDays} DÍAS`
+            : "EMPIEZA A VENDER HOY"}
+        </p>
       </div>
 
       {/* Card */}
@@ -110,10 +149,65 @@ export default function RegisterPage() {
                   style={{ width: "100%", padding: "11px 14px", background: "var(--surf2)", border: "1px solid var(--border2)", borderRadius: 10, color: "var(--text)", fontSize: 13, outline: "none", fontFamily: "'DM Sans',sans-serif" }} />
               </div>
             ))}
-            <div style={{ background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.18)", borderRadius: 12, padding: "12px 16px", marginTop: 16 }}>
-              <p style={{ fontSize: 9, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 4 }}>Plan incluido</p>
-              <p style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}><span style={{ color: "var(--brand-primary)" }}>15 días gratis</span> · Plan Básico</p>
-              <p style={{ fontSize: 11, color: "var(--muted)" }}>Sin tarjeta de crédito requerida</p>
+            {/* Selector de plan */}
+            <div style={{ marginTop: 20 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 8 }}>Elige tu plan</label>
+
+              {plansLoading ? (
+                <div style={{ padding: "14px 16px", background: "var(--surf2)", border: "1px solid var(--border2)", borderRadius: 12, fontSize: 12, color: "var(--muted)" }}>
+                  Cargando planes…
+                </div>
+              ) : plans.length === 0 ? (
+                <div style={{ padding: "14px 16px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 12, fontSize: 12, color: "#ef4444" }}>
+                  No hay planes disponibles. Contacta al administrador.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {plans.map(p => {
+                    const isSelected = p.id === selectedPlanId;
+                    const perks: string[] = [];
+                    if (p.maxLocations > 0) perks.push(`${p.maxLocations === 99 ? "∞" : p.maxLocations} sucursal${p.maxLocations === 1 ? "" : "es"}`);
+                    if (p.maxEmployees > 0) perks.push(`${p.maxEmployees === 99 ? "∞" : p.maxEmployees} empleados`);
+                    if (p.hasKDS)       perks.push("KDS");
+                    if (p.hasInventory) perks.push("Inventario");
+                    if (p.hasReports)   perks.push("Reportes");
+                    if (p.hasLoyalty)   perks.push("Loyalty");
+                    if (p.hasAPIAccess) perks.push("API");
+                    return (
+                      <button key={p.id} type="button" onClick={() => setSelectedPlanId(p.id)}
+                        style={{
+                          textAlign: "left", cursor: "pointer",
+                          padding: "14px 16px", borderRadius: 12,
+                          background: isSelected ? "rgba(124,58,237,0.10)" : "var(--surf2)",
+                          border: `1px solid ${isSelected ? "var(--brand-primary)" : "var(--border2)"}`,
+                          boxShadow: isSelected ? "0 0 0 3px rgba(124,58,237,0.12)" : "none",
+                          transition: "all .15s",
+                        }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>{p.displayName}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--brand-primary)" }}>
+                            ${p.price}<span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 500 }}>/mes</span>
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>
+                          {p.trialDays > 0 ? `${p.trialDays} días gratis` : "Sin trial"} · sin tarjeta
+                        </div>
+                        {perks.length > 0 && (
+                          <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono',monospace" }}>
+                            {perks.join(" · ")}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedPlan && (
+                <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 10 }}>
+                  Puedes cambiar de plan en cualquier momento desde tu panel de administración.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -183,6 +277,12 @@ export default function RegisterPage() {
               style={{ width: "100%", padding: "12px", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer", border: "1px solid var(--border2)", background: "var(--surf2)", color: "var(--muted)", opacity: (resending || resendDone) ? 0.6 : 1 }}>
               {resendDone ? "✓ Correo reenviado" : resending ? "Enviando..." : "No llegó el correo — Reenviar"}
             </button>
+            <p style={{ marginTop: 20, fontSize: 13, color: "var(--muted)" }}>
+              ¿Ya activaste tu cuenta?{" "}
+              <Link href="/login" style={{ color: "var(--brand-primary)", fontWeight: 700, textDecoration: "none" }}>
+                Ir a iniciar sesión →
+              </Link>
+            </p>
           </div>
         )}
 

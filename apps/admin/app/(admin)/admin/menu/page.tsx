@@ -114,18 +114,21 @@ export default function MenuPage() {
     if (!files || files.length === 0) return;
 
     const fileNames = Array.from(files).map(f => f.name);
-    setScanState({ active: true, currentFile: fileNames[0], current: 1, total: files.length, error: null });
+    setScanState({ active: true, currentFile: fileNames[0] ?? '', current: 1, total: files.length, error: null });
 
     // Cicla entre los nombres de archivo mientras espera la respuesta de la IA
     let fileIdx = 0;
     const cycleInterval = setInterval(() => {
       fileIdx = (fileIdx + 1) % fileNames.length;
-      setScanState(p => (!p.error ? { ...p, currentFile: fileNames[fileIdx], current: fileIdx + 1 } : p));
+      setScanState(p => (!p.error ? { ...p, currentFile: fileNames[fileIdx] ?? '', current: fileIdx + 1 } : p));
     }, 1200);
 
     try {
       const fd = new FormData();
-      for (let i = 0; i < files.length; i++) fd.append("images", files[i]);
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (f) fd.append("images", f);
+      }
 
       const { data } = await api.post("/api/ai/scan-menu", fd, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -136,7 +139,7 @@ export default function MenuPage() {
 
       // Fase 2: importar categorías
       setScanState(p => ({ ...p, currentFile: 'Creando categorías...', current: 0, total: aiItems?.length || 0 }));
-      let currentCats = [...cats];
+      const currentCats = [...cats];
       if (aiCats) {
         for (const catName of aiCats) {
           const exists = currentCats.find(c => c.name.toLowerCase() === catName.toLowerCase());
@@ -325,7 +328,7 @@ export default function MenuPage() {
   }
 
   function toggleSelect(id: string) {
-    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelectedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
   function toggleSelectAll() {
     setSelectedIds(selectedIds.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map(i => i.id)));

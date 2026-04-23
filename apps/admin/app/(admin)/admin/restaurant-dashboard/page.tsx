@@ -860,7 +860,7 @@ export default function RestaurantDashboard() {
               <div>
                 <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi }}>Turno actual</div>
                 <div style={{ fontSize: 11, color: V.txMut, marginTop: 2 }}>
-                  {activeStaff.length > 0
+                  {activeStaff[0]
                     ? `${activeStaff.length} ${activeStaff.length === 1 ? "persona" : "personas"} · abierto ${new Date(activeStaff[0].startAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}`
                     : "Sin personal activo"}
                 </div>

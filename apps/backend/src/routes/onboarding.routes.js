@@ -6,13 +6,13 @@
 const router = require('express').Router()
 const axios  = require('axios')
 const prisma = require('@mrtpvrest/database').prisma
-const { authenticate } = require('../middleware/auth.middleware')
+const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware')
 
 // Nota: usamos axios directo a la Anthropic API porque @anthropic-ai/sdk
 // no está instalado. El SDK openai@6 que sí está instalado es para OpenAI,
 // no compatible sin adaptador.
 
-router.use(authenticate)
+router.use(authenticate, requireTenantAccess)
 
 // ── System prompt ────────────────────────────────────────────────────────────
 

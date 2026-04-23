@@ -5,13 +5,13 @@
 
 const router  = require('express').Router()
 const prisma  = require('@mrtpvrest/database').prisma
-const { authenticate } = require('../middleware/auth.middleware')
+const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware')
 const multer  = require('multer')
 const { scanMenuFromImages } = require('../services/ai.service')
 const { uploadImage } = require('../services/cloudinary.service')
 const { extractAccentColor } = require('../services/extractColor.service')
 
-router.use(authenticate)
+router.use(authenticate, requireTenantAccess)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/tenant/me — datos del tenant + subscription + onboardingStep

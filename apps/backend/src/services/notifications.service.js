@@ -156,4 +156,43 @@ async function notifyNewOrder(order) {
   ));
 }
 
-module.exports = { notifyOrderStatus, notifyIngredientShortage, notifyNewOrder, sendWhatsApp, sendPushToOrder };
+// ── Alerta de stock bajo ───────────────────────────────────────────────────
+async function notifyLowStock(ingredient, locationId) {
+  try {
+    // Push a suscripciones registradas en esta sucursal
+    const subs = await prisma.pushSubscription.findMany({ where: { locationId } });
+    const payload = JSON.stringify({
+      title: '⚠️ Stock bajo',
+      body: `${ingredient.name}: ${ingredient.stock} ${ingredient.unit} (mín: ${ingredient.minStock})`,
+      tag: 'low-stock-' + ingredient.id,
+      data: { url: '/admin/inventario' },
+    });
+    await Promise.allSettled(subs.map(sub =>
+      webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        payload
+      ).catch(() => {})
+    ));
+
+    // Email al admin de la sucursal (si RESEND_API_KEY disponible)
+    if (process.env.RESEND_API_KEY) {
+      const { sendEmail } = require('../utils/mailer');
+      const location = await prisma.location.findUnique({
+        where: { id: locationId },
+        select: { name: true, restaurant: { select: { name: true, users: { where: { role: { in: ['ADMIN', 'OWNER'] } }, select: { email: true }, take: 3 } } } },
+      });
+      const emails = location?.restaurant?.users?.map(u => u.email).filter(Boolean) ?? [];
+      if (emails.length > 0) {
+        const loc = location?.name ?? locationId;
+        const rest = location?.restaurant?.name ?? '';
+        await sendEmail(emails, `⚠️ Stock bajo — ${ingredient.name}`,
+          `<p>El ingrediente <strong>${ingredient.name}</strong> en <strong>${rest} / ${loc}</strong> está por debajo del mínimo.<br>
+          Stock actual: <strong>${ingredient.stock} ${ingredient.unit}</strong> · Mínimo: <strong>${ingredient.minStock} ${ingredient.unit}</strong></p>
+          <p><a href="${process.env.NEXT_PUBLIC_ADMIN_URL || 'https://admin.mrtpvrest.com'}/inventario">Ver inventario</a></p>`
+        ).catch(() => {});
+      }
+    }
+  } catch (e) { console.error('notifyLowStock:', e.message); }
+}
+
+module.exports = { notifyOrderStatus, notifyIngredientShortage, notifyNewOrder, notifyLowStock, sendWhatsApp, sendPushToOrder };
