@@ -18,7 +18,11 @@ const authenticate = async (req, res, next) => {
     });
 
     if (!user) {
-      // Intentar buscar como empleado si no es usuario
+      // Intentar buscar como empleado si no es usuario.
+      // Cargamos location → restaurant para resolver tenantId/restaurantId del empleado,
+      // ya que Employee no tiene esos campos en su tabla. Esto garantiza que
+      // requireTenantAccess encuentre `req.user.tenantId` aunque el JWT antiguo
+      // no lo incluyera explícitamente.
       const emp = await prisma.employee.findUnique({
         where: { id },
         select: {
@@ -35,9 +39,20 @@ const authenticate = async (req, res, next) => {
           canTakeDelivery: true,
           canTakeTakeout: true,
           canManageShifts: true,
+          location: {
+            select: {
+              restaurantId: true,
+              restaurant: { select: { tenantId: true } },
+            },
+          },
         },
       });
-      if (emp) user = { ...emp, email: null, isEmployee: true };
+      if (emp) {
+        const restaurantId = emp.location?.restaurantId ?? payload.restaurantId ?? null;
+        const tenantId     = emp.location?.restaurant?.tenantId ?? payload.tenantId ?? null;
+        const { location, ...empBase } = emp;
+        user = { ...empBase, restaurantId, tenantId, email: null, isEmployee: true };
+      }
     }
 
     if (!user || !user.isActive)
