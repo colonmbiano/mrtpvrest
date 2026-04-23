@@ -264,6 +264,14 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
         paidAt: new Date(),
       }
     });
+
+    // Kick del cajón: fire-and-forget. Un cobro nunca debe fallar porque el
+    // cajón esté desconectado o no haya impresora de caja configurada.
+    try {
+      const { kickCashDrawerForLocation } = require('../services/printer.service');
+      kickCashDrawerForLocation(order.locationId).catch(() => {});
+    } catch (err) { console.error('Drawer kick no disponible:', err.message); }
+
     res.json(order);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

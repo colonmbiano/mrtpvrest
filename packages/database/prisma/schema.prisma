@@ -748,9 +748,26 @@ model Printer {
   location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
   name       String
-  ip         String
-  port       Int      @default(9100)
-  type       String   @default("KITCHEN")
+  // type = rol de la impresora (KITCHEN/BAR/FRYER/CASHIER). Lo mantenemos como
+  // String libre por retrocompatibilidad con datos existentes.
+  type       String @default("KITCHEN")
+  // connectionType = transporte físico. NETWORK es el único funcionalmente
+  // operativo hoy; USB/BLUETOOTH se guardan para UI pero requieren un plugin
+  // nativo de Capacitor (próxima iteración).
+  connectionType PrinterConnection @default(NETWORK)
+
+  // Campos específicos por transporte. Todos nullable porque sólo el relevante
+  // al connectionType se llena.
+  ip               String?  // NETWORK: IP del print-server embebido
+  port             Int      @default(9100)
+  usbPort          String?  // USB: device path (p. ej. /dev/usb/lp0)
+  bluetoothAddress String?  // BLUETOOTH: MAC del dispositivo
+
+  // ¿Esta impresora tiene un cajón de dinero conectado al puerto drawer?
+  // Cuando es true + type=CASHIER, el backend le manda ESC/POS kick al
+  // confirmar un cobro en efectivo.
+  supportsCashDrawer Boolean @default(false)
+
   isActive   Boolean  @default(true)
   categories String[]
   createdAt  DateTime @default(now())
@@ -1280,6 +1297,12 @@ enum TableStatus {
   AVAILABLE
   OCCUPIED
   DIRTY
+}
+
+enum PrinterConnection {
+  NETWORK
+  USB
+  BLUETOOTH
 }
 
 model Table {
