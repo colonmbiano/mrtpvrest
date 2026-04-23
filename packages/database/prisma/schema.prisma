@@ -747,10 +747,10 @@ model Printer {
   locationId String?
   location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  name       String
+  name           String
   // type = rol de la impresora (KITCHEN/BAR/FRYER/CASHIER). Lo mantenemos como
   // String libre por retrocompatibilidad con datos existentes.
-  type       String @default("KITCHEN")
+  type           String            @default("KITCHEN")
   // connectionType = transporte físico. NETWORK es el único funcionalmente
   // operativo hoy; USB/BLUETOOTH se guardan para UI pero requieren un plugin
   // nativo de Capacitor (próxima iteración).
@@ -758,10 +758,10 @@ model Printer {
 
   // Campos específicos por transporte. Todos nullable porque sólo el relevante
   // al connectionType se llena.
-  ip               String?  // NETWORK: IP del print-server embebido
-  port             Int      @default(9100)
-  usbPort          String?  // USB: device path (p. ej. /dev/usb/lp0)
-  bluetoothAddress String?  // BLUETOOTH: MAC del dispositivo
+  ip               String? // NETWORK: IP del print-server embebido
+  port             Int     @default(9100)
+  usbPort          String? // USB: device path (p. ej. /dev/usb/lp0)
+  bluetoothAddress String? // BLUETOOTH: MAC del dispositivo
 
   // ¿Esta impresora tiene un cajón de dinero conectado al puerto drawer?
   // Cuando es true + type=CASHIER, el backend le manda ESC/POS kick al
@@ -1306,9 +1306,9 @@ enum PrinterConnection {
 }
 
 model Table {
-  id         String      @id @default(cuid())
+  id         String   @id @default(cuid())
   locationId String
-  location   Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
   name     String // "Mesa 1", "Barra 3", "Terraza A"
   // Coordenadas del mapa editable del TPV. En la misma unidad que la UI del
