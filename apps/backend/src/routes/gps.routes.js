@@ -1,6 +1,6 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // Punto de origen del negocio (actualizable desde admin)
@@ -82,8 +82,11 @@ router.post('/:driverId/location', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── GET ubicación actual de todos los repartidores (admin) ────────────────
-router.get('/live', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+// ── GET ubicación actual de todos los repartidores ────────────────────────
+// Accesible a roles admin-like del TPV (ADMIN/MANAGER/OWNER) y a SUPER_ADMIN.
+// Se relajó respecto al requireAdmin original porque en la operación del TPV
+// un MANAGER necesita ver repartidores activos sin tener el rol ADMIN pleno.
+router.get('/live', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
   try {
     const drivers = await prisma.employee.findMany({
       where: { role: 'DELIVERY', isActive: true }
