@@ -8,7 +8,9 @@
       "build": "prisma generate --schema=../../packages/database/prisma/schema.prisma",
       "db:migrate": "npx prisma migrate dev --schema=../../packages/database/prisma/schema.prisma",
       "db:seed": "node ../../packages/database/prisma/seed.js",
-      "trial:extend": "node ../../scripts/extend-trial.js"
+      "trial:extend": "node ../../scripts/extend-trial.js",
+      "test": "jest",
+      "test:coverage": "jest --coverage"
    },
    "dependencies": {
       "@google/generative-ai": "^0.24.1",
@@ -39,6 +41,8 @@
       "zod": "^3.22.4"
    },
    "devDependencies": {
-      "nodemon": "^3.0.3"
+      "jest": "^30.3.0",
+      "nodemon": "^3.0.3",
+      "supertest": "^7.2.2"
    }
 }

@@ -1,146 +1,28 @@
 const router  = require('express').Router();
 const prisma   = require('@mrtpvrest/database').prisma;
-const bcrypt   = require('bcryptjs');
-const jwt      = require('jsonwebtoken');
 const { authenticate, requireSuperAdmin } = require('../middleware/auth.middleware');
+
+// Tenant de sistema — contenedor del SUPER_ADMIN de plataforma. Se excluye
+// de toda lista / métrica visible a clientes o super-admins del SaaS.
+const PLATFORM_TENANT_SLUG = 'mrtpvrest-platform';
+const excludePlatform = { slug: { not: PLATFORM_TENANT_SLUG } };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS PÚBLICAS (sin auth)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// POST /api/saas/register — Onboarding público
-router.post('/register', async (req, res) => {
-  const {
-    restaurantName, slug, phone, address, logoUrl,
-    planId, adminName, email, password
-  } = req.body;
-
-  if (!restaurantName || !slug || !planId || !adminName || !email || !password) {
-    return res.status(400).json({
-      error: 'Campos requeridos: restaurantName, slug, planId, adminName, email, password'
-    });
-  }
-  if (password.length < 8) {
-    return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
-  }
-
-  try {
-    const existing = await prisma.restaurant.findUnique({ where: { slug: slug.toLowerCase() } });
-    if (existing) {
-      return res.status(409).json({ error: 'El slug ya está en uso. Elige otro nombre.' });
-    }
-
-    const plan = await prisma.plan.findUnique({ where: { id: planId } });
-    if (!plan || !plan.isActive) {
-      return res.status(404).json({ error: 'Plan no encontrado o inactivo' });
-    }
-
-    const emailTaken = await prisma.user.findUnique({ where: { email } });
-    if (emailTaken) {
-      return res.status(409).json({ error: 'Ya existe una cuenta con ese email' });
-    }
-
-    const now         = new Date();
-    const trialEndsAt = new Date(now);
-    trialEndsAt.setDate(trialEndsAt.getDate() + plan.trialDays);
-
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    const [restaurant, user] = await prisma.$transaction(async (tx) => {
-      const rest = await tx.restaurant.create({
-        data: {
-          slug:     slug.toLowerCase(),
-          name:     restaurantName,
-          logoUrl:  logoUrl || null,
-          isActive: true,
-          config: {
-            create: {
-              phone:             phone   || '',
-              address:           address || '',
-              estimatedDelivery: 40,
-              isOpen:            true,
-              pointsPerTen:      1,
-              pointsValuePesos:  0.10,
-            }
-          },
-          subscription: {
-            create: {
-              planId,
-              status:             'TRIAL',
-              trialEndsAt,
-              currentPeriodStart: now,
-              currentPeriodEnd:   trialEndsAt,
-              priceSnapshot:      plan.price,
-              paymentGateway:     'MANUAL',
-            }
-          }
-        }
-      });
-
-      const usr = await tx.user.create({
-        data: {
-          restaurantId: rest.id,
-          name:         adminName,
-          email:        email.toLowerCase(),
-          passwordHash,
-          role:         'ADMIN',
-          isActive:     true,
-        }
-      });
-
-      return [rest, usr];
-    });
-
-    const accessToken  = jwt.sign(
-      { userId: user.id, restaurantId: restaurant.id },
-      process.env.JWT_SECRET,
-      { expiresIn: '365d' }
-    );
-    const refreshToken = jwt.sign(
-      { userId: user.id },
-      process.env.JWT_REFRESH_SECRET,
-      { expiresIn: '365d' }
-    );
-
-    await prisma.refreshToken.create({
-      data: {
-        token:     refreshToken,
-        userId:    user.id,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      }
-    });
-
-    res.status(201).json({
-      user: {
-        id:             user.id,
-        name:           user.name,
-        email:          user.email,
-        role:           user.role,
-        restaurantId:   restaurant.id,
-        restaurantSlug: restaurant.slug,
-      },
-      accessToken,
-      refreshToken,
-      restaurant: {
-        id:   restaurant.id,
-        slug: restaurant.slug,
-        name: restaurant.name,
-        subscription: {
-          status:    'TRIAL',
-          trialEndsAt,
-          plan:      plan.displayName,
-          trialDays: plan.trialDays,
-        }
-      }
-    });
-
-  } catch (e) {
-    if (e.code === 'P2002') {
-      return res.status(409).json({ error: 'El slug o email ya está registrado' });
-    }
-    console.error('Error en /saas/register:', e);
-    res.status(500).json({ error: 'Error al registrar. Intenta de nuevo.' });
-  }
+// POST /api/saas/register — DEPRECATED.
+// Creaba Restaurant huérfano (sin tenantId) y con `subscription` en Restaurant
+// en vez de en Tenant. Tras el NOT NULL en Restaurant.tenantId/User.tenantId
+// (audit C2a) dejó de funcionar. El onboarding canónico vive en
+// POST /api/auth/register-tenant (con alias /api/auth/register).
+router.post('/register', (req, res) => {
+  res.status(410).json({
+    error: 'Endpoint deprecado',
+    code: 'ENDPOINT_DEPRECATED',
+    redirect: '/api/auth/register-tenant',
+    message: 'Use POST /api/auth/register-tenant para el onboarding de tenant.',
+  });
 });
 
 // GET /api/saas/plans — público (usado en onboarding sin token)
@@ -226,6 +108,7 @@ router.patch('/plans/:id', async (req, res) => {
 router.get('/tenants', async (req, res) => {
   try {
     const tenants = await prisma.tenant.findMany({
+      where: excludePlatform,
       include: {
         subscription: { include: { plan: true } },
         restaurants:  { select: { id: true, slug: true, name: true, isActive: true } },
@@ -533,8 +416,8 @@ router.get('/mrr', authenticate, requireSuperAdmin, async (req, res) => {
 router.get('/health', authenticate, requireSuperAdmin, async (req, res) => {
   try {
     const [tenantCount, activeSub, orderCount24h, revenue24hAgg] = await Promise.all([
-      prisma.tenant.count(),
-      prisma.subscription.count({ where: { status: { in: ['ACTIVE', 'TRIAL'] } } }),
+      prisma.tenant.count({ where: excludePlatform }),
+      prisma.subscription.count({ where: { status: { in: ['ACTIVE', 'TRIAL'] }, tenant: excludePlatform } }),
       prisma.order.count({ where: { createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
       prisma.order.aggregate({
         _sum: { total: true },
@@ -561,7 +444,7 @@ router.get('/top-tenants', authenticate, requireSuperAdmin, async (req, res) => 
     const limit = Math.min(parseInt(req.query.limit, 10) || 5, 50);
 
     const subs = await prisma.subscription.findMany({
-      where: { status: { in: ['ACTIVE', 'PAST_DUE'] } },
+      where: { status: { in: ['ACTIVE', 'PAST_DUE'] }, tenant: excludePlatform },
       orderBy: { priceSnapshot: 'desc' },
       take: limit,
       include: {
@@ -602,7 +485,7 @@ router.get('/new-tenants', authenticate, requireSuperAdmin, async (req, res) => 
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     const tenants = await prisma.tenant.findMany({
-      where: { createdAt: { gte: since } },
+      where: { createdAt: { gte: since }, ...excludePlatform },
       orderBy: { createdAt: 'desc' },
       take: limit,
       select: {
@@ -750,6 +633,129 @@ router.delete('/api-keys/:id', authenticate, requireSuperAdmin, async (req, res)
     res.json({ ok: true, id: updated.id });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'API key no encontrada' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TPV REMOTE CONFIG — gestión desde el dashboard SaaS (SUPER_ADMIN)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ALLOWED_ORDER_TYPES = ['DINE_IN', 'TAKEOUT', 'DELIVERY'];
+
+function sanitizeTpvPayload(body) {
+  const data = {};
+  if (body.apiUrl !== undefined) {
+    const v = typeof body.apiUrl === 'string' ? body.apiUrl.trim() : '';
+    data.apiUrl = v ? v : null;
+  }
+  if (body.allowedOrderTypes !== undefined) {
+    const arr = Array.isArray(body.allowedOrderTypes) ? body.allowedOrderTypes : [];
+    const filtered = arr.filter(t => ALLOWED_ORDER_TYPES.includes(t));
+    data.allowedOrderTypes = filtered.length > 0 ? filtered : ALLOWED_ORDER_TYPES;
+  }
+  if (body.lockTimeoutSec !== undefined) {
+    const n = Number(body.lockTimeoutSec);
+    if (!Number.isFinite(n) || n < 0 || n > 86400) {
+      throw new Error('lockTimeoutSec debe ser un entero entre 0 y 86400');
+    }
+    data.lockTimeoutSec = Math.floor(n);
+  }
+  if (body.accentColor !== undefined) {
+    const v = typeof body.accentColor === 'string' ? body.accentColor.trim() : '';
+    if (v && !/^#[0-9a-fA-F]{3,8}$/.test(v)) {
+      throw new Error('accentColor debe ser hex (ej. #F5C842)');
+    }
+    data.accentColor = v || null;
+  }
+  if (body.extra !== undefined) {
+    if (body.extra !== null && typeof body.extra !== 'object') {
+      throw new Error('extra debe ser un objeto JSON');
+    }
+    data.extra = body.extra ?? {};
+  }
+  return data;
+}
+
+// GET /api/saas/tpv-configs — lista todas las sucursales con su config (o defaults)
+router.get('/tpv-configs', async (req, res) => {
+  try {
+    const locations = await prisma.location.findMany({
+      where: { isActive: true },
+      include: {
+        tpvConfig: true,
+        restaurant: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            logoUrl: true,
+            accentColor: true,
+            tenant: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: [{ restaurant: { name: 'asc' } }, { name: 'asc' }],
+    });
+
+    res.json(locations.map(l => ({
+      locationId:   l.id,
+      locationName: l.name,
+      locationSlug: l.slug,
+      businessType: l.businessType,
+      restaurantId:   l.restaurant.id,
+      restaurantName: l.restaurant.name,
+      restaurantSlug: l.restaurant.slug,
+      tenantId:       l.restaurant.tenant?.id || null,
+      tenantName:     l.restaurant.tenant?.name || null,
+      config: l.tpvConfig
+        ? {
+            apiUrl:            l.tpvConfig.apiUrl,
+            allowedOrderTypes: l.tpvConfig.allowedOrderTypes,
+            lockTimeoutSec:    l.tpvConfig.lockTimeoutSec,
+            accentColor:       l.tpvConfig.accentColor,
+            extra:             l.tpvConfig.extra ?? {},
+            updatedAt:         l.tpvConfig.updatedAt,
+          }
+        : null,
+    })));
+  } catch (e) {
+    if (e?.code === 'P2021' || /does not exist/i.test(e?.message || '')) return res.json([]);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/saas/tpv-configs/:locationId — upsert de la config de una sucursal
+router.put('/tpv-configs/:locationId', async (req, res) => {
+  try {
+    const location = await prisma.location.findUnique({
+      where: { id: req.params.locationId },
+      select: { id: true },
+    });
+    if (!location) return res.status(404).json({ error: 'Sucursal no encontrada' });
+
+    let data;
+    try { data = sanitizeTpvPayload(req.body || {}); }
+    catch (err) { return res.status(400).json({ error: err.message }); }
+
+    const saved = await prisma.tpvRemoteConfig.upsert({
+      where:  { locationId: location.id },
+      update: data,
+      create: { locationId: location.id, ...data },
+    });
+    res.json(saved);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/saas/tpv-configs/:locationId — vuelve a defaults
+router.delete('/tpv-configs/:locationId', async (req, res) => {
+  try {
+    await prisma.tpvRemoteConfig.delete({ where: { locationId: req.params.locationId } });
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.code === 'P2025') return res.json({ ok: true }); // ya no existía, idempotente
     res.status(500).json({ error: e.message });
   }
 });

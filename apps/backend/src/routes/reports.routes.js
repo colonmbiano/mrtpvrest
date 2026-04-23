@@ -1,9 +1,9 @@
 ﻿const express = require('express')
 const prisma  = require('@mrtpvrest/database').prisma
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware')
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const router  = express.Router()
 
-router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
+router.get('/dashboard', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { from, to } = req.query;
     const where = { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId, status: { not: 'CANCELLED' } };
@@ -46,7 +46,7 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al generar dashboard' }); }
 });
 
-router.get('/sales', authenticate, requireAdmin, async (req, res) => {
+router.get('/sales', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -62,7 +62,7 @@ router.get('/sales', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al generar reporte' }) }
 })
 
-router.get('/top-items', authenticate, requireAdmin, async (req, res) => {
+router.get('/top-items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -79,7 +79,7 @@ router.get('/top-items', authenticate, requireAdmin, async (req, res) => {
 
 // GET /api/reports/top-products?period=HOY|7D|30D|AÑO&limit=5
 // Usado por el widget "Top del día" del admin dashboard.
-router.get('/top-products', authenticate, requireAdmin, async (req, res) => {
+router.get('/top-products', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -120,7 +120,7 @@ router.get('/top-products', authenticate, requireAdmin, async (req, res) => {
 });
 
 // GET /api/reports/by-day?days=30 — ventas agrupadas por día
-router.get('/by-day', authenticate, requireAdmin, async (req, res) => {
+router.get('/by-day', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const days  = parseInt(req.query.days) || 30
     const from  = new Date(); from.setDate(from.getDate() - days + 1); from.setHours(0,0,0,0)
@@ -148,7 +148,7 @@ router.get('/by-day', authenticate, requireAdmin, async (req, res) => {
 
 // GET /api/reports/saved — reportes guardados por el usuario. Devuelve [] hasta
 // que exista el modelo de persistencia; el frontend renderiza empty-state.
-router.get('/saved', authenticate, requireAdmin, async (req, res) => {
+router.get('/saved', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     res.json([]);
   } catch (e) {

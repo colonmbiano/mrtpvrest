@@ -1,6 +1,6 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // ── LOGIN repartidor (usa Employee con rol DELIVERY) ──────────────────────
@@ -49,7 +49,7 @@ router.get('/:driverId/history', async (req, res) => {
 });
 
 // ── PUT asignar repartidor a pedido (admin) ───────────────────────────────
-router.put('/assign', authenticate, requireAdmin, async (req, res) => {
+router.put('/assign', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { orderId, driverId } = req.body;
     const order = await prisma.order.update({
@@ -99,7 +99,7 @@ router.post('/orders/:orderId/messages', async (req, res) => {
 });
 
 // ── GET todos los repartidores (admin) ────────────────────────────────────
-router.get('/', authenticate, requireAdmin, async (req, res) => {
+router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const drivers = await prisma.employee.findMany({
       where: { role: 'DELIVERY', isActive: true },

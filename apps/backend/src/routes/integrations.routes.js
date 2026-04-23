@@ -1,6 +1,6 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const crypto = require('crypto');
 const router = express.Router();
 
@@ -13,7 +13,7 @@ const INTEGRATION_TYPES = {
 };
 
 // GET integraciones del restaurante actual
-router.get('/', authenticate, requireAdmin, async (req, res) => {
+router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const configs = await prisma.integrationConfig.findMany({
       where: { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId }
@@ -36,7 +36,7 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
 });
 
 // PUT guardar/actualizar integración (Por Restaurante)
-router.put('/:type', authenticate, requireAdmin, async (req, res) => {
+router.put('/:type', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { enabled, mode, config } = req.body;
     const type = req.params.type.toUpperCase();

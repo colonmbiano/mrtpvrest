@@ -3,43 +3,21 @@
 
 const express = require('express')
 const prisma  = require('@mrtpvrest/database').prisma
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware')
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
+const log = require('../lib/logger')('locations')
 
 const router = express.Router()
 
 const VALID_BUSINESS_TYPES = ['RESTAURANT', 'RETAIL', 'BAR', 'CAFE']
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/locations — Listar todas las sucursales del usuario/marca
-// ─────────────────────────────────────────────────────────────────────────────
-router.get('/', authenticate, async (req, res) => {
-  try {
-    const locations = await prisma.location.findMany({
-      where: {
-        restaurantId: req.user.restaurantId,
-      },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        address: true,
-        phone: true,
-        isActive: true,
-        businessType: true,
-      },
-    })
-    res.json(locations)
-  } catch (err) {
-    console.error('GET /locations:', err)
-    res.status(500).json({ error: 'Error al obtener sucursales' })
-  }
-})
+// Listado de sucursales consolidado en GET /api/admin/locations (audit M1).
+// Este router mantiene sólo detalle (:id) y mutaciones específicas de location.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/locations/:id — Detalles de la sucursal (incluye businessType)
 // Requiere autenticación. Sólo la sucursal del restaurante del usuario.
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/:id', authenticate, async (req, res) => {
+router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
   try {
     const { id } = req.params
     const location = await prisma.location.findUnique({
@@ -67,7 +45,7 @@ router.get('/:id', authenticate, async (req, res) => {
 
     res.json(location)
   } catch (err) {
-    console.error('GET /locations/:id:', err)
+    log.error('location.get.failed', { err, id: req.params.id, userId: req.user?.id })
     res.status(500).json({ error: 'Error al obtener la sucursal' })
   }
 })
@@ -76,7 +54,7 @@ router.get('/:id', authenticate, async (req, res) => {
 // PUT /api/locations/:id/business-type — Cambia el modo de la sucursal
 // Sólo ADMIN / SUPER_ADMIN. Acepta: RESTAURANT | RETAIL | BAR | CAFE
 // ─────────────────────────────────────────────────────────────────────────────
-router.put('/:id/business-type', authenticate, requireAdmin, async (req, res) => {
+router.put('/:id/business-type', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params
     const { businessType } = req.body || {}
@@ -112,9 +90,15 @@ router.put('/:id/business-type', authenticate, requireAdmin, async (req, res) =>
       },
     })
 
+    log.info('location.businessType.changed', {
+      id: updated.id,
+      restaurantId: updated.restaurantId,
+      businessType: updated.businessType,
+      actor: req.user?.id,
+    })
     res.json(updated)
   } catch (err) {
-    console.error('PUT /locations/:id/business-type:', err)
+    log.error('location.businessType.failed', { err, id: req.params.id, userId: req.user?.id })
     res.status(500).json({ error: 'Error al actualizar el tipo de negocio' })
   }
 })

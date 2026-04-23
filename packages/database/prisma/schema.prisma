@@ -29,6 +29,15 @@ model Tenant {
   isOnboarded    Boolean @default(false)
   activeModules  Json    @default("[]")
 
+  // SaaS Modules Flags
+  hasInventory Boolean @default(false)
+  hasDelivery  Boolean @default(false)
+  hasWebStore  Boolean @default(false)
+
+  // Storefront & Contact
+  whatsappNumber String?
+  themeConfig    Json? // { theme: "STREET_FOOD", primaryColor: "#000000" }
+
   emailVerifiedAt         DateTime?
   emailVerificationToken  String?   @unique
   emailVerificationExpiry DateTime?
@@ -146,12 +155,12 @@ model Invoice {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model GlobalConfig {
-  id                 String   @id @default("saas-config")
-  basicPlanPrice     Float    @default(29)
-  proPlanPrice       Float    @default(59)
-  unlimitedPlanPrice Float    @default(99)
-  trialDays          Int      @default(15)
-  currency           String   @default("USD")
+  id                 String  @id @default("saas-config")
+  basicPlanPrice     Float   @default(29)
+  proPlanPrice       Float   @default(59)
+  unlimitedPlanPrice Float   @default(99)
+  trialDays          Int     @default(15)
+  currency           String  @default("USD")
   supportEmail       String?
 
   // Feature flags globales (visibles en dashboard SaaS)
@@ -160,7 +169,7 @@ model GlobalConfig {
   maintenanceMode  Boolean @default(false)
   whatsappEnabled  Boolean @default(true)
 
-  updatedAt          DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 
   @@map("global_configs")
 }
@@ -170,16 +179,16 @@ model GlobalConfig {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model SaasApiKey {
-  id        String    @id @default(cuid())
-  tenantId  String?
-  name      String
-  prefix    String    @unique // primeros chars de la key (para mostrar)
-  hash      String    // hash completo de la key (no reversible)
-  scopes    String[]  @default([])
-  active    Boolean   @default(true)
-  lastUsedAt DateTime?
-  revokedAt DateTime?
-  requests24h Int     @default(0)
+  id          String    @id @default(cuid())
+  tenantId    String?
+  name        String
+  prefix      String    @unique // primeros chars de la key (para mostrar)
+  hash        String // hash completo de la key (no reversible)
+  scopes      String[]  @default([])
+  active      Boolean   @default(true)
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  requests24h Int       @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -197,7 +206,7 @@ model SaasLog {
   tenantId  String?
   level     String   @default("INFO") // INFO | WARN | ERROR | OK
   message   String
-  context   String?  // e.g. "billing · stripe"
+  context   String? // e.g. "billing · stripe"
   createdAt DateTime @default(now())
 
   @@index([createdAt])
@@ -211,8 +220,8 @@ model SaasLog {
 
 model Restaurant {
   id           String  @id @default(cuid())
-  tenantId     String?
-  tenant       Tenant? @relation(fields: [tenantId], references: [id])
+  tenantId     String
+  tenant       Tenant  @relation(fields: [tenantId], references: [id])
   slug         String  @unique
   name         String
   domain       String? @unique
@@ -224,7 +233,7 @@ model Restaurant {
   // BYOK — Gemini API key del cliente (cifrada AES-256-GCM).
   // Durante el trial se usa la key de la plataforma como fallback;
   // al expirar el trial esta es obligatoria.
-  aiApiKey         String?   // ciphertext: `<ivHex>:<tagHex>:<dataHex>`
+  aiApiKey         String? // ciphertext: `<ivHex>:<tagHex>:<dataHex>`
   aiKeyValidatedAt DateTime? // última vez que se validó contra Gemini
 
   // Configuración Global
@@ -276,6 +285,10 @@ model Location {
   // Configuración de Ticket por sucursal
   ticketConfig TicketConfig?
 
+  // Configuración remota del TPV (OTA) — override de comportamiento y branding
+  // sin necesidad de reconstruir el APK.
+  tpvConfig TpvRemoteConfig?
+
   // Operación Local
   orders            Order[]
   employees         Employee[]
@@ -306,11 +319,11 @@ enum Role {
 }
 
 model User {
-  id           String      @id @default(cuid())
-  tenantId     String?
-  tenant       Tenant?     @relation(fields: [tenantId], references: [id])
-  restaurantId String?
-  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id])
+  id           String     @id @default(cuid())
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id])
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
 
   name         String
   email        String  @unique
@@ -322,7 +335,7 @@ model User {
 
   addresses     Address[]
   orders        Order[]
-  loyalty       LoyaltyAccount?
+  loyalty       LoyaltyAccount[]
   refreshTokens RefreshToken[]
   landingEdits  LandingContent[] @relation("LandingContentUpdater")
 
@@ -581,7 +594,7 @@ model LoyaltyAccount {
   id           String               @id @default(cuid())
   restaurantId String
   restaurant   Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  userId       String               @unique
+  userId       String
   user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   points       Int                  @default(0)
   totalEarned  Int                  @default(0)
@@ -592,6 +605,7 @@ model LoyaltyAccount {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([userId, restaurantId])
   @@map("loyalty_accounts")
 }
 
@@ -678,9 +692,9 @@ model TicketConfig {
   locationId String?   @unique
   location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  businessName        String  @default("Master Burger's")
-  header              String  @default("Master Burger's")
-  subheader           String  @default("A chuparse los dedos")
+  businessName        String
+  header              String  @default("")
+  subheader           String  @default("")
   footer              String  @default("Gracias por su preferencia")
   showLogo            Boolean @default(true)
   showAddress         Boolean @default(true)
@@ -1108,11 +1122,42 @@ model KdsMessage {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model LandingContent {
-  id        String   @id @default("landing")   // always "landing"
+  id        String   @id @default("landing") // always "landing"
   content   Json
   updatedAt DateTime @updatedAt
   updatedBy String?
   updater   User?    @relation("LandingContentUpdater", fields: [updatedBy], references: [id])
 
   @@map("landing_content")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TPV REMOTE CONFIG — configuración servida al APK TPV en tiempo de ejecución.
+// Permite mover comportamiento y branding por sucursal sin reconstruir el APK.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TpvRemoteConfig {
+  id         String   @id @default(cuid())
+  locationId String   @unique
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  // Nivel 1 — override de la URL del backend (null = usar el default baked del APK)
+  apiUrl String?
+
+  // Tipos de orden que la sucursal acepta (subset de DINE_IN / TAKEOUT / DELIVERY)
+  allowedOrderTypes Json @default("[\"DINE_IN\",\"TAKEOUT\",\"DELIVERY\"]")
+
+  // Segundos de inactividad antes de auto-bloquear la caja (0 = desactivado)
+  lockTimeoutSec Int @default(0)
+
+  // Color de acento del TPV (hex). Si null, usa el accent del Restaurant.
+  accentColor String?
+
+  // Expansión futura sin migrar schema
+  extra Json @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tpv_remote_configs")
 }

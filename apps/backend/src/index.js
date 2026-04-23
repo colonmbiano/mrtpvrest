@@ -8,29 +8,57 @@ const helmet      = require('helmet')
 const compression = require('compression')
 const morgan      = require('morgan')
 const rateLimit   = require('express-rate-limit')
+const sentry      = require('./lib/sentry');
 const shiftsRoutes = require('./routes/shifts.routes');
 const tenantMiddleware = require('./middleware/tenant.middleware');
+
+sentry.init();
 
 const app = express()
 app.set('trust proxy', 1)
 const server = http.createServer(app)
 
-const ALLOWED_ORIGINS = [
+// CORS whitelist — URLs explícitas (audit M6). Se quitaron los patrones
+// wildcard *.vercel.app y *.railway.app que aceptaban cualquier proyecto
+// ajeno en esas plataformas. En dev se aceptan localhost + capacitor;
+// en prod solo dominios oficiales + CORS_ORIGINS (extensión por env,
+// separado por coma).
+const PROD_ORIGINS = [
+  /^https:\/\/([a-z0-9-]+\.)?mrtpvrest\.com$/,
+  'https://mrtpvrest-admin.vercel.app',
+  'https://mrtpvrest-tpv.vercel.app',
+  'https://mrtpvrest-client.vercel.app',
+  'https://mrtpvrest-landing.vercel.app',
+  'https://mrtpvrest-saas.vercel.app',
+  'https://mrtpvrest-kiosk.vercel.app',
   'https://colonmbianos-projects.vercel.app',
+];
+
+const DEV_ORIGINS = [
   'http://localhost',
   'http://localhost:3000',
   'http://localhost:3001',
+  'http://localhost:3002',
+  'http://localhost:3005',
+  'http://localhost:3006',
   'http://localhost:8081',
-  'capacitor://localhost',
   'http://127.0.0.1:3000',
-  /\.vercel\.app$/,
-  /\.railway\.app$/,
-  /^https:\/\/([a-z0-9-]+\.)?mrtpvrest\.com$/,
+  'capacitor://localhost',
+];
+
+const EXTRA_ORIGINS = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+const ALLOWED_ORIGINS = [
+  ...PROD_ORIGINS,
+  ...(process.env.NODE_ENV === 'production' ? [] : DEV_ORIGINS),
+  ...EXTRA_ORIGINS,
 ];
 
 const corsOptions = {
-  // Pasamos el arreglo directo. cors sabe cómo evaluar Strings y Regex.
-  origin: ALLOWED_ORIGINS, 
+  origin: ALLOWED_ORIGINS,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 };
@@ -61,6 +89,8 @@ io.on('connection', (socket) => {
 })
 
 // Middlewares base
+// Sentry requestHandler debe ir ANTES que cualquier otro middleware/router.
+app.use(sentry.requestHandler())
 app.use(helmet())
 app.use(compression())
 // 1. Aplicamos CORS
@@ -116,6 +146,7 @@ app.use('/api/admin',        require('./routes/admin.routes'))
 app.use('/api/saas',         require('./routes/saas.routes'))
 app.use('/api/ai',           require('./routes/ai.routes'));
 app.use('/api/onboarding',   require('./routes/onboarding.routes'));
+app.use('/api/tpv/config',   require('./routes/tpv-config.routes'));
 
 app.get('/health', (req, res) => {
   res.json({
@@ -129,6 +160,9 @@ app.get('/health', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({ error: 'Ruta no encontrada: ' + req.method + ' ' + req.path })
 })
+
+// Sentry errorHandler debe ir ANTES del handler de errores de la app.
+app.use(sentry.errorHandler())
 
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack)

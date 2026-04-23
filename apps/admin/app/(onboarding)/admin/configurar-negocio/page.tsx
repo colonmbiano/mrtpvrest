@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 
@@ -73,19 +73,63 @@ export default function ConfigurarNegocioPage() {
   const [selected, setSelected] = useState<BusinessType | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locationId, setLocationId] = useState<string | null>(null);
+  const [resolvingLocation, setResolvingLocation] = useState(true);
 
-  const locationId = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem("locationId");
+  // Resolvemos la sucursal en este orden:
+  // 1. localStorage.locationId (si el usuario ya la tiene seleccionada).
+  // 2. GET /api/admin/locations — primera sucursal activa del restaurant.
+  // 3. POST /api/admin/locations — crear "Principal" si no hay ninguna
+  //    (defensa en profundidad; el registro ya debería haberla creado, pero
+  //    si alguien llega al onboarding sin sucursal por cuenta legacy, se
+  //    auto-arregla).
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolve() {
+      if (typeof window === "undefined") return;
+
+      const fromLS = localStorage.getItem("locationId");
+      if (fromLS) {
+        if (!cancelled) { setLocationId(fromLS); setResolvingLocation(false); }
+        return;
+      }
+
+      try {
+        const { data } = await api.get<any[]>("/api/admin/locations");
+        const active = (data || []).filter(l => l.isActive !== false);
+        if (active.length > 0) {
+          const first = active[0];
+          localStorage.setItem("locationId", first.id);
+          if (first.name) localStorage.setItem("locationName", first.name);
+          if (!cancelled) { setLocationId(first.id); setResolvingLocation(false); }
+          return;
+        }
+
+        // No hay ninguna — la creamos.
+        const created = await api.post("/api/admin/locations", { name: "Principal", slug: "principal" });
+        localStorage.setItem("locationId", created.data.id);
+        localStorage.setItem("locationName", created.data.name || "Principal");
+        if (!cancelled) { setLocationId(created.data.id); setResolvingLocation(false); }
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err?.response?.data?.error || err?.message || "No se pudo preparar tu sucursal.");
+          setResolvingLocation(false);
+        }
+      }
+    }
+
+    resolve();
+    return () => { cancelled = true; };
   }, []);
 
   const handleSelect = async (key: BusinessType) => {
-    if (saving) return;
+    if (saving || resolvingLocation) return;
     setSelected(key);
     setError(null);
 
     if (!locationId) {
-      setError("No hay una sucursal seleccionada. Inicia sesión de nuevo y vuelve a intentar.");
+      setError("No pudimos preparar tu sucursal. Recarga la página o contacta soporte.");
       return;
     }
 

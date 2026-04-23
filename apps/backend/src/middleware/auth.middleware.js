@@ -18,7 +18,11 @@ const authenticate = async (req, res, next) => {
     });
 
     if (!user) {
-      // Intentar buscar como empleado si no es usuario
+      // Intentar buscar como empleado si no es usuario.
+      // Cargamos location → restaurant para resolver tenantId/restaurantId del empleado,
+      // ya que Employee no tiene esos campos en su tabla. Esto garantiza que
+      // requireTenantAccess encuentre `req.user.tenantId` aunque el JWT antiguo
+      // no lo incluyera explícitamente.
       const emp = await prisma.employee.findUnique({
         where: { id },
         select: {
@@ -35,9 +39,20 @@ const authenticate = async (req, res, next) => {
           canTakeDelivery: true,
           canTakeTakeout: true,
           canManageShifts: true,
+          location: {
+            select: {
+              restaurantId: true,
+              restaurant: { select: { tenantId: true } },
+            },
+          },
         },
       });
-      if (emp) user = { ...emp, email: null, isEmployee: true };
+      if (emp) {
+        const restaurantId = emp.location?.restaurantId ?? payload.restaurantId ?? null;
+        const tenantId     = emp.location?.restaurant?.tenantId ?? payload.tenantId ?? null;
+        const { location, ...empBase } = emp;
+        user = { ...empBase, restaurantId, tenantId, email: null, isEmployee: true };
+      }
     }
 
     if (!user || !user.isActive)
@@ -77,4 +92,35 @@ const requireRole = (...roles) => (req, res, next) => {
   return res.status(403).json({ error: `Acceso restringido. Roles permitidos: ${roles.join(', ')}` });
 };
 
-module.exports = { authenticate, requireAdmin, requireSuperAdmin, requireRole }
+// Aislamiento tenant — garantiza que el JWT del usuario pertenezca al mismo
+// tenant que el recurso que va a tocar. Debe ir después de `authenticate` y
+// de `tenantMiddleware` (que adjunta `req.restaurant`). SUPER_ADMIN puede
+// cruzar tenants explícitamente.
+const requireTenantAccess = (req, res, next) => {
+  if (req.user?.role === 'SUPER_ADMIN') return next();
+
+  const userTenantId = req.user?.tenantId;
+  if (!userTenantId) {
+    return res.status(403).json({ error: 'Usuario sin tenant asignado' });
+  }
+
+  const resourceTenantId =
+    req.restaurant?.tenantId ||
+    req.tenant?.id ||
+    req.tenant?.tenantId ||
+    null;
+
+  if (resourceTenantId && resourceTenantId !== userTenantId) {
+    return res.status(403).json({ error: 'Acceso cruzado entre tenants no permitido' });
+  }
+
+  next();
+};
+
+module.exports = {
+  authenticate,
+  requireAdmin,
+  requireSuperAdmin,
+  requireRole,
+  requireTenantAccess,
+};

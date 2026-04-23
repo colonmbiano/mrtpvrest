@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // GET todos los banners activos (publico — para app cliente)
@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET todos los banners (admin)
-router.get('/all', authenticate, requireAdmin, async (req, res) => {
+router.get('/all', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const banners = await prisma.banner.findMany({ orderBy: { sortOrder: 'asc' } });
     res.json(banners);
@@ -48,7 +48,7 @@ router.get('/all', authenticate, requireAdmin, async (req, res) => {
 });
 
 // POST crear banner
-router.post('/', authenticate, requireAdmin, async (req, res) => {
+router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const count = await prisma.banner.count();
     const banner = await prisma.banner.create({
@@ -59,7 +59,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
 });
 
 // PUT actualizar banner
-router.put('/:id', authenticate, requireAdmin, async (req, res) => {
+router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const banner = await prisma.banner.update({
       where: { id: req.params.id },
@@ -70,7 +70,7 @@ router.put('/:id', authenticate, requireAdmin, async (req, res) => {
 });
 
 // DELETE eliminar banner
-router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
+router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     await prisma.banner.delete({ where: { id: req.params.id } });
     res.json({ ok: true });

@@ -7,6 +7,37 @@ export const metadata: Metadata = {
   description: "Sistema de gestión de pedidos",
 };
 
+// Cleanup inline que corre ANTES de hidratar React. Desregistra cualquier
+// service worker que tenga scope global (/) fuera de /repartidor. Sin esto,
+// un SW viejo (del banner de PWA para delivery, que antes se registraba con
+// scope /) seguía interceptando requests del admin y sirviendo JS cacheado,
+// bloqueando los deploys nuevos.
+const SW_CLEANUP_SCRIPT = `
+(function(){
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    var isDelivery = location.pathname.indexOf('/repartidor') === 0;
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      regs.forEach(function(reg){
+        var scope = reg.scope || '';
+        var inDelivery = scope.indexOf('/repartidor') !== -1;
+        if (isDelivery && inDelivery) return;
+        if (!inDelivery) reg.unregister().catch(function(){});
+      });
+    }).catch(function(){});
+    if (!isDelivery && 'caches' in window) {
+      caches.keys().then(function(keys){
+        keys.forEach(function(k){
+          if (k === 'delivery-v1' || k.indexOf('delivery') !== -1) {
+            caches.delete(k).catch(function(){});
+          }
+        });
+      }).catch(function(){});
+    }
+  } catch(e) {}
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
@@ -14,6 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{__html:
           "(function(){try{var t=localStorage.getItem('mb-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})()"
         }} />
+        <script dangerouslySetInnerHTML={{__html: SW_CLEANUP_SCRIPT}} />
       </head>
       <body>
         <ThemeProvider>

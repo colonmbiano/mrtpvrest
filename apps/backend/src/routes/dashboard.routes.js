@@ -10,7 +10,7 @@
 
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
@@ -71,7 +71,7 @@ function requireRestaurant(req, res) {
 // ── GET /api/dashboard/stats?period=HOY|7D|30D|AÑO ──────────────────────────
 // KPIs principales (ventas, pedidos, ticket promedio, tiempo prep.) con deltas
 // vs el periodo inmediato anterior de la misma longitud.
-router.get('/stats', authenticate, requireAdmin, async (req, res) => {
+router.get('/stats', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = requireRestaurant(req, res);
     if (!restaurantId) return;
@@ -142,7 +142,7 @@ router.get('/stats', authenticate, requireAdmin, async (req, res) => {
 // ── GET /api/dashboard/sales-by-day?days=7 ──────────────────────────────────
 // Devuelve ventas agrupadas por día (ISO yyyy-mm-dd) junto con la misma
 // longitud de ventana previa para comparar semana vs semana pasada.
-router.get('/sales-by-day', authenticate, requireAdmin, async (req, res) => {
+router.get('/sales-by-day', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = requireRestaurant(req, res);
     if (!restaurantId) return;
@@ -210,7 +210,7 @@ router.get('/sales-by-day', authenticate, requireAdmin, async (req, res) => {
 
 // ── GET /api/dashboard/live-orders ──────────────────────────────────────────
 // Pedidos activos en tiempo real: estados NUEVO, PREP, LISTO, RUTA.
-router.get('/live-orders', authenticate, requireAdmin, async (req, res) => {
+router.get('/live-orders', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = requireRestaurant(req, res);
     if (!restaurantId) return;
@@ -255,7 +255,7 @@ router.get('/live-orders', authenticate, requireAdmin, async (req, res) => {
 });
 
 // ── GET /api/dashboard/top-items?period=...&limit=5 ─────────────────────────
-router.get('/top-items', authenticate, requireAdmin, async (req, res) => {
+router.get('/top-items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = requireRestaurant(req, res);
     if (!restaurantId) return;
@@ -291,7 +291,7 @@ router.get('/top-items', authenticate, requireAdmin, async (req, res) => {
 
 // ── GET /api/dashboard/hourly-distribution?period=HOY|7D|30D|AÑO ────────────
 // Devuelve un arreglo de 24 horas con el número de pedidos en cada franja.
-router.get('/hourly-distribution', authenticate, requireAdmin, async (req, res) => {
+router.get('/hourly-distribution', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = requireRestaurant(req, res);
     if (!restaurantId) return;
@@ -327,7 +327,7 @@ router.get('/hourly-distribution', authenticate, requireAdmin, async (req, res) 
 
 // ── GET /api/dashboard/active-shift ────────────────────────────────────────
 // Turno activo + empleados con clock-in abierto.
-router.get('/active-shift', authenticate, requireAdmin, async (req, res) => {
+router.get('/active-shift', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const locationId = getLocationId(req);
     if (!locationId) return res.json({ shift: null, staff: [] });
@@ -363,7 +363,7 @@ router.get('/active-shift', authenticate, requireAdmin, async (req, res) => {
 
 // ── GET /api/dashboard/channels-payments?period=HOY|7D|30D|AÑO ──────────────
 // Distribución de ventas por canal (orderType) y por método de pago.
-router.get('/channels-payments', authenticate, requireAdmin, async (req, res) => {
+router.get('/channels-payments', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = requireRestaurant(req, res);
     if (!restaurantId) return;
@@ -424,7 +424,7 @@ router.get('/channels-payments', authenticate, requireAdmin, async (req, res) =>
 
 // ── GET /api/dashboard/low-inventory ───────────────────────────────────────
 // Ingredientes con stock por debajo de su mínimo, en la sucursal activa.
-router.get('/low-inventory', authenticate, requireAdmin, async (req, res) => {
+router.get('/low-inventory', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const locationId = getLocationId(req);
     if (!locationId) return res.json([]);
@@ -449,7 +449,7 @@ router.get('/low-inventory', authenticate, requireAdmin, async (req, res) => {
 // ── GET /api/dashboard/sales-by-location?period=HOY|7D|30D|AÑO ─────────────
 // Agregado de ventas por sucursal en el período; devuelve `[]` cuando aún no
 // hay pedidos para que el frontend renderice "Sin datos" sin fallbacks falsos.
-router.get('/sales-by-location', authenticate, requireAdmin, async (req, res) => {
+router.get('/sales-by-location', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = requireRestaurant(req, res);
     if (!restaurantId) return;
@@ -508,7 +508,7 @@ router.get('/sales-by-location', authenticate, requireAdmin, async (req, res) =>
 // Devuelve insights detectados automáticamente. Hoy se entrega vacío para que
 // el frontend muestre empty-state; cuando el pipeline de análisis esté activo
 // se poblará desde el mismo endpoint.
-router.get('/insights', authenticate, requireAdmin, async (req, res) => {
+router.get('/insights', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = requireRestaurant(req, res);
     if (!restaurantId) return;

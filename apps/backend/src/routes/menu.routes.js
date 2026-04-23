@@ -1,6 +1,6 @@
 ﻿const express  = require('express')
 const prisma   = require('@mrtpvrest/database').prisma
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware')
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const router   = express.Router()
 
 // ── Categorías ────────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ router.get('/categories', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al obtener categorias' }) }
 })
 
-router.post('/categories', authenticate, requireAdmin, async (req, res) => {
+router.post('/categories', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Nombre requerido' });
@@ -33,7 +33,7 @@ router.post('/categories', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/categories/:id', authenticate, requireAdmin, async (req, res) => {
+router.put('/categories/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     // Verificamos que la categoría pertenezca al restaurante
     const cat = await prisma.category.update({
@@ -47,7 +47,7 @@ router.put('/categories/:id', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/categories/:id', authenticate, requireAdmin, async (req, res) => {
+router.delete('/categories/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     await prisma.category.delete({
       where: {
@@ -111,7 +111,7 @@ router.get('/items/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al obtener platillo' }) }
 })
 
-router.post('/items', authenticate, requireAdmin, async (req, res) => {
+router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { categoryId, name, description, imageUrl, price, preparationTime, isPopular, isPromo, activeDays } = req.body
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
@@ -137,7 +137,7 @@ router.post('/items', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al crear platillo' }) }
 })
 
-router.put('/items/:id', authenticate, requireAdmin, async (req, res) => {
+router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name, description, price, isAvailable, isPopular, imageUrl, categoryId, isPromo, activeDays } = req.body
     const item = await prisma.menuItem.update({
@@ -161,7 +161,7 @@ router.put('/items/:id', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al actualizar platillo' }) }
 })
 
-router.delete('/items/:id', authenticate, requireAdmin, async (req, res) => {
+router.delete('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     await prisma.menuItem.delete({
       where: {
@@ -193,7 +193,7 @@ router.get('/:id/variants', async (req, res) => {
 
 // ── Variant Templates (grupos reutilizables) ──────────────────────────────
 
-router.get('/variant-templates', authenticate, requireAdmin, async (req, res) => {
+router.get('/variant-templates', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const templates = await prisma.variantTemplate.findMany({
       where: { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId }, // Filtrado por Tenant
@@ -204,7 +204,7 @@ router.get('/variant-templates', authenticate, requireAdmin, async (req, res) =>
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/variant-templates', authenticate, requireAdmin, async (req, res) => {
+router.post('/variant-templates', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name, options = [] } = req.body;
     if (!name) return res.status(400).json({ error: 'Nombre requerido' });
@@ -220,7 +220,7 @@ router.post('/variant-templates', authenticate, requireAdmin, async (req, res) =
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/variant-templates/:id/options', authenticate, requireAdmin, async (req, res) => {
+router.post('/variant-templates/:id/options', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, price } = req.body;
@@ -250,7 +250,7 @@ router.post('/variant-templates/:id/options', authenticate, requireAdmin, async 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/variant-templates/:id/options/:optionId', authenticate, requireAdmin, async (req, res) => {
+router.put('/variant-templates/:id/options/:optionId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name, price, sortOrder } = req.body;
     
@@ -267,7 +267,7 @@ router.put('/variant-templates/:id/options/:optionId', authenticate, requireAdmi
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/variant-templates/:id/options/:optionId', authenticate, requireAdmin, async (req, res) => {
+router.delete('/variant-templates/:id/options/:optionId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     await prisma.variantTemplateOption.delete({
       where: { id: req.params.optionId }

@@ -34,13 +34,13 @@ async function discountInventory(prisma, items, orderId, restaurantId, locationI
 
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const router = express.Router();
 
 
 // ── GET /admin — Pedidos filtrados por SUCURSAL ──────────────────────────
-router.get('/admin', authenticate, requireAdmin, async (req, res) => {
+router.get('/admin', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
@@ -87,7 +87,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // ── POST /tpv — Crear pedido ──────────────────────────────────────────
-router.post('/tpv', authenticate, requireAdmin, requireActiveShift, async (req, res) => {
+router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActiveShift, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
@@ -144,7 +144,7 @@ router.post('/tpv', authenticate, requireAdmin, requireActiveShift, async (req, 
 // ── POST /:id/items — Añadir ronda a una orden activa ──────────────────
 // Inserta nuevos OrderItem sobre una orden ya abierta (no pagada ni cerrada),
 // re-calcula subtotal/total y devuelve la orden completa actualizada.
-router.post('/:id/items', authenticate, requireAdmin, async (req, res) => {
+router.post('/:id/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
@@ -224,7 +224,7 @@ router.post('/:id/items', authenticate, requireAdmin, async (req, res) => {
 
 // ── GESTIÓN DE PAGOS Y CUENTAS ──
 
-router.post('/:id/confirm-payment', authenticate, requireAdmin, async (req, res) => {
+router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const order = await prisma.order.update({
       where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
@@ -235,7 +235,7 @@ router.post('/:id/confirm-payment', authenticate, requireAdmin, async (req, res)
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/:id/print-bill', authenticate, requireAdmin, async (req, res) => {
+router.post('/:id/print-bill', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
       where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
@@ -253,7 +253,7 @@ router.post('/:id/print-bill', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/:id/confirm-cash', authenticate, async (req, res) => {
+router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, res) => {
   try {
     const order = await prisma.order.update({
       where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
@@ -271,7 +271,7 @@ router.put('/:id/confirm-cash', authenticate, async (req, res) => {
 // ── PUT /:id/void-payment — Anular un cobro (solo ADMIN) ──────────────
 // Revierte un pago marcado como PAID: deja la orden como pendiente de cobro
 // y conserva una nota de auditoría con el nombre del admin que anuló.
-router.put('/:id/void-payment', authenticate, requireAdmin, async (req, res) => {
+router.put('/:id/void-payment', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.restaurantId;
