@@ -302,6 +302,7 @@ model Location {
   cashShifts        CashShift[]
   externalOrders    ExternalOrder[]
   pushSubscriptions PushSubscription[]
+  tables            Table[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -470,6 +471,12 @@ enum OrderStatus {
   ON_THE_WAY
   DELIVERED
   CANCELLED
+  // OPEN = cuenta abierta (dine-in): la mesa acumula rondas hasta que se cobra.
+  // Se añadió al final del enum a propósito: PostgreSQL ordena los valores de
+  // un enum por declaración, así que cualquier código/SQL existente que
+  // dependiera del orden PENDING < CONFIRMED < ... < CANCELLED se mantiene
+  // intacto.
+  OPEN
 }
 
 enum PaymentMethod {
@@ -522,7 +529,12 @@ model Order {
   notes String?
 
   orderType        String    @default("DELIVERY")
+  // tableNumber es el número plano legado (lo siguen enviando orders antiguos
+  // y el flujo Quick Service). tableId es la nueva FK opcional al modelo Table
+  // para Dine-in con cuentas abiertas. Ambos conviven por compatibilidad.
   tableNumber      Int?
+  tableId          String?
+  table            Table?    @relation(fields: [tableId], references: [id], onDelete: SetNull)
   source           String    @default("ONLINE")
   deliveryDriverId String?
   deliveryAddress  String?
@@ -543,10 +555,12 @@ model Order {
 
   items         OrderItem[]
   statusHistory OrderStatusHistory[]
+  rounds        OrderRound[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([tableId])
   @@map("orders")
 }
 
@@ -563,6 +577,13 @@ model OrderItem {
   notes      String?
   modifiers  OrderItemModifier[]
 
+  // Agrupación por ronda de comanda. Nullable para ítems creados antes de
+  // introducir el concepto (y para el flujo Quick Service que manda todo en
+  // una sola ronda implícita).
+  roundId String?
+  round   OrderRound? @relation(fields: [roundId], references: [id], onDelete: SetNull)
+
+  @@index([roundId])
   @@map("order_items")
 }
 
@@ -1247,4 +1268,58 @@ model Expense {
   @@index([tenantId])
   @@index([rideId])
   @@map("expenses")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DINE-IN — Mesas físicas + rondas de comanda para cuentas abiertas.
+// Las tablas son del local (Location), no del restaurante padre: dos sucursales
+// de la misma marca tienen layouts y números distintos.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  DIRTY
+}
+
+model Table {
+  id         String      @id @default(cuid())
+  locationId String
+  location   Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  name     String // "Mesa 1", "Barra 3", "Terraza A"
+  // Coordenadas del mapa editable del TPV. En la misma unidad que la UI del
+  // planímetro (píxeles o % del canvas, según implemente el front). Default 0
+  // para que mesas creadas por API sin layout no rompan.
+  x        Float       @default(0)
+  y        Float       @default(0)
+  status   TableStatus @default(AVAILABLE)
+  isActive Boolean     @default(true)
+
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Dos mesas dentro del mismo local no pueden llamarse igual.
+  @@unique([locationId, name])
+  @@index([locationId])
+  @@map("tables")
+}
+
+model OrderRound {
+  id              String   @id @default(cuid())
+  orderId         String
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // 1 = primera comanda, 2 = segunda ronda, etc. Único por orden.
+  roundNumber     Int
+  sentToKitchenAt DateTime @default(now())
+
+  items OrderItem[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([orderId, roundNumber])
+  @@index([orderId])
+  @@map("order_rounds")
 }
