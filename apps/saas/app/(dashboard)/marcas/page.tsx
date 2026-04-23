@@ -1,11 +1,14 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import api from "@/lib/api";
+import TenantModulesToggle from "@/components/TenantModulesToggle";
 
 interface Plan { id: string; name: string; displayName: string; price: number }
 interface Tenant {
   id: string; name: string; slug: string; ownerEmail: string;
   logoUrl: string | null; onboardingDone: boolean; createdAt: string;
+  hasInventory: boolean; hasDelivery: boolean; hasWebStore: boolean;
+  whatsappNumber: string | null;
   subscription: { status: string; daysLeft: number | null; trialEndsAt: string; plan: Plan } | null;
   _count: { restaurants: number; users: number };
 }
@@ -156,7 +159,7 @@ export default function MarcasPage() {
             <table className="db-brands-table">
               <thead>
                 <tr>
-                  <th>Marca</th><th>Plan</th><th>Estado</th><th>Trial</th><th>Usuarios</th><th>Acciones</th>
+                  <th>Marca</th><th>Plan</th><th>Estado</th><th>Trial</th><th>Usuarios</th><th>Módulos &amp; Web</th><th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -192,6 +195,21 @@ export default function MarcasPage() {
                           : sub?.trialEndsAt ? timeAgo(sub.trialEndsAt) : "—"}
                       </td>
                       <td style={{ fontSize:12, fontFamily:"DM Mono,monospace" }}>{t._count.users}</td>
+                      <td>
+                        <TenantModulesToggle
+                          tenant={{
+                            id: t.id,
+                            hasInventory:   t.hasInventory,
+                            hasDelivery:    t.hasDelivery,
+                            hasWebStore:    t.hasWebStore,
+                            whatsappNumber: t.whatsappNumber,
+                          }}
+                          onUpdated={(patch) => {
+                            setTenants((prev) => prev.map(x => x.id === t.id ? { ...x, ...patch } : x));
+                          }}
+                          onError={showToast}
+                        />
+                      </td>
                       <td>
                         <div style={{ display:"flex", gap:6 }}>
                           {sub?.status === "TRIAL" && (
