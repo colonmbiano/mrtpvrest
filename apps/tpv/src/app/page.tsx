@@ -5,6 +5,7 @@ import KDSMessages from "@/components/admin/KDSMessages";
 import IngredientShortageModal from "@/components/admin/IngredientShortageModal";
 import DeliveryAssignModal from "@/components/admin/DeliveryAssignModal";
 import ShiftModal from "@/components/admin/ShiftModal";
+import TPVConfigModal from "@/components/admin/TPVConfigModal";
 import RetailLayout from "@/components/layouts/RetailLayout";
 import BarLayout from "@/components/layouts/BarLayout";
 import CafeLayout from "@/components/layouts/CafeLayout";
@@ -1014,6 +1015,14 @@ export default function TPVPage() {
                   </div>
                 </div>
               </button>
+              <button onClick={() => { setShowManagerMenu(false); setShowSettingsModal(true); }}
+                className="w-full flex items-center gap-4 px-6 py-4 hover:bg-[var(--surf2)] transition-colors text-left border-b border-[var(--border)]/50">
+                <span className="text-2xl">🖨️</span>
+                <div>
+                  <div className="font-bold text-sm text-white">Configuración TPV</div>
+                  <div className="text-xs text-[var(--muted)]">Impresoras, ticket, cocina, display</div>
+                </div>
+              </button>
               <button onClick={() => router.push("/setup")}
                 className="w-full flex items-center gap-4 px-6 py-4 hover:bg-[var(--surf2)] transition-colors text-left border-b border-[var(--border)]/50">
                 <span className="text-2xl">🔧</span>
@@ -1031,6 +1040,10 @@ export default function TPVPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showSettingsModal && (
+        <TPVConfigModal onClose={() => setShowSettingsModal(false)} />
       )}
     </div>
   );
