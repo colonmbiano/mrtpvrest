@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import PWAInstallBanner from "@/components/delivery/PWAInstallBanner";
 
 export const metadata: Metadata = {
   title: "Master Burger's - Repartidor",
@@ -27,6 +28,7 @@ export default function RepartidorLayout({ children }: { children: React.ReactNo
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       <meta name="theme-color" content="#f5a623" />
       {children}
+      <PWAInstallBanner />
     </>
   );
 }

@@ -6,6 +6,7 @@ import TrialBanner from "@/components/TrialBanner";
 import { getUser } from "@/lib/auth";
 import { AccentInjector } from "@/components/AccentInjector";
 import FloatingVoiceAgent from "@/components/FloatingVoiceAgent";
+import OnboardingChecklist from "@/components/OnboardingChecklist";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -61,6 +62,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
         <TrialBanner />
         <main className="flex-1 p-4 md:p-8">
+          <OnboardingChecklist />
           {children}
         </main>
       </div>
