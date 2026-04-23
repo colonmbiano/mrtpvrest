@@ -236,6 +236,36 @@ router.patch('/tenants/:id/status', async (req, res) => {
   }
 });
 
+// PATCH /api/saas/tenants/:id/modules  — togglear módulos SaaS y storefront config
+// Body: { hasInventory?, hasDelivery?, hasWebStore?, whatsappNumber?, themeConfig? }
+// Solo se actualizan los campos enviados (merge parcial).
+router.patch('/tenants/:id/modules', async (req, res) => {
+  const { hasInventory, hasDelivery, hasWebStore, whatsappNumber, themeConfig } = req.body || {};
+
+  const data = {};
+  if (typeof hasInventory === 'boolean')  data.hasInventory = hasInventory;
+  if (typeof hasDelivery  === 'boolean')  data.hasDelivery  = hasDelivery;
+  if (typeof hasWebStore  === 'boolean')  data.hasWebStore  = hasWebStore;
+  if (whatsappNumber !== undefined)       data.whatsappNumber = whatsappNumber || null;
+  if (themeConfig    !== undefined)       data.themeConfig    = themeConfig;
+
+  if (Object.keys(data).length === 0) {
+    return res.status(400).json({ error: 'No se enviaron campos para actualizar' });
+  }
+
+  try {
+    const tenant = await prisma.tenant.update({
+      where: { id: req.params.id, ...excludePlatform },
+      data,
+      include: { subscription: { include: { plan: true } } }
+    });
+    res.json(tenant);
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Tenant no encontrado' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // PATCH /api/saas/tenants/:id/plan  — cambiar plan de un tenant
 router.patch('/tenants/:id/plan', async (req, res) => {
   const { planId } = req.body;

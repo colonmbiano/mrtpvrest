@@ -49,15 +49,30 @@ function safe<T>(fn: () => T, fallback: T): T {
  */
 export function getApiUrl(): string {
   const baked = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL;
-  if (typeof window === "undefined") return baked;
+
+  const normalizeUrl = (url: string) => {
+    if (!url) return url;
+    // Si estamos en Android y la URL apunta a localhost, redirigir al host de la máquina (10.0.2.2)
+    if (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform() === 'android') {
+      return url.replace(/localhost|127\.0\.0\.1/g, "10.0.2.2");
+    }
+    return url;
+  };
+
+  if (typeof window === "undefined") return normalizeUrl(baked);
 
   const override = safe(() => localStorage.getItem(LS_API_URL_OVERRIDE), null);
-  if (override && override.trim()) return override.trim();
+
+  if (override && override.trim()) {
+    return normalizeUrl(override.trim());
+  }
 
   const cached = getCachedRemoteConfig();
-  if (cached?.apiUrl && cached.apiUrl.trim()) return cached.apiUrl.trim();
+  if (cached?.apiUrl && cached.apiUrl.trim()) {
+    return normalizeUrl(cached.apiUrl.trim());
+  }
 
-  return baked;
+  return normalizeUrl(baked);
 }
 
 export function setApiUrlOverride(url: string | null): void {
