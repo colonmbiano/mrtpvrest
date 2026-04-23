@@ -3,10 +3,16 @@
 import axios from "axios";
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import {
+  getApiUrl,
+  getApiUrlOverride,
+  setApiUrlOverride,
+  DEFAULT_API_URL,
+  fetchRemoteConfig,
+  clearCachedRemoteConfig,
+} from "@/lib/config";
+import api from "@/lib/api";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "https://master-burguers-production.up.railway.app";
 const ACCENT = "#F5C842";
 
 type Location = {
@@ -37,8 +43,13 @@ export default function SetupPage() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [picked, setPicked] = useState<{ restaurant: Restaurant; location: Location } | null>(null);
   const [terminalId, setTerminalId] = useState("");
+  const [serverUrl, setServerUrl] = useState("");
+  const [showServerEditor, setShowServerEditor] = useState(false);
 
   useEffect(() => {
+    // Pre-llenamos el campo "Servidor" con el override activo o el default baked.
+    setServerUrl(getApiUrlOverride() || getApiUrl());
+
     const restaurantId = localStorage.getItem("restaurantId");
     const locationId = localStorage.getItem("locationId");
     if (!restaurantId || !locationId) return;
@@ -49,39 +60,94 @@ export default function SetupPage() {
     setTerminalId(localStorage.getItem("terminalId") || "");
   }, []);
 
+  function applyServerOverride() {
+    const trimmed = serverUrl.trim();
+    if (!trimmed) {
+      setApiUrlOverride(null);
+      setServerUrl(getApiUrl());
+      return;
+    }
+    if (!/^https?:\/\//i.test(trimmed)) {
+      setError("El servidor debe comenzar con http:// o https://");
+      return;
+    }
+    setApiUrlOverride(trimmed);
+    setError("");
+  }
+
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError("");
 
     try {
-      const { data } = await axios.post(`${API_URL}/api/auth/login`, { email, password });
+      const base = getApiUrl();
+      const { data } = await axios.post(`${base}/api/auth/login`, { email, password });
       const authed = axios.create({
-        baseURL: API_URL,
+        baseURL: base,
         headers: { Authorization: `Bearer ${data.accessToken}` },
       });
 
-      const me = await authed.get("/api/tenant/me");
-      const tenantRestaurants: Restaurant[] = (me.data.restaurants || []).map((r: any) => ({
-        id: r.id,
-        name: r.name,
-        accentColor: r.accentColor || null,
-        locations: Array.isArray(r.locations) ? r.locations : [],
-      }));
+      const role = data?.user?.role;
+      const userRestaurantId = data?.user?.restaurantId;
+      let tenantRestaurants: Restaurant[] = [];
 
-      await Promise.all(
-        tenantRestaurants.map(async (r) => {
-          if (r.locations.length > 0) return;
-          try {
-            const res = await authed.get(`/api/tenant/restaurants/${r.id}/locations`);
-            r.locations = res.data || [];
-          } catch {
-            r.locations = [];
+      if (role === "SUPER_ADMIN") {
+        // El dueño de la plataforma no está ligado a un tenant; listamos todas
+        // las sucursales cross-tenant para que pueda vincular el TPV a
+        // cualquier marca sin pedir credenciales al cliente.
+        const res = await authed.get("/api/saas/tpv-configs");
+        const byRestaurant = new Map<string, Restaurant>();
+        for (const row of res.data || []) {
+          if (!byRestaurant.has(row.restaurantId)) {
+            byRestaurant.set(row.restaurantId, {
+              id:          row.restaurantId,
+              name:        row.tenantName && row.tenantName !== row.restaurantName
+                             ? `${row.restaurantName} · ${row.tenantName}`
+                             : row.restaurantName,
+              accentColor: null,
+              locations:   [],
+            });
           }
-        }),
-      );
+          byRestaurant.get(row.restaurantId)!.locations.push({
+            id:      row.locationId,
+            name:    row.locationName,
+            address: null,
+          });
+        }
+        tenantRestaurants = Array.from(byRestaurant.values())
+          .filter(r => r.locations.length > 0);
+      } else if (userRestaurantId) {
+        // Admin de marca. No dependemos de /api/tenant/me (que requiere
+        // user.tenantId — algunos admins legacy lo tienen NULL). Resolvemos
+        // directo con los endpoints que sólo necesitan user.restaurantId.
+        // No silenciamos los errores: si el server da 4xx/5xx queremos verlo
+        // en pantalla en vez de degradar a "sin sucursales" misterioso.
+        const cfgRes = await authed.get("/api/admin/config")
+          .catch((err: any) => {
+            const status = err?.response?.status;
+            const msg    = err?.response?.data?.error || err?.message || "request failed";
+            throw new Error(`/api/admin/config → ${status || "?"} · ${msg}`);
+          });
+        const locRes = await authed.get("/api/admin/locations")
+          .catch((err: any) => {
+            const status = err?.response?.status;
+            const msg    = err?.response?.data?.error || err?.message || "request failed";
+            throw new Error(`/api/admin/locations → ${status || "?"} · ${msg}`);
+          });
+        tenantRestaurants = [{
+          id:          userRestaurantId,
+          name:        cfgRes.data?.name || "Mi marca",
+          accentColor: cfgRes.data?.accentColor || null,
+          locations:   (locRes.data || [])
+            .filter((l: any) => l.isActive !== false)
+            .map((l: any) => ({ id: l.id, name: l.name, address: l.address || null })),
+        }];
+      } else {
+        throw new Error(`Tu sesión no trae restaurantId. user.role=${role || "?"}, user.id=${data?.user?.id || "?"}. Revisa que tu cuenta tenga un restaurante asignado.`);
+      }
 
-      if (tenantRestaurants.every((r) => r.locations.length === 0)) {
+      if (tenantRestaurants.length === 0 || tenantRestaurants.every((r) => r.locations.length === 0)) {
         throw new Error("No encontramos sucursales activas para esta cuenta.");
       }
 
@@ -103,7 +169,7 @@ export default function SetupPage() {
     setStep("terminal");
   }
 
-  function finishSetup() {
+  async function finishSetup() {
     if (!picked) return;
     setStep("saving");
     const { restaurant, location } = picked;
@@ -122,6 +188,11 @@ export default function SetupPage() {
     if (restaurant.accentColor) {
       localStorage.setItem("mb-accent", restaurant.accentColor);
     }
+
+    // Nueva sucursal → cache previa ya no aplica
+    clearCachedRemoteConfig();
+    // Pre-calentamos la config remota antes de redirigir al TPV.
+    await fetchRemoteConfig(api).catch(() => null);
 
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
@@ -151,6 +222,7 @@ export default function SetupPage() {
       "user",
     ].forEach((k) => localStorage.removeItem(k));
     document.cookie = "mb-role=; path=/; max-age=0; SameSite=Lax";
+    clearCachedRemoteConfig();
     setAlreadyLinked(null);
     setRestaurants([]);
     setEmail("");
@@ -224,6 +296,47 @@ export default function SetupPage() {
             <PrimaryButton disabled={loading} type="submit">
               {loading ? "Entrando…" : "Entrar"}
             </PrimaryButton>
+
+            <div className="mt-6 pt-5 border-t" style={{ borderColor: "var(--border)" }}>
+              <button
+                type="button"
+                onClick={() => setShowServerEditor(s => !s)}
+                className="text-xs"
+                style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer" }}
+              >
+                {showServerEditor ? "▾" : "▸"} Servidor
+              </button>
+              {showServerEditor && (
+                <div className="mt-3">
+                  <p className="text-xs mb-2" style={{ color: "var(--muted)" }}>
+                    Solo cámbialo si tu instalación apunta a un backend distinto. Default: {DEFAULT_API_URL}
+                  </p>
+                  <Input
+                    value={serverUrl}
+                    onChange={(e) => setServerUrl(e.target.value)}
+                    placeholder="https://api.mrtpvrest.com"
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={applyServerOverride}
+                      className="flex-1 text-xs font-bold py-2 rounded-xl"
+                      style={{ background: ACCENT, color: "#000", border: "none", cursor: "pointer" }}
+                    >
+                      Aplicar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setApiUrlOverride(null); setServerUrl(getApiUrl()); }}
+                      className="flex-1 text-xs py-2 rounded-xl"
+                      style={{ background: "transparent", color: "var(--muted)", border: "1px solid var(--border)", cursor: "pointer" }}
+                    >
+                      Usar default
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </form>
         )}
 

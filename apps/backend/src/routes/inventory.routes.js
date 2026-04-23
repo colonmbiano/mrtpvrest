@@ -1,11 +1,12 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { notifyLowStock } = require('../services/notifications.service');
 const router = express.Router();
 
 // ── PROVEEDORES (Nivel Marca) ─────────────────────────────────────────────
 
-router.get('/suppliers', authenticate, requireAdmin, async (req, res) => {
+router.get('/suppliers', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const suppliers = await prisma.supplier.findMany({
       where: { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId }, // Global por Marca
@@ -15,7 +16,7 @@ router.get('/suppliers', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/suppliers', authenticate, requireAdmin, async (req, res) => {
+router.post('/suppliers', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const supplier = await prisma.supplier.create({
       data: { ...req.body, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId }
@@ -24,7 +25,7 @@ router.post('/suppliers', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/suppliers/:id', authenticate, requireAdmin, async (req, res) => {
+router.put('/suppliers/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const supplier = await prisma.supplier.update({
       where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
@@ -37,7 +38,7 @@ router.put('/suppliers/:id', authenticate, requireAdmin, async (req, res) => {
 // ── INGREDIENTES (Nivel Sucursal) ─────────────────────────────────────────
 
 // GET /api/inventory/alerts — ingredientes con stock <= minStock (widget dashboard)
-router.get('/alerts', authenticate, requireAdmin, async (req, res) => {
+router.get('/alerts', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const locationId = req.headers['x-location-id'] || req.query.locationId;
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
@@ -53,7 +54,7 @@ router.get('/alerts', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/ingredients', authenticate, requireAdmin, async (req, res) => {
+router.get('/ingredients', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const locationId = req.headers['x-location-id'] || req.query.locationId;
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
@@ -66,7 +67,7 @@ router.get('/ingredients', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/ingredients', authenticate, requireAdmin, async (req, res) => {
+router.post('/ingredients', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const locationId = req.headers['x-location-id'] || req.query.locationId;
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
@@ -82,7 +83,7 @@ router.post('/ingredients', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/ingredients/:id', authenticate, requireAdmin, async (req, res) => {
+router.put('/ingredients/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const locationId = req.headers['x-location-id'] || req.query.locationId;
     const { name, unit, stock, minStock, supplierId, purchaseUnit, purchaseCost, conversionFactor } = req.body;
@@ -109,7 +110,7 @@ router.put('/ingredients/:id', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-router.delete('/ingredients/:id', authenticate, requireAdmin, async (req, res) => {
+router.delete('/ingredients/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const locationId = req.headers['x-location-id'] || req.query.locationId;
     await prisma.ingredient.delete({ where: { id: req.params.id, locationId } });
@@ -120,7 +121,7 @@ router.delete('/ingredients/:id', authenticate, requireAdmin, async (req, res) =
   }
 });
 
-router.post('/bulk-confirm', authenticate, requireAdmin, async (req, res) => {
+router.post('/bulk-confirm', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const locationId = req.headers['x-location-id'] || req.query.locationId;
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
@@ -172,17 +173,113 @@ router.post('/bulk-confirm', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-router.get('/movements', authenticate, requireAdmin, async (req, res) => {
-  res.json([]); // TODO: Implementar lógica de movimientos
+// ── MOVIMIENTOS DE INVENTARIO (IN / OUT / ADJUST) ─────────────────────────
+//
+// Movimientos quedan asociados al ingrediente; el scope por sucursal se
+// resuelve via ingredient.locationId. Actualizamos el stock del ingrediente
+// atómicamente en la misma transacción.
+
+const MOVEMENT_TYPES = new Set(['IN', 'OUT', 'ADJUST']);
+
+router.get('/movements', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const take = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    const where = { ingredient: { locationId } };
+    if (req.query.ingredientId) where.ingredientId = String(req.query.ingredientId);
+    if (req.query.type && MOVEMENT_TYPES.has(String(req.query.type).toUpperCase())) {
+      where.type = String(req.query.type).toUpperCase();
+    }
+
+    const movements = await prisma.inventoryMovement.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take,
+      include: {
+        ingredient: { select: { id: true, name: true, unit: true, stock: true, minStock: true } },
+      },
+    });
+    res.json(movements);
+  } catch (e) {
+    console.error('GET /inventory/movements:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
-router.get('/alerts', authenticate, requireAdmin, async (req, res) => {
-  res.json([]); // TODO: Implementar lógica de alertas
+router.post('/movements', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const { ingredientId, type, quantity, reason, orderId } = req.body || {};
+    const typeU = String(type || '').toUpperCase();
+    const qty = Number(quantity);
+
+    if (!ingredientId) return res.status(400).json({ error: 'ingredientId requerido' });
+    if (!MOVEMENT_TYPES.has(typeU)) {
+      return res.status(400).json({ error: `type inválido. Valores: ${[...MOVEMENT_TYPES].join(', ')}` });
+    }
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return res.status(400).json({ error: 'quantity debe ser un número positivo' });
+    }
+
+    const ingredient = await prisma.ingredient.findUnique({
+      where: { id: ingredientId },
+      select: { id: true, locationId: true, stock: true, minStock: true, name: true, unit: true },
+    });
+    if (!ingredient || ingredient.locationId !== locationId) {
+      return res.status(404).json({ error: 'Ingrediente no encontrado en esta sucursal' });
+    }
+
+    // Delta final aplicado al stock según el tipo.
+    // ADJUST interpreta quantity como stock absoluto nuevo; IN suma; OUT resta.
+    let stockUpdate;
+    let movementQty = qty;
+    if (typeU === 'IN') {
+      stockUpdate = { stock: { increment: qty } };
+    } else if (typeU === 'OUT') {
+      if (ingredient.stock - qty < 0) {
+        return res.status(409).json({ error: 'Stock insuficiente', current: ingredient.stock });
+      }
+      stockUpdate = { stock: { decrement: qty } };
+    } else { // ADJUST
+      stockUpdate = { stock: qty };
+      movementQty = qty - ingredient.stock; // delta registrado
+    }
+
+    const [movement, updated] = await prisma.$transaction([
+      prisma.inventoryMovement.create({
+        data: {
+          ingredientId,
+          type: typeU,
+          quantity: movementQty,
+          reason: reason || '',
+          orderId: orderId || null,
+        },
+      }),
+      prisma.ingredient.update({
+        where: { id: ingredientId },
+        data: stockUpdate,
+        select: { id: true, name: true, unit: true, stock: true, minStock: true },
+      }),
+    ]);
+
+    const lowStock = updated.minStock > 0 && updated.stock <= updated.minStock;
+
+    if (lowStock) notifyLowStock(updated, locationId).catch(() => {});
+
+    res.status(201).json({ movement, ingredient: updated, lowStock });
+  } catch (e) {
+    console.error('POST /inventory/movements:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── RECETAS (Nivel Marca) ──────────────────────────────────────────────────
 
-router.get('/recipes/:menuItemId', authenticate, requireAdmin, async (req, res) => {
+router.get('/recipes/:menuItemId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const recipes = await prisma.recipeItem.findMany({
       where: {

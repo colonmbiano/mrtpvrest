@@ -7,6 +7,7 @@ const prisma     = require('@mrtpvrest/database').prisma
 const { authenticate } = require('../middleware/auth.middleware')
 const rateLimit  = require('express-rate-limit')
 const { sendEmail, verificationEmailHtml } = require('../utils/mailer')
+const log = require('../lib/logger')('auth')
 
 const router = express.Router()
 
@@ -58,12 +59,14 @@ router.post('/login', loginLimiter, async (req, res) => {
       refreshToken
     })
   } catch (error) {
-    console.error('Error Login:', error);
+    log.error('login.failed', { err: error, email: req.body?.email })
     res.status(500).json({ error: 'Error al iniciar sesion' })
   }
 })
 
-// NUEVA RUTA: Obtener sucursales para el "Registro de App" (Usado por TPV y Delivery)
+// DEPRECATED alias (audit M1). Canónico: GET /api/admin/locations.
+// Mantenido para compatibilidad con APK mobile-tpv ya distribuida.
+// Responde el mismo payload reducido (id/name/slug) que el mobile consume.
 router.get('/my-locations', authenticate, async (req, res) => {
   try {
     if (!req.user.restaurantId) {
@@ -73,6 +76,8 @@ router.get('/my-locations', authenticate, async (req, res) => {
       where: { restaurantId: req.user.restaurantId },
       select: { id: true, name: true, slug: true }
     });
+    res.set('Deprecation', 'true');
+    res.set('Link', '</api/admin/locations>; rel="successor-version"');
     res.json(locations);
   } catch (error) {
     res.status(500).json({ error: 'Error al listar sucursales' });
@@ -84,10 +89,17 @@ router.get('/me', authenticate, async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: { id: true, name: true, email: true, phone: true, role: true, restaurantId: true,
-        loyalty: { select: { points: true, tier: true, qrCode: true, totalEarned: true } },
+        // Loyalty es ahora array (una cuenta por restaurant). Devolvemos
+        // la del restaurant del usuario si existe.
+        loyalty: {
+          where: req.user.restaurantId ? { restaurantId: req.user.restaurantId } : undefined,
+          select: { points: true, tier: true, qrCode: true, totalEarned: true, restaurantId: true },
+          take: 1,
+        },
       },
     })
-    res.json(user)
+    const payload = user ? { ...user, loyalty: user.loyalty?.[0] || null } : null
+    res.json(payload)
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener perfil' })
   }
@@ -104,8 +116,10 @@ const registerLimiter = rateLimit({
   message: { error: 'Demasiados registros desde esta IP. Intenta en 1 hora.' },
 })
 
-router.post('/register-tenant', registerLimiter, async (req, res) => {
-  const { restaurantName, ownerName, email, password } = req.body
+// POST /api/auth/register-tenant (canónico)
+// POST /api/auth/register (alias retrocompatible — clientes antiguos)
+router.post(['/register-tenant', '/register'], registerLimiter, async (req, res) => {
+  const { restaurantName, ownerName, email, password, planId: requestedPlanId } = req.body
 
   if (!restaurantName || !ownerName || !email || !password) {
     return res.status(400).json({ error: 'restaurantName, ownerName, email y password son requeridos' })
@@ -131,8 +145,13 @@ router.post('/register-tenant', registerLimiter, async (req, res) => {
     if (emailTaken) return res.status(409).json({ error: 'Ya existe una cuenta con ese email' })
     if (slugTaken)  return res.status(409).json({ error: 'Ese nombre de restaurante ya está registrado' })
 
-    // Buscamos el plan BASIC (o el primero activo si no existe)
-    let plan = await prisma.plan.findFirst({ where: { name: 'BASIC', isActive: true } })
+    // Resolución de plan: el solicitado por el cliente si es válido; si no,
+    // BASIC; si tampoco, el primer activo más barato. Si no hay ninguno, 500.
+    let plan = null
+    if (requestedPlanId) {
+      plan = await prisma.plan.findFirst({ where: { id: requestedPlanId, isActive: true } })
+    }
+    if (!plan) plan = await prisma.plan.findFirst({ where: { name: 'BASIC', isActive: true } })
     if (!plan) plan = await prisma.plan.findFirst({ where: { isActive: true }, orderBy: { price: 'asc' } })
     if (!plan) return res.status(500).json({ error: 'No hay planes activos configurados' })
 
@@ -141,7 +160,7 @@ router.post('/register-tenant', registerLimiter, async (req, res) => {
     trialEndsAt.setDate(trialEndsAt.getDate() + plan.trialDays)
     const passwordHash = await bcrypt.hash(password, 12)
 
-    const { tenant, restaurant, user } = await prisma.$transaction(async (tx) => {
+    const { tenant, restaurant, user, location } = await prisma.$transaction(async (tx) => {
       // 1. Tenant
       const t = await tx.tenant.create({
         data: {
@@ -185,6 +204,19 @@ router.post('/register-tenant', registerLimiter, async (req, res) => {
         }
       })
 
+      // 3.5. Location default "Principal" — sin esto, el onboarding y el TPV
+      // no tienen sucursal que seleccionar y quedan bloqueados pidiendo al
+      // usuario que "inicie sesión de nuevo".
+      const loc = await tx.location.create({
+        data: {
+          restaurantId: r.id,
+          name:         'Principal',
+          slug:         'principal',
+          isActive:     true,
+          ticketConfig: { create: { businessName: restaurantName, header: restaurantName } },
+        }
+      })
+
       // 4. User ADMIN ligado a Tenant + Restaurant
       const u = await tx.user.create({
         data: {
@@ -198,7 +230,7 @@ router.post('/register-tenant', registerLimiter, async (req, res) => {
         }
       })
 
-      return { tenant: t, restaurant: r, user: u }
+      return { tenant: t, restaurant: r, user: u, location: loc }
     })
 
     const { accessToken, refreshToken } = generateTokens(user.id, restaurant.id, user.role, tenant.id)
@@ -217,13 +249,23 @@ router.post('/register-tenant', registerLimiter, async (req, res) => {
       }
     })
 
+    log.info('register.tenant.ok', {
+      tenantId: tenant.id,
+      restaurantId: restaurant.id,
+      userId: user.id,
+      locationId: location?.id || null,
+      planId: plan.id,
+      planName: plan.name,
+      email: email.toLowerCase(),
+    })
+
     // Enviar email (sin bloquear la respuesta)
     const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/verify-email?token=${verificationToken}`
     sendEmail(
       email.toLowerCase(),
       `Verifica tu cuenta de ${restaurantName} — MRTPVREST`,
       verificationEmailHtml(ownerName, restaurantName, verifyUrl)
-    ).catch(err => console.error('[register-tenant] Error enviando email:', err.message))
+    ).catch(err => log.error('register.email.failed', { tenantId: tenant.id, err }))
 
     res.status(201).json({
       user: {
@@ -242,6 +284,11 @@ router.post('/register-tenant', registerLimiter, async (req, res) => {
         id:   restaurant.id,
         slug: restaurant.slug,
       },
+      location: location ? {
+        id:   location.id,
+        name: location.name,
+        slug: location.slug,
+      } : null,
       subscription: {
         status:     'TRIAL',
         trialEndsAt,
@@ -253,7 +300,7 @@ router.post('/register-tenant', registerLimiter, async (req, res) => {
     })
   } catch (e) {
     if (e.code === 'P2002') return res.status(409).json({ error: 'El email o nombre ya está registrado' })
-    console.error('Error en /auth/register-tenant:', e)
+    log.error('register.tenant.failed', { err: e, email: req.body?.email })
     res.status(500).json({ error: 'Error al registrar. Intenta de nuevo.' })
   }
 })

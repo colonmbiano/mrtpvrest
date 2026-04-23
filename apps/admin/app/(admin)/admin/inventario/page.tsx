@@ -94,7 +94,10 @@ export default function InventarioPage() {
     setIsScanning(true);
     try {
       const fd = new FormData();
-      for (let i = 0; i < files.length; i++) fd.append("images", files[i]);
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (f) fd.append("images", f);
+      }
       const { data } = await api.post("/api/ai/scan-inventory", fd, {
         headers: { "Content-Type": "multipart/form-data" }
       });
@@ -169,7 +172,7 @@ export default function InventarioPage() {
   }
 
   function toggleSelect(id: string) {
-    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelectedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
   function toggleSelectAll() {
     setSelectedIds(selectedIds.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map(i => i.id)));

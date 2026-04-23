@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 const ROLE_DEFAULTS = {
@@ -13,7 +13,7 @@ const ROLE_DEFAULTS = {
 };
 
 // GET todos los empleados (Filtrado por Sucursal)
-router.get('/', authenticate, requireAdmin, async (req, res) => {
+router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const employees = await prisma.employee.findMany({
       where: { locationId: req.locationId }, // Cambio: locationId
@@ -27,7 +27,7 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
 });
 
 // GET un empleado
-router.get('/:id', authenticate, requireAdmin, async (req, res) => {
+router.get('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const emp = await prisma.employee.findUnique({
       where: { id: req.params.id, locationId: req.locationId },
@@ -39,7 +39,7 @@ router.get('/:id', authenticate, requireAdmin, async (req, res) => {
 });
 
 // POST crear empleado
-router.post('/', authenticate, requireAdmin, async (req, res) => {
+router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
@@ -81,7 +81,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // PUT actualizar empleado
-router.put('/:id', authenticate, requireAdmin, async (req, res) => {
+router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name, phone, pin, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays, isActive,
       canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout } = req.body;
@@ -138,9 +138,19 @@ router.post('/login', async (req, res) => {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
     if (!pin) return res.status(400).json({ error: 'PIN requerido' });
 
-    // Buscar todos los empleados activos de la sucursal y comparar PIN
+    // Buscar todos los empleados activos de la sucursal y comparar PIN.
+    // Incluimos location → restaurant para resolver tenantId/restaurantId del empleado
+    // (Employee no tiene esos campos directos; viven en la cadena de relaciones).
     const candidates = await prisma.employee.findMany({
-      where: { locationId: req.locationId, isActive: true }
+      where: { locationId: req.locationId, isActive: true },
+      include: {
+        location: {
+          select: {
+            restaurantId: true,
+            restaurant: { select: { tenantId: true } },
+          },
+        },
+      },
     });
 
     let emp = null;
@@ -163,14 +173,23 @@ router.post('/login', async (req, res) => {
       await prisma.employee.update({ where: { id: emp.id }, data: { pin: pinHash } }).catch(() => {});
     }
 
+    const restaurantId = emp.location?.restaurantId ?? req.user?.restaurantId ?? req.restaurantId ?? null;
+    const tenantId     = emp.location?.restaurant?.tenantId ?? req.tenant?.id ?? null;
+
+    if (!tenantId) {
+      return res.status(500).json({ error: 'Empleado sin tenant resoluble (location/restaurant huérfanos)' });
+    }
+
     const jwt = require('jsonwebtoken');
     const token = jwt.sign(
-      { id: emp.id, role: emp.role, restaurantId: req.user?.restaurantId || req.restaurantId, locationId: req.locationId },
+      { id: emp.id, role: emp.role, tenantId, restaurantId, locationId: req.locationId },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     );
 
-    res.json({ employee: emp, token });
+    // No devolvemos la relación anidada al cliente, solo el empleado plano.
+    const { location, ...employeePublic } = emp;
+    res.json({ employee: employeePublic, token });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

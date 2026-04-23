@@ -1,6 +1,6 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const { notifyOrderStatus, notifyIngredientShortage, sendWhatsApp } = require('../services/notifications.service');
 const router = express.Router();
 
@@ -23,7 +23,7 @@ router.post('/subscribe', async (req, res) => {
 });
 
 // POST notificar cambio de estado (se llama automáticamente desde orders)
-router.post('/order-status', authenticate, requireAdmin, async (req, res) => {
+router.post('/order-status', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { orderId, status } = req.body;
     const order = await prisma.order.findUnique({
@@ -37,7 +37,7 @@ router.post('/order-status', authenticate, requireAdmin, async (req, res) => {
 });
 
 // POST notificar falta de ingrediente (desde TPV)
-router.post('/ingredient-shortage', authenticate, requireAdmin, async (req, res) => {
+router.post('/ingredient-shortage', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { orderId, missingItem, options } = req.body;
     const order = await prisma.order.findUnique({
@@ -51,7 +51,7 @@ router.post('/ingredient-shortage', authenticate, requireAdmin, async (req, res)
 });
 
 // POST enviar mensaje personalizado a cliente
-router.post('/custom', authenticate, requireAdmin, async (req, res) => {
+router.post('/custom', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { orderId, message } = req.body;
     const order = await prisma.order.findUnique({

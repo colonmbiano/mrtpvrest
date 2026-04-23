@@ -1,7 +1,10 @@
 ﻿const express = require('express')
 const prisma  = require('@mrtpvrest/database').prisma
-const { authenticate, requireAdmin } = require('../middleware/auth.middleware')
+const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const router  = express.Router()
+
+// Tenant de sistema — se excluye del listado visible de marcas.
+const PLATFORM_TENANT_SLUG = 'mrtpvrest-platform'
 
 // Middleware para verificar si es SUPER_ADMIN (Tú)
 const requireSuperAdmin = (req, res, next) => {
@@ -49,7 +52,7 @@ router.put('/global-config', authenticate, requireSuperAdmin, async (req, res) =
 
 // ── CONFIGURACIÓN DEL RESTAURANTE (PARA EL DUEÑO Y LA APP) ────────────────
 
-router.get('/config', authenticate, requireAdmin, async (req, res) => {
+router.get('/config', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -69,7 +72,7 @@ router.get('/config', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al obtener configuracion' }) }
 })
 
-router.put('/brand', authenticate, requireAdmin, async (req, res) => {
+router.put('/brand', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -86,7 +89,7 @@ router.put('/brand', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al actualizar marca: ' + e.message }) }
 })
 
-router.put('/config', authenticate, requireAdmin, async (req, res) => {
+router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user.restaurantId;
     const VALID_FIELDS = [
@@ -108,14 +111,14 @@ router.put('/config', authenticate, requireAdmin, async (req, res) => {
 
 // ── GESTIÓN DE SUCURSALES ───────────────────────────────────────────────
 
-router.get('/locations', authenticate, requireAdmin, async (req, res) => {
+router.get('/locations', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const locations = await prisma.location.findMany({ where: { restaurantId: req.user.restaurantId } });
     res.json(locations);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/locations', authenticate, requireAdmin, async (req, res) => {
+router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name, slug, address, phone } = req.body;
     const restaurant = await prisma.restaurant.findUnique({
@@ -125,14 +128,22 @@ router.post('/locations', authenticate, requireAdmin, async (req, res) => {
     if (restaurant._count.locations >= restaurant.maxLocations) {
       return res.status(403).json({ error: `Límite de sucursales alcanzado (${restaurant.maxLocations}).` });
     }
+    // Tomamos businessName del restaurant padre — nunca usar mocks.
     const location = await prisma.location.create({
-      data: { restaurantId: req.user.restaurantId, name, slug: slug.toLowerCase(), address, phone, ticketConfig: { create: { businessName: name } } }
+      data: {
+        restaurantId: req.user.restaurantId,
+        name,
+        slug: slug.toLowerCase(),
+        address,
+        phone,
+        ticketConfig: { create: { businessName: restaurant.name, header: restaurant.name } },
+      },
     });
     res.json(location);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/locations/:id', authenticate, requireAdmin, async (req, res) => {
+router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name, address, phone } = req.body;
     const location = await prisma.location.findUnique({ where: { id: req.params.id } });
@@ -146,7 +157,7 @@ router.put('/locations/:id', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/locations/:id', authenticate, requireAdmin, async (req, res) => {
+router.delete('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const location = await prisma.location.findUnique({ where: { id: req.params.id } });
     if (!location || location.restaurantId !== req.user.restaurantId)
@@ -161,6 +172,7 @@ router.delete('/locations/:id', authenticate, requireAdmin, async (req, res) => 
 router.get('/tenants', authenticate, requireSuperAdmin, async (req, res) => {
   try {
     const tenants = await prisma.tenant.findMany({
+      where: { slug: { not: PLATFORM_TENANT_SLUG } },
       include: {
         subscription: { include: { plan: true } },
         restaurants: {
@@ -324,7 +336,7 @@ const { encryptSecret, decryptSecret, maskSecret } = require('../lib/secret-cryp
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // GET /api/admin/ai-key — estado: si hay key, muestra máscara + validación
-router.get('/ai-key', authenticate, requireAdmin, async (req, res) => {
+router.get('/ai-key', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -366,7 +378,7 @@ router.get('/ai-key', authenticate, requireAdmin, async (req, res) => {
 });
 
 // POST /api/admin/ai-key — guarda nueva key (previa validación contra Gemini)
-router.post('/ai-key', authenticate, requireAdmin, async (req, res) => {
+router.post('/ai-key', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -408,7 +420,7 @@ router.post('/ai-key', authenticate, requireAdmin, async (req, res) => {
 });
 
 // DELETE /api/admin/ai-key — remueve la key del restaurante
-router.delete('/ai-key', authenticate, requireAdmin, async (req, res) => {
+router.delete('/ai-key', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
