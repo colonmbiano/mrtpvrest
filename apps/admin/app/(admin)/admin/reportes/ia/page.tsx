@@ -263,9 +263,11 @@ export default function ReportesIAPage() {
                 ))}
               </div>
               <button style={btn(false, true)}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ verticalAlign: -2, marginRight: 4 }}>
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
+                <span className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95" style={{ verticalAlign: -2, marginRight: 4 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                </span>
                 Exportar PDF
               </button>
             </div>
@@ -314,9 +316,11 @@ export default function ReportesIAPage() {
                 border: "none", color: "#fff", display: "grid", placeItems: "center",
                 cursor: "pointer", boxShadow: `0 4px 14px ${V.irisG}`,
               }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
+                <div className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                  </svg>
+                </div>
               </button>
             </div>
             {/* Chips */}
@@ -359,7 +363,7 @@ export default function ReportesIAPage() {
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <div style={{ width: 28, height: 28, borderRadius: 8, background: col.iconBg, color: col.icon, display: "grid", placeItems: "center", flexShrink: 0 }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/></svg>
                     </div>
                     <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".14em", textTransform: "uppercase" as const, fontWeight: 700, color: col.kind }}>{ins.kind}</span>
                   </div>
@@ -683,7 +687,9 @@ export default function ReportesIAPage() {
             </div>
             <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
               <button onClick={() => setMsgs(INIT_MSGS)} style={{ width: 30, height: 30, borderRadius: 8, background: "transparent", border: "none", color: V.txMut, cursor: "pointer", display: "grid", placeItems: "center" }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <div className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </div>
               </button>
             </div>
           </div>
@@ -781,9 +787,11 @@ export default function ReportesIAPage() {
                 style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: V.tx, fontSize: 13, fontFamily: "inherit" }}
               />
               <button onClick={() => sendChat(chatMsg)} style={{ width: 32, height: 32, borderRadius: 8, background: V.iris5, border: "none", color: "#fff", cursor: "pointer", display: "grid", placeItems: "center" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
+                <div className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                  </svg>
+                </div>
               </button>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, fontSize: 10, color: V.txDim, fontFamily: "'DM Mono',monospace", letterSpacing: ".04em" }}>
