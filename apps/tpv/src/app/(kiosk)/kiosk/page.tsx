@@ -33,7 +33,7 @@ type CartItem = {
   modifiers: { modifierId: string; name: string; price: number }[];
 };
 
-type Screen = "menu" | "cart" | "payment" | "success" | "error" | "forbidden";
+type Screen = "menu" | "cart" | "payment" | "success" | "error" | "forbidden" | "no-provider";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -59,7 +59,8 @@ export default function KioskPage() {
   const [activeCategory, setActiveCategory] = useState<string>("");
   const [loading, setLoading]       = useState(true);
   const [ordering, setOrdering]     = useState(false);
-  const [initPoint, setInitPoint]   = useState<string | null>(null);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [paymentProvider, setPaymentProvider] = useState<string | null>(null);
   const [orderId, setOrderId]       = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState<string>("");
 
@@ -156,14 +157,20 @@ export default function KioskPage() {
       );
 
       setOrderId(data.order?.id ?? null);
-      if (data.initPoint) {
-        setInitPoint(data.initPoint);
+      setPaymentProvider(data.provider ?? null);
+      if (data.checkoutUrl) {
+        setCheckoutUrl(data.checkoutUrl);
         setScreen("payment");
       } else {
         setScreen("success");
       }
-    } catch {
-      setScreen("error");
+    } catch (err: any) {
+      const msg = err?.response?.data?.error ?? "";
+      if (err?.response?.status === 400 && /pasarela/i.test(msg)) {
+        setScreen("no-provider");
+      } else {
+        setScreen("error");
+      }
     } finally {
       setOrdering(false);
     }
@@ -171,7 +178,8 @@ export default function KioskPage() {
 
   function resetKiosk() {
     setCart([]);
-    setInitPoint(null);
+    setCheckoutUrl(null);
+    setPaymentProvider(null);
     setOrderId(null);
     setTableNumber("");
     setScreen("menu");
@@ -187,6 +195,24 @@ export default function KioskPage() {
         <p className="text-gray-400 max-w-sm">
           Este restaurante no tiene el módulo Kiosko habilitado en su plan. Contacta al administrador.
         </p>
+      </div>
+    );
+  }
+
+  if (screen === "no-provider") {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 text-center bg-gray-950">
+        <span className="text-6xl">💳</span>
+        <h1 className="text-2xl font-black text-white">Pasarela de pago no configurada</h1>
+        <p className="text-gray-400 max-w-sm">
+          El administrador debe activar al menos una pasarela (MercadoPago, Stripe, etc.) en Admin → Integraciones.
+        </p>
+        <button
+          onClick={() => setScreen("cart")}
+          className="mt-4 px-6 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-sm transition-colors"
+        >
+          Volver al carrito
+        </button>
       </div>
     );
   }
@@ -224,21 +250,24 @@ export default function KioskPage() {
     );
   }
 
-  if (screen === "payment" && initPoint) {
+  if (screen === "payment" && checkoutUrl) {
+    const providerLabel = paymentProvider === "STRIPE" ? "Stripe"
+      : paymentProvider === "MERCADOPAGO" ? "MercadoPago"
+      : "pasarela";
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-8 text-center bg-gray-950">
         <div className="w-24 h-24 rounded-full bg-blue-500/20 flex items-center justify-center text-5xl">📲</div>
         <h1 className="text-3xl font-black text-white">Escanea para pagar</h1>
         <p className="text-gray-300 max-w-sm">
-          Abre MercadoPago en tu celular y escanea el código QR, o toca el botón para pagar en esta pantalla.
+          Toca el botón para pagar con {providerLabel}, o escanea el código QR que aparece en tu celular.
         </p>
         <a
-          href={initPoint}
+          href={checkoutUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="px-8 py-4 bg-blue-500 hover:bg-blue-400 text-white font-black rounded-2xl text-lg transition-colors"
         >
-          Pagar con MercadoPago →
+          Pagar con {providerLabel} →
         </a>
         <button
           onClick={resetKiosk}
