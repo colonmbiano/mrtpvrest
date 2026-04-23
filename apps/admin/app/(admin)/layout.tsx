@@ -5,6 +5,7 @@ import Sidebar from "@/components/admin/Sidebar";
 import TrialBanner from "@/components/TrialBanner";
 import { getUser } from "@/lib/auth";
 import { AccentInjector } from "@/components/AccentInjector";
+import FloatingVoiceAgent from "@/components/FloatingVoiceAgent";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -63,6 +64,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {children}
         </main>
       </div>
+      <FloatingVoiceAgent />
     </div>
   );
 }
