@@ -104,10 +104,10 @@ export default function FloatingVoiceAgent() {
       else setStatus("idle");
     };
     rec.onend = () => {
-      if (status === "listening") {
-        // Terminó sin resultado: volver a idle suavemente.
-        setStatus(prev => (prev === "listening" ? "idle" : prev));
-      }
+      // Terminó el reconocimiento: si seguimos en "listening" (no se disparó
+      // onresult con texto ni onerror), volvemos a idle. Usamos el updater
+      // funcional porque el valor capturado en el closure puede estar stale.
+      setStatus(prev => (prev === "listening" ? "idle" : prev));
     };
 
     recognitionRef.current = rec;
