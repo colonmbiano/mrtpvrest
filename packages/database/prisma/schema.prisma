@@ -45,6 +45,9 @@ model Tenant {
   subscription Subscription?
   restaurants  Restaurant[]
   users        User[]
+  vehicles     Vehicle[]
+  rides        Ride[]
+  expenses     Expense[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1160,4 +1163,88 @@ model TpvRemoteConfig {
   updatedAt DateTime @updatedAt
 
   @@map("tpv_remote_configs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOGÍSTICA & FLOTA — vehículos, turnos (Ride) y gastos operativos (FASE 4).
+// Gateado en UI por Tenant.hasDelivery. Entidades scopeadas por tenantId.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum VehicleType {
+  MOTO
+  CARRO
+  BICI
+}
+
+enum ExpenseCategory {
+  GASOLINA
+  REFACCION
+  PONCHADURA
+  OTROS
+}
+
+model Vehicle {
+  id       String      @id @default(cuid())
+  tenantId String
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name     String // ej. "Moto A"
+  plate    String?
+  type     VehicleType @default(MOTO)
+  isActive Boolean     @default(true)
+
+  rides Ride[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@map("vehicles")
+}
+
+model Ride {
+  id         String @id @default(cuid())
+  tenantId   String
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Nota: la .md menciona `userId`; en este codebase los repartidores son
+  // Employee (no User), así que referenciamos Employee.id por consistencia
+  // con el resto del stack (PIN login, CashShift, etc.). Se mantiene como
+  // String sin FK dura para evitar bloquear borrado de empleados históricos.
+  employeeId String
+
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+
+  startTime    DateTime  @default(now())
+  endTime      DateTime?
+  startMileage Int?
+  endMileage   Int?
+
+  expenses Expense[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([vehicleId])
+  @@index([employeeId])
+  @@map("rides")
+}
+
+model Expense {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  rideId String?
+  ride   Ride?   @relation(fields: [rideId], references: [id], onDelete: SetNull)
+
+  amount      Decimal         @db.Decimal(10, 2)
+  category    ExpenseCategory
+  description String?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([rideId])
+  @@map("expenses")
 }
