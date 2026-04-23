@@ -91,14 +91,32 @@ router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActi
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
-    const { items, orderType, tableNumber, paymentMethod, subtotal, discount, total, customerName, customerPhone, status } = req.body;
+    const { items, orderType, tableNumber, tableId, paymentMethod, subtotal, discount, total, customerName, customerPhone, status } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'Sin productos' });
 
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+
+    // Validar tableId si vino: debe pertenecer a esta sucursal y estar activa.
+    let table = null;
+    if (tableId) {
+      table = await prisma.table.findFirst({
+        where: { id: tableId, locationId: req.locationId, isActive: true },
+      });
+      if (!table) return res.status(400).json({ error: 'Mesa no válida para esta sucursal' });
+      if (table.status === 'OCCUPIED') {
+        return res.status(409).json({
+          error: 'La mesa ya tiene una cuenta abierta',
+          code: 'TABLE_OCCUPIED',
+        });
+      }
+    }
+
     const orderNumber = 'TPV-' + Date.now().toString().slice(-6);
+    const isDineInTab = (orderType === 'DINE_IN') && !!tableId;
 
     const createdItems = await Promise.all(items.map(async (item) => {
       const menuItem = await prisma.menuItem.findUnique({
-        where: { id: item.menuItemId, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId }
+        where: { id: item.menuItemId, restaurantId }
       });
       return {
         menuItemId: item.menuItemId,
@@ -110,31 +128,59 @@ router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActi
       };
     }));
 
-    const order = await prisma.order.create({
-      data: {
-        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId,
-        locationId: req.locationId,
-        shiftId: req.shiftId,
-        orderNumber,
-        status: status || 'CONFIRMED',
-        orderType: orderType || 'TAKEOUT',
-        tableNumber: tableNumber || null,
-        paymentMethod: paymentMethod || 'CASH',
-        subtotal: subtotal || 0,
-        discount: discount || 0,
-        total: total || 0,
-        source: 'TPV',
-        customerName, customerPhone,
-        items: { create: createdItems },
-      },
-      include: { items: { include: { menuItem: { include: { category: true } } } } },
+    // Si es dine-in con mesa: status=OPEN (cuenta abierta) y la primera ronda
+    // se crea explícita para que el flujo de rondas posteriores quede limpio.
+    const order = await prisma.$transaction(async (tx) => {
+      const created = await tx.order.create({
+        data: {
+          restaurantId,
+          locationId: req.locationId,
+          shiftId: req.shiftId,
+          orderNumber,
+          status: status || (isDineInTab ? 'OPEN' : 'CONFIRMED'),
+          orderType: orderType || 'TAKEOUT',
+          tableNumber: tableNumber || (table ? null : null),
+          tableId: tableId || null,
+          paymentMethod: paymentMethod || 'CASH',
+          subtotal: subtotal || 0,
+          discount: discount || 0,
+          total: total || 0,
+          source: 'TPV',
+          customerName, customerPhone,
+        },
+      });
+
+      if (isDineInTab) {
+        // Primera ronda con sus items.
+        const round = await tx.orderRound.create({
+          data: { orderId: created.id, roundNumber: 1 },
+        });
+        await tx.orderItem.createMany({
+          data: createdItems.map(it => ({ ...it, orderId: created.id, roundId: round.id })),
+        });
+        await tx.table.update({ where: { id: tableId }, data: { status: 'OCCUPIED' } });
+      } else {
+        // Quick service: ronda implícita (roundId=null) — flujo legacy.
+        await tx.orderItem.createMany({
+          data: createdItems.map(it => ({ ...it, orderId: created.id })),
+        });
+      }
+
+      return tx.order.findUnique({
+        where: { id: created.id },
+        include: {
+          items: { include: { menuItem: { include: { category: true } } } },
+          rounds: true,
+          table: true,
+        },
+      });
     });
 
-    await discountInventory(prisma, items, order.id, req.user?.restaurantId || req.user?.restaurantId || req.restaurantId, req.locationId);
+    await discountInventory(prisma, items, order.id, restaurantId, req.locationId);
 
     const io = req.app.get('io');
     if (io) {
-      io.to(`restaurant:${req.user?.restaurantId || req.user?.restaurantId || req.restaurantId}:location:${req.locationId}:admins`).emit('order:new', order);
+      io.to(`restaurant:${restaurantId}:location:${req.locationId}:admins`).emit('order:new', order);
     }
 
     res.json(order);
@@ -142,9 +188,13 @@ router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActi
 });
 
 // ── POST /:id/items — Añadir ronda a una orden activa ──────────────────
-// Inserta nuevos OrderItem sobre una orden ya abierta (no pagada ni cerrada),
-// re-calcula subtotal/total y devuelve la orden completa actualizada.
-router.post('/:id/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+// Crea una nueva OrderRound (roundNumber = max+1), inserta los items con
+// roundId tagueado y manda a cocina SOLO los items de esa ronda (no
+// reimprime la cuenta entera).
+//
+// Alias: POST /:id/rounds — mismo handler, nombre canónico para clientes
+// nuevos del API. /items se mantiene por compatibilidad con la TPV actual.
+async function addRoundHandler(req, res) {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
@@ -177,7 +227,6 @@ router.post('/:id/items', authenticate, requireTenantAccess, requireAdmin, async
       const price = menuItem?.price || 0;
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
       return {
-        orderId: id,
         menuItemId: item.menuItemId,
         name: menuItem?.name || 'Producto',
         price,
@@ -187,9 +236,22 @@ router.post('/:id/items', authenticate, requireTenantAccess, requireAdmin, async
       };
     }));
 
-    // Transaccional: insertar items + recalcular totales desde cero.
-    const updated = await prisma.$transaction(async (tx) => {
-      await tx.orderItem.createMany({ data: newItemsData });
+    // Transaccional: crear OrderRound, insertar items con roundId, recalcular totales.
+    const { updated, round } = await prisma.$transaction(async (tx) => {
+      const lastRound = await tx.orderRound.findFirst({
+        where: { orderId: id },
+        orderBy: { roundNumber: 'desc' },
+        select: { roundNumber: true },
+      });
+      const nextNumber = (lastRound?.roundNumber || 0) + 1;
+
+      const newRound = await tx.orderRound.create({
+        data: { orderId: id, roundNumber: nextNumber },
+      });
+
+      await tx.orderItem.createMany({
+        data: newItemsData.map(d => ({ ...d, orderId: id, roundId: newRound.id })),
+      });
 
       const all = await tx.orderItem.findMany({ where: { orderId: id } });
       const subtotal = all.reduce((s, i) => s + (i.subtotal || 0), 0);
@@ -197,19 +259,29 @@ router.post('/:id/items', authenticate, requireTenantAccess, requireAdmin, async
       const deliveryFee = existing.deliveryFee || 0;
       const total = subtotal - discount + deliveryFee;
 
-      return tx.order.update({
+      const finalOrder = await tx.order.update({
         where: { id },
         data: { subtotal, total },
         include: {
           user: { select: { name: true, phone: true } },
           items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
+          rounds: { orderBy: { roundNumber: 'asc' } },
           address: true,
+          table: true,
         },
       });
+
+      return { updated: finalOrder, round: newRound };
     });
 
     // Descontar inventario con el request original (usa menuItemId + quantity).
     await discountInventory(prisma, items, id, restaurantId, req.locationId);
+
+    // Imprimir SOLO los items de esta ronda en cocina. Fire-and-forget.
+    try {
+      const { printOrderRoundTicket } = require('../services/printer.service');
+      printOrderRoundTicket(updated, round.id).catch(() => {});
+    } catch (err) { console.error('Print round ticket no disponible:', err.message); }
 
     // Notificar a clientes conectados (admin/cocina) para refresco en vivo.
     const io = req.app.get('io');
@@ -218,11 +290,29 @@ router.post('/:id/items', authenticate, requireTenantAccess, requireAdmin, async
         .emit('order:updated', updated);
     }
 
-    res.json(updated);
+    res.json({ ...updated, lastRound: round });
   } catch (e) { res.status(500).json({ error: e.message }); }
-});
+}
+
+router.post('/:id/items',  authenticate, requireTenantAccess, requireAdmin, addRoundHandler);
+router.post('/:id/rounds', authenticate, requireTenantAccess, requireAdmin, addRoundHandler);
 
 // ── GESTIÓN DE PAGOS Y CUENTAS ──
+
+// Helper: cuando un dine-in se paga, libera la mesa (OCCUPIED → DIRTY) para
+// que el equipo de salón sepa que está pendiente de limpieza. Idempotente:
+// si la orden no es dine-in o no tiene tableId, no-op.
+async function releaseTableIfDineIn(orderId) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { tableId: true, orderType: true },
+  });
+  if (!order?.tableId || order.orderType !== 'DINE_IN') return;
+  await prisma.table.update({
+    where: { id: order.tableId },
+    data: { status: 'DIRTY' },
+  }).catch(() => {});
+}
 
 router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
@@ -231,6 +321,7 @@ router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireAd
       data: { status: 'CONFIRMED', paidAt: new Date(), paymentStatus: 'PAID' },
       include: { user: true }
     });
+    await releaseTableIfDineIn(order.id);
     res.json({ ok: true, order });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -264,6 +355,17 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
         paidAt: new Date(),
       }
     });
+
+    // Kick del cajón: fire-and-forget. Un cobro nunca debe fallar porque el
+    // cajón esté desconectado o no haya impresora de caja configurada.
+    try {
+      const { kickCashDrawerForLocation } = require('../services/printer.service');
+      kickCashDrawerForLocation(order.locationId).catch(() => {});
+    } catch (err) { console.error('Drawer kick no disponible:', err.message); }
+
+    // Si era dine-in, liberar la mesa (OCCUPIED → DIRTY).
+    await releaseTableIfDineIn(order.id);
+
     res.json(order);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -7,9 +7,9 @@
     "build": "next build",
     "start": "next start -p 3005",
     "lint": "next lint",
-    "build:apk": "CAPACITOR_BUILD=true next build && npx cap sync android",
-    "apk:debug": "CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleDebug && cd .. && echo \"APK -> android/app/build/outputs/apk/debug/app-debug.apk\"",
-    "apk:release": "CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleRelease && cd .. && echo \"APK -> android/app/build/outputs/apk/release/app-release-unsigned.apk\"",
+    "build:apk": "cross-env CAPACITOR_BUILD=true next build && npx cap sync android",
+    "apk:debug": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleDebug && cd ..",
+    "apk:release": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleRelease && cd ..",
     "cap:open": "npx cap open android",
     "cap:sync": "npx cap sync android"
   },

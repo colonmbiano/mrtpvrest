@@ -75,6 +75,17 @@ router.get('/info', async (req, res) => {
   if (!store) return;
   const { restaurant, location } = store;
 
+  // Cargamos el Tenant padre para exponer al storefront público los flags/config
+  // que el dueño configuró en su panel SaaS (web-store on/off, tema, WhatsApp).
+  let tenantConfig = { hasWebStore: false, whatsappNumber: null, themeConfig: null };
+  if (restaurant.tenantId) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: restaurant.tenantId },
+      select: { hasWebStore: true, whatsappNumber: true, themeConfig: true },
+    });
+    if (tenant) tenantConfig = tenant;
+  }
+
   res.json({
     id:       restaurant.id,
     name:     restaurant.name,
@@ -83,6 +94,9 @@ router.get('/info', async (req, res) => {
     phone:    restaurant.phone    || null,
     address:  restaurant.address  || null,
     location: location ? { id: location.id, name: location.name, address: location.address } : null,
+    hasWebStore:    tenantConfig.hasWebStore,
+    whatsappNumber: tenantConfig.whatsappNumber,
+    themeConfig:    tenantConfig.themeConfig,
   });
 });
 
