@@ -317,7 +317,7 @@ export default function StorePage() {
   const [checkout, setCheckout]       = useState(false);
   const [success, setSuccess]         = useState<{ orderNumber: string; total: number } | null>(null);
   const [loading, setLoading]         = useState(true);
-  const catRefs                       = useRef<Record<string, HTMLDivElement | null>>({});
+  const catRefs                       = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
     Promise.all([
