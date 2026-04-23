@@ -3,6 +3,19 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import { IconBadge } from "@/components/ui/icon-badge";
+import { ICON_GRADIENTS } from "@/lib/icon-gradients";
+
+const ic = (children: React.ReactNode, size = 18) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    {children}
+  </svg>
+);
+const IconSales  = () => ic(<><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></>);
+const IconOrders = () => ic(<><path d="M9 11V6a3 3 0 016 0v5"/><path d="M5 9h14l-1 11H6L5 9z"/></>);
+const IconTicket = () => ic(<><path d="M4 4h16v16l-2-1.5L16 20l-2-1.5L12 20l-2-1.5L8 20l-2-1.5L4 20V4z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></>);
+const IconClock  = () => ic(<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>);
 
 type TopProduct = { name: string; quantity: number; total: number };
 type StaffMember = { id: string; name: string; role: string; tables: string[]; startAt: string };
@@ -387,6 +400,7 @@ export default function RestaurantDashboard() {
       delta: deltaLabel(ventasDelta, ventasPrev), up: ventasDelta >= 0, sub: periodSub[period],
       spark: "", fill: "", color: "#9472ff",
       href: "/admin/reportes",
+      icon: <IconSales />, gradient: ICON_GRADIENTS.sales,
     },
     {
       label: "Pedidos",
@@ -396,6 +410,7 @@ export default function RestaurantDashboard() {
       sub: activeCount ? `${activeCount} activos ahora` : periodSub[period],
       spark: "", fill: "", color: "var(--green, #10b981)",
       href: "/admin/pedidos",
+      icon: <IconOrders />, gradient: ICON_GRADIENTS.orders,
     },
     {
       label: "Ticket promedio",
@@ -405,6 +420,7 @@ export default function RestaurantDashboard() {
       sub: periodSub[period],
       spark: "", fill: "", color: "var(--amber, #f59e0b)",
       href: "/admin/reportes",
+      icon: <IconTicket />, gradient: ICON_GRADIENTS.money,
     },
     {
       label: "Tiempo prep. prom.",
@@ -412,6 +428,7 @@ export default function RestaurantDashboard() {
       delta: activeCount ? `${activeCount} activos` : "—", up: true, sub: "tiempo en espera",
       spark: "", fill: "", color: "#b89eff",
       href: "/admin/pedidos",
+      icon: <IconClock />, gradient: ICON_GRADIENTS.delivery,
     },
   ];
 
@@ -576,7 +593,10 @@ export default function RestaurantDashboard() {
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); router.push(k.href); } }}
               style={{ ...card, position: "relative", overflow: "hidden", cursor: "pointer" }}
             >
-              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txMut, letterSpacing: ".14em", textTransform: "uppercase", marginBottom: 8 }}>
+              <div style={{ position: "absolute", top: 14, right: 14 }}>
+                <IconBadge icon={k.icon} gradient={k.gradient} size="md" />
+              </div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txMut, letterSpacing: ".14em", textTransform: "uppercase", marginBottom: 8, paddingRight: 52 }}>
                 {k.label}
               </div>
               <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 38, color: V.txHi, letterSpacing: "-.02em", lineHeight: 1 }}>

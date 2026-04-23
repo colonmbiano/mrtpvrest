@@ -21,7 +21,7 @@ const CARDS: TypeCard[] = [
     subtitle: "Servicio en mesa, cocina, delivery",
     description: "Pedidos por mesa, impresión en cocina, meseros y control de turnos.",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10">
         <path d="M7 2v20" />
         <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Z" />
         <path d="M3 6v4a3 3 0 0 0 3 3" />
@@ -34,7 +34,7 @@ const CARDS: TypeCard[] = [
     subtitle: "Tienda con inventario y código de barras",
     description: "Scanner, catálogo por SKU, precios por peso y control de stock.",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10">
         <path d="M3 9l1.5-6h15L21 9" />
         <path d="M3 9h18v12H3z" />
         <path d="M8 13h8" />
@@ -47,7 +47,7 @@ const CARDS: TypeCard[] = [
     subtitle: "Consumo por comanda, cuentas abiertas",
     description: "Bebidas por categoría, propinas, cuentas divididas y cierre nocturno.",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10">
         <path d="M3 3h18l-7 9v7h3v2H7v-2h3v-7Z" />
       </svg>
     ),
@@ -58,7 +58,7 @@ const CARDS: TypeCard[] = [
     subtitle: "Bebidas y repostería para llevar",
     description: "Flujo rápido de mostrador, modificadores (leche, azúcar) y fidelidad.",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10">
         <path d="M3 9h14v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" />
         <path d="M17 10h2a2 2 0 0 1 0 4h-2" />
         <path d="M7 3v3" />

@@ -262,7 +262,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
                 }}
               >
                 <span
-                  className="flex-shrink-0"
+                  className="flex-shrink-0 inline-flex transition-transform duration-200 hover:scale-110 active:scale-95"
                   style={{ color: hasActive ? section.accent : "var(--muted)", opacity: 0.8 }}
                 >
                   {section.icon}
@@ -302,7 +302,10 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
                           color: active ? section.accent : "var(--muted)",
                         }}
                       >
-                        <span style={{ opacity: active ? 1 : 0.6, flexShrink: 0, color: active ? section.accent : "currentColor" }}>
+                        <span
+                          className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95"
+                          style={{ opacity: active ? 1 : 0.6, flexShrink: 0, color: active ? section.accent : "currentColor" }}
+                        >
                           {item.icon}
                         </span>
                         <span>{item.label}</span>
