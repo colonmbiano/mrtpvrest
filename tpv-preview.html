@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TPV · Responsive Preview</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800;900&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0A0A0A;
+      --surf: #141414;
+      --surf2: #1c1c1c;
+      --border: #2A2A2A;
+      --text: #ffffff;
+      --muted: #9ca3af;
+      --accent: #F5C842;
+    }
+    html, body { background: #050505; color: white; font-family: "DM Sans", system-ui, sans-serif; }
+    .font-syne { font-family: "Syne", sans-serif; }
+
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+    .tab {
+      padding: 10px 18px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.02);
+      color: #9ca3af;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .tab:hover { background: rgba(255,255,255,0.05); color: white; }
+    .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* Phone / tablet / desktop frames */
+    .frame-mobile {
+      width: 380px; height: 780px;
+      border-radius: 44px; padding: 12px;
+      background: linear-gradient(160deg, #1a1a1a, #0a0a0a);
+      box-shadow: 0 30px 70px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.06);
+      position: relative;
+    }
+    .frame-mobile::before {
+      content: ""; position: absolute; top: 22px; left: 50%; transform: translateX(-50%);
+      width: 9px; height: 9px; border-radius: 50%; background: #000; z-index: 20;
+    }
+    .frame-tablet {
+      width: 900px; height: 620px;
+      border-radius: 28px; padding: 16px;
+      background: linear-gradient(160deg, #1a1a1a, #0a0a0a);
+      box-shadow: 0 30px 70px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.06);
+    }
+    .frame-desktop {
+      width: 1200px; height: 720px;
+      border-radius: 16px; padding: 10px;
+      background: linear-gradient(160deg, #1a1a1a, #0a0a0a);
+      box-shadow: 0 30px 70px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.06);
+    }
+    .frame-inner {
+      width: 100%; height: 100%;
+      border-radius: 32px;
+      overflow: hidden;
+      background: var(--bg);
+      position: relative;
+      display: flex; flex-direction: column;
+    }
+    .frame-desktop .frame-inner { border-radius: 8px; }
+    .frame-tablet .frame-inner { border-radius: 16px; }
+
+    /* Common components */
+    .app-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 12px; height: 48px;
+      background: var(--surf); border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .brand-block { display: flex; flex-direction: column; min-width: 0; line-height: 1; }
+    .brand-name { font-size: 13px; font-weight: 900; color: var(--accent); }
+    .brand-location { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-top: 2px; }
+    .search-input {
+      flex: 1; min-width: 0; padding: 8px 12px;
+      border-radius: 12px; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); font-size: 13px;
+    }
+    .header-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 40px; padding: 0 12px;
+      border-radius: 12px; background: var(--surf2); border: 1px solid var(--border);
+      color: var(--text); font-size: 12px; font-weight: 700;
+      cursor: pointer; user-select: none;
+    }
+    .pill-count {
+      min-width: 18px; height: 18px; padding: 0 6px;
+      border-radius: 99px; background: var(--accent); color: #fff;
+      font-size: 10px; font-weight: 900;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+
+    /* Menu item card */
+    .menu-item {
+      position: relative; border-radius: 16px; padding: 16px;
+      background: var(--surf); border: 1px solid var(--border);
+      min-height: 120px; text-align: left;
+      cursor: pointer; user-select: none;
+      transition: transform 0.1s;
+    }
+    .menu-item:active { transform: scale(0.95); }
+    .menu-item .name { font-size: 14px; font-weight: 700; line-height: 1.2; margin-bottom: 6px; }
+    .menu-item .price { font-size: 15px; font-weight: 900; color: var(--accent); }
+    .menu-item .img {
+      width: 100%; height: 80px; object-fit: cover; border-radius: 8px;
+      background: linear-gradient(135deg, #2a2028, #1a1012); margin-bottom: 8px;
+      display: flex; align-items: center; justify-content: center; font-size: 32px;
+    }
+
+    /* Chip */
+    .chip {
+      padding: 0 16px; min-height: 44px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 12px; font-size: 11px; font-weight: 700;
+      flex-shrink: 0; cursor: pointer; user-select: none;
+      background: var(--surf); color: var(--muted);
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .chip.active {
+      background: var(--accent); color: #000;
+      border: 2px solid var(--accent);
+    }
+
+    /* Ticket */
+    .ticket-input {
+      width: 100%; padding: 12px; border-radius: 12px;
+      background: var(--surf2); border: 1px solid var(--border); color: var(--text);
+      font-size: 13px; outline: none;
+    }
+    .type-btn {
+      flex: 1; min-height: 48px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 12px; font-size: 11px; font-weight: 700;
+      cursor: pointer; user-select: none;
+      background: var(--surf2); color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .type-btn.active {
+      background: var(--accent); color: #fff;
+      border: 2px solid var(--accent);
+    }
+    .qty-btn {
+      width: 40px; height: 40px;
+      border-radius: 8px; background: var(--surf2);
+      font-size: 16px; font-weight: 900;
+      cursor: pointer; user-select: none;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .pay-btn {
+      min-height: 56px; border-radius: 12px;
+      font-size: 13px; font-weight: 900;
+      cursor: pointer; user-select: none;
+      background: var(--accent); color: #fff;
+      border: 2px solid var(--accent);
+    }
+
+    /* FAB */
+    .fab {
+      position: absolute; bottom: 16px; left: 16px; right: 16px;
+      height: 56px; border-radius: 16px; background: var(--accent); color: #fff;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px; font-size: 13px; font-weight: 900;
+      box-shadow: 0 10px 30px rgba(255,92,53,0.35);
+      user-select: none; z-index: 40; cursor: pointer;
+    }
+
+    /* Sidebar category list (lg+) */
+    .cat-sidebar-btn {
+      width: 100%; text-align: left; padding: 0 16px; min-height: 48px;
+      display: flex; align-items: center;
+      border-radius: 12px; font-size: 13px; font-weight: 700;
+      cursor: pointer; user-select: none;
+      background: var(--surf2); color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .cat-sidebar-btn.active {
+      background: var(--accent); color: #000;
+      border: 2px solid var(--accent);
+    }
+
+    .line-through { text-decoration: line-through; }
+
+    /* Bottom Sheet */
+    .sheet-backdrop {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.65); z-index: 49;
+    }
+    .sheet {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 88%; background: var(--surf);
+      border-top-left-radius: 24px; border-top-right-radius: 24px;
+      border-top: 1px solid var(--border);
+      z-index: 50; display: flex; flex-direction: column; overflow: hidden;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+
+  <header class="max-w-[1300px] mx-auto mb-6 text-center">
+    <h1 class="text-3xl font-black tracking-tighter mb-1">
+      TPV <span class="text-[#F5C842]">· Responsive Preview</span>
+    </h1>
+    <p class="text-sm text-gray-500">Tres breakpoints del mismo layout: Mobile → Tablet → Desktop. Touch targets ≥44px, <code>select-none</code>, <code>scrollbar-hide</code>.</p>
+  </header>
+
+  <div class="max-w-[1300px] mx-auto mb-8 flex flex-wrap gap-2 justify-center">
+    <button class="tab active" data-screen="mobile">📱 Mobile</button>
+    <button class="tab" data-screen="mobile-sheet">📱 Mobile · Bottom Sheet</button>
+    <button class="tab" data-screen="tablet">📟 Tablet (md)</button>
+    <button class="tab" data-screen="desktop">🖥 Desktop (lg+)</button>
+  </div>
+
+  <div class="flex justify-center">
+
+    <!-- MOBILE -->
+    <div class="screen active" data-screen="mobile">
+      <div class="frame-mobile">
+        <div class="frame-inner">
+          <!-- Header -->
+          <div class="app-header">
+            <div class="brand-block">
+              <span class="brand-name">MASTER</span>
+              <span class="brand-location">POLANCO</span>
+            </div>
+            <input class="search-input" placeholder="Buscar producto..." value="" />
+            <button class="header-btn">📋<span class="pill-count">3</span></button>
+          </div>
+          <!-- Categorías chips horizontal -->
+          <div class="flex gap-2 px-3 py-2 overflow-x-auto scrollbar-hide flex-shrink-0 border-b border-[var(--border)]">
+            <button class="chip active">Todo</button>
+            <button class="chip">Burgers</button>
+            <button class="chip">Sides</button>
+            <button class="chip">Bebidas</button>
+            <button class="chip">Postres</button>
+          </div>
+          <!-- Menu full width -->
+          <div class="flex-1 overflow-y-auto p-3 pb-24 scrollbar-hide">
+            <div class="grid grid-cols-2 gap-3">
+              <button class="menu-item">
+                <div class="img">🍔</div>
+                <div class="name">Master Burger</div>
+                <div class="price">$189</div>
+              </button>
+              <button class="menu-item">
+                <div class="img">🍔</div>
+                <div class="name">Smash Classic</div>
+                <div class="price">$149</div>
+              </button>
+              <button class="menu-item">
+                <div class="img">🍔</div>
+                <div class="name">BBQ Ranch</div>
+                <div class="price">$209</div>
+              </button>
+              <button class="menu-item">
+                <div class="img">🍟</div>
+                <div class="name">Papas Master</div>
+                <div class="price">$95</div>
+              </button>
+              <button class="menu-item">
+                <div class="img">🥤</div>
+                <div class="name">Coca-Cola</div>
+                <div class="price">$35</div>
+              </button>
+              <button class="menu-item">
+                <div class="img">🍋</div>
+                <div class="name">Limonada Mint</div>
+                <div class="price">$55</div>
+              </button>
+            </div>
+          </div>
+          <!-- FAB -->
+          <div class="fab">
+            <span class="flex items-center gap-2"><span class="text-base">🧾</span> Ver Orden (3)</span>
+            <span>$389</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MOBILE + BOTTOM SHEET -->
+    <div class="screen" data-screen="mobile-sheet">
+      <div class="frame-mobile">
+        <div class="frame-inner">
+          <div class="app-header">
+            <div class="brand-block">
+              <span class="brand-name">MASTER</span>
+              <span class="brand-location">POLANCO</span>
+            </div>
+            <input class="search-input" placeholder="Buscar producto..." />
+            <button class="header-btn">📋<span class="pill-count">3</span></button>
+          </div>
+          <div class="flex gap-2 px-3 py-2 overflow-x-auto scrollbar-hide flex-shrink-0 border-b border-[var(--border)]">
+            <button class="chip active">Todo</button>
+            <button class="chip">Burgers</button>
+            <button class="chip">Sides</button>
+            <button class="chip">Bebidas</button>
+          </div>
+          <div class="flex-1 overflow-y-auto p-3 pb-24 scrollbar-hide opacity-30 pointer-events-none">
+            <div class="grid grid-cols-2 gap-3">
+              <button class="menu-item"><div class="img">🍔</div><div class="name">Master Burger</div><div class="price">$189</div></button>
+              <button class="menu-item"><div class="img">🍔</div><div class="name">Smash Classic</div><div class="price">$149</div></button>
+            </div>
+          </div>
+
+          <!-- BOTTOM SHEET OPEN -->
+          <div class="sheet-backdrop"></div>
+          <div class="sheet">
+            <div class="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0 relative">
+              <div class="absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 rounded-full" style="background: var(--border);"></div>
+              <span class="text-[11px] font-black uppercase tracking-widest select-none mt-2" style="color: var(--muted);">Orden actual</span>
+              <button class="w-10 h-10 rounded-xl flex items-center justify-center select-none" style="background: var(--surf2); color: var(--muted);">✕</button>
+            </div>
+
+            <!-- Ticket tabs -->
+            <div class="flex items-center gap-1 px-2 pt-2 pb-0 border-b flex-shrink-0" style="border-color: var(--border);">
+              <button class="px-4 min-h-[40px] rounded-t-xl text-xs font-bold select-none" style="background: var(--accent); color: #000;">T1</button>
+              <button class="px-3 min-h-[40px] rounded-xl text-base font-black ml-1 select-none" style="background: var(--surf2); color: var(--muted);">+</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
+              <!-- Name/Phone -->
+              <div class="flex gap-2">
+                <input class="ticket-input flex-1" placeholder="Nombre" value="Sra. López" />
+                <input class="ticket-input w-24" placeholder="Tel" value="555-" />
+              </div>
+              <!-- Type -->
+              <div class="flex gap-1.5">
+                <button class="type-btn">🥡 Llevar</button>
+                <button class="type-btn active">🪑 Mesa</button>
+                <button class="type-btn">🛵 Domicilio</button>
+              </div>
+              <!-- Table input -->
+              <input class="ticket-input text-center font-black text-lg" value="4" />
+
+              <!-- Items -->
+              <div class="flex items-start gap-2 py-2 border-b" style="border-color: var(--border);">
+                <div class="flex-1 text-xs">
+                  <div class="flex items-center gap-1"><span class="font-medium">Master Burger</span><span class="font-bold" style="color: var(--accent);">(Doble)</span></div>
+                </div>
+                <div class="flex items-center gap-1">
+                  <button class="qty-btn">−</button>
+                  <span class="text-sm font-bold w-6 text-center">1</span>
+                  <button class="qty-btn">+</button>
+                </div>
+                <div class="flex flex-col items-end">
+                  <span class="text-xs font-black" style="color: var(--accent);">$219</span>
+                  <button class="text-xs mt-1" style="color: #ef4444;">✕</button>
+                </div>
+              </div>
+              <div class="flex items-start gap-2 py-2 border-b" style="border-color: var(--border);">
+                <div class="flex-1 text-xs">
+                  <div class="flex items-center gap-1"><span class="font-medium">Papas Master</span></div>
+                  <div class="text-[10px]" style="color: var(--muted);">Sin jalapeños</div>
+                </div>
+                <div class="flex items-center gap-1">
+                  <button class="qty-btn">−</button>
+                  <span class="text-sm font-bold w-6 text-center">1</span>
+                  <button class="qty-btn">+</button>
+                </div>
+                <div class="flex flex-col items-end">
+                  <span class="text-xs font-black" style="color: var(--accent);">$115</span>
+                  <button class="text-xs mt-1" style="color: #ef4444;">✕</button>
+                </div>
+              </div>
+
+              <!-- Totals -->
+              <div class="flex justify-between text-xs" style="color: var(--muted);"><span>Subtotal</span><span>$389</span></div>
+              <div class="flex justify-between font-black text-2xl py-1"><span>Total</span><span style="color: var(--accent);">$389</span></div>
+
+              <button class="w-full min-h-[48px] rounded-xl text-sm font-bold border select-none" style="border-color: var(--border); color: var(--muted);">🍳 Enviar a cocina</button>
+              <div class="grid grid-cols-2 gap-2">
+                <button class="pay-btn">💵 Efectivo</button>
+                <button class="pay-btn">💳 Tarjeta</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABLET -->
+    <div class="screen" data-screen="tablet">
+      <div class="frame-tablet">
+        <div class="frame-inner">
+          <div class="app-header">
+            <div class="brand-block">
+              <span class="brand-name">MASTER BURGUERS</span>
+              <span class="brand-location">POLANCO</span>
+            </div>
+            <input class="search-input" placeholder="Buscar producto..." />
+            <button class="header-btn">📋 Pedidos <span class="pill-count">3</span></button>
+          </div>
+          <div class="flex-1 flex overflow-hidden min-h-0">
+            <!-- Menu + chips -->
+            <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+              <div class="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide flex-shrink-0 border-b whitespace-nowrap" style="border-color: var(--border);">
+                <button class="chip active">Todo</button>
+                <button class="chip">Burgers</button>
+                <button class="chip">Sides</button>
+                <button class="chip">Bebidas</button>
+                <button class="chip">Postres</button>
+                <button class="chip">Desayunos</button>
+              </div>
+              <div class="flex-1 overflow-y-auto p-4 scrollbar-hide">
+                <div class="grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));">
+                  <button class="menu-item"><div class="img">🍔</div><div class="name">Master Burger</div><div class="price">$189</div></button>
+                  <button class="menu-item"><div class="img">🍔</div><div class="name">Smash Classic</div><div class="price">$149</div></button>
+                  <button class="menu-item"><div class="img">🍔</div><div class="name">BBQ Ranch</div><div class="price">$209</div></button>
+                  <button class="menu-item"><div class="img">🍟</div><div class="name">Papas Master</div><div class="price">$95</div></button>
+                  <button class="menu-item"><div class="img">🥤</div><div class="name">Coca-Cola</div><div class="price">$35</div></button>
+                  <button class="menu-item"><div class="img">🍋</div><div class="name">Limonada Mint</div><div class="price">$55</div></button>
+                  <button class="menu-item"><div class="img">🍰</div><div class="name">Brownie</div><div class="price">$85</div></button>
+                  <button class="menu-item"><div class="img">🥗</div><div class="name">Ensalada César</div><div class="price">$129</div></button>
+                </div>
+              </div>
+            </div>
+            <!-- Ticket sidebar -->
+            <aside class="flex-shrink-0 border-l flex flex-col overflow-hidden" style="width: 340px; border-color: var(--border); background: var(--surf);">
+              <div class="flex items-center gap-1 px-2 pt-2 pb-0 border-b flex-shrink-0" style="border-color: var(--border);">
+                <button class="px-4 min-h-[44px] rounded-t-xl text-xs font-bold select-none" style="background: var(--accent); color: #000;">T1</button>
+                <button class="px-4 min-h-[44px] rounded-t-xl text-xs font-bold select-none" style="background: var(--surf2); color: var(--muted);">T2</button>
+                <button class="px-3 min-h-[44px] rounded-xl text-base font-black ml-1 select-none" style="background: var(--surf2); color: var(--muted);">+</button>
+              </div>
+              <div class="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-hide">
+                <div class="flex gap-2">
+                  <input class="ticket-input flex-1" placeholder="Nombre" value="Sra. López" />
+                  <input class="ticket-input w-24" placeholder="Tel" />
+                </div>
+                <div class="flex gap-1.5">
+                  <button class="type-btn">🥡 Llevar</button>
+                  <button class="type-btn active">🪑 Mesa</button>
+                  <button class="type-btn">🛵</button>
+                </div>
+                <input class="ticket-input text-center font-black text-lg" value="4" />
+
+                <div class="flex items-start gap-2 py-2 border-b" style="border-color: var(--border);">
+                  <div class="flex-1 text-xs">
+                    <div class="font-medium">Master Burger <span class="font-bold" style="color: var(--accent);">(Doble)</span></div>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <button class="qty-btn">−</button><span class="text-sm font-bold w-6 text-center">1</span><button class="qty-btn">+</button>
+                  </div>
+                  <div class="flex flex-col items-end"><span class="text-xs font-black" style="color: var(--accent);">$219</span></div>
+                </div>
+                <div class="flex items-start gap-2 py-2 border-b" style="border-color: var(--border);">
+                  <div class="flex-1 text-xs">
+                    <div class="font-medium">Papas Master</div>
+                    <div class="text-[10px]" style="color: var(--muted);">Sin jalapeños</div>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <button class="qty-btn">−</button><span class="text-sm font-bold w-6 text-center">1</span><button class="qty-btn">+</button>
+                  </div>
+                  <div class="flex flex-col items-end"><span class="text-xs font-black" style="color: var(--accent);">$115</span></div>
+                </div>
+
+                <div class="flex justify-between font-black text-2xl py-1 mt-2"><span>Total</span><span style="color: var(--accent);">$389</span></div>
+                <button class="w-full min-h-[48px] rounded-xl text-sm font-bold border select-none" style="border-color: var(--border); color: var(--muted);">🍳 Enviar a cocina</button>
+                <div class="grid grid-cols-2 gap-2">
+                  <button class="pay-btn">💵 Efectivo</button>
+                  <button class="pay-btn">💳 Tarjeta</button>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DESKTOP -->
+    <div class="screen" data-screen="desktop">
+      <div class="frame-desktop">
+        <div class="frame-inner">
+          <div class="app-header">
+            <div class="brand-block">
+              <span class="brand-name">MASTER BURGUERS</span>
+              <span class="brand-location">POLANCO · TURNO 8H</span>
+            </div>
+            <input class="search-input" placeholder="Buscar producto..." />
+            <button class="header-btn">🕒 Turno</button>
+            <button class="header-btn">📋 Pedidos <span class="pill-count">3</span></button>
+          </div>
+          <div class="flex-1 flex overflow-hidden min-h-0">
+            <!-- Sidebar categorías -->
+            <aside class="w-52 flex-shrink-0 border-r overflow-y-auto p-3 space-y-2 scrollbar-hide" style="border-color: var(--border); background: var(--surf);">
+              <button class="cat-sidebar-btn active">Todo</button>
+              <button class="cat-sidebar-btn">Burgers</button>
+              <button class="cat-sidebar-btn">Sides</button>
+              <button class="cat-sidebar-btn">Bebidas</button>
+              <button class="cat-sidebar-btn">Postres</button>
+              <button class="cat-sidebar-btn">Desayunos</button>
+              <button class="cat-sidebar-btn">Especiales</button>
+            </aside>
+
+            <!-- Menu -->
+            <main class="flex-1 overflow-y-auto p-4 scrollbar-hide">
+              <div class="grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));">
+                <button class="menu-item"><div class="img">🍔</div><div class="name">Master Burger</div><div class="price">$189</div></button>
+                <button class="menu-item"><div class="img">🍔</div><div class="name">Smash Classic</div><div class="price">$149</div></button>
+                <button class="menu-item"><div class="img">🍔</div><div class="name">BBQ Ranch</div><div class="price">$209</div></button>
+                <button class="menu-item"><div class="img">🥓</div><div class="name">Bacon Deluxe</div><div class="price">$219</div></button>
+                <button class="menu-item"><div class="img">🍟</div><div class="name">Papas Master</div><div class="price">$95</div></button>
+                <button class="menu-item"><div class="img">🧅</div><div class="name">Aros cebolla</div><div class="price">$75</div></button>
+                <button class="menu-item"><div class="img">🥤</div><div class="name">Coca-Cola</div><div class="price">$35</div></button>
+                <button class="menu-item"><div class="img">🍋</div><div class="name">Limonada Mint</div><div class="price">$55</div></button>
+                <button class="menu-item"><div class="img">🍰</div><div class="name">Brownie</div><div class="price">$85</div></button>
+                <button class="menu-item"><div class="img">🥗</div><div class="name">Ensalada César</div><div class="price">$129</div></button>
+              </div>
+            </main>
+
+            <!-- Ticket sidebar -->
+            <aside class="flex-shrink-0 border-l flex flex-col overflow-hidden" style="width: 360px; border-color: var(--border); background: var(--surf);">
+              <div class="flex items-center gap-1 px-2 pt-2 pb-0 border-b flex-shrink-0" style="border-color: var(--border);">
+                <button class="px-4 min-h-[44px] rounded-t-xl text-xs font-bold select-none" style="background: var(--accent); color: #000;">T1</button>
+                <button class="px-4 min-h-[44px] rounded-t-xl text-xs font-bold select-none" style="background: var(--surf2); color: var(--muted);">T2</button>
+                <button class="px-3 min-h-[44px] rounded-xl text-base font-black ml-1 select-none" style="background: var(--surf2); color: var(--muted);">+</button>
+              </div>
+              <div class="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-hide">
+                <div class="flex gap-2">
+                  <input class="ticket-input flex-1" value="Sra. López" />
+                  <input class="ticket-input w-24" placeholder="Tel" />
+                </div>
+                <div class="flex gap-1.5">
+                  <button class="type-btn">🥡 Llevar</button>
+                  <button class="type-btn active">🪑 Mesa</button>
+                  <button class="type-btn">🛵 Domicilio</button>
+                </div>
+                <input class="ticket-input text-center font-black text-lg" value="4" />
+
+                <div class="flex items-start gap-2 py-2 border-b" style="border-color: var(--border);">
+                  <div class="flex-1 text-xs">
+                    <div class="font-medium">Master Burger <span class="font-bold" style="color: var(--accent);">(Doble)</span></div>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <button class="qty-btn">−</button><span class="text-sm font-bold w-6 text-center">1</span><button class="qty-btn">+</button>
+                  </div>
+                  <div class="flex flex-col items-end"><span class="text-xs font-black" style="color: var(--accent);">$219</span></div>
+                </div>
+                <div class="flex items-start gap-2 py-2 border-b" style="border-color: var(--border);">
+                  <div class="flex-1 text-xs">
+                    <div class="font-medium">Papas Master</div>
+                    <div class="text-[10px]" style="color: var(--muted);">Sin jalapeños</div>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <button class="qty-btn">−</button><span class="text-sm font-bold w-6 text-center">1</span><button class="qty-btn">+</button>
+                  </div>
+                  <div class="flex flex-col items-end"><span class="text-xs font-black" style="color: var(--accent);">$115</span></div>
+                </div>
+                <div class="flex items-start gap-2 py-2 border-b" style="border-color: var(--border);">
+                  <div class="flex-1 text-xs">
+                    <div class="font-medium">Limonada Mint</div>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <button class="qty-btn">−</button><span class="text-sm font-bold w-6 text-center">1</span><button class="qty-btn">+</button>
+                  </div>
+                  <div class="flex flex-col items-end"><span class="text-xs font-black" style="color: var(--accent);">$55</span></div>
+                </div>
+
+                <div class="flex justify-between text-xs" style="color: var(--muted);"><span>Subtotal</span><span>$389</span></div>
+                <div class="flex justify-between font-black text-2xl py-1"><span>Total</span><span style="color: var(--accent);">$389</span></div>
+
+                <button class="w-full min-h-[48px] rounded-xl text-sm font-bold border select-none" style="border-color: var(--border); color: var(--muted);">🍳 Enviar a cocina</button>
+                <div class="grid grid-cols-2 gap-2">
+                  <button class="pay-btn">💵 Efectivo</button>
+                  <button class="pay-btn">💳 Tarjeta</button>
+                  <button class="pay-btn">📲 Transferencia</button>
+                  <button class="pay-btn">🎁 Cortesía</button>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <section class="max-w-[1000px] mx-auto mt-12 p-6 rounded-2xl border border-white/5" style="background: rgba(255,255,255,0.02);">
+    <h3 class="text-sm font-black uppercase tracking-widest mb-4" style="color: var(--accent);">Breakpoints aplicados</h3>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-400 leading-relaxed">
+      <div>
+        <p class="font-black text-white mb-1">📱 Mobile (default)</p>
+        <p>1 columna. Categorías = chips horizontales con <code class="text-[#F5C842]">overflow-x-auto</code>. Menú full-width. Ticket oculto → <strong>FAB inferior</strong> "Ver Orden (N) · $X" que abre Bottom Sheet (88vh).</p>
+      </div>
+      <div>
+        <p class="font-black text-white mb-1">📟 Tablet (md:)</p>
+        <p>2 columnas. Menú <code>flex-1</code> + Ticket sidebar fijo <code class="text-[#F5C842]">w-[340px]</code>. Categorías siguen como chips arriba del menú. FAB oculto.</p>
+      </div>
+      <div>
+        <p class="font-black text-white mb-1">🖥 Desktop (lg+)</p>
+        <p>3 columnas: sidebar cats <code class="text-[#F5C842]">w-52</code> + menú + ticket <code class="text-[#F5C842]">w-[360px]</code>. Búsqueda global + botón Pedidos en header.</p>
+      </div>
+    </div>
+    <div class="mt-5 pt-4 border-t border-white/5 text-xs text-gray-500">
+      <strong class="text-white">Touch targets:</strong> chips <code>min-h-[44px]</code> · cards <code>min-h-[120px]</code> · qty <code>w-10 h-10</code> · pay <code>min-h-[56px]</code> ·
+      <strong class="text-white ml-2">Safe:</strong> <code>select-none</code>, <code>scrollbar-hide</code>, <code>active:scale-95</code>, estados seleccionados con fondo sólido + borde 2px
+    </div>
+  </section>
+
+  <footer class="max-w-[1300px] mx-auto mt-8 pt-4 border-t border-white/5 text-xs text-gray-600 text-center">
+    mrtpvrest · apps/tpv · listo para Capacitor/PWA · branch <span class="text-gray-400 font-bold">feat/tpv-setup-meseros-cleanup</span>
+  </footer>
+
+  <script>
+    const tabs = document.querySelectorAll(".tab");
+    const screens = document.querySelectorAll(".screen");
+    tabs.forEach((t) => {
+      t.addEventListener("click", () => {
+        const target = t.dataset.screen;
+        tabs.forEach((x) => x.classList.remove("active"));
+        screens.forEach((s) => s.classList.remove("active"));
+        t.classList.add("active");
+        document.querySelector(`.screen[data-screen="${target}"]`).classList.add("active");
+      });
+    });
+  </script>
+</body>
+</html>

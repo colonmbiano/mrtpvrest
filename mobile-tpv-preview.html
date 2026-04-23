@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mobile TPV · Android Preview</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0A0A0A;
+      --surf: #141414;
+      --surf2: #1c1c1c;
+      --border: #2A2A2A;
+      --text: #ffffff;
+      --muted: #9ca3af;
+      --accent: #F5C842;
+    }
+    html, body { background: #000; color: white; font-family: "Inter", system-ui, sans-serif; }
+    * { -webkit-font-smoothing: antialiased; }
+
+    /* Android phone frame */
+    .phone {
+      width: 380px;
+      height: 780px;
+      border-radius: 44px;
+      padding: 12px;
+      background: linear-gradient(160deg, #1a1a1a, #0a0a0a);
+      box-shadow: 0 30px 70px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.06);
+      position: relative;
+    }
+    .phone::before {
+      /* camera cutout */
+      content: "";
+      position: absolute;
+      top: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #000;
+      z-index: 20;
+      box-shadow: 0 0 0 2px #0a0a0a;
+    }
+    .phone-inner {
+      width: 100%;
+      height: 100%;
+      border-radius: 34px;
+      overflow: hidden;
+      background: var(--bg);
+      position: relative;
+    }
+    .status-bar {
+      height: 28px;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      font-size: 11px;
+      font-weight: 700;
+      color: white;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .screen-body {
+      padding-top: 28px;
+      height: 100%;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+    .screen-body::-webkit-scrollbar { display: none; }
+
+    .tab {
+      padding: 10px 18px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.02);
+      color: #9ca3af;
+      transition: all 0.15s;
+    }
+    .tab:hover { background: rgba(255,255,255,0.05); color: white; }
+    .tab.active { background: #F5C842; color: #000; border-color: #F5C842; }
+
+    .screen { display: none; }
+    .screen.active { display: flex; justify-content: center; }
+
+    .numpad-key {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 18px;
+      padding: 18px 0;
+      text-align: center;
+      font-size: 24px;
+      font-weight: 700;
+      color: white;
+      cursor: pointer;
+    }
+    .numpad-key:active { background: rgba(245,200,66,0.2); }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+
+  <!-- Header -->
+  <header class="max-w-[900px] mx-auto mb-6 text-center">
+    <div class="flex items-baseline gap-4 justify-center mb-2">
+      <h1 class="text-3xl font-black tracking-tighter">
+        mobile-tpv <span style="color: var(--accent);">· Android Preview</span>
+      </h1>
+    </div>
+    <p class="text-sm text-gray-500">
+      React Native (Expo) — las 6 pantallas con los tokens de color reales
+      <span class="text-[#F5C842] font-bold">#F5C842</span> sobre fondo dark
+      <span class="text-gray-400 font-bold">#0A0A0A</span>.
+    </p>
+  </header>
+
+  <!-- Tabs -->
+  <div class="max-w-[900px] mx-auto mb-8 flex flex-wrap gap-2 justify-center">
+    <button class="tab active" data-screen="setup">1 · Setup</button>
+    <button class="tab" data-screen="pin">2 · PIN</button>
+    <button class="tab" data-screen="dashboard">3 · Dashboard</button>
+    <button class="tab" data-screen="new-order">4 · Nueva orden</button>
+    <button class="tab" data-screen="table-detail">5 · Mesa detalle</button>
+    <button class="tab" data-screen="shift">6 · Corte / Turno</button>
+  </div>
+
+  <div class="max-w-[900px] mx-auto">
+
+    <!-- 1. SETUP -->
+    <div class="screen active" data-screen="setup">
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="status-bar">
+            <span>20:14</span>
+            <span>● ● ● 100%</span>
+          </div>
+          <div class="screen-body px-5 pt-16">
+            <div class="text-center mb-10">
+              <div class="text-5xl mb-4">🍽</div>
+              <h1 class="text-2xl font-black text-white mb-1">Vincular terminal</h1>
+              <p class="text-xs text-gray-500 font-medium">Ingresa con tu cuenta de administrador</p>
+            </div>
+
+            <div class="rounded-3xl p-5 space-y-3" style="background: var(--surf); border: 1px solid var(--border);">
+              <div>
+                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Correo</label>
+                <div class="rounded-xl px-4 py-3 text-sm text-white" style="background: var(--surf2); border: 1px solid var(--border);">
+                  admin@masterburguers.com
+                </div>
+              </div>
+              <div>
+                <label class="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Contraseña</label>
+                <div class="rounded-xl px-4 py-3 text-sm text-white" style="background: var(--surf2); border: 1px solid var(--border);">
+                  ••••••••••
+                </div>
+              </div>
+              <button class="w-full mt-3 py-4 rounded-2xl font-black uppercase tracking-wider text-sm" style="background: var(--accent); color: #000;">
+                Buscar sucursales
+              </button>
+            </div>
+
+            <p class="text-center text-[10px] text-gray-600 mt-8 font-bold uppercase tracking-widest">
+              Master Burguers · v1.0.0
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. PIN -->
+    <div class="screen" data-screen="pin">
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="status-bar">
+            <span>20:14</span>
+            <span>● ● ● 100%</span>
+          </div>
+          <div class="screen-body px-5 pt-12">
+            <!-- Top bar -->
+            <div class="flex justify-between items-center mb-8">
+              <div class="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest" style="background: rgba(245,200,66,0.12); color: var(--accent); border: 1px solid rgba(245,200,66,0.25);">
+                Polanco
+              </div>
+              <button class="text-[10px] font-black uppercase tracking-widest text-gray-500">Desvincular</button>
+            </div>
+
+            <div class="text-center mb-6">
+              <h1 class="text-3xl font-black text-white mb-1.5">Ingresa tu PIN</h1>
+              <p class="text-xs text-gray-500 font-medium">Personal autorizado Master Burguers</p>
+            </div>
+
+            <!-- PIN dots -->
+            <div class="flex justify-center gap-4 my-8">
+              <div class="w-4 h-4 rounded-full" style="background: var(--accent);"></div>
+              <div class="w-4 h-4 rounded-full" style="background: var(--accent);"></div>
+              <div class="w-4 h-4 rounded-full" style="background: var(--accent);"></div>
+              <div class="w-4 h-4 rounded-full" style="background: rgba(255,255,255,0.1);"></div>
+            </div>
+
+            <p class="text-center text-xs font-bold text-gray-500 mb-5">Tocando numpad…</p>
+
+            <!-- Numpad -->
+            <div class="grid grid-cols-3 gap-3 max-w-[300px] mx-auto">
+              <div class="numpad-key">1</div>
+              <div class="numpad-key">2</div>
+              <div class="numpad-key">3</div>
+              <div class="numpad-key">4</div>
+              <div class="numpad-key">5</div>
+              <div class="numpad-key">6</div>
+              <div class="numpad-key">7</div>
+              <div class="numpad-key">8</div>
+              <div class="numpad-key">9</div>
+              <div class="numpad-key" style="background: transparent; border-color: transparent; color: #6b7280; font-size: 11px; font-weight:800;">C</div>
+              <div class="numpad-key">0</div>
+              <div class="numpad-key" style="background: transparent; border-color: transparent;">⌫</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. DASHBOARD -->
+    <div class="screen" data-screen="dashboard">
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="status-bar">
+            <span>20:14</span>
+            <span>● ● ● 100%</span>
+          </div>
+          <div class="screen-body pt-10">
+            <!-- Header -->
+            <div class="px-5 pb-4">
+              <p class="text-xs text-gray-500 font-medium mb-0.5">Hola, Daniel R.</p>
+              <h1 class="text-2xl font-black text-white">Mesas activas</h1>
+            </div>
+
+            <!-- Action buttons row -->
+            <div class="px-5 pb-5 flex gap-2 overflow-x-auto">
+              <button class="shrink-0 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest" style="background: var(--accent); color:#000;">+ Nueva venta</button>
+              <button class="shrink-0 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white/5 text-gray-300 border border-white/5">Corte</button>
+              <button class="shrink-0 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white/5 text-gray-300 border border-white/5">Cerrar turno</button>
+            </div>
+
+            <!-- Table grid -->
+            <div class="px-5 grid grid-cols-2 gap-3">
+              <div class="rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-3xl font-black" style="color: var(--accent);">4</span>
+                  <span class="px-2 py-0.5 rounded-full text-[8px] font-black uppercase" style="background: rgba(139,92,246,0.15); color:#8b5cf6;">Prep</span>
+                </div>
+                <p class="text-xs font-bold text-white mb-0.5">$428.00</p>
+                <p class="text-[10px] text-gray-500">3 items · 14min</p>
+              </div>
+              <div class="rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-3xl font-black" style="color: var(--accent);">7</span>
+                  <span class="px-2 py-0.5 rounded-full text-[8px] font-black uppercase" style="background: rgba(34,197,94,0.15); color:#22c55e;">Listo</span>
+                </div>
+                <p class="text-xs font-bold text-white mb-0.5">$612.00</p>
+                <p class="text-[10px] text-gray-500">5 items · 22min</p>
+              </div>
+              <div class="rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-3xl font-black" style="color: var(--accent);">12</span>
+                  <span class="px-2 py-0.5 rounded-full text-[8px] font-black uppercase" style="background: rgba(245,158,11,0.15); color:#f59e0b;">Pend</span>
+                </div>
+                <p class="text-xs font-bold text-white mb-0.5">$245.00</p>
+                <p class="text-[10px] text-gray-500">2 items · 3min</p>
+              </div>
+              <div class="rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-3xl font-black" style="color: var(--accent);">15</span>
+                  <span class="px-2 py-0.5 rounded-full text-[8px] font-black uppercase" style="background: rgba(59,130,246,0.15); color:#3b82f6;">Conf</span>
+                </div>
+                <p class="text-xs font-bold text-white mb-0.5">$189.00</p>
+                <p class="text-[10px] text-gray-500">1 item · 1min</p>
+              </div>
+            </div>
+
+            <!-- Loose orders -->
+            <div class="px-5 mt-6 mb-6">
+              <h3 class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Para llevar / Delivery</h3>
+              <div class="rounded-2xl p-4 mb-2 flex justify-between items-center" style="background: var(--surf); border:1px solid var(--border);">
+                <div>
+                  <p class="text-xs font-bold text-white">ORD-4819</p>
+                  <p class="text-[10px] text-gray-500">Para llevar · Karla G.</p>
+                </div>
+                <span class="text-sm font-black" style="color: var(--accent);">$295.00</span>
+              </div>
+              <div class="rounded-2xl p-4 flex justify-between items-center" style="background: var(--surf); border:1px solid var(--border);">
+                <div>
+                  <p class="text-xs font-bold text-white">ORD-4820</p>
+                  <p class="text-[10px] text-gray-500">Delivery · Uber Eats</p>
+                </div>
+                <span class="text-sm font-black" style="color: var(--accent);">$488.00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. NEW ORDER -->
+    <div class="screen" data-screen="new-order">
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="status-bar">
+            <span>20:14</span>
+            <span>● ● ● 100%</span>
+          </div>
+          <div class="screen-body pt-10">
+            <!-- Header -->
+            <div class="px-5 pb-3 flex justify-between items-center">
+              <button class="text-[10px] font-black uppercase tracking-widest text-gray-500">← Atrás</button>
+              <h1 class="text-base font-black text-white">Nueva orden</h1>
+              <button class="text-[10px] font-black uppercase tracking-widest text-red-500">Limpiar</button>
+            </div>
+
+            <!-- Category chips -->
+            <div class="px-5 pb-4 flex gap-2 overflow-x-auto">
+              <span class="shrink-0 px-4 py-1.5 rounded-full text-[10px] font-black uppercase" style="background: var(--accent); color:#000;">Todos</span>
+              <span class="shrink-0 px-4 py-1.5 rounded-full text-[10px] font-black uppercase bg-white/5 text-gray-400 border border-white/5">Burgers</span>
+              <span class="shrink-0 px-4 py-1.5 rounded-full text-[10px] font-black uppercase bg-white/5 text-gray-400 border border-white/5">Sides</span>
+              <span class="shrink-0 px-4 py-1.5 rounded-full text-[10px] font-black uppercase bg-white/5 text-gray-400 border border-white/5">Bebidas</span>
+            </div>
+
+            <!-- Menu grid -->
+            <div class="px-5 grid grid-cols-2 gap-3">
+              <div class="rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+                <span class="inline-block text-[8px] font-black uppercase px-2 py-0.5 rounded-full mb-2" style="background:rgba(245,200,66,0.15); color: var(--accent);">PROMO</span>
+                <p class="text-sm font-bold text-white mb-1 leading-tight">Master Burger</p>
+                <p class="text-lg font-black" style="color: var(--accent);">$189</p>
+              </div>
+              <div class="rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+                <p class="text-sm font-bold text-white mb-1 leading-tight">Smash Classic</p>
+                <p class="text-lg font-black" style="color: var(--accent);">$149</p>
+              </div>
+              <div class="rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+                <p class="text-sm font-bold text-white mb-1 leading-tight">BBQ Ranch</p>
+                <p class="text-lg font-black" style="color: var(--accent);">$209</p>
+              </div>
+              <div class="rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+                <p class="text-sm font-bold text-white mb-1 leading-tight">Papas Master</p>
+                <p class="text-lg font-black" style="color: var(--accent);">$95</p>
+              </div>
+            </div>
+
+            <!-- Cart peek -->
+            <div class="mx-5 mt-6 rounded-3xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+              <div class="flex justify-between items-center mb-3">
+                <h3 class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Ticket · 3 items</h3>
+                <span class="text-base font-black text-white">$389.00</span>
+              </div>
+
+              <div class="space-y-2 mb-3">
+                <div class="flex justify-between items-center">
+                  <div>
+                    <p class="text-xs font-bold text-white">Master Burger <span class="text-[10px]" style="color: var(--accent);">· Doble</span></p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button class="w-6 h-6 rounded-full bg-white/5 text-xs font-black">−</button>
+                    <span class="text-xs font-bold w-4 text-center">1</span>
+                    <button class="w-6 h-6 rounded-full text-xs font-black" style="background: var(--accent); color:#000;">+</button>
+                  </div>
+                </div>
+                <div class="flex justify-between items-center">
+                  <div>
+                    <p class="text-xs font-bold text-white">Papas Master <span class="text-[10px]" style="color: var(--accent);">· Grande</span></p>
+                    <p class="text-[9px] text-gray-500 italic">Sin jalapeños</p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button class="w-6 h-6 rounded-full bg-white/5 text-xs font-black">−</button>
+                    <span class="text-xs font-bold w-4 text-center">1</span>
+                    <button class="w-6 h-6 rounded-full text-xs font-black" style="background: var(--accent); color:#000;">+</button>
+                  </div>
+                </div>
+                <div class="flex justify-between items-center">
+                  <div>
+                    <p class="text-xs font-bold text-white">Limonada Mint</p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button class="w-6 h-6 rounded-full bg-white/5 text-xs font-black">−</button>
+                    <span class="text-xs font-bold w-4 text-center">1</span>
+                    <button class="w-6 h-6 rounded-full text-xs font-black" style="background: var(--accent); color:#000;">+</button>
+                  </div>
+                </div>
+              </div>
+
+              <button class="w-full py-3 rounded-2xl font-black uppercase tracking-wider text-xs" style="background: var(--accent); color:#000;">
+                Enviar orden
+              </button>
+            </div>
+
+            <div class="h-8"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. TABLE DETAIL -->
+    <div class="screen" data-screen="table-detail">
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="status-bar">
+            <span>20:14</span>
+            <span>● ● ● 100%</span>
+          </div>
+          <div class="screen-body pt-10">
+            <!-- Header -->
+            <div class="px-5 pb-4 flex items-center gap-3">
+              <button class="text-[10px] font-black uppercase tracking-widest text-gray-500">← Atrás</button>
+              <div class="flex-1"></div>
+            </div>
+            <div class="px-5 pb-6">
+              <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Mesa activa</p>
+              <h1 class="text-5xl font-black" style="color: var(--accent);">4</h1>
+            </div>
+
+            <!-- Ticket card 1 -->
+            <div class="mx-5 mb-3 rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+              <div class="flex justify-between items-center mb-3">
+                <div>
+                  <p class="text-xs font-bold text-white">ORD-4821</p>
+                  <p class="text-[10px] text-gray-500">Sra. López · hace 14min</p>
+                </div>
+                <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase" style="background: rgba(139,92,246,0.15); color:#8b5cf6;">Preparando</span>
+              </div>
+              <div class="space-y-1.5 pl-1 border-l-2" style="border-color: rgba(245,200,66,0.3);">
+                <div class="pl-3">
+                  <p class="text-xs text-white"><span class="font-black" style="color: var(--accent);">1×</span> Master Burger</p>
+                  <p class="text-[10px] text-gray-500 italic">Doble · sin pepinillos</p>
+                </div>
+                <div class="pl-3">
+                  <p class="text-xs text-white"><span class="font-black" style="color: var(--accent);">1×</span> Papas Master</p>
+                </div>
+              </div>
+              <div class="flex justify-between mt-3 pt-3 border-t border-white/5">
+                <span class="text-[10px] text-gray-500 uppercase font-bold">Subtotal</span>
+                <span class="text-sm font-black text-white">$334.00</span>
+              </div>
+            </div>
+
+            <!-- Ticket card 2 -->
+            <div class="mx-5 mb-3 rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+              <div class="flex justify-between items-center mb-3">
+                <div>
+                  <p class="text-xs font-bold text-white">ORD-4826</p>
+                  <p class="text-[10px] text-gray-500">hace 4min</p>
+                </div>
+                <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase" style="background: rgba(245,158,11,0.15); color:#f59e0b;">Pendiente</span>
+              </div>
+              <div class="space-y-1.5 pl-1 border-l-2" style="border-color: rgba(245,200,66,0.3);">
+                <div class="pl-3">
+                  <p class="text-xs text-white"><span class="font-black" style="color: var(--accent);">2×</span> Limonada Mint</p>
+                </div>
+              </div>
+              <div class="flex justify-between mt-3 pt-3 border-t border-white/5">
+                <span class="text-[10px] text-gray-500 uppercase font-bold">Subtotal</span>
+                <span class="text-sm font-black text-white">$110.00</span>
+              </div>
+            </div>
+
+            <!-- FAB -->
+            <div class="px-5 mt-4">
+              <button class="w-full py-3 rounded-2xl text-xs font-black uppercase tracking-widest" style="background:transparent; color: var(--accent); border:1px dashed var(--accent);">
+                + Agregar a la cuenta
+              </button>
+            </div>
+
+            <div class="h-24"></div>
+
+            <!-- Sticky footer -->
+            <div class="absolute bottom-0 left-0 right-0 p-4 border-t" style="background: var(--bg); border-color: var(--border);">
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-[10px] text-gray-500 uppercase font-bold">3 items · 2 órdenes</span>
+                <span class="text-2xl font-black text-white">$444.00</span>
+              </div>
+              <button class="w-full py-3.5 rounded-2xl font-black uppercase tracking-wider text-sm" style="background: var(--accent); color:#000;">
+                Cobrar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. SHIFT -->
+    <div class="screen" data-screen="shift">
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="status-bar">
+            <span>20:14</span>
+            <span>● ● ● 100%</span>
+          </div>
+          <div class="screen-body pt-10">
+            <!-- Header -->
+            <div class="px-5 pb-3 flex items-center gap-3">
+              <button class="text-[10px] font-black uppercase tracking-widest text-gray-500">← Atrás</button>
+            </div>
+            <div class="px-5 pb-5">
+              <h1 class="text-xl font-black text-white">Resumen de turno</h1>
+              <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Hoy · Polanco</p>
+            </div>
+
+            <!-- Summary card -->
+            <div class="mx-5 mb-5 rounded-3xl p-6 text-center" style="background: var(--surf); border:1px solid var(--border);">
+              <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Total vendido</p>
+              <p class="text-5xl font-black" style="color: var(--accent);">$12,480</p>
+              <p class="text-xs text-gray-500 mt-2 font-medium">47 tickets cerrados</p>
+            </div>
+
+            <!-- Method tiles -->
+            <div class="px-5 grid grid-cols-2 gap-3 mb-5">
+              <div class="rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+                <div class="text-lg mb-1">💵</div>
+                <p class="text-[10px] font-black uppercase tracking-widest" style="color:#22c55e;">Efectivo</p>
+                <p class="text-base font-black text-white mt-1">$4,120</p>
+              </div>
+              <div class="rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+                <div class="text-lg mb-1">💳</div>
+                <p class="text-[10px] font-black uppercase tracking-widest" style="color:#3b82f6;">Tarjeta</p>
+                <p class="text-base font-black text-white mt-1">$6,840</p>
+              </div>
+              <div class="rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+                <div class="text-lg mb-1">📲</div>
+                <p class="text-[10px] font-black uppercase tracking-widest" style="color:#8b5cf6;">Transfer</p>
+                <p class="text-base font-black text-white mt-1">$1,320</p>
+              </div>
+              <div class="rounded-2xl p-4" style="background: var(--surf); border:1px solid var(--border);">
+                <div class="text-lg mb-1">🎁</div>
+                <p class="text-[10px] font-black uppercase tracking-widest" style="color: var(--accent);">Cortesía</p>
+                <p class="text-base font-black text-white mt-1">$200</p>
+              </div>
+            </div>
+
+            <!-- Ticket rows -->
+            <div class="px-5">
+              <h3 class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Tickets del turno</h3>
+              <div class="space-y-2">
+                <div class="rounded-xl p-3 flex justify-between items-center" style="background: var(--surf); border:1px solid var(--border);">
+                  <div>
+                    <p class="text-xs font-bold text-white">ORD-4821 · Mesa 4</p>
+                    <p class="text-[10px] text-gray-500">20:02 · Tarjeta</p>
+                  </div>
+                  <span class="text-sm font-black" style="color: var(--accent);">$444</span>
+                </div>
+                <div class="rounded-xl p-3 flex justify-between items-center" style="background: var(--surf); border:1px solid var(--border);">
+                  <div>
+                    <p class="text-xs font-bold text-white">ORD-4820 · Delivery</p>
+                    <p class="text-[10px] text-gray-500">19:48 · Transfer</p>
+                  </div>
+                  <span class="text-sm font-black" style="color: var(--accent);">$488</span>
+                </div>
+                <div class="rounded-xl p-3 flex justify-between items-center" style="background: var(--surf); border:1px solid var(--border);">
+                  <div>
+                    <p class="text-xs font-bold text-white">ORD-4819 · Takeout</p>
+                    <p class="text-[10px] text-gray-500">19:33 · Efectivo</p>
+                  </div>
+                  <span class="text-sm font-black" style="color: var(--accent);">$295</span>
+                </div>
+              </div>
+              <div class="h-8"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="max-w-[900px] mx-auto mt-12 pt-6 border-t border-white/5 text-xs text-gray-600 text-center">
+    mrtpvrest · apps/mobile-tpv · Expo + React Native · accent <span class="text-[#F5C842] font-bold">#F5C842</span>
+  </footer>
+
+  <script>
+    const tabs = document.querySelectorAll(".tab");
+    const screens = document.querySelectorAll(".screen");
+    tabs.forEach((t) => {
+      t.addEventListener("click", () => {
+        const target = t.dataset.screen;
+        tabs.forEach((x) => x.classList.remove("active"));
+        screens.forEach((s) => s.classList.remove("active"));
+        t.classList.add("active");
+        document.querySelector(`.screen[data-screen="${target}"]`).classList.add("active");
+      });
+    });
+  </script>
+</body>
+</html>
