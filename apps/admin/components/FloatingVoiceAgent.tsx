@@ -141,7 +141,7 @@ export default function FloatingVoiceAgent() {
             ? "Dictado no soportado en este navegador"
             : "Dictar instrucción"
         }
-        className="fixed z-40 bottom-5 right-5 md:bottom-8 md:right-8 w-14 h-14 md:w-16 md:h-16 rounded-full shadow-2xl flex items-center justify-center text-white transition-all active:scale-95"
+        className="fixed z-40 bottom-5 right-5 md:bottom-8 md:right-8 w-14 h-14 md:w-16 md:h-16 rounded-full shadow-2xl flex items-center justify-center text-white transition-all duration-200 hover:scale-110 active:scale-95"
         style={{
           background: bg,
           boxShadow:
@@ -177,7 +177,7 @@ export default function FloatingVoiceAgent() {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
             aria-hidden

@@ -32,6 +32,7 @@ const IClock     = ({ size }: IconProps) => ic(<><circle cx="8" cy="8" r="6"/><p
 const IWallet    = ({ size }: IconProps) => ic(<><rect x="1" y="5" width="14" height="9" rx="1"/><path d="M4 5V4a2 2 0 012-2h7a2 2 0 012 2v1"/><circle cx="12" cy="10" r="1" fill="currentColor" stroke="none"/></>, size);
 const IMapPin    = ({ size }: IconProps) => ic(<><path d="M8 14s5-4 5-8A5 5 0 003 6c0 4 5 8 5 8z"/><circle cx="8" cy="6" r="2"/></>, size);
 const ILayoutDash = ({ size }: IconProps) => ic(<><rect x="1" y="1" width="6" height="8" rx="1"/><rect x="9" y="1" width="6" height="4" rx="1"/><rect x="9" y="7" width="6" height="8" rx="1"/><rect x="1" y="11" width="6" height="4" rx="1"/></>, size);
+const IPuzzle    = ({ size }: IconProps) => ic(<><path d="M6 2h4v2a1 1 0 001 1h2v4h-2a1 1 0 00-1 1v2H6v-2a1 1 0 00-1-1H3V5h2a1 1 0 001-1V2z"/></>, size);
 
 // ── Nav sections ──────────────────────────────────────────────
 const SECTIONS = [
@@ -48,6 +49,7 @@ const SECTIONS = [
       { href: "/admin/reportes/ia",          icon: <ILayoutDash />, label: "Reportes IA ✦" },
       { href: "/admin/tickets",              icon: <IFolder />,    label: "Config. Tickets" },
       { href: "/admin/integraciones",        icon: <IPlug />,      label: "Integraciones" },
+      { href: "/admin/modulos",             icon: <IPuzzle />,    label: "Módulos" },
     ],
   },
   {
@@ -262,7 +264,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
                 }}
               >
                 <span
-                  className="flex-shrink-0"
+                  className="flex-shrink-0 inline-flex transition-transform duration-200 hover:scale-110 active:scale-95"
                   style={{ color: hasActive ? section.accent : "var(--muted)", opacity: 0.8 }}
                 >
                   {section.icon}
@@ -302,7 +304,10 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
                           color: active ? section.accent : "var(--muted)",
                         }}
                       >
-                        <span style={{ opacity: active ? 1 : 0.6, flexShrink: 0, color: active ? section.accent : "currentColor" }}>
+                        <span
+                          className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95"
+                          style={{ opacity: active ? 1 : 0.6, flexShrink: 0, color: active ? section.accent : "currentColor" }}
+                        >
                           {item.icon}
                         </span>
                         <span>{item.label}</span>

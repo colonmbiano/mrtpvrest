@@ -105,6 +105,7 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 app.use('/api/public', require('./routes/menu.routes'))
 app.use('/api/store',  require('./routes/store.routes'))
 app.use('/api/payments/terminal', require('./routes/terminal.routes'))
+app.use('/api/kiosk/mp-webhook',  require('./routes/kiosk-webhook.routes'))
 
 // --- MIDDLEWARE DE SAAS (TENANT) ---
 app.use(tenantMiddleware);
@@ -149,6 +150,8 @@ app.use('/api/saas',         require('./routes/saas.routes'))
 app.use('/api/ai',           require('./routes/ai.routes'));
 app.use('/api/onboarding',   require('./routes/onboarding.routes'));
 app.use('/api/tpv/config',   require('./routes/tpv-config.routes'));
+app.use('/api/kiosk',        require('./routes/kiosk.routes'));
+app.use('/api/modules',      require('./routes/modules.routes'));
 
 app.get('/health', (req, res) => {
   res.json({

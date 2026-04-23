@@ -370,6 +370,49 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.put('/:id/status', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const order = await prisma.order.update({
+      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.restaurantId },
+      data: { status }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
+    }
+
+    res.json(order);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/:id/payment', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const { paymentMethod } = req.body;
+    const order = await prisma.order.update({
+      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.restaurantId },
+      data: {
+        paymentMethod,
+        paymentStatus: 'PAID',
+        status: 'DELIVERED',
+        paidAt: new Date(),
+        cashCollected: paymentMethod === 'CASH',
+        cashCollectedAt: paymentMethod === 'CASH' ? new Date() : null,
+      }
+    });
+
+    await releaseTableIfDineIn(order.id);
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
+    }
+
+    res.json(order);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── PUT /:id/void-payment — Anular un cobro (solo ADMIN) ──────────────
 // Revierte un pago marcado como PAID: deja la orden como pendiente de cobro
 // y conserva una nota de auditoría con el nombre del admin que anuló.
