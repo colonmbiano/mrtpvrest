@@ -1,6 +1,7 @@
 const express = require('express');
 const { scanMenuFromImages, scanInventoryFromImages } = require('../services/ai.service');
 const { runAssistant } = require('../services/assistant.service');
+const { runVoiceAgent } = require('../services/voice-agent.service');
 const { resolveAiKey } = require('../services/ai-key.service');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
@@ -79,6 +80,34 @@ router.post('/assistant', authenticate, requireTenantAccess, requireAdmin, async
     if (error?.code) return sendAiError(res, error);
     console.error('Error en AI Assistant Route:', error);
     res.status(500).json({ error: 'Hubo un problema al procesar la solicitud.' });
+  }
+});
+
+// POST /api/ai/agent — FASE 5: agente de voz del TPV (Anthropic + tool_use).
+// Body: { prompt: string }
+// El tenantId se toma del JWT (NUNCA del body) para evitar IDOR. Si el body
+// incluye tenantId y no coincide, responde 403.
+// Responde con { ok, action, message, data? } para que el frontend muestre un
+// toast y refresque la vista afectada si aplica.
+router.post('/agent', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(403).json({ error: 'Tenant no resoluble' });
+
+    const { prompt, tenantId: bodyTenantId } = req.body || {};
+    if (bodyTenantId && bodyTenantId !== tenantId) {
+      return res.status(403).json({ error: 'tenantId del body no coincide con la sesión' });
+    }
+    if (!prompt?.trim()) return res.status(400).json({ error: 'prompt requerido' });
+
+    const locationId = req.headers['x-location-id'] || req.locationId || null;
+
+    const result = await runVoiceAgent({ prompt, tenantId, locationId });
+    res.json(result);
+  } catch (error) {
+    if (error?.code) return sendAiError(res, error);
+    console.error('Error en AI Agent Route:', error.message);
+    res.status(500).json({ error: 'Hubo un problema al procesar la instrucción de voz.' });
   }
 });
 
