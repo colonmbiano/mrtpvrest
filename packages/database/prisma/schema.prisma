@@ -34,6 +34,8 @@ model Tenant {
   hasDelivery  Boolean @default(false)
   hasWebStore  Boolean @default(false)
 
+  enabledModules String[] @default([])
+
   // Storefront & Contact
   whatsappNumber String?
   themeConfig    Json? // { theme: "STREET_FOOD", primaryColor: "#000000" }
@@ -73,6 +75,8 @@ model Plan {
   hasReports   Boolean @default(false)
   hasAPIAccess Boolean @default(false)
   isActive     Boolean @default(true)
+
+  allowedModules String[] @default([])
 
   subscriptions Subscription[]
 
@@ -489,6 +493,7 @@ enum PaymentMethod {
   OXXO
   SPEI
   CASH_ON_DELIVERY
+  QR_CODE
 }
 
 enum PaymentStatus {
@@ -548,6 +553,9 @@ model Order {
 
   conektaOrderId   String?
   conektaChargeId  String?
+  mpPreferenceId   String?
+  mpPaymentId      String?
+  mpStatus         String?
   estimatedMinutes Int?
 
   shiftId String?
