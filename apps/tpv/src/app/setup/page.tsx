@@ -47,6 +47,12 @@ export default function SetupPage() {
   const [showServerEditor, setShowServerEditor] = useState(false);
 
   useEffect(() => {
+    // HARD RESET: Si hay una URL vieja de localhost, la limpiamos
+    const oldUrl = localStorage.getItem("apiBaseUrl");
+    if (oldUrl && (oldUrl.includes("localhost") || oldUrl.includes("127.0.0.1"))) {
+      localStorage.removeItem("apiBaseUrl");
+    }
+
     // Pre-llenamos el campo "Servidor" con el override activo o el default baked.
     setServerUrl(getApiUrlOverride() || getApiUrl());
 

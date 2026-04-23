@@ -111,6 +111,9 @@ export default function TPVPage() {
   const [editAddress, setEditAddress]             = useState("");
   const [confirmingCash, setConfirmingCash]       = useState<string | null>(null);
 
+  // Turno
+  const [activeShift, setActiveShift]             = useState<any>(null);
+
   // Bloqueo
   const [isGlobalLocked, setIsGlobalLocked]     = useState(true);
   const [currentEmployee, setCurrentEmployee]   = useState<any>(null);
@@ -126,8 +129,8 @@ export default function TPVPage() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showShiftModal, setShowShiftModal]       = useState(false);
 
-  // Turno
-  const [activeShift, setActiveShift] = useState<any>(null);
+  const [gridCols, setGridCols] = useState(4);
+  const [fontSize, setFontSize] = useState("sm");
 
   // Mobile nav
   // Drawers móviles
@@ -816,10 +819,10 @@ export default function TPVPage() {
             <div className="text-sm">Cargando menú...</div>
           </div>
         ) : (
-          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
+          <div className={`grid gap-3 grid-cols-${gridCols}`}>
             {filteredItems.map((item: any) => (
               <button key={item.id} onClick={() => handleItemClick(item)}
-                className="relative rounded-2xl p-4 text-left border active:scale-95 transition-transform select-none min-h-[120px]"
+                className={`relative rounded-2xl p-4 text-left border active:scale-95 transition-transform select-none min-h-[120px] text-${fontSize}`}
                 style={{ background: "var(--surf)", borderColor: "var(--border)", opacity: activeShift ? 1 : 0.5 }}>
                 {item.isPromo && item.promoPrice && (
                   <span className="absolute top-2 right-2 text-[9px] font-black px-1.5 py-0.5 rounded-full z-10"
@@ -1055,6 +1058,28 @@ export default function TPVPage() {
                   <div className="text-xs text-[var(--muted)]">Impresoras, ticket, cocina, display</div>
                 </div>
               </button>
+
+              <div className="px-6 py-4 border-b border-[var(--border)]/50">
+                <div className="text-xs font-bold text-[var(--muted)] mb-3 uppercase tracking-widest">Apariencia del Menú</div>
+                <div className="grid grid-cols-5 gap-2 mb-4">
+                  {[3,4,5,6].map(c => (
+                    <button key={c} onClick={() => setGridCols(c)}
+                      className="py-2 rounded-lg text-xs font-bold border"
+                      style={{ background: gridCols === c ? ACCENT : "var(--surf2)", color: gridCols === c ? "#000" : "var(--text)", borderColor: gridCols === c ? ACCENT : "var(--border)" }}>
+                      {c}x{c}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  {["xs", "sm", "base", "lg"].map(sz => (
+                    <button key={sz} onClick={() => setFontSize(sz)}
+                      className="flex-1 py-2 rounded-lg text-xs font-bold border uppercase"
+                      style={{ background: fontSize === sz ? ACCENT : "var(--surf2)", color: fontSize === sz ? "#000" : "var(--text)", borderColor: fontSize === sz ? ACCENT : "var(--border)" }}>
+                      {sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button onClick={() => { setShowManagerMenu(false); setShowDriversPanel(true); }}
                 className="w-full flex items-center gap-4 px-6 py-4 hover:bg-[var(--surf2)] transition-colors text-left border-b border-[var(--border)]/50">
                 <span className="text-2xl">🚴</span>
@@ -1148,131 +1173,91 @@ function TPVLockScreen({
 }) {
   return (
     <div
-      className="min-h-screen px-4 py-6 md:px-8"
+      className="min-h-screen flex items-center justify-center p-4"
       style={{
-        background:
-          "radial-gradient(circle at top, rgba(255,92,53,0.2), transparent 34%), linear-gradient(180deg, #08080c 0%, #11111a 100%)",
+        background: "radial-gradient(circle at center, #1a1a2e 0%, #0a0a0f 100%)",
       }}
     >
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl flex-col justify-center gap-6 lg:flex-row lg:items-stretch">
-        <div className="flex flex-1 flex-col justify-between rounded-[2rem] border border-white/10 bg-black/20 p-8 shadow-2xl backdrop-blur md:p-10">
-          <div>
-            <div
-              className="mb-5 inline-flex rounded-full border px-4 py-2 text-[11px] font-black uppercase tracking-[0.3em]"
-              style={{ borderColor: `${accent}66`, color: accent, background: `${accent}14` }}
-            >
-              TPV bloqueado
-            </div>
-            <h1 className="max-w-xl text-4xl font-black uppercase tracking-tight text-white md:text-6xl">
-              {restaurantName}
-            </h1>
-            {locationName && (
-              <p className="mt-4 text-base font-bold text-white/60 md:text-lg">
-                Sucursal: {locationName}
-              </p>
-            )}
-            <p className="mt-6 max-w-md text-sm leading-6 text-white/50 md:text-base">
-              Ingresa el PIN del empleado para abrir la caja. El teclado esta optimizado
-              para tablets y pantallas tactiles.
-            </p>
-          </div>
+      <div className="w-full max-w-lg">
+        {/* Settings button in the corner */}
+        <button
+          onClick={onChangeLocation}
+          className="fixed top-6 right-6 w-12 h-12 rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 text-white/50 hover:text-white transition-colors"
+        >
+          ⚙️
+        </button>
 
-          <div className="mt-10 flex flex-wrap gap-3 text-xs font-bold uppercase tracking-[0.2em] text-white/35">
-            <span className="rounded-full border border-white/10 px-3 py-2">Modo oscuro</span>
-            <span className="rounded-full border border-white/10 px-3 py-2">Acceso por PIN</span>
-            <span className="rounded-full border border-white/10 px-3 py-2">Sesion rapida</span>
-          </div>
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-black text-white mb-2 uppercase tracking-tighter" style={{ color: accent }}>
+            {restaurantName}
+          </h1>
+          <p className="text-sm font-bold text-white/40 uppercase tracking-widest">
+            {locationName || "Terminal de Punto de Venta"}
+          </p>
         </div>
 
-        <div className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-[#101018] p-5 shadow-2xl md:p-7">
-          <div className="rounded-[1.75rem] border border-white/10 bg-[#151520] p-5 md:p-7">
-            <div className="mb-6 flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.25em] text-white/40">
-                  PIN del empleado
-                </p>
-                <h2 className="mt-2 text-2xl font-black text-white md:text-3xl">
-                  Desbloquear terminal
-                </h2>
-              </div>
+        <div className="bg-[#12121a] rounded-[2.5rem] p-8 border border-white/5 shadow-2xl">
+          <div className="flex justify-center gap-4 mb-8">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className={`w-4 h-4 rounded-full transition-all duration-300 ${
+                  pinInput.length > i ? "scale-125 shadow-lg" : "bg-white/10"
+                }`}
+                style={{
+                  backgroundColor: pinInput.length > i ? accent : undefined,
+                  boxShadow: pinInput.length > i ? `0 0 15px ${accent}66` : "none",
+                }}
+              />
+            ))}
+          </div>
+
+          {pinError && (
+            <p className="text-red-500 text-center text-sm font-bold mb-4 animate-bounce">
+              {pinError}
+            </p>
+          )}
+
+          <div className="grid grid-cols-3 gap-4">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
               <button
-                onClick={onChangeLocation}
-                className="rounded-2xl border border-white/10 px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-white/55 transition hover:bg-white/5"
-              >
-                Cambiar sucursal
-              </button>
-            </div>
-
-            <div className="mb-5 grid grid-cols-6 gap-3">
-              {Array.from({ length: PIN_MAX_LENGTH }).map((_, index) => {
-                const filled = index < pinInput.length;
-                return (
-                  <div
-                    key={index}
-                    className="flex h-16 items-center justify-center rounded-2xl border text-2xl font-black md:h-20 md:text-3xl"
-                    style={{
-                      borderColor: filled ? `${accent}99` : "rgba(255,255,255,0.08)",
-                      background: filled ? `${accent}22` : "rgba(255,255,255,0.03)",
-                      color: filled ? accent : "rgba(255,255,255,0.22)",
-                    }}
-                  >
-                    {filled ? "•" : ""}
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mb-5 min-h-6 text-sm font-bold">
-              {pinError ? (
-                <span className="text-red-400">{pinError}</span>
-              ) : (
-                <span className="text-white/35">Usa un PIN de 4 a 6 digitos.</span>
-              )}
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 md:gap-4">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
-                <button
-                  key={digit}
-                  disabled={isVerifyingPin}
-                  onClick={() => onDigit(String(digit))}
-                  className="min-h-[86px] rounded-[1.5rem] border border-white/10 bg-[#1b1b27] text-4xl font-black text-white shadow-lg transition active:scale-[0.98] disabled:opacity-50 md:min-h-[110px] md:text-5xl"
-                >
-                  {digit}
-                </button>
-              ))}
-              <button
+                key={num}
                 disabled={isVerifyingPin}
-                onClick={onClear}
-                className="min-h-[86px] rounded-[1.5rem] border border-white/10 bg-[#191923] text-lg font-black uppercase tracking-[0.2em] text-white/65 transition active:scale-[0.98] disabled:opacity-50 md:min-h-[110px]"
+                onClick={() => onDigit(String(num))}
+                className="aspect-square rounded-3xl bg-white/5 border border-white/10 text-3xl font-black text-white hover:bg-white/10 active:scale-95 transition-all"
               >
-                C
+                {num}
               </button>
-              <button
-                disabled={isVerifyingPin}
-                onClick={() => onDigit("0")}
-                className="min-h-[86px] rounded-[1.5rem] border border-white/10 bg-[#1b1b27] text-4xl font-black text-white shadow-lg transition active:scale-[0.98] disabled:opacity-50 md:min-h-[110px] md:text-5xl"
-              >
-                0
-              </button>
-              <button
-                disabled={isVerifyingPin}
-                onClick={onBackspace}
-                className="min-h-[86px] rounded-[1.5rem] border border-red-500/15 bg-red-500/10 text-2xl font-black text-red-400 transition active:scale-[0.98] disabled:opacity-50 md:min-h-[110px] md:text-3xl"
-              >
-                ⌫
-              </button>
-            </div>
-
+            ))}
             <button
-              disabled={isVerifyingPin || pinInput.length < PIN_MIN_LENGTH}
-              onClick={onSubmit}
-              className="mt-5 min-h-[64px] w-full rounded-[1.5rem] text-lg font-black uppercase tracking-[0.22em] text-white transition disabled:cursor-not-allowed disabled:opacity-40"
-              style={{ background: accent }}
+              onClick={onClear}
+              className="aspect-square rounded-3xl bg-red-500/10 border border-red-500/20 text-xl font-black text-red-500 hover:bg-red-500/20 active:scale-95 transition-all"
             >
-              {isVerifyingPin ? "Verificando..." : "Entrar al TPV"}
+              C
+            </button>
+            <button
+              disabled={isVerifyingPin}
+              onClick={() => onDigit("0")}
+              className="aspect-square rounded-3xl bg-white/5 border border-white/10 text-3xl font-black text-white hover:bg-white/10 active:scale-95 transition-all"
+            >
+              0
+            </button>
+            <button
+              onClick={onBackspace}
+              className="aspect-square rounded-3xl bg-white/5 border border-white/10 text-2xl font-black text-white hover:bg-white/10 active:scale-95 transition-all"
+            >
+              ⌫
             </button>
           </div>
+
+          <button
+            disabled={isVerifyingPin || pinInput.length < 4}
+            onClick={onSubmit}
+            className="w-full mt-8 py-5 rounded-[2rem] text-lg font-black uppercase tracking-widest text-black transition-all active:scale-[0.98] disabled:opacity-30"
+            style={{ background: accent }}
+          >
+            {isVerifyingPin ? "Verificando..." : "Ingresar"}
+          </button>
         </div>
       </div>
     </div>
