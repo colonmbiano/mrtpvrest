@@ -325,6 +325,20 @@ async function printOrderToStation(order, printerId) {
   }
 }
 
+// ── IMPRIMIR SOLO LOS ITEMS DE UNA RONDA (Dine-in) ────────────────────────
+// Variante de printOrderTicket que filtra por roundId antes de despachar a
+// las impresoras de cocina. Útil cuando una mesa pide una segunda ronda y
+// queremos que cocina sólo vea lo nuevo, no la cuenta entera otra vez.
+async function printOrderRoundTicket(order, roundId) {
+  if (!roundId) return printOrderTicket(order);
+  const filtered = {
+    ...order,
+    items: (order.items || []).filter(it => it.roundId === roundId),
+  };
+  if (filtered.items.length === 0) return;
+  return printOrderTicket(filtered);
+}
+
 // ── ABRIR CAJÓN DEL DINERO ────────────────────────────────────────────────
 // Manda el comando ESC/POS drawer-kick a una impresora por IP. Safe: inicializa
 // el puerto primero para evitar estados corruptos del printer.
@@ -360,7 +374,7 @@ async function kickCashDrawerForLocation(locationId) {
 }
 
 module.exports = {
-  printOrderTicket, printBillTicket, printOrderToStation,
+  printOrderTicket, printOrderRoundTicket, printBillTicket, printOrderToStation,
   printTest, printToIp, buildKitchenTicket, buildCashierTicket,
   kickDrawer, kickCashDrawerForLocation,
 };
