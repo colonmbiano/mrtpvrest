@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
+import DriverMovementsModal from "./DriverMovementsModal";
 
 // Panel ligero de rastreo para el TPV: lista de repartidores activos con
 // estado online, última actividad y ruta en curso. No incluye mapa (está en
@@ -16,6 +17,13 @@ type DriverRow = {
   } | null;
   activeRoute: { id: string; startAt: string } | null;
   online: boolean;
+  cash?: {
+    income: number;
+    expense: number;
+    returned: number;
+    deliveries: number;
+    balance: number;
+  };
 };
 
 type LiveResponse = {
@@ -58,13 +66,28 @@ export default function DriversPanel({ open, onClose, accent }: Props) {
   const [data, setData] = useState<LiveResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedDriver, setSelectedDriver] = useState<{ id: string; name: string } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function fetchLive(silent = false) {
     try {
       if (!silent) setLoading(true);
-      const { data } = await api.get<LiveResponse>("/api/gps/live");
-      setData(data);
+      const [gpsRes, cashRes] = await Promise.all([
+        api.get<LiveResponse>("/api/gps/live"),
+        api.get("/api/driver-cash/summary/today")
+      ]);
+
+      const cashMap = (cashRes.data || []).reduce((acc: any, item: any) => {
+        acc[item.driver.id] = { ...item, balance: item.income - item.expense - item.returned };
+        return acc;
+      }, {});
+
+      const mergedDrivers = gpsRes.data.drivers.map(d => ({
+        ...d,
+        cash: cashMap[d.driver.id]
+      }));
+
+      setData({ ...gpsRes.data, drivers: mergedDrivers });
       setError("");
     } catch (e: any) {
       const status = e?.response?.status;
@@ -160,8 +183,9 @@ export default function DriversPanel({ open, onClose, accent }: Props) {
                 return (
                   <div
                     key={d.driver.id}
-                    className="px-5 py-4 flex items-start gap-3"
+                    className="px-5 py-4 flex items-start gap-3 hover:bg-white/5 cursor-pointer transition-colors"
                     style={{ borderColor: "var(--border)" }}
+                    onClick={() => setSelectedDriver({ id: d.driver.id, name: d.driver.name })}
                   >
                     <div
                       className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0 overflow-hidden"
@@ -183,7 +207,29 @@ export default function DriversPanel({ open, onClose, accent }: Props) {
                           title={d.online ? "Online" : "Desconectado"}
                         />
                       </div>
-                      <div className="text-[11px] mt-0.5" style={{ color: "var(--muted)" }}>
+
+                      {d.cash && (
+                        <div className="mt-2 flex gap-1.5 flex-wrap">
+                          <div className="px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/20">
+                            <div className="text-[9px] text-green-400 font-bold uppercase leading-none mb-0.5">Ingresos</div>
+                            <div className="text-xs font-black text-green-400">${d.cash.income.toFixed(0)}</div>
+                          </div>
+                          <div className="px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/20">
+                            <div className="text-[9px] text-red-400 font-bold uppercase leading-none mb-0.5">Gastos</div>
+                            <div className="text-xs font-black text-red-400">${d.cash.expense.toFixed(0)}</div>
+                          </div>
+                          <div className="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                            <div className="text-[9px] text-blue-400 font-bold uppercase leading-none mb-0.5">Entregas</div>
+                            <div className="text-xs font-black text-blue-400">{d.cash.deliveries}</div>
+                          </div>
+                          <div className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 ml-auto">
+                            <div className="text-[9px] text-white/40 font-bold uppercase leading-none mb-0.5">Saldo</div>
+                            <div className="text-xs font-black text-white">${d.cash.balance.toFixed(0)}</div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="text-[11px] mt-2" style={{ color: "var(--muted)" }}>
                         {d.activeRoute ? (
                           <span style={{ color: accent }}>● En ruta desde {formatRelative(d.activeRoute.startAt)}</span>
                         ) : (
@@ -221,6 +267,15 @@ export default function DriversPanel({ open, onClose, accent }: Props) {
             Refrescar ahora
           </button>
         </div>
+
+        {selectedDriver && (
+          <DriverMovementsModal
+            driver={selectedDriver}
+            onClose={() => setSelectedDriver(null)}
+            onRefresh={() => fetchLive(true)}
+            accent={accent}
+          />
+        )}
       </div>
     </div>
   );
