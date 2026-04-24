@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 
@@ -58,6 +58,14 @@ function fmtDate(iso: string | null | undefined) {
 }
 
 export default function BillingPage() {
+  return (
+    <Suspense fallback={<div className="p-10" style={{ color: "var(--tx-mut)" }}>Cargando…</div>}>
+      <BillingInner />
+    </Suspense>
+  );
+}
+
+function BillingInner() {
   const searchParams = useSearchParams();
   const returnStatus = searchParams.get("status"); // success | cancel
   const [status, setStatus] = useState<StatusResponse | null>(null);
