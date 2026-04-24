@@ -43,8 +43,7 @@ const SECTIONS = [
     icon: <IBarChart />,
     accent: "#22c55e",
     items: [
-      { href: "/admin",                      icon: <IGrid />,      label: "Dashboard" },
-      { href: "/admin/restaurant-dashboard", icon: <IUniverse />,  label: "Rest. Dashboard" },
+      { href: "/admin/restaurant-dashboard", icon: <IGrid />,      label: "Dashboard" },
       { href: "/admin/mi-marca",             icon: <IBuilding />,  label: "Mi Marca" },
       { href: "/admin/reportes",             icon: <ITrending />,  label: "Reportes" },
       { href: "/admin/reportes/ia",          icon: <ILayoutDash />, label: "Reportes IA ✦" },

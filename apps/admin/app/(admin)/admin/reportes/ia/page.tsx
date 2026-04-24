@@ -391,7 +391,7 @@ export default function ReportesIAPage() {
                 <div style={{ fontSize: 12, color: V.txMut, marginTop: 2, display: "flex", alignItems: "center", gap: 8 }}>
                   <span>{sedes.length} {sedes.length === 1 ? "sede" : "sedes"}</span>
                   <span style={{ color: V.txDim }}>·</span>
-                  <span>{stats ? `${stats.orders.value.toLocaleString("es-MX")} pedidos` : "sin pedidos"}</span>
+                  <span>{stats ? `${(stats.orders.value ?? 0).toLocaleString("es-MX")} pedidos` : "sin pedidos"}</span>
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
@@ -404,17 +404,25 @@ export default function ReportesIAPage() {
             {/* KPI strip — datos reales del período */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", borderBottom: `1px solid ${V.bd1}` }}>
               {(() => {
-                const fmt = (n: number) =>
-                  n >= 1_000_000 ? `$${(n/1_000_000).toFixed(2)}` :
-                  n >= 1_000     ? `$${(n/1_000).toFixed(1)}`     :
-                                   `$${n.toLocaleString("es-MX", { maximumFractionDigits: 0 })}`;
-                const sml = (n: number) => n >= 1_000_000 ? "M" : n >= 1_000 ? "k" : "";
-                const fmtPct = (d: number) => `${d >= 0 ? "↑" : "↓"} ${Math.abs(d).toFixed(1)}%`;
+                const fmt = (raw: number | undefined | null) => {
+                  const n = Number(raw ?? 0);
+                  return n >= 1_000_000 ? `$${(n/1_000_000).toFixed(2)}` :
+                         n >= 1_000     ? `$${(n/1_000).toFixed(1)}`     :
+                                          `$${n.toLocaleString("es-MX", { maximumFractionDigits: 0 })}`;
+                };
+                const sml = (raw: number | undefined | null) => {
+                  const n = Number(raw ?? 0);
+                  return n >= 1_000_000 ? "M" : n >= 1_000 ? "k" : "";
+                };
+                const fmtPct = (raw: number | undefined | null) => {
+                  const d = Number(raw ?? 0);
+                  return `${d >= 0 ? "↑" : "↓"} ${Math.abs(d).toFixed(1)}%`;
+                };
                 const rows = [
-                  { label: "Ventas totales",  value: stats ? fmt(stats.sales.value)             : "—", sml: stats ? sml(stats.sales.value) : "",  up: (stats?.sales.delta        ?? 0) >= 0, delta: stats ? fmtPct(stats.sales.delta)          : "",  sub: stats ? `vs ${fmt(stats.sales.prev)}`           : "sin datos" },
-                  { label: "Pedidos",         value: stats ? stats.orders.value.toLocaleString("es-MX") : "—", sml: "",                            up: (stats?.orders.delta       ?? 0) >= 0, delta: stats ? fmtPct(stats.orders.delta)         : "",  sub: stats ? `vs ${stats.orders.prev.toLocaleString("es-MX")}` : "sin datos" },
-                  { label: "Ticket promedio", value: stats ? `$${stats.averageTicket.value}` : "—",       sml: "",                                 up: (stats?.averageTicket.delta?? 0) >= 0, delta: stats ? fmtPct(stats.averageTicket.delta) : "",  sub: stats ? `vs $${stats.averageTicket.prev}`       : "sin datos" },
-                  { label: "Prep. activa",    value: stats ? `${stats.prepMinutes.value}` : "—",          sml: "min",                              up: true,                                  delta: "",                                              sub: stats ? `${stats.prepMinutes.activeCount} activos` : "sin datos" },
+                  { label: "Ventas totales",  value: stats ? fmt(stats.sales.value)                      : "—", sml: stats ? sml(stats.sales.value) : "",  up: (stats?.sales.delta        ?? 0) >= 0, delta: stats ? fmtPct(stats.sales.delta)          : "",  sub: stats ? `vs ${fmt(stats.sales.prev)}`                            : "sin datos" },
+                  { label: "Pedidos",         value: stats ? (stats.orders.value ?? 0).toLocaleString("es-MX") : "—", sml: "",                            up: (stats?.orders.delta       ?? 0) >= 0, delta: stats ? fmtPct(stats.orders.delta)         : "",  sub: stats ? `vs ${(stats.orders.prev ?? 0).toLocaleString("es-MX")}` : "sin datos" },
+                  { label: "Ticket promedio", value: stats ? `$${stats.averageTicket?.value ?? 0}`       : "—", sml: "",                                 up: (stats?.averageTicket?.delta?? 0) >= 0, delta: stats ? fmtPct(stats.averageTicket?.delta) : "",  sub: stats ? `vs $${stats.averageTicket?.prev ?? 0}`                  : "sin datos" },
+                  { label: "Prep. activa",    value: stats ? `${stats.prepMinutes?.value ?? 0}`          : "—", sml: "min",                              up: true,                                  delta: "",                                              sub: stats ? `${stats.prepMinutes?.activeCount ?? 0} activos`         : "sin datos" },
                 ];
                 return rows.map((k, i) => (
                   <div key={k.label} style={{ padding: "16px 22px", borderRight: i < 3 ? `1px solid ${V.bd1}` : "none" }}>
@@ -443,7 +451,7 @@ export default function ReportesIAPage() {
                 </div>
                 <p style={{ fontSize: 13, color: V.txMid, lineHeight: 1.6 }}>
                   {stats
-                    ? `En el período actual se registraron ${stats.orders.value.toLocaleString("es-MX")} pedidos y $${stats.sales.value.toLocaleString("es-MX",{maximumFractionDigits:0})} en ventas, con ticket promedio de $${stats.averageTicket.value}. Usa el chat de Mesero para generar un análisis detallado sobre este reporte.`
+                    ? `En el período actual se registraron ${(stats.orders.value ?? 0).toLocaleString("es-MX")} pedidos y $${(stats.sales.value ?? 0).toLocaleString("es-MX",{maximumFractionDigits:0})} en ventas, con ticket promedio de $${stats.averageTicket?.value ?? 0}. Usa el chat de Mesero para generar un análisis detallado sobre este reporte.`
                     : "Aún no hay datos suficientes para generar un resumen. Pregúntale a Mesero desde el panel derecho cuando quieras un análisis personalizado."
                   }
                 </p>
@@ -544,7 +552,7 @@ export default function ReportesIAPage() {
                               </td>
                               <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}>
                                 <span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>
-                                  ${s.sales.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
+                                  ${(s.sales ?? 0).toLocaleString("es-MX", { maximumFractionDigits: 0 })}
                                 </span>
                               </td>
                               <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}`, minWidth: 180 }}>
@@ -552,15 +560,15 @@ export default function ReportesIAPage() {
                                   <div style={{ flex: 1, height: 4, background: V.surf3, borderRadius: 2 }}>
                                     <div style={{ width: `${pct}%`, height: 4, background: up ? V.ok : V.err, borderRadius: 2 }} />
                                   </div>
-                                  <span style={delta(up)}>{up ? "↑" : "↓"} {Math.abs(s.delta).toFixed(1)}%</span>
+                                  <span style={delta(up)}>{up ? "↑" : "↓"} {Math.abs(Number(s.delta ?? 0)).toFixed(1)}%</span>
                                 </div>
                               </td>
                               <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}>
-                                <span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>{s.orders.toLocaleString("es-MX")}</span>
+                                <span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>{(s.orders ?? 0).toLocaleString("es-MX")}</span>
                               </td>
                               <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}>
                                 <span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>
-                                  ${s.avgTicket.toLocaleString("es-MX")}
+                                  ${(s.avgTicket ?? 0).toLocaleString("es-MX")}
                                 </span>
                               </td>
                               <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}>
@@ -598,12 +606,12 @@ export default function ReportesIAPage() {
                           </span>
                           <div>
                             <div style={{ color: V.tx, fontWeight: 600, fontSize: 13 }}>{p.name}</div>
-                            <div style={{ fontSize: 11, color: V.txMut }}>{p.quantity.toLocaleString("es-MX")} unidades</div>
+                            <div style={{ fontSize: 11, color: V.txMut }}>{(p.quantity ?? 0).toLocaleString("es-MX")} unidades</div>
                           </div>
                         </div>
                         <div style={{ textAlign: "right" }}>
                           <div style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>
-                            ${p.revenue.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
+                            ${(p.revenue ?? 0).toLocaleString("es-MX", { maximumFractionDigits: 0 })}
                           </div>
                         </div>
                       </div>
