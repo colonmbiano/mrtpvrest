@@ -6,6 +6,18 @@ const nextConfig = {
       { protocol: 'https', hostname: '**' },
     ],
   },
+  // Proxy same-origin /api/* → backend para evitar CORS desde el navegador.
+  // Con esto el cliente axios usa paths relativos (/api/...) y Next.js reescribe
+  // a NEXT_PUBLIC_API_URL/api/... en el edge. Si la env no está definida,
+  // no inyectamos el rewrite para no romper el build.
+  async rewrites() {
+    const api = process.env.NEXT_PUBLIC_API_URL
+    if (!api) return []
+    const base = api.replace(/\/$/, '')
+    return [
+      { source: '/api/:path*', destination: `${base}/api/:path*` },
+    ]
+  },
 }
 
 // Sentry opcional. Solo activa si @sentry/nextjs está instalado Y SENTRY_DSN definida.
