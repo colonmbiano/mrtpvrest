@@ -35,6 +35,9 @@ packages/database/generated/
 .vscode
 .idea
 
+# Claude Code worktrees (sesiones anteriores, no código del repo)
+**/.claude/worktrees/
+
 # Design System (carpetas pesadas de assets/previews)
 Design System/images/
 Design System/uploads/
