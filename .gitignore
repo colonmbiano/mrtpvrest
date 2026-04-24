@@ -34,3 +34,8 @@ packages/database/generated/
 # Editor
 .vscode
 .idea
+
+# Design System (carpetas pesadas de assets/previews)
+Design System/images/
+Design System/uploads/
+Design System/export/
