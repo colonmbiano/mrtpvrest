@@ -131,6 +131,20 @@ router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, 
     res.json(emp);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// DELETE eliminar empleado
+router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const emp = await prisma.employee.findUnique({
+      where: { id: req.params.id, locationId: req.locationId }
+    });
+    if (!emp) return res.status(404).json({ error: 'Empleado no encontrado en esta sucursal' });
+    if (emp.role === 'ADMIN') return res.status(403).json({ error: 'No puedes eliminar un administrador' });
+
+    await prisma.employee.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST login con PIN
 router.post('/login', async (req, res) => {
   try {
