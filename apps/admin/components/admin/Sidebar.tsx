@@ -33,6 +33,7 @@ const IWallet    = ({ size }: IconProps) => ic(<><rect x="1" y="5" width="14" he
 const IMapPin    = ({ size }: IconProps) => ic(<><path d="M8 14s5-4 5-8A5 5 0 003 6c0 4 5 8 5 8z"/><circle cx="8" cy="6" r="2"/></>, size);
 const ILayoutDash = ({ size }: IconProps) => ic(<><rect x="1" y="1" width="6" height="8" rx="1"/><rect x="9" y="1" width="6" height="4" rx="1"/><rect x="9" y="7" width="6" height="8" rx="1"/><rect x="1" y="11" width="6" height="4" rx="1"/></>, size);
 const IPuzzle    = ({ size }: IconProps) => ic(<><path d="M6 2h4v2a1 1 0 001 1h2v4h-2a1 1 0 00-1 1v2H6v-2a1 1 0 00-1-1H3V5h2a1 1 0 001-1V2z"/></>, size);
+const ICreditCard= ({ size }: IconProps) => ic(<><rect x="1" y="3" width="14" height="10" rx="1.5"/><line x1="1" y1="6.5" x2="15" y2="6.5"/><line x1="4" y1="10.5" x2="7" y2="10.5"/></>, size);
 
 // ── Nav sections ──────────────────────────────────────────────
 const SECTIONS = [
@@ -50,6 +51,7 @@ const SECTIONS = [
       { href: "/admin/tickets",              icon: <IFolder />,    label: "Config. Tickets" },
       { href: "/admin/integraciones",        icon: <IPlug />,      label: "Integraciones" },
       { href: "/admin/modulos",             icon: <IPuzzle />,    label: "Módulos" },
+      { href: "/admin/billing",              icon: <ICreditCard />, label: "Facturación" },
     ],
   },
   {
