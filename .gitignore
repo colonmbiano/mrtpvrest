@@ -16,6 +16,10 @@ out
 .env
 .env.local
 .env.*.local
+tests/e2e/.env.test
+
+# Playwright results
+tests/e2e/results/
 
 # Logs
 *.log
