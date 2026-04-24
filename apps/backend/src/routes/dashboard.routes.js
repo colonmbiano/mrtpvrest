@@ -18,6 +18,13 @@ const router = express.Router();
 
 const PERIODS = new Set(['HOY', '7D', '30D', 'AÑO', 'ANIO', 'ANO']);
 
+// Estados que cuentan como "pedido activo / en curso". Deben coincidir con
+// los valores del enum OrderStatus en packages/database/prisma/schema.prisma
+// (PENDING, CONFIRMED, PREPARING, READY, ON_THE_WAY, DELIVERED, CANCELLED,
+// OPEN). Antes estaba 'DELIVERING' — no existe en el enum y Prisma reventaba
+// toda la ruta con PrismaClientValidationError.
+const ACTIVE_ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'ON_THE_WAY', 'OPEN'];
+
 function getRestaurantId(req) {
   return req.user?.restaurantId || req.restaurantId || null;
 }
@@ -102,14 +109,23 @@ router.get('/stats', authenticate, requireTenantAccess, requireAdmin, async (req
     // Tiempo promedio en preparación: tiempo entre createdAt y el momento en
     // que el pedido llegó a READY. Si no tenemos historial, calculamos el
     // tiempo transcurrido desde la creación de los pedidos aún activos.
-    const activeOrders = await prisma.order.findMany({
-      where: {
-        ...baseWhere,
-        status: { in: ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'DELIVERING'] },
-      },
-      select: { createdAt: true },
-      take: 200,
-    });
+    // Aislamos esta query en su propio try/catch: un status inválido en el
+    // enum no debe tumbar todo el dashboard (antes de este guard, un
+    // PrismaClientValidationError aquí devolvía 500 al frontend completo).
+    let activeOrders = [];
+    try {
+      activeOrders = await prisma.order.findMany({
+        where: {
+          ...baseWhere,
+          status: { in: ACTIVE_ORDER_STATUSES },
+        },
+        select: { createdAt: true },
+        take: 200,
+      });
+    } catch (err) {
+      console.error('dashboard/stats activeOrders fallback:', err.message);
+      activeOrders = [];
+    }
     const nowMs = Date.now();
     const waitMinutes = activeOrders.length
       ? activeOrders.reduce((s, o) => s + (nowMs - new Date(o.createdAt).getTime()) / 60000, 0) / activeOrders.length
@@ -220,7 +236,7 @@ router.get('/live-orders', authenticate, requireTenantAccess, requireAdmin, asyn
       where: {
         restaurantId,
         ...(locationId ? { locationId } : {}),
-        status: { in: ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'DELIVERING'] },
+        status: { in: ACTIVE_ORDER_STATUSES },
       },
       orderBy: { createdAt: 'desc' },
       take: 50,
