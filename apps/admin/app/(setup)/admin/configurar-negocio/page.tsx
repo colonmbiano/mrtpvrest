@@ -1,3 +1,16 @@
+// /admin/configurar-negocio · Wizard de tipo de negocio (cards)
+//
+// Pantalla full-screen (sin sidebar) que pide al admin elegir el tipo de
+// negocio — Restaurante / Retail / Bar / Café — y crea el Restaurant/Location.
+// Entradas:
+//   · desde login/page.tsx cuando el user entra y no tiene restaurantes
+//   · desde Sidebar.tsx botón "Añadir sucursal"
+//
+// Vive en app/(setup)/… (grupo invisible) para heredar un layout sin
+// Sidebar y no mezclarse con las rutas operacionales bajo app/(admin)/…
+//
+// NO confundir con /onboarding (app/onboarding/page.tsx): ese es el chat
+// IA del primer registro post-verify-email.
 "use client";
 
 import { useEffect, useState } from "react";

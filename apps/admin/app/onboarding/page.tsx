@@ -1,3 +1,12 @@
+// /onboarding · Onboarding conversacional con IA (chat)
+//
+// Flujo POST-verify-email para dueños recién registrados: la IA conduce una
+// conversación que completa los datos del negocio y llama a /api/onboarding/chat.
+// Es la puerta de entrada al dashboard para un tenant nuevo.
+//
+// NO confundir con /admin/configurar-negocio (app/(setup)/…): ese wizard de
+// cards (Restaurante/Retail/Bar/Café) se usa post-login cuando el usuario
+// no tiene un restaurante, o desde el Sidebar al "Añadir sucursal".
 "use client";
 
 import { useEffect, useRef, useState } from "react";
