@@ -1,7 +1,13 @@
 ﻿import axios from "axios";
 import { getApiUrl } from "./config";
 
-const api = axios.create({ baseURL: getApiUrl() });
+// En el browser usamos paths relativos ("") para que pasen por el rewrite
+// de next.config.js (same-origin, sin CORS). En SSR/Node seguimos usando la
+// URL absoluta porque no hay proxy.
+const baseURL =
+  typeof window === "undefined" ? getApiUrl() : "";
+
+const api = axios.create({ baseURL });
 
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
