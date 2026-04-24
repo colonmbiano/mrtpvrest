@@ -40,6 +40,9 @@ model Tenant {
   whatsappNumber String?
   themeConfig    Json? // { theme: "STREET_FOOD", primaryColor: "#000000" }
 
+  // Stripe customer (B2B SaaS billing) — reusado entre checkouts y portal
+  stripeCustomerId String? @unique
+
   emailVerifiedAt         DateTime?
   emailVerificationToken  String?   @unique
   emailVerificationExpiry DateTime?
@@ -77,6 +80,9 @@ model Plan {
   isActive     Boolean @default(true)
 
   allowedModules String[] @default([])
+
+  // Stripe Price ID (price_xxx) — product/price creados en el Stripe Dashboard
+  stripePriceId String? @unique
 
   subscriptions Subscription[]
 

@@ -97,6 +97,15 @@ app.use(compression())
 app.use(cors(corsOptions));
 // 2. Respondemos automáticamente a TODAS las peticiones OPTIONS (Preflight)
 app.options('*', cors(corsOptions));
+
+// Webhook Stripe (B2B SaaS billing) — montado ANTES de express.json() porque
+// la verificación de firma (constructEvent) exige el body crudo exacto.
+app.use(
+  '/api/billing/webhook',
+  express.raw({ type: 'application/json' }),
+  require('./routes/saas-billing-webhook.routes')
+)
+
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ limit: '50mb', extended: true }))
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
@@ -147,6 +156,7 @@ app.use('/api/inventory',    require('./routes/inventory.routes'))
 app.use('/api/banners',      require('./routes/banners.routes'))
 app.use('/api/admin',        require('./routes/admin.routes'))
 app.use('/api/saas',         require('./routes/saas.routes'))
+app.use('/api/billing',      require('./routes/saas-billing.routes'))
 app.use('/api/ai',           require('./routes/ai.routes'));
 app.use('/api/onboarding',   require('./routes/onboarding.routes'));
 app.use('/api/tpv/config',   require('./routes/tpv-config.routes'));
