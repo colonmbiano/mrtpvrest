@@ -1,35 +1,81 @@
-@import url("https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── TEMA OSCURO (default) ── */
+/* ─────────────────────────────────────────────────────────────
+   DESIGN SYSTEM · MRTPVREST (canonical tokens)
+   Fuentes: Syne (display) · DM Sans (body) · DM Mono (mono)
+   ───────────────────────────────────────────────────────────── */
 :root, [data-theme="dark"] {
-  --bg:     #0A0A0A;
-  --surf:   #141414;
-  --surf2:  #1c1c1c;
-  --border: #2A2A2A;
+  /* Iris (brand) */
+  --iris-200:#dcd0ff; --iris-300:#b89eff; --iris-400:#9472ff; --iris-500:#7c3aed;
+  --iris-600:#6428d0; --iris-soft:rgba(124,58,237,.14); --iris-glow:rgba(124,58,237,.35);
+
+  /* Status */
+  --ok:#10b981;   --ok-soft:rgba(16,185,129,.14);
+  --warn:#f59e0b; --warn-soft:rgba(245,158,11,.14);
+  --err:#ef4444;  --err-soft:rgba(239,68,68,.14);
+  --info:#3b82f6; --info-soft:rgba(59,130,246,.14);
+
+  /* Superficies dark (OLED) */
+  --bg:     #08080f;
+  --surf-1: #0f0f1c;
+  --surf-2: #15152a;
+  --surf-3: #1c1c38;
+
+  /* Borders */
+  --bd-1: rgba(255,255,255,.08);
+  --bd-2: rgba(255,255,255,.14);
+
+  /* Texto (AAA contra --bg) */
+  --tx:     #f4f4fb;
+  --tx-hi:  #ffffff;
+  --tx-mid: #c4c4de;
+  --tx-mut: #9494b8;
+  --tx-dim: #6e6e92;
+
+  /* Tipografía */
+  --f-d: var(--font-syne, 'Syne'), sans-serif;
+  --f-b: var(--font-dm-sans, 'DM Sans'), sans-serif;
+  --f-m: var(--font-dm-mono, 'DM Mono'), monospace;
+
+  /* Alias legacy (compat con UI previa del TPV) */
+  --surf:   var(--surf-1);
+  --surf2:  var(--surf-2);
+  --border: var(--bd-1);
   --gold:   #F5C842;
   --gold2:  #FFD060;
-  --green:  #22c55e;
-  --red:    #ef4444;
-  --text:   #ffffff;
-  --muted:  #9ca3af;
+  --green:  var(--ok);
+  --red:    var(--err);
+  --text:   var(--tx);
+  --muted:  var(--tx-mut);
   --shadow: rgba(0,0,0,0.4);
 }
 
-/* ── TEMA CLARO ── */
+/* ── LIGHT THEME ── */
 [data-theme="light"] {
-  --bg:     #f5f4f0;
-  --surf:   #ffffff;
-  --surf2:  #f0ede8;
-  --border: #e0ddd8;
+  --bg:     #f7f7fb;
+  --surf-1: #ffffff;
+  --surf-2: #f2f2f7;
+  --surf-3: #ebebf1;
+  --bd-1:   #e4e4ec;
+  --bd-2:   #d4d4de;
+  --tx:     #0c0c17;
+  --tx-hi:  #05050c;
+  --tx-mid: #2a2a44;
+  --tx-mut: #5a5a7a;
+  --tx-dim: #8585a3;
+  --iris-soft: rgba(124,58,237,.08);
+
+  --surf:   var(--surf-1);
+  --surf2:  var(--surf-2);
+  --border: var(--bd-1);
   --gold:   #d4820a;
   --gold2:  #e8a020;
   --green:  #16a34a;
   --red:    #dc2626;
-  --text:   #1a1814;
-  --muted:  #7a7570;
+  --text:   var(--tx);
+  --muted:  var(--tx-mut);
   --shadow: rgba(0,0,0,0.1);
 }
 
@@ -37,12 +83,15 @@
 
 body {
   background: var(--bg);
-  color: var(--text);
-  font-family: "DM Sans", sans-serif;
+  color: var(--tx);
+  font-family: var(--f-b);
+  -webkit-font-smoothing: antialiased;
   transition: background 0.2s, color 0.2s;
 }
 
-.font-syne { font-family: "Syne", sans-serif; }
+.font-syne    { font-family: var(--f-d); }
+.font-display { font-family: var(--f-d); letter-spacing: -.02em; }
+.font-mono    { font-family: var(--f-m); font-feature-settings: "tnum" 1, "zero" 1; }
 
 /* Transición suave al cambiar tema */
 *, *::before, *::after {
@@ -65,6 +114,6 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
 /* Bottom sheet animation */
 @keyframes slideUp {
   from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  to   { transform: translateY(0); }
 }
 .sheet-enter { animation: slideUp 0.22s cubic-bezier(0.22, 1, 0.36, 1); }

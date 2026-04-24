@@ -1,30 +1,64 @@
-@import url("https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500;600&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── DARK THEME (default) ── */
+/* ─────────────────────────────────────────────────────────────
+   DESIGN SYSTEM · MRTPVREST (canonical tokens)
+   Fuentes: Syne (display) · DM Sans (body) · DM Mono (mono)
+   ───────────────────────────────────────────────────────────── */
 :root,
 [data-theme="dark"] {
-  --bg:            #080810;
-  --surf:          #0e0e18;
-  --surf2:         #13131f;
-  --surf3:         #191928;
-  --border:        #1c1c2e;
-  --border2:       #282840;
-  --text:          #eaeaf6;
-  --muted:         #6868a0;
-  --muted2:        #404060;
+  /* Iris (brand) */
+  --iris-200:#dcd0ff; --iris-300:#b89eff; --iris-400:#9472ff; --iris-500:#7c3aed;
+  --iris-600:#6428d0; --iris-soft:rgba(124,58,237,.14); --iris-glow:rgba(124,58,237,.35);
+
+  /* Status */
+  --ok:#10b981;   --ok-soft:rgba(16,185,129,.14);
+  --warn:#f59e0b; --warn-soft:rgba(245,158,11,.14);
+  --err:#ef4444;  --err-soft:rgba(239,68,68,.14);
+  --info:#3b82f6; --info-soft:rgba(59,130,246,.14);
+
+  /* Superficies dark (OLED) */
+  --bg:     #08080f;
+  --surf-1: #0f0f1c;
+  --surf-2: #15152a;
+  --surf-3: #1c1c38;
+
+  /* Borders */
+  --bd-1: rgba(255,255,255,.08);
+  --bd-2: rgba(255,255,255,.14);
+
+  /* Texto (AAA contra --bg) */
+  --tx:     #f4f4fb;
+  --tx-hi:  #ffffff;
+  --tx-mid: #c4c4de;
+  --tx-mut: #9494b8;
+  --tx-dim: #6e6e92;
+
+  /* Tipografía */
+  --f-d: var(--font-syne, 'Syne'), sans-serif;
+  --f-b: var(--font-dm-sans, 'DM Sans'), sans-serif;
+  --f-m: var(--font-dm-mono, 'DM Mono'), monospace;
+
+  /* Alias legacy (compat con UI previa del admin) */
+  --surf:          var(--surf-1);
+  --surf2:         var(--surf-2);
+  --surf3:         var(--surf-3);
+  --border:        var(--bd-1);
+  --border2:       var(--bd-2);
+  --text:          var(--tx);
+  --muted:         var(--tx-mut);
+  --muted2:        var(--tx-dim);
 
   /* Brand accent — overwritten by AccentInjector with logo color */
-  --brand-primary:   #7c3aed;
-  --brand-secondary: #9f67ff;
+  --brand-primary:   var(--iris-500);
+  --brand-secondary: var(--iris-400);
 
-  /* Semantic colors */
-  --green:  #10b981;
-  --amber:  #f59e0b;
-  --red:    #ef4444;
-  --blue:   #3b82f6;
+  /* Semantic colors (legacy aliases) */
+  --green:  var(--ok);
+  --amber:  var(--warn);
+  --red:    var(--err);
+  --blue:   var(--info);
 
   /* Accent aliases used across the admin UI */
   --gold:   #f5a623;
@@ -39,18 +73,30 @@
 
 /* ── LIGHT THEME ── */
 [data-theme="light"] {
-  --bg:            #f4f4f0;
-  --surf:          #ffffff;
-  --surf2:         #f0f0ec;
-  --surf3:         #e8e8e4;
-  --border:        #dededa;
-  --border2:       #ccccc8;
-  --text:          #111118;
-  --muted:         #606078;
-  --muted2:        #9898a8;
+  --bg:     #f7f7fb;
+  --surf-1: #ffffff;
+  --surf-2: #f2f2f7;
+  --surf-3: #ebebf1;
+  --bd-1:   #e4e4ec;
+  --bd-2:   #d4d4de;
+  --tx:     #0c0c17;
+  --tx-hi:  #05050c;
+  --tx-mid: #2a2a44;
+  --tx-mut: #5a5a7a;
+  --tx-dim: #8585a3;
+  --iris-soft: rgba(124,58,237,.08);
 
-  --brand-primary:   #7c3aed;
-  --brand-secondary: #6d28d9;
+  --surf:          var(--surf-1);
+  --surf2:         var(--surf-2);
+  --surf3:         var(--surf-3);
+  --border:        var(--bd-1);
+  --border2:       var(--bd-2);
+  --text:          var(--tx);
+  --muted:         var(--tx-mut);
+  --muted2:        var(--tx-dim);
+
+  --brand-primary:   var(--iris-500);
+  --brand-secondary: var(--iris-600);
 
   --green:  #059669;
   --amber:  #d97706;
@@ -70,12 +116,16 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 body {
-  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
-  color: var(--text);
+  font-family: var(--f-b);
+  color: var(--tx);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+.font-syne    { font-family: var(--f-d); }
+.font-display { font-family: var(--f-d); letter-spacing: -.02em; }
+.font-mono    { font-family: var(--f-m); font-feature-settings: "tnum" 1, "zero" 1; }
 
 /* Pulse animation for live indicators */
 @keyframes pulse-live {
@@ -83,6 +133,3 @@ body {
   50%       { opacity: 0.4; }
 }
 .animate-pulse { animation: pulse-live 2s ease-in-out infinite; }
-
-/* Monospace data values */
-.font-mono { font-family: 'DM Mono', monospace; }
