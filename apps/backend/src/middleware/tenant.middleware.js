@@ -52,7 +52,8 @@ const tenantMiddleware = async (req, res, next) => {
     '/api/saas/register',
     '/api/saas/plans',
     '/api/saas',
-    '/api/ai'
+    '/api/ai',
+    '/api/billing'
   ];
 
   if (globalPaths.some(p => req.path.startsWith(p))) return next();
