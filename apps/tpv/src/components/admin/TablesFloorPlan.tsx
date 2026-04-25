@@ -289,18 +289,19 @@ export default function TablesFloorPlan({
                     onPointerUp={endDrag}
                     onPointerCancel={endDrag}
                     onClick={() => !editing && handleTileClick(t)}
-                    className="absolute rounded-xl flex flex-col items-center justify-center text-center select-none transition-shadow"
+                    className="absolute rounded-2xl flex flex-col items-center justify-center text-center select-none transition-all table-tile"
                     style={{
                       left: t.x,
                       top: t.y,
                       width: TILE,
                       height: TILE,
-                      background: sty.bg,
+                      background: `linear-gradient(145deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04)), ${sty.bg}`,
                       border: `2px solid ${sty.ring}`,
                       cursor: editing ? "grab" : selectable ? "pointer" : "not-allowed",
                       opacity: selectable ? 1 : 0.55,
-                      boxShadow: dragId === t.id ? `0 8px 24px ${sty.ring}66` : undefined,
+                      boxShadow: dragId === t.id ? `0 18px 44px ${sty.ring}66` : `0 14px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.14)`,
                       touchAction: editing ? "none" : "auto",
+                      backdropFilter: "blur(14px)",
                     }}
                     title={
                       mode === "pick" && !selectable
@@ -323,6 +324,7 @@ export default function TablesFloorPlan({
                       />
                     ) : (
                       <>
+                        <span className="table-glyph mb-1" aria-hidden="true" />
                         <div className="font-black text-sm text-white">{t.name}</div>
                         <div className="text-[10px] font-bold mt-0.5" style={{ color: sty.ring }}>
                           {sty.label}

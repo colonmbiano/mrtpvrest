@@ -25,6 +25,18 @@ api.interceptors.response.use(
   (r) => r,
   async (error) => {
     // Si el error es por falta de IDs, podríamos redirigir a una página de "Setup"
+    if (typeof window !== "undefined" && error?.response?.status === 401) {
+      const url = String(error?.config?.url || "");
+      const isPinLogin = url.includes("/api/employees/login");
+      if (!isPinLogin && !window.location.pathname.startsWith("/setup")) {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("tpv-employee-token");
+        localStorage.removeItem("tpv-employee");
+        localStorage.removeItem("restaurantId");
+        localStorage.removeItem("locationId");
+        window.location.replace("/setup");
+      }
+    }
     return Promise.reject(error);
   }
 );
