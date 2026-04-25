@@ -86,7 +86,7 @@ export default function KioskPage() {
       const { data } = await axios.get(`${baseUrl}/api/kiosk/menu`, { headers });
       const cats = (data as Category[]).filter((c) => c.items.length > 0);
       setCategories(cats);
-      if (cats.length > 0) setActiveCategory(cats[0].id);
+      if (cats[0]) setActiveCategory(cats[0].id);
     } catch (err: any) {
       if (err?.response?.status === 403) setScreen("forbidden");
     } finally {

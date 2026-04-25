@@ -15,7 +15,9 @@ import { useLocation } from "@/hooks/useLocation";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { useRouter } from "next/navigation";
 
-const DEFAULT_ACCENT = "#F5C842";
+// Actualizado a tu naranja corporativo por defecto. 
+// La variable remota tomará el color del Tenant en Supabase.
+const DEFAULT_ACCENT = "#ff5c35"; 
 const EMPLOYEE_TOKEN_KEY = "tpv-employee-token";
 const EMPLOYEE_DATA_KEY = "tpv-employee";
 const PIN_MIN_LENGTH = 4;
@@ -38,7 +40,6 @@ const PAY_METHODS = [
   { value: "TRANSFER", label: "📲 Transferencia" },
   { value: "COURTESY", label: "🎁 Cortesía" },
 ];
-
 
 const ALL_ORDER_TYPES: { t: string; l: string }[] = [
   { t: "TAKEOUT",  l: "🥡 Llevar" },
@@ -73,14 +74,9 @@ export default function TPVPage() {
 
   // Tickets
   const defaultOrderType = orderTypeTabs[0]?.t || "TAKEOUT";
-  // tableId/tableName tagueamos la mesa elegida via el planímetro (Dine-in).
-  // El campo legacy `table` (string) se mantiene por compatibilidad con código
-  // que sólo lee tableNumber.
   const emptyTicket = () => ({ id: Date.now(), name: "", phone: "", type: defaultOrderType, table: "", tableId: "", tableName: "", address: "", items: [], discount: 0, discountType: "percent" });
   const [tickets, setTickets]           = useState<any[]>(() => [{ id: 1, name: "", phone: "", type: "TAKEOUT", table: "", tableId: "", tableName: "", address: "", items: [], discount: 0, discountType: "percent" }]);
 
-  // Si el tipo del ticket activo ya no está permitido (ej. la sucursal desactivó
-  // TAKEOUT desde el dashboard), lo re-alineamos al primer tipo válido.
   useEffect(() => {
     if (orderTypeTabs.length === 0) return;
     setTickets(ts => ts.map(t =>
@@ -133,7 +129,6 @@ export default function TPVPage() {
   const [fontSize, setFontSize] = useState("sm");
 
   // Mobile nav
-  // Drawers móviles
   const [ticketDrawerOpen, setTicketDrawerOpen] = useState(false);
   const [ordersDrawerOpen, setOrdersDrawerOpen] = useState(false);
 
@@ -158,8 +153,6 @@ export default function TPVPage() {
     setPinError("");
   }, []);
 
-  // Auto-lock por inactividad — controlado por TpvRemoteConfig.lockTimeoutSec.
-  // 0 o estando ya bloqueado → no arma el timer.
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const timeoutSec = remoteConfig.lockTimeoutSec;
@@ -180,7 +173,6 @@ export default function TPVPage() {
     };
   }, [remoteConfig.lockTimeoutSec, isGlobalLocked, clearEmployeeSession]);
 
-  // ── SAAS INIT ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const restId = localStorage.getItem("restaurantId");
     const locId  = localStorage.getItem("locationId");
@@ -311,7 +303,6 @@ export default function TPVPage() {
     return () => clearInterval(t);
   }, [fetchOrders, isGlobalLocked, isConfigured]);
 
-  // ── TICKET HELPERS ─────────────────────────────────────────────────────────
   function updateTicket(patch: any) {
     setTickets(ts => ts.map((t, i) => i === activeTicket ? { ...t, ...patch } : t));
   }
@@ -587,8 +578,6 @@ export default function TPVPage() {
   }
 
   // ── Cerebro Adaptativo: switch de modo ────────────────────────────────────
-  // Para modos distintos a RESTAURANT renderizamos placeholders. Cuando la
-  // sucursal es RESTAURANT (default) caemos al TPV clásico debajo.
   if (!locLoading) {
     if (businessType === "RETAIL") return <RetailLayout />;
     if (businessType === "BAR")    return <BarLayout />;
@@ -597,7 +586,6 @@ export default function TPVPage() {
 
   // ── TPV PRINCIPAL ──────────────────────────────────────────────────────────
 
-  // Ticket pane reutilizado en sidebar md+ y en bottom-sheet mobile
   const ticketPane = (
     <div className="flex flex-col h-full min-h-0 overflow-hidden" style={{ background: "var(--surf)" }}>
       {/* Pestañas de tickets */}
@@ -612,11 +600,11 @@ export default function TPVPage() {
             <button onClick={() => closeTicket(idx)} className="text-xs px-2 min-h-[44px] select-none" style={{ color: "var(--muted)" }}>✕</button>
           </div>
         ))}
-        <button onClick={addNewTicket} className="px-3 min-h-[44px] rounded-xl text-base font-black flex-shrink-0 ml-1 select-none"
-          style={{ background: "var(--surf2)", color: "var(--muted)" }}>+</button>
+        <button onClick={addNewTicket} className="px-3 min-h-[44px] rounded-xl text-base font-black flex-shrink-0 ml-1 select-none hover:bg-[var(--surf2)] transition-colors"
+          style={{ background: "transparent", color: "var(--muted)" }}>+</button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 pb-6 space-y-2 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto p-4 pb-6 space-y-3 scrollbar-hide">
         {!activeShift && (
           <div className="rounded-xl p-3 flex items-center justify-between"
             style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
@@ -626,36 +614,36 @@ export default function TPVPage() {
               style={{ background: "#ef4444", color: "#fff" }}>Abrir turno</button>
           </div>
         )}
-        <div className="flex gap-2">
-          <input value={ticket.name} onChange={e => updateTicket({ name: e.target.value })}
-            placeholder="Nombre" className="flex-1 px-3 py-3 rounded-xl text-sm outline-none"
-            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
-          <input value={ticket.phone} onChange={e => updateTicket({ phone: e.target.value })}
-            placeholder="Tel" type="tel" className="w-28 px-3 py-3 rounded-xl text-sm outline-none"
-            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
-        </div>
-        <div className="flex gap-1.5">
+        
+        {/* Segmented Control - Tipo de Orden */}
+        <div className="flex gap-1 p-1 rounded-xl bg-[var(--bg)] border border-[var(--border)]">
           {orderTypeTabs.map(({ t, l }) => (
             <button key={t} onClick={() => updateTicket({ type: t })}
-              className="flex-1 min-h-[48px] rounded-xl text-xs font-bold select-none"
-              style={{
-                background: ticket.type === t ? ACCENT : "var(--surf2)",
-                color: ticket.type === t ? "#fff" : "var(--muted)",
-                border: ticket.type === t ? `2px solid ${ACCENT}` : "1px solid var(--border)",
-              }}>
+              className={`flex-1 min-h-[40px] rounded-lg text-xs font-bold select-none transition-all ${ticket.type === t ? 'shadow-md text-white' : 'text-[var(--muted)] hover:text-white'}`}
+              style={{ background: ticket.type === t ? ACCENT : "transparent" }}>
               {l}
             </button>
           ))}
         </div>
+
+        <div className="flex gap-2">
+          <input value={ticket.name} onChange={e => updateTicket({ name: e.target.value })}
+            placeholder="Nombre" className="flex-1 px-3 py-3 rounded-xl text-sm outline-none transition-colors focus:border-[var(--accent)]"
+            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
+          <input value={ticket.phone} onChange={e => updateTicket({ phone: e.target.value })}
+            placeholder="Tel" type="tel" className="w-28 px-3 py-3 rounded-xl text-sm outline-none transition-colors focus:border-[var(--accent)]"
+            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }} />
+        </div>
+
         {ticket.type === "DINE_IN" && (
           <button
             type="button"
             onClick={() => setShowTablePicker(true)}
-            className="w-full px-3 py-3 rounded-xl text-sm font-bold outline-none text-center flex items-center justify-center gap-2"
+            className="w-full px-3 py-3 rounded-xl text-sm font-bold outline-none text-center flex items-center justify-center gap-2 transition-all hover:bg-[var(--surf2)]"
             style={{
-              background: "var(--surf2)",
-              border: ticket.tableId ? `2px solid ${ACCENT}` : "1px solid var(--border)",
-              color: "var(--text)",
+              background: ticket.tableId ? `${ACCENT}15` : "var(--surf2)",
+              border: ticket.tableId ? `1px solid ${ACCENT}` : "1px solid var(--border)",
+              color: ticket.tableId ? ACCENT : "var(--text)",
             }}
           >
             <span>🪑</span>
@@ -674,50 +662,57 @@ export default function TPVPage() {
         )}
         {ticket.type === "DELIVERY" && (
           <input value={ticket.address} onChange={e => updateTicket({ address: e.target.value })}
-            placeholder="📍 Dirección de entrega" className="w-full px-3 py-3 rounded-xl text-sm outline-none"
-            style={{ background: "var(--surf2)", border: `1px solid ${ACCENT}55`, color: "var(--text)" }} />
+            placeholder="📍 Dirección de entrega" className="w-full px-3 py-3 rounded-xl text-sm outline-none transition-colors focus:border-[var(--accent)]"
+            style={{ background: "var(--surf2)", border: `1px solid var(--border)`, color: "var(--text)" }} />
         )}
+
+        <div className="w-full h-px bg-[var(--border)] my-2" />
+
         {ticket.items.length === 0 ? (
-          <div className="text-center py-10 text-xs select-none" style={{ color: "var(--muted)" }}>Sin productos</div>
+          <div className="text-center py-10 text-xs select-none" style={{ color: "var(--muted)" }}>Sin productos en la orden</div>
         ) : ticket.items.map((item: any, idx: number) => (
           <div key={idx} className="flex items-start gap-2 py-2 border-b" style={{ borderColor: "var(--border)" }}>
             <div className="flex-1 text-xs min-w-0 select-none">
               <div className="flex items-center gap-1 flex-wrap">
-                <span className="font-medium">{item.name}</span>
+                <span className="font-syne font-bold text-sm text-white">{item.name}</span>
                 {item.variantName && <span className="font-bold" style={{ color: ACCENT }}>({item.variantName})</span>}
                 {item.isPromo && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{ background: ACCENT + "22", color: ACCENT }}>PROMO</span>}
               </div>
-              {item.notes && <div className="text-[10px]" style={{ color: "var(--muted)" }}>{item.notes}</div>}
+              {item.notes && <div className="text-[10px] mt-0.5" style={{ color: "var(--muted)" }}>{item.notes}</div>}
               {item.isPromo && item.originalPrice && (
-                <div className="text-[10px]" style={{ color: "var(--muted)" }}>Normal: <span className="line-through">${item.originalPrice}</span></div>
+                <div className="text-[10px] mt-0.5" style={{ color: "var(--muted)" }}>Normal: <span className="line-through">${item.originalPrice}</span></div>
               )}
             </div>
-            <div className="flex items-center gap-1">
-              <button onClick={() => changeQty(idx, -1)} className="w-10 h-10 rounded-lg text-base font-black flex items-center justify-center select-none" style={{ background: "var(--surf2)" }}>−</button>
+            <div className="flex items-center gap-1 bg-[var(--bg)] rounded-lg p-0.5 border border-[var(--border)]">
+              <button onClick={() => changeQty(idx, -1)} className="w-8 h-8 rounded-md text-base flex items-center justify-center select-none hover:bg-[var(--surf2)] transition-colors text-[var(--muted)] hover:text-white">−</button>
               <span className="text-sm font-bold w-6 text-center">{item.quantity}</span>
-              <button onClick={() => changeQty(idx, 1)} className="w-10 h-10 rounded-lg text-base font-black flex items-center justify-center select-none" style={{ background: "var(--surf2)" }}>+</button>
+              <button onClick={() => changeQty(idx, 1)} className="w-8 h-8 rounded-md text-base flex items-center justify-center select-none hover:bg-[var(--surf2)] transition-colors text-[var(--muted)] hover:text-white">+</button>
             </div>
-            <div className="flex flex-col items-end flex-shrink-0">
-              <span className="text-xs font-black select-none" style={{ color: ACCENT }}>${item.subtotal.toFixed(0)}</span>
-              <button onClick={() => removeFromTicket(idx)} className="text-xs mt-1 px-1 select-none" style={{ color: "#ef4444" }}>✕</button>
+            <div className="flex flex-col items-end flex-shrink-0 ml-2">
+              <span className="text-sm font-black select-none" style={{ color: ACCENT }}>${item.subtotal.toFixed(0)}</span>
+              <button onClick={() => removeFromTicket(idx)} className="text-[10px] mt-1 px-1 select-none hover:underline" style={{ color: "#ef4444" }}>Eliminar</button>
             </div>
           </div>
         ))}
+        
         {ticket.items.length > 0 && (
-          <div className="space-y-2 pt-2">
-            <div className="flex justify-between text-xs select-none" style={{ color: "var(--muted)" }}><span>Subtotal</span><span>${subtotal.toFixed(0)}</span></div>
-            {discountAmt > 0 && <div className="flex justify-between text-xs select-none" style={{ color: "#22c55e" }}><span>Descuento</span><span>−${discountAmt.toFixed(0)}</span></div>}
-            <div className="flex justify-between font-black text-2xl py-1 select-none"><span>Total</span><span style={{ color: ACCENT }}>${total.toFixed(0)}</span></div>
-            <button onClick={sendToKitchen} className="w-full min-h-[48px] rounded-xl text-sm font-bold border select-none"
-              style={{ borderColor: "var(--border)", color: "var(--muted)" }}>🍳 Enviar a cocina</button>
+          <div className="space-y-3 pt-4">
+            <div className="flex justify-between text-sm select-none" style={{ color: "var(--muted)" }}><span>Subtotal</span><span>${subtotal.toFixed(0)}</span></div>
+            {discountAmt > 0 && <div className="flex justify-between text-sm select-none" style={{ color: "#22c55e" }}><span>Descuento</span><span>−${discountAmt.toFixed(0)}</span></div>}
+            <div className="flex justify-between font-black text-3xl py-2 border-t border-[var(--border)] select-none">
+              <span className="font-syne text-white">Total</span>
+              <span style={{ color: ACCENT }}>${total.toFixed(0)}</span>
+            </div>
+            <button onClick={sendToKitchen} className="w-full min-h-[48px] rounded-xl text-sm font-bold border select-none hover:bg-[var(--surf2)] transition-all"
+              style={{ borderColor: "var(--border)", color: "var(--text)" }}>🍳 Enviar a cocina</button>
             <div className="grid grid-cols-2 gap-2">
               {PAY_METHODS.map(m => (
                 <button key={m.value} onClick={() => chargeTicket(m.value)}
-                  className="min-h-[56px] rounded-xl text-sm font-black select-none"
+                  className={`min-h-[56px] rounded-xl text-sm font-black select-none transition-all ${activeShift ? 'hover:brightness-110 active:scale-95' : 'opacity-50'}`}
                   style={{
                     background: activeShift ? ACCENT : "var(--surf2)",
                     color: activeShift ? "#fff" : "var(--muted)",
-                    border: activeShift ? `2px solid ${ACCENT}` : "1px solid var(--border)",
+                    border: activeShift ? `1px solid transparent` : "1px solid var(--border)",
                   }}>
                   {m.label}
                 </button>
@@ -729,7 +724,6 @@ export default function TPVPage() {
     </div>
   );
 
-  // Orders pane reutilizado en drawer
   const ordersPane = (
     <div className="flex flex-col h-full min-h-0 overflow-hidden" style={{ background: "var(--surf)" }}>
       <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0" style={{ borderColor: "var(--border)" }}>
@@ -743,12 +737,12 @@ export default function TPVPage() {
           const sc = STATUS_COLORS[order.status] || "#888";
           const isSel = selectedOrder?.id === order.id;
           return (
-            <div key={order.id} className="rounded-xl border overflow-hidden"
-              style={{ borderColor: isSel ? ACCENT : "var(--border)", background: isSel ? ACCENT + "14" : "var(--surf2)" }}>
+            <div key={order.id} className="rounded-xl border overflow-hidden transition-all"
+              style={{ borderColor: isSel ? ACCENT : "var(--border)", background: isSel ? `${ACCENT}08` : "var(--surf2)" }}>
               <button className="w-full px-4 py-3 flex items-center justify-between text-left select-none min-h-[56px]"
                 onClick={() => setSelectedOrder(isSel ? null : order)}>
                 <div className="min-w-0">
-                  <div className="text-sm font-bold truncate">
+                  <div className="text-sm font-bold truncate text-white font-syne">
                     {order.customerName || order.user?.name || "Sin nombre"}
                     {order.tableNumber && <span style={{ color: "#8b5cf6" }}> · Mesa {order.tableNumber}</span>}
                   </div>
@@ -761,26 +755,26 @@ export default function TPVPage() {
               </button>
               {isSel && (
                 <div className="px-4 pb-3 border-t" style={{ borderColor: "var(--border)" }}>
-                  <div className="my-3 space-y-1 text-xs select-none">
+                  <div className="my-3 space-y-1 text-xs select-none text-[var(--muted)]">
                     {(order.items || []).map((item: any, i: number) => (
-                      <div key={i} className="flex justify-between"><span>{item.quantity}x {item.name}</span><span>${Number(item.subtotal).toFixed(0)}</span></div>
+                      <div key={i} className="flex justify-between"><span>{item.quantity}x {item.name}</span><span className="text-white">${Number(item.subtotal).toFixed(0)}</span></div>
                     ))}
                   </div>
                   <div className="space-y-2">
                     {(() => { const nextStatus = NEXT_STATUS[order.status]; return nextStatus && (
                       <button onClick={() => updateOrderStatus(order.id, nextStatus)} disabled={updatingOrder === order.id}
-                        className="w-full min-h-[48px] rounded-xl text-xs font-bold select-none"
+                        className="w-full min-h-[48px] rounded-xl text-xs font-bold select-none hover:brightness-110 transition-all"
                         style={{ background: ACCENT, color: "#fff" }}>
                         {updatingOrder === order.id ? "..." : `→ ${STATUS_LABELS[nextStatus]}`}
                       </button>
                     ); })()}
                     <button onClick={() => { setPayModal(order); setPayMethod("CASH"); setCashReceived(""); }}
-                      className="w-full min-h-[48px] rounded-xl text-xs font-bold select-none"
+                      className="w-full min-h-[48px] rounded-xl text-xs font-bold select-none hover:bg-green-500/20 transition-all"
                       style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}>
                       💵 Cobrar ticket
                     </button>
                     <button onClick={() => updateOrderStatus(order.id, "CANCELLED")}
-                      className="w-full min-h-[48px] rounded-xl text-xs font-bold select-none"
+                      className="w-full min-h-[48px] rounded-xl text-xs font-bold select-none hover:bg-red-500/20 transition-all"
                       style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
                       Cancelar pedido
                     </button>
@@ -794,49 +788,44 @@ export default function TPVPage() {
     </div>
   );
 
-  // Menú grid reutilizado
   const menuPane = (
     <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
       {/* Categorías: chips horizontal (< lg) */}
-      <div className="flex gap-2 overflow-x-auto px-3 py-2 flex-shrink-0 border-b scrollbar-hide whitespace-nowrap lg:hidden" style={{ borderColor: "var(--border)" }}>
+      <div className="flex gap-2 overflow-x-auto px-3 py-2 flex-shrink-0 border-b scrollbar-hide whitespace-nowrap lg:hidden bg-[var(--surf)]" style={{ borderColor: "var(--border)" }}>
         {[{ id: "all", name: "Todo" }, ...categories].map(cat => (
           <button key={cat.id} onClick={() => setSelectedCat(cat.id)}
-            className="px-4 min-h-[44px] rounded-xl text-xs font-bold flex-shrink-0 select-none"
-            style={{
-              background: selectedCat === cat.id ? ACCENT : "var(--surf)",
-              color: selectedCat === cat.id ? "#000" : "var(--muted)",
-              border: selectedCat === cat.id ? `2px solid ${ACCENT}` : "1px solid var(--border)",
-            }}>
+            className={`px-4 min-h-[44px] rounded-xl text-xs font-syne font-bold flex-shrink-0 select-none transition-all ${selectedCat === cat.id ? 'bg-[var(--surf2)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surf2)]'}`}
+            style={{ borderBottom: selectedCat === cat.id ? `3px solid ${ACCENT}` : '3px solid transparent' }}>
             {cat.name}
           </button>
         ))}
       </div>
       {/* Menu grid */}
-      <div className="flex-1 overflow-y-auto p-3 pb-28 md:pb-3 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto p-4 pb-28 md:pb-4 scrollbar-hide bg-[var(--bg)]">
         {allItems.length === 0 ? (
           <div className="flex items-center justify-center h-full flex-col gap-3 select-none" style={{ color: "var(--muted)" }}>
             <div className="text-4xl animate-spin">🍔</div>
-            <div className="text-sm">Cargando menú...</div>
+            <div className="text-sm font-syne">Cargando menú...</div>
           </div>
         ) : (
-          <div className={`grid gap-3 grid-cols-${gridCols}`}>
+          <div className={`grid gap-4 grid-cols-${gridCols}`}>
             {filteredItems.map((item: any) => (
               <button key={item.id} onClick={() => handleItemClick(item)}
-                className={`relative rounded-2xl p-4 text-left border active:scale-95 transition-transform select-none min-h-[120px] text-${fontSize}`}
-                style={{ background: "var(--surf)", borderColor: "var(--border)", opacity: activeShift ? 1 : 0.5 }}>
+                className={`relative rounded-2xl p-4 text-left border border-[var(--border)] bg-[var(--surf)] active:scale-95 hover:bg-[var(--surf2)] hover:-translate-y-1 transition-all select-none min-h-[120px] text-${fontSize} overflow-hidden group`}
+                style={{ opacity: activeShift ? 1 : 0.5 }}>
                 {item.isPromo && item.promoPrice && (
-                  <span className="absolute top-2 right-2 text-[9px] font-black px-1.5 py-0.5 rounded-full z-10"
+                  <span className="absolute top-3 right-3 text-[9px] font-black px-2 py-1 rounded-full z-10 shadow-sm"
                     style={{ background: ACCENT, color: "#fff" }}>% OFF</span>
                 )}
-                {item.imageUrl && <img src={item.imageUrl} alt="" className="w-full h-20 object-cover rounded-lg mb-2 pointer-events-none" />}
-                <div className="text-sm font-bold leading-tight mb-1 line-clamp-2">{item.name}</div>
+                {item.imageUrl && <img src={item.imageUrl} alt="" className="w-full h-24 object-cover rounded-xl mb-3 pointer-events-none group-hover:opacity-90 transition-opacity" />}
+                <div className="font-syne text-sm font-bold leading-tight mb-1 line-clamp-2 text-white">{item.name}</div>
                 {item.isPromo && item.promoPrice ? (
-                  <div className="flex items-baseline gap-1 flex-wrap">
+                  <div className="flex items-baseline gap-1.5 flex-wrap mt-auto pt-2">
                     <span className="text-[10px] line-through" style={{ color: "var(--muted)" }}>${item.price}</span>
-                    <span className="text-sm font-black" style={{ color: ACCENT }}>${item.promoPrice}</span>
+                    <span className="font-sans text-sm font-black" style={{ color: ACCENT }}>${item.promoPrice}</span>
                   </div>
                 ) : (
-                  <div className="text-sm font-black" style={{ color: ACCENT }}>${item.price}</div>
+                  <div className="font-sans text-sm font-black mt-auto pt-2" style={{ color: ACCENT }}>${item.price}</div>
                 )}
               </button>
             ))}
@@ -852,50 +841,53 @@ export default function TPVPage() {
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: "var(--bg)" }}>
 
       {/* ── HEADER ── */}
-      <header className="flex items-center gap-2 px-3 h-12 flex-shrink-0 border-b"
+      <header className="flex items-center gap-3 px-4 h-14 flex-shrink-0 border-b"
         style={{ background: "var(--surf)", borderColor: "var(--border)" }}>
-        <div className="flex flex-col min-w-0 mr-1 leading-none">
-          <span className="text-sm font-black tracking-tight truncate" style={{ color: ACCENT }}>{restaurantName}</span>
-          {locationName && <span className="text-[9px] font-bold uppercase tracking-widest truncate mt-0.5" style={{ color: "var(--muted)" }}>{locationName}</span>}
+        <div className="flex flex-col min-w-0 mr-2 leading-none">
+          <span className="text-base font-syne font-black tracking-tight truncate" style={{ color: ACCENT }}>{restaurantName}</span>
+          {locationName && <span className="text-[10px] font-bold uppercase tracking-widest truncate mt-1" style={{ color: "var(--muted)" }}>{locationName}</span>}
         </div>
-        <div className="flex-1 min-w-0">
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar producto..."
-            className="w-full px-3 py-2 rounded-xl text-sm outline-none select-none"
-            style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }} />
+        <div className="flex-1 min-w-0 max-w-md">
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm opacity-50">🔍</span>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar producto..."
+              className="w-full pl-9 pr-4 py-2 rounded-xl text-sm outline-none select-none transition-colors focus:border-[var(--accent)]"
+              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }} />
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
           <button onClick={() => setOrdersDrawerOpen(true)}
-            className="relative flex items-center gap-1.5 px-3 h-10 rounded-xl text-xs font-bold select-none"
+            className="relative flex items-center gap-1.5 px-3 h-10 rounded-xl text-xs font-bold select-none hover:bg-[var(--surf)] transition-colors"
             style={{ background: "var(--surf2)", color: "var(--text)", border: "1px solid var(--border)" }}>
             <span className="text-sm">📋</span>
             <span className="hidden sm:inline">Pedidos</span>
             {orders.length > 0 && (
-              <span className="ml-0.5 text-[10px] font-black rounded-full min-w-[18px] h-[18px] inline-flex items-center justify-center px-1" style={{ background: ACCENT, color: "#fff" }}>
+              <span className="ml-1 text-[10px] font-black rounded-full min-w-[18px] h-[18px] inline-flex items-center justify-center px-1" style={{ background: ACCENT, color: "#fff" }}>
                 {orders.length}
               </span>
             )}
           </button>
           <KDSMessages />
           <button onClick={() => setShowShiftModal(true)}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold"
+            className="flex items-center gap-1.5 px-3 h-10 rounded-xl text-xs font-bold transition-colors hover:brightness-110"
             style={{ background: activeShift ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)", color: activeShift ? "#22c55e" : "#ef4444", border: `1px solid ${activeShift ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}` }}>
             {activeShift ? "🟢" : "🔴"}
-            <span className="hidden sm:inline ml-0.5">{activeShift ? "Turno" : "Sin turno"}</span>
+            <span className="hidden sm:inline">{activeShift ? "Turno" : "Sin turno"}</span>
           </button>
-          <div className="hidden sm:flex flex-col items-end leading-none">
-            <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: "var(--muted)" }}>Atendiendo</span>
-            <span className="text-xs font-black" style={{ color: ACCENT }}>{currentEmployee?.name?.split(" ")[0] || "Cajero"}</span>
+          <div className="hidden sm:flex flex-col items-end leading-none ml-2 border-l pl-4 border-[var(--border)]">
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--muted)" }}>Atendiendo</span>
+            <span className="text-sm font-syne font-black text-white">{currentEmployee?.name?.split(" ")[0] || "Cajero"}</span>
           </div>
           {isAdmin && (
             <button onClick={() => setShowManagerMenu(true)}
-              className="w-8 h-8 rounded-xl flex items-center justify-center text-sm"
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-sm hover:bg-[var(--surf)] transition-colors ml-1"
               style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--muted)" }} title="Ajustes">
               ⚙️
             </button>
           )}
           <button
             onClick={clearEmployeeSession}
-            className="w-8 h-8 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-colors"
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-colors"
             style={{ background: "var(--surf2)", border: "1px solid var(--border)" }} title="Bloquear Caja">
             🔒
           </button>
@@ -906,16 +898,13 @@ export default function TPVPage() {
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
 
         {/* Sidebar de Categorías — solo lg+ */}
-        <aside className="hidden lg:flex lg:flex-col lg:w-52 xl:w-56 flex-shrink-0 border-r overflow-y-auto scrollbar-hide p-3 gap-1.5"
+        <aside className="hidden lg:flex lg:flex-col lg:w-56 flex-shrink-0 border-r overflow-y-auto scrollbar-hide py-4 px-2 gap-2"
           style={{ borderColor: "var(--border)", background: "var(--surf)" }}>
+          <div className="px-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--muted)]">Categorías</div>
           {[{ id: "all", name: "Todo" }, ...categories].map(cat => (
             <button key={cat.id} onClick={() => setSelectedCat(cat.id)}
-              className="w-full text-left px-4 min-h-[48px] rounded-xl text-sm font-bold flex-shrink-0 select-none"
-              style={{
-                background: selectedCat === cat.id ? ACCENT : "var(--surf2)",
-                color: selectedCat === cat.id ? "#000" : "var(--muted)",
-                border: selectedCat === cat.id ? `2px solid ${ACCENT}` : "1px solid var(--border)",
-              }}>
+              className={`w-full text-left px-4 min-h-[48px] rounded-xl text-sm font-syne font-bold flex-shrink-0 select-none transition-all ${selectedCat === cat.id ? 'bg-[var(--surf2)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surf2)]'}`}
+              style={{ borderLeft: selectedCat === cat.id ? `4px solid ${ACCENT}` : '4px solid transparent' }}>
               {cat.name}
             </button>
           ))}
@@ -925,7 +914,7 @@ export default function TPVPage() {
         {menuPane}
 
         {/* Ticket inline — md+ */}
-        <aside className="hidden md:flex md:flex-col flex-shrink-0 border-l overflow-hidden md:w-[340px] lg:w-[360px] xl:w-[380px]"
+        <aside className="hidden md:flex md:flex-col flex-shrink-0 border-l overflow-hidden md:w-[360px] lg:w-[380px] xl:w-[400px] shadow-xl z-10"
           style={{ borderColor: "var(--border)", background: "var(--surf)" }}>
           {ticketPane}
         </aside>
@@ -935,31 +924,31 @@ export default function TPVPage() {
       {/* FAB mobile: Ver Orden (N) · $X */}
       <button
         onClick={() => setTicketDrawerOpen(true)}
-        className="md:hidden fixed bottom-4 left-4 right-4 h-14 rounded-2xl shadow-2xl flex items-center justify-between px-5 font-black text-sm z-40 select-none active:scale-[0.98] transition-transform"
+        className="md:hidden fixed bottom-6 left-4 right-4 h-14 rounded-2xl shadow-2xl flex items-center justify-between px-6 font-syne font-black text-sm z-40 select-none active:scale-[0.98] transition-transform"
         style={{ background: ACCENT, color: "#fff" }}
       >
-        <span className="flex items-center gap-2">
-          <span className="text-lg">🧾</span>
+        <span className="flex items-center gap-3">
+          <span className="text-xl">🧾</span>
           <span>Ver Orden ({ticketCount})</span>
         </span>
-        <span className="text-base font-black">${total.toFixed(0)}</span>
+        <span className="text-lg font-sans font-black">${total.toFixed(0)}</span>
       </button>
 
       {/* Bottom Sheet mobile: Ticket */}
       {ticketDrawerOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex flex-col" onClick={() => setTicketDrawerOpen(false)}>
-          <div className="flex-1" style={{ background: "rgba(0,0,0,0.65)" }} />
+          <div className="flex-1 backdrop-blur-sm transition-all" style={{ background: "rgba(0,0,0,0.65)" }} />
           <div
             onClick={(e) => e.stopPropagation()}
             className="sheet-enter rounded-t-3xl shadow-2xl flex flex-col overflow-hidden relative"
             style={{ background: "var(--surf)", height: "88vh", borderTop: `1px solid var(--border)` }}
           >
-            <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0 relative">
-              <div className="w-10 h-1 rounded-full absolute left-1/2 -translate-x-1/2 top-2" style={{ background: "var(--border)" }} />
-              <span className="text-xs font-black uppercase tracking-widest select-none mt-2" style={{ color: "var(--muted)" }}>Orden actual</span>
+            <div className="flex items-center justify-between px-6 pt-5 pb-3 flex-shrink-0 relative border-b border-[var(--border)]">
+              <div className="w-12 h-1.5 rounded-full absolute left-1/2 -translate-x-1/2 top-2" style={{ background: "var(--surf2)" }} />
+              <span className="text-xs font-syne font-black uppercase tracking-widest select-none mt-2 text-white">Orden actual</span>
               <button onClick={() => setTicketDrawerOpen(false)}
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-lg select-none"
-                style={{ background: "var(--surf2)", color: "var(--muted)" }}>✕</button>
+                className="w-8 h-8 mt-1 rounded-full flex items-center justify-center text-sm select-none hover:bg-[var(--surf2)] transition-colors"
+                style={{ color: "var(--muted)", background: "var(--bg)" }}>✕</button>
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
               {ticketPane}
@@ -971,17 +960,17 @@ export default function TPVPage() {
       {/* Drawer de Pedidos (todas las resoluciones) */}
       {ordersDrawerOpen && (
         <div className="fixed inset-0 z-50 flex" onClick={() => setOrdersDrawerOpen(false)}>
-          <div className="flex-1" style={{ background: "rgba(0,0,0,0.65)" }} />
+          <div className="flex-1 backdrop-blur-sm" style={{ background: "rgba(0,0,0,0.65)" }} />
           <div
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md h-full shadow-2xl flex flex-col overflow-hidden"
             style={{ background: "var(--surf)", borderLeft: `1px solid var(--border)` }}
           >
-            <div className="flex items-center justify-between px-4 h-14 flex-shrink-0 border-b" style={{ borderColor: "var(--border)" }}>
-              <span className="text-sm font-black uppercase tracking-widest select-none">📋 Pedidos</span>
+            <div className="flex items-center justify-between px-6 h-16 flex-shrink-0 border-b bg-[var(--bg)]" style={{ borderColor: "var(--border)" }}>
+              <span className="text-sm font-syne font-black uppercase tracking-widest select-none text-white">📋 Gestor de Pedidos</span>
               <button onClick={() => setOrdersDrawerOpen(false)}
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-lg select-none"
-                style={{ background: "var(--surf2)", color: "var(--muted)" }}>✕</button>
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-lg select-none hover:bg-[var(--surf2)] transition-colors"
+                style={{ color: "var(--muted)" }}>✕</button>
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
               {ordersPane}
@@ -992,27 +981,27 @@ export default function TPVPage() {
 
       {/* ── MODALES ── */}
       {payModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.85)" }}>
-          <div className="w-full max-w-sm rounded-2xl border p-6" style={{ background: "var(--surf)", borderColor: "var(--border)" }}>
-            <h3 className="font-syne font-black text-lg mb-1">💵 Cobrar {payModal.orderNumber}</h3>
-            <p className="text-2xl font-black mb-4" style={{ color: ACCENT }}>${Number(payModal.total).toFixed(0)}</p>
-            <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: "rgba(0,0,0,0.85)" }}>
+          <div className="w-full max-w-sm rounded-3xl border p-8 shadow-2xl" style={{ background: "var(--surf)", borderColor: "var(--border)" }}>
+            <h3 className="font-syne font-black text-xl mb-1 text-white">💵 Cobrar {payModal.orderNumber}</h3>
+            <p className="text-4xl font-sans font-black mb-6" style={{ color: ACCENT }}>${Number(payModal.total).toFixed(0)}</p>
+            <div className="grid grid-cols-2 gap-3 mb-6">
               {PAY_METHODS.map(m => (
                 <button key={m.value} onClick={() => setPayMethod(m.value)}
-                  className="py-2 rounded-xl text-xs font-bold"
-                  style={{ background: payMethod === m.value ? ACCENT : "var(--surf2)", color: payMethod === m.value ? "#fff" : "var(--muted)", border: "1px solid var(--border)" }}>
+                  className="py-3 rounded-xl text-xs font-bold transition-all"
+                  style={{ background: payMethod === m.value ? ACCENT : "var(--bg)", color: payMethod === m.value ? "#fff" : "var(--muted)", border: payMethod === m.value ? `1px solid ${ACCENT}` : "1px solid var(--border)" }}>
                   {m.label}
                 </button>
               ))}
             </div>
             <div className="flex gap-3">
               <button onClick={() => setPayModal(null)}
-                className="flex-1 py-3 rounded-xl font-bold border min-h-[44px]"
-                style={{ borderColor: "var(--border)", color: "var(--muted)" }}>Cancelar</button>
+                className="flex-1 py-3.5 rounded-xl font-bold border min-h-[48px] hover:bg-[var(--surf2)] transition-colors"
+                style={{ borderColor: "var(--border)", color: "var(--text)", background: "transparent" }}>Cancelar</button>
               <button onClick={() => chargeExistingOrder(payModal.id, payMethod)} disabled={updatingOrder === payModal.id}
-                className="flex-1 py-3 rounded-xl font-syne font-black min-h-[44px]"
+                className="flex-1 py-3.5 rounded-xl font-syne font-black min-h-[48px] hover:brightness-110 transition-all shadow-lg"
                 style={{ background: ACCENT, color: "#fff" }}>
-                {updatingOrder === payModal.id ? "..." : "✅ Confirmar"}
+                {updatingOrder === payModal.id ? "Procesando..." : "✅ Confirmar"}
               </button>
             </div>
           </div>
@@ -1037,7 +1026,7 @@ export default function TPVPage() {
                   {currentEmployee?.role === "OWNER" ? "Propietario" : "Gerente"}
                 </p>
               </div>
-              <button onClick={() => setShowManagerMenu(false)} className="text-[var(--muted)] hover:text-white text-2xl">✕</button>
+              <button onClick={() => setShowManagerMenu(false)} className="text-[var(--muted)] hover:text-white text-2xl transition-colors">✕</button>
             </div>
             <div className="flex-1 overflow-y-auto py-2">
               <button onClick={() => { setShowManagerMenu(false); setShowShiftModal(true); }}
@@ -1059,22 +1048,22 @@ export default function TPVPage() {
                 </div>
               </button>
 
-              <div className="px-6 py-4 border-b border-[var(--border)]/50">
-                <div className="text-xs font-bold text-[var(--muted)] mb-3 uppercase tracking-widest">Apariencia del Menú</div>
-                <div className="grid grid-cols-5 gap-2 mb-4">
+              <div className="px-6 py-5 border-b border-[var(--border)]/50">
+                <div className="text-[10px] font-bold text-[var(--muted)] mb-3 uppercase tracking-widest">Apariencia del Menú</div>
+                <div className="grid grid-cols-4 gap-2 mb-4">
                   {[3,4,5,6].map(c => (
                     <button key={c} onClick={() => setGridCols(c)}
-                      className="py-2 rounded-lg text-xs font-bold border"
-                      style={{ background: gridCols === c ? ACCENT : "var(--surf2)", color: gridCols === c ? "#000" : "var(--text)", borderColor: gridCols === c ? ACCENT : "var(--border)" }}>
-                      {c}x{c}
+                      className="py-2 rounded-lg text-xs font-bold border transition-colors"
+                      style={{ background: gridCols === c ? ACCENT : "var(--bg)", color: gridCols === c ? "#fff" : "var(--text)", borderColor: gridCols === c ? ACCENT : "var(--border)" }}>
+                      {c}x
                     </button>
                   ))}
                 </div>
                 <div className="flex gap-2">
                   {["xs", "sm", "base", "lg"].map(sz => (
                     <button key={sz} onClick={() => setFontSize(sz)}
-                      className="flex-1 py-2 rounded-lg text-xs font-bold border uppercase"
-                      style={{ background: fontSize === sz ? ACCENT : "var(--surf2)", color: fontSize === sz ? "#000" : "var(--text)", borderColor: fontSize === sz ? ACCENT : "var(--border)" }}>
+                      className="flex-1 py-2 rounded-lg text-xs font-bold border uppercase transition-colors"
+                      style={{ background: fontSize === sz ? ACCENT : "var(--bg)", color: fontSize === sz ? "#fff" : "var(--text)", borderColor: fontSize === sz ? ACCENT : "var(--border)" }}>
                       {sz}
                     </button>
                   ))}
@@ -1085,7 +1074,7 @@ export default function TPVPage() {
                 <span className="text-2xl">🚴</span>
                 <div>
                   <div className="font-bold text-sm text-white">Repartidores activos</div>
-                  <div className="text-xs text-[var(--muted)]">Estado online, rutas, distancia al local</div>
+                  <div className="text-xs text-[var(--muted)]">Estado online, rutas, distancia</div>
                 </div>
               </button>
               <button onClick={() => { setShowManagerMenu(false); setShowTablesFloor(true); }}
@@ -1107,7 +1096,7 @@ export default function TPVPage() {
             </div>
             <div className="p-4 border-t border-[var(--border)] bg-[var(--bg)]">
               <button onClick={clearEmployeeSession}
-                className="w-full py-3 rounded-xl flex items-center justify-center gap-2 font-bold text-red-500 bg-red-500/10 hover:bg-red-500/20 transition-colors">
+                className="w-full py-3.5 rounded-xl flex items-center justify-center gap-2 font-bold text-red-500 bg-red-500/10 hover:bg-red-500/20 transition-colors">
                 🔒 Bloquear sesión
               </button>
             </div>
@@ -1188,7 +1177,7 @@ function TPVLockScreen({
         </button>
 
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-black text-white mb-2 uppercase tracking-tighter" style={{ color: accent }}>
+          <h1 className="text-4xl font-syne font-black text-white mb-2 uppercase tracking-tighter" style={{ color: accent }}>
             {restaurantName}
           </h1>
           <p className="text-sm font-bold text-white/40 uppercase tracking-widest">
@@ -1253,7 +1242,7 @@ function TPVLockScreen({
           <button
             disabled={isVerifyingPin || pinInput.length < 4}
             onClick={onSubmit}
-            className="w-full mt-8 py-5 rounded-[2rem] text-lg font-black uppercase tracking-widest text-black transition-all active:scale-[0.98] disabled:opacity-30"
+            className="w-full mt-8 py-5 rounded-[2rem] text-lg font-syne font-black uppercase tracking-widest text-black transition-all active:scale-[0.98] disabled:opacity-30"
             style={{ background: accent }}
           >
             {isVerifyingPin ? "Verificando..." : "Ingresar"}
