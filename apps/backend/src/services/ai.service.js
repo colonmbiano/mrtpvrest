@@ -7,7 +7,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 function getGeminiModel(apiKey, json = false) {
   const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({
-    model: "gemini-flash-latest",
+    model: "gemini-1.5-flash",
     ...(json && { generationConfig: { responseMimeType: "application/json" } }),
   });
 }
