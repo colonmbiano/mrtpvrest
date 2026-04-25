@@ -103,7 +103,18 @@ router.post('/chat', async (req, res) => {
       systemInstruction: SYSTEM_PROMPT
     });
 
-    const formattedHistory = history.map(h => ({
+    // El frontend a veces incluye el mensaje actual al final del historial.
+    // Esto causa que Gemini reciba 2 mensajes de usuario consecutivos y crashee.
+    let cleanHistory = [...history];
+    if (
+      cleanHistory.length > 0 && 
+      cleanHistory[cleanHistory.length - 1].role === 'user' && 
+      cleanHistory[cleanHistory.length - 1].content === message
+    ) {
+      cleanHistory.pop();
+    }
+
+    const formattedHistory = cleanHistory.map(h => ({
       role: h.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: h.content }]
     }));
