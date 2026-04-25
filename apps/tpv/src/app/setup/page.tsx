@@ -228,27 +228,14 @@ export default function SetupPage() {
 
   function unlink() {
     if (!confirm("¿Desvincular este TPV? Tendrás que volver a configurarlo.")) return;
-    [
-      "restaurantId",
-      "restaurantName",
-      "locationId",
-      "locationName",
-      "terminalId",
-      "mb-accent",
-      "accessToken",
-      "refreshToken",
-      "user",
-    ].forEach((k) => localStorage.removeItem(k));
-    document.cookie = "mb-role=; path=/; max-age=0; SameSite=Lax";
-    clearCachedRemoteConfig();
-    setAlreadyLinked(null);
-    setRestaurants([]);
-    setEmail("");
-    setPassword("");
-
-    setError("");
-    setStep("login");
-    window.location.href = "/setup";
+    // Limpiar TODO — no arriesgamos dejar basura
+    try { localStorage.clear(); } catch {}
+    // Limpiar cookies conocidas
+    ["mb-role", "accessToken", "refreshToken"].forEach((c) => {
+      document.cookie = `${c}=; path=/; max-age=0; SameSite=Lax`;
+    });
+    // Hard reload para limpiar cualquier caché del navegador
+    window.location.replace("/setup");
   }
 
   if (alreadyLinked && step === "login") {
@@ -262,13 +249,18 @@ export default function SetupPage() {
 
           <PrimaryButton onClick={() => router.replace("/")}>Ir al TPV</PrimaryButton>
 
-          <div className="mt-8 pt-5 border-t" style={{ borderColor: "var(--border)" }}>
+          <div className="mt-6">
             <button
               onClick={unlink}
-              className="text-sm"
-              style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}
+              className="w-full py-3 rounded-2xl text-sm font-bold"
+              style={{
+                background: "rgba(239,68,68,0.12)",
+                border: "1px solid rgba(239,68,68,0.35)",
+                color: "#ef4444",
+                cursor: "pointer",
+              }}
             >
-              Desvincular TPV
+              🔓 Desvincular y re-configurar este TPV
             </button>
           </div>
         </Card>
