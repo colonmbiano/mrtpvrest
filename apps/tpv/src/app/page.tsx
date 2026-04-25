@@ -1165,7 +1165,12 @@ export default function TPVPage() {
       )}
 
       {/* Componentes y Modales Secundarios Preservados */}
-      <IngredientShortageModal />
+      {shortageOrder && (
+        <IngredientShortageModal
+          order={shortageOrder}
+          onClose={() => setShortageOrder(null)}
+        />
+      )}
       {assignOrder && (
         <DeliveryAssignModal
           order={assignOrder}
