@@ -33,7 +33,7 @@ async function runAutoPromos() {
     let aiModel = null;
     if (apiKey) {
       const genAI = new GoogleGenerativeAI(apiKey);
-      aiModel = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+      aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     }
 
     for (const location of locations) {
