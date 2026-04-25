@@ -22,12 +22,21 @@ export default function DemoPage() {
         }}>
           ← Volver
         </Link>
-        <div style={{
-          fontFamily: 'DM Mono, monospace', fontSize: 11, color: '#6e6e92',
-          letterSpacing: '0.14em',
-        }}>
-          DEMO · MRTPVREST.COM
-        </div>
+        <a
+          href="https://admin.mrtpvrest.com/register"
+          style={{
+            pointerEvents: 'auto',
+            fontFamily: 'DM Sans, sans-serif', fontSize: 13, fontWeight: 700,
+            color: '#000', textDecoration: 'none',
+            padding: '9px 18px', borderRadius: 8,
+            background: '#7c3aed',
+            boxShadow: '0 0 20px #7c3aed55',
+            letterSpacing: '0.01em',
+            transition: 'opacity .2s',
+          }}
+        >
+          Registrarse ahora →
+        </a>
       </div>
 
       <Stage
