@@ -61,8 +61,15 @@ const ALL_ORDER_TYPES: { t: string; l: string }[] = [
   { t: "DELIVERY", l: "🛵 Domicilio" },
 ];
 
+import { usePOSStore } from "@/store/usePOSStore";
+
 export default function TPVPage() {
   const router = useRouter();
+  const { theme } = usePOSStore();
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   // Cerebro Adaptativo: tipo de negocio por sucursal
   const { businessType, loading: locLoading } = useLocation();
@@ -1195,7 +1202,18 @@ export default function TPVPage() {
 }
 
 // ── PANTALLA DE BLOQUEO PREMIUM DASHBOARD ───────────────────────────────────
+import { usePOSStore } from "@/store/usePOSStore";
+
 function TPVLockScreen({ accent, restaurantName, locationName, pinInput, pinError, isVerifyingPin, onDigit, onBackspace, onClear, onSubmit, onChangeLocation }: any) {
+  const { theme, setTheme } = usePOSStore();
+  const themes = [
+    { id: 'dark', label: 'Dark Inmersivo', color: '#7c3aed' },
+    { id: 'concepto-1', label: 'Teal Moderno', color: '#34d399' },
+    { id: 'concepto-2', label: 'Indigo Urbano', color: '#818cf8' },
+    { id: 'concepto-3', label: 'Emerald Minimal', color: '#10b981' },
+    { id: 'naranja', label: 'Naranja Corp', color: '#ea580c' },
+    { id: 'amarillo', label: 'Alta Visibilidad', color: '#ca8a04' },
+  ];
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-[#050507] relative overflow-hidden font-dm-sans">
 
@@ -1208,6 +1226,18 @@ function TPVLockScreen({ accent, restaurantName, locationName, pinInput, pinErro
         <button onClick={onChangeLocation} className="absolute -top-16 right-0 w-12 h-12 rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 transition-all">
           ⚙️
         </button>
+
+        <div className="flex gap-4 justify-center mb-6">
+          {themes.map(t => (
+            <button 
+              key={t.id} 
+              onClick={() => setTheme(t.id)}
+              className={`w-8 h-8 rounded-full border-2 transition-all ${theme === t.id ? 'scale-110' : 'hover:scale-105 opacity-70 hover:opacity-100'}`}
+              style={{ backgroundColor: t.color, borderColor: theme === t.id ? accent : 'transparent' }}
+              title={t.label}
+            />
+          ))}
+        </div>
 
         <div className="text-center mb-10">
           <h1 className="text-5xl font-syne font-black text-white mb-3 uppercase tracking-tighter drop-shadow-2xl" style={{ color: accent }}>{restaurantName}</h1>
