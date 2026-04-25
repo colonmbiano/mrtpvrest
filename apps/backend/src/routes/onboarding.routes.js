@@ -4,13 +4,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const router = require('express').Router()
-const axios  = require('axios')
+const { GoogleGenerativeAI } = require('@google/generative-ai')
 const prisma = require('@mrtpvrest/database').prisma
 const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware')
-
-// Nota: usamos axios directo a la Anthropic API porque @anthropic-ai/sdk
-// no está instalado. El SDK openai@6 que sí está instalado es para OpenAI,
-// no compatible sin adaptador.
 
 router.use(authenticate, requireTenantAccess)
 
@@ -101,28 +97,27 @@ router.post('/chat', async (req, res) => {
 
   let aiJson
   try {
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        contents: [
-          ...history.map(h => ({
-            role:  h.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: h.content }]
-          })),
-          { role: 'user', parts: [{ text: message }] }
-        ],
-        systemInstruction: {
-          parts: [{ text: SYSTEM_PROMPT }]
-        },
-        generationConfig: {
-          temperature:      0.7,
-          maxOutputTokens:  1000,
-        }
-      },
-      { timeout: 30000 }
-    )
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+      systemInstruction: SYSTEM_PROMPT
+    });
 
-    const rawText = response.data.candidates[0].content.parts[0].text
+    const formattedHistory = history.map(h => ({
+      role: h.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: h.content }]
+    }));
+
+    const chat = model.startChat({
+      history: formattedHistory,
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1000,
+      }
+    });
+
+    const result = await chat.sendMessage([{ text: message }]);
+    const rawText = result.response.text();
 
     try {
       aiJson = JSON.parse(rawText)
@@ -133,8 +128,7 @@ router.post('/chat', async (req, res) => {
       aiJson = JSON.parse(match[0])
     }
   } catch (err) {
-    const detail = err?.response?.data ?? err.message
-    console.error('Error llamando Gemini API (onboarding):', JSON.stringify(detail))
+    console.error('Error llamando Gemini API (onboarding):', err.message)
     return res.status(502).json({ error: 'Error al contactar la IA. Intenta de nuevo.' })
   }
 

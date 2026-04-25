@@ -238,16 +238,11 @@ export default function TPVPage() {
       router.replace("/setup");
     } else {
       setIsConfigured(true);
-      // FIX LOGIN 401: Controlamos el error de token expirado
-      api.get("/api/admin/config").then(res => {
-        if (res.data.name)           setRestaurantName(res.data.name);
-        if (res.data.locationName)   setLocationName(res.data.locationName);
-        if (res.data.location?.name) setLocationName(res.data.location.name);
-      }).catch((err) => {
-        if (err?.response?.status === 401) {
-          handleExpiredSession();
-        }
-      });
+      
+      const storedRestName = localStorage.getItem("restaurantName");
+      const storedLocName = localStorage.getItem("locationName");
+      if (storedRestName) setRestaurantName(storedRestName);
+      if (storedLocName) setLocationName(storedLocName);
 
       const storedToken = localStorage.getItem(EMPLOYEE_TOKEN_KEY) || localStorage.getItem("accessToken");
       const storedEmployee = localStorage.getItem(EMPLOYEE_DATA_KEY);
