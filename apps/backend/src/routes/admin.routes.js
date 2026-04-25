@@ -1,4 +1,4 @@
-﻿const express = require('express')
+const express = require('express')
 const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const router  = express.Router()
@@ -120,7 +120,7 @@ router.get('/locations', authenticate, requireTenantAccess, requireAdmin, async 
 
 router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { name, slug, address, phone } = req.body;
+    const { name, slug, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount } = req.body;
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: req.user.restaurantId },
       include: { _count: { select: { locations: true } } }
@@ -136,6 +136,9 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
         slug: slug.toLowerCase(),
         address,
         phone,
+        ...(autoPromoEnabled !== undefined && { autoPromoEnabled }),
+        ...(autoPromoThreshold !== undefined && { autoPromoThreshold }),
+        ...(autoPromoDiscount !== undefined && { autoPromoDiscount }),
         ticketConfig: { create: { businessName: restaurant.name, header: restaurant.name } },
       },
     });
@@ -145,13 +148,20 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
 
 router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { name, address, phone } = req.body;
+    const { name, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount } = req.body;
     const location = await prisma.location.findUnique({ where: { id: req.params.id } });
     if (!location || location.restaurantId !== req.user.restaurantId)
       return res.status(404).json({ error: 'Sucursal no encontrada' });
     const updated = await prisma.location.update({
       where: { id: req.params.id },
-      data: { ...(name && { name }), ...(address !== undefined && { address }), ...(phone !== undefined && { phone }) }
+      data: { 
+        ...(name && { name }), 
+        ...(address !== undefined && { address }), 
+        ...(phone !== undefined && { phone }),
+        ...(autoPromoEnabled !== undefined && { autoPromoEnabled }),
+        ...(autoPromoThreshold !== undefined && { autoPromoThreshold }),
+        ...(autoPromoDiscount !== undefined && { autoPromoDiscount })
+      }
     });
     res.json(updated);
   } catch (e) { res.status(500).json({ error: e.message }); }

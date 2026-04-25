@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import Image from "next/image";
 
-type Location = { id: string; name: string; slug: string; address?: string; phone?: string };
+type Location = { id: string; name: string; slug: string; address?: string; phone?: string; autoPromoEnabled?: boolean; autoPromoThreshold?: number; autoPromoDiscount?: number; };
 
 function slugify(text: string) {
   return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
@@ -14,7 +14,7 @@ function LocationsSection() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Location | null>(null);
-  const [form, setForm] = useState({ name: "", address: "", phone: "" });
+  const [form, setForm] = useState({ name: "", address: "", phone: "", autoPromoEnabled: false, autoPromoThreshold: 10, autoPromoDiscount: 15 });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -28,8 +28,8 @@ function LocationsSection() {
 
   useEffect(() => { fetchLocations(); }, []);
 
-  const openCreate = () => { setEditing(null); setForm({ name: "", address: "", phone: "" }); setError(""); setShowModal(true); };
-  const openEdit = (loc: Location) => { setEditing(loc); setForm({ name: loc.name, address: loc.address || "", phone: loc.phone || "" }); setError(""); setShowModal(true); };
+  const openCreate = () => { setEditing(null); setForm({ name: "", address: "", phone: "", autoPromoEnabled: false, autoPromoThreshold: 10, autoPromoDiscount: 15 }); setError(""); setShowModal(true); };
+  const openEdit = (loc: Location) => { setEditing(loc); setForm({ name: loc.name, address: loc.address || "", phone: loc.phone || "", autoPromoEnabled: loc.autoPromoEnabled || false, autoPromoThreshold: loc.autoPromoThreshold || 10, autoPromoDiscount: loc.autoPromoDiscount || 15 }); setError(""); setShowModal(true); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,6 +141,44 @@ function LocationsSection() {
                   className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold"
                 />
               </div>
+
+              <div className="bg-black/50 p-5 rounded-3xl border border-orange-500/20">
+                <label className="flex items-center gap-3 cursor-pointer mb-4">
+                  <input
+                    type="checkbox"
+                    checked={form.autoPromoEnabled}
+                    onChange={e => setForm({ ...form, autoPromoEnabled: e.target.checked })}
+                    className="w-5 h-5 accent-orange-500 rounded"
+                  />
+                  <span className="text-sm font-black text-white uppercase tracking-widest">Promociones con IA</span>
+                </label>
+                {form.autoPromoEnabled && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Umbral (ventas min)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={form.autoPromoThreshold}
+                        onChange={e => setForm({ ...form, autoPromoThreshold: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-black border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-orange-500 transition-all text-sm font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Descuento (%)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={form.autoPromoDiscount}
+                        onChange={e => setForm({ ...form, autoPromoDiscount: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-black border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-orange-500 transition-all text-sm font-bold"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {error && <p className="text-red-400 text-xs font-bold ml-2">{error}</p>}
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest border border-gray-700 text-gray-400 hover:border-gray-500 transition-all">

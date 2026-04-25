@@ -295,6 +295,11 @@ model Location {
   // Cerebro Adaptativo: tipo de negocio por sucursal
   businessType BusinessType @default(RESTAURANT)
 
+  // Motor de Promociones Automáticas con IA
+  autoPromoEnabled   Boolean @default(false)
+  autoPromoThreshold Int     @default(10) // Umbral: Ventas menores a X en los últimos 7 días
+  autoPromoDiscount  Float   @default(15) // % de descuento automático
+
   // Configuración de Ticket por sucursal
   ticketConfig TicketConfig?
 
