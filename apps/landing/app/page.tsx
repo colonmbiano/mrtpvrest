@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import Link from 'next/link'
 
 const apps = [
   { src: '/showcase/app-cliente.png', alt: 'App cliente — pedidos online desde el celular', glow: 'green' },
@@ -45,7 +46,9 @@ export default function HomePage() {
         </p>
         <div className="hero-actions">
           <button className="btn-primary">Registrar mi restaurante →</button>
-          <button className="btn-ghost">Ver demo</button>
+          <Link href="/demo" className="btn-ghost" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+            Ver demo
+          </Link>
         </div>
       </div>
 
@@ -137,7 +140,9 @@ export default function HomePage() {
         <p>Regístrate en MRTPVREST y activa las 6 apps para tu negocio desde el primer día.</p>
         <div className="cta-actions">
           <button className="btn-primary">Registrar mi negocio →</button>
-          <button className="btn-ghost">Ver demo en vivo</button>
+          <Link href="/demo" className="btn-ghost" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+            Ver demo en vivo
+          </Link>
         </div>
         <p className="cta-note">MASTER BURGER&apos;S · EL PRIMER RESTAURANTE EN LA PLATAFORMA</p>
       </div>
