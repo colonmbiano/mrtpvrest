@@ -254,8 +254,13 @@ router.patch('/tenants/:id/modules', async (req, res) => {
   }
 
   try {
+    // Prisma update no acepta operadores como `not` en el where — pre-check separado.
+    const existing = await prisma.tenant.findUnique({ where: { id: req.params.id }, select: { slug: true } });
+    if (!existing) return res.status(404).json({ error: 'Tenant no encontrado' });
+    if (existing.slug === PLATFORM_TENANT_SLUG) return res.status(403).json({ error: 'No se puede modificar el tenant de plataforma' });
+
     const tenant = await prisma.tenant.update({
-      where: { id: req.params.id, ...excludePlatform },
+      where: { id: req.params.id },
       data,
       include: { subscription: { include: { plan: true } } }
     });
@@ -370,9 +375,17 @@ router.get('/tenants/:id/invoices', async (req, res) => {
 });
 
 // DELETE /api/saas/tenants/:id  — eliminar tenant y todos sus datos
+// Cascada manual: User → Restaurant (cascada a Orders/Categorías) → Tenant (cascada a Subscription)
 router.delete('/tenants/:id', async (req, res) => {
   try {
-    await prisma.tenant.delete({ where: { id: req.params.id } })
+    await prisma.$transaction(async (tx) => {
+      // 1. Usuarios del tenant (tienen FK a Restaurant sin cascade — deben ir primero)
+      await tx.user.deleteMany({ where: { tenantId: req.params.id } })
+      // 2. Restaurantes (cascada a Location, Order, Category, MenuItem, etc.)
+      await tx.restaurant.deleteMany({ where: { tenantId: req.params.id } })
+      // 3. Tenant (cascada a Subscription e Invoice)
+      await tx.tenant.delete({ where: { id: req.params.id } })
+    })
     res.json({ ok: true })
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Tenant no encontrado' })
