@@ -91,18 +91,12 @@ router.post('/chat', async (req, res) => {
     return res.status(400).json({ error: 'El campo "message" es requerido' })
   }
 
-  let apiKey
-  try {
-    const restaurantId = req.user?.restaurantId || req.restaurantId
-    ;({ apiKey } = await require('../services/ai-key.service').resolveAiKey({ restaurantId }))
-  } catch (err) {
-    if (err.code === 'AI_KEY_REQUIRED') {
-      return res.status(402).json({ error: err.message, code: 'AI_KEY_REQUIRED', action: 'configure_ai_key' })
-    }
-    if (err.code === 'AI_KEY_CORRUPTED') {
-      return res.status(409).json({ error: err.message, code: 'AI_KEY_CORRUPTED' })
-    }
-    return res.status(500).json({ error: err.message || 'No se pudo resolver la API key' })
+  // El onboarding es un flujo de plataforma: siempre usa la key de plataforma.
+  // El tenant recién registrado aún no tiene key propia ni tiene sentido pedírsela.
+  const apiKey = process.env.GOOGLE_AI_API_KEY
+  if (!apiKey) {
+    console.error('GOOGLE_AI_API_KEY no está configurada en el servidor')
+    return res.status(503).json({ error: 'El servicio de IA no está disponible en este momento. Contacta soporte.' })
   }
 
   let aiJson
@@ -139,7 +133,8 @@ router.post('/chat', async (req, res) => {
       aiJson = JSON.parse(match[0])
     }
   } catch (err) {
-    console.error('Error llamando Anthropic API:', err?.response?.data ?? err.message)
+    const detail = err?.response?.data ?? err.message
+    console.error('Error llamando Gemini API (onboarding):', JSON.stringify(detail))
     return res.status(502).json({ error: 'Error al contactar la IA. Intenta de nuevo.' })
   }
 
