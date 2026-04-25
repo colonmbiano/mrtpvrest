@@ -1214,33 +1214,33 @@ function TPVLockScreen({ accent, restaurantName, locationName, pinInput, pinErro
           <p className="text-xs font-bold text-white/40 uppercase tracking-[0.3em]">{locationName || "Terminal de Punto de Venta"}</p>
         </div>
 
-        <div className="bg-[#0a0a0c]/80 backdrop-blur-2xl rounded-[3rem] p-10 border border-white/5 shadow-2xl">
-          <div className="flex justify-center gap-5 mb-10">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className={`w-4 h-4 rounded-full transition-all duration-500 ${pinInput.length > i ? "scale-125" : "bg-white/10"}`}
+        <div className="bg-[#0a0a0c]/80 backdrop-blur-2xl rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 border border-white/5 shadow-2xl">
+          <div className="flex justify-center gap-3 md:gap-5 mb-8 md:mb-10">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className={`w-3 h-3 md:w-4 md:h-4 rounded-full transition-all duration-500 ${pinInput.length > i ? "scale-125" : "bg-white/10"}`}
                 style={{ backgroundColor: pinInput.length > i ? accent : undefined, boxShadow: pinInput.length > i ? `0 0 20px ${accent}80` : "none" }} />
             ))}
           </div>
 
           {pinError && <p className="text-red-400 text-center text-sm font-bold mb-6 animate-bounce">{pinError}</p>}
 
-          <div className="grid grid-cols-3 gap-5">
+          <div className="grid grid-cols-3 gap-3 md:gap-5">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
               <button key={num} disabled={isVerifyingPin} onClick={() => onDigit(String(num))}
-                className="aspect-square rounded-[2rem] bg-white/5 border border-white/5 text-3xl font-syne font-black text-white/80 hover:bg-white/10 hover:text-white hover:-translate-y-1 active:scale-95 transition-all">
+                className="aspect-square rounded-2xl md:rounded-[2rem] bg-white/5 border border-white/5 text-2xl md:text-3xl font-syne font-black text-white/80 hover:bg-white/10 hover:text-white hover:-translate-y-1 active:scale-95 transition-all">
                 {num}
               </button>
             ))}
             <button onClick={onClear}
-              className="aspect-square rounded-[2rem] bg-red-500/10 border border-red-500/20 text-xl font-black text-red-400 hover:bg-red-500/20 hover:-translate-y-1 active:scale-95 transition-all">
+              className="aspect-square rounded-2xl md:rounded-[2rem] bg-red-500/10 border border-red-500/20 text-xl md:text-2xl font-black text-red-400 hover:bg-red-500/20 hover:-translate-y-1 active:scale-95 transition-all">
               C
             </button>
             <button disabled={isVerifyingPin} onClick={() => onDigit("0")}
-              className="aspect-square rounded-[2rem] bg-white/5 border border-white/5 text-3xl font-syne font-black text-white/80 hover:bg-white/10 hover:text-white hover:-translate-y-1 active:scale-95 transition-all">
+              className="aspect-square rounded-2xl md:rounded-[2rem] bg-white/5 border border-white/5 text-2xl md:text-3xl font-syne font-black text-white/80 hover:bg-white/10 hover:text-white hover:-translate-y-1 active:scale-95 transition-all">
               0
             </button>
             <button onClick={onBackspace}
-              className="aspect-square rounded-[2rem] bg-white/5 border border-white/5 text-2xl font-black text-white/80 hover:bg-white/10 hover:text-white hover:-translate-y-1 active:scale-95 transition-all">
+              className="aspect-square rounded-2xl md:rounded-[2rem] bg-white/5 border border-white/5 text-xl md:text-2xl font-black text-white/80 hover:bg-white/10 hover:text-white hover:-translate-y-1 active:scale-95 transition-all">
               ⌫
             </button>
           </div>

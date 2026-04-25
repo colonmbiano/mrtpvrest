@@ -170,9 +170,28 @@ export default function SetupPage() {
     }
   }
 
-  function pickLocation(restaurant: Restaurant, location: Location) {
+  async function pickLocation(restaurant: Restaurant, location: Location) {
     setPicked({ restaurant, location });
-    setStep("terminal");
+    setStep("saving");
+
+    localStorage.setItem("restaurantId", restaurant.id);
+    localStorage.setItem("restaurantName", restaurant.name);
+    localStorage.setItem("locationId", location.id);
+    localStorage.setItem("locationName", location.name);
+    localStorage.removeItem("terminalId");
+
+    if (restaurant.accentColor) {
+      localStorage.setItem("mb-accent", restaurant.accentColor);
+    }
+
+    clearCachedRemoteConfig();
+    await fetchRemoteConfig(api).catch(() => null);
+
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+
+    router.replace("/");
   }
 
   async function finishSetup() {
@@ -303,46 +322,7 @@ export default function SetupPage() {
               {loading ? "Entrando…" : "Entrar"}
             </PrimaryButton>
 
-            <div className="mt-6 pt-5 border-t" style={{ borderColor: "var(--border)" }}>
-              <button
-                type="button"
-                onClick={() => setShowServerEditor(s => !s)}
-                className="text-xs"
-                style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer" }}
-              >
-                {showServerEditor ? "▾" : "▸"} Servidor
-              </button>
-              {showServerEditor && (
-                <div className="mt-3">
-                  <p className="text-xs mb-2" style={{ color: "var(--muted)" }}>
-                    Solo cámbialo si tu instalación apunta a un backend distinto. Default: {DEFAULT_API_URL}
-                  </p>
-                  <Input
-                    value={serverUrl}
-                    onChange={(e) => setServerUrl(e.target.value)}
-                    placeholder="https://api.mrtpvrest.com"
-                  />
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      type="button"
-                      onClick={applyServerOverride}
-                      className="flex-1 text-xs font-bold py-2 rounded-xl"
-                      style={{ background: ACCENT, color: "#000", border: "none", cursor: "pointer" }}
-                    >
-                      Aplicar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setApiUrlOverride(null); setServerUrl(getApiUrl()); }}
-                      className="flex-1 text-xs py-2 rounded-xl"
-                      style={{ background: "transparent", color: "var(--muted)", border: "1px solid var(--border)", cursor: "pointer" }}
-                    >
-                      Usar default
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+
           </form>
         )}
 
@@ -392,43 +372,7 @@ export default function SetupPage() {
           </>
         )}
 
-        {step === "terminal" && picked && (
-          <>
-            <H1>Terminal de pagos</H1>
-            <p className="mt-2 mb-6 text-sm" style={{ color: "var(--muted)" }}>
-              Introduce el ID o IP de la terminal física asignada a este TPV. Es opcional — si lo
-              dejas vacío, los pagos con tarjeta deberán cobrarse manualmente.
-            </p>
-            <div
-              className="mb-4 p-3 rounded-xl"
-              style={{ background: "var(--surf2, var(--bg))", border: "1px solid var(--border)" }}
-            >
-              <div className="text-xs uppercase tracking-wider" style={{ color: "var(--muted)" }}>
-                Vinculando
-              </div>
-              <div className="text-base font-bold mt-1" style={{ color: "var(--text)" }}>
-                {picked.restaurant.name} · {picked.location.name}
-              </div>
-            </div>
-            <Label>ID / IP de la terminal</Label>
-            <Input
-              value={terminalId}
-              onChange={(e) => setTerminalId(e.target.value)}
-              placeholder="Ej. 192.168.1.45 o TERM-001"
-              autoFocus
-            />
-            <PrimaryButton onClick={finishSetup}>
-              {terminalId.trim() ? "Guardar y vincular" : "Vincular sin terminal"}
-            </PrimaryButton>
-            <button
-              onClick={() => setStep("pick")}
-              className="mt-3 text-sm"
-              style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer" }}
-            >
-              ← Cambiar sucursal
-            </button>
-          </>
-        )}
+
 
         {step === "saving" && (
           <div className="text-center py-10">
