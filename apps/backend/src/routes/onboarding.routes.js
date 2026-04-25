@@ -99,7 +99,7 @@ router.post('/chat', async (req, res) => {
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: "gemini-1.5-flash-8b",
       systemInstruction: SYSTEM_PROMPT
     });
 
