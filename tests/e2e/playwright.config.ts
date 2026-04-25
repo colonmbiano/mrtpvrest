@@ -18,8 +18,23 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
+    // 1) Corre primero: genera .auth/admin.json
+    {
+      name: 'setup',
+      testMatch: 'auth.setup.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    // 2) Tests de empleados y repartidores — esperan el setup
+    {
+      name: 'admin-autenticado',
+      testMatch: '{04-empleados,05-repartidor}.spec.ts',
+      dependencies: ['setup'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    // 3) Resto sin dependencias
     {
       name: 'chromium',
+      testMatch: '{01-login,02-tpv,03-kds}.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
   ],

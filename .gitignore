@@ -18,8 +18,9 @@ out
 .env.*.local
 tests/e2e/.env.test
 
-# Playwright results
+# Playwright results y sesiones auth
 tests/e2e/results/
+tests/e2e/.auth/
 
 # Logs
 *.log
