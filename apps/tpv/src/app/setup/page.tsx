@@ -42,7 +42,7 @@ export default function SetupPage() {
   const [loading, setLoading] = useState(false);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [picked, setPicked] = useState<{ restaurant: Restaurant; location: Location } | null>(null);
-  const [terminalId, setTerminalId] = useState("");
+
   const [serverUrl, setServerUrl] = useState("");
   const [showServerEditor, setShowServerEditor] = useState(false);
 
@@ -63,7 +63,7 @@ export default function SetupPage() {
       restaurantName: localStorage.getItem("restaurantName") || "Restaurante",
       locationName: localStorage.getItem("locationName") || "Sucursal",
     });
-    setTerminalId(localStorage.getItem("terminalId") || "");
+
   }, []);
 
   function applyServerOverride() {
@@ -178,7 +178,7 @@ export default function SetupPage() {
     localStorage.setItem("restaurantName", restaurant.name);
     localStorage.setItem("locationId", location.id);
     localStorage.setItem("locationName", location.name);
-    localStorage.removeItem("terminalId");
+
 
     if (restaurant.accentColor) {
       localStorage.setItem("mb-accent", restaurant.accentColor);
@@ -226,13 +226,6 @@ export default function SetupPage() {
     router.replace("/");
   }
 
-  function saveTerminalOnly() {
-    const v = terminalId.trim();
-    if (v) localStorage.setItem("terminalId", v);
-    else localStorage.removeItem("terminalId");
-    router.replace("/");
-  }
-
   function unlink() {
     if (!confirm("¿Desvincular este TPV? Tendrás que volver a configurarlo.")) return;
     [
@@ -252,7 +245,7 @@ export default function SetupPage() {
     setRestaurants([]);
     setEmail("");
     setPassword("");
-    setTerminalId("");
+
     setError("");
     setStep("login");
   }
@@ -266,13 +259,7 @@ export default function SetupPage() {
             <b>{alreadyLinked.restaurantName}</b> — {alreadyLinked.locationName}
           </p>
 
-          <Label>Terminal de pagos (opcional)</Label>
-          <Input
-            value={terminalId}
-            onChange={(e) => setTerminalId(e.target.value)}
-            placeholder="Ej. 192.168.1.45 o TERM-001"
-          />
-          <PrimaryButton onClick={saveTerminalOnly}>Guardar y continuar</PrimaryButton>
+          <PrimaryButton onClick={() => router.replace("/")}>Ir al TPV</PrimaryButton>
 
           <div className="mt-8 pt-5 border-t" style={{ borderColor: "var(--border)" }}>
             <button
