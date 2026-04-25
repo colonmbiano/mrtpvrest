@@ -1202,7 +1202,6 @@ export default function TPVPage() {
 }
 
 // ── PANTALLA DE BLOQUEO PREMIUM DASHBOARD ───────────────────────────────────
-import { usePOSStore } from "@/store/usePOSStore";
 
 function TPVLockScreen({ accent, restaurantName, locationName, pinInput, pinError, isVerifyingPin, onDigit, onBackspace, onClear, onSubmit, onChangeLocation }: any) {
   const { theme, setTheme } = usePOSStore();
