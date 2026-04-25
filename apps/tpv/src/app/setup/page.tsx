@@ -248,6 +248,7 @@ export default function SetupPage() {
 
     setError("");
     setStep("login");
+    window.location.href = "/setup";
   }
 
   if (alreadyLinked && step === "login") {
@@ -284,16 +285,20 @@ export default function SetupPage() {
             <p className="mt-2 mb-6 text-sm" style={{ color: "var(--muted)" }}>
               Inicia sesión como administrador para asignar este dispositivo a una sucursal.
             </p>
-            <Label>Email</Label>
+            <Label htmlFor="email">Email</Label>
             <Input
+              id="email"
+              name="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
             />
-            <Label>Contraseña</Label>
+            <Label htmlFor="password">Contraseña</Label>
             <Input
+              id="password"
+              name="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -414,9 +419,10 @@ function H1({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Label({ children }: { children: React.ReactNode }) {
+function Label({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
   return (
     <label
+      htmlFor={htmlFor}
       className="block text-[11px] font-semibold uppercase tracking-widest mt-4 mb-1.5"
       style={{ color: "var(--muted)" }}
     >
