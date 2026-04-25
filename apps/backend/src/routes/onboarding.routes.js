@@ -140,7 +140,7 @@ router.post('/chat', async (req, res) => {
     }
   } catch (err) {
     console.error('Error llamando Gemini API (onboarding):', err.message)
-    return res.status(502).json({ error: 'Error al contactar la IA. Intenta de nuevo.' })
+    return res.status(502).json({ error: `Error de Google IA: ${err.message}` })
   }
 
   // ── Persistir cuando el onboarding está completo ──────────────────────────
