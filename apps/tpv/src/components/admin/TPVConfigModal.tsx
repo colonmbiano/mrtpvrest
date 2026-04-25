@@ -2,8 +2,18 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 
+type DisplaySettings = {
+  gridSize?: number;
+  gridCols?: number;
+  sound?: string;
+  showImages?: boolean;
+  fontSize?: "xs" | "sm" | "md" | "lg" | "xl";
+};
+
 interface Props {
   onClose: () => void;
+  settings?: DisplaySettings;
+  onUpdate?: (settings: DisplaySettings) => void;
 }
 
 const PRINTER_TYPES = [
@@ -60,7 +70,7 @@ const emptyPrinter = {
   ip:"", port:9100, usbPort:"", bluetoothAddress:"", isActive:true, categories:[] as string[],
 };
 
-export default function TPVConfigModal({ onClose }: Props) {
+export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
   const [tab, setTab] = useState<"printers"|"ticket"|"kitchen"|"display">("printers");
   const [printers, setPrinters] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -96,7 +106,7 @@ export default function TPVConfigModal({ onClose }: Props) {
   const [gridSize, setGridSize] = useState(4);
   const [sound, setSound] = useState("ding");
   const [showImages, setShowImages] = useState(true);
-  const [fontSize, setFontSize] = useState<"sm"|"md"|"lg">("md");
+  const [fontSize, setFontSize] = useState<"xs"|"sm"|"md"|"lg"|"xl">("md");
 
   useEffect(() => {
     const saved = localStorage.getItem("tpv-display-config");
@@ -111,6 +121,14 @@ export default function TPVConfigModal({ onClose }: Props) {
     }
     fetchAll();
   }, []);
+
+  useEffect(() => {
+    if (!settings) return;
+    const nextGrid = settings.gridSize || settings.gridCols;
+    if (nextGrid) setGridSize(nextGrid);
+    if (settings.fontSize) setFontSize(settings.fontSize);
+    if (settings.showImages !== undefined) setShowImages(settings.showImages);
+  }, [settings]);
 
   async function fetchAll() {
     try {
@@ -212,9 +230,24 @@ export default function TPVConfigModal({ onClose }: Props) {
     finally { setSaving(false); }
   }
 
+  function publishDisplayConfig(patch: DisplaySettings = {}) {
+    const next = {
+      gridSize,
+      gridCols: gridSize,
+      sound,
+      showImages,
+      fontSize,
+      ...patch,
+    };
+    if (patch.gridSize) next.gridCols = patch.gridSize;
+    if (patch.gridCols) next.gridSize = patch.gridCols;
+    localStorage.setItem("tpv-display-config", JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent("tpv-config-changed", { detail: next }));
+    onUpdate?.(next);
+  }
+
   function saveDisplayConfig() {
-    localStorage.setItem("tpv-display-config", JSON.stringify({ gridSize, sound, showImages, fontSize }));
-    window.dispatchEvent(new CustomEvent("tpv-config-changed", { detail: { gridSize, sound, showImages, fontSize } }));
+    publishDisplayConfig();
     setSaved(true); setTimeout(() => setSaved(false), 2000);
   }
 
@@ -518,7 +551,7 @@ export default function TPVConfigModal({ onClose }: Props) {
                 <div className="text-xs font-black uppercase tracking-wider mb-3" style={{color:"var(--gold)"}}>Cuadrícula de productos</div>
                 <div className="grid grid-cols-4 gap-2">
                   {GRID_OPTIONS.map(opt => (
-                    <button key={opt.value} onClick={() => setGridSize(opt.value)}
+                    <button key={opt.value} onClick={() => { setGridSize(opt.value); publishDisplayConfig({ gridSize: opt.value, gridCols: opt.value }); }}
                       className="py-3 rounded-xl flex flex-col items-center gap-1 border-2 transition-all"
                       style={{background:gridSize===opt.value?"rgba(245,166,35,0.1)":"var(--surf)",borderColor:gridSize===opt.value?"var(--gold)":"var(--border)"}}>
                       <span className="font-syne font-black text-lg" style={{color:gridSize===opt.value?"var(--gold)":"var(--text)"}}>{opt.label}</span>
@@ -531,7 +564,7 @@ export default function TPVConfigModal({ onClose }: Props) {
                 <div className="text-xs font-black uppercase tracking-wider mb-3" style={{color:"var(--gold)"}}>Tamaño de texto</div>
                 <div className="grid grid-cols-3 gap-2">
                   {[{value:"sm",label:"Pequeño"},{value:"md",label:"Mediano"},{value:"lg",label:"Grande"}].map(opt => (
-                    <button key={opt.value} onClick={() => setFontSize(opt.value as any)}
+                    <button key={opt.value} onClick={() => { setFontSize(opt.value as any); publishDisplayConfig({ fontSize: opt.value as any }); }}
                       className="py-2.5 rounded-xl font-bold text-sm border-2 transition-all"
                       style={{background:fontSize===opt.value?"rgba(245,166,35,0.1)":"var(--surf)",borderColor:fontSize===opt.value?"var(--gold)":"var(--border)",color:fontSize===opt.value?"var(--gold)":"var(--muted)"}}>
                       {opt.label}
@@ -548,7 +581,7 @@ export default function TPVConfigModal({ onClose }: Props) {
                     <div className="text-sm font-medium">Mostrar imágenes</div>
                     <div className="text-xs" style={{color:"var(--muted)"}}>Ocultar para un TPV más rápido</div>
                   </div>
-                  <button onClick={() => setShowImages(!showImages)}
+                  <button onClick={() => { const next = !showImages; setShowImages(next); publishDisplayConfig({ showImages: next }); }}
                     className="w-12 h-6 rounded-full transition-all relative"
                     style={{background:showImages?"var(--gold)":"var(--surf2)"}}>
                     <div className="w-5 h-5 rounded-full absolute top-0.5 transition-all bg-white"
@@ -560,7 +593,7 @@ export default function TPVConfigModal({ onClose }: Props) {
                 <div className="text-xs font-black uppercase tracking-wider mb-3" style={{color:"var(--gold)"}}>Sonido al recibir pedido</div>
                 <div className="flex flex-col gap-2">
                   {SOUND_OPTIONS.map(opt => (
-                    <button key={opt.value} onClick={() => setSound(opt.value)}
+                    <button key={opt.value} onClick={() => { setSound(opt.value); publishDisplayConfig({ sound: opt.value }); }}
                       className="py-2.5 px-4 rounded-xl text-sm font-bold text-left border-2 transition-all"
                       style={{background:sound===opt.value?"rgba(245,166,35,0.1)":"var(--surf)",borderColor:sound===opt.value?"var(--gold)":"var(--border)",color:sound===opt.value?"var(--gold)":"var(--muted)"}}>
                       {opt.label}
