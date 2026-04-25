@@ -141,7 +141,7 @@ export default function TPVPage() {
   const [showShiftModal, setShowShiftModal]       = useState(false);
 
   const [gridCols, setGridCols] = useState(4);
-  const [fontSize, setFontSize] = useState("sm");
+  const [fontSize, setFontSize] = useState<"xs" | "sm" | "md" | "lg" | "xl">("sm");
   const [showImages, setShowImages] = useState(true);
 
   // Mobile nav
@@ -1166,7 +1166,16 @@ export default function TPVPage() {
 
       {/* Componentes y Modales Secundarios Preservados */}
       <IngredientShortageModal />
-      <DeliveryAssignModal open={!!assignOrder} onClose={() => setAssignOrder(null)} order={assignOrder} />
+      {assignOrder && (
+        <DeliveryAssignModal
+          order={assignOrder}
+          onClose={() => setAssignOrder(null)}
+          onAssigned={() => {
+            setAssignOrder(null);
+            fetchOrders();
+          }}
+        />
+      )}
       {showShiftModal && <ShiftModal employee={currentEmployee || {id: "", name: "Cajero"}} onClose={() => { setShowShiftModal(false); refreshShift(); }} />}
       {showDriversPanel && <DriversPanel open={showDriversPanel} onClose={() => setShowDriversPanel(false)} accent={ACCENT} />}
       <TablesFloorPlan open={showTablesFloor} mode="manage" onClose={() => setShowTablesFloor(false)} accent={ACCENT} />
