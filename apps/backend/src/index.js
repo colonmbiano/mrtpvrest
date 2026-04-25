@@ -190,6 +190,9 @@ app.use((err, req, res, next) => {
 const { startTrialExpiryJob } = require('./jobs/trialExpiry.job')
 startTrialExpiryJob()
 
+const { startAutoPromosJob } = require('./jobs/autoPromos.job')
+startAutoPromosJob()
+
 const PORT = process.env.PORT || 3001
 server.listen(PORT,'0.0.0.0', () => {
   console.log('┌─────────────────────────────────┐')
