@@ -188,7 +188,8 @@ export default function TPVPage() {
       res => res,
       err => {
         const url = String(err?.config?.url || "");
-        if (err?.response?.status === 401 && !url.includes("/api/employees/login")) {
+        // Avoid redirect loop if useLocation or config fetches fail while locked
+        if (err?.response?.status === 401 && !url.includes("/api/employees/login") && !url.includes("/api/locations/") && !url.includes("/api/tpv/config")) {
           handleExpiredSession();
         }
         return Promise.reject(err);
