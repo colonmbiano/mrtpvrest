@@ -14,38 +14,28 @@ const config: Config = {
         background: "var(--bg)",
         foreground: "var(--tx)",
 
-        // Design System · MRTPVREST
-        bg: "var(--bg)",
+        // SPA Theme Variables
+        bgApp: "var(--bg-app)",
         surf: {
-          DEFAULT: "var(--surf-1)",
           1: "var(--surf-1)",
           2: "var(--surf-2)",
           3: "var(--surf-3)",
         },
-        bd: {
-          1: "var(--bd-1)",
-          2: "var(--bd-2)",
+        accent: {
+          DEFAULT: "var(--accent)",
+          glow: "var(--accent-glow)",
         },
         tx: {
-          DEFAULT: "var(--tx)",
-          hi: "var(--tx-hi)",
-          mid: "var(--tx-mid)",
+          main: "var(--tx-main)",
           mut: "var(--tx-mut)",
           dim: "var(--tx-dim)",
         },
-        iris: {
-          200: "var(--iris-200)",
-          300: "var(--iris-300)",
-          400: "var(--iris-400)",
-          500: "var(--iris-500)",
-          600: "var(--iris-600)",
-          soft: "var(--iris-soft)",
-          glow: "var(--iris-glow)",
+        bd: {
+          main: "var(--bd-main)",
         },
-        ok:   { DEFAULT: "var(--ok)",   soft: "var(--ok-soft)"   },
-        warn: { DEFAULT: "var(--warn)", soft: "var(--warn-soft)" },
-        err:  { DEFAULT: "var(--err)",  soft: "var(--err-soft)"  },
-        info: { DEFAULT: "var(--info)", soft: "var(--info-soft)" },
+        ok: "var(--ok)",
+        warn: "var(--warn)",
+        err: "var(--err)",
       },
       fontFamily: {
         sans:    ["var(--font-dm-sans)", "DM Sans", "system-ui", "sans-serif"],

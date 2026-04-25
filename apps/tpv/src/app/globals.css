@@ -3,204 +3,121 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────
-   DESIGN SYSTEM · MRTPVREST (canonical tokens)
-   Fuentes: Syne (display) · DM Sans (body) · DM Mono (mono)
+   DESIGN SYSTEM · MRTPVREST (legacy + SPA)
    ───────────────────────────────────────────────────────────── */
-:root, [data-theme="dark"] {
-  /* Iris (brand) */
-  --iris-200:#dcd0ff; --iris-300:#b89eff; --iris-400:#9472ff; --iris-500:#7c3aed;
-  --iris-600:#6428d0; --iris-soft:rgba(124,58,237,.14); --iris-glow:rgba(124,58,237,.35);
 
-  /* Status */
-  --ok:#10b981;   --ok-soft:rgba(16,185,129,.14);
-  --warn:#f59e0b; --warn-soft:rgba(245,158,11,.14);
-  --err:#ef4444;  --err-soft:rgba(239,68,68,.14);
-  --info:#3b82f6; --info-soft:rgba(59,130,246,.14);
+@layer base {
+  :root, [data-theme="dark"] {
+    --bg-app: #0a0a0c;
+    --surf-1: #121217;
+    --surf-2: #1a1a21;
+    --surf-3: #22222d;
+    --accent: #7c3aed;
+    --accent-glow: rgba(124,58,237,.35);
+    
+    --tx-main: #ffffff;
+    --tx-mut:  #a1a1aa;
+    --tx-dim:  #71717a;
+    
+    --bd-main: rgba(255,255,255,0.1);
+    
+    --ok: #10b981; --warn: #f59e0b; --err: #ef4444;
 
-  /* Superficies dark (OLED) */
-  --bg:     #08080f;
-  --surf-1: #0f0f1c;
-  --surf-2: #15152a;
-  --surf-3: #1c1c38;
+    /* Legacy tokens for existing components */
+    --bg: var(--bg-app);
+    --surf: var(--surf-1);
+    --surf2: var(--surf-2);
+    --border: var(--bd-main);
+    --tx: var(--tx-main);
+    --f-b: var(--font-dm-sans, 'DM Sans'), sans-serif;
+    --f-d: var(--font-syne, 'Syne'), sans-serif;
+    --f-m: var(--font-dm-mono, 'DM Mono'), monospace;
+  }
 
-  /* Borders */
-  --bd-1: rgba(255,255,255,.08);
-  --bd-2: rgba(255,255,255,.14);
+  [data-theme="concepto-1"] {
+    --bg-app: #022c22;
+    --surf-1: #064e3b;
+    --surf-2: #065f46;
+    --surf-3: #047857;
+    --accent: #34d399;
+    --accent-glow: rgba(52,211,153,.35);
+    --tx-main: #ffffff; --tx-mut: #a7f3d0; --tx-dim: #6ee7b7;
+    --bd-main: rgba(255,255,255,0.15);
+  }
 
-  /* Texto (AAA contra --bg) */
-  --tx:     #f4f4fb;
-  --tx-hi:  #ffffff;
-  --tx-mid: #c4c4de;
-  --tx-mut: #9494b8;
-  --tx-dim: #6e6e92;
+  [data-theme="concepto-2"] {
+    --bg-app: #1e1b4b;
+    --surf-1: #312e81;
+    --surf-2: #3730a3;
+    --surf-3: #4338ca;
+    --accent: #818cf8;
+    --accent-glow: rgba(129,140,248,.35);
+    --tx-main: #ffffff; --tx-mut: #c7d2fe; --tx-dim: #a5b4fc;
+    --bd-main: rgba(255,255,255,0.15);
+  }
 
-  /* Tipografía */
-  --f-d: var(--font-syne, 'Syne'), sans-serif;
-  --f-b: var(--font-dm-sans, 'DM Sans'), sans-serif;
-  --f-m: var(--font-dm-mono, 'DM Mono'), monospace;
+  [data-theme="concepto-3"] {
+    --bg-app: #f8fafc;
+    --surf-1: #ffffff;
+    --surf-2: #f1f5f9;
+    --surf-3: #e2e8f0;
+    --accent: #10b981;
+    --accent-glow: rgba(16,185,129,.35);
+    --tx-main: #0f172a; --tx-mut: #475569; --tx-dim: #64748b;
+    --bd-main: rgba(0,0,0,0.1);
+  }
 
-  /* Alias legacy (compat con UI previa del TPV) */
-  --surf:   var(--surf-1);
-  --surf2:  var(--surf-2);
-  --border: var(--bd-1);
-  --gold:   #F5C842;
-  --gold2:  #FFD060;
-  --green:  var(--ok);
-  --red:    var(--err);
-  --text:   var(--tx);
-  --muted:  var(--tx-mut);
-  --shadow: rgba(0,0,0,0.4);
-}
+  [data-theme="naranja"] {
+    --bg-app: #fff7ed;
+    --surf-1: #ffffff;
+    --surf-2: #ffedd5;
+    --surf-3: #fed7aa;
+    --accent: #ea580c;
+    --accent-glow: rgba(234,88,12,.35);
+    --tx-main: #431407; --tx-mut: #9a3412; --tx-dim: #c2410c;
+    --bd-main: rgba(0,0,0,0.1);
+  }
 
-/* ── LIGHT THEME ── */
-[data-theme="light"] {
-  --bg:     #f7f7fb;
-  --surf-1: #ffffff;
-  --surf-2: #f2f2f7;
-  --surf-3: #ebebf1;
-  --bd-1:   #e4e4ec;
-  --bd-2:   #d4d4de;
-  --tx:     #0c0c17;
-  --tx-hi:  #05050c;
-  --tx-mid: #2a2a44;
-  --tx-mut: #5a5a7a;
-  --tx-dim: #8585a3;
-  --iris-soft: rgba(124,58,237,.08);
-
-  --surf:   var(--surf-1);
-  --surf2:  var(--surf-2);
-  --border: var(--bd-1);
-  --gold:   #d4820a;
-  --gold2:  #e8a020;
-  --green:  #16a34a;
-  --red:    #dc2626;
-  --text:   var(--tx);
-  --muted:  var(--tx-mut);
-  --shadow: rgba(0,0,0,0.1);
+  [data-theme="amarillo"] {
+    --bg-app: #fefce8;
+    --surf-1: #ffffff;
+    --surf-2: #fef08a;
+    --surf-3: #fde047;
+    --accent: #ca8a04;
+    --accent-glow: rgba(202,138,4,.35);
+    --tx-main: #422006; --tx-mut: #854d0e; --tx-dim: #a16207;
+    --bd-main: rgba(0,0,0,0.1);
+  }
 }
 
 * { box-sizing: border-box; }
 
 body {
-  background: var(--bg);
-  color: var(--tx);
+  background: var(--bg-app);
+  color: var(--tx-main);
   font-family: var(--f-b);
   -webkit-font-smoothing: antialiased;
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.3s ease, color 0.3s ease;
+  overflow: hidden; /* For SPA app-like feel */
 }
-
-.font-syne    { font-family: var(--f-d); }
-.font-display { font-family: var(--f-d); letter-spacing: -.02em; }
-.font-mono    { font-family: var(--f-m); font-feature-settings: "tnum" 1, "zero" 1; }
 
 /* Transición suave al cambiar tema */
 *, *::before, *::after {
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
 }
-
-/* KDS también respeta el tema */
-[data-theme="light"] #driver-map { filter: brightness(0.95); }
 
 /* Utilidades nativas para APK / PWA */
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 
-/* Evitar selección de texto al hacer tap (meseros operando rápido) */
 button, .no-select { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-
-/* Overscroll / bounce suprimido para sensación nativa */
 html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 
-/* Bottom sheet animation */
-@keyframes slideUp {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
+.pos-shadow {
+  box-shadow: 0 10px 40px -10px var(--accent-glow);
 }
-.sheet-enter { animation: slideUp 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
-
-.tpv-shell {
-  background:
-    radial-gradient(circle at 20% 0%, rgba(255, 92, 53, 0.14), transparent 32rem),
-    radial-gradient(circle at 82% 8%, rgba(124, 58, 237, 0.12), transparent 34rem),
-    linear-gradient(180deg, #08080f 0%, #050507 52%, #08080f 100%);
-}
-
 .glass-panel {
-  background:
-    linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)),
-    rgba(10,10,16,0.72);
-  border-color: rgba(255,255,255,0.10);
-  box-shadow:
-    0 18px 44px rgba(0,0,0,0.34),
-    inset 0 1px 0 rgba(255,255,255,0.08);
+  background: var(--surf-1);
+  border: 1px solid var(--bd-main);
   backdrop-filter: blur(22px);
-}
-
-.glass-card {
-  background:
-    linear-gradient(145deg, rgba(255,255,255,0.095), rgba(255,255,255,0.03)),
-    rgba(15,15,24,0.76);
-  border-color: rgba(255,255,255,0.10);
-  box-shadow:
-    0 14px 34px rgba(0,0,0,0.24),
-    inset 0 1px 0 rgba(255,255,255,0.09);
-  backdrop-filter: blur(18px);
-}
-
-.glass-card:hover,
-.glass-button:hover {
-  border-color: rgba(255,255,255,0.18);
-  background:
-    linear-gradient(145deg, rgba(255,255,255,0.14), rgba(255,255,255,0.045)),
-    rgba(20,20,30,0.82);
-}
-
-.glass-button {
-  background:
-    linear-gradient(145deg, rgba(255,255,255,0.09), rgba(255,255,255,0.025)),
-    rgba(255,255,255,0.045);
-  border: 1px solid rgba(255,255,255,0.10);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
-  backdrop-filter: blur(16px);
-}
-
-.table-glyph {
-  position: relative;
-  display: inline-block;
-  width: 28px;
-  height: 22px;
-  color: currentColor;
-}
-
-.table-glyph::before {
-  content: "";
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  top: 2px;
-  height: 12px;
-  border-radius: 999px;
-  border: 2px solid currentColor;
-  background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.04));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22);
-}
-
-.table-glyph::after {
-  content: "";
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 1px;
-  height: 8px;
-  border-left: 2px solid currentColor;
-  border-right: 2px solid currentColor;
-}
-
-.table-glyph--mini {
-  width: 20px;
-  height: 16px;
-}
-
-.table-tile:hover {
-  transform: translateY(-2px);
 }
