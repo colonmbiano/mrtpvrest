@@ -178,10 +178,8 @@ export default function TPVPage() {
 
   const handleExpiredSession = useCallback(() => {
     clearEmployeeSession();
-    localStorage.removeItem("restaurantId");
-    localStorage.removeItem("locationId");
-    router.replace("/setup");
-  }, [clearEmployeeSession, router]);
+    setIsGlobalLocked(true);
+  }, [clearEmployeeSession]);
 
   useEffect(() => {
     const interceptorId = api.interceptors.response.use(
