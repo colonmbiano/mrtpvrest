@@ -280,6 +280,9 @@ importers:
       '@types/react':
         specifier: ^18
         version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18
+        version: 18.3.7(@types/react@18.3.28)
       typescript:
         specifier: ^5
         version: 5.9.3
