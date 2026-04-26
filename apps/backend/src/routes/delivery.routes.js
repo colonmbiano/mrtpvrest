@@ -66,12 +66,26 @@ router.put('/:driverId/orders/:orderId/status', async (req, res) => {
     const { status, paymentMethod } = req.body;
     const data = { status };
     if (paymentMethod) data.paymentMethod = paymentMethod;
-    if (status === 'DELIVERED') data.paidAt = new Date();
+    if (status === 'DELIVERED') {
+      if (paymentMethod === 'CASH') {
+        data.cashCollected = false;
+        data.paidAt = null;
+      } else {
+        data.paidAt = new Date();
+      }
+    }
     const order = await prisma.order.update({
       where: { id: req.params.orderId },
       data,
       include: { items: { include: { menuItem: true } }, user: true }
     });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
+    }
+
     res.json(order);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -92,8 +106,15 @@ router.post('/orders/:orderId/messages', async (req, res) => {
   try {
     const { message, fromDriver } = req.body;
     const msg = await prisma.deliveryMessage.create({
-      data: { orderId: req.params.orderId, message, fromDriver: fromDriver || false }
+      data: { orderId: req.params.orderId, message, fromDriver: fromDriver || false },
+      include: { order: true }
     });
+
+    const io = req.app.get('io');
+    if (io && msg.order) {
+      io.to(`restaurant:${msg.order.restaurantId}:location:${msg.order.locationId}:admins`).emit('newMessage', { orderId: msg.orderId, msg });
+    }
+
     res.json(msg);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
