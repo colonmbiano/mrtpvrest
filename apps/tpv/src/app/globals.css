@@ -3,121 +3,180 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────
-   DESIGN SYSTEM · MRTPVREST (legacy + SPA)
+   DESIGN SYSTEM · MRTPVREST · TPV
+   3 paletas (green | purple | orange) × 2 modos (dark | light)
+   data-theme="<palette>" data-mode="<mode>"
    ───────────────────────────────────────────────────────────── */
 
 @layer base {
-  :root, [data-theme="dark"] {
-    --bg-app: #0a0a0c;
-    --surf-1: #121217;
-    --surf-2: #1a1a21;
-    --surf-3: #22222d;
-    --accent: #7c3aed;
-    --accent-glow: rgba(124,58,237,.35);
-    
-    --tx-main: #ffffff;
-    --tx-mut:  #a1a1aa;
-    --tx-dim:  #71717a;
-    
-    --bd-main: rgba(255,255,255,0.1);
-    
-    --ok: #10b981; --warn: #f59e0b; --err: #ef4444;
+  /* ── Default = green · dark ───────────────────────────────── */
+  :root {
+    /* Surfaces & text · dark mode (defaults) */
+    --bg:               #0a0a0a;
+    --surface-1:        #141414;
+    --surface-2:        #1f1f1f;
+    --surface-3:        #2a2a2a;
+    --surface-hover:    #333333;
 
-    /* Legacy tokens for existing components */
-    --bg: var(--bg-app);
-    --surf: var(--surf-1);
-    --surf2: var(--surf-2);
-    --border: var(--bd-main);
-    --tx: var(--tx-main);
-    --f-b: var(--font-dm-sans, 'DM Sans'), sans-serif;
-    --f-d: var(--font-syne, 'Syne'), sans-serif;
-    --f-m: var(--font-dm-mono, 'DM Mono'), monospace;
+    --text-primary:     #ffffff;
+    --text-secondary:   #a1a1aa;
+    --text-muted:       #71717a;
+    --text-disabled:    #52525b;
+
+    --border:           rgba(255, 255, 255, 0.08);
+    --border-strong:    rgba(255, 255, 255, 0.16);
+    --border-focus:     var(--brand);
+
+    --shadow-sm:        0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md:        0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-lg:        0 12px 32px rgba(0, 0, 0, 0.5);
+    --shadow-glow:      0 10px 40px -10px var(--brand-glow);
+
+    /* Brand · green */
+    --brand:            #10b981;
+    --brand-hover:      #059669;
+    --brand-active:     #047857;
+    --brand-soft:       rgba(16, 185, 129, 0.12);
+    --brand-glow:       rgba(16, 185, 129, 0.35);
+    --brand-fg:         #ffffff;
+
+    /* Status (semantic, theme-independent) */
+    --success:          #10b981;
+    --success-soft:     rgba(16, 185, 129, 0.12);
+    --warning:          #f59e0b;
+    --warning-soft:     rgba(245, 158, 11, 0.12);
+    --danger:           #ef4444;
+    --danger-soft:      rgba(239, 68, 68, 0.12);
+    --info:             #3b82f6;
+    --info-soft:        rgba(59, 130, 246, 0.12);
+
+    /* Radii & spacing scale */
+    --radius-sm:        0.5rem;
+    --radius-md:        0.75rem;
+    --radius-lg:        1rem;
+    --radius-xl:        1.25rem;
+    --radius-full:      9999px;
+
+    /* Fonts (set via next/font in layout.tsx) */
+    --font-body:        var(--font-dm-sans, 'DM Sans'), system-ui, sans-serif;
+    --font-display:     var(--font-syne, 'Syne'), system-ui, sans-serif;
+    --font-mono:        var(--font-dm-mono, 'DM Mono'), ui-monospace, monospace;
+
+    /* ── Legacy aliases (do not use in new code) ───────────── */
+    --bg-app:           var(--bg);
+    --surf-1:           var(--surface-1);
+    --surf-2:           var(--surface-2);
+    --surf-3:           var(--surface-3);
+    --surf:             var(--surface-1);
+    --surf2:            var(--surface-2);
+    --accent:           var(--brand);
+    --accent-glow:      var(--brand-glow);
+    --tx-main:          var(--text-primary);
+    --tx-mut:           var(--text-secondary);
+    --tx-dim:           var(--text-muted);
+    --tx:               var(--text-primary);
+    --muted:            var(--text-secondary);
+    --bd-main:          var(--border);
+    --ok:               var(--success);
+    --warn:             var(--warning);
+    --err:              var(--danger);
+    --f-b:              var(--font-body);
+    --f-d:              var(--font-display);
+    --f-m:              var(--font-mono);
   }
 
-  [data-theme="concepto-1"] {
-    --bg-app: #022c22;
-    --surf-1: #064e3b;
-    --surf-2: #065f46;
-    --surf-3: #047857;
-    --accent: #34d399;
-    --accent-glow: rgba(52,211,153,.35);
-    --tx-main: #ffffff; --tx-mut: #a7f3d0; --tx-dim: #6ee7b7;
-    --bd-main: rgba(255,255,255,0.15);
+  /* ── Mode overrides ───────────────────────────────────────── */
+  [data-mode="light"] {
+    --bg:             #f8fafc;
+    --surface-1:      #ffffff;
+    --surface-2:      #f1f5f9;
+    --surface-3:      #e2e8f0;
+    --surface-hover:  #cbd5e1;
+
+    --text-primary:   #0f172a;
+    --text-secondary: #475569;
+    --text-muted:     #64748b;
+    --text-disabled:  #94a3b8;
+
+    --border:         rgba(15, 23, 42, 0.08);
+    --border-strong:  rgba(15, 23, 42, 0.16);
+
+    --shadow-sm:      0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-md:      0 4px 12px rgba(15, 23, 42, 0.08);
+    --shadow-lg:      0 12px 32px rgba(15, 23, 42, 0.12);
   }
 
-  [data-theme="concepto-2"] {
-    --bg-app: #1e1b4b;
-    --surf-1: #312e81;
-    --surf-2: #3730a3;
-    --surf-3: #4338ca;
-    --accent: #818cf8;
-    --accent-glow: rgba(129,140,248,.35);
-    --tx-main: #ffffff; --tx-mut: #c7d2fe; --tx-dim: #a5b4fc;
-    --bd-main: rgba(255,255,255,0.15);
+  /* ── Palette overrides (apply over current mode) ──────────── */
+  [data-theme="green"] {
+    --brand:        #10b981;
+    --brand-hover:  #059669;
+    --brand-active: #047857;
+    --brand-soft:   rgba(16, 185, 129, 0.12);
+    --brand-glow:   rgba(16, 185, 129, 0.35);
+    --brand-fg:     #ffffff;
   }
 
-  [data-theme="concepto-3"] {
-    --bg-app: #f8fafc;
-    --surf-1: #ffffff;
-    --surf-2: #f1f5f9;
-    --surf-3: #e2e8f0;
-    --accent: #10b981;
-    --accent-glow: rgba(16,185,129,.35);
-    --tx-main: #0f172a; --tx-mut: #475569; --tx-dim: #64748b;
-    --bd-main: rgba(0,0,0,0.1);
+  [data-theme="purple"] {
+    --brand:        #7c3aed;
+    --brand-hover:  #6d28d9;
+    --brand-active: #5b21b6;
+    --brand-soft:   rgba(124, 58, 237, 0.14);
+    --brand-glow:   rgba(124, 58, 237, 0.35);
+    --brand-fg:     #ffffff;
   }
 
-  [data-theme="naranja"] {
-    --bg-app: #fff7ed;
-    --surf-1: #ffffff;
-    --surf-2: #ffedd5;
-    --surf-3: #fed7aa;
-    --accent: #ea580c;
-    --accent-glow: rgba(234,88,12,.35);
-    --tx-main: #431407; --tx-mut: #9a3412; --tx-dim: #c2410c;
-    --bd-main: rgba(0,0,0,0.1);
+  [data-theme="orange"] {
+    --brand:        #ff5c35;
+    --brand-hover:  #e64a26;
+    --brand-active: #cc3d1d;
+    --brand-soft:   rgba(255, 92, 53, 0.14);
+    --brand-glow:   rgba(255, 92, 53, 0.35);
+    --brand-fg:     #ffffff;
   }
 
-  [data-theme="amarillo"] {
-    --bg-app: #fefce8;
-    --surf-1: #ffffff;
-    --surf-2: #fef08a;
-    --surf-3: #fde047;
-    --accent: #ca8a04;
-    --accent-glow: rgba(202,138,4,.35);
-    --tx-main: #422006; --tx-mut: #854d0e; --tx-dim: #a16207;
-    --bd-main: rgba(0,0,0,0.1);
-  }
+  /* ── Legacy theme IDs (backwards compat with old picker) ─── */
+  [data-theme="dark"]       { /* maps to green dark via shim */ }
+  [data-theme="concepto-1"] { --brand: #34d399; --brand-glow: rgba(52,211,153,.35); }
+  [data-theme="concepto-2"] { --brand: #818cf8; --brand-glow: rgba(129,140,248,.35); }
+  [data-theme="concepto-3"] { --brand: #10b981; --brand-glow: rgba(16,185,129,.35); }
+  [data-theme="naranja"]    { --brand: #ea580c; --brand-glow: rgba(234,88,12,.35); }
+  [data-theme="amarillo"]   { --brand: #ca8a04; --brand-glow: rgba(202,138,4,.35); }
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Element resets & utilities
+   ───────────────────────────────────────────────────────────── */
 * { box-sizing: border-box; }
 
 body {
-  background: var(--bg-app);
-  color: var(--tx-main);
-  font-family: var(--f-b);
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
-  transition: background 0.3s ease, color 0.3s ease;
-  overflow: hidden; /* For SPA app-like feel */
+  transition: background-color 0.25s ease, color 0.25s ease;
+  overflow: hidden;
 }
 
-/* Transición suave al cambiar tema */
 *, *::before, *::after {
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
 }
 
-/* Utilidades nativas para APK / PWA */
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 
-button, .no-select { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
-
-.pos-shadow {
-  box-shadow: 0 10px 40px -10px var(--accent-glow);
+button, .no-select {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
-.glass-panel {
-  background: var(--surf-1);
-  border: 1px solid var(--bd-main);
+html, body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pos-shadow   { box-shadow: var(--shadow-glow); }
+.glass-panel  {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
   backdrop-filter: blur(22px);
 }

@@ -20,8 +20,23 @@ export type Ticket = {
   items: CartItem[];
 };
 
+export type Palette = 'green' | 'purple' | 'orange';
+export type Mode = 'dark' | 'light';
+
 interface POSState {
-  // Theme
+  // Hydration flag (persist rehydrate completion)
+  _hasHydrated: boolean;
+
+  // Theming (new API)
+  palette: Palette;
+  mode: Mode;
+  themeChosen: boolean;
+  setPalette: (p: Palette) => void;
+  setMode: (m: Mode) => void;
+  toggleMode: () => void;
+  setThemeChosen: (chosen: boolean) => void;
+
+  // Theming (legacy API — kept as shim for old pickers)
   theme: string;
   setTheme: (theme: string) => void;
 
@@ -49,15 +64,55 @@ interface POSState {
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
+const applyDocAttrs = (palette: Palette, mode: Mode) => {
+  if (typeof document === 'undefined') return;
+  document.documentElement.setAttribute('data-theme', palette);
+  document.documentElement.setAttribute('data-mode', mode);
+};
+
+// Legacy theme-id → { palette, mode } for the old picker
+const LEGACY_THEME_MAP: Record<string, { palette: Palette; mode: Mode }> = {
+  'dark':       { palette: 'green',  mode: 'dark'  },
+  'light':      { palette: 'green',  mode: 'light' },
+  'green':      { palette: 'green',  mode: 'dark'  },
+  'purple':     { palette: 'purple', mode: 'dark'  },
+  'orange':     { palette: 'orange', mode: 'dark'  },
+  'concepto-1': { palette: 'green',  mode: 'dark'  },
+  'concepto-2': { palette: 'purple', mode: 'dark'  },
+  'concepto-3': { palette: 'green',  mode: 'light' },
+  'naranja':    { palette: 'orange', mode: 'light' },
+  'amarillo':   { palette: 'orange', mode: 'light' },
+};
+
 export const usePOSStore = create<POSState>()(
   persist(
     (set, get) => ({
-      theme: 'concepto-2',
+      _hasHydrated: false,
+
+      // Theming
+      palette: 'green',
+      mode: 'dark',
+      themeChosen: false,
+      theme: 'green',
+
+      setPalette: (palette) => {
+        set({ palette, theme: palette });
+        applyDocAttrs(palette, get().mode);
+      },
+      setMode: (mode) => {
+        set({ mode });
+        applyDocAttrs(get().palette, mode);
+      },
+      toggleMode: () => {
+        const next: Mode = get().mode === 'dark' ? 'light' : 'dark';
+        set({ mode: next });
+        applyDocAttrs(get().palette, next);
+      },
+      setThemeChosen: (chosen) => set({ themeChosen: chosen }),
       setTheme: (theme) => {
-        set({ theme });
-        if (typeof document !== 'undefined') {
-          document.documentElement.setAttribute('data-theme', theme);
-        }
+        const target = LEGACY_THEME_MAP[theme] ?? { palette: 'green' as Palette, mode: 'dark' as Mode };
+        set({ palette: target.palette, mode: target.mode, theme });
+        applyDocAttrs(target.palette, target.mode);
       },
 
       isAuthenticated: false,
@@ -157,6 +212,12 @@ export const usePOSStore = create<POSState>()(
     }),
     {
       name: 'pos-store',
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          applyDocAttrs(state.palette, state.mode);
+          state._hasHydrated = true;
+        }
+      },
     }
   )
 );

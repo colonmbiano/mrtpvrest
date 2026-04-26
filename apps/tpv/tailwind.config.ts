@@ -6,7 +6,7 @@ const config: Config = {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
-  darkMode: ["selector", '[data-theme="dark"]'],
+  darkMode: ["selector", '[data-mode="dark"]'],
   theme: {
     extend: {
       colors: {
