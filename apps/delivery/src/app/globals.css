@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0a0a0c;
+  --surf: #121216;
+  --surf2: #1e1e24;
+  --border: #2a2a35;
+  --text: #ffffff;
+  --text-dim: #9ca3af;
+  --brand: #ff5c35;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+/* Transiciones suaves */
+*, *::before, *::after {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
