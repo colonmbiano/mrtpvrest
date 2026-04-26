@@ -55,7 +55,12 @@
       "Bash(NEXT_PUBLIC_API_URL=https://api.mrtpvrest.com NODE_ENV=production npx next build)",
       "Bash(git checkout *)",
       "Bash(git fetch *)",
-      "Bash(find /c/Users/colon/Downloads/mrtpvrest -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" -o -name \"*.js\" \\\\\\) -exec grep -l \"invoice\" {} \\\\;)"
+      "Bash(find /c/Users/colon/Downloads/mrtpvrest -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" -o -name \"*.js\" \\\\\\) -exec grep -l \"invoice\" {} \\\\;)",
+      "Bash(git reset *)",
+      "Bash(git stash *)",
+      "Bash(git -C ../.. show HEAD:apps/tpv/src/store/usePOSStore.ts)",
+      "Read(//c/Users/colon/AppData/Local/Temp/claude/C--Users-colon-Downloads-mrtpvrest/33bc4d31-03fb-4791-b578-e26791a35b7e/tasks/**)",
+      "Bash(xxd)"
     ]
   }
 }
