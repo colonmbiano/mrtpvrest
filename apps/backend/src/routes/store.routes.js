@@ -111,23 +111,22 @@ router.get('/menu', async (req, res) => {
       prisma.category.findMany({
         where: { restaurantId: restaurant.id, isActive: true },
         orderBy: { sortOrder: 'asc' },
-        select: { id: true, name: true, description: true, image: true, sortOrder: true },
+        select: { id: true, name: true, description: true, imageUrl: true, sortOrder: true },
       }),
       prisma.menuItem.findMany({
-        where: { restaurantId: restaurant.id, isActive: true },
-        orderBy: { sortOrder: 'asc' },
+        where: { restaurantId: restaurant.id, isAvailable: true },
         select: {
           id: true, name: true, description: true, price: true,
-          promoPrice: true, isPromo: true, image: true,
-          categoryId: true, sortOrder: true,
+          isPromo: true, imageUrl: true,
+          categoryId: true,
           variants: {
-            where: { isActive: true },
+            where: { isAvailable: true },
             select: { id: true, name: true, price: true },
             orderBy: { price: 'asc' },
           },
           complements: {
-            where: { isActive: true },
-            select: { id: true, name: true, price: true, isRequired: true },
+            where: { isAvailable: true },
+            select: { id: true, name: true, price: true },
           },
         },
       }),
@@ -194,7 +193,7 @@ router.post('/orders', async (req, res) => {
         if (!menuItemId) throw new Error('menuItemId requerido en cada item.');
 
         const menuItem = await prisma.menuItem.findUnique({
-          where: { id: menuItemId, restaurantId: restaurant.id, isActive: true },
+          where: { id: menuItemId, restaurantId: restaurant.id, isAvailable: true },
           include: { variants: true },
         });
         if (!menuItem) throw new Error(`Producto ${menuItemId} no disponible.`);
@@ -217,7 +216,6 @@ router.post('/orders', async (req, res) => {
           quantity: qty,
           subtotal: unitPrice * qty,
           notes:    itemNotes || null,
-          variantId: variantId || null,
         };
       })
     );
