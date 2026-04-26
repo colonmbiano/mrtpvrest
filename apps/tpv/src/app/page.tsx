@@ -1,12 +1,18 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
+import { Settings, Delete, Armchair, ShoppingBag, Bike, Bell, RefreshCcw, Truck, ChevronRight } from "lucide-react";
 import api from "@/lib/api";
 import KDSMessages from "@/components/admin/KDSMessages";
-import IngredientShortageModal from "@/components/admin/IngredientShortageModal";
-import DeliveryAssignModal from "@/components/admin/DeliveryAssignModal";
-import ShiftModal from "@/components/admin/ShiftModal";
-import TPVConfigModal from "@/components/admin/TPVConfigModal";
 import DriversPanel from "@/components/admin/DriversPanel";
+import { useModals } from "@/contexts/ModalContext";
+import ModalStack from "@/components/tpv/ModalStack";
+import PaletteSwitcher from "@/components/PaletteSwitcher";
+import ThemeToggle from "@/components/ThemeToggle";
+import POSShell from "@/components/tpv/POSShell";
+import SideRail, { type RailSection } from "@/components/tpv/SideRail";
+import CategoryTabs from "@/components/tpv/CategoryTabs";
+import ProductGrid from "@/components/tpv/ProductGrid";
+import TicketPanel, { type OrderType, type OrderTypeOption } from "@/components/tpv/TicketPanel";
 import TablesFloorPlan from "@/components/admin/TablesFloorPlan";
 import RetailLayout from "@/components/layouts/RetailLayout";
 import BarLayout from "@/components/layouts/BarLayout";
@@ -65,11 +71,20 @@ import { usePOSStore } from "@/store/usePOSStore";
 
 export default function TPVPage() {
   const router = useRouter();
-  const { theme } = usePOSStore();
+  const themeChosen = usePOSStore((s) => s.themeChosen);
+  const hasHydrated = usePOSStore((s) => s._hasHydrated);
+  const { openShift, openTpvConfig, openPayment, openDiscount, openConfirm, openOrderDetail, openDeliveryAssign, openChangeOrderType } = useModals();
+  const [railSection, setRailSection] = useState<RailSection>("catalog");
+  const [showOrdersDrawer, setShowOrdersDrawer] = useState(false);
 
+  // Gate: only after persist has rehydrated, redirect to wizard if no theme chosen
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
+    if (!hasHydrated) return;
+    const linked = !!localStorage.getItem("restaurantId") && !!localStorage.getItem("locationId");
+    if (linked && !themeChosen) {
+      router.replace("/setup?step=appearance");
+    }
+  }, [hasHydrated, themeChosen, router]);
 
   // Cerebro Adaptativo: tipo de negocio por sucursal
   const { businessType, loading: locLoading } = useLocation();
@@ -116,15 +131,11 @@ export default function TPVPage() {
   const [showPanel, setShowPanel]                 = useState(true);
   const [panelTab, setPanelTab]                   = useState<"active" | "cash">("active");
   const [selectedOrder, setSelectedOrder]         = useState<any>(null);
-  const [payModal, setPayModal]                   = useState<any>(null);
-  const [payMethod, setPayMethod]                 = useState("CASH");
-  const [cashReceived, setCashReceived]           = useState("");
+  // payment modal: openPayment(order) → <ModalStack/> renders <PaymentModal/>
   const [updatingOrder, setUpdatingOrder]         = useState<string | null>(null);
   const [addingToOrder, setAddingToOrder]         = useState<any>(null);
   const [printers, setPrinters]                   = useState<any[]>([]);
   const [reprintOpen, setReprintOpen]             = useState<string | null>(null);
-  const [assignOrder, setAssignOrder]             = useState<any>(null);
-  const [shortageOrder, setShortageOrder]         = useState<any>(null);
   const [editTypeOrder, setEditTypeOrder]         = useState<string | null>(null);
   const [editAddress, setEditAddress]             = useState("");
   const [confirmingCash, setConfirmingCash]       = useState<string | null>(null);
@@ -144,8 +155,7 @@ export default function TPVPage() {
   const [showDriversPanel, setShowDriversPanel]   = useState(false);
   const [showTablesFloor, setShowTablesFloor]     = useState(false);
   const [showTablePicker, setShowTablePicker]     = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showShiftModal, setShowShiftModal]       = useState(false);
+  // shift + tpv config modals are now opened via useModals() / rendered by <ModalStack/>
 
   const [gridCols, setGridCols] = useState(4);
   const [fontSize, setFontSize] = useState<"xs" | "sm" | "md" | "lg" | "xl">("sm");
@@ -157,6 +167,14 @@ export default function TPVPage() {
 
   const ticket  = tickets[activeTicket] || tickets[0];
   const isAdmin = ["ADMIN", "MANAGER", "OWNER"].includes(currentEmployee?.role);
+
+  const promptShift = useCallback(() => {
+    openShift({
+      id: currentEmployee?.id ?? "",
+      name: currentEmployee?.name ?? "Cajero",
+      role: currentEmployee?.role ?? "",
+    });
+  }, [openShift, currentEmployee]);
 
   const clearEmployeeSession = useCallback(() => {
     localStorage.removeItem("accessToken");
@@ -413,7 +431,7 @@ export default function TPVPage() {
   }
 
   function handleItemClick(item: any) {
-    if (!activeShift) { alert("⚠️ Debes abrir un turno antes de agregar productos"); setShowShiftModal(true); return; }
+    if (!activeShift) { alert("⚠️ Debes abrir un turno antes de agregar productos"); promptShift(); return; }
 
     // Si estamos en MODO EDICIÓN, inyectamos directamente a la orden
     if (addingToOrder) {
@@ -429,7 +447,7 @@ export default function TPVPage() {
   }
 
   async function addItemToExistingOrder(order: any, item: any, variant: any, mods: any[]) {
-    if (!activeShift) { alert("⚠️ Debes abrir un turno para agregar productos"); setShowShiftModal(true); return; }
+    if (!activeShift) { alert("⚠️ Debes abrir un turno para agregar productos"); promptShift(); return; }
     try {
       const price = variant ? variant.price : item.price;
       const modsPrice = (mods || []).reduce((s: number, m: any) => s + m.price, 0);
@@ -494,7 +512,7 @@ export default function TPVPage() {
 
   async function sendToKitchen() {
     if (ticket.items.length === 0) { alert("Agrega productos al ticket"); return; }
-    if (!activeShift) { alert("⚠️ Debes abrir un turno antes de enviar pedidos"); setShowShiftModal(true); return; }
+    if (!activeShift) { alert("⚠️ Debes abrir un turno antes de enviar pedidos"); promptShift(); return; }
     try {
       const { data: order } = await api.post("/api/orders/tpv", {
         items: ticket.items.map((i: any) => ({ menuItemId: i.menuItemId, quantity: i.quantity, notes: i.notes })),
@@ -512,7 +530,7 @@ export default function TPVPage() {
 
   async function chargeTicket(paymentMethod: string) {
     if (ticket.items.length === 0) { alert("Agrega productos"); return; }
-    if (!activeShift) { alert("⚠️ Debes abrir un turno antes de cobrar"); setShowShiftModal(true); return; }
+    if (!activeShift) { alert("⚠️ Debes abrir un turno antes de cobrar"); promptShift(); return; }
     try {
       await api.post("/api/orders/tpv", {
         items: ticket.items.map((i: any) => ({ menuItemId: i.menuItemId, quantity: i.quantity, notes: i.notes })),
@@ -529,17 +547,17 @@ export default function TPVPage() {
   }
 
   async function chargeExistingOrder(orderId: string, method: string) {
-    if (!activeShift) { alert("⚠️ Debes abrir un turno antes de cobrar"); setShowShiftModal(true); return; }
+    if (!activeShift) { alert("⚠️ Debes abrir un turno antes de cobrar"); promptShift(); return; }
     setUpdatingOrder(orderId);
     try {
       await api.put(`/api/orders/${orderId}/payment`, { paymentMethod: method });
-      setPayModal(null); setSelectedOrder(null); fetchOrders();
+      setSelectedOrder(null); fetchOrders();
     } catch (err: any) { alert(err.response?.data?.error || "Error al cobrar"); }
     finally { setUpdatingOrder(null); }
   }
 
   async function updateOrderStatus(orderId: string, status: string) {
-    if (!activeShift) { alert("⚠️ Debes abrir un turno para cambiar estados"); setShowShiftModal(true); return; }
+    if (!activeShift) { alert("⚠️ Debes abrir un turno para cambiar estados"); promptShift(); return; }
     setUpdatingOrder(orderId);
     try {
       await api.put(`/api/orders/${orderId}/status`, { status });
@@ -570,7 +588,7 @@ export default function TPVPage() {
   }
 
   async function confirmCash(order: any) {
-    if (!activeShift) { alert("⚠️ Debes abrir un turno para confirmar cobros"); setShowShiftModal(true); return; }
+    if (!activeShift) { alert("⚠️ Debes abrir un turno para confirmar cobros"); promptShift(); return; }
     if (!confirm(`¿Confirmar recepción de $${Number(order.total).toFixed(0)} en efectivo de ${order.orderNumber}?`)) return;
     setConfirmingCash(order.id);
     try {
@@ -581,7 +599,7 @@ export default function TPVPage() {
   }
 
   async function confirmAllCash() {
-    if (!activeShift) { alert("⚠️ Debes abrir un turno para confirmar cobros"); setShowShiftModal(true); return; }
+    if (!activeShift) { alert("⚠️ Debes abrir un turno para confirmar cobros"); promptShift(); return; }
     if (pendingCashOrders.length === 0) return;
     const totalAmt = pendingCashOrders.reduce((s, o) => s + Number(o.total), 0);
     if (!confirm(`¿Confirmar TODOS los cobros pendientes?\n${pendingCashOrders.length} pedidos · $${totalAmt.toFixed(0)} total`)) return;
@@ -646,7 +664,7 @@ export default function TPVPage() {
         {!activeShift && (
           <div className="rounded-xl p-3 flex items-center justify-between border border-red-500/20 bg-red-500/10">
             <span className="text-xs font-bold text-red-500">🔴 Sin turno abierto</span>
-            <button onClick={() => setShowShiftModal(true)} className="text-xs font-black px-4 min-h-[40px] rounded-xl bg-red-500 text-white">Abrir turno</button>
+            <button onClick={() => promptShift()} className="text-xs font-black px-4 min-h-[40px] rounded-xl bg-red-500 text-white">Abrir turno</button>
           </div>
         )}
         
@@ -793,7 +811,18 @@ export default function TPVPage() {
                         {updatingOrder === order.id ? "..." : `→ ${STATUS_LABELS[nextStatus]}`}
                       </button>
                     ); })()}
-                    <button onClick={() => { setPayModal(order); setPayMethod("CASH"); setCashReceived(""); }}
+                    <button onClick={() => openPayment({
+                        id: order.id,
+                        total: Number(order.total ?? 0),
+                        items: (order.items || []).map((it: any) => ({
+                          id: it.id,
+                          name: it.product?.name || it.name,
+                          quantity: Number(it.quantity ?? 1),
+                          price: Number(it.price ?? it.product?.price ?? 0),
+                        })),
+                        customerName: order.customerName,
+                        table: order.tableName,
+                      })}
                       className="w-full min-h-[48px] rounded-xl text-xs font-bold text-green-400 bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 transition-all">
                       💵 Cobrar ticket
                     </button>
@@ -878,7 +907,321 @@ export default function TPVPage() {
 
   const ticketCount = ticket.items.reduce((s: number, i: any) => s + i.quantity, 0);
 
+  // Map allowed order types from remoteConfig to the new TicketPanel option shape
+  const orderTypeOptions: OrderTypeOption[] = orderTypeTabs.map(({ t }) => {
+    const id = t as OrderType;
+    const meta =
+      id === "DINE_IN"  ? { label: "Mesa",      Icon: Armchair }    :
+      id === "TAKEOUT"  ? { label: "Llevar",    Icon: ShoppingBag } :
+                          { label: "Domicilio", Icon: Bike };
+    return { id, label: meta.label, icon: <meta.Icon size={12} /> };
+  });
+
+  // Lines for TicketPanel — index-based id so qty/remove work via index
+  const ticketLines = ticket.items.map((it: any, idx: number) => ({
+    id: String(idx),
+    name: it.name + (it.variantName ? ` (${it.variantName})` : ""),
+    quantity: it.quantity,
+    price: it.price,
+    notes: it.notes || undefined,
+  }));
+
+  // Tabs for TicketPanel
+  const ticketTabs = tickets.map((t: any, i: number) => ({
+    id: String(i),
+    name: t.name?.trim() || `T${i + 1}`,
+  }));
+
+  // Filtered + mapped products for ProductGrid
+  const productsForGrid = filteredItems.map((p: any) => ({
+    id: p.id,
+    name: p.name,
+    price: Number(p.isPromo && p.promoPrice ? p.promoPrice : p.price ?? 0),
+    category: categories.find((c: any) => c.id === p.categoryId)?.name,
+    imageUrl: showImages ? (p.imageUrl ?? null) : null,
+  }));
+
+  const handleProcessLocalPayment = () => {
+    if (ticket.items.length === 0) return;
+    if (!activeShift) { alert("⚠️ Debes abrir un turno antes de cobrar"); promptShift(); return; }
+    openPayment({
+      id: `local-${activeTicket}`,
+      total,
+      items: ticket.items.map((it: any, idx: number) => ({
+        id: String(idx),
+        name: it.name + (it.variantName ? ` (${it.variantName})` : ""),
+        quantity: it.quantity,
+        price: it.price,
+      })),
+      customerName: ticket.name || undefined,
+      table: ticket.tableName || null,
+    });
+  };
+
   return (
+    <>
+      <POSShell
+        rail={
+          <SideRail
+            section={railSection}
+            onSection={(s) => {
+              setRailSection(s);
+              if (s === "receipts") setShowOrdersDrawer((v) => !v);
+              if (s === "shift") promptShift();
+              if (s === "config") openTpvConfig();
+            }}
+            onLogout={clearEmployeeSession}
+          />
+        }
+        main={
+          <div className="flex flex-col h-full p-4 gap-4 overflow-hidden">
+            <div className="flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <CategoryTabs
+                  categories={categories.map((c: any) => ({ id: c.id, name: c.name }))}
+                  selected={selectedCat}
+                  onSelect={setSelectedCat}
+                />
+              </div>
+              <button
+                onClick={() => setShowOrdersDrawer((v) => !v)}
+                className="h-10 px-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 shrink-0"
+                style={{
+                  background: showOrdersDrawer ? "var(--brand)" : "var(--surface-2)",
+                  color: showOrdersDrawer ? "var(--brand-fg)" : "var(--text-secondary)",
+                  border: "1px solid var(--border)",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                <Bell size={14} /> {orders.length} activos
+              </button>
+              {!activeShift && (
+                <button
+                  onClick={promptShift}
+                  className="h-10 px-3 rounded-xl text-xs font-bold uppercase tracking-wider shrink-0"
+                  style={{
+                    background: "var(--danger-soft)",
+                    color: "var(--danger)",
+                    border: "1px solid var(--danger)",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  Sin turno
+                </button>
+              )}
+              <KDSMessages />
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <ProductGrid
+                products={productsForGrid}
+                onPick={(p) => {
+                  const item = allItems.find((it: any) => it.id === p.id);
+                  if (item) handleItemClick(item);
+                }}
+                searchValue={search}
+                onSearchChange={setSearch}
+                cols={(gridCols >= 4 ? 4 : 3) as 3 | 4}
+                currency="$"
+              />
+            </div>
+          </div>
+        }
+        ticket={
+          <TicketPanel
+            tabs={ticketTabs}
+            activeTabId={String(activeTicket)}
+            onTabSelect={(id) => setActiveTicket(parseInt(id))}
+            onTabAdd={addNewTicket}
+            onTabClose={(id) => closeTicket(parseInt(id))}
+
+            customerName={ticket.name}
+            customerPhone={ticket.phone}
+            onCustomerNameChange={(v) => updateTicket({ name: v })}
+            onCustomerPhoneChange={(v) => updateTicket({ phone: v })}
+
+            orderType={ticket.type as OrderType}
+            orderTypeOptions={orderTypeOptions}
+            onOrderTypeChange={(t) => updateTicket({ type: t })}
+
+            tableLabel={ticket.tableName || null}
+            onPickTable={() => setShowTablePicker(true)}
+            onClearTable={() => updateTicket({ tableId: "", tableName: "", table: "" })}
+            address={ticket.address}
+            onAddressChange={(v) => updateTicket({ address: v })}
+
+            lines={ticketLines}
+            onLineQty={(id, delta) => changeQty(parseInt(id), delta)}
+            onLineRemove={(id) => removeFromTicket(parseInt(id))}
+
+            onSendToKitchen={sendToKitchen}
+            onDiscount={() => openDiscount(`local-${activeTicket}`, total)}
+            onClear={() => openConfirm({
+              title: "Limpiar ticket",
+              message: "Se borrarán los productos y los datos del cliente.",
+              confirmLabel: "Sí, limpiar",
+              tone: "danger",
+              onConfirm: () => updateTicket({ items: [], name: "", phone: "", address: "", tableId: "", tableName: "", table: "" }),
+            })}
+
+            subtotal={subtotal}
+            total={total}
+            currency="$"
+            onPrimary={handleProcessLocalPayment}
+            onSecondaryLeft={() => openConfirm({ title: "Dividir cuenta", message: "Función próximamente.", confirmLabel: "Entendido", onConfirm: () => {} })}
+            onSecondaryRight={sendToKitchen}
+            primaryLabel="PROCESAR COBRO"
+            secondaryLeftLabel="DIVIDIR"
+            secondaryRightLabel="PENDIENTE"
+          />
+        }
+      />
+
+      {showOrdersDrawer && (
+        <OrdersDrawer
+          orders={orders}
+          onClose={() => setShowOrdersDrawer(false)}
+          onChargeOrder={(o) => openPayment({
+            id: o.id,
+            total: Number(o.total ?? 0),
+            items: (o.items || []).map((it: any) => ({
+              id: it.id, name: it.product?.name || it.name,
+              quantity: Number(it.quantity ?? 1),
+              price: Number(it.price ?? it.product?.price ?? 0),
+            })),
+            customerName: o.customerName,
+            table: o.tableName,
+          })}
+          onDetail={(o) => openOrderDetail(o.id)}
+          onAssignDriver={(o) => openDeliveryAssign({
+            id: o.id,
+            customerName: o.customerName || "Cliente",
+            address: o.deliveryAddress || "",
+            total: Number(o.total ?? 0),
+          })}
+          onChangeType={(o) => openChangeOrderType({
+            orderId: o.id,
+            currentType: o.orderType as OrderType,
+            customerName: o.customerName,
+            total: Number(o.total ?? 0),
+            address: o.deliveryAddress,
+            tableName: o.tableName,
+          })}
+        />
+      )}
+
+      {/* Variants picker (legacy) */}
+      {variantModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}>
+          <div className="w-full max-w-md rounded-3xl p-6 shadow-2xl" style={{ background: "var(--surface-1)", border: "1px solid var(--border)" }}>
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <div>
+                <h3 className="text-lg font-black" style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}>
+                  {variantModal.item?.name}
+                </h3>
+                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>Selecciona una variante</p>
+              </div>
+              <button onClick={closeProductModals} className="w-9 h-9 rounded-xl"
+                style={{ background: "var(--surface-2)", color: "var(--text-secondary)" }}>✕</button>
+            </div>
+            <div className="grid gap-2">
+              {(variantModal.item?.variants || []).map((variant: any) => (
+                <button key={variant.id} onClick={() => chooseVariant(variant)}
+                  className="flex items-center justify-between rounded-xl px-4 py-3 text-left transition-all hover:brightness-110"
+                  style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+                  <span className="font-bold" style={{ color: "var(--text-primary)" }}>{variant.name}</span>
+                  <span className="font-extrabold" style={{ color: "var(--brand)" }}>${Number(variant.price).toFixed(0)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modifiers picker (legacy) */}
+      {modifierModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}>
+          <div className="w-full max-w-md rounded-3xl p-6 shadow-2xl" style={{ background: "var(--surface-1)", border: "1px solid var(--border)" }}>
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <div>
+                <h3 className="text-lg font-black" style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}>
+                  {modifierModal.item?.name}
+                </h3>
+                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>Agrega complementos opcionales</p>
+              </div>
+              <button onClick={closeProductModals} className="w-9 h-9 rounded-xl"
+                style={{ background: "var(--surface-2)", color: "var(--text-secondary)" }}>✕</button>
+            </div>
+            <div className="grid gap-2 mb-5">
+              {((modifierModal.item?.complements || modifierModal.item?.modifiers || []) as any[]).map((mod: any) => {
+                const selected = selectedMods.some((m: any) => m.id === mod.id);
+                return (
+                  <button key={mod.id} onClick={() => toggleModifier(mod)}
+                    className="flex items-center justify-between rounded-xl px-4 py-3 text-left"
+                    style={{
+                      background: selected ? "var(--brand-soft)" : "var(--surface-2)",
+                      border: `1px solid ${selected ? "var(--brand)" : "var(--border)"}`,
+                    }}>
+                    <span className="font-bold" style={{ color: "var(--text-primary)" }}>{mod.name}</span>
+                    <span className="font-extrabold" style={{ color: selected ? "var(--brand)" : "var(--text-muted)" }}>
+                      +${Number(mod.price || 0).toFixed(0)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <button onClick={() => resolveProductSelection(modifierModal, modifierModal.variant || null, selectedMods)}
+              className="w-full h-12 rounded-xl font-black uppercase tracking-wider"
+              style={{ background: "var(--brand)", color: "var(--brand-fg)", boxShadow: "var(--shadow-glow)", letterSpacing: "0.08em" }}>
+              Agregar producto
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modales globales */}
+      <ModalStack
+        currency="$"
+        tpvConfigSettings={{ gridSize: gridCols, gridCols, fontSize, showImages }}
+        onTpvConfigUpdate={(s: any) => applyDisplayConfig(s)}
+        onShiftChange={refreshShift}
+        onDeliveryAssigned={fetchOrders}
+        onPaymentPaid={async ({ method, orderId }) => {
+          const backendMethod = method === "card" ? "CARD" : method === "mixed" ? "MIXED" : "CASH";
+          if (orderId.startsWith("local-")) {
+            await chargeTicket(backendMethod);
+          } else {
+            await chargeExistingOrder(orderId, backendMethod);
+          }
+        }}
+        onChangeOrderType={async (orderId, patch) => {
+          try {
+            await api.patch(`/api/orders/${orderId}`, {
+              orderType: patch.type,
+              deliveryAddress: patch.address ?? null,
+              tableName: patch.tableName ?? null,
+            });
+            fetchOrders();
+          } catch (err: any) { alert(err.response?.data?.error || "Error al cambiar tipo"); }
+        }}
+      />
+
+      {showDriversPanel && <DriversPanel open={showDriversPanel} onClose={() => setShowDriversPanel(false)} accent="var(--brand)" />}
+      <TablesFloorPlan open={showTablesFloor} mode="manage" onClose={() => setShowTablesFloor(false)} accent="var(--brand)" />
+      <TablesFloorPlan
+        open={showTablePicker}
+        mode="pick"
+        onClose={() => setShowTablePicker(false)}
+        accent="var(--brand)"
+        onPick={(table: any) => {
+          updateTicket({ tableId: table.id, tableName: table.name, table: table.name?.replace(/\D/g, "") || "" });
+          setShowTablePicker(false);
+        }}
+      />
+    </>
+  );
+
+  /* ── LEGACY UI (pre-shell) — preserved as dead code, removable later ── */
+  const _legacyUnused = (
     <div className="tpv-shell flex flex-col h-screen overflow-hidden text-[#e1e1e3] font-dm-sans">
 
       {/* ── HEADER DASHBOARD ── */}
@@ -918,7 +1261,7 @@ export default function TPVPage() {
               </button>
             </div>
           )}
-          <button onClick={() => setShowShiftModal(true)}
+          <button onClick={() => promptShift()}
             className={`flex items-center gap-2 px-4 h-10 rounded-xl text-xs font-bold transition-all ${activeShift ? "bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"}`}>
             {activeShift ? "🟢 Turno" : "🔴 Sin turno"}
           </button>
@@ -927,7 +1270,7 @@ export default function TPVPage() {
             <span className="text-sm font-syne font-black text-white">{currentEmployee?.name?.split(" ")[0] || "Cajero"}</span>
           </div>
           {isAdmin && (
-            <button onClick={() => setShowSettingsModal(true)}
+            <button onClick={() => openTpvConfig()}
               className="w-10 h-10 rounded-xl flex items-center justify-center text-sm bg-white/5 hover:bg-white/10 border border-white/10 transition-colors ml-2" title="Ajustes">
               ⚙️
             </button>
@@ -1009,34 +1352,6 @@ export default function TPVPage() {
         </div>
       )}
 
-      {/* ── MODALES ── */}
-      {payModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[3rem] border border-white/10 p-10 shadow-2xl bg-[#0a0a0c]">
-            <h3 className="font-syne font-black text-2xl mb-2 text-white">💵 Cobrar {payModal.orderNumber}</h3>
-            <p className="text-5xl font-sans font-black mb-8" style={{ color: ACCENT }}>${Number(payModal.total).toFixed(0)}</p>
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              {PAY_METHODS.map(m => (
-                <button key={m.value} onClick={() => setPayMethod(m.value)}
-                  className="py-4 rounded-2xl text-sm font-bold transition-all"
-                  style={{ background: payMethod === m.value ? ACCENT : "rgba(255,255,255,0.05)", color: payMethod === m.value ? "#fff" : "rgba(255,255,255,0.4)", border: payMethod === m.value ? `1px solid ${ACCENT}` : "1px solid rgba(255,255,255,0.1)" }}>
-                  {m.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-4">
-              <button onClick={() => setPayModal(null)}
-                className="flex-1 py-4 rounded-2xl font-bold border border-white/10 text-white/60 hover:bg-white/5 transition-colors">Cancelar</button>
-              <button onClick={() => chargeExistingOrder(payModal.id, payMethod)} disabled={updatingOrder === payModal.id}
-                className="flex-1 py-4 rounded-2xl font-syne font-black hover:brightness-110 transition-all shadow-lg text-white"
-                style={{ background: ACCENT }}>
-                {updatingOrder === payModal.id ? "Procesando..." : "✅ Confirmar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {false && showManagerMenu && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowManagerMenu(false)} />
@@ -1053,14 +1368,14 @@ export default function TPVPage() {
 
             {/* OPCIÓN A APLICADA: Configuración Visual centralizada en el modal */}
             <div className="flex-1 overflow-y-auto py-4">
-              <button onClick={() => { setShowManagerMenu(false); setShowShiftModal(true); }} className="w-full flex items-center gap-4 px-8 py-5 hover:bg-white/5 transition-colors text-left border-b border-white/5 group">
+              <button onClick={() => { setShowManagerMenu(false); promptShift(); }} className="w-full flex items-center gap-4 px-8 py-5 hover:bg-white/5 transition-colors text-left border-b border-white/5 group">
                 <span className="text-2xl group-hover:scale-110 transition-transform">🕒</span>
                 <div>
                   <div className="font-bold text-sm text-white">Turno de Caja</div>
                   <div className="text-xs mt-1" style={{ color: activeShift ? "#22c55e" : "#ef4444" }}>{activeShift ? "🟢 Turno abierto" : "🔴 Sin turno"}</div>
                 </div>
               </button>
-              <button onClick={() => { setShowManagerMenu(false); setShowSettingsModal(true); }} className="w-full flex items-center gap-4 px-8 py-5 hover:bg-white/5 transition-colors text-left border-b border-white/5 group">
+              <button onClick={() => { setShowManagerMenu(false); openTpvConfig(); }} className="w-full flex items-center gap-4 px-8 py-5 hover:bg-white/5 transition-colors text-left border-b border-white/5 group">
                 <span className="text-2xl group-hover:scale-110 transition-transform">🖨️</span>
                 <div>
                   <div className="font-bold text-sm text-white">Configuración TPV</div>
@@ -1096,16 +1411,6 @@ export default function TPVPage() {
             </div>
           </div>
         </div>
-      )}
-
-      {showSettingsModal && (
-        <TPVConfigModal
-          onClose={() => setShowSettingsModal(false)}
-          settings={{ gridSize: gridCols, gridCols, fontSize, showImages }}
-          onUpdate={(s: any) => {
-             applyDisplayConfig(s);
-          }}
-        />
       )}
 
       {variantModal && (
@@ -1165,24 +1470,19 @@ export default function TPVPage() {
         </div>
       )}
 
-      {/* Componentes y Modales Secundarios Preservados */}
-      {shortageOrder && (
-        <IngredientShortageModal
-          order={shortageOrder}
-          onClose={() => setShortageOrder(null)}
-        />
-      )}
-      {assignOrder && (
-        <DeliveryAssignModal
-          order={assignOrder}
-          onClose={() => setAssignOrder(null)}
-          onAssigned={() => {
-            setAssignOrder(null);
-            fetchOrders();
-          }}
-        />
-      )}
-      {showShiftModal && <ShiftModal employee={currentEmployee || {id: "", name: "Cajero"}} onClose={() => { setShowShiftModal(false); refreshShift(); }} />}
+      {/* Modales globales (shift, tpv config, shortage, delivery assign, payment, etc.) */}
+      <ModalStack
+        currency="$"
+        tpvConfigSettings={{ gridSize: gridCols, gridCols, fontSize, showImages }}
+        onTpvConfigUpdate={(s: any) => applyDisplayConfig(s)}
+        onShiftChange={refreshShift}
+        onDeliveryAssigned={fetchOrders}
+        onPaymentPaid={async ({ method, orderId }) => {
+          const backendMethod = method === "card" ? "CARD" : method === "mixed" ? "MIXED" : "CASH";
+          await chargeExistingOrder(orderId, backendMethod);
+        }}
+      />
+
       {showDriversPanel && <DriversPanel open={showDriversPanel} onClose={() => setShowDriversPanel(false)} accent={ACCENT} />}
       <TablesFloorPlan open={showTablesFloor} mode="manage" onClose={() => setShowTablesFloor(false)} accent={ACCENT} />
       <TablesFloorPlan
@@ -1200,92 +1500,386 @@ export default function TPVPage() {
   );
 }
 
-// ── PANTALLA DE BLOQUEO PREMIUM DASHBOARD ───────────────────────────────────
+// ── ORDERS DRAWER ────────────────────────────────────────────────────────────
 
-function TPVLockScreen({ accent, restaurantName, locationName, pinInput, pinError, isVerifyingPin, onDigit, onBackspace, onClear, onSubmit, onChangeLocation }: any) {
-  const { theme, setTheme } = usePOSStore();
-  const themes = [
-    { id: 'dark', label: 'Dark Inmersivo', color: '#7c3aed' },
-    { id: 'concepto-1', label: 'Teal Moderno', color: '#34d399' },
-    { id: 'concepto-2', label: 'Indigo Urbano', color: '#818cf8' },
-    { id: 'concepto-3', label: 'Emerald Minimal', color: '#10b981' },
-    { id: 'naranja', label: 'Naranja Corp', color: '#ea580c' },
-    { id: 'amarillo', label: 'Alta Visibilidad', color: '#ca8a04' },
-  ];
+const ORDER_TYPE_META: Record<string, { label: string; Icon: typeof Armchair }> = {
+  DINE_IN:  { label: "Mesa",      Icon: Armchair },
+  TAKEOUT:  { label: "Llevar",    Icon: ShoppingBag },
+  DELIVERY: { label: "Domicilio", Icon: Bike },
+};
+
+function OrdersDrawer({
+  orders, onClose, onChargeOrder, onDetail, onAssignDriver, onChangeType,
+}: {
+  orders: any[];
+  onClose: () => void;
+  onChargeOrder: (o: any) => void;
+  onDetail: (o: any) => void;
+  onAssignDriver: (o: any) => void;
+  onChangeType: (o: any) => void;
+}) {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#050507] relative overflow-hidden font-dm-sans">
+    <div className="fixed inset-0 z-[150] flex" onClick={onClose}>
+      <div className="flex-1" style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} />
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md h-full overflow-y-auto scrollbar-hide flex flex-col"
+        style={{
+          background: "var(--surface-1)",
+          borderLeft: "1px solid var(--border)",
+          boxShadow: "var(--shadow-lg)",
+        }}
+      >
+        <header
+          className="flex items-center justify-between px-5 py-4 border-b"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
+              Activas
+            </p>
+            <h2
+              className="text-lg font-extrabold"
+              style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}
+            >
+              Pedidos · {orders.length}
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-9 h-9 rounded-xl flex items-center justify-center"
+            style={{ background: "var(--surface-2)", color: "var(--text-secondary)" }}
+            aria-label="Cerrar"
+          >
+            ✕
+          </button>
+        </header>
 
-      {/* MARCA DE AGUA GIGANTE */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
-        <h1 className="text-[35vw] font-syne font-black tracking-tighter select-none text-white">MRTPV</h1>
+        <ul className="flex-1 flex flex-col gap-2 p-4">
+          {orders.length === 0 && (
+            <li className="text-sm text-center py-12" style={{ color: "var(--text-muted)" }}>
+              No hay pedidos activos
+            </li>
+          )}
+          {orders.map((o) => {
+            const type = String(o.orderType || "TAKEOUT");
+            const meta = ORDER_TYPE_META[type] ?? ORDER_TYPE_META.TAKEOUT!;
+            const Icon = meta.Icon;
+            return (
+              <li
+                key={o.id}
+                className="rounded-2xl p-4 flex flex-col gap-3"
+                style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold truncate" style={{ color: "var(--text-primary)" }}>
+                      {o.customerName || `Orden ${(o.orderNumber || o.id).slice(0, 6)}`}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-widest"
+                        style={{ background: "var(--brand-soft)", color: "var(--brand)" }}
+                      >
+                        <Icon size={10} /> {meta.label}
+                      </span>
+                      <span
+                        className="text-[10px] font-bold uppercase tracking-widest"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        {o.status}
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    className="text-base font-extrabold"
+                    style={{ color: "var(--brand)", fontFamily: "var(--font-display)" }}
+                  >
+                    ${Number(o.total ?? 0).toFixed(2)}
+                  </span>
+                </div>
+
+                {type === "DELIVERY" && (
+                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                    {o.deliveryAddress || "Sin dirección"}
+                    {o.driver?.name && (
+                      <>
+                        {" · "}<span style={{ color: "var(--brand)" }}>Repartidor: {o.driver.name}</span>
+                      </>
+                    )}
+                  </p>
+                )}
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  <DrawerAction Icon={RefreshCcw} label="Cambiar tipo" onClick={() => onChangeType(o)} />
+                  {type === "DELIVERY" && (
+                    <DrawerAction Icon={Truck} label={o.driver?.name ? "Reasignar" : "Asignar repartidor"} onClick={() => onAssignDriver(o)} tone="brand" />
+                  )}
+                  <DrawerAction Icon={ChevronRight} label="Detalle" onClick={() => onDetail(o)} />
+                  <DrawerAction Icon={ShoppingBag} label="Cobrar" onClick={() => onChargeOrder(o)} tone="brand" />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function DrawerAction({
+  Icon, label, onClick, tone,
+}: {
+  Icon: typeof RefreshCcw;
+  label: string;
+  onClick: () => void;
+  tone?: "brand";
+}) {
+  const isBrand = tone === "brand";
+  return (
+    <button
+      onClick={onClick}
+      className="h-9 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wider transition-all hover:brightness-110"
+      style={{
+        background: isBrand ? "var(--brand-soft)" : "var(--surface-3)",
+        color: isBrand ? "var(--brand)" : "var(--text-secondary)",
+        border: `1px solid ${isBrand ? "var(--brand)" : "var(--border)"}`,
+        letterSpacing: "0.06em",
+      }}
+    >
+      <Icon size={12} />
+      {label}
+    </button>
+  );
+}
+
+// ── PANTALLA DE BLOQUEO ──────────────────────────────────────────────────────
+
+function TPVLockScreen({
+  restaurantName,
+  locationName,
+  pinInput,
+  pinError,
+  isVerifyingPin,
+  onDigit,
+  onBackspace,
+  onClear,
+  onSubmit,
+  onChangeLocation,
+}: any) {
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center p-4 overflow-hidden select-none"
+      style={{ background: "var(--bg)", color: "var(--text-primary)", fontFamily: "var(--font-body)" }}
+    >
+      {/* Watermark */}
+      <div
+        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        style={{ opacity: 0.03 }}
+        aria-hidden="true"
+      >
+        <h1
+          className="font-black tracking-tighter"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: "clamp(8rem, 35vw, 30rem)",
+            color: "var(--text-primary)",
+          }}
+        >
+          MRTPV
+        </h1>
       </div>
 
-      <div className="w-full max-w-lg z-10 relative">
-        <button onClick={onChangeLocation} className="absolute -top-16 right-0 w-12 h-12 rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 transition-all">
-          ⚙️
-        </button>
+      {/* Top-left: palette + theme controls */}
+      <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
+        <PaletteSwitcher size="sm" />
+        <ThemeToggle size="sm" />
+      </div>
 
-        <div className="flex gap-4 justify-center mb-6">
-          {themes.map(t => (
-            <button 
-              key={t.id} 
-              onClick={() => setTheme(t.id)}
-              className={`w-8 h-8 rounded-full border-2 transition-all ${theme === t.id ? 'scale-110' : 'hover:scale-105 opacity-70 hover:opacity-100'}`}
-              style={{ backgroundColor: t.color, borderColor: theme === t.id ? accent : 'transparent' }}
-              title={t.label}
-            />
-          ))}
+      {/* Top-right: settings */}
+      <button
+        onClick={onChangeLocation}
+        className="absolute top-4 right-4 z-20 w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
+        style={{
+          background: "var(--surface-2)",
+          border: "1px solid var(--border)",
+          color: "var(--text-secondary)",
+        }}
+        aria-label="Cambiar configuración"
+      >
+        <Settings size={16} />
+      </button>
+
+      {/* Card */}
+      <div
+        className="relative z-10 w-full flex flex-col gap-6 max-h-[92vh] overflow-y-auto scrollbar-hide"
+        style={{ width: "min(100%, 26rem)" }}
+      >
+        {/* Branding */}
+        <div className="text-center flex flex-col gap-1.5">
+          <h1
+            className="font-black tracking-tight uppercase truncate"
+            style={{
+              color: "var(--brand)",
+              fontFamily: "var(--font-display)",
+              fontSize: "clamp(1.75rem, 7vw, 3rem)",
+              lineHeight: 1.05,
+            }}
+          >
+            {restaurantName}
+          </h1>
+          <p
+            className="font-bold uppercase"
+            style={{
+              color: "var(--text-muted)",
+              letterSpacing: "0.22em",
+              fontSize: "clamp(0.6rem, 1.6vw, 0.7rem)",
+            }}
+          >
+            {locationName || "Terminal de Punto de Venta"}
+          </p>
         </div>
 
-        <div className="text-center mb-10">
-          <h1 className="text-5xl font-syne font-black text-white mb-3 uppercase tracking-tighter drop-shadow-2xl" style={{ color: accent }}>{restaurantName}</h1>
-          <p className="text-xs font-bold text-white/40 uppercase tracking-[0.3em]">{locationName || "Terminal de Punto de Venta"}</p>
-        </div>
-
-        <div className="bg-[#0a0a0c]/80 backdrop-blur-2xl rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 border border-white/5 shadow-2xl">
-          <div className="flex justify-center gap-3 md:gap-5 mb-8 md:mb-10">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className={`w-3 h-3 md:w-4 md:h-4 rounded-full transition-all duration-500 ${pinInput.length > i ? "scale-125" : "bg-white/10"}`}
-                style={{ backgroundColor: pinInput.length > i ? accent : undefined, boxShadow: pinInput.length > i ? `0 0 20px ${accent}80` : "none" }} />
-            ))}
+        <div
+          className="rounded-3xl flex flex-col gap-5"
+          style={{
+            background: "var(--surface-1)",
+            border: "1px solid var(--border)",
+            boxShadow: "var(--shadow-lg)",
+            padding: "clamp(1rem, 3vw, 1.75rem)",
+          }}
+        >
+          {/* PIN dots */}
+          <div
+            className="flex items-center justify-center"
+            style={{ gap: "clamp(0.5rem, 2vw, 0.9rem)" }}
+          >
+            {Array.from({ length: 6 }).map((_, i) => {
+              const filled = pinInput.length > i;
+              return (
+                <div
+                  key={i}
+                  className="rounded-full transition-all duration-300"
+                  style={{
+                    width: "clamp(0.65rem, 2.2vw, 0.95rem)",
+                    height: "clamp(0.65rem, 2.2vw, 0.95rem)",
+                    background: filled ? "var(--brand)" : "var(--surface-3)",
+                    boxShadow: filled ? "var(--shadow-glow)" : "none",
+                    transform: filled ? "scale(1.15)" : "scale(1)",
+                  }}
+                />
+              );
+            })}
           </div>
 
-          {pinError && <p className="text-red-400 text-center text-sm font-bold mb-6 animate-bounce">{pinError}</p>}
+          {/* Error */}
+          {pinError && (
+            <p
+              className="text-center text-sm font-bold"
+              style={{ color: "var(--danger)" }}
+              role="alert"
+            >
+              {pinError}
+            </p>
+          )}
 
-          <div className="grid grid-cols-3 gap-3 md:gap-5">
+          {/* Keypad */}
+          <div
+            className="grid grid-cols-3"
+            style={{ gap: "clamp(0.5rem, 1.6vw, 0.85rem)" }}
+          >
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-              <button key={num} disabled={isVerifyingPin} onClick={() => onDigit(String(num))}
-                className="aspect-square rounded-2xl md:rounded-[2rem] bg-white/5 border border-white/5 text-2xl md:text-3xl font-syne font-black text-white/80 hover:bg-white/10 hover:text-white hover:-translate-y-1 active:scale-95 transition-all">
+              <KeypadButton
+                key={num}
+                onClick={() => onDigit(String(num))}
+                disabled={isVerifyingPin}
+              >
                 {num}
-              </button>
+              </KeypadButton>
             ))}
-            <button onClick={onClear}
-              className="aspect-square rounded-2xl md:rounded-[2rem] bg-red-500/10 border border-red-500/20 text-xl md:text-2xl font-black text-red-400 hover:bg-red-500/20 hover:-translate-y-1 active:scale-95 transition-all">
+            <KeypadButton onClick={onClear} variant="danger" ariaLabel="Limpiar">
               C
-            </button>
-            <button disabled={isVerifyingPin} onClick={() => onDigit("0")}
-              className="aspect-square rounded-2xl md:rounded-[2rem] bg-white/5 border border-white/5 text-2xl md:text-3xl font-syne font-black text-white/80 hover:bg-white/10 hover:text-white hover:-translate-y-1 active:scale-95 transition-all">
+            </KeypadButton>
+            <KeypadButton onClick={() => onDigit("0")} disabled={isVerifyingPin}>
               0
-            </button>
-            <button onClick={onBackspace}
-              className="aspect-square rounded-2xl md:rounded-[2rem] bg-white/5 border border-white/5 text-xl md:text-2xl font-black text-white/80 hover:bg-white/10 hover:text-white hover:-translate-y-1 active:scale-95 transition-all">
-              ⌫
-            </button>
+            </KeypadButton>
+            <KeypadButton onClick={onBackspace} variant="ghost" ariaLabel="Borrar">
+              <Delete size={20} />
+            </KeypadButton>
           </div>
 
-          <button disabled={isVerifyingPin || pinInput.length < 4} onClick={onSubmit}
-            className="w-full mt-10 py-5 rounded-[2rem] text-lg font-syne font-black uppercase tracking-widest text-black transition-all active:scale-[0.98] disabled:opacity-30 shadow-2xl"
-            style={{ background: accent }}>
+          {/* Submit */}
+          <button
+            disabled={isVerifyingPin || pinInput.length < 4}
+            onClick={onSubmit}
+            className="w-full rounded-2xl font-black uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{
+              background: "var(--brand)",
+              color: "var(--brand-fg)",
+              fontFamily: "var(--font-display)",
+              boxShadow: "var(--shadow-glow)",
+              letterSpacing: "0.18em",
+              padding: "clamp(0.85rem, 2.4vw, 1.2rem)",
+              fontSize: "clamp(0.9rem, 2.2vw, 1.05rem)",
+            }}
+          >
             {isVerifyingPin ? "Verificando..." : "Ingresar"}
           </button>
         </div>
       </div>
 
-      {/* MARCA DE AGUA INFERIOR */}
-      <div className="absolute bottom-10 opacity-30 flex flex-col items-center gap-1 select-none">
-        <span className="text-[9px] font-black tracking-widest uppercase text-white/50">SaaS Multi-tenant</span>
-        <span className="text-base font-syne font-black tracking-tighter text-white">MRTPVREST</span>
+      {/* Footer watermark */}
+      <div
+        className="absolute z-10 flex flex-col items-center gap-0.5 pointer-events-none"
+        style={{ bottom: "clamp(0.5rem, 3vh, 2rem)", opacity: 0.35 }}
+        aria-hidden="true"
+      >
+        <span
+          className="font-black tracking-widest uppercase"
+          style={{ fontSize: "0.55rem", color: "var(--text-muted)", letterSpacing: "0.22em" }}
+        >
+          SaaS Multi-tenant
+        </span>
+        <span
+          className="font-black tracking-tighter"
+          style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontFamily: "var(--font-display)" }}
+        >
+          MRTPVREST
+        </span>
       </div>
     </div>
+  );
+}
+
+function KeypadButton({
+  children,
+  onClick,
+  disabled,
+  variant,
+  ariaLabel,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  variant?: "danger" | "ghost";
+  ariaLabel?: string;
+}) {
+  const isDanger = variant === "danger";
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      className="aspect-square rounded-2xl font-black flex items-center justify-center transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-40"
+      style={{
+        background: isDanger ? "var(--danger-soft)" : "var(--surface-2)",
+        border: `1px solid ${isDanger ? "var(--danger)" : "var(--border)"}`,
+        color: isDanger ? "var(--danger)" : "var(--text-primary)",
+        fontFamily: "var(--font-display)",
+        fontSize: "clamp(1.2rem, 3.6vw, 1.8rem)",
+      }}
+    >
+      {children}
+    </button>
   );
 }
