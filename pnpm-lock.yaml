@@ -283,15 +283,6 @@ importers:
       '@types/react-dom':
         specifier: ^18
         version: 18.3.7(@types/react@18.3.28)
-      autoprefixer:
-        specifier: ^10.4.17
-        version: 10.4.27(postcss@8.5.8)
-      postcss:
-        specifier: ^8.4.33
-        version: 8.5.8
-      tailwindcss:
-        specifier: ^3.4.1
-        version: 3.4.19(tsx@4.21.0)(yaml@2.8.3)
       typescript:
         specifier: ^5
         version: 5.9.3
