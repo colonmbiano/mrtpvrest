@@ -26,9 +26,9 @@ export type { Product, CartItem, TicketData } from "@/store/ticketStore";
 
 // ── Tipos de compatibilidad ───────────────────────────────────────────
 type LegacyTicket = {
-  id: string;
+  id: string | number;
   name: string;
-  items: unknown[];
+  items: import("@/store/ticketStore").CartItem[];
 };
 
 type CombinedLegacyState = {
@@ -51,10 +51,10 @@ type CombinedLegacyState = {
   tickets: LegacyTicket[];
   activeTicketId: string;
   addTicket: () => void;
-  removeTicket: (id: string) => void;
-  setActiveTicket: (id: string) => void;
+  removeTicket: (id: string | number) => void;
+  setActiveTicket: (id: string | number) => void;
   addItemToActiveTicket: (p: unknown) => void;
-  updateItemQuantity: (idx: number, delta: number) => void;
+  updateItemQuantity: (id: string, delta: number) => void;
   removeItem: (idx: number) => void;
   clearActiveTicket: () => void;
 };
@@ -63,8 +63,8 @@ type CombinedLegacyState = {
  * @deprecated Usa useThemeStore, useAuthStore o useTicketStore directamente.
  * Este shim mantiene compatibilidad con código legacy que importa usePOSStore.
  */
-export function usePOSStore<T>(
-  selector: (state: CombinedLegacyState) => T
+export function usePOSStore<T = CombinedLegacyState>(
+  selector?: (state: CombinedLegacyState) => T
 ): T {
   const theme  = useThemeStore();
   const auth   = useAuthStore();
@@ -98,10 +98,14 @@ export function usePOSStore<T>(
     removeTicket:         () => ticket.closeTicket(ticket.activeIndex),
     setActiveTicket:      () => {},
     addItemToActiveTicket:() => {},
-    updateItemQuantity:   ticket.changeItemQty,
+    updateItemQuantity:   (id: string, delta: number) => {
+      const t = ticket.getActiveTicket();
+      const idx = t.items.findIndex(i => i.id === id);
+      if (idx !== -1) ticket.changeItemQty(idx, delta);
+    },
     removeItem:           ticket.removeItem,
     clearActiveTicket:    ticket.clearActiveItems,
   };
 
-  return selector(combined);
+  return selector ? selector(combined) : (combined as unknown as T);
 }

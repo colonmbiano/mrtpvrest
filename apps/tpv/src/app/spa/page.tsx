@@ -49,8 +49,9 @@ function LoginScreen() {
 
   const handleClear = () => setPin("");
 
-  const handleSubmit = () => {
-    if (login(pin)) {
+  const handleSubmit = async () => {
+    const success = await login(pin);
+    if (success) {
       setError(false);
     } else {
       setError(true);
@@ -204,8 +205,8 @@ function POSGrid() {
 function CartPanel() {
   const { tickets, activeTicketId, setActiveTicket, addTicket, removeTicket, updateItemQuantity, clearActiveTicket } = usePOSStore();
   
-  const activeTicket = tickets.find(t => t.id === activeTicketId) || tickets[0];
-  const total = activeTicket.items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  const activeTicket = tickets.find(t => t.id === activeTicketId) || tickets[0]!;
+  const total = activeTicket.items.reduce((acc: number, item) => acc + (item.price * item.quantity), 0);
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -237,7 +238,7 @@ function CartPanel() {
       {/* Cart Items */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 scrollbar-hide">
         <AnimatePresence>
-          {activeTicket.items.map(item => (
+          {activeTicket!.items.map(item => (
             <motion.div 
               key={item.id}
               initial={{ opacity: 0, x: 20 }}
@@ -263,7 +264,7 @@ function CartPanel() {
           ))}
         </AnimatePresence>
         
-        {activeTicket.items.length === 0 && (
+        {activeTicket!.items.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-tx-mut opacity-50">
             <ShoppingCart className="w-12 h-12 mb-4" />
             <p className="font-bold">Ticket vacío</p>
