@@ -1669,33 +1669,9 @@ function TPVLockScreen({
 }: any) {
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center p-4 overflow-hidden select-none"
+      className="fixed inset-0 overflow-auto select-none"
       style={{ background: "var(--bg)", color: "var(--text-primary)", fontFamily: "var(--font-body)" }}
     >
-      {/* Watermark */}
-      <div
-        className="absolute inset-0 flex items-center justify-center pointer-events-none"
-        style={{ opacity: 0.03 }}
-        aria-hidden="true"
-      >
-        <h1
-          className="font-black tracking-tighter"
-          style={{
-            fontFamily: "var(--font-display)",
-            fontSize: "clamp(8rem, 35vw, 30rem)",
-            color: "var(--text-primary)",
-          }}
-        >
-          MRTPV
-        </h1>
-      </div>
-
-      {/* Top-left: palette + theme controls */}
-      <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
-        <PaletteSwitcher size="sm" />
-        <ThemeToggle size="sm" />
-      </div>
-
       {/* Top-right: settings */}
       <button
         onClick={onChangeLocation}
@@ -1710,142 +1686,152 @@ function TPVLockScreen({
         <Settings size={16} />
       </button>
 
-      {/* Card */}
-      <div
-        className="relative z-10 w-full flex flex-col gap-6 max-h-[92vh] overflow-y-auto scrollbar-hide"
-        style={{ width: "min(100%, 26rem)" }}
-      >
-        {/* Branding */}
-        <div className="text-center flex flex-col gap-1.5">
-          <h1
-            className="font-black tracking-tight uppercase truncate"
-            style={{
-              color: "var(--brand)",
-              fontFamily: "var(--font-display)",
-              fontSize: "clamp(1.75rem, 7vw, 3rem)",
-              lineHeight: 1.05,
-            }}
-          >
-            {restaurantName}
-          </h1>
-          <p
-            className="font-bold uppercase"
-            style={{
-              color: "var(--text-muted)",
-              letterSpacing: "0.22em",
-              fontSize: "clamp(0.6rem, 1.6vw, 0.7rem)",
-            }}
-          >
-            {locationName || "Terminal de Punto de Venta"}
-          </p>
-        </div>
-
-        <div
-          className="rounded-3xl flex flex-col gap-5"
-          style={{
-            background: "var(--surface-1)",
-            border: "1px solid var(--border)",
-            boxShadow: "var(--shadow-lg)",
-            padding: "clamp(1rem, 3vw, 1.75rem)",
-          }}
-        >
-          {/* PIN dots */}
-          <div
-            className="flex items-center justify-center"
-            style={{ gap: "clamp(0.5rem, 2vw, 0.9rem)" }}
-          >
-            {Array.from({ length: 6 }).map((_, i) => {
-              const filled = pinInput.length > i;
-              return (
-                <div
-                  key={i}
-                  className="rounded-full transition-all duration-300"
-                  style={{
-                    width: "clamp(0.65rem, 2.2vw, 0.95rem)",
-                    height: "clamp(0.65rem, 2.2vw, 0.95rem)",
-                    background: filled ? "var(--brand)" : "var(--surface-3)",
-                    boxShadow: filled ? "var(--shadow-glow)" : "none",
-                    transform: filled ? "scale(1.15)" : "scale(1)",
-                  }}
-                />
-              );
-            })}
-          </div>
-
-          {/* Error */}
-          {pinError && (
-            <p
-              className="text-center text-sm font-bold"
-              style={{ color: "var(--danger)" }}
-              role="alert"
-            >
-              {pinError}
-            </p>
-          )}
-
-          {/* Keypad */}
-          <div
-            className="grid grid-cols-3"
-            style={{ gap: "clamp(0.5rem, 1.6vw, 0.85rem)" }}
-          >
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-              <KeypadButton
-                key={num}
-                onClick={() => onDigit(String(num))}
-                disabled={isVerifyingPin}
-              >
-                {num}
-              </KeypadButton>
-            ))}
-            <KeypadButton onClick={onClear} variant="danger" ariaLabel="Limpiar">
-              C
-            </KeypadButton>
-            <KeypadButton onClick={() => onDigit("0")} disabled={isVerifyingPin}>
-              0
-            </KeypadButton>
-            <KeypadButton onClick={onBackspace} variant="ghost" ariaLabel="Borrar">
-              <Delete size={20} />
-            </KeypadButton>
-          </div>
-
-          {/* Submit */}
-          <button
-            disabled={isVerifyingPin || pinInput.length < 4}
-            onClick={onSubmit}
-            className="w-full rounded-2xl font-black uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{
-              background: "var(--brand)",
-              color: "var(--brand-fg)",
-              fontFamily: "var(--font-display)",
-              boxShadow: "var(--shadow-glow)",
-              letterSpacing: "0.18em",
-              padding: "clamp(0.85rem, 2.4vw, 1.2rem)",
-              fontSize: "clamp(0.9rem, 2.2vw, 1.05rem)",
-            }}
-          >
-            {isVerifyingPin ? "Verificando..." : "Ingresar"}
-          </button>
-        </div>
+      {/* Top-left: palette + theme controls */}
+      <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
+        <PaletteSwitcher size="sm" />
+        <ThemeToggle size="sm" />
       </div>
 
-      {/* Footer watermark */}
-      <div
-        className="absolute z-10 flex flex-col items-center gap-0.5 pointer-events-none"
-        style={{ bottom: "clamp(0.5rem, 3vh, 2rem)", opacity: 0.35 }}
-        aria-hidden="true"
-      >
-        <span
-          className="font-black tracking-widest uppercase"
-          style={{ fontSize: "0.55rem", color: "var(--text-muted)", letterSpacing: "0.22em" }}
-        >
-          SaaS Multi-tenant
-        </span>
-        <span
-          className="font-black tracking-tighter"
-          style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontFamily: "var(--font-display)" }}
-        >
-          MRTPVREST
-        </span>
+      <div className="min-h-full flex items-center justify-center p-6">
+        <div className="w-full" style={{ maxWidth: "26rem" }}>
+          {/* Wordmark — matches /setup */}
+          <div className="text-center mb-6">
+            <h1
+              className="font-black tracking-tighter"
+              style={{
+                color: "var(--brand)",
+                fontFamily: "var(--font-display)",
+                fontSize: "clamp(2rem, 8vw, 2.5rem)",
+                lineHeight: 1,
+              }}
+            >
+              MRTPVREST
+            </h1>
+            <p
+              className="mt-1.5 font-bold uppercase"
+              style={{
+                color: "var(--text-muted)",
+                letterSpacing: "0.18em",
+                fontSize: "0.625rem",
+              }}
+            >
+              Punto de Venta
+            </p>
+          </div>
+
+          {/* Card */}
+          <div
+            className="rounded-3xl flex flex-col gap-6"
+            style={{
+              background: "var(--surface-1)",
+              border: "1px solid var(--border)",
+              boxShadow: "var(--shadow-lg)",
+              padding: "clamp(1.25rem, 4vw, 1.75rem)",
+            }}
+          >
+            {/* Tenant context */}
+            <div className="text-center flex flex-col gap-1">
+              <span
+                className="font-bold truncate"
+                style={{
+                  color: "var(--text-primary)",
+                  fontSize: "clamp(1rem, 4vw, 1.125rem)",
+                  fontFamily: "var(--font-display)",
+                }}
+              >
+                {restaurantName}
+              </span>
+              <span
+                className="font-bold uppercase"
+                style={{
+                  color: "var(--text-muted)",
+                  letterSpacing: "0.16em",
+                  fontSize: "0.625rem",
+                }}
+              >
+                {locationName || "Terminal"} · Ingresa tu PIN
+              </span>
+            </div>
+
+            {/* PIN dots */}
+            <div
+              className="flex items-center justify-center"
+              style={{ gap: "clamp(0.65rem, 2.4vw, 1rem)" }}
+            >
+              {Array.from({ length: 6 }).map((_, i) => {
+                const filled = pinInput.length > i;
+                return (
+                  <div
+                    key={i}
+                    className="rounded-full transition-all duration-200"
+                    style={{
+                      width: "clamp(0.85rem, 2.6vw, 1.1rem)",
+                      height: "clamp(0.85rem, 2.6vw, 1.1rem)",
+                      background: filled ? "var(--brand)" : "var(--surface-3)",
+                      boxShadow: filled ? "var(--shadow-glow)" : "none",
+                      transform: filled ? "scale(1.1)" : "scale(1)",
+                    }}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Error */}
+            {pinError && (
+              <p
+                className="text-center text-sm font-bold"
+                style={{ color: "var(--danger)" }}
+                role="alert"
+              >
+                {pinError}
+              </p>
+            )}
+
+            {/* Keypad */}
+            <div
+              className="grid grid-cols-3"
+              style={{ gap: "clamp(0.6rem, 2vw, 0.9rem)" }}
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                <KeypadButton
+                  key={num}
+                  onClick={() => onDigit(String(num))}
+                  disabled={isVerifyingPin}
+                >
+                  {num}
+                </KeypadButton>
+              ))}
+              <KeypadButton onClick={onClear} variant="danger" ariaLabel="Limpiar">
+                C
+              </KeypadButton>
+              <KeypadButton onClick={() => onDigit("0")} disabled={isVerifyingPin}>
+                0
+              </KeypadButton>
+              <KeypadButton onClick={onBackspace} variant="ghost" ariaLabel="Borrar">
+                <Delete size={22} />
+              </KeypadButton>
+            </div>
+
+            {/* Submit */}
+            <button
+              disabled={isVerifyingPin || pinInput.length < 4}
+              onClick={onSubmit}
+              className="w-full rounded-2xl font-black uppercase transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                background: "var(--brand)",
+                color: "var(--brand-fg)",
+                fontFamily: "var(--font-display)",
+                boxShadow: "var(--shadow-glow)",
+                letterSpacing: "0.12em",
+                padding: "1rem",
+                fontSize: "0.875rem",
+                border: "none",
+              }}
+            >
+              {isVerifyingPin ? "Verificando..." : "Ingresar"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1870,13 +1856,13 @@ function KeypadButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel}
-      className="aspect-square rounded-2xl font-black flex items-center justify-center transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-40"
+      className="aspect-square rounded-2xl font-black flex items-center justify-center transition-all hover:brightness-110 active:scale-95 disabled:opacity-40"
       style={{
         background: isDanger ? "var(--danger-soft)" : "var(--surface-2)",
         border: `1px solid ${isDanger ? "var(--danger)" : "var(--border)"}`,
         color: isDanger ? "var(--danger)" : "var(--text-primary)",
         fontFamily: "var(--font-display)",
-        fontSize: "clamp(1.2rem, 3.6vw, 1.8rem)",
+        fontSize: "clamp(1.5rem, 4.5vw, 2rem)",
       }}
     >
       {children}
