@@ -117,20 +117,20 @@
   }
 
   [data-theme="purple"] {
-    --brand:        #7c3aed;
-    --brand-hover:  #6d28d9;
-    --brand-active: #5b21b6;
-    --brand-soft:   rgba(124, 58, 237, 0.14);
-    --brand-glow:   rgba(124, 58, 237, 0.35);
+    --brand:        #6366f1;
+    --brand-hover:  #4f46e5;
+    --brand-active: #4338ca;
+    --brand-soft:   rgba(99, 102, 241, 0.14);
+    --brand-glow:   rgba(99, 102, 241, 0.35);
     --brand-fg:     #ffffff;
   }
 
   [data-theme="orange"] {
-    --brand:        #ff5c35;
-    --brand-hover:  #e64a26;
-    --brand-active: #cc3d1d;
-    --brand-soft:   rgba(255, 92, 53, 0.14);
-    --brand-glow:   rgba(255, 92, 53, 0.35);
+    --brand:        #f97316;
+    --brand-hover:  #ea580c;
+    --brand-active: #c2410c;
+    --brand-soft:   rgba(249, 115, 22, 0.14);
+    --brand-glow:   rgba(249, 115, 22, 0.35);
     --brand-fg:     #ffffff;
   }
 
@@ -180,3 +180,31 @@ html, body {
   border: 1px solid var(--border);
   backdrop-filter: blur(22px);
 }
+
+@layer utilities {
+  .eyebrow {
+    @apply text-[10px] font-bold uppercase tracking-[0.2em] text-tx-mut leading-none;
+  }
+  .mono {
+    @apply font-mono;
+    font-feature-settings: "tnum";
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  .transition-pos {
+    @apply transition-all duration-150 ease-out;
+  }
+}
+
+/* Animación de placeholder rayado diagonal (§4.1) */
+.img-placeholder {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--surface-2),
+    var(--surface-2) 10px,
+    var(--surface-3) 10px,
+    var(--surface-3) 20px
+  );
+}
+
