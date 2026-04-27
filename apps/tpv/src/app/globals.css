@@ -2,150 +2,106 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─────────────────────────────────────────────────────────────
-   DESIGN SYSTEM · MRTPVREST · TPV
-   3 paletas (green | purple | orange) × 2 modos (dark | light)
-   data-theme="<palette>" data-mode="<mode>"
-   ───────────────────────────────────────────────────────────── */
-
 @layer base {
-  /* ── Default = green · dark ───────────────────────────────── */
   :root {
-    /* Surfaces & text · dark mode (defaults) */
-    --bg:               #0a0a0a;
-    --surface-1:        #141414;
-    --surface-2:        #1f1f1f;
-    --surface-3:        #2a2a2a;
-    --surface-hover:    #333333;
-
-    --text-primary:     #ffffff;
-    --text-secondary:   #a1a1aa;
-    --text-muted:       #71717a;
-    --text-disabled:    #52525b;
-
-    --border:           rgba(255, 255, 255, 0.08);
-    --border-strong:    rgba(255, 255, 255, 0.16);
-    --border-focus:     var(--brand);
-
-    --shadow-sm:        0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md:        0 4px 12px rgba(0, 0, 0, 0.4);
-    --shadow-lg:        0 12px 32px rgba(0, 0, 0, 0.5);
-    --shadow-glow:      0 10px 40px -10px var(--brand-glow);
-
-    /* Brand · green */
-    --brand:            #10b981;
-    --brand-hover:      #059669;
-    --brand-active:     #047857;
-    --brand-soft:       rgba(16, 185, 129, 0.12);
-    --brand-glow:       rgba(16, 185, 129, 0.35);
-    --brand-fg:         #ffffff;
-
-    /* Status (semantic, theme-independent) */
-    --success:          #10b981;
-    --success-soft:     rgba(16, 185, 129, 0.12);
-    --warning:          #f59e0b;
-    --warning-soft:     rgba(245, 158, 11, 0.12);
-    --danger:           #ef4444;
-    --danger-soft:      rgba(239, 68, 68, 0.12);
-    --info:             #3b82f6;
-    --info-soft:        rgba(59, 130, 246, 0.12);
-
-    /* Radii & spacing scale */
-    --radius-sm:        0.5rem;
-    --radius-md:        0.75rem;
-    --radius-lg:        1rem;
-    --radius-xl:        1.25rem;
-    --radius-full:      9999px;
-
-    /* Fonts (set via next/font in layout.tsx) */
-    --font-body:        var(--font-dm-sans, 'DM Sans'), system-ui, sans-serif;
-    --font-display:     var(--font-syne, 'Syne'), system-ui, sans-serif;
-    --font-mono:        var(--font-dm-mono, 'DM Mono'), ui-monospace, monospace;
-
-    /* ── Legacy aliases (do not use in new code) ───────────── */
-    --bg-app:           var(--bg);
-    --surf-1:           var(--surface-1);
-    --surf-2:           var(--surface-2);
-    --surf-3:           var(--surface-3);
-    --surf:             var(--surface-1);
-    --surf2:            var(--surface-2);
-    --accent:           var(--brand);
-    --accent-glow:      var(--brand-glow);
-    --tx-main:          var(--text-primary);
-    --tx-mut:           var(--text-secondary);
-    --tx-dim:           var(--text-muted);
-    --tx:               var(--text-primary);
-    --muted:            var(--text-secondary);
-    --bd-main:          var(--border);
-    --ok:               var(--success);
-    --warn:             var(--warning);
-    --err:              var(--danger);
-    --f-b:              var(--font-body);
-    --f-d:              var(--font-display);
-    --f-m:              var(--font-mono);
-  }
-
-  /* ── Mode overrides ───────────────────────────────────────── */
-  [data-mode="light"] {
-    --bg:             #f8fafc;
-    --surface-1:      #ffffff;
-    --surface-2:      #f1f5f9;
-    --surface-3:      #e2e8f0;
-    --surface-hover:  #cbd5e1;
-
-    --text-primary:   #0f172a;
-    --text-secondary: #475569;
-    --text-muted:     #64748b;
-    --text-disabled:  #94a3b8;
-
-    --border:         rgba(15, 23, 42, 0.08);
-    --border-strong:  rgba(15, 23, 42, 0.16);
-
-    --shadow-sm:      0 1px 2px rgba(15, 23, 42, 0.06);
-    --shadow-md:      0 4px 12px rgba(15, 23, 42, 0.08);
-    --shadow-lg:      0 12px 32px rgba(15, 23, 42, 0.12);
-  }
-
-  /* ── Palette overrides (apply over current mode) ──────────── */
-  [data-theme="green"] {
-    --brand:        #10b981;
-    --brand-hover:  #059669;
+    --bg: #0a0a0a;
+    --surface-1: #141414;
+    --surface-2: #1f1f1f;
+    --surface-3: #2a2a2a;
+    --surface-hover: #333333;
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --text-disabled: #52525b;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --border-focus: var(--brand);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+    --shadow-glow: 0 10px 40px -10px var(--brand-glow);
+    --brand: #10b981;
+    --brand-hover: #059669;
     --brand-active: #047857;
-    --brand-soft:   rgba(16, 185, 129, 0.12);
-    --brand-glow:   rgba(16, 185, 129, 0.35);
-    --brand-fg:     #ffffff;
+    --brand-soft: rgba(16, 185, 129, 0.12);
+    --brand-glow: rgba(16, 185, 129, 0.35);
+    --brand-fg: #ffffff;
+    --success: #10b981;
+    --success-soft: rgba(16, 185, 129, 0.12);
+    --warning: #f59e0b;
+    --warning-soft: rgba(245, 158, 11, 0.12);
+    --danger: #ef4444;
+    --danger-soft: rgba(239, 68, 68, 0.12);
+    --info: #3b82f6;
+    --info-soft: rgba(59, 130, 246, 0.12);
+    --radius-sm: 0.5rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1rem;
+    --radius-xl: 1.25rem;
+    --radius-full: 9999px;
+    --font-body: var(--font-dm-sans, 'DM Sans'), system-ui, sans-serif;
+    --font-display: var(--font-syne, 'Syne'), system-ui, sans-serif;
+    --font-mono: var(--font-dm-mono, 'DM Mono'), ui-monospace, monospace;
+
+    /* Legacy aliases */
+    --bg-app: var(--bg);
+    --surf-1: var(--surface-1);
+    --surf-2: var(--surface-2);
+    --surf-3: var(--surface-3);
+    --surf: var(--surface-1);
+    --surf2: var(--surface-2);
+    --accent: var(--brand);
+    --tx-main: var(--text-primary);
+    --tx-mut: var(--text-secondary);
+    --tx-dim: var(--text-muted);
+    --bd-main: var(--border);
+  }
+
+  [data-mode="light"] {
+    --bg: #f8fafc;
+    --surface-1: #ffffff;
+    --surface-2: #f1f5f9;
+    --surface-3: #e2e8f0;
+    --surface-hover: #cbd5e1;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --text-disabled: #94a3b8;
+    --border: rgba(15, 23, 42, 0.08);
+    --border-strong: rgba(15, 23, 42, 0.16);
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+    --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
+  }
+
+  [data-theme="green"] {
+    --brand: #10b981;
+    --brand-hover: #059669;
+    --brand-active: #047857;
+    --brand-soft: rgba(16, 185, 129, 0.12);
+    --brand-glow: rgba(16, 185, 129, 0.35);
+    --brand-fg: #ffffff;
   }
 
   [data-theme="purple"] {
-    --brand:        #6366f1;
-    --brand-hover:  #4f46e5;
+    --brand: #6366f1;
+    --brand-hover: #4f46e5;
     --brand-active: #4338ca;
-    --brand-soft:   rgba(99, 102, 241, 0.14);
-    --brand-glow:   rgba(99, 102, 241, 0.35);
-    --brand-fg:     #ffffff;
+    --brand-soft: rgba(99, 102, 241, 0.14);
+    --brand-glow: rgba(99, 102, 241, 0.35);
+    --brand-fg: #ffffff;
   }
 
   [data-theme="orange"] {
-    --brand:        #f97316;
-    --brand-hover:  #ea580c;
+    --brand: #f97316;
+    --brand-hover: #ea580c;
     --brand-active: #c2410c;
-    --brand-soft:   rgba(249, 115, 22, 0.14);
-    --brand-glow:   rgba(249, 115, 22, 0.35);
-    --brand-fg:     #ffffff;
+    --brand-soft: rgba(249, 115, 22, 0.14);
+    --brand-glow: rgba(249, 115, 22, 0.35);
+    --brand-fg: #ffffff;
   }
-
-  /* ── Legacy theme IDs (backwards compat with old picker) ─── */
-  [data-theme="dark"]       { /* maps to green dark via shim */ }
-  [data-theme="concepto-1"] { --brand: #34d399; --brand-glow: rgba(52,211,153,.35); }
-  [data-theme="concepto-2"] { --brand: #818cf8; --brand-glow: rgba(129,140,248,.35); }
-  [data-theme="concepto-3"] { --brand: #10b981; --brand-glow: rgba(16,185,129,.35); }
-  [data-theme="naranja"]    { --brand: #ea580c; --brand-glow: rgba(234,88,12,.35); }
-  [data-theme="amarillo"]   { --brand: #ca8a04; --brand-glow: rgba(202,138,4,.35); }
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Element resets & utilities
-   ───────────────────────────────────────────────────────────── */
 * { box-sizing: border-box; }
 
 body {
@@ -157,29 +113,20 @@ body {
   overflow: hidden;
 }
 
-*, *::before, *::after {
-  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
-}
-
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 
 button, .no-select {
   user-select: none;
   -webkit-user-select: none;
-  -webkit-touch-callout: none;
 }
+
 html, body {
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-.pos-shadow   { box-shadow: var(--shadow-glow); }
-.glass-panel  {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  backdrop-filter: blur(22px);
-}
+.pos-shadow { box-shadow: var(--shadow-glow); }
 
 @layer utilities {
   .eyebrow {
@@ -192,19 +139,4 @@ html, body {
   .tnum {
     font-variant-numeric: tabular-nums;
   }
-  .transition-pos {
-    @apply transition-all duration-150 ease-out;
-  }
 }
-
-/* Animación de placeholder rayado diagonal (§4.1) */
-.img-placeholder {
-  background: repeating-linear-gradient(
-    135deg,
-    var(--surface-2),
-    var(--surface-2) 10px,
-    var(--surface-3) 10px,
-    var(--surface-3) 20px
-  );
-}
-
