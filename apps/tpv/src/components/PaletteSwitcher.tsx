@@ -1,5 +1,5 @@
 "use client";
-import { usePOSStore, type Palette } from "@/store/usePOSStore";
+import { useThemeStore, type Palette } from "@/store/themeStore";
 
 const PALETTES: { id: Palette; label: string; color: string }[] = [
   { id: "green",  label: "Verde",   color: "#10b981" },
@@ -14,9 +14,9 @@ export default function PaletteSwitcher({
   layout?: "row" | "col";
   size?: "sm" | "md";
 }) {
-  const palette = usePOSStore((s) => s.palette);
-  const setPalette = usePOSStore((s) => s.setPalette);
-  const sm = size === "sm";
+  const palette    = useThemeStore((s) => s.palette);
+  const setPalette = useThemeStore((s) => s.setPalette);
+  const sm  = size === "sm";
   const dim = sm ? 24 : 32;
 
   return (
