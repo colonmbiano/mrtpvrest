@@ -66,10 +66,10 @@ const config: Config = {
       },
     },
   },
-  safelist: [
+  /* safelist: [
     { pattern: /grid-cols-(3|4|5|6)/ },
     { pattern: /text-(xs|sm|base|lg)/ },
-  ],
+  ], */
   plugins: [],
 };
 export default config;
