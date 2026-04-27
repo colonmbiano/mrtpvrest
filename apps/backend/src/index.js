@@ -18,42 +18,25 @@ const app = express()
 app.set('trust proxy', 1)
 const server = http.createServer(app)
 
-const ALLOWED_ORIGINS = [
-  'https://reparto.mrtpvrest.com',
-  'https://tpv.mrtpvrest.com',
-  'https://admin.mrtpvrest.com',
-  'https://saas.mrtpvrest.com',
-  'https://mrtpvrest.com',
-  'https://master-burguers-production.up.railway.app',
-  /\.mrtpvrest\.com$/,
-  /\.vercel\.app$/,
-  ...(process.env.NODE_ENV === 'production' ? [] : [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3002',
-    'http://localhost:3005',
-    'http://localhost:3006',
-    'http://localhost:8081',
-    'capacitor://localhost'
-  ]),
-];
-
 const corsOptions = {
   origin: (origin, callback) => {
+    // Permitir peticiones sin origen (como apps móviles o curl)
     if (!origin) return callback(null, true);
-    const isAllowed = ALLOWED_ORIGINS.some(allowed => {
-      if (allowed instanceof RegExp) return allowed.test(origin);
-      return allowed === origin;
-    });
-    if (isAllowed) {
+    
+    const isMrtpv = origin.endsWith('mrtpvrest.com');
+    const isVercel = origin.endsWith('vercel.app');
+    const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1') || origin.startsWith('capacitor://');
+
+    if (isMrtpv || isVercel || isLocal) {
       callback(null, true);
     } else {
-      callback(new Error('CORS blocked: ' + origin));
+      console.log('CORS Blocked Origin:', origin);
+      callback(new Error('CORS not allowed for ' + origin));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-restaurant-id', 'x-location-id', 'x-restaurant-slug']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-restaurant-id', 'x-location-id', 'x-restaurant-slug', 'x-location-slug']
 };
 
 // Socket.io
@@ -88,8 +71,6 @@ app.use(helmet())
 app.use(compression())
 // 1. Aplicamos CORS
 app.use(cors(corsOptions));
-// 2. Respondemos automáticamente a TODAS las peticiones OPTIONS (Preflight)
-app.options('*', cors(corsOptions));
 
 // Webhook Stripe (B2B SaaS billing) — montado ANTES de express.json() porque
 // la verificación de firma (constructEvent) exige el body crudo exacto.
