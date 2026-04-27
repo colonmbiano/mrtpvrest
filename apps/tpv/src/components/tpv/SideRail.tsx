@@ -2,6 +2,7 @@
 import { LayoutGrid, Coffee, BarChart3, Receipt, Settings, Palette, LogOut } from "lucide-react";
 import { useState } from "react";
 import { usePOSStore } from "@/store/usePOSStore";
+import { useRouter } from "next/navigation";
 import PaletteSwitcher from "@/components/PaletteSwitcher";
 import ThemeToggle from "@/components/ThemeToggle";
 
@@ -16,6 +17,7 @@ export default function SideRail({
   onSection?: (s: RailSection) => void;
   onLogout?: () => void;
 }) {
+  const router = useRouter();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const logout = usePOSStore((s) => s.logout);
 
@@ -69,8 +71,11 @@ export default function SideRail({
         label="Salir"
         danger
         onClick={() => {
-          onLogout?.();
-          logout();
+          if (confirm("¿Cerrar sesión?")) {
+            onLogout?.();
+            logout();
+            router.replace("/");
+          }
         }}
       />
     </nav>

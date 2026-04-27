@@ -4,10 +4,22 @@ import { LayoutGrid, LayoutList } from "lucide-react";
 import Chip from "@/components/ui/Chip";
 import Link from "next/link";
 import api from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
+import { LogOut } from "lucide-react";
 
 export default function WaiterFloorPlanPage() {
+  const router = useRouter();
+  const employee = useAuthStore((s) => s.employee);
+  const logout = useAuthStore((s) => s.logout);
   const [tables, setTables] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const handleLogout = () => {
+    if (confirm("¿Estás seguro de que deseas salir?")) {
+      logout();
+      router.replace("/");
+    }
+  };
 
   useEffect(() => {
     const fetchTables = async () => {
@@ -39,15 +51,24 @@ export default function WaiterFloorPlanPage() {
         <div className="flex justify-between items-start">
           <div className="space-y-2">
             <span className="text-[11px] font-black uppercase tracking-[0.3em] text-iris-500">
-              DISTRIBUCIÓN EN VIVO
+              {employee?.name || "MESERO"} EN TURNO
             </span>
             <h1 className="text-4xl md:text-5xl font-display font-black tracking-tighter text-tx-pri leading-none uppercase">
               Salón <span className="text-iris-500">Principal</span>
             </h1>
           </div>
-          <div className="flex bg-surf-2 p-1 rounded-2xl border border-bd">
-            <button className="p-3 rounded-xl bg-surf-3 text-tx-pri shadow-glow shadow-iris-glow/10"><LayoutGrid size={20} /></button>
-            <button className="p-3 rounded-xl text-tx-mut hover:text-tx-pri transition-colors"><LayoutList size={20} /></button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={handleLogout}
+              className="px-6 py-3 rounded-2xl bg-surf-2 border border-bd text-tx-mut hover:text-danger hover:border-danger/30 transition-all font-black text-xs uppercase tracking-widest flex items-center gap-2"
+            >
+              <LogOut size={16} />
+              SALIR
+            </button>
+            <div className="flex bg-surf-2 p-1 rounded-2xl border border-bd">
+              <button className="p-3 rounded-xl bg-surf-3 text-tx-pri shadow-glow shadow-iris-glow/10"><LayoutGrid size={20} /></button>
+              <button className="p-3 rounded-xl text-tx-mut hover:text-tx-pri transition-colors"><LayoutList size={20} /></button>
+            </div>
           </div>
         </div>
 
