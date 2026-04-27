@@ -1,11 +1,11 @@
 "use client";
 import { Moon, Sun } from "lucide-react";
-import { usePOSStore } from "@/store/usePOSStore";
+import { useThemeStore } from "@/store/themeStore";
 
 export default function ThemeToggle({ size = "md" }: { size?: "sm" | "md" }) {
-  const mode = usePOSStore((s) => s.mode);
-  const toggleMode = usePOSStore((s) => s.toggleMode);
-  const sm = size === "sm";
+  const mode       = useThemeStore((s) => s.mode);
+  const toggleMode = useThemeStore((s) => s.toggleMode);
+  const sm     = size === "sm";
   const isDark = mode === "dark";
 
   return (

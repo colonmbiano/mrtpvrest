@@ -140,6 +140,10 @@ router.post('/chat', async (req, res) => {
     }
   } catch (err) {
     console.error('Error llamando Gemini API (onboarding):', err.message)
+    const is429 = err.message?.includes('429') || err.message?.includes('Too Many Requests') || err.message?.includes('quota')
+    if (is429) {
+      return res.status(503).json({ error: 'El servicio de IA está temporalmente no disponible por límite de cuota. Intenta en unos minutos.' })
+    }
     return res.status(502).json({ error: `Error de Google IA: ${err.message}` })
   }
 

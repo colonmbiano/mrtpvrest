@@ -1,0 +1,70 @@
+name: CI — TPV Lint, Test & Build
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "apps/tpv/**"
+      - "packages/**"
+  pull_request:
+    branches: [master]
+    paths:
+      - "apps/tpv/**"
+      - "packages/**"
+
+env:
+  PNPM_VERSION: "9"
+  NODE_VERSION: "20"
+
+jobs:
+  lint-test-build:
+    name: Lint + Test + Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm ${{ env.PNPM_VERSION }}
+        uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint TPV
+        run: pnpm --filter @mrtpvrest/tpv lint
+
+      - name: Pruebas unitarias TPV
+        run: pnpm --filter @mrtpvrest/tpv test --ci
+        env:
+          NEXT_PUBLIC_API_URL: https://api.mrtpvrest.com
+
+      - name: Build TPV
+        run: pnpm --filter @mrtpvrest/tpv build
+        env:
+          NEXT_PUBLIC_API_URL: https://api.mrtpvrest.com
+
+      - name: Reporte de cobertura (summary)
+        if: always()
+        run: pnpm --filter @mrtpvrest/tpv test:coverage --ci --coverageReporters=text-summary
+        env:
+          NEXT_PUBLIC_API_URL: https://api.mrtpvrest.com
+        continue-on-error: true
