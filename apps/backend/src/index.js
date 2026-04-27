@@ -18,50 +18,42 @@ const app = express()
 app.set('trust proxy', 1)
 const server = http.createServer(app)
 
-// CORS whitelist — URLs explícitas (audit M6). Se quitaron los patrones
-// wildcard *.vercel.app y *.railway.app que aceptaban cualquier proyecto
-// ajeno en esas plataformas. En dev se aceptan localhost + capacitor;
-// en prod solo dominios oficiales + CORS_ORIGINS (extensión por env,
-// separado por coma).
-const PROD_ORIGINS = [
-  /^https:\/\/([a-z0-9-]+\.)?mrtpvrest\.com\/?$/,
-  'https://reparto.mrtpvrest.com',
-  'https://mrtpvrest-admin.vercel.app',
-  'https://mrtpvrest-tpv.vercel.app',
-  'https://mrtpvrest-client.vercel.app',
-  'https://mrtpvrest-landing.vercel.app',
-  'https://mrtpvrest-saas.vercel.app',
-  'https://mrtpvrest-kiosk.vercel.app',
-  'https://colonmbianos-projects.vercel.app',
-];
-
-const DEV_ORIGINS = [
-  'http://localhost',
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:3002',
-  'http://localhost:3005',
-  'http://localhost:3006',
-  'http://localhost:8081',
-  'http://127.0.0.1:3000',
-  'capacitor://localhost',
-];
-
-const EXTRA_ORIGINS = (process.env.CORS_ORIGINS || '')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
-
 const ALLOWED_ORIGINS = [
-  ...PROD_ORIGINS,
-  ...(process.env.NODE_ENV === 'production' ? [] : DEV_ORIGINS),
-  ...EXTRA_ORIGINS,
+  'https://reparto.mrtpvrest.com',
+  'https://tpv.mrtpvrest.com',
+  'https://admin.mrtpvrest.com',
+  'https://saas.mrtpvrest.com',
+  'https://mrtpvrest.com',
+  'https://master-burguers-production.up.railway.app',
+  /\.mrtpvrest\.com$/,
+  /\.vercel\.app$/,
+  ...(process.env.NODE_ENV === 'production' ? [] : [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3002',
+    'http://localhost:3005',
+    'http://localhost:3006',
+    'http://localhost:8081',
+    'capacitor://localhost'
+  ]),
 ];
 
 const corsOptions = {
-  origin: ALLOWED_ORIGINS,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const isAllowed = ALLOWED_ORIGINS.some(allowed => {
+      if (allowed instanceof RegExp) return allowed.test(origin);
+      return allowed === origin;
+    });
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS blocked: ' + origin));
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-restaurant-id', 'x-location-id', 'x-restaurant-slug']
 };
 
 // Socket.io
