@@ -13,7 +13,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
   ];
 
   return (
-    <div className="flex flex-col h-screen w-full bg-surf-0 overflow-hidden font-sans text-tx-pri max-w-[500px] mx-auto border-x border-bd">
+    <div className="flex flex-col h-screen w-full bg-bgApp overflow-hidden font-sans text-tx-pri">
       {/* HEADER MÓVIL */}
       <header className="h-16 px-6 border-b border-bd bg-surf-1 flex items-center justify-between shrink-0">
         <div className="flex flex-col">
