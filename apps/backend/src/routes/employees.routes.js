@@ -138,7 +138,6 @@ router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, async (re
       where: { id: req.params.id, locationId: req.locationId }
     });
     if (!emp) return res.status(404).json({ error: 'Empleado no encontrado en esta sucursal' });
-    if (emp.role === 'ADMIN') return res.status(403).json({ error: 'No puedes eliminar un administrador' });
 
     await prisma.employee.delete({ where: { id: req.params.id } });
     res.json({ ok: true });

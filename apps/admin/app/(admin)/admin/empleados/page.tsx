@@ -118,8 +118,6 @@ export default function EmpleadosPage() {
     setSelectedIds(new Set()); fetchEmployees();
   }
   async function bulkDelete() {
-    const adminSelected = filtered.filter((e: any) => selectedIds.has(e.id) && e.role === "ADMIN");
-    if (adminSelected.length > 0) { alert("No puedes eliminar administradores."); return; }
     if (!confirm(`¿Eliminar ${selectedIds.size} empleado(s)? Esta acción no se puede deshacer.`)) return;
     await Promise.all([...selectedIds].map(id => api.delete(`/api/employees/${id}`).catch(() => {})));
     setSelectedIds(new Set()); fetchEmployees();
@@ -132,10 +130,6 @@ export default function EmpleadosPage() {
   }
 
   async function deleteEmployee(id: string, role: string) {
-    if (role === "ADMIN") {
-      alert("No puedes eliminar a un administrador.");
-      return;
-    }
     if (!confirm("¿Eliminar empleado?")) return;
     try {
       await api.delete(`/api/employees/${id}`);

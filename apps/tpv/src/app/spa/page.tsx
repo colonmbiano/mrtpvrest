@@ -3,11 +3,13 @@
 import { usePOSStore } from "@/store/usePOSStore";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, SunMoon, ShoppingCart, User, Store, LogOut, ChevronRight, Search, Plus, Minus, X, Trash2, Receipt } from "lucide-react";
+import { Lock, SunMoon, ShoppingCart, User, Store, LogOut, ChevronRight, Search, Plus, Minus, X, Trash2, Receipt, Settings } from "lucide-react";
+import TicketConfigModal from "@/components/modals/TicketConfigModal";
 
 export default function POS_SPA() {
-  const { isAuthenticated, login, theme, setTheme } = usePOSStore();
+  const { isAuthenticated, login, theme, setTheme } = usePOSStore() as any;
   const [mounted, setMounted] = useState(false);
+  const [showTicketConfig, setShowTicketConfig] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -22,9 +24,10 @@ export default function POS_SPA() {
         {!isAuthenticated ? (
           <LoginScreen key="login" />
         ) : (
-          <MainPOS key="pos" />
+          <MainPOS key="pos" onOpenTickets={() => setShowTicketConfig(true)} />
         )}
       </AnimatePresence>
+      <TicketConfigModal isOpen={showTicketConfig} onClose={() => setShowTicketConfig(false)} />
     </div>
   );
 }
@@ -105,7 +108,7 @@ function LoginScreen() {
   );
 }
 
-function MainPOS() {
+function MainPOS({ onOpenTickets }: { onOpenTickets: () => void }) {
   const { logout } = usePOSStore();
   
   return (
@@ -127,6 +130,10 @@ function MainPOS() {
             <User className="w-6 h-6" />
           </button>
         </nav>
+
+        <button onClick={onOpenTickets} className="p-3 rounded-2xl text-tx-mut hover:text-accent hover:bg-accent/10 transition-all">
+          <Settings className="w-6 h-6" />
+        </button>
 
         <button onClick={logout} className="p-3 rounded-2xl text-err/70 hover:text-err hover:bg-err/10 transition-all">
           <LogOut className="w-6 h-6" />

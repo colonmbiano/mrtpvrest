@@ -145,6 +145,38 @@ router.get('/menu', async (req, res) => {
   }
 });
 
+// ── GET /api/store/locations ─────────────────────────────────────────────────
+router.get('/locations', async (req, res) => {
+  const restaurantSlug = req.query.r;
+  if (!restaurantSlug) return res.status(400).json({ error: 'Slug (r) requerido.' });
+
+  try {
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { slug: restaurantSlug },
+      include: {
+        locations: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            address: true,
+            phone: true,
+            businessType: true,
+            autoPromoEnabled: true,
+          }
+        }
+      }
+    });
+
+    if (!restaurant) return res.status(404).json({ error: 'Restaurante no encontrado.' });
+    res.json(restaurant.locations);
+  } catch (e) {
+    console.error('[store] GET /locations error:', e.message);
+    res.status(500).json({ error: 'Error al obtener sucursales.' });
+  }
+});
+
 // ── POST /api/store/orders ───────────────────────────────────────────────────
 router.post('/orders', async (req, res) => {
   const store = await resolveStore(req, res);

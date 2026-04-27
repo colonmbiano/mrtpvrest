@@ -41,6 +41,40 @@ export default function StorefrontClient({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<any>(null);
 
+  // Location logic
+  const [locations, setLocations] = useState<any[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<any>(null);
+  const [loadingLocs, setLoadingLocs] = useState(true);
+
+  useMemo(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API}/api/store/locations?r=${encodeURIComponent(store.slug || '')}`);
+        if (res.ok) {
+          const locs = await res.json();
+          setLocations(locs);
+          
+          if (locs.length === 1) {
+            setSelectedLocation(locs[0]);
+          } else if (locs.length > 1) {
+             // Intentar geolocalización
+             if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                   // Aquí podríamos calcular la distancia real si tuviéramos lat/lng en el schema
+                   // Por ahora seleccionamos la primera o dejamos que el usuario elija
+                   setSelectedLocation(locs[0]);
+                }, () => {
+                   setSelectedLocation(locs[0]);
+                });
+             } else {
+                setSelectedLocation(locs[0]);
+             }
+          }
+        }
+      } catch {} finally { setLoadingLocs(false); }
+    })();
+  }, [store.slug]);
+
   function scrollTo(catId: string) {
     setActiveCat(catId);
     catRefs.current[catId]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -61,6 +95,7 @@ export default function StorefrontClient({
           deliveryAddress,
           orderType: 'DELIVERY',
           paymentMethod: 'CASH',
+          locationId: selectedLocation?.id,
           items: lines.map(l => ({
             menuItemId: l.id,
             quantity: l.quantity,
@@ -122,6 +157,19 @@ export default function StorefrontClient({
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">Abierto ahora</span>
           </div>
+          {locations.length > 1 && (
+            <div className="mt-2">
+              <select 
+                value={selectedLocation?.id} 
+                onChange={(e) => setSelectedLocation(locations.find(l => l.id === e.target.value))}
+                className="bg-gray-100 border-none rounded-lg px-2 py-1 text-[10px] font-bold outline-none cursor-pointer"
+              >
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>Sucursal: {loc.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </header>
 
