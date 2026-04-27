@@ -15,9 +15,8 @@ const VALID_BUSINESS_TYPES = ['RESTAURANT', 'RETAIL', 'BAR', 'CAFE']
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/locations/:id — Detalles de la sucursal (incluye businessType)
-// Requiere autenticación. Sólo la sucursal del restaurante del usuario.
-// ─────────────────────────────────────────────────────────────────────────────
-router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
+// Nota: Se permite acceso sin authenticate para que el TPV cargue config inicial.
+router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
     const location = await prisma.location.findUnique({
