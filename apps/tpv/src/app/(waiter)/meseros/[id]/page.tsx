@@ -123,7 +123,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
           fullWidth 
           size="xl" 
           className="h-14 font-black uppercase tracking-[0.1em] text-sm gap-3 shadow-2xl shadow-iris-glow"
-          onClick={() => console.log("Add items")}
+          onClick={() => router.push(`/meseros/${tableId}/orden`)}
         >
           <Plus size={20} />
           Agregar a la comanda
