@@ -1,12 +1,14 @@
-// Asistente administrativo para el dashboard, basado en Gemini Flash (gratuito
-// dentro de la cuota). Expone runAssistant({ messages, restaurantId, locationId })
-// con 4 herramientas read-only (function calling) que consultan Prisma scoped.
+// Asistente administrativo del dashboard, migrado de Gemini a Groq Cloud.
+// Usa el SDK oficial de OpenAI apuntando a Groq (baseURL https://api.groq.com/openai/v1)
+// con el modelo llama-3.1-8b-instant. Expone runAssistant({ messages, restaurantId, locationId })
+// con 4 herramientas read-only (function calling) que consultan Prisma scoped por restaurante
+// y, cuando aplica, por sucursal.
 
-const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
+const OpenAI = require('openai');
 const { prisma } = require('@mrtpvrest/database');
-const { resolveAiKey } = require('./ai-key.service');
+const { resolveGroqKey } = require('./ai-key.service');
+const { GROQ_BASE_URL, GROQ_MODEL, wrapGroqError } = require('./groq-error');
 
-const MODEL = 'gemini-flash-latest';
 const MAX_ITERATIONS = 6;
 
 const SYSTEM_PROMPT = `Eres el asistente administrativo de MRTPVREST, un SaaS de gestión de restaurantes.
@@ -20,50 +22,75 @@ Reglas:
 - Esta versión es sólo de lectura, no puedes modificar datos.
 - Respuestas concisas (bajo 120 palabras salvo que pidan un resumen extenso).`;
 
-const functionDeclarations = [
+// Las 4 herramientas mapeadas al formato function calling de OpenAI/Groq.
+const tools = [
   {
-    name: 'get_sales_summary',
-    description: 'Devuelve ingresos totales, número de pedidos y ticket promedio del período indicado, para el restaurante actual. Excluye pedidos cancelados.',
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        period: {
-          type: SchemaType.STRING,
-          enum: ['HOY', '7D', '30D', 'AÑO'],
-          description: 'HOY = hoy, 7D = últimos 7 días, 30D = últimos 30 días, AÑO = año en curso.',
+    type: 'function',
+    function: {
+      name: 'get_sales_summary',
+      description: 'Devuelve ingresos totales, número de pedidos y ticket promedio del período indicado, para el restaurante actual. Excluye pedidos cancelados.',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: {
+            type: 'string',
+            enum: ['HOY', '7D', '30D', 'AÑO'],
+            description: 'HOY = hoy, 7D = últimos 7 días, 30D = últimos 30 días, AÑO = año en curso.',
+          },
         },
+        required: ['period'],
+        additionalProperties: false,
       },
-      required: ['period'],
     },
   },
   {
-    name: 'get_top_products',
-    description: 'Lista los productos más vendidos en el período, ordenados por cantidad descendente. Devuelve nombre, cantidad vendida y monto total.',
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        period: {
-          type: SchemaType.STRING,
-          enum: ['HOY', '7D', '30D', 'AÑO'],
-          description: 'Período a consultar.',
+    type: 'function',
+    function: {
+      name: 'get_top_products',
+      description: 'Lista los productos más vendidos en el período, ordenados por cantidad descendente. Devuelve nombre, cantidad vendida y monto total.',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: {
+            type: 'string',
+            enum: ['HOY', '7D', '30D', 'AÑO'],
+            description: 'Período a consultar.',
+          },
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 20,
+            description: 'Cantidad de productos a devolver (1–20, por defecto 5).',
+          },
         },
-        limit: {
-          type: SchemaType.INTEGER,
-          description: 'Cantidad de productos a devolver (1–20, por defecto 5).',
-        },
+        required: ['period'],
+        additionalProperties: false,
       },
-      required: ['period'],
     },
   },
   {
-    name: 'get_inventory_alerts',
-    description: 'Lista ingredientes de la sucursal activa cuyo stock está en o por debajo del stock mínimo. Devuelve nombre, unidad, stock actual y stock mínimo. Requiere sucursal activa.',
-    parameters: { type: SchemaType.OBJECT, properties: {} },
+    type: 'function',
+    function: {
+      name: 'get_inventory_alerts',
+      description: 'Lista ingredientes de la sucursal activa cuyo stock está en o por debajo del stock mínimo. Devuelve nombre, unidad, stock actual y stock mínimo. Requiere sucursal activa.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
+    },
   },
   {
-    name: 'get_active_staff',
-    description: 'Lista empleados con turno activo (EmployeeShift abierto) en la sucursal activa: nombre, rol, mesas y hora de inicio. Requiere sucursal activa.',
-    parameters: { type: SchemaType.OBJECT, properties: {} },
+    type: 'function',
+    function: {
+      name: 'get_active_staff',
+      description: 'Lista empleados con turno activo (EmployeeShift abierto) en la sucursal activa: nombre, rol, mesas y hora de inicio. Requiere sucursal activa.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
+    },
   },
 ];
 
@@ -197,80 +224,100 @@ async function runAssistant({ messages, restaurantId, locationId }) {
     throw err;
   }
 
-  // BYOK: key del cliente, o de la plataforma durante trial, o 402.
-  const { apiKey } = await resolveAiKey({ restaurantId });
+  // BYOK Groq: key del cliente, fallback a la de plataforma durante trial, o 402.
+  const { apiKey } = await resolveGroqKey({ restaurantId });
 
   const contextBlock = await buildContextBlock({ restaurantId, locationId });
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: MODEL,
-    systemInstruction: `${SYSTEM_PROMPT}\n\n${contextBlock}`,
-    tools: [{ functionDeclarations }],
-  });
+  const groq = new OpenAI({ apiKey, baseURL: GROQ_BASE_URL });
 
-  // Traducir historial al formato de Gemini (solo turnos previos — el último
-  // mensaje del usuario se envía con sendMessage).
-  const history = [];
-  for (let i = 0; i < messages.length - 1; i++) {
-    const m = messages[i];
+  // Convertimos el historial al formato OpenAI. La UI envía bloques tipo
+  // Anthropic ([{type:'text', text:'...'}]) o strings; los aplanamos a string
+  // porque Groq/llama no soporta input estructurado tipo Anthropic.
+  const chatMessages = [
+    { role: 'system', content: `${SYSTEM_PROMPT}\n\n${contextBlock}` },
+  ];
+  for (const m of messages) {
     const text = toText(m.content);
     if (!text) continue;
-    history.push({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text }],
+    chatMessages.push({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: text,
     });
   }
 
-  const chat = model.startChat({ history });
-
-  const userText = toText(lastUser.content);
-  let next = userText;
   const toolsUsed = [];
   let finalText = '';
   let usage = null;
 
   try {
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-      const result = await chat.sendMessage(next);
-      const response = result.response;
-      usage = response.usageMetadata || usage;
-      const calls = typeof response.functionCalls === 'function' ? response.functionCalls() : null;
+      const completion = await groq.chat.completions.create({
+        model: GROQ_MODEL,
+        messages: chatMessages,
+        tools,
+        tool_choice: 'auto',
+        temperature: 0.4,
+        max_tokens: 1024,
+      });
 
-      if (!calls || calls.length === 0) {
-        finalText = response.text() || '';
+      usage = completion.usage || usage;
+      const choice = completion.choices?.[0];
+      const msg = choice?.message;
+      if (!msg) {
+        finalText = 'No recibí respuesta del modelo.';
         break;
       }
 
-      const parts = [];
-      for (const call of calls) {
-        toolsUsed.push(call.name);
+      const toolCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+
+      if (toolCalls.length === 0) {
+        finalText = msg.content || '';
+        break;
+      }
+
+      // Persistimos el turno del asistente con sus tool_calls para el siguiente
+      // round-trip; Groq lo exige tal cual viene del modelo.
+      chatMessages.push({
+        role: 'assistant',
+        content: msg.content || '',
+        tool_calls: toolCalls.map((c) => ({
+          id: c.id,
+          type: 'function',
+          function: { name: c.function.name, arguments: c.function.arguments },
+        })),
+      });
+
+      for (const call of toolCalls) {
+        const name = call.function?.name;
+        toolsUsed.push(name);
+        let args = {};
+        try {
+          args = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
+        } catch {
+          args = {};
+        }
         let payload;
         try {
-          payload = await execTool(call.name, call.args || {}, { restaurantId, locationId });
+          payload = await execTool(name, args, { restaurantId, locationId });
         } catch (err) {
           payload = { error: err.message };
         }
-        parts.push({
-          functionResponse: {
-            name: call.name,
-            response: { result: payload },
-          },
+        chatMessages.push({
+          role: 'tool',
+          tool_call_id: call.id,
+          content: JSON.stringify(payload),
         });
       }
-      next = parts;
     }
   } catch (err) {
-    const wrapped = new Error(err.message || 'Error al consultar Gemini');
-    wrapped.code = 'UPSTREAM';
-    wrapped.status = err.status || 500;
-    throw wrapped;
+    throw wrapGroqError(err);
   }
 
   if (!finalText) finalText = 'Se alcanzó el límite de iteraciones del asistente.';
 
-  // Devolver el historial completo en el mismo formato del frontend
-  // (bloques tipo Anthropic) para que la UI pueda mostrar texto + pipeline.
+  // Devolver el historial completo en el formato que espera la UI (bloques
+  // tipo Anthropic) — texto + nombres de herramientas usadas.
   const assistantContent = [{ type: 'text', text: finalText }];
   for (const name of toolsUsed) assistantContent.push({ type: 'tool_use', name });
 
