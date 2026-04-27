@@ -83,7 +83,7 @@ export const useTicketStore = create<TicketState>()((set, get) => ({
 
   getActiveTicket: () => {
     const { tickets, activeIndex } = get();
-    return tickets[activeIndex] ?? tickets[0];
+    return tickets[activeIndex] ?? tickets[0]!;
   },
 
   addTicket: (defaultType = "TAKEOUT") => {
