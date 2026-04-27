@@ -24,7 +24,8 @@ const server = http.createServer(app)
 // en prod solo dominios oficiales + CORS_ORIGINS (extensión por env,
 // separado por coma).
 const PROD_ORIGINS = [
-  /^https:\/\/([a-z0-9-]+\.)?mrtpvrest\.com$/,
+  /^https:\/\/([a-z0-9-]+\.)?mrtpvrest\.com\/?$/,
+  'https://reparto.mrtpvrest.com',
   'https://mrtpvrest-admin.vercel.app',
   'https://mrtpvrest-tpv.vercel.app',
   'https://mrtpvrest-client.vercel.app',
