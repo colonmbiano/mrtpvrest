@@ -37,8 +37,8 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Sucursal no encontrada' })
     }
 
-    // Aislamiento multi-tenant: sólo permitimos leer sucursales del propio restaurante
-    if (req.user.restaurantId && location.restaurantId !== req.user.restaurantId) {
+    // Aislamiento multi-tenant: sólo permitimos leer sucursales del propio restaurante si hay un usuario logueado
+    if (req.user?.restaurantId && location.restaurantId !== req.user.restaurantId) {
       return res.status(403).json({ error: 'Acceso denegado a esta sucursal' })
     }
 
