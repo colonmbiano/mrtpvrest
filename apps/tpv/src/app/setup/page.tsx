@@ -1,7 +1,7 @@
 "use client";
 
 import axios from "axios";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Sun, Moon, Check, ArrowLeft, Lock, Sparkles } from "lucide-react";
 import {
@@ -35,7 +35,7 @@ const PALETTES: { id: Palette; label: string; color: string; sub: string }[] = [
   { id: "orange", label: "Naranja Brand",   color: "#ff5c35", sub: "Cálido · Dinámico"   },
 ];
 
-export default function SetupPage() {
+function SetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const palette = usePOSStore((s) => s.palette);
@@ -384,6 +384,22 @@ export default function SetupPage() {
     </Page>
   );
 }
+
+export default function SetupPage() {
+  return (
+    <Suspense fallback={
+      <div className="fixed inset-0 flex items-center justify-center bg-bg" style={{ background: "var(--bg)" }}>
+        <div className="text-center">
+          <h1 className="text-xl font-black italic animate-pulse" style={{ color: "var(--brand)" }}>MRTPVREST</h1>
+          <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>Cargando configuración...</p>
+        </div>
+      </div>
+    }>
+      <SetupContent />
+    </Suspense>
+  );
+}
+
 
 /* ── Appearance step (palette + mode picker) ─────────────────── */
 
