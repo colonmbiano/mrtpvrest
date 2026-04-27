@@ -458,7 +458,14 @@ export default function TPVPage() {
         notes: (mods || []).map((m: any) => m.name).join(", "),
       });
       fetchOrders();
-      if (selectedOrder?.id === order.id) { const { data } = await api.get(`/api/orders/${order.id}`); setSelectedOrder(data); }
+      if (selectedOrder?.id === order.id) {
+        try {
+          const { data } = await api.get(`/api/orders/${order.id}`);
+          setSelectedOrder(data);
+        } catch (err: any) {
+          if (err.response?.status === 404) setSelectedOrder(null);
+        }
+      }
     } catch (err: any) { alert(err.response?.data?.error || "Error al agregar"); }
   }
 
@@ -562,7 +569,14 @@ export default function TPVPage() {
     try {
       await api.put(`/api/orders/${orderId}/status`, { status });
       fetchOrders();
-      if (selectedOrder?.id === orderId) setSelectedOrder((p: any) => ({ ...p, status }));
+      if (selectedOrder?.id === orderId) {
+        try {
+          const { data } = await api.get(`/api/orders/${orderId}`);
+          setSelectedOrder(data);
+        } catch (err: any) {
+          if (err.response?.status === 404) setSelectedOrder(null);
+        }
+      }
     } catch (err: any) { alert(err.response?.data?.error || "Error"); }
     finally { setUpdatingOrder(null); }
   }

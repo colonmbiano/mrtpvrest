@@ -86,7 +86,10 @@ export function usePOSStore<T = CombinedLegacyState>(
     // ── Auth shim ────────────────────────────────────────────────────
     isAuthenticated: auth.isAuthenticated,
     shiftOpen:       !!auth.activeShift,
-    login:           async () => false, // usa useAuthStore.loginWithPin
+    login:           async (pin: string) => {
+      const res = await auth.loginWithPin(pin);
+      return res.success;
+    },
     logout:          auth.logout,
     openShift:       () => {},
     closeShift:      () => auth.setActiveShift(null),
