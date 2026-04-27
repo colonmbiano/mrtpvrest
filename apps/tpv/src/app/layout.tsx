@@ -35,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" data-theme="green" data-mode="dark" suppressHydrationWarning>
+    <html lang="es" data-theme="orange" data-mode="dark" suppressHydrationWarning>
       <body
         className={`${syne.variable} ${dmSans.variable} ${dmMono.variable} antialiased`}
       >
