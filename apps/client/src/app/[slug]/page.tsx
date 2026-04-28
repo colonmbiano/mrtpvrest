@@ -1,12 +1,13 @@
 import { notFound } from 'next/navigation';
+import { MochiTheme } from '@/components/themes/MochiTheme';
+import { BentoTheme } from '@/components/themes/BentoTheme';
+import { PocketTheme } from '@/components/themes/PocketTheme';
 import StorefrontClient from './StorefrontClient';
 
 const API =
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.API_URL ||
-  'http://localhost:3001'; // Cambiado a 3001 que es el backend
-
-type ThemeConfig = { theme?: string; primaryColor?: string } | null;
+  'http://localhost:3001';
 
 type StoreInfo = {
   id: string;
@@ -15,14 +16,17 @@ type StoreInfo = {
   logo: string | null;
   hasWebStore: boolean;
   whatsappNumber: string | null;
-  themeConfig: ThemeConfig;
+  themeConfig: {
+    theme?: string;
+    primaryColor?: string;
+  } | null;
 };
 
 async function fetchStore(slug: string): Promise<StoreInfo | null> {
   try {
     const res = await fetch(
       `${API}/api/store/info?r=${encodeURIComponent(slug)}`,
-      { next: { revalidate: 0 } } // Sin caché para pruebas
+      { next: { revalidate: 0 } }
     );
     if (!res.ok) return null;
     return (await res.json()) as StoreInfo;
@@ -44,33 +48,62 @@ async function fetchMenu(slug: string) {
   }
 }
 
+async function fetchLocations(slug: string) {
+  try {
+    const res = await fetch(
+      `${API}/api/store/locations?r=${encodeURIComponent(slug)}`,
+      { next: { revalidate: 0 } }
+    );
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
 export default async function StorefrontPage({
   params,
 }: {
   params: { slug: string };
 }) {
-  const store = await fetchStore(params.slug);
+  const [store, menu, locations] = await Promise.all([
+    fetchStore(params.slug),
+    fetchMenu(params.slug),
+    fetchLocations(params.slug),
+  ]);
+
   if (!store || !store.hasWebStore) notFound();
 
-  const menu = await fetchMenu(params.slug);
   const primary = store.themeConfig?.primaryColor || '#ff5c35';
+  const theme = store.themeConfig?.theme || 'DEFAULT';
+
+  const data = { info: store, menu, locations };
 
   return (
     <div
-      style={{ ['--primary' as string]: primary } as React.CSSProperties}
-      className="min-h-screen bg-gray-50"
+      style={{ ['--color-primary' as string]: primary } as React.CSSProperties}
+      className="min-h-screen bg-white"
     >
-      <StorefrontClient
-        store={{
-          id: store.id,
-          name: store.name,
-          logo: store.logo,
-          whatsappNumber: store.whatsappNumber,
-          primaryColor: primary,
-          slug: store.slug,
-        }}
-        categories={menu.categories || []}
-      />
+      {theme === 'MOCHI' && <MochiTheme data={data} />}
+      {theme === 'BENTO' && <BentoTheme data={data} />}
+      {theme === 'POCKET' && <PocketTheme data={data} />}
+      
+      {/* Fallback to legacy client if no modern theme is selected or during transition */}
+      {theme === 'DEFAULT' && (
+        <div style={{ ['--primary' as string]: primary } as React.CSSProperties}>
+          <StorefrontClient
+            store={{
+              id: store.id,
+              name: store.name,
+              logo: store.logo,
+              whatsappNumber: store.whatsappNumber,
+              primaryColor: primary,
+              slug: store.slug,
+            }}
+            categories={menu.categories || []}
+          />
+        </div>
+      )}
     </div>
   );
 }
