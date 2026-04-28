@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getApiUrl } from "@/lib/config";
-
-const API = getApiUrl();
+import api from "@/lib/api";
 
 interface ChecklistState {
   hasLogo:       boolean;
@@ -32,10 +30,10 @@ export default function OnboardingChecklist() {
     if (!token) return;
 
     Promise.all([
-      fetch(`${API}/api/tenant/me`,      { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
-      fetch(`${API}/api/menu/items`,     { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : []),
-      fetch(`${API}/api/employees`,      { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : []),
-      fetch(`${API}/api/orders/admin`,   { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : []),
+      api.get(`/api/tenant/me`).then(r => r.data).catch(() => null),
+      api.get(`/api/menu/items`).then(r => r.data).catch(() => []),
+      api.get(`/api/employees`).then(r => r.data).catch(() => []),
+      api.get(`/api/orders/admin`).then(r => r.data).catch(() => []),
     ]).then(([tenant, menuItems, employees, orders]) => {
       setState({
         hasLogo:       !!(tenant?.logoUrl),

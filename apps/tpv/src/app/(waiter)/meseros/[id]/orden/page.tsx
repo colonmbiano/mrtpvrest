@@ -95,7 +95,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
     if (cart.length === 0) return;
     setSubmitting(true);
     try {
-      await api.post("/api/orders", {
+      await api.post("/api/orders/tpv", {
         type: "DINE_IN",
         tableId,
         items: cart.map((l) => ({
