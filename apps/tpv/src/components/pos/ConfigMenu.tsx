@@ -1,8 +1,20 @@
 "use client";
 import React from "react";
+import Link from "next/link";
 import { X, User, Clock, Printer, Palette, LogOut, LayoutGrid, Monitor } from "lucide-react";
 import Button from "@/components/ui/Button";
-import Chip from "@/components/ui/Chip";
+import { useAuthStore, type EmployeeRole } from "@/store/authStore";
+
+const ROLE_LABEL: Record<EmployeeRole, string> = {
+  OWNER: "Propietario",
+  ADMIN: "Administrador",
+  MANAGER: "Gerente",
+  CASHIER: "Cajero",
+  WAITER: "Mesero",
+  KITCHEN: "Cocina",
+  COOK: "Cocinero",
+  DELIVERY: "Repartidor",
+};
 
 interface ConfigMenuProps {
   isOpen: boolean;
@@ -23,7 +35,19 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
   isDark,
   onToggleMode,
 }) => {
+  const employee = useAuthStore((s) => s.employee);
+
   if (!isOpen) return null;
+
+  const initials =
+    (employee?.name ?? "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? "")
+      .join("") || "??";
+
+  const roleLabel = employee?.role ? ROLE_LABEL[employee.role] : "Sin sesión";
 
   const themes = [
     { id: "green",  label: "Esmeralda", color: "#10b981" },
@@ -58,10 +82,10 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
           <section className="space-y-4">
             <span className="eyebrow">SESIÓN ACTUAL</span>
             <div className="flex items-center gap-4 bg-surf-2 p-4 rounded-xl border border-bd">
-              <div className="w-12 h-12 rounded-full bg-iris-soft text-iris-500 flex items-center justify-center font-black text-lg">LP</div>
+              <div className="w-12 h-12 rounded-full bg-iris-soft text-iris-500 flex items-center justify-center font-black text-lg">{initials}</div>
               <div className="flex flex-col">
-                <span className="text-[14px] font-bold">Lucía Pérez</span>
-                <span className="text-[11px] text-tx-mut uppercase font-bold tracking-tight">Administradora</span>
+                <span className="text-[14px] font-bold">{employee?.name ?? "Sin sesión"}</span>
+                <span className="text-[11px] text-tx-mut uppercase font-bold tracking-tight">{roleLabel}</span>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-2">
@@ -78,13 +102,23 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
           <section className="space-y-4">
             <span className="eyebrow">OPERACIONES</span>
             <div className="grid grid-cols-1 gap-2">
-              <Button variant="soft" className="justify-start gap-3">
-                <Monitor size={16} /> Monitoreo KDS
-              </Button>
-              <Button variant="soft" className="justify-start gap-3">
-                <LayoutGrid size={16} /> Salones y Mesas
-              </Button>
-              <Button variant="soft" className="justify-start gap-3">
+              <Link href="/kds" onClick={onClose} className="block">
+                <Button variant="soft" fullWidth className="justify-start gap-3">
+                  <Monitor size={16} /> Monitoreo KDS
+                </Button>
+              </Link>
+              <Link href="/meseros" onClick={onClose} className="block">
+                <Button variant="soft" fullWidth className="justify-start gap-3">
+                  <LayoutGrid size={16} /> Salones y Mesas
+                </Button>
+              </Link>
+              {/* TODO: ruta /configuracion/impresoras aún no existe en apps/tpv/src/app — habilitar cuando esté lista */}
+              <Button
+                variant="soft"
+                className="justify-start gap-3 opacity-60 cursor-not-allowed"
+                disabled
+                title="Próximamente"
+              >
                 <Printer size={16} /> Configurar impresoras
               </Button>
             </div>
