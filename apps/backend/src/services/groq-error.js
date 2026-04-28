@@ -2,7 +2,7 @@
 // Si Groq devuelve 429 o 5xx (saturación / fallo upstream), exponemos un error
 // 503 al cliente con un mensaje en español.
 
-const GROQ_BUSY_MESSAGE = 'El motor de respuesta rápida está saturado, intenta de nuevo en unos segundos';
+const GROQ_BUSY_MESSAGE = 'Motor de respuesta rápida saturado';
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 const GROQ_MODEL = 'llama-3.1-8b-instant';
 

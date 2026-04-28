@@ -4,7 +4,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const router = require('express').Router()
-const { GoogleGenerativeAI } = require('@google/generative-ai')
+const OpenAI = require('openai')
+const { GROQ_BASE_URL, GROQ_MODEL, wrapGroqError } = require('../services/groq-error')
 const prisma = require('@mrtpvrest/database').prisma
 const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware')
 
@@ -88,63 +89,46 @@ router.post('/chat', async (req, res) => {
   }
 
   // El onboarding es un flujo de plataforma: siempre usa la key de plataforma.
-  // El tenant recién registrado aún no tiene key propia ni tiene sentido pedírsela.
-  const apiKey = process.env.GOOGLE_AI_API_KEY
+  const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) {
-    console.error('GOOGLE_AI_API_KEY no está configurada en el servidor')
+    console.error('GROQ_API_KEY no está configurada en el servidor')
     return res.status(503).json({ error: 'El servicio de IA no está disponible en este momento. Contacta soporte.' })
   }
 
   let aiJson
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.0-flash",
-      systemInstruction: SYSTEM_PROMPT
+    const groq = new OpenAI({ apiKey, baseURL: GROQ_BASE_URL });
+
+    const chatMessages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...history.map(h => ({
+        role: h.role === 'assistant' ? 'assistant' : 'user',
+        content: h.content
+      })),
+      { role: 'user', content: message }
+    ];
+
+    const completion = await groq.chat.completions.create({
+      model: GROQ_MODEL,
+      messages: chatMessages,
+      temperature: 0.7,
+      max_tokens: 1000,
+      response_format: { type: 'json_object' }
     });
 
-    // El frontend a veces incluye el mensaje actual al final del historial.
-    // Esto causa que Gemini reciba 2 mensajes de usuario consecutivos y crashee.
-    let cleanHistory = [...history];
-    if (
-      cleanHistory.length > 0 && 
-      cleanHistory[cleanHistory.length - 1].role === 'user' && 
-      cleanHistory[cleanHistory.length - 1].content === message
-    ) {
-      cleanHistory.pop();
-    }
-
-    const formattedHistory = cleanHistory.map(h => ({
-      role: h.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: h.content }]
-    }));
-
-    const chat = model.startChat({
-      history: formattedHistory,
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 1000,
-      }
-    });
-
-    const result = await chat.sendMessage([{ text: message }]);
-    const rawText = result.response.text();
+    const rawText = completion.choices[0]?.message?.content || '{}';
 
     try {
       aiJson = JSON.parse(rawText)
     } catch {
-      // Si la IA no devolvió JSON puro, intentamos extraerlo
       const match = rawText.match(/\{[\s\S]*\}/)
       if (!match) throw new Error('La IA no devolvió JSON válido')
       aiJson = JSON.parse(match[0])
     }
   } catch (err) {
-    console.error('Error llamando Gemini API (onboarding):', err.message)
-    const is429 = err.message?.includes('429') || err.message?.includes('Too Many Requests') || err.message?.includes('quota')
-    if (is429) {
-      return res.status(503).json({ error: 'El servicio de IA está temporalmente no disponible por límite de cuota. Intenta en unos minutos.' })
-    }
-    return res.status(502).json({ error: `Error de Google IA: ${err.message}` })
+    console.error('Error llamando Groq API (onboarding):', err.message)
+    const wrapped = wrapGroqError(err);
+    return res.status(wrapped.status || 502).json({ error: wrapped.message })
   }
 
   // ── Persistir cuando el onboarding está completo ──────────────────────────

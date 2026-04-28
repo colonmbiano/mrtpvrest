@@ -5,7 +5,15 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"],
-      "inputs": ["!apps/delivery/**", "!apps/client/**", "!apps/landing/**"]
+      "inputs": ["!apps/delivery/**", "!apps/client/**", "!apps/landing/**"],
+      "env": [
+        "GROQ_API_KEY",
+        "RESEND_API_KEY",
+        "STRIPE_SECRET_KEY",
+        "AI_ENCRYPTION_KEY",
+        "JWT_SECRET",
+        "NEXT_PUBLIC_API_URL"
+      ]
     },
     "dev": {
       "cache": false,

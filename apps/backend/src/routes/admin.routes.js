@@ -402,13 +402,19 @@ router.post('/ai-key', authenticate, requireTenantAccess, requireAdmin, async (r
     }
     const trimmed = apiKey.trim();
 
-    // Validar contra Gemini con una llamada trivial
+    // Validar contra Groq con una llamada trivial
     try {
-      const probe = new GoogleGenerativeAI(trimmed).getGenerativeModel({ model: 'gemini-flash-latest' });
-      const result = await probe.generateContent('ping');
-      if (!result?.response) throw new Error('Respuesta vacía de Gemini');
+      const { GROQ_BASE_URL, GROQ_MODEL } = require('../services/groq-error');
+      const OpenAI = require('openai');
+      const probe = new OpenAI({ apiKey: trimmed, baseURL: GROQ_BASE_URL });
+      const result = await probe.chat.completions.create({
+        model: GROQ_MODEL,
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 5,
+      });
+      if (!result?.choices?.length) throw new Error('Respuesta vacía de Groq');
     } catch (probeErr) {
-      const msg = probeErr?.message || 'La API key no fue aceptada por Google AI Studio.';
+      const msg = probeErr?.message || 'La API key no fue aceptada por Groq Cloud.';
       return res.status(422).json({ error: `No pude validar la API key: ${msg}`, code: 'KEY_INVALID' });
     }
 
