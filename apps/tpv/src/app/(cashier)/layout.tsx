@@ -11,12 +11,15 @@ import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useRouter } from "next/navigation";
 
 import SidebarTicket from "@/components/pos/SidebarTicket";
+import { useThemeStore } from "@/store/themeStore";
 
 export default function CashierLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [showMenu, setShowMenu] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
   const [pinInput, setPinInput] = useState("");
+
+  const { palette, mode, setPalette, toggleMode } = useThemeStore();
 
   const { 
     isLocked, 
@@ -62,10 +65,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         isOpen={showMenu} 
         onClose={() => setShowMenu(false)}
         onLogout={logout}
-        currentTheme="green"
-        onThemeChange={(t) => console.log("Theme:", t)}
-        isDark={true}
-        onToggleMode={() => console.log("Toggle Mode")}
+        currentTheme={palette}
+        onThemeChange={setPalette}
+        isDark={mode === "dark"}
+        onToggleMode={toggleMode}
       />
 
       <OrdersDrawer 
