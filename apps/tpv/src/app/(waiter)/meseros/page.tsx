@@ -4,6 +4,7 @@ import { LayoutGrid, LayoutList } from "lucide-react";
 import Chip from "@/components/ui/Chip";
 import Link from "next/link";
 import api from "@/lib/api";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { LogOut } from "lucide-react";
 
