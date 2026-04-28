@@ -83,9 +83,3 @@ Solución de problemas (rápido)
 - Puertos en uso: verificar que 3002/3005/3006 están libres o cambiar en package.json de cada app.
 - Dependencias workspace no resueltas: ejecutar `pnpm install --filter <package>` o `pnpm -w install`.
 
-Contacto y siguientes pasos
-
-- Para añadir documentación de variables de entorno o diagramas de arquitectura, proporcionar .env.example o pedir que genere un diagrama basado en los flujos de backend.
-
----
-Este README es una guía rápida para desarrolladores. ¿Deseas que genere un archivo .env.example basado en el código o un diagrama de arquitectura? 
