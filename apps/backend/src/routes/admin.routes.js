@@ -54,7 +54,7 @@ router.put('/global-config', authenticate, requireSuperAdmin, async (req, res) =
 
 router.get('/config', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
     const [config, restaurant] = await Promise.all([
       prisma.restaurantConfig.findUnique({ where: { restaurantId } }),
@@ -74,7 +74,7 @@ router.get('/config', authenticate, requireTenantAccess, requireAdmin, async (re
 
 router.put('/brand', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
     const { name, logoUrl } = req.body;
     const data = {};
@@ -91,7 +91,7 @@ router.put('/brand', authenticate, requireTenantAccess, requireAdmin, async (req
 
 router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const restaurantId = req.user.restaurantId;
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
     const VALID_FIELDS = [
       'phone','whatsappNumber','address','deliveryFee','freeDeliveryFrom',
       'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
@@ -113,7 +113,8 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
 
 router.get('/locations', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const locations = await prisma.location.findMany({ where: { restaurantId: req.user.restaurantId } });
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const locations = await prisma.location.findMany({ where: { restaurantId } });
     res.json(locations);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -121,8 +122,9 @@ router.get('/locations', authenticate, requireTenantAccess, requireAdmin, async 
 router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name, slug, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount } = req.body;
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
     const restaurant = await prisma.restaurant.findUnique({
-      where: { id: req.user.restaurantId },
+      where: { id: restaurantId },
       include: { _count: { select: { locations: true } } }
     });
     if (restaurant._count.locations >= restaurant.maxLocations) {
@@ -131,7 +133,7 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
     // Tomamos businessName del restaurant padre — nunca usar mocks.
     const location = await prisma.location.create({
       data: {
-        restaurantId: req.user.restaurantId,
+        restaurantId,
         name,
         slug: slug.toLowerCase(),
         address,
@@ -149,8 +151,9 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
 router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount } = req.body;
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
     const location = await prisma.location.findUnique({ where: { id: req.params.id } });
-    if (!location || location.restaurantId !== req.user.restaurantId)
+    if (!location || location.restaurantId !== restaurantId)
       return res.status(404).json({ error: 'Sucursal no encontrada' });
     const updated = await prisma.location.update({
       where: { id: req.params.id },
@@ -169,8 +172,9 @@ router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, as
 
 router.delete('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
     const location = await prisma.location.findUnique({ where: { id: req.params.id } });
-    if (!location || location.restaurantId !== req.user.restaurantId)
+    if (!location || location.restaurantId !== restaurantId)
       return res.status(404).json({ error: 'Sucursal no encontrada' });
     await prisma.location.delete({ where: { id: req.params.id } });
     res.json({ ok: true });

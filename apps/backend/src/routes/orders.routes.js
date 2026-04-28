@@ -46,7 +46,7 @@ router.get('/admin', authenticate, requireTenantAccess, requireAdmin, async (req
 
     const orders = await prisma.order.findMany({
       where: {
-        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId,
+        restaurantId: req.restaurantId || req.user?.restaurantId,
         locationId: req.locationId
       },
       orderBy: { createdAt: 'desc' },
@@ -65,7 +65,7 @@ router.get('/admin', authenticate, requireTenantAccess, requireAdmin, async (req
 router.get('/:id', async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
-      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
+      where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
       include: {
         user: { select: { name: true, phone: true, email: true } },
         items: { include: { menuItem: true } },
@@ -317,7 +317,7 @@ async function releaseTableIfDineIn(orderId) {
 router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const order = await prisma.order.update({
-      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
+      where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
       data: { status: 'CONFIRMED', paidAt: new Date(), paymentStatus: 'PAID' },
       include: { user: true }
     });
@@ -329,7 +329,7 @@ router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireAd
 router.post('/:id/print-bill', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
-      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
+      where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
       include: { items: { include: { menuItem: true } } }
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
@@ -347,7 +347,7 @@ router.post('/:id/print-bill', authenticate, requireTenantAccess, requireAdmin, 
 router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, res) => {
   try {
     const order = await prisma.order.update({
-      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
+      where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
       data: {
         cashCollected: true,
         cashCollectedAt: new Date(),

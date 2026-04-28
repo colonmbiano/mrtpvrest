@@ -91,7 +91,9 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
   const path = usePathname();
   const [user, setUser]             = useState<any>(null);
   const [locations, setLocations]   = useState<any[]>([]);
+  const [brands, setBrands]         = useState<any[]>([]);
   const [activeLocationId, setActiveLocationId] = useState<string>("");
+  const [activeBrandId, setActiveBrandId]       = useState<string>("");
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
   const [imgError, setImgError]     = useState(false);
   const [open, setOpen]             = useState<Record<string, boolean>>({});
@@ -101,10 +103,27 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
     const currentUser = getUser();
     setUser(currentUser);
     if (currentUser) {
-      // Desacoplamos los dos requests: si uno falla (p. ej. /api/admin/config
-      // tras una migración pendiente), el otro debe seguir funcionando. Antes
-      // un Promise.all rechazaba ambos y el selector quedaba en "Sin sucursales"
-      // aunque /api/admin/locations respondiera OK.
+      // 1. Cargar contexto de Tenant y sus marcas
+      (async () => {
+        try {
+          const { data: tenant } = await api.get("/api/tenant/me");
+          const restaurantList = tenant.restaurants || [];
+          setBrands(restaurantList);
+          
+          const currentBrandId = localStorage.getItem("restaurantId");
+          if (currentBrandId && restaurantList.some((r: any) => r.id === currentBrandId)) {
+            setActiveBrandId(currentBrandId);
+          } else if (restaurantList.length > 0) {
+            const firstId = restaurantList[0].id;
+            localStorage.setItem("restaurantId", firstId);
+            setActiveBrandId(firstId);
+          }
+        } catch {
+          setBrands([]);
+        }
+      })();
+
+      // 2. Cargar sucursales de la marca activa
       (async () => {
         try {
           const { data } = await api.get("/api/admin/locations");
@@ -123,12 +142,14 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
           setIsLoadingLocations(false);
         }
       })();
+
+      // 3. Cargar configuración visual de la marca
       (async () => {
         try {
           const { data } = await api.get("/api/admin/config");
           setBrand({ name: data.name || "", logoUrl: data.logoUrl || null });
         } catch {
-          /* sin config todavía: se dejan los defaults del sidebar */
+          /* sin config todavía */
         }
       })();
     } else {
@@ -136,6 +157,13 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
     }
     setOpen(getDefaultOpen());
   }, [path]);
+
+  const handleBrandChange = (id: string) => {
+    localStorage.setItem("restaurantId", id);
+    localStorage.removeItem("locationId"); // Forzar recarga de sucursales de la nueva marca
+    setActiveBrandId(id);
+    window.location.reload();
+  };
 
   const handleLocationChange = (id: string) => {
     localStorage.setItem("locationId", id);
@@ -188,6 +216,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
             <div className="text-[9px] font-bold tracking-widest uppercase" style={{ color: "var(--muted)" }}>
               Control Panel
             </div>
+            </div>
           </div>
           {onClose && (
             <button
@@ -205,8 +234,34 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
           )}
         </div>
 
+        {/* Brand Selector (Solo si tiene > 1 marca) */}
+        {brands.length > 1 && (
+          <div className="px-4 mb-4">
+            <div className="text-[9px] font-bold uppercase tracking-widest mb-1.5" style={{ color: "var(--muted)" }}>
+              Marca / Restaurante
+            </div>
+            <div className="relative">
+              <select
+                value={activeBrandId}
+                onChange={e => handleBrandChange(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-xs font-bold outline-none appearance-none cursor-pointer"
+                style={{
+                  background: "var(--surf2)",
+                  border: "1px solid var(--brand-primary, #7c3aed)44",
+                  color: "var(--text)",
+                }}
+              >
+                {brands.map(b => (
+                  <option key={b.id} value={b.id}>🏠 {b.name}</option>
+                ))}
+              </select>
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--brand-primary)", fontSize: 8 }}>▼</div>
+            </div>
+          </div>
+        )}
+
         {/* Sucursal selector */}
-        <div>
+        <div className="px-4">
           <div className="text-[9px] font-bold uppercase tracking-widest mb-1.5" style={{ color: "var(--muted)" }}>
             Sucursal activa
           </div>
@@ -224,7 +279,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
               {isLoadingLocations && <option>Cargando...</option>}
               {!isLoadingLocations && locations.length === 0 && <option>Sin sucursales</option>}
               {locations.map(loc => (
-                <option key={loc.id} value={loc.id}>{loc.name}</option>
+                <option key={loc.id} value={loc.id}>📍 {loc.name}</option>
               ))}
             </select>
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)", fontSize: 8 }}>▼</div>
