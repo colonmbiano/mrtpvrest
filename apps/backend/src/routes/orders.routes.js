@@ -11,7 +11,11 @@ async function discountInventory(prisma, items, orderId, restaurantId, locationI
         },
       });
       for (const r of recipe) {
-        const needed = r.quantity * item.quantity;
+        // Master Schema: Aplicar wastagePercent
+        // Cantidad = (Qty Receta) * (Factor Merma) * (Qty Item Vendido)
+        const wastageFactor = 1 + (r.wastagePercent / 100);
+        const needed = r.quantity * wastageFactor * item.quantity;
+        
         await prisma.ingredient.update({
           where: { id: r.ingredientId, locationId },
           data: { stock: { decrement: needed } },
