@@ -297,9 +297,8 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
             <span>Añadir sucursal</span>
           </Link>
         </div>
-      </div>
 
-      {/* ── Navigation ── */}
+        {/* ── Navigation ── */}
       <nav className="flex-1 overflow-y-auto py-2 px-2" style={{ scrollbarWidth: "none" }}>
         {SECTIONS.map(section => {
           const isOpen = !!open[section.key];
