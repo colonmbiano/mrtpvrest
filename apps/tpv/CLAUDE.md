@@ -9,10 +9,11 @@ Deploy: `tpv.masterburguers.com` (Vercel, repo `master-burguers-tpv`)
 
 | | |
 |---|---|
-| Framework | React + Vite |
+| Framework | Next.js 14 (App Router) |
 | Auth | PIN de empleado (tabla `Employee`) |
-| API | Backend en Railway vía env `VITE_API_URL` |
+| API | Backend en Railway vía env `NEXT_PUBLIC_API_URL` |
 | Impresión | WiFi  via printer-agent local |
+| APK Android | Capacitor (`pnpm run build:apk`) |
 
 ---
 
@@ -72,7 +73,7 @@ Deploy: `tpv.masterburguers.com` (Vercel, repo `master-burguers-tpv`)
 ## Variables de Entorno
 
 ```env
-VITE_API_URL=https://<backend-railway-url>
+NEXT_PUBLIC_API_URL=https://<backend-railway-url>
 ```
 
 ---
@@ -81,13 +82,16 @@ VITE_API_URL=https://<backend-railway-url>
 
 ```bash
 # Desarrollo local
-pnpm --filter tpv dev
+pnpm --filter @mrtpvrest/tpv dev
 
 # Build
-pnpm --filter tpv build
+pnpm --filter @mrtpvrest/tpv build
 
-# Deploy (automático al hacer push a main en Vercel)
-git add . && git commit -m "mensaje" && git push
+# Build APK Android (Capacitor)
+pnpm --filter @mrtpvrest/tpv run build:apk
+
+# Deploy (automático al hacer push a master en Vercel)
+git push
 ```
 
 ---
