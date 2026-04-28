@@ -44,7 +44,7 @@ export default function SidebarTicket() {
         total: total,
       };
 
-      await api.post("/api/orders", orderData);
+      await api.post("/api/orders/tpv", orderData);
       toast.success("Pedido enviado a cocina");
       clearActiveItems();
     } catch (error: any) {
