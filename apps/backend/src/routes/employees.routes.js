@@ -51,7 +51,7 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
 
     // PIN único dentro de la marca — comparar contra hashes existentes
     const sameRestaurantEmps = await prisma.employee.findMany({
-      where: { location: { restaurantId: req.user?.restaurantId || req.restaurantId } },
+      where: { location: { restaurantId: req.restaurantId || req.user?.restaurantId } },
       select: { pin: true }
     });
     for (const e of sameRestaurantEmps) {
