@@ -10,7 +10,14 @@
       "Bash(git log *)",
       "Bash(node scripts/health-check.js)",
       "Bash(pnpm list *)",
-      "Skill(update-config)"
+      "Skill(update-config)",
+      "Bash(rtk hook *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(rtk diff *)",
+      "Bash(rtk prisma *)",
+      "Bash(rtk npx *)",
+      "Bash(pnpm --filter backend exec prisma validate)",
+      "Bash(pnpm --filter @mrtpvrest/database exec prisma validate)"
     ]
   }
 }
