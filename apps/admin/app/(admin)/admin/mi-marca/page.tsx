@@ -208,6 +208,7 @@ export default function BrandConfigPage() {
     whatsappNumber: "",
     deliveryFee: 0,
     estimatedDelivery: 40,
+    storefrontTheme: "MOCHI"
   });
 
   useEffect(() => {
@@ -319,6 +320,32 @@ export default function BrandConfigPage() {
             <div>
               <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Dirección Principal</label>
               <input type="text" value={config.address} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, address: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-3 block tracking-widest">Estilo de Tienda Online</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {[
+                  { id: "MOCHI", name: "Mochi", emoji: "🌸", desc: "Minimalista Kawaii" },
+                  { id: "BENTO", name: "Bento", emoji: "⚡", desc: "Moderno Asimétrico" },
+                  { id: "POCKET", name: "Pocket", emoji: "📱", desc: "App-First / Pocket" }
+                ].map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setConfig(p => ({ ...p, storefrontTheme: t.id }))}
+                    className={`p-4 rounded-3xl border-2 transition-all text-left group ${
+                      config.storefrontTheme === t.id 
+                        ? "border-orange-500 bg-orange-500/10" 
+                        : "border-white/5 bg-black hover:border-white/20"
+                    }`}
+                  >
+                    <span className="text-2xl mb-2 block">{t.emoji}</span>
+                    <p className="font-black text-sm uppercase tracking-tight">{t.name}</p>
+                    <p className="text-[10px] text-gray-500 font-bold group-hover:text-gray-400">{t.desc}</p>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
