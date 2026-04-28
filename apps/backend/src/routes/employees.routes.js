@@ -29,7 +29,7 @@ router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res
 // GET un empleado
 router.get('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const emp = await prisma.employee.findUnique({
+    const emp = await prisma.employee.findFirst({
       where: { id: req.params.id, locationId: req.locationId },
       include: { shifts: { orderBy: { startAt: 'desc' }, take: 30 } }
     });
@@ -91,7 +91,7 @@ router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, 
       canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout } = req.body;
 
     // 1. Verificar que el empleado exista en esta sucursal
-    const existing = await prisma.employee.findUnique({
+    const existing = await prisma.employee.findFirst({
       where: { id: req.params.id, locationId: req.locationId }
     });
     if (!existing) return res.status(404).json({ error: 'Empleado no encontrado' });
@@ -138,7 +138,7 @@ router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, 
 // DELETE eliminar empleado
 router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const emp = await prisma.employee.findUnique({
+    const emp = await prisma.employee.findFirst({
       where: { id: req.params.id, locationId: req.locationId }
     });
     if (!emp) return res.status(404).json({ error: 'Empleado no encontrado en esta sucursal' });
