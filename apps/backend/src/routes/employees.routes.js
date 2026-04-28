@@ -44,7 +44,11 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
     const { name, phone, pin, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays,
-      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout } = req.body;
+      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout,
+      locationId: bodyLocationId } = req.body;
+
+    const locationId = req.locationId || bodyLocationId;
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
     if (!name || !pin) return res.status(400).json({ error: 'Nombre y PIN requeridos' });
     if (!/^\d{4,6}$/.test(pin)) return res.status(400).json({ error: 'El PIN debe ser numérico de 4 a 6 dígitos' });

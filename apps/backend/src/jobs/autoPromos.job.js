@@ -1,6 +1,8 @@
 const { prisma } = require('@mrtpvrest/database');
 const cron = require('node-cron');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const OpenAI = require('openai');
+const { resolveGroqKey } = require('../services/ai-key.service');
+const { GROQ_BASE_URL, GROQ_MODEL } = require('../services/groq-error');
 
 /**
  * Motor de Promociones Automáticas con IA
@@ -27,14 +29,6 @@ async function runAutoPromos() {
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    // AI Config
-    const apiKey = process.env.GOOGLE_AI_API_KEY;
-    let aiModel = null;
-    if (apiKey) {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-8b' });
-    }
 
     for (const location of locations) {
       console.log(`🤖 Analizando sucursal: ${location.name} (Threshold: ${location.autoPromoThreshold}, Discount: ${location.autoPromoDiscount}%)`);
@@ -91,12 +85,22 @@ async function runAutoPromos() {
 
         let aiDescription = item.description;
 
-        // Opcional: Usar Gemini para generar una descripción llamativa de promoción
-        if (aiModel && !item.isPromo) {
+        // Opcional: Usar Groq para generar una descripción llamativa de promoción
+        if (!item.isPromo) {
           try {
+            const { apiKey } = await resolveGroqKey({ restaurantId: location.restaurantId });
+            const groq = new OpenAI({ apiKey, baseURL: GROQ_BASE_URL });
+            
             const prompt = `Eres un experto en marketing de restaurantes. El platillo "${item.name}" (Descripción original: "${item.description || 'Sin descripción'}") no se está vendiendo bien. Hemos aplicado un descuento del ${location.autoPromoDiscount}%. Escribe una frase corta (máximo 15 palabras) muy llamativa y apetitosa para promocionar este platillo hoy. No uses comillas.`;
-            const result = await aiModel.generateContent(prompt);
-            const aiText = result.response.text().trim();
+            
+            const completion = await groq.chat.completions.create({
+              model: GROQ_MODEL,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.8,
+              max_tokens: 60
+            });
+
+            const aiText = completion.choices[0]?.message?.content?.trim();
             if (aiText) aiDescription = aiText;
           } catch (aiErr) {
             console.error(`   - Error AI para ${item.name}: ${aiErr.message}`);
