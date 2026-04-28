@@ -8,6 +8,7 @@ const config: Config = {
   ],
   darkMode: ["selector", '[data-mode="dark"]'],
   theme: {
+    extend: {
       colors: {
         // Design Tokens (Handoff Montana)
         surf: {
@@ -22,10 +23,12 @@ const config: Config = {
           sec: "var(--text-secondary)",
           mut: "var(--text-muted)",
           dis: "var(--text-disabled)",
+          main: "var(--text-primary)",
         },
         bd: {
           DEFAULT: "var(--border)",
           strong: "var(--border-strong)",
+          main: "var(--border)",
         },
         iris: {
           500: "var(--brand)",
@@ -66,10 +69,6 @@ const config: Config = {
       },
     },
   },
-  /* safelist: [
-    { pattern: /grid-cols-(3|4|5|6)/ },
-    { pattern: /text-(xs|sm|base|lg)/ },
-  ], */
   plugins: [],
 };
 export default config;
