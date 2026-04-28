@@ -10,7 +10,7 @@ const EXPENSE_CATEGORIES = [
 ];
 
 interface Props {
-  employee: { id: string; name: string; role: string };
+  employee: { id: string; name: string };
   onClose: () => void;
 }
 
@@ -155,8 +155,6 @@ export default function ShiftModal({ employee, onClose }: Props) {
   }
 
   const isClosed = !shift?.isOpen;
-  const isAdmin = ["ADMIN", "MANAGER", "OWNER", "SUPER_ADMIN"].includes(employee.role);
-  const shouldHideTotals = shift?.blindClose && !isAdmin;
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
@@ -221,26 +219,20 @@ export default function ShiftModal({ employee, onClose }: Props) {
               {/* Ventas por método */}
               <div className="rounded-2xl border p-4" style={{ background: "var(--surf2)", borderColor: "var(--border)" }}>
                 <div className="text-xs font-black uppercase tracking-wider mb-3" style={{ color: "var(--muted)" }}>Ventas por método de pago</div>
-                {shouldHideTotals && !isClosed ? (
-                  <div className="py-8 text-center text-xs opacity-50 italic">
-                    👁️ El resumen de ventas está oculto (Cierre Ciego activo)
+                {[
+                  { label: "💵 Efectivo",       value: isClosed ? shift.totalCash     : null, color: "#22c55e" },
+                  { label: "💳 Tarjeta",         value: isClosed ? shift.totalCard     : null, color: "#3b82f6" },
+                  { label: "📲 Transferencia",   value: isClosed ? shift.totalTransfer : null, color: "#8b5cf6" },
+                  { label: "🎁 Cortesía",        value: isClosed ? shift.totalCourtesy : null, color: "#f59e0b" },
+                ].map(row => (
+                  <div key={row.label} className="flex justify-between items-center py-2 border-b last:border-0"
+                    style={{ borderColor: "var(--border)" }}>
+                    <span className="text-sm" style={{ color: "var(--muted)" }}>{row.label}</span>
+                    <span className="font-syne font-black text-sm" style={{ color: row.color }}>
+                      {row.value != null ? `$${row.value.toFixed(0)}` : "—"}
+                    </span>
                   </div>
-                ) : (
-                  [
-                    { label: "💵 Efectivo",       value: isClosed ? shift.totalCash     : null, color: "#22c55e" },
-                    { label: "💳 Tarjeta",         value: isClosed ? shift.totalCard     : null, color: "#3b82f6" },
-                    { label: "📲 Transferencia",   value: isClosed ? shift.totalTransfer : null, color: "#8b5cf6" },
-                    { label: "🎁 Cortesía",        value: isClosed ? shift.totalCourtesy : null, color: "#f59e0b" },
-                  ].map(row => (
-                    <div key={row.label} className="flex justify-between items-center py-2 border-b last:border-0"
-                      style={{ borderColor: "var(--border)" }}>
-                      <span className="text-sm" style={{ color: "var(--muted)" }}>{row.label}</span>
-                      <span className="font-syne font-black text-sm" style={{ color: row.color }}>
-                        {row.value != null ? `$${row.value.toFixed(0)}` : "—"}
-                      </span>
-                    </div>
-                  ))
-                )}
+                ))}
               </div>
 
               {/* Totales */}
@@ -248,7 +240,7 @@ export default function ShiftModal({ employee, onClose }: Props) {
                 <div className="rounded-2xl p-3 text-center" style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
                   <div className="text-xs font-bold mb-1" style={{ color: "var(--muted)" }}>Total ventas</div>
                   <div className="text-xl font-black" style={{ color: "#22c55e" }}>
-                    {isClosed || !shouldHideTotals ? (shift.totalSales ? `$${shift.totalSales.toFixed(0)}` : "$0") : "—"}
+                    {isClosed ? `$${shift.totalSales.toFixed(0)}` : "—"}
                   </div>
                 </div>
                 <div className="rounded-2xl p-3 text-center" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
@@ -258,7 +250,7 @@ export default function ShiftModal({ employee, onClose }: Props) {
                 <div className="rounded-2xl p-3 text-center" style={{ background: "rgba(245,166,35,0.08)", border: "1px solid rgba(245,166,35,0.3)" }}>
                   <div className="text-xs font-bold mb-1" style={{ color: "var(--muted)" }}>Pedidos</div>
                   <div className="text-xl font-black" style={{ color: "var(--gold)" }}>
-                    {isClosed || !shouldHideTotals ? (shift.ordersCount || 0) : "—"}
+                    {isClosed ? shift.ordersCount : "—"}
                   </div>
                 </div>
               </div>
@@ -398,14 +390,10 @@ export default function ShiftModal({ employee, onClose }: Props) {
                   <span style={{ color: "var(--muted)" }}>Gastos registrados</span>
                   <span className="font-bold" style={{ color: "#ef4444" }}>-${totalExpenses.toFixed(0)}</span>
                 </div>
-                {!shouldHideTotals && (
-                  <div className="flex justify-between text-sm py-1 pt-2 border-t mt-1" style={{ borderColor: "var(--border)" }}>
-                    <span style={{ color: "var(--muted)" }}>Efectivo esperado</span>
-                    <span className="font-black" style={{ color: "#22c55e" }}>
-                      ${(shift.openingFloat + (shift.totalCash || 0) - totalExpenses).toFixed(0)}
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-between text-sm py-1">
+                  <span style={{ color: "var(--muted)" }}>Gastos registrados</span>
+                  <span className="font-bold">{shift.expenses?.length || 0}</span>
+                </div>
               </div>
 
               <button onClick={closeShift} disabled={closing}
