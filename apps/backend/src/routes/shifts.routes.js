@@ -69,7 +69,7 @@ router.get('/active', authenticate, requireTenantAccess, requireLocation, async 
 // ── POST abrir turno (solo en la sucursal del request) ───────────────────
 router.post('/open', authenticate, requireTenantAccess, requireLocation, requireCanManageShifts, async (req, res) => {
   try {
-    const { openingFloat, employeeId, employeeName } = req.body;
+    const { openingFloat, employeeId, employeeName, blindClose } = req.body;
 
     // Cerrar cualquier turno abierto previo en ESTA sucursal
     await prisma.cashShift.updateMany({
@@ -85,6 +85,7 @@ router.post('/open', authenticate, requireTenantAccess, requireLocation, require
         openedById: req.user.id,
         openingFloat: openingFloat || 0,
         isOpen: true,
+        blindClose: !!blindClose,
       },
       include: { expenses: true }
     });
@@ -134,6 +135,9 @@ router.post('/:id/close', authenticate, requireTenantAccess, requireLocation, re
     const totalExpenses = shift.expenses.reduce((s, e) => s + e.amount, 0);
     const totalSales = Object.values(totals).reduce((a, b) => a + b, 0);
 
+    // Snapshot para Cierre Ciego: Calculamos lo que DEBERÍA haber en efectivo
+    const expectedCash = shift.openingFloat + totals.totalCash - totalExpenses;
+
     const closed = await prisma.cashShift.update({
       where: { id: shiftId },
       data: {
@@ -142,6 +146,7 @@ router.post('/:id/close', authenticate, requireTenantAccess, requireLocation, re
         closedById: req.user.id,
         closingFloat: closingFloat || 0,
         notes: notes || null,
+        expectedCash,
         ...totals,
         totalExpenses,
         totalSales,
