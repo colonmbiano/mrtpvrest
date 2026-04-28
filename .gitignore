@@ -37,3 +37,12 @@ public/assets/
 # Configuración de entorno (Seguridad)
 .env
 .env.*
+
+# Scratch local de Claude / herramientas
+.superpowers/
+.claude/worktrees/
+
+# Logs y dumps locales
+build_log.txt
+*.tmp
+*.bak
