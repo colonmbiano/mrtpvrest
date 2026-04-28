@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { useCart } from '../../lib/cartStore';
+import { getApiUrl } from '../../lib/config';
 
 type StoreProps = {
   id: string;
@@ -14,7 +15,7 @@ type StoreProps = {
 };
 
 const fmt = (n: number) => `$${n.toFixed(0)}`;
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API = getApiUrl();
 
 export default function StorefrontClient({
   store,
