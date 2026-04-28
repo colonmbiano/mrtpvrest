@@ -95,7 +95,7 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
     const VALID_FIELDS = [
       'phone','whatsappNumber','address','deliveryFee','freeDeliveryFrom',
       'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
-      'pointsPerTen','pointsValuePesos'
+      'pointsPerTen','pointsValuePesos','storefrontTheme'
     ];
     const data = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => VALID_FIELDS.includes(k))

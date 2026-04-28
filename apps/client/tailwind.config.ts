@@ -5,8 +5,10 @@ const config: Config = {
   theme: {
     extend: {
       colors: { 
-        accent: "var(--primary, #ff5c35)",
-        brand: "var(--primary, #ff5c35)",
+        primary: 'var(--color-primary, #ff5c35)',
+        'primary-light': 'color-mix(in srgb, var(--color-primary, #ff5c35) 20%, white)',
+        accent: "var(--color-primary, #ff5c35)",
+        brand: "var(--color-primary, #ff5c35)",
         surface: {
           0: "#ffffff",
           1: "#f8f9fa",
@@ -15,15 +17,26 @@ const config: Config = {
         }
       },
       fontFamily: { 
+        syne: ["var(--font-syne)", "sans-serif"],
         sans: ["var(--font-dm-sans)", "system-ui", "sans-serif"],
         display: ["var(--font-syne)", "sans-serif"],
       },
       borderRadius: {
+        'saas': '32px',
         '3xl': '24px',
         '4xl': '32px',
       },
       boxShadow: {
         'premium': '0 20px 40px -10px rgba(0,0,0,0.05)',
+      },
+      keyframes: {
+        'slide-in-right': {
+          '0%': { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(0)' },
+        }
+      },
+      animation: {
+        'slide-in-right': 'slide-in-right 0.3s ease-out forwards',
       }
     },
   },

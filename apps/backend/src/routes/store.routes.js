@@ -75,13 +75,15 @@ router.get('/info', async (req, res) => {
   if (!store) return;
   const { restaurant, location } = store;
 
-  // Cargamos el Tenant padre para exponer al storefront público los flags/config
-  // que el dueño configuró en su panel SaaS (web-store on/off, tema, WhatsApp).
-  let tenantConfig = { hasWebStore: false, whatsappNumber: null, themeConfig: null };
+  // Cargamos la configuración específica del restaurante (marca)
+  const config = await prisma.restaurantConfig.findUnique({ where: { restaurantId: restaurant.id } });
+
+  // Cargamos el Tenant padre para flags globales (hasWebStore)
+  let tenantConfig = { hasWebStore: false, whatsappNumber: null };
   if (restaurant.tenantId) {
     const tenant = await prisma.tenant.findUnique({
       where: { id: restaurant.tenantId },
-      select: { hasWebStore: true, whatsappNumber: true, themeConfig: true },
+      select: { hasWebStore: true, whatsappNumber: true },
     });
     if (tenant) tenantConfig = tenant;
   }
@@ -90,13 +92,14 @@ router.get('/info', async (req, res) => {
     id:       restaurant.id,
     name:     restaurant.name,
     slug:     restaurant.slug,
-    logo:     restaurant.logo     || null,
-    phone:    restaurant.phone    || null,
-    address:  restaurant.address  || null,
+    logo:     restaurant.logoUrl  || null,
+    phone:    config?.phone       || restaurant.phone    || null,
+    address:  config?.address     || restaurant.address  || null,
     location: location ? { id: location.id, name: location.name, address: location.address } : null,
     hasWebStore:    tenantConfig.hasWebStore,
-    whatsappNumber: tenantConfig.whatsappNumber,
-    themeConfig:    tenantConfig.themeConfig,
+    whatsappNumber: config?.whatsappNumber || tenantConfig.whatsappNumber,
+    storefrontTheme: config?.storefrontTheme || "MOCHI",
+    primaryColor:    restaurant.accentColor || "#ff5c35",
   });
 });
 
