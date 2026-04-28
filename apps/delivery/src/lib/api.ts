@@ -1,9 +1,7 @@
 ﻿import axios from "axios";
+import { getApiUrl } from "./config";
 
-// Cambiamos a dinámico para usar localhost en desarrollo o la URL de producción
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-
-const api = axios.create({ baseURL: API_URL });
+const api = axios.create({ baseURL: getApiUrl() });
 
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {

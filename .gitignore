@@ -37,3 +37,17 @@ public/assets/
 # Configuración de entorno (Seguridad)
 .env
 .env.*
+
+# Scratch local de Claude / herramientas
+.superpowers/
+.claude/worktrees/
+
+# Logs y dumps locales
+build_log.txt
+*.tmp
+*.bak
+
+# Reportes generados por Playwright
+tests/e2e-report/
+tests/e2e/results/
+playwright-report/
