@@ -1,52 +1,42 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
-import { ChevronLeft, Search, ShoppingCart, Send, Minus, Plus, X } from "lucide-react";
-import Button from "@/components/ui/Button";
+import { ChevronLeft, Search } from "lucide-react";
 import CategoryRail from "@/components/pos/CategoryRail";
 import ProductCard from "@/components/pos/ProductCard";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import type { Product } from "./_lib/types";
+import { useOrderCart } from "./_hooks/useOrderCart";
+import CartSheet from "./_components/CartSheet";
+import BottomTicketBar from "./_components/BottomTicketBar";
 
-type Product = {
-  id: string;
-  name: string;
-  price: number;
-  categoryId?: string;
-  imageUrl?: string | null;
-  promoPrice?: number | null;
-};
-
-type CartLine = {
-  menuItemId: string;
-  name: string;
-  price: number;
-  quantity: number;
-};
+type Category = { id: string; name: string };
 
 export default function WaiterOrderPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const tableId = params.id;
 
-  const [categories, setCategories] = useState<any[]>([{ id: "all", name: "Todos" }]);
+  const [categories, setCategories] = useState<Category[]>([{ id: "all", name: "Todos" }]);
   const [products, setProducts] = useState<Product[]>([]);
   const [activeCat, setActiveCat] = useState("all");
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [cart, setCart] = useState<CartLine[]>([]);
   const [showSheet, setShowSheet] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const { cart, count, total, addToCart, changeQty, removeLine } = useOrderCart();
 
   useEffect(() => {
     (async () => {
       try {
         const [catsRes, itemsRes] = await Promise.all([
-          api.get("/api/menu/categories"),
-          api.get("/api/menu/items"),
+          api.get<Category[]>("/api/menu/categories"),
+          api.get<Product[]>("/api/menu/items"),
         ]);
         setCategories([{ id: "all", name: "Todos" }, ...catsRes.data]);
         setProducts(itemsRes.data);
-      } catch (e: any) {
+      } catch {
         toast.error("No se pudo cargar el menu");
       } finally {
         setIsLoading(false);
@@ -63,35 +53,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
     return list;
   }, [products, activeCat, search]);
 
-  const addToCart = (p: Product) => {
-    const price = p.promoPrice ?? p.price;
-    setCart((prev) => {
-      const idx = prev.findIndex((l) => l.menuItemId === p.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
-        return next;
-      }
-      return [...prev, { menuItemId: p.id, name: p.name, price, quantity: 1 }];
-    });
-  };
-
-  const changeQty = (menuItemId: string, delta: number) => {
-    setCart((prev) =>
-      prev
-        .map((l) => (l.menuItemId === menuItemId ? { ...l, quantity: l.quantity + delta } : l))
-        .filter((l) => l.quantity > 0)
-    );
-  };
-
-  const removeLine = (menuItemId: string) => {
-    setCart((prev) => prev.filter((l) => l.menuItemId !== menuItemId));
-  };
-
-  const cartCount = cart.reduce((acc, l) => acc + l.quantity, 0);
-  const total = cart.reduce((acc, l) => acc + l.price * l.quantity, 0);
-
-  const handleSend = async () => {
+  async function handleSend() {
     if (cart.length === 0) return;
     setSubmitting(true);
     try {
@@ -113,7 +75,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
     } finally {
       setSubmitting(false);
     }
-  };
+  }
 
   return (
     <div className="h-full flex flex-col bg-surf-0">
@@ -144,7 +106,6 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         </div>
       </div>
 
-      {/* CATEGORIES */}
       <CategoryRail categories={categories} activeId={activeCat} onSelect={setActiveCat} />
 
       {/* PRODUCTS GRID */}
@@ -174,102 +135,23 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         )}
       </div>
 
-      {/* BOTTOM TICKET BAR */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-bd bg-surf-1 flex flex-col gap-3 shadow-2xl backdrop-blur-xl">
-        <button
-          onClick={() => cartCount > 0 && setShowSheet(true)}
-          className="h-12 bg-surf-2 border border-bd rounded-2xl flex items-center px-4 gap-3 active:scale-95 transition-all disabled:opacity-50"
-          disabled={cartCount === 0}
-        >
-          <div className="w-7 h-7 rounded-lg bg-iris-soft text-iris-500 flex items-center justify-center font-black text-xs">
-            {cartCount}
-          </div>
-          <div className="flex-1 text-left">
-            <div className="text-[10px] font-bold text-tx-dis uppercase tracking-tighter leading-none">
-              Comanda
-            </div>
-            <div className="mono tnum text-[14px] font-black">${total.toFixed(2)}</div>
-          </div>
-          <ChevronLeft className="rotate-90 text-tx-dis" size={16} />
-        </button>
+      <BottomTicketBar
+        count={count}
+        total={total}
+        submitting={submitting}
+        onOpenSheet={() => setShowSheet(true)}
+        onSend={handleSend}
+      />
 
-        <Button
-          variant="primary"
-          fullWidth
-          size="xl"
-          className="h-14 font-black uppercase tracking-[0.1em] text-sm gap-3 shadow-lg shadow-iris-glow disabled:opacity-50"
-          disabled={cartCount === 0 || submitting}
-          onClick={handleSend}
-        >
-          <Send size={18} />
-          {submitting ? "Enviando..." : "Enviar a cocina"}
-        </Button>
-      </div>
-
-      {/* CART SHEET */}
       {showSheet && (
-        <div
-          className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowSheet(false)}
-        >
-          <div
-            className="absolute bottom-0 left-0 right-0 max-h-[80%] bg-surf-1 border-t border-bd rounded-t-3xl flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-bd flex items-center justify-between">
-              <div>
-                <div className="eyebrow !text-[10px]">COMANDA</div>
-                <div className="text-[16px] font-black">Mesa {tableId}</div>
-              </div>
-              <button
-                onClick={() => setShowSheet(false)}
-                className="w-9 h-9 rounded-xl bg-surf-2 border border-bd flex items-center justify-center text-tx-sec"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
-              {cart.map((l) => (
-                <div
-                  key={l.menuItemId}
-                  className="flex items-center gap-3 p-3 rounded-2xl bg-surf-2 border border-bd"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-bold truncate">{l.name}</div>
-                    <div className="mono tnum text-[12px] text-tx-mut">${l.price.toFixed(2)}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => changeQty(l.menuItemId, -1)}
-                      className="w-8 h-8 rounded-lg bg-surf-3 border border-bd flex items-center justify-center"
-                    >
-                      <Minus size={14} />
-                    </button>
-                    <span className="mono tnum text-[14px] font-black w-6 text-center">
-                      {l.quantity}
-                    </span>
-                    <button
-                      onClick={() => changeQty(l.menuItemId, 1)}
-                      className="w-8 h-8 rounded-lg bg-iris-soft border border-iris-500 text-iris-500 flex items-center justify-center"
-                    >
-                      <Plus size={14} />
-                    </button>
-                    <button
-                      onClick={() => removeLine(l.menuItemId)}
-                      className="ml-1 w-8 h-8 rounded-lg bg-surf-3 border border-bd flex items-center justify-center text-tx-mut"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="p-4 border-t border-bd flex items-center justify-between">
-              <div className="eyebrow !text-[10px]">TOTAL</div>
-              <div className="mono tnum text-2xl font-black">${total.toFixed(2)}</div>
-            </div>
-          </div>
-        </div>
+        <CartSheet
+          tableId={tableId}
+          cart={cart}
+          total={total}
+          onClose={() => setShowSheet(false)}
+          onChangeQty={changeQty}
+          onRemove={removeLine}
+        />
       )}
     </div>
   );

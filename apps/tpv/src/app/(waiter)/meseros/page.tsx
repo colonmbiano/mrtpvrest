@@ -1,21 +1,41 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { LayoutGrid, LayoutList } from "lucide-react";
 import Chip from "@/components/ui/Chip";
 import Link from "next/link";
 import api from "@/lib/api";
 
+type Table = {
+  id: string;
+  name: string;
+  status: string;
+  seats?: number | null;
+  activeOrder?: { total: number | string } | null;
+};
+
+const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
+  AVAILABLE: { label: "Libre",       dot: "bg-tx-dis"  },
+  OCCUPIED:  { label: "Ocupada",     dot: "bg-info"    },
+  DIRTY:     { label: "Sucia",       dot: "bg-warning" },
+  RESERVED:  { label: "Reservada",   dot: "bg-iris-500"},
+  CLEANING:  { label: "Limpiándose", dot: "bg-warning" },
+};
+
+function getStatusConfig(status: string) {
+  return STATUS_CONFIG[status] ?? { label: status || "Desconocido", dot: "bg-tx-dis" };
+}
+
 export default function WaiterFloorPlanPage() {
-  const [tables, setTables] = useState<any[]>([]);
+  const [tables, setTables] = useState<Table[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTables = async () => {
       try {
-        const { data } = await api.get("/api/tables");
+        const { data } = await api.get<Table[]>("/api/tables");
         setTables(data);
-      } catch (error) {
-        console.error("Error loading tables:", error);
+      } catch {
+        setError("No se pudieron cargar las mesas.");
       } finally {
         setIsLoading(false);
       }
@@ -23,28 +43,13 @@ export default function WaiterFloorPlanPage() {
     fetchTables();
   }, []);
 
-  const getStatusConfig = (status: string) => {
-    switch (status) {
-      case "AVAILABLE": return { label: "Libre", color: "text-tx-dis", dot: "bg-tx-dis" };
-      case "OCCUPIED": return { label: "Ocupada", color: "text-info", dot: "bg-info" };
-      case "DIRTY": return { label: "Sucia", color: "text-warning", dot: "bg-warning" };
-      default: return { label: "Desconocido", color: "text-tx-dis", dot: "bg-tx-dis" };
-    }
-  };
-
   return (
     <div className="h-full flex flex-col bg-surf-0">
       {/* HEADER ESPECÍFICO */}
       <div className="p-6 border-b border-bd bg-surf-1 flex flex-col gap-6 shrink-0">
-        <div className="flex justify-between items-start">
-          <div className="space-y-1">
-            <span className="eyebrow">DISTRIBUCIÓN EN VIVO</span>
-            <h1 className="text-3xl font-black tracking-tight text-tx-pri">Salón Principal</h1>
-          </div>
-          <div className="flex bg-surf-2 p-1 rounded-xl border border-bd">
-            <button className="p-2 rounded-lg bg-surf-3 text-tx-pri shadow-sm"><LayoutGrid size={18} /></button>
-            <button className="p-2 rounded-lg text-tx-mut hover:text-tx-pri"><LayoutList size={18} /></button>
-          </div>
+        <div className="space-y-1">
+          <span className="eyebrow">DISTRIBUCIÓN EN VIVO</span>
+          <h1 className="text-3xl font-black tracking-tight text-tx-pri">Salón Principal</h1>
         </div>
 
         <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide">
@@ -56,19 +61,24 @@ export default function WaiterFloorPlanPage() {
 
       {/* TABLES GRID */}
       <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-        {isLoading ? (
+        {error ? (
+          <div className="text-center py-20 text-tx-mut text-[13px]">{error}</div>
+        ) : isLoading ? (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
             {[...Array(12)].map((_, i) => (
               <div key={i} className="aspect-square bg-surf-1 animate-pulse rounded-[2rem]" />
             ))}
           </div>
+        ) : tables.length === 0 ? (
+          <div className="text-center py-20 text-tx-mut text-[13px]">No hay mesas configuradas en esta sucursal.</div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 pb-24">
             {tables.map((table) => {
               const cfg = getStatusConfig(table.status);
+              const seatsLabel = table.seats ? `${table.seats}p` : "—";
               return (
-                <Link 
-                  key={table.id} 
+                <Link
+                  key={table.id}
                   href={`/meseros/${table.id}`}
                   className={`
                     aspect-square rounded-[2rem] bg-surf-1 border border-bd p-5 flex flex-col items-start justify-between
@@ -84,7 +94,7 @@ export default function WaiterFloorPlanPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <div className="eyebrow !text-[10px] !text-tx-dis">{cfg.label} · 4p</div>
+                    <div className="eyebrow !text-[10px] !text-tx-dis">{cfg.label} · {seatsLabel}</div>
                     {table.activeOrder && (
                       <div className="mono tnum text-[15px] font-black tracking-tight text-tx-pri">
                         ${Number(table.activeOrder.total).toFixed(0)}
