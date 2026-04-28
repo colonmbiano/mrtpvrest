@@ -8,6 +8,7 @@ const config: Config = {
   ],
   darkMode: ["selector", '[data-mode="dark"]'],
   theme: {
+    extend: {
       colors: {
         // Design Tokens (Handoff Montana)
         surf: {
@@ -22,10 +23,12 @@ const config: Config = {
           sec: "var(--text-secondary)",
           mut: "var(--text-muted)",
           dis: "var(--text-disabled)",
+          main: "var(--text-primary)", // Added to match code usage
         },
         bd: {
           DEFAULT: "var(--border)",
           strong: "var(--border-strong)",
+          main: "var(--border)", // Added to match code usage
         },
         iris: {
           500: "var(--brand)",
@@ -45,6 +48,8 @@ const config: Config = {
         background: "var(--bg)",
         foreground: "var(--text-primary)",
         bgApp: "var(--bg)",
+        accent: "var(--brand)", // Added for convenience
+        err: "var(--danger)",   // Added for convenience
       },
       borderRadius: {
         sm: "8px",
@@ -66,10 +71,6 @@ const config: Config = {
       },
     },
   },
-  /* safelist: [
-    { pattern: /grid-cols-(3|4|5|6)/ },
-    { pattern: /text-(xs|sm|base|lg)/ },
-  ], */
   plugins: [],
 };
 export default config;
