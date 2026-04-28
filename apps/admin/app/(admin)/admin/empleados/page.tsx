@@ -119,7 +119,14 @@ export default function EmpleadosPage() {
   }
   async function bulkDelete() {
     if (!confirm(`¿Eliminar ${selectedIds.size} empleado(s)? Esta acción no se puede deshacer.`)) return;
-    await Promise.all([...selectedIds].map(id => api.delete(`/api/employees/${id}`).catch(() => {})));
+    let hasError = false;
+    await Promise.all([...selectedIds].map(id => api.delete(`/api/employees/${id}`).catch((err) => {
+      hasError = true;
+      console.error(err);
+    })));
+    if (hasError) {
+      alert("Error al eliminar uno o más empleados. Verifique si tienen registros asociados o intente de nuevo.");
+    }
     setSelectedIds(new Set()); fetchEmployees();
   }
 
