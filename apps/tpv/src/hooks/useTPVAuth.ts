@@ -31,9 +31,12 @@ export function useTPVAuth() {
   // Redirección por roles tras autenticación exitosa
   useEffect(() => {
     if (auth.isAuthenticated && auth.employee) {
-      if (auth.employee.role === "WAITER") {
+      const role = auth.employee.role;
+      if (role === "WAITER") {
         router.push("/meseros");
-      } else if (auth.employee.role === "KITCHEN") {
+      } else if (role === "KITCHEN" || role === "COOK") {
+        // COOK y KITCHEN comparten la pantalla KDS (ambos preparan comanda).
+        // Mantener consistencia con usePinLock.ts que ya hace este mismo OR.
         router.push("/kds");
       }
     }

@@ -28,11 +28,18 @@ export interface AuthEmployee {
   role: EmployeeRole;
   locationId?: string;
   restaurantId?: string;
+  // Tokens que el admin asignó como mesas a cargo (ej. ["1","2","3"]).
+  // El backend almacena strings libres; el frontend hace matching laxo
+  // (id, name o sufijo numérico del name) al filtrar el plano del salón.
+  tables?: string[];
   canCharge?: boolean;
   canDiscount?: boolean;
   canModifyTickets?: boolean;
   canDeleteTickets?: boolean;
   canConfigSystem?: boolean;
+  canTakeDelivery?: boolean;
+  canTakeTakeout?: boolean;
+  canManageShifts?: boolean;
 }
 
 interface AuthState {

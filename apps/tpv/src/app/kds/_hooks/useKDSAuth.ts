@@ -35,7 +35,8 @@ export function useKDSAuth(): KDSAuthState {
 
     try {
       const parsed = JSON.parse(empRaw) as Employee;
-      if (parsed?.role && parsed.role !== "KITCHEN") {
+      // KITCHEN y COOK comparten esta pantalla — ambos roles preparan comanda.
+      if (parsed?.role && parsed.role !== "KITCHEN" && parsed.role !== "COOK") {
         setAuthError("La sesion activa no corresponde a cocina.");
         return;
       }

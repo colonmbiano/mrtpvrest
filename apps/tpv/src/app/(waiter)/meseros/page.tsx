@@ -1,8 +1,9 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Chip from "@/components/ui/Chip";
 import Link from "next/link";
 import api from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
 
 type Table = {
   id: string;
@@ -24,10 +25,23 @@ function getStatusConfig(status: string) {
   return STATUS_CONFIG[status] ?? { label: status || "Desconocido", dot: "bg-tx-dis" };
 }
 
+// Matching laxo entre Employee.tables (tokens libres como "1","2") y
+// Table.{id, name}. Acepta match exacto por id o name, o sufijo numérico.
+// Ejemplo: token "3" matchea "Mesa 3", "Terraza 3", id "ckxyz3".
+function tableMatches(table: Table, tokens: string[]): boolean {
+  if (tokens.length === 0) return true;
+  if (tokens.includes(table.id)) return true;
+  if (tokens.includes(table.name)) return true;
+  const m = /(\d+)\s*$/.exec(String(table.name));
+  if (m && tokens.includes(m[1])) return true;
+  return false;
+}
+
 export default function WaiterFloorPlanPage() {
   const [tables, setTables] = useState<Table[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const employee = useAuthStore((s) => s.employee);
 
   useEffect(() => {
     const fetchTables = async () => {
@@ -43,6 +57,16 @@ export default function WaiterFloorPlanPage() {
     fetchTables();
   }, []);
 
+  // Filtrado por mesas asignadas. Si el mesero no tiene `tables` configuradas
+  // (mesero "flotante"), muestra todas. Solo aplica al rol WAITER — admins/
+  // managers ven todo el salón.
+  const assignedTokens = employee?.role === "WAITER" ? (employee?.tables || []) : [];
+  const visibleTables = useMemo(
+    () => tables.filter((t) => tableMatches(t, assignedTokens)),
+    [tables, assignedTokens],
+  );
+  const isFiltered = assignedTokens.length > 0;
+
   return (
     <div className="h-full flex flex-col bg-surf-0">
       {/* HEADER ESPECÍFICO */}
@@ -56,6 +80,11 @@ export default function WaiterFloorPlanPage() {
           <Chip variant="info" size="sm" dot>Ocupadas</Chip>
           <Chip variant="success" size="sm" dot>Disponibles</Chip>
           <Chip variant="warning" size="sm" dot>Sucia / Cuenta</Chip>
+          {isFiltered && (
+            <Chip variant="brand" size="sm">
+              Mostrando tus {visibleTables.length} mesa(s) asignada(s)
+            </Chip>
+          )}
         </div>
       </div>
 
@@ -69,11 +98,15 @@ export default function WaiterFloorPlanPage() {
               <div key={i} className="aspect-square bg-surf-1 animate-pulse rounded-[2rem]" />
             ))}
           </div>
-        ) : tables.length === 0 ? (
-          <div className="text-center py-20 text-tx-mut text-[13px]">No hay mesas configuradas en esta sucursal.</div>
+        ) : visibleTables.length === 0 ? (
+          <div className="text-center py-20 text-tx-mut text-[13px]">
+            {isFiltered
+              ? "No tienes mesas asignadas en esta sucursal. Pide al admin que te asigne mesas en /admin/empleados."
+              : "No hay mesas configuradas en esta sucursal."}
+          </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 pb-24">
-            {tables.map((table) => {
+            {visibleTables.map((table) => {
               const cfg = getStatusConfig(table.status);
               const seatsLabel = table.seats ? `${table.seats}p` : "—";
               return (
