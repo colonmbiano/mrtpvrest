@@ -29,6 +29,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     isLocked,
     restaurantName,
     locationName,
+    locationAddress,
     isVerifying,
     loginWithPin,
     logout,
@@ -49,9 +50,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   if (isLocked) {
     return (
-      <LockScreen 
+      <LockScreen
         restaurantName={restaurantName}
         locationName={locationName}
+        locationAddress={locationAddress}
         pinInput={pinInput}
         onDigit={handlePinDigit}
         onBackspace={() => setPinInput(prev => prev.slice(0, -1))}

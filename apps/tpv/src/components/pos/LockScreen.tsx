@@ -1,11 +1,12 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Clock, MapPin, Delete, X, ChevronRight } from "lucide-react";
 import Button from "@/components/ui/Button";
 
 interface LockScreenProps {
   restaurantName: string;
   locationName: string;
+  locationAddress?: string;
   pinInput: string;
   onDigit: (digit: string) => void;
   onBackspace: () => void;
@@ -15,9 +16,25 @@ interface LockScreenProps {
   isVerifying?: boolean;
 }
 
+function getGreeting(hour: number): string {
+  if (hour < 12) return "Buenos días.";
+  if (hour < 19) return "Buenas tardes.";
+  return "Buenas noches.";
+}
+
+function formatLockDate(d: Date): { time: string; date: string } {
+  const time = d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
+  // "LUNES 27 ABR" en mayúsculas, sin año, idioma es-MX.
+  const weekday = d.toLocaleDateString("es-MX", { weekday: "long" });
+  const day = d.getDate();
+  const month = d.toLocaleDateString("es-MX", { month: "short" }).replace(/\.$/, "");
+  return { time, date: `${weekday} ${day} ${month}`.toUpperCase() };
+}
+
 const LockScreen: React.FC<LockScreenProps> = ({
   restaurantName,
   locationName,
+  locationAddress,
   pinInput,
   onDigit,
   onBackspace,
@@ -28,6 +45,17 @@ const LockScreen: React.FC<LockScreenProps> = ({
 }) => {
   const pinLength = 4;
   const digits = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+  // Reloj en vivo. Inicializa null para evitar hydration mismatch en SSR.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const greeting = now ? getGreeting(now.getHours()) : "Hola.";
+  const dateInfo = now ? formatLockDate(now) : { time: "--:--", date: "" };
 
   return (
     <div className="fixed inset-0 z-[100] bg-surf-0 flex items-center justify-center px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8 font-sans text-tx-pri overflow-auto md:overflow-hidden">
@@ -53,7 +81,12 @@ const LockScreen: React.FC<LockScreenProps> = ({
                 {locationName} · TERMINAL 01
               </span>
               <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black tracking-tight leading-[0.95] text-tx-pri">
-                Buenas<br />tardes.
+                {greeting.split(" ").map((part, i, arr) => (
+                  <React.Fragment key={i}>
+                    {part}
+                    {i < arr.length - 1 ? <br /> : null}
+                  </React.Fragment>
+                ))}
               </h1>
               <p className="text-sm sm:text-base md:text-lg text-tx-sec leading-relaxed max-w-sm pt-2 sm:pt-3 md:pt-4">
                 Ingresa tu PIN de empleado para iniciar sesión y gestionar el turno actual.
@@ -63,11 +96,16 @@ const LockScreen: React.FC<LockScreenProps> = ({
 
           <div className="space-y-2 sm:space-y-2.5 md:space-y-3 lg:space-y-3 opacity-40">
             <div className="flex items-center gap-3 text-sm font-bold mono uppercase tracking-tight">
-              <Clock size={16} /> 14:42 · LUNES 27 ABR
+              <Clock size={16} />
+              <span className="tnum">{dateInfo.time}</span>
+              {dateInfo.date && <span>· {dateInfo.date}</span>}
             </div>
-            <div className="flex items-center gap-3 text-sm font-bold opacity-80 uppercase tracking-tight">
-              <MapPin size={16} /> AV. REFORMA 142, CDMX
-            </div>
+            {locationAddress && (
+              <div className="flex items-center gap-3 text-sm font-bold opacity-80 uppercase tracking-tight">
+                <MapPin size={16} />
+                <span className="truncate">{locationAddress}</span>
+              </div>
+            )}
           </div>
         </div>
 

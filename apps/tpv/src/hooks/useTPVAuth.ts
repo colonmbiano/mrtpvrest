@@ -8,12 +8,13 @@ export function useTPVAuth() {
   const auth = useAuthStore();
   const [restaurantName, setRestaurantName] = useState("MRTPVREST");
   const [locationName, setLocationName] = useState("");
+  const [locationAddress, setLocationAddress] = useState("");
 
   useEffect(() => {
     // Verificar si el dispositivo está vinculado
     const restId = localStorage.getItem("restaurantId");
     const locId = localStorage.getItem("locationId");
-    
+
     if (!restId || !locId) {
       router.replace("/setup");
       return;
@@ -21,6 +22,7 @@ export function useTPVAuth() {
 
     setRestaurantName(localStorage.getItem("restaurantName") || "MRTPVREST");
     setLocationName(localStorage.getItem("locationName") || "Sucursal");
+    setLocationAddress(localStorage.getItem("locationAddress") || "");
 
     // Intentar hidratar sesión desde storage si no está autenticado en estado
     if (!auth.isAuthenticated) {
@@ -52,6 +54,7 @@ export function useTPVAuth() {
     currentEmployee: auth.employee,
     restaurantName,
     locationName,
+    locationAddress,
     isVerifying: false, // El store maneja la carga internamente si fuera necesario, o podemos añadir estado local
     error: "", // Se maneja en el componente llamando a loginWithPin
     loginWithPin,

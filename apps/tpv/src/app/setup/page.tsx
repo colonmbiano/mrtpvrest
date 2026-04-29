@@ -177,6 +177,11 @@ function SetupContent() {
     localStorage.setItem("restaurantName", restaurant.name);
     localStorage.setItem("locationId", location.id);
     localStorage.setItem("locationName", location.name);
+    if (location.address) {
+      localStorage.setItem("locationAddress", location.address);
+    } else {
+      localStorage.removeItem("locationAddress");
+    }
     if (restaurant.accentColor) {
       localStorage.setItem("mb-accent", restaurant.accentColor);
     }
