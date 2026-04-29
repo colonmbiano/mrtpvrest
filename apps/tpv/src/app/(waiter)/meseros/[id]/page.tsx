@@ -24,10 +24,17 @@ interface ActiveOrder {
   items: OrderItem[];
 }
 
+interface Zone {
+  id: string;
+  name: string;
+  icon: string | null;
+}
+
 interface TableData {
   id: string;
   name: string;
   status: "AVAILABLE" | "OCCUPIED" | "DIRTY";
+  zone: Zone | null;
   activeOrder: ActiveOrder | null;
 }
 
@@ -93,7 +100,11 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
           <ChevronLeft size={20} />
         </button>
         <div className="flex flex-col min-w-0">
-          <span className="eyebrow !text-[10px]">DETALLE DE MESA</span>
+          <span className="eyebrow !text-[10px]">
+            {table?.zone
+              ? `${table.zone.icon ? table.zone.icon + " " : ""}${table.zone.name.toUpperCase()}`
+              : "DETALLE DE MESA"}
+          </span>
           <h2 className="text-[18px] font-black leading-none truncate">
             {isLoading ? "Cargando…" : table ? table.name : "Mesa no encontrada"}
           </h2>
