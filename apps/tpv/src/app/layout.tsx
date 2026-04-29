@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Syne, DM_Sans, DM_Mono } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
-import ModalRoot from "@/components/tpv/ModalRoot";
 import { PermissionGateProvider } from "@/contexts/PermissionGateContext";
 
 const syne = Syne({
@@ -41,7 +41,20 @@ export default function RootLayout({
         className={`${syne.variable} ${dmSans.variable} ${dmMono.variable} antialiased`}
       >
         <PermissionGateProvider>
-          <ModalRoot>{children}</ModalRoot>
+          {children}
+          <Toaster
+            position="bottom-right"
+            theme="dark"
+            richColors
+            closeButton
+            toastOptions={{
+              style: {
+                background: "var(--surface-1)",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border)",
+              },
+            }}
+          />
         </PermissionGateProvider>
       </body>
     </html>
