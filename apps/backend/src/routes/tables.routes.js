@@ -8,6 +8,7 @@
  *
  * Rutas:
  *   GET    /api/tables                     → lista con activeOrder embebida
+ *   GET    /api/tables/:id                 → detalle con activeOrder + items
  *   POST   /api/tables                     → crea mesa
  *   PATCH  /api/tables/:id                 → actualiza name/x/y/status/isActive
  *   DELETE /api/tables/:id                 → soft delete (isActive=false)
@@ -37,6 +38,7 @@ router.get('/', async (req, res) => {
     const tables = await prisma.table.findMany({
       where: { locationId: req.locationId, isActive: true },
       orderBy: { name: 'asc' },
+      include: { zone: { select: { id: true, name: true, icon: true, isActive: true } } },
     });
 
     // Para cada mesa OCCUPIED, traer la orden activa (status=OPEN) más reciente
@@ -62,13 +64,60 @@ router.get('/', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── GET detalle de una mesa (con orden activa + items) ─────────────────────
+// Usado por la pantalla de detalle de meseros (/meseros/[id]) para mostrar la
+// cuenta acumulada en vivo sin pedir el endpoint general.
+router.get('/:id', async (req, res) => {
+  try {
+    if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const table = await prisma.table.findFirst({
+      where: { id: req.params.id, locationId: req.locationId, isActive: true },
+      include: { zone: { select: { id: true, name: true, icon: true, isActive: true } } },
+    });
+    if (!table) return res.status(404).json({ error: 'Mesa no encontrada' });
+
+    let activeOrder = null;
+    if (table.status === 'OCCUPIED') {
+      activeOrder = await prisma.order.findFirst({
+        where: { tableId: table.id, status: 'OPEN' },
+        select: {
+          id: true,
+          orderNumber: true,
+          total: true,
+          subtotal: true,
+          discount: true,
+          customerName: true,
+          createdAt: true,
+          items: {
+            select: { id: true, name: true, price: true, quantity: true, subtotal: true },
+            orderBy: { id: 'asc' },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+    res.json({ ...table, activeOrder });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── POST crear mesa ────────────────────────────────────────────────────────
 router.post('/', requireRole(...MANAGE_ROLES), async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
-    const { name, x, y } = req.body || {};
+    const { name, x, y, zoneId } = req.body || {};
     if (!name?.trim()) return res.status(400).json({ error: 'Nombre requerido' });
+
+    // Validar zona (opcional): si llega zoneId, debe pertenecer al mismo
+    // location para no crear cross-tenant.
+    if (zoneId) {
+      const zone = await prisma.zone.findFirst({
+        where: { id: zoneId, locationId: req.locationId, isActive: true },
+        select: { id: true },
+      });
+      if (!zone) return res.status(400).json({ error: 'Zona inválida' });
+    }
 
     const table = await prisma.table.create({
       data: {
@@ -76,7 +125,9 @@ router.post('/', requireRole(...MANAGE_ROLES), async (req, res) => {
         name: name.trim(),
         x: Number.isFinite(Number(x)) ? Number(x) : 0,
         y: Number.isFinite(Number(y)) ? Number(y) : 0,
+        zoneId: zoneId || null,
       },
+      include: { zone: { select: { id: true, name: true, icon: true, isActive: true } } },
     });
     res.status(201).json({ ...table, activeOrder: null });
   } catch (e) {
@@ -95,7 +146,7 @@ router.patch('/:id', requireRole(...MANAGE_ROLES), async (req, res) => {
     });
     if (!existing) return res.status(404).json({ error: 'Mesa no encontrada' });
 
-    const { name, x, y, status, isActive } = req.body || {};
+    const { name, x, y, status, isActive, zoneId } = req.body || {};
     const data = {};
     if (name !== undefined) data.name = String(name).trim();
     if (x !== undefined && Number.isFinite(Number(x))) data.x = Number(x);
@@ -107,8 +158,26 @@ router.patch('/:id', requireRole(...MANAGE_ROLES), async (req, res) => {
       data.status = status;
     }
     if (isActive !== undefined) data.isActive = !!isActive;
+    // zoneId puede ser null explícito (mover mesa a "Sin zona") o un id de
+    // zona del mismo local. Cualquier otra cosa se valida y rechaza.
+    if (zoneId !== undefined) {
+      if (zoneId === null || zoneId === '') {
+        data.zoneId = null;
+      } else {
+        const zone = await prisma.zone.findFirst({
+          where: { id: zoneId, locationId: req.locationId, isActive: true },
+          select: { id: true },
+        });
+        if (!zone) return res.status(400).json({ error: 'Zona inválida' });
+        data.zoneId = zoneId;
+      }
+    }
 
-    const table = await prisma.table.update({ where: { id: existing.id }, data });
+    const table = await prisma.table.update({
+      where: { id: existing.id },
+      data,
+      include: { zone: { select: { id: true, name: true, icon: true, isActive: true } } },
+    });
     res.json(table);
   } catch (e) {
     if (e.code === 'P2002') {

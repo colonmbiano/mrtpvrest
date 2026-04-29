@@ -318,6 +318,7 @@ model Location {
   externalOrders    ExternalOrder[]
   pushSubscriptions PushSubscription[]
   tables            Table[]
+  zones             Zone[]
   taxConfigs        TaxConfig[]
 
   createdAt DateTime @default(now())
@@ -1386,6 +1387,13 @@ model Table {
   locationId String
   location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
+  // Zona (área) opcional dentro del local: "Terraza", "Barra", "Mostrador",
+  // "Patio", etc. Cada negocio define las suyas desde el panel de
+  // configuración del TPV. Nullable para mesas "sin zona" (mesas extra que se
+  // sacan en días no contemplados, mesas heredadas, etc.).
+  zoneId     String?
+  zone       Zone?    @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+
   name     String // "Mesa 1", "Barra 3", "Terraza A"
   // Coordenadas del mapa editable del TPV. En la misma unidad que la UI del
   // planímetro (píxeles o % del canvas, según implemente el front). Default 0
@@ -1403,7 +1411,32 @@ model Table {
   // Dos mesas dentro del mismo local no pueden llamarse igual.
   @@unique([locationId, name])
   @@index([locationId])
+  @@index([zoneId])
   @@map("tables")
+}
+
+// Zona (área) configurable del salón: "Terraza", "Mostrador", "Barra",
+// "Patio", etc. Cada Location define su propio set — un food truck tendrá
+// solo "Mostrador" mientras que un restaurante con patio tendrá "Salón
+// principal" + "Terraza". Las mesas pueden estar en una zona o sin zona.
+model Zone {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  name     String  // visible al usuario, único dentro del local
+  icon     String? // emoji u id de icono para el chip ("🌴", "🛋️"...)
+  order    Int     @default(0) // orden de presentación en filtros/lista
+  isActive Boolean @default(true)
+
+  tables Table[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([locationId, name])
+  @@index([locationId])
+  @@map("zones")
 }
 
 model OrderRound {
