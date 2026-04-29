@@ -1,8 +1,10 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { Plus, Trash2, Printer, CreditCard, ShoppingCart } from "lucide-react";
 import Button from "@/components/ui/Button";
 import TicketLine from "@/components/pos/TicketLine";
+import PaymentModal from "@/components/pos/PaymentModal";
+import DiscountModal from "@/components/pos/DiscountModal";
 import { useTicketStore } from "@/store/ticketStore";
 import { usePermissionGate } from "@/contexts/PermissionGateContext";
 import api from "@/lib/api";
@@ -10,6 +12,8 @@ import { toast } from "sonner";
 
 export default function SidebarTicket() {
   const { run: runWithPermission } = usePermissionGate();
+  const [showPayment, setShowPayment] = useState(false);
+  const [showDiscount, setShowDiscount] = useState(false);
   const { 
     tickets,
     activeIndex,
@@ -158,17 +162,55 @@ export default function SidebarTicket() {
            </div>
         </div>
 
-        <Button variant="primary" size="xl" fullWidth className="h-14 text-sm tracking-[0.2em] font-black uppercase shadow-glow">
+        <Button
+          variant="primary"
+          size="xl"
+          fullWidth
+          className="h-14 text-sm tracking-[0.2em] font-black uppercase shadow-glow disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={ticket.items.length === 0}
+          onClick={() => setShowPayment(true)}
+        >
           <CreditCard size={18} className="mr-2" />
           Procesar cobro
         </Button>
-        
+
         <div className="grid grid-cols-3 gap-2 mt-3">
            <Button variant="soft" size="md" className="text-[10px] font-black uppercase" onClick={handleSendToKitchen}>🍳 Cocina</Button>
-           <Button variant="soft" size="md" className="text-[10px] font-black uppercase">🏷 Desc.</Button>
+           <Button
+             variant="soft"
+             size="md"
+             className="text-[10px] font-black uppercase disabled:opacity-40 disabled:cursor-not-allowed"
+             disabled={ticket.items.length === 0}
+             onClick={() => setShowDiscount(true)}
+           >🏷 Desc.</Button>
            <Button variant="soft" size="md" className="text-[10px] font-black uppercase" onClick={() => closeTicket(activeIndex)}>❌ Cerrar</Button>
         </div>
       </div>
+
+      {showPayment && (
+        <PaymentModal
+          ticket={ticket}
+          subtotal={subtotal}
+          total={total}
+          onPaid={() => {
+            setShowPayment(false);
+            closeTicket(activeIndex);
+          }}
+          onClose={() => setShowPayment(false)}
+        />
+      )}
+
+      {showDiscount && (
+        <DiscountModal
+          subtotal={subtotal}
+          initialDiscount={ticket.discount}
+          initialMode={ticket.discountType}
+          onApply={(amount, mode) => {
+            useTicketStore.getState().updateTicket({ discount: amount, discountType: mode });
+          }}
+          onClose={() => setShowDiscount(false)}
+        />
+      )}
     </aside>
   );
 }
