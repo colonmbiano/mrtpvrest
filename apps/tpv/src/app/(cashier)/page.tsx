@@ -71,19 +71,19 @@ export default function CatalogPage() {
         onSelect={setActiveCat} 
       />
       
-      <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 scrollbar-hide">
         {isLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
             {[...Array(10)].map((_, i) => (
               <div key={i} className="aspect-square bg-surf-1 animate-pulse rounded-2xl" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
             {filteredProducts.map((product) => (
-              <ProductCard 
-                key={product.id} 
-                {...product} 
+              <ProductCard
+                key={product.id}
+                {...product}
                 onClick={() => handleAddToCart(product)}
               />
             ))}
