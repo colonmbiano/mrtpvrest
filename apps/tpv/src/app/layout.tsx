@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Syne, DM_Sans, DM_Mono } from "next/font/google";
 import "./globals.css";
 import ModalRoot from "@/components/tpv/ModalRoot";
+import { PermissionGateProvider } from "@/contexts/PermissionGateContext";
 
 const syne = Syne({
   subsets: ["latin"],
@@ -39,7 +40,9 @@ export default function RootLayout({
       <body
         className={`${syne.variable} ${dmSans.variable} ${dmMono.variable} antialiased`}
       >
-        <ModalRoot>{children}</ModalRoot>
+        <PermissionGateProvider>
+          <ModalRoot>{children}</ModalRoot>
+        </PermissionGateProvider>
       </body>
     </html>
   );
