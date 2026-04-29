@@ -1,17 +1,22 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { authenticate, requireTenantAccess, requirePermission } = require('../middleware/auth.middleware');
 const { printTest, kickDrawer } = require('../services/printer.service');
 const router = express.Router();
 
 // ── Gate común ───────────────────────────────────────────────────────────────
 router.use(authenticate, requireTenantAccess);
 
+// Configurar impresoras y tickets es operativo (no setup de tenant), así que
+// en lugar de requireAdmin usamos canConfigSystem. Admin sigue pasando porque
+// tiene rol admin-equivalente.
+const requireConfig = requirePermission('canConfigSystem');
+
 // ────────────────────────────────────────────────────────────────────────────
 // Ticket Config — GET/PUT deben ir ANTES de /:id para que Express no matchee
 // "ticket-config" como un id.
 // ────────────────────────────────────────────────────────────────────────────
-router.get('/ticket-config', requireAdmin, async (req, res) => {
+router.get('/ticket-config', requireConfig, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
     let cfg = await prisma.ticketConfig.findUnique({ where: { locationId: req.locationId } });
@@ -33,7 +38,7 @@ router.get('/ticket-config', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/ticket-config', requireAdmin, async (req, res) => {
+router.put('/ticket-config', requireConfig, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
     const { id, locationId, createdAt, updatedAt, ...data } = req.body || {};
@@ -81,7 +86,7 @@ function normalizePrinterPayload(body) {
   return payload;
 }
 
-router.get('/', requireAdmin, async (req, res) => {
+router.get('/', requireConfig, async (req, res) => {
   try {
     const printers = await prisma.printer.findMany({
       where: { locationId: req.locationId },
@@ -91,7 +96,7 @@ router.get('/', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/', requireAdmin, async (req, res) => {
+router.post('/', requireConfig, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
     const data = normalizePrinterPayload(req.body);
@@ -102,7 +107,7 @@ router.post('/', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/:id', requireAdmin, async (req, res) => {
+router.put('/:id', requireConfig, async (req, res) => {
   try {
     const data = normalizePrinterPayload(req.body);
     const printer = await prisma.printer.update({
@@ -113,7 +118,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/:id', requireAdmin, async (req, res) => {
+router.delete('/:id', requireConfig, async (req, res) => {
   try {
     await prisma.printer.delete({
       where: { id: req.params.id, locationId: req.locationId },
@@ -127,7 +132,7 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 // ────────────────────────────────────────────────────────────────────────────
 
 // POST /api/printers/:id/test — envía un ticket de prueba
-router.post('/:id/test', requireAdmin, async (req, res) => {
+router.post('/:id/test', requireConfig, async (req, res) => {
   try {
     const printer = await prisma.printer.findFirst({
       where: { id: req.params.id, locationId: req.locationId, isActive: true },
@@ -148,7 +153,7 @@ router.post('/:id/test', requireAdmin, async (req, res) => {
 });
 
 // POST /api/printers/:id/kick-drawer — abre el cajón vía ESC/POS
-router.post('/:id/kick-drawer', requireAdmin, async (req, res) => {
+router.post('/:id/kick-drawer', requireConfig, async (req, res) => {
   try {
     const printer = await prisma.printer.findFirst({
       where: { id: req.params.id, locationId: req.locationId, isActive: true },
