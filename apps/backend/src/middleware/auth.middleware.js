@@ -1,6 +1,11 @@
 ﻿const jwt    = require('jsonwebtoken')
 const prisma = require('@mrtpvrest/database').prisma
 
+// Tipo del JWT que firma el endpoint /api/employees/authorize-action.
+// Vida útil corta (30s) para que sea de un solo uso práctico.
+const PERMISSION_OVERRIDE_TTL_SEC = 30;
+const PERMISSION_OVERRIDE_KIND = 'permission-override';
+
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -102,24 +107,57 @@ const ADMIN_EQUIVALENT_ROLES = new Set([
   'MANAGER',
 ]);
 
+// Verifica si el request actual tiene permiso para `perm`. Pasa si:
+//  - El usuario tiene rol admin-equivalente, o
+//  - req.user[perm] === true, o
+//  - El header X-Permission-Override trae un JWT firmado por
+//    /api/employees/authorize-action con el mismo permiso (override por PIN
+//    de admin). Cuando el override es válido, marca req.permissionAuthorizedBy
+//    con el id del empleado que lo autorizó para auditoría aguas abajo.
+const hasPermission = (req, perm) => {
+  if (ADMIN_EQUIVALENT_ROLES.has(req.user?.role)) return true;
+  if (req.user?.[perm] === true) return true;
+
+  const overrideToken = req.headers['x-permission-override'];
+  if (overrideToken) {
+    try {
+      const decoded = jwt.verify(overrideToken, process.env.JWT_SECRET);
+      if (
+        decoded?.kind === PERMISSION_OVERRIDE_KIND &&
+        decoded.permission === perm
+      ) {
+        req.permissionAuthorizedBy = decoded.authorizingEmployeeId;
+        return true;
+      }
+    } catch {
+      // token expirado o inválido: cae a deny
+    }
+  }
+  return false;
+};
+
 // Gate de permisos por flag canX del empleado.
 // Uso: requirePermission('canCharge')
 //
-// Pasa siempre si:
-//  - El usuario tiene un rol admin-equivalente (ver set arriba), o
-//  - req.user[perm] === true.
-//
-// El frontend puede capturar el código PERMISSION_DENIED para abrir el flujo
-// de override por PIN de administrador.
+// El 403 incluye `code: PERMISSION_DENIED` y `permission: <perm>` para que
+// el frontend pueda abrir el flujo de override por PIN de administrador.
 const requirePermission = (perm) => (req, res, next) => {
-  if (ADMIN_EQUIVALENT_ROLES.has(req.user?.role)) return next();
-  if (req.user?.[perm] === true) return next();
+  if (hasPermission(req, perm)) return next();
   return res.status(403).json({
     error: 'No tienes permiso para realizar esta acción',
     code: 'PERMISSION_DENIED',
     permission: perm,
   });
 };
+
+// Firma un token de override de un solo uso (vida corta) para que el cliente
+// lo reenvíe en el header X-Permission-Override del siguiente request.
+const signPermissionOverride = (permission, authorizingEmployeeId) =>
+  jwt.sign(
+    { kind: PERMISSION_OVERRIDE_KIND, permission, authorizingEmployeeId },
+    process.env.JWT_SECRET,
+    { expiresIn: PERMISSION_OVERRIDE_TTL_SEC },
+  );
 
 // Aislamiento tenant — garantiza que el JWT del usuario pertenezca al mismo
 // tenant que el recurso que va a tocar. Debe ir después de `authenticate` y
@@ -154,4 +192,7 @@ module.exports = {
   requirePermission,
   requireTenantAccess,
   ADMIN_EQUIVALENT_ROLES,
+  hasPermission,
+  signPermissionOverride,
+  PERMISSION_OVERRIDE_TTL_SEC,
 };

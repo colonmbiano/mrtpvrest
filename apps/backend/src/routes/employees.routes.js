@@ -1,8 +1,26 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const {
+  authenticate,
+  requireAdmin,
+  requireTenantAccess,
+  signPermissionOverride,
+  ADMIN_EQUIVALENT_ROLES,
+  PERMISSION_OVERRIDE_TTL_SEC,
+} = require('../middleware/auth.middleware');
 const router = express.Router();
+
+const KNOWN_PERMISSIONS = new Set([
+  'canCharge',
+  'canDiscount',
+  'canModifyTickets',
+  'canDeleteTickets',
+  'canConfigSystem',
+  'canTakeDelivery',
+  'canTakeTakeout',
+  'canManageShifts',
+]);
 
 const ROLE_DEFAULTS = {
   ADMIN:    { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:true,  canConfigSystem:true,  canTakeDelivery:true,  canTakeTakeout:true },
@@ -208,6 +226,68 @@ router.post('/login', async (req, res) => {
     const { location, ...employeePublic } = emp;
     res.json({ employee: employeePublic, token });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/employees/authorize-action — override por PIN de administrador.
+// Permite que un empleado sin permiso solicite aprobación in-situ ingresando
+// el PIN de alguien que sí pueda. Devuelve un override token de vida corta
+// (PERMISSION_OVERRIDE_TTL_SEC) que el cliente reenvía como header
+// `X-Permission-Override` en el siguiente request al endpoint sensible.
+//
+// Body: { pin: string, permission: string }
+// 200: { ok: true, overrideToken, expiresInSec, authorizedBy: { id, name, role } }
+// 401: PIN no válido en esta sucursal
+// 403: el PIN es válido pero ese empleado tampoco tiene el permiso
+// 400: payload inválido
+router.post('/authorize-action', async (req, res) => {
+  try {
+    const { pin, permission } = req.body || {};
+    if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+    if (!pin) return res.status(400).json({ error: 'PIN requerido' });
+    if (!permission || !KNOWN_PERMISSIONS.has(permission)) {
+      return res.status(400).json({ error: 'Permiso desconocido' });
+    }
+
+    const candidates = await prisma.employee.findMany({
+      where: { locationId: req.locationId, isActive: true },
+      select: {
+        id: true, name: true, role: true, pin: true,
+        canCharge: true, canDiscount: true, canModifyTickets: true,
+        canDeleteTickets: true, canConfigSystem: true,
+        canTakeDelivery: true, canTakeTakeout: true, canManageShifts: true,
+      },
+    });
+
+    let emp = null;
+    for (const c of candidates) {
+      if (c.pin.startsWith('$2')) {
+        if (await bcrypt.compare(pin, c.pin)) { emp = c; break; }
+      } else if (c.pin === pin) { emp = c; break; }
+    }
+    if (!emp) {
+      return res.status(401).json({ error: 'PIN incorrecto en esta sucursal' });
+    }
+
+    // El autorizante necesita ser admin-equivalente o tener el flag específico.
+    const isAdminEquivalent = ADMIN_EQUIVALENT_ROLES.has(emp.role);
+    const hasFlag = emp[permission] === true;
+    if (!isAdminEquivalent && !hasFlag) {
+      return res.status(403).json({
+        error: `${emp.name} no tiene permiso para autorizar esta acción`,
+        code: 'AUTHORIZER_LACKS_PERMISSION',
+      });
+    }
+
+    const overrideToken = signPermissionOverride(permission, emp.id);
+    res.json({
+      ok: true,
+      overrideToken,
+      expiresInSec: PERMISSION_OVERRIDE_TTL_SEC,
+      authorizedBy: { id: emp.id, name: emp.name, role: emp.role },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;

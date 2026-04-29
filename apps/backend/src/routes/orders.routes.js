@@ -38,48 +38,47 @@ async function discountInventory(prisma, items, orderId, restaurantId, locationI
 
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess, requirePermission } = require('../middleware/auth.middleware');
+const {
+  authenticate,
+  requireAdmin,
+  requireTenantAccess,
+  requirePermission,
+  hasPermission,
+} = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
 
-// Permisos compuestos:
-// - Crear orden: depende del orderType (DELIVERY/TAKEOUT/DINE_IN). DINE_IN
-//   no exige permiso porque es la operación de mesa por defecto.
-// - Si la orden trae descuento, el empleado debe tener canDiscount.
-const requireOrderTypePermission = (req, res, next) => {
-  const role = req.user?.role;
-  // Admin-equivalentes pasan siempre
-  if (['ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER'].includes(role)) return next();
+// Permisos compuestos. Usan hasPermission(req, perm) para respetar tanto el
+// flag del empleado como el header X-Permission-Override por PIN de admin.
 
+// DINE_IN no exige permiso (operación de mesa por defecto). DELIVERY/TAKEOUT
+// requieren su flag específico.
+const requireOrderTypePermission = (req, res, next) => {
   const type = req.body?.orderType || req.body?.type;
-  if (type === 'DELIVERY' && req.user?.canTakeDelivery !== true) {
-    return res.status(403).json({
-      error: 'No tienes permiso para crear pedidos de delivery',
-      code: 'PERMISSION_DENIED',
-      permission: 'canTakeDelivery',
-    });
-  }
-  if (type === 'TAKEOUT' && req.user?.canTakeTakeout !== true) {
-    return res.status(403).json({
-      error: 'No tienes permiso para crear pedidos para llevar',
-      code: 'PERMISSION_DENIED',
-      permission: 'canTakeTakeout',
-    });
-  }
-  next();
+  let perm = null;
+  if (type === 'DELIVERY') perm = 'canTakeDelivery';
+  else if (type === 'TAKEOUT') perm = 'canTakeTakeout';
+  if (!perm) return next();
+
+  if (hasPermission(req, perm)) return next();
+  return res.status(403).json({
+    error: perm === 'canTakeDelivery'
+      ? 'No tienes permiso para crear pedidos de delivery'
+      : 'No tienes permiso para crear pedidos para llevar',
+    code: 'PERMISSION_DENIED',
+    permission: perm,
+  });
 };
 
+// Sólo exige canDiscount cuando la orden viene con descuento aplicado.
 const requireDiscountPermissionIfApplied = (req, res, next) => {
-  const role = req.user?.role;
-  if (['ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER'].includes(role)) return next();
   const discount = Number(req.body?.discount) || 0;
-  if (discount > 0 && req.user?.canDiscount !== true) {
-    return res.status(403).json({
-      error: 'No tienes permiso para aplicar descuentos',
-      code: 'PERMISSION_DENIED',
-      permission: 'canDiscount',
-    });
-  }
-  next();
+  if (discount <= 0) return next();
+  if (hasPermission(req, 'canDiscount')) return next();
+  return res.status(403).json({
+    error: 'No tienes permiso para aplicar descuentos',
+    code: 'PERMISSION_DENIED',
+    permission: 'canDiscount',
+  });
 };
 const router = express.Router();
 
