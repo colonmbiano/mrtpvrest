@@ -92,6 +92,35 @@ const requireRole = (...roles) => (req, res, next) => {
   return res.status(403).json({ error: `Acceso restringido. Roles permitidos: ${roles.join(', ')}` });
 };
 
+// Roles que tienen TODOS los permisos automáticamente (admin-equivalentes).
+// Si necesitas un override más granular, configura el flag específico en el
+// empleado en vez de subirle el rol.
+const ADMIN_EQUIVALENT_ROLES = new Set([
+  'ADMIN',
+  'SUPER_ADMIN',
+  'OWNER',
+  'MANAGER',
+]);
+
+// Gate de permisos por flag canX del empleado.
+// Uso: requirePermission('canCharge')
+//
+// Pasa siempre si:
+//  - El usuario tiene un rol admin-equivalente (ver set arriba), o
+//  - req.user[perm] === true.
+//
+// El frontend puede capturar el código PERMISSION_DENIED para abrir el flujo
+// de override por PIN de administrador.
+const requirePermission = (perm) => (req, res, next) => {
+  if (ADMIN_EQUIVALENT_ROLES.has(req.user?.role)) return next();
+  if (req.user?.[perm] === true) return next();
+  return res.status(403).json({
+    error: 'No tienes permiso para realizar esta acción',
+    code: 'PERMISSION_DENIED',
+    permission: perm,
+  });
+};
+
 // Aislamiento tenant — garantiza que el JWT del usuario pertenezca al mismo
 // tenant que el recurso que va a tocar. Debe ir después de `authenticate` y
 // de `tenantMiddleware` (que adjunta `req.restaurant`). SUPER_ADMIN puede
@@ -122,5 +151,7 @@ module.exports = {
   requireAdmin,
   requireSuperAdmin,
   requireRole,
+  requirePermission,
   requireTenantAccess,
+  ADMIN_EQUIVALENT_ROLES,
 };

@@ -38,8 +38,49 @@ async function discountInventory(prisma, items, orderId, restaurantId, locationI
 
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess, requirePermission } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
+
+// Permisos compuestos:
+// - Crear orden: depende del orderType (DELIVERY/TAKEOUT/DINE_IN). DINE_IN
+//   no exige permiso porque es la operación de mesa por defecto.
+// - Si la orden trae descuento, el empleado debe tener canDiscount.
+const requireOrderTypePermission = (req, res, next) => {
+  const role = req.user?.role;
+  // Admin-equivalentes pasan siempre
+  if (['ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER'].includes(role)) return next();
+
+  const type = req.body?.orderType || req.body?.type;
+  if (type === 'DELIVERY' && req.user?.canTakeDelivery !== true) {
+    return res.status(403).json({
+      error: 'No tienes permiso para crear pedidos de delivery',
+      code: 'PERMISSION_DENIED',
+      permission: 'canTakeDelivery',
+    });
+  }
+  if (type === 'TAKEOUT' && req.user?.canTakeTakeout !== true) {
+    return res.status(403).json({
+      error: 'No tienes permiso para crear pedidos para llevar',
+      code: 'PERMISSION_DENIED',
+      permission: 'canTakeTakeout',
+    });
+  }
+  next();
+};
+
+const requireDiscountPermissionIfApplied = (req, res, next) => {
+  const role = req.user?.role;
+  if (['ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER'].includes(role)) return next();
+  const discount = Number(req.body?.discount) || 0;
+  if (discount > 0 && req.user?.canDiscount !== true) {
+    return res.status(403).json({
+      error: 'No tienes permiso para aplicar descuentos',
+      code: 'PERMISSION_DENIED',
+      permission: 'canDiscount',
+    });
+  }
+  next();
+};
 const router = express.Router();
 
 
@@ -91,7 +132,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // ── POST /tpv — Crear pedido ──────────────────────────────────────────
-router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActiveShift, async (req, res) => {
+router.post('/tpv', authenticate, requireTenantAccess, requireOrderTypePermission, requireDiscountPermissionIfApplied, requireActiveShift, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
@@ -298,8 +339,8 @@ async function addRoundHandler(req, res) {
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
 
-router.post('/:id/items',  authenticate, requireTenantAccess, requireAdmin, addRoundHandler);
-router.post('/:id/rounds', authenticate, requireTenantAccess, requireAdmin, addRoundHandler);
+router.post('/:id/items',  authenticate, requireTenantAccess, requirePermission('canModifyTickets'), addRoundHandler);
+router.post('/:id/rounds', authenticate, requireTenantAccess, requirePermission('canModifyTickets'), addRoundHandler);
 
 // ── GESTIÓN DE PAGOS Y CUENTAS ──
 
@@ -318,7 +359,7 @@ async function releaseTableIfDineIn(orderId) {
   }).catch(() => {});
 }
 
-router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requirePermission('canCharge'), async (req, res) => {
   try {
     const order = await prisma.order.update({
       where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
@@ -330,7 +371,7 @@ router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireAd
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/:id/print-bill', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/:id/print-bill', authenticate, requireTenantAccess, requirePermission('canCharge'), async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
       where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
@@ -348,7 +389,7 @@ router.post('/:id/print-bill', authenticate, requireTenantAccess, requireAdmin, 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, res) => {
+router.put('/:id/confirm-cash', authenticate, requireTenantAccess, requirePermission('canCharge'), async (req, res) => {
   try {
     const order = await prisma.order.update({
       where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
@@ -374,7 +415,15 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/:id/status', authenticate, requireTenantAccess, async (req, res) => {
+// CANCELLED requiere canDeleteTickets; el resto de transiciones de status
+// (PREPARING/READY/DELIVERED) son flujo operacional normal y solo necesitan
+// estar autenticado en el tenant.
+const requireCanCancelIfStatusIsCancel = (req, res, next) => {
+  if (req.body?.status !== 'CANCELLED') return next();
+  return requirePermission('canDeleteTickets')(req, res, next);
+};
+
+router.put('/:id/status', authenticate, requireTenantAccess, requireCanCancelIfStatusIsCancel, async (req, res) => {
   try {
     const { status } = req.body;
     const order = await prisma.order.update({
@@ -391,7 +440,7 @@ router.put('/:id/status', authenticate, requireTenantAccess, async (req, res) =>
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/:id/payment', authenticate, requireTenantAccess, async (req, res) => {
+router.put('/:id/payment', authenticate, requireTenantAccess, requirePermission('canCharge'), async (req, res) => {
   try {
     const { paymentMethod } = req.body;
     const order = await prisma.order.update({

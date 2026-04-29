@@ -1,17 +1,10 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess, requirePermission } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // Gate: solo empleados/usuarios con permiso pueden abrir/cerrar turnos
-const requireCanManageShifts = (req, res, next) => {
-  if (req.user?.role === 'ADMIN' || req.user?.role === 'SUPER_ADMIN') return next();
-  if (req.user?.canManageShifts === true) return next();
-  return res.status(403).json({
-    error: 'No tienes permisos para gestionar turnos de caja',
-    code: 'CANNOT_MANAGE_SHIFTS',
-  });
-};
+const requireCanManageShifts = requirePermission('canManageShifts');
 
 // Asegura que la sucursal esté identificada en el request
 const requireLocation = (req, res, next) => {
