@@ -4,10 +4,12 @@ import { Plus, Trash2, Printer, CreditCard, ShoppingCart } from "lucide-react";
 import Button from "@/components/ui/Button";
 import TicketLine from "@/components/pos/TicketLine";
 import { useTicketStore } from "@/store/ticketStore";
+import { usePermissionGate } from "@/contexts/PermissionGateContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
 export default function SidebarTicket() {
+  const { run: runWithPermission } = usePermissionGate();
   const { 
     tickets,
     activeIndex,
@@ -30,21 +32,30 @@ export default function SidebarTicket() {
       return;
     }
     
-    try {
-      const orderData = {
-        type: ticket.type,
-        items: ticket.items.map(item => ({
-          menuItemId: item.menuItemId,
-          quantity: item.quantity,
-          notes: item.notes || ""
-        })),
-        tableId: ticket.tableId || null,
-        customerName: ticket.name || "Publico General",
-        customerPhone: ticket.phone || null,
-        total: total,
-      };
+    const orderData = {
+      orderType: ticket.type,
+      items: ticket.items.map(item => ({
+        menuItemId: item.menuItemId,
+        quantity: item.quantity,
+        notes: item.notes || ""
+      })),
+      tableId: ticket.tableId || null,
+      customerName: ticket.name || "Publico General",
+      customerPhone: ticket.phone || null,
+      subtotal: subtotal,
+      discount: ticket.discount,
+      total: total,
+    };
 
-      await api.post("/api/orders/tpv", orderData);
+    try {
+      // El backend exige canTakeDelivery / canTakeTakeout según orderType y
+      // canDiscount si discount > 0. Si el empleado actual no tiene el flag,
+      // PermissionGateProvider abre el modal de PIN admin y reintenta.
+      await runWithPermission((overrideToken) =>
+        api.post("/api/orders/tpv", orderData, {
+          headers: overrideToken ? { "X-Permission-Override": overrideToken } : undefined,
+        }),
+      );
       toast.success("Pedido enviado a cocina");
       clearActiveItems();
     } catch (error: any) {

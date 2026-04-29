@@ -16,7 +16,7 @@ const requireConfig = requirePermission('canConfigSystem');
 // Ticket Config — GET/PUT deben ir ANTES de /:id para que Express no matchee
 // "ticket-config" como un id.
 // ────────────────────────────────────────────────────────────────────────────
-router.get('/ticket-config', requireConfig, async (req, res) => {
+router.get('/ticket-config', async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
     let cfg = await prisma.ticketConfig.findUnique({ where: { locationId: req.locationId } });
@@ -86,7 +86,7 @@ function normalizePrinterPayload(body) {
   return payload;
 }
 
-router.get('/', requireConfig, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const printers = await prisma.printer.findMany({
       where: { locationId: req.locationId },

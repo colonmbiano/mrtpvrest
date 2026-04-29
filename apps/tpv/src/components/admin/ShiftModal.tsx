@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { usePermissionGate } from "@/contexts/PermissionGateContext";
 
 const EXPENSE_CATEGORIES = [
   { value: "SUPPLIES", label: "🛒 Insumos" },
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function ShiftModal({ employee, onClose }: Props) {
+  const { run: runWithPermission } = usePermissionGate();
   const [shift, setShift]           = useState<any>(null);
   const [loading, setLoading]       = useState(true);
   const [openingFloat, setOpeningFloat] = useState("");
@@ -49,11 +51,15 @@ export default function ShiftModal({ employee, onClose }: Props) {
     if (!openingFloat) { alert("Ingresa el fondo de caja"); return; }
     setOpening(true);
     try {
-      const { data } = await api.post("/api/shifts/open", {
-        openingFloat: Number(openingFloat),
-        employeeId: employee.id,
-        employeeName: employee.name,
-      });
+      const { data } = await runWithPermission((overrideToken) =>
+        api.post("/api/shifts/open", {
+          openingFloat: Number(openingFloat),
+          employeeId: employee.id,
+          employeeName: employee.name,
+        }, {
+          headers: overrideToken ? { "X-Permission-Override": overrideToken } : undefined,
+        }),
+      );
       setShift(data);
       setTab("summary");
     } catch (e: any) { alert(e.response?.data?.error || "Error"); }
@@ -88,10 +94,14 @@ export default function ShiftModal({ employee, onClose }: Props) {
     if (!confirm("¿Cerrar el turno? Esta acción no se puede deshacer.")) return;
     setClosing(true);
     try {
-      const { data } = await api.post(`/api/shifts/${shift.id}/close`, {
-        closingFloat: Number(closingFloat) || 0,
-        notes: closeNotes,
-      });
+      const { data } = await runWithPermission((overrideToken) =>
+        api.post(`/api/shifts/${shift.id}/close`, {
+          closingFloat: Number(closingFloat) || 0,
+          notes: closeNotes,
+        }, {
+          headers: overrideToken ? { "X-Permission-Override": overrideToken } : undefined,
+        }),
+      );
       setShift(data);
     } catch (e: any) { alert(e.response?.data?.error || "Error"); }
     finally { setClosing(false); }

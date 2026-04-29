@@ -6,6 +6,7 @@ import ProductCard from "@/components/pos/ProductCard";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { usePermissionGate } from "@/contexts/PermissionGateContext";
 import type { Product } from "./_lib/types";
 import { useOrderCart } from "./_hooks/useOrderCart";
 import CartSheet from "./_components/CartSheet";
@@ -16,6 +17,7 @@ type Category = { id: string; name: string };
 export default function WaiterOrderPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const tableId = params.id;
+  const { run: runWithPermission } = usePermissionGate();
 
   const [categories, setCategories] = useState<Category[]>([{ id: "all", name: "Todos" }]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -56,18 +58,24 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   async function handleSend() {
     if (cart.length === 0) return;
     setSubmitting(true);
+    const orderData = {
+      orderType: "DINE_IN",
+      tableId,
+      items: cart.map((l) => ({
+        menuItemId: l.menuItemId,
+        quantity: l.quantity,
+        notes: "",
+      })),
+      customerName: `Mesa ${tableId}`,
+      subtotal: total,
+      total,
+    };
     try {
-      await api.post("/api/orders/tpv", {
-        type: "DINE_IN",
-        tableId,
-        items: cart.map((l) => ({
-          menuItemId: l.menuItemId,
-          quantity: l.quantity,
-          notes: "",
-        })),
-        customerName: `Mesa ${tableId}`,
-        total,
-      });
+      await runWithPermission((overrideToken) =>
+        api.post("/api/orders/tpv", orderData, {
+          headers: overrideToken ? { "X-Permission-Override": overrideToken } : undefined,
+        }),
+      );
       toast.success("Comanda enviada a cocina");
       router.push(`/meseros/${tableId}`);
     } catch (e: any) {

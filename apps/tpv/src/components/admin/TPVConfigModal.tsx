@@ -1,6 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { usePermissionGate } from "@/contexts/PermissionGateContext";
+
+function withOverride(token?: string) {
+  return token ? { headers: { "X-Permission-Override": token } } : undefined;
+}
 
 type DisplaySettings = {
   gridSize?: number;
@@ -71,6 +76,7 @@ const emptyPrinter = {
 };
 
 export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
+  const { run: runWithPermission } = usePermissionGate();
   const [tab, setTab] = useState<"printers"|"ticket"|"kitchen"|"display">("printers");
   const [printers, setPrinters] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -178,8 +184,11 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
       if (form.connectionType === "USB") { payload.ip = ""; payload.bluetoothAddress = ""; }
       if (form.connectionType === "BLUETOOTH") { payload.ip = ""; payload.usbPort = ""; }
 
-      if (editPrinter) await api.put(`/api/printers/${editPrinter.id}`, payload);
-      else await api.post("/api/printers", payload);
+      await runWithPermission((token) =>
+        editPrinter
+          ? api.put(`/api/printers/${editPrinter.id}`, payload, withOverride(token))
+          : api.post("/api/printers", payload, withOverride(token)),
+      );
       setShowForm(false);
       fetchAll();
     } catch (err: any) { alert(err.response?.data?.error || "Error al guardar"); }
@@ -188,13 +197,19 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
 
   async function deletePrinter(id: string) {
     if (!confirm("¿Eliminar esta impresora?")) return;
-    try { await api.delete(`/api/printers/${id}`); fetchAll(); }
+    try {
+      await runWithPermission((token) => api.delete(`/api/printers/${id}`, withOverride(token)));
+      fetchAll();
+    }
     catch (err: any) { alert(err.response?.data?.error || "Error"); }
   }
 
   async function testPrinter(printer: any) {
     setTesting(printer.id);
-    try { await api.post(`/api/printers/${printer.id}/test`); alert(`✅ Prueba enviada a ${printer.name}`); }
+    try {
+      await runWithPermission((token) => api.post(`/api/printers/${printer.id}/test`, undefined, withOverride(token)));
+      alert(`✅ Prueba enviada a ${printer.name}`);
+    }
     catch { alert("❌ No se pudo conectar a la impresora"); }
     finally { setTesting(null); }
   }
@@ -216,7 +231,13 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
 
   async function saveTicketConfig() {
     setSaving(true);
-    try { await api.put("/api/printers/ticket-config", config); setSaved(true); setTimeout(() => setSaved(false), 2000); }
+    try {
+      await runWithPermission((token) =>
+        api.put("/api/printers/ticket-config", config, withOverride(token)),
+      );
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
     catch (err: any) { alert(err.response?.data?.error || "Error"); }
     finally { setSaving(false); }
   }
@@ -224,7 +245,9 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
   async function saveKitchenConfig() {
     setSaving(true);
     try {
-      await api.put("/api/printers/ticket-config", { ...config, kitchenLayout: JSON.stringify(kitchenLayout) });
+      await runWithPermission((token) =>
+        api.put("/api/printers/ticket-config", { ...config, kitchenLayout: JSON.stringify(kitchenLayout) }, withOverride(token)),
+      );
       setSaved(true); setTimeout(() => setSaved(false), 2000);
     } catch (err: any) { alert(err.response?.data?.error || "Error"); }
     finally { setSaving(false); }

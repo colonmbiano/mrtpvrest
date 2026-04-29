@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { X, Save, Receipt, Printer, ShieldCheck } from "lucide-react";
+import { usePermissionGate } from "@/contexts/PermissionGateContext";
 
 type TicketConfig = {
   businessName: string;
@@ -32,6 +33,7 @@ const EMPTY: TicketConfig = {
 };
 
 export default function TicketConfigModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const { run: runWithPermission } = usePermissionGate();
   const [cfg, setCfg] = useState<TicketConfig>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -57,7 +59,11 @@ export default function TicketConfigModal({ isOpen, onClose }: { isOpen: boolean
     setSaving(true);
     setError("");
     try {
-      await api.put("/api/printers/ticket-config", cfg);
+      await runWithPermission((token) =>
+        api.put("/api/printers/ticket-config", cfg, {
+          headers: token ? { "X-Permission-Override": token } : undefined,
+        }),
+      );
       onClose();
     } catch (e: any) {
       setError(e?.response?.data?.error || "Error al guardar");
