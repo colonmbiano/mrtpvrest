@@ -8,6 +8,7 @@
  *
  * Rutas:
  *   GET    /api/tables                     → lista con activeOrder embebida
+ *   GET    /api/tables/:id                 → detalle con activeOrder + items
  *   POST   /api/tables                     → crea mesa
  *   PATCH  /api/tables/:id                 → actualiza name/x/y/status/isActive
  *   DELETE /api/tables/:id                 → soft delete (isActive=false)
@@ -59,6 +60,42 @@ router.get('/', async (req, res) => {
     }
 
     res.json(tables.map(t => ({ ...t, activeOrder: orderByTable[t.id] || null })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET detalle de una mesa (con orden activa + items) ─────────────────────
+// Usado por la pantalla de detalle de meseros (/meseros/[id]) para mostrar la
+// cuenta acumulada en vivo sin pedir el endpoint general.
+router.get('/:id', async (req, res) => {
+  try {
+    if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const table = await prisma.table.findFirst({
+      where: { id: req.params.id, locationId: req.locationId, isActive: true },
+    });
+    if (!table) return res.status(404).json({ error: 'Mesa no encontrada' });
+
+    let activeOrder = null;
+    if (table.status === 'OCCUPIED') {
+      activeOrder = await prisma.order.findFirst({
+        where: { tableId: table.id, status: 'OPEN' },
+        select: {
+          id: true,
+          orderNumber: true,
+          total: true,
+          subtotal: true,
+          discount: true,
+          customerName: true,
+          createdAt: true,
+          items: {
+            select: { id: true, name: true, price: true, quantity: true, subtotal: true },
+            orderBy: { id: 'asc' },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+    res.json({ ...table, activeOrder });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
