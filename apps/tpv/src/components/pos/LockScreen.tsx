@@ -1,6 +1,6 @@
 "use client";
-import React from "react";
-import { Clock, MapPin, Delete, X, ChevronRight } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Clock, MapPin, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 
 interface LockScreenProps {
@@ -13,6 +13,12 @@ interface LockScreenProps {
   onSubmit: () => void;
   onChangeLocation: () => void;
   isVerifying?: boolean;
+}
+
+function getGreeting(hour: number): string {
+  if (hour < 12) return "Buenos días.";
+  if (hour < 19) return "Buenas tardes.";
+  return "Buenas noches.";
 }
 
 const LockScreen: React.FC<LockScreenProps> = ({
@@ -28,6 +34,33 @@ const LockScreen: React.FC<LockScreenProps> = ({
 }) => {
   const pinLength = 4;
   const digits = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+  // Reloj en vivo. Evita render mismatch en SSR usando un placeholder hasta
+  // que monte en el cliente. Refresca cada 30s para que el "Buenas tardes"
+  // y la hora estén siempre actuales.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const timeLabel = now
+    ? now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false })
+    : "--:--";
+  const dateLabel = now
+    ? now.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "short" }).toUpperCase()
+    : "";
+  const greeting = getGreeting(now?.getHours() ?? 12);
+  const [g1, g2] = greeting.split(" ");
+
+  // Dirección de la sucursal (opcional). Se persiste en localStorage durante
+  // el setup si la API la devuelve; si no existe, no pintamos esa línea.
+  const [locationAddress, setLocationAddress] = useState<string>("");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setLocationAddress(localStorage.getItem("locationAddress") || "");
+  }, []);
 
   return (
     <div className="fixed inset-0 z-[100] bg-surf-0 flex items-center justify-center px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8 font-sans text-tx-pri overflow-auto md:overflow-hidden">
@@ -50,10 +83,10 @@ const LockScreen: React.FC<LockScreenProps> = ({
 
             <div className="space-y-2">
               <span className="eyebrow !text-xs opacity-60 uppercase tracking-widest">
-                {locationName} · TERMINAL 01
+                {locationName}
               </span>
               <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black tracking-tight leading-[0.95] text-tx-pri">
-                Buenas<br />tardes.
+                {g1}<br />{g2}
               </h1>
               <p className="text-sm sm:text-base md:text-lg text-tx-sec leading-relaxed max-w-sm pt-2 sm:pt-3 md:pt-4">
                 Ingresa tu PIN de empleado para iniciar sesión y gestionar el turno actual.
@@ -63,11 +96,13 @@ const LockScreen: React.FC<LockScreenProps> = ({
 
           <div className="space-y-2 sm:space-y-2.5 md:space-y-3 lg:space-y-3 opacity-40">
             <div className="flex items-center gap-3 text-sm font-bold mono uppercase tracking-tight">
-              <Clock size={16} /> 14:42 · LUNES 27 ABR
+              <Clock size={16} /> {timeLabel}{dateLabel ? ` · ${dateLabel}` : ""}
             </div>
-            <div className="flex items-center gap-3 text-sm font-bold opacity-80 uppercase tracking-tight">
-              <MapPin size={16} /> AV. REFORMA 142, CDMX
-            </div>
+            {locationAddress && (
+              <div className="flex items-center gap-3 text-sm font-bold opacity-80 uppercase tracking-tight">
+                <MapPin size={16} /> {locationAddress}
+              </div>
+            )}
           </div>
         </div>
 
@@ -95,34 +130,36 @@ const LockScreen: React.FC<LockScreenProps> = ({
             ))}
           </div>
 
-          {/* KEYPAD */}
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-2 md:gap-2.5 lg:gap-3">
+          {/* KEYPAD — alturas y tamaño de fuente más grandes para tablet/celular.
+              Botones con min-h ergonómico (target táctil ≥48px en móvil). */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-2.5 md:gap-3">
             {digits.map((digit) => (
               <button
                 key={digit}
                 onClick={() => onDigit(digit.toString())}
-                className="aspect-square h-12 sm:h-13 md:h-14 lg:h-16 rounded-lg sm:rounded-lg md:rounded-xl lg:rounded-2xl bg-surf-2 border border-bd text-sm sm:text-base md:text-lg lg:text-2xl font-black mono hover:bg-surf-3 active:scale-95 transition-pos"
+                className="aspect-square h-16 sm:h-18 md:h-20 lg:h-24 rounded-xl md:rounded-2xl bg-surf-2 border border-bd text-3xl sm:text-4xl md:text-4xl lg:text-5xl font-black mono hover:bg-surf-3 active:scale-95 transition-pos"
               >
                 {digit}
               </button>
             ))}
             <button
               onClick={onClear}
-              className="h-12 sm:h-13 md:h-14 lg:h-16 text-xs font-black uppercase tracking-widest text-tx-dis hover:text-tx-mut transition-colors"
+              className="h-16 sm:h-18 md:h-20 lg:h-24 text-[11px] sm:text-xs md:text-sm font-black uppercase tracking-widest text-tx-dis hover:text-tx-mut transition-colors active:scale-95"
             >
               Limpiar
             </button>
             <button
               onClick={() => onDigit("0")}
-              className="aspect-square h-12 sm:h-13 md:h-14 lg:h-16 rounded-lg sm:rounded-lg md:rounded-xl lg:rounded-2xl bg-surf-2 border border-bd text-sm sm:text-base md:text-lg lg:text-2xl font-black mono hover:bg-surf-3 active:scale-95 transition-pos"
+              className="aspect-square h-16 sm:h-18 md:h-20 lg:h-24 rounded-xl md:rounded-2xl bg-surf-2 border border-bd text-3xl sm:text-4xl md:text-4xl lg:text-5xl font-black mono hover:bg-surf-3 active:scale-95 transition-pos"
             >
               0
             </button>
             <button
               onClick={onBackspace}
-              className="h-12 sm:h-13 md:h-14 lg:h-16 flex items-center justify-center text-tx-dis hover:text-tx-mut transition-colors"
+              aria-label="Borrar"
+              className="h-16 sm:h-18 md:h-20 lg:h-24 flex items-center justify-center rounded-xl md:rounded-2xl bg-surf-2 border border-bd text-tx-dis hover:text-tx-mut active:scale-95 transition-pos"
             >
-              <X size={24} />
+              <X size={28} />
             </button>
           </div>
 

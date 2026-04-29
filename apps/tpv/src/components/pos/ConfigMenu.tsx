@@ -1,8 +1,9 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { X, User, Clock, Printer, Palette, LogOut, LayoutGrid, Monitor } from "lucide-react";
 import Button from "@/components/ui/Button";
+import TPVConfigModal from "@/components/admin/TPVConfigModal";
 import { useAuthStore, type EmployeeRole } from "@/store/authStore";
 
 const ROLE_LABEL: Record<EmployeeRole, string> = {
@@ -36,6 +37,7 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
   onToggleMode,
 }) => {
   const employee = useAuthStore((s) => s.employee);
+  const [showPrinters, setShowPrinters] = useState(false);
 
   if (!isOpen) return null;
 
@@ -63,8 +65,8 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
         onClick={onClose} 
       />
       
-      {/* DRAWER CONTENT */}
-      <div className="relative w-[360px] h-full bg-surf-1 border-r border-bd shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 ease-out">
+      {/* DRAWER CONTENT — full width en celular hasta sm, fijo 360px en tablet+ */}
+      <div className="relative w-full max-w-[360px] sm:w-[360px] h-full bg-surf-1 border-r border-bd shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 ease-out">
         {/* HEADER */}
         <div className="p-6 border-b border-bd flex justify-between items-center">
           <div className="flex flex-col">
@@ -112,12 +114,11 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
                   <LayoutGrid size={16} /> Salones y Mesas
                 </Button>
               </Link>
-              {/* TODO: ruta /configuracion/impresoras aún no existe en apps/tpv/src/app — habilitar cuando esté lista */}
               <Button
                 variant="soft"
-                className="justify-start gap-3 opacity-60 cursor-not-allowed"
-                disabled
-                title="Próximamente"
+                fullWidth
+                className="justify-start gap-3"
+                onClick={() => setShowPrinters(true)}
               >
                 <Printer size={16} /> Configurar impresoras
               </Button>
@@ -178,6 +179,10 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
           </div>
         </div>
       </div>
+
+      {showPrinters && (
+        <TPVConfigModal onClose={() => setShowPrinters(false)} />
+      )}
     </div>
   );
 };
