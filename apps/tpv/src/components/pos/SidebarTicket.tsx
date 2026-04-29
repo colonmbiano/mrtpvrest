@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { Plus, Trash2, Printer, CreditCard, ShoppingCart } from "lucide-react";
+import { Plus, Trash2, Printer, CreditCard, ShoppingCart, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal from "@/components/pos/PaymentModal";
@@ -10,7 +10,13 @@ import { usePermissionGate } from "@/contexts/PermissionGateContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
-export default function SidebarTicket() {
+interface SidebarTicketProps {
+  /** Visible en móvil cuando true. En desktop (lg+) siempre se ve inline. */
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function SidebarTicket({ isOpen = false, onClose }: SidebarTicketProps) {
   const { run: runWithPermission } = usePermissionGate();
   const [showPayment, setShowPayment] = useState(false);
   const [showDiscount, setShowDiscount] = useState(false);
@@ -68,8 +74,36 @@ export default function SidebarTicket() {
   };
 
   return (
-    <aside className="w-[420px] border-l border-bd bg-surf-1 flex flex-col shrink-0">
-      {/* TABS DE TICKETS */}
+    <>
+      {/* OVERLAY (sólo móvil) */}
+      <div
+        className={`
+          fixed inset-0 z-30 bg-black/50 backdrop-blur-sm transition-opacity lg:hidden
+          ${isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
+        `}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      <aside
+        className={`
+          fixed top-0 right-0 z-40 h-full w-full max-w-md
+          border-l border-bd bg-surf-1 flex flex-col shrink-0
+          transition-transform duration-300 ease-out
+          ${isOpen ? "translate-x-0" : "translate-x-full"}
+          lg:static lg:translate-x-0 lg:max-w-none lg:w-[420px]
+        `}
+      >
+        {/* CERRAR (sólo móvil) */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 z-10 lg:hidden w-9 h-9 rounded-xl bg-surf-2 border border-bd flex items-center justify-center text-tx-mut active:scale-95"
+          aria-label="Cerrar carrito"
+        >
+          <X size={18} />
+        </button>
+
+        {/* TABS DE TICKETS */}
       <div className="flex h-12 bg-surf-0 border-b border-bd">
         <div className="flex-1 flex overflow-x-auto scrollbar-hide">
           {tickets.map((t, idx) => (
@@ -212,5 +246,6 @@ export default function SidebarTicket() {
         />
       )}
     </aside>
+    </>
   );
 }
