@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Search, Menu, Bell, ShoppingCart, UtensilsCrossed } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
@@ -30,9 +30,23 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     restaurantName,
     locationName,
     isVerifying,
+    currentEmployee,
     loginWithPin,
     logout,
   } = useTPVAuth();
+
+  // VALIDACIÓN DE ROL: Solo CASHIER, OWNER, ADMIN, MANAGER pueden acceder a /(cashier)
+  useEffect(() => {
+    if (currentEmployee && !isLocked) {
+      const allowedRoles = ["CASHIER", "OWNER", "ADMIN", "MANAGER"];
+      if (!allowedRoles.includes(currentEmployee.role)) {
+        console.warn(
+          `[SECURITY] Acceso denegado a /(cashier): rol ${currentEmployee.role} no autorizado`
+        );
+        router.replace("/");
+      }
+    }
+  }, [currentEmployee, isLocked, router]);
 
   const handlePinDigit = (digit: string) => {
     if (pinInput.length < 6) setPinInput(prev => prev + digit);
@@ -49,7 +63,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   if (isLocked) {
     return (
-      <LockScreen 
+      <LockScreen
         restaurantName={restaurantName}
         locationName={locationName}
         pinInput={pinInput}
@@ -62,7 +76,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       />
     );
   }
-  
+
   return (
     <div className="flex h-screen w-full bg-surf-0 overflow-hidden font-sans text-tx-pri">
       <ConfigMenu
