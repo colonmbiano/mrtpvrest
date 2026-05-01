@@ -5,13 +5,42 @@
  */
 import { create } from "zustand";
 
+export type Modifier = {
+  id: string;
+  groupId: string;
+  name: string;
+  priceAdd: number;
+  isDefault?: boolean;
+};
+
+export type ModifierGroup = {
+  id: string;
+  name: string;
+  required: boolean;
+  multiSelect: boolean;
+  minSelection: number;
+  maxSelection: number;
+  freeModifiersLimit: number;
+  modifiers: Modifier[];
+};
+
+export type ModifierSelection = {
+  id: string;
+  groupId: string;
+  name: string;
+  priceAdd: number;
+};
+
 export type Product = {
   id: string;
   name: string;
   price: number;
   category: string;
+  categoryId?: string;
+  imageUrl?: string | null;
   isPromo?: boolean;
   promoPrice?: number | null;
+  modifierGroups?: ModifierGroup[];
 };
 
 export type CartItem = Product & {
@@ -22,8 +51,13 @@ export type CartItem = Product & {
   variantId?: string | null;
   variantName?: string | null;
   originalPrice?: number | null;
-  mods?: unknown[];
+  modifiers?: ModifierSelection[];
 };
+
+export function modifierKey(mods?: ModifierSelection[]): string {
+  if (!mods || mods.length === 0) return "";
+  return [...mods].map((m) => m.id).sort().join(",");
+}
 
 export type TicketData = {
   id: string | number;
@@ -126,11 +160,13 @@ export const useTicketStore = create<TicketState>()((set, get) => ({
     set((state) => ({
       tickets: state.tickets.map((t, i) => {
         if (i !== state.activeIndex) return t;
+        const incomingModKey = modifierKey(item.modifiers);
         const existing = t.items.find(
           (ci) =>
             ci.menuItemId === item.menuItemId &&
             ci.variantId === item.variantId &&
-            ci.notes === item.notes
+            ci.notes === item.notes &&
+            modifierKey(ci.modifiers) === incomingModKey
         );
         if (existing) {
           return {
