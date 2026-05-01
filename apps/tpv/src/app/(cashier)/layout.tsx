@@ -1,18 +1,41 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { Search, Menu, Bell, ShoppingCart, UtensilsCrossed } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Search, Menu, Receipt, ShoppingCart, UtensilsCrossed } from "lucide-react";
 import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
-import Input from "@/components/ui/Input";
 import ConfigMenu from "@/components/pos/ConfigMenu";
 import LockScreen from "@/components/pos/LockScreen";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
+import api from "@/lib/api";
 
 import SidebarTicket from "@/components/pos/SidebarTicket";
 import { useThemeStore } from "@/store/themeStore";
+
+const ORDER_TYPE_LABEL: Record<string, string> = {
+  DINE_IN: "MESA",
+  TAKEOUT: "LLEVAR",
+  DELIVERY: "DOMICILIO",
+};
+
+const ACTIVE_STATUSES = new Set([
+  "PENDING",
+  "CONFIRMED",
+  "PREPARING",
+  "READY",
+  "OPEN",
+  "OUT_FOR_DELIVERY",
+]);
+
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const m = Math.max(0, Math.floor(ms / 60000));
+  if (m < 1) return "ahora";
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return `${h}h`;
+}
 
 export default function CashierLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -25,6 +48,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const activeTicket = useTicketStore((s) => s.getActiveTicket());
   const itemCount = activeTicket.items.reduce((acc, i) => acc + i.quantity, 0);
 
+  const [openOrders, setOpenOrders] = useState<any[]>([]);
+
   const {
     isLocked,
     restaurantName,
@@ -34,6 +59,39 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     loginWithPin,
     logout,
   } = useTPVAuth();
+
+  const fetchOpenOrders = useCallback(async () => {
+    try {
+      const { data } = await api.get("/api/orders/admin");
+      const list = Array.isArray(data) ? data : [];
+      setOpenOrders(list.filter((o: any) => ACTIVE_STATUSES.has(o.status)));
+    } catch (err) {
+      console.error("Error cargando órdenes abiertas:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isLocked) return;
+    fetchOpenOrders();
+    const id = setInterval(fetchOpenOrders, 30000);
+    return () => clearInterval(id);
+  }, [isLocked, fetchOpenOrders]);
+
+  useEffect(() => {
+    if (showOrders) fetchOpenOrders();
+  }, [showOrders, fetchOpenOrders]);
+
+  const drawerOrders = openOrders.map((o: any) => ({
+    id: o.id,
+    orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
+    customerName: o.customerName || o.user?.name || "Público general",
+    type: ORDER_TYPE_LABEL[o.orderType] || o.orderType || "ORDEN",
+    status: o.status,
+    total: Number(o.total ?? 0),
+    time: timeAgo(o.createdAt),
+    itemsCount: Array.isArray(o.items) ? o.items.length : 0,
+    needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
+  }));
 
   // VALIDACIÓN DE ROL: Solo CASHIER, OWNER, ADMIN, MANAGER pueden acceder a /(cashier)
   useEffect(() => {
@@ -92,7 +150,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       <OrdersDrawer
         isOpen={showOrders}
         onClose={() => setShowOrders(false)}
-        orders={[]} // Connect to real orders if needed
+        orders={drawerOrders}
         onSelectOrder={(o) => console.log("Select:", o)}
         onConfirmPayment={(o) => console.log("Pay:", o)}
       />
@@ -137,16 +195,21 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
               <Search size={18} />
             </Button>
 
-            <Badge count={0} variant="brand">
-              <Button
-                variant="soft"
-                size="md"
-                className="w-10 px-0"
-                onClick={() => setShowOrders(true)}
-              >
-                <Bell size={18} />
-              </Button>
-            </Badge>
+            <button
+              onClick={() => setShowOrders(true)}
+              className="relative h-10 px-3 sm:px-4 rounded-md bg-surf-2 hover:bg-surf-3 border border-bd flex items-center gap-2 text-tx-pri transition-pos"
+              aria-label="Ver órdenes abiertas"
+            >
+              <Receipt size={16} className="text-iris-500" />
+              <span className="hidden sm:inline text-[11px] font-black uppercase tracking-widest">
+                Órdenes
+              </span>
+              {openOrders.length > 0 && (
+                <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-iris-500 text-white text-[10px] font-black flex items-center justify-center mono tnum">
+                  {openOrders.length}
+                </span>
+              )}
+            </button>
 
             <div className="hidden lg:block h-8 w-[1px] bg-bd mx-1" />
 
