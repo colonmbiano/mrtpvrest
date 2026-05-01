@@ -69,7 +69,26 @@ router.get('/active', authenticate, requireTenantAccess, requireLocation, async 
 // ── POST abrir turno (solo en la sucursal del request) ───────────────────
 router.post('/open', authenticate, requireTenantAccess, requireLocation, requireCanManageShifts, async (req, res) => {
   try {
-    const { openingFloat, employeeId, employeeName, blindClose } = req.body;
+    const { openingFloat, employeeId: bodyEmployeeId, employeeName: bodyEmployeeName, blindClose } = req.body;
+
+    // Resolver qué Employee abre el turno.
+    // CashShift.openedById es FK a Employee — NO podemos pasarle un User admin.
+    let openedByEmployeeId = null;
+    let openedByEmployeeName = bodyEmployeeName || null;
+
+    if (req.user?.isEmployee) {
+      openedByEmployeeId = req.user.id;
+      openedByEmployeeName = openedByEmployeeName || req.user.name || 'Cajero';
+    } else if (bodyEmployeeId) {
+      const emp = await prisma.employee.findFirst({
+        where: { id: bodyEmployeeId, locationId: req.locationId, isActive: true },
+      });
+      if (!emp) return res.status(400).json({ error: 'employeeId inválido para esta sucursal', code: 'INVALID_EMPLOYEE' });
+      openedByEmployeeId = emp.id;
+      openedByEmployeeName = openedByEmployeeName || emp.name;
+    } else {
+      return res.status(400).json({ error: 'Se requiere employeeId en el body cuando el caller no es un Employee', code: 'EMPLOYEE_ID_REQUIRED' });
+    }
 
     // Cerrar cualquier turno abierto previo en ESTA sucursal
     await prisma.cashShift.updateMany({
@@ -80,9 +99,9 @@ router.post('/open', authenticate, requireTenantAccess, requireLocation, require
     const shift = await prisma.cashShift.create({
       data: {
         locationId: req.locationId,
-        employeeId: employeeId || req.user.id,
-        employeeName: employeeName || req.user.name || 'Cajero',
-        openedById: req.user.id,
+        employeeId: openedByEmployeeId,
+        employeeName: openedByEmployeeName,
+        openedById: openedByEmployeeId,
         openingFloat: openingFloat || 0,
         isOpen: true,
         blindClose: !!blindClose,
@@ -96,7 +115,7 @@ router.post('/open', authenticate, requireTenantAccess, requireLocation, require
 // ── POST cerrar turno (solo el de la sucursal del request) ───────────────
 router.post('/:id/close', authenticate, requireTenantAccess, requireLocation, requireCanManageShifts, async (req, res) => {
   try {
-    const { closingFloat, notes } = req.body;
+    const { closingFloat, notes, employeeId: bodyEmployeeId } = req.body;
     const shiftId = req.params.id;
 
     const shift = await prisma.cashShift.findFirst({
@@ -104,6 +123,18 @@ router.post('/:id/close', authenticate, requireTenantAccess, requireLocation, re
       include: { expenses: true }
     });
     if (!shift) return res.status(404).json({ error: 'Turno no encontrado en esta sucursal' });
+
+    // Resolver Employee que cierra (closedById FK a Employee)
+    let closedByEmployeeId = null;
+    if (req.user?.isEmployee) {
+      closedByEmployeeId = req.user.id;
+    } else if (bodyEmployeeId) {
+      const emp = await prisma.employee.findFirst({
+        where: { id: bodyEmployeeId, locationId: req.locationId, isActive: true },
+      });
+      if (!emp) return res.status(400).json({ error: 'employeeId inválido para esta sucursal' });
+      closedByEmployeeId = emp.id;
+    }
 
     // Solo órdenes de este turno (scoped por shiftId con fallback temporal)
     const orders = await prisma.order.findMany({
@@ -143,7 +174,7 @@ router.post('/:id/close', authenticate, requireTenantAccess, requireLocation, re
       data: {
         isOpen: false,
         closedAt: new Date(),
-        closedById: req.user.id,
+        closedById: closedByEmployeeId,
         closingFloat: closingFloat || 0,
         notes: notes || null,
         expectedCash,
