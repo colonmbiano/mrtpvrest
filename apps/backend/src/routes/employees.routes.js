@@ -5,11 +5,11 @@ const { authenticate, requireAdmin, requireTenantAccess } = require('../middlewa
 const router = express.Router();
 
 const ROLE_DEFAULTS = {
-  ADMIN:    { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:true,  canConfigSystem:true,  canTakeDelivery:true,  canTakeTakeout:true },
-  CASHIER:  { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true },
-  WAITER:   { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true },
-  DELIVERY: { canCharge:true,  canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:true,  canTakeTakeout:false },
-  COOK:     { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:false },
+  ADMIN:    { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:true,  canConfigSystem:true,  canTakeDelivery:true,  canTakeTakeout:true,  canManageShifts:true  },
+  CASHIER:  { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true,  canManageShifts:true  },
+  WAITER:   { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true,  canManageShifts:false },
+  DELIVERY: { canCharge:true,  canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:true,  canTakeTakeout:false, canManageShifts:false },
+  COOK:     { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:false, canManageShifts:false },
 };
 
 // GET todos los empleados (Filtrado por Sucursal)
@@ -44,7 +44,7 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
     const { name, phone, pin, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays,
-      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout,
+      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout, canManageShifts,
       locationId: bodyLocationId } = req.body;
 
     const locationId = req.locationId || bodyLocationId;
@@ -79,6 +79,7 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
         canConfigSystem:  canConfigSystem  !== undefined ? canConfigSystem  : defaults.canConfigSystem,
         canTakeDelivery:  canTakeDelivery  !== undefined ? canTakeDelivery  : defaults.canTakeDelivery,
         canTakeTakeout:   canTakeTakeout   !== undefined ? canTakeTakeout   : defaults.canTakeTakeout,
+        canManageShifts:  canManageShifts  !== undefined ? canManageShifts  : defaults.canManageShifts,
       }
     });
     res.json(emp);
@@ -88,7 +89,7 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
 router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name, phone, pin, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays, isActive,
-      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout } = req.body;
+      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout, canManageShifts } = req.body;
 
     // 1. Verificar que el empleado exista en esta sucursal
     const existing = await prisma.employee.findFirst({
@@ -99,7 +100,7 @@ router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, 
     // 2. Preparar los datos a actualizar
     const updateData = {
       name, phone, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays,
-      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout
+      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout, canManageShifts
     };
 
     // Actualizar estado activo/inactivo si se envía
@@ -203,6 +204,14 @@ router.post('/login', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     );
+
+    // No devolvemos la relación anidada al cliente, solo el empleado plano.
+    const { location, ...employeePublic } = emp;
+    res.json({ employee: employeePublic, token });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+module.exports = router;
 
     // No devolvemos la relación anidada al cliente, solo el empleado plano.
     const { location, ...employeePublic } = emp;
