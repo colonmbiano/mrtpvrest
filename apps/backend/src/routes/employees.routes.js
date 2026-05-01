@@ -212,11 +212,3 @@ router.post('/login', async (req, res) => {
 });
 
 module.exports = router;
-
-    // No devolvemos la relación anidada al cliente, solo el empleado plano.
-    const { location, ...employeePublic } = emp;
-    res.json({ employee: employeePublic, token });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-module.exports = router;
