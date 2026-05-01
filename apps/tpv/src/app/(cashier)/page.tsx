@@ -2,23 +2,17 @@
 import React, { useState, useEffect } from "react";
 import CategoryRail from "@/components/pos/CategoryRail";
 import ProductCard from "@/components/pos/ProductCard";
-import TicketLine from "@/components/pos/TicketLine";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
-import Button from "@/components/ui/Button";
-import { Plus, Trash2, Printer, CreditCard } from "lucide-react";
 import api from "@/lib/api";
 import { useTicketStore, type Product, type CartItem } from "@/store/ticketStore";
 
 export default function CatalogPage() {
-  const { 
-    getActiveTicket, 
-    updateTicket, 
-    addItemToActive, 
-    changeItemQty, 
-    removeItem, 
-    clearActiveItems 
+  const {
+    getActiveTicket,
+    updateTicket,
+    addItemToActive,
   } = useTicketStore();
-  
+
   const ticket = getActiveTicket();
   
   const [categories, setCategories] = useState<any[]>([]);
@@ -65,10 +59,17 @@ export default function CatalogPage() {
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-surf-0">
-      <CategoryRail 
-        categories={categories} 
-        activeId={activeCat} 
-        onSelect={setActiveCat} 
+      <div className="px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 pb-1">
+        <OrderTypeToggle
+          active={ticket.type}
+          onChange={(type) => updateTicket({ type })}
+        />
+      </div>
+
+      <CategoryRail
+        categories={categories}
+        activeId={activeCat}
+        onSelect={setActiveCat}
       />
       
       <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 scrollbar-hide">
