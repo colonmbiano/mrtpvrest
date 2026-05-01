@@ -118,17 +118,60 @@ router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActi
     const orderNumber = 'TPV-' + Date.now().toString().slice(-6);
     const isDineInTab = (orderType === 'DINE_IN') && !!tableId;
 
-    const createdItems = await Promise.all(items.map(async (item) => {
+    // Resolver cada item con su menuItem y modificadores (validados contra DB).
+    // El precio del item siempre se re-lee del servidor, igual que los priceAdd
+    // de los modificadores: el cliente no puede manipular precios.
+    const resolvedItems = await Promise.all(items.map(async (item) => {
       const menuItem = await prisma.menuItem.findUnique({
-        where: { id: item.menuItemId, restaurantId }
+        where: { id: item.menuItemId, restaurantId },
+        include: { modifierGroups: { include: { modifiers: true } } },
       });
+
+      const basePrice = menuItem?.price || 0;
+      const modifierIds = Array.isArray(item.modifiers)
+        ? item.modifiers.map((m) => m?.modifierId).filter(Boolean)
+        : [];
+
+      // Indexar todos los modificadores válidos del item por id, agrupados.
+      const validModsById = new Map();
+      const groupsById = new Map();
+      for (const g of menuItem?.modifierGroups || []) {
+        groupsById.set(g.id, g);
+        for (const m of g.modifiers) validModsById.set(m.id, m);
+      }
+
+      // Filtrar a sólo los que efectivamente pertenecen al item; agrupar por groupId.
+      const selectedByGroup = new Map();
+      for (const id of modifierIds) {
+        const mod = validModsById.get(id);
+        if (!mod) continue;
+        const arr = selectedByGroup.get(mod.groupId) || [];
+        arr.push(mod);
+        selectedByGroup.set(mod.groupId, arr);
+      }
+
+      // Aplicar freeModifiersLimit por grupo: los más baratos van gratis primero.
+      let unitExtra = 0;
+      const flatMods = [];
+      for (const [groupId, mods] of selectedByGroup.entries()) {
+        const free = groupsById.get(groupId)?.freeModifiersLimit || 0;
+        const sorted = [...mods].sort((a, b) => a.priceAdd - b.priceAdd);
+        sorted.forEach((m, idx) => {
+          const charge = idx >= free ? m.priceAdd : 0;
+          unitExtra += charge;
+          flatMods.push({ modifierId: m.id, name: m.name, priceAdd: charge });
+        });
+      }
+
+      const unitPrice = basePrice + unitExtra;
       return {
         menuItemId: item.menuItemId,
         name: menuItem?.name || 'Producto',
-        price: menuItem?.price || 0,
+        price: unitPrice,
         quantity: item.quantity,
-        subtotal: (menuItem?.price || 0) * item.quantity,
+        subtotal: unitPrice * item.quantity,
         notes: item.notes || null,
+        _modifiers: flatMods,
       };
     }));
 
@@ -154,26 +197,35 @@ router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActi
         },
       });
 
+      let roundId = null;
       if (isDineInTab) {
-        // Primera ronda con sus items.
         const round = await tx.orderRound.create({
           data: { orderId: created.id, roundNumber: 1 },
         });
-        await tx.orderItem.createMany({
-          data: createdItems.map(it => ({ ...it, orderId: created.id, roundId: round.id })),
-        });
+        roundId = round.id;
         await tx.table.update({ where: { id: tableId }, data: { status: 'OCCUPIED' } });
-      } else {
-        // Quick service: ronda implícita (roundId=null) — flujo legacy.
-        await tx.orderItem.createMany({
-          data: createdItems.map(it => ({ ...it, orderId: created.id })),
+      }
+
+      // Creamos cada OrderItem individualmente porque los modificadores son
+      // una relación nested write (no se puede con createMany).
+      for (const it of resolvedItems) {
+        const { _modifiers, ...itemData } = it;
+        await tx.orderItem.create({
+          data: {
+            ...itemData,
+            orderId: created.id,
+            roundId,
+            modifiers: _modifiers.length
+              ? { create: _modifiers.map(m => ({ modifierId: m.modifierId, name: m.name, priceAdd: m.priceAdd })) }
+              : undefined,
+          },
         });
       }
 
       return tx.order.findUnique({
         where: { id: created.id },
         include: {
-          items: { include: { menuItem: { include: { category: true } } } },
+          items: { include: { menuItem: { include: { category: true } }, modifiers: true } },
           rounds: true,
           table: true,
         },

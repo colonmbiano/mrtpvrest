@@ -2,12 +2,10 @@ import { notFound } from 'next/navigation';
 import { MochiTheme } from '@/components/themes/MochiTheme';
 import { BentoTheme } from '@/components/themes/BentoTheme';
 import { PocketTheme } from '@/components/themes/PocketTheme';
+import { getApiUrl } from '@/lib/config';
 import StorefrontClient from './StorefrontClient';
 
-const API =
-  process.env.NEXT_PUBLIC_API_URL ||
-  process.env.API_URL ||
-  'http://localhost:3001';
+const API = getApiUrl();
 
 type StoreInfo = {
   id: string;

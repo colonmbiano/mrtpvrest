@@ -24,6 +24,12 @@ type ActiveOrder = {
   _count?: { items: number };
 };
 
+type Zone = {
+  id: string;
+  name: string;
+  icon: string | null;
+};
+
 type TableRow = {
   id: string;
   name: string;
@@ -31,6 +37,8 @@ type TableRow = {
   y: number;
   status: TableStatus;
   isActive: boolean;
+  zoneId: string | null;
+  zone: Zone | null;
   activeOrder: ActiveOrder | null;
 };
 
@@ -72,21 +80,41 @@ export default function TablesFloorPlan({
   // Add table form
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newZoneId, setNewZoneId] = useState<string>("");
 
   // Rename inline
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
+  // Zonas configurables del local (para asignar a cada mesa).
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [zonePickerId, setZonePickerId] = useState<string | null>(null);
+
   async function fetchAll() {
     try {
       setLoading(true);
-      const { data } = await api.get<TableRow[]>("/api/tables");
-      setTables(data);
+      const [tablesRes, zonesRes] = await Promise.all([
+        api.get<TableRow[]>("/api/tables"),
+        api.get<Zone[]>("/api/zones").catch(() => ({ data: [] as Zone[] })),
+      ]);
+      setTables(tablesRes.data);
+      setZones(zonesRes.data || []);
       setError("");
     } catch (e: any) {
       setError(e?.response?.data?.error || "No se pudo cargar las mesas");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function assignZone(tableId: string, zoneId: string | null) {
+    try {
+      const { data } = await api.patch<TableRow>(`/api/tables/${tableId}`, { zoneId });
+      setTables(prev => prev.map(t => (t.id === tableId ? { ...t, zoneId: data.zoneId, zone: data.zone } : t)));
+    } catch (e: any) {
+      alert(e?.response?.data?.error || "Error al asignar zona");
+    } finally {
+      setZonePickerId(null);
     }
   }
 
@@ -152,9 +180,11 @@ export default function TablesFloorPlan({
       const { data } = await api.post<TableRow>("/api/tables", {
         name: newName.trim(),
         x: 20, y: 20,
+        zoneId: newZoneId || null,
       });
       setTables(prev => [...prev, data]);
       setNewName("");
+      setNewZoneId("");
       setShowAdd(false);
     } catch (e: any) {
       alert(e?.response?.data?.error || "Error al crear mesa");
@@ -345,6 +375,16 @@ export default function TablesFloorPlan({
                         <button
                           onClick={ev => {
                             ev.stopPropagation();
+                            setZonePickerId(zonePickerId === t.id ? null : t.id);
+                          }}
+                          className="w-6 h-6 rounded-full text-[10px] font-bold bg-amber-500 text-black shadow"
+                          title="Asignar zona"
+                        >
+                          🏷
+                        </button>
+                        <button
+                          onClick={ev => {
+                            ev.stopPropagation();
                             setRenameId(t.id);
                             setRenameValue(t.name);
                           }}
@@ -362,6 +402,51 @@ export default function TablesFloorPlan({
                         </button>
                       </div>
                     )}
+
+                    {/* Badge de zona en la esquina inferior izquierda */}
+                    {t.zone && (
+                      <div
+                        className="absolute -bottom-1.5 -left-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 shadow"
+                        style={{ background: "rgba(0,0,0,0.7)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)" }}
+                      >
+                        <span>{t.zone.icon || "📍"}</span>
+                        <span className="max-w-[60px] truncate">{t.zone.name}</span>
+                      </div>
+                    )}
+
+                    {/* Popover selector de zona */}
+                    {zonePickerId === t.id && editing && (
+                      <div
+                        className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-30 rounded-xl shadow-2xl border min-w-[180px] py-1"
+                        style={{ background: "var(--surf)", borderColor: "var(--border)" }}
+                        onClick={ev => ev.stopPropagation()}
+                        onPointerDown={ev => ev.stopPropagation()}
+                      >
+                        <button
+                          onClick={() => assignZone(t.id, null)}
+                          className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-white/5"
+                          style={{ color: !t.zoneId ? accent : "var(--muted)" }}
+                        >
+                          — Sin zona
+                        </button>
+                        {zones.length === 0 && (
+                          <div className="px-3 py-2 text-[10px]" style={{ color: "var(--muted)" }}>
+                            Crea zonas en Configuración → 🏷️ Zonas
+                          </div>
+                        )}
+                        {zones.map(z => (
+                          <button
+                            key={z.id}
+                            onClick={() => assignZone(t.id, z.id)}
+                            className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-white/5 flex items-center gap-2"
+                            style={{ color: t.zoneId === z.id ? accent : "var(--text)" }}
+                          >
+                            <span>{z.icon || "📍"}</span>
+                            <span className="truncate">{z.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -377,7 +462,7 @@ export default function TablesFloorPlan({
           {mode === "manage" && editing ? (
             <>
               {showAdd ? (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <input
                     value={newName}
                     onChange={e => setNewName(e.target.value)}
@@ -386,6 +471,19 @@ export default function TablesFloorPlan({
                     style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)" }}
                     autoFocus
                   />
+                  <select
+                    value={newZoneId}
+                    onChange={e => setNewZoneId(e.target.value)}
+                    className="px-3 py-2 rounded-lg text-sm outline-none"
+                    style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)" }}
+                  >
+                    <option value="">— Sin zona</option>
+                    {zones.map(z => (
+                      <option key={z.id} value={z.id}>
+                        {z.icon ? `${z.icon} ` : ""}{z.name}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     onClick={addTable}
                     className="px-3 py-2 rounded-lg text-xs font-black uppercase"
@@ -394,7 +492,7 @@ export default function TablesFloorPlan({
                     Agregar
                   </button>
                   <button
-                    onClick={() => { setShowAdd(false); setNewName(""); }}
+                    onClick={() => { setShowAdd(false); setNewName(""); setNewZoneId(""); }}
                     className="px-3 py-2 rounded-lg text-xs font-bold"
                     style={{ color: "var(--muted)" }}
                   >
