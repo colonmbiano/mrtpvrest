@@ -32,15 +32,18 @@ export default function SidebarTicket() {
     
     try {
       const orderData = {
-        type: ticket.type,
+        orderType: ticket.type,
         items: ticket.items.map(item => ({
           menuItemId: item.menuItemId,
           quantity: item.quantity,
-          notes: item.notes || ""
+          notes: item.notes || "",
+          modifiers: (item.modifiers || []).map(m => ({ modifierId: m.id })),
         })),
         tableId: ticket.tableId || null,
         customerName: ticket.name || "Publico General",
         customerPhone: ticket.phone || null,
+        subtotal: subtotal,
+        discount: ticket.discount,
         total: total,
       };
 
@@ -121,6 +124,7 @@ export default function SidebarTicket() {
               name={item.name}
               quantity={item.quantity}
               price={item.price}
+              modifiers={item.modifiers?.map(m => ({ name: m.name, priceAdd: m.priceAdd }))}
               onIncrease={() => changeItemQty(idx, 1)}
               onDecrease={() => changeItemQty(idx, -1)}
             />
