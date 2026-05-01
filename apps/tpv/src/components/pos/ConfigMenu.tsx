@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import Link from "next/link";
-import { X, User, Clock, Printer, Palette, LogOut, LayoutGrid, Monitor } from "lucide-react";
+import { X, User, Clock, Printer, Palette, LogOut, LayoutGrid, Monitor, Settings } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { useAuthStore, type EmployeeRole } from "@/store/authStore";
 
@@ -112,17 +112,32 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
                   <LayoutGrid size={16} /> Salones y Mesas
                 </Button>
               </Link>
-              {/* TODO: ruta /configuracion/impresoras aún no existe en apps/tpv/src/app — habilitar cuando esté lista */}
-              <Button
-                variant="soft"
-                className="justify-start gap-3 opacity-60 cursor-not-allowed"
-                disabled
-                title="Próximamente"
-              >
-                <Printer size={16} /> Configurar impresoras
-              </Button>
             </div>
           </section>
+
+          {/* ADMIN */}
+          {(employee?.role === "ADMIN" || employee?.role === "OWNER") && (
+            <section className="space-y-4">
+              <span className="eyebrow" style={{ color: "#ffb84d" }}>ADMINISTRACIÓN</span>
+              <div className="grid grid-cols-1 gap-2">
+                <Link href="/admin/menu" onClick={onClose} className="block">
+                  <Button variant="soft" fullWidth className="justify-start gap-3" style={{ borderLeft: "2px solid #ffb84d" }}>
+                    <Settings size={16} color="#ffb84d" /> Editor de Menú
+                  </Button>
+                </Link>
+                <Link href="/admin/impresoras" onClick={onClose} className="block">
+                  <Button variant="soft" fullWidth className="justify-start gap-3" style={{ borderLeft: "2px solid #ffb84d" }}>
+                    <Printer size={16} color="#ffb84d" /> Gestión de Impresoras
+                  </Button>
+                </Link>
+                <Link href="/admin/tickets" onClick={onClose} className="block">
+                  <Button variant="soft" fullWidth className="justify-start gap-3" style={{ borderLeft: "2px solid #ffb84d" }}>
+                    <Monitor size={16} color="#ffb84d" /> Configurador de Tickets
+                  </Button>
+                </Link>
+              </div>
+            </section>
+          )}
 
           {/* APARIENCIA */}
           <section className="space-y-4">
