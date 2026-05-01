@@ -318,6 +318,7 @@ router.get('/orders/:id', async (req, res) => {
         id: true, orderNumber: true, status: true, orderType: true,
         subtotal: true, deliveryFee: true, total: true,
         estimatedMinutes: true, createdAt: true, paidAt: true,
+        paymentMethod: true, paymentStatus: true,
         customerName: true, deliveryAddress: true, notes: true,
         items: {
           select: { name: true, quantity: true, price: true, subtotal: true, notes: true }
