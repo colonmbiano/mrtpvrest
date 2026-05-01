@@ -71,13 +71,23 @@ const emptyPrinter = {
 };
 
 export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
-  const [tab, setTab] = useState<"printers"|"ticket"|"kitchen"|"display">("printers");
+  const [tab, setTab] = useState<"printers"|"ticket"|"kitchen"|"display"|"zones">("printers");
   const [printers, setPrinters] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [config, setConfig] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState<string|null>(null);
+
+  // Zones (áreas configurables del salón)
+  const [zones, setZones] = useState<any[]>([]);
+  const [zoneName, setZoneName] = useState("");
+  const [zoneIcon, setZoneIcon] = useState("");
+  const [zoneSaving, setZoneSaving] = useState(false);
+  const [zoneError, setZoneError] = useState<string|null>(null);
+  const [zoneEditing, setZoneEditing] = useState<string|null>(null);
+  const [zoneEditName, setZoneEditName] = useState("");
+  const [zoneEditIcon, setZoneEditIcon] = useState("");
 
   // Printer form
   const [showForm, setShowForm] = useState(false);
@@ -132,10 +142,11 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
 
   async function fetchAll() {
     try {
-      const [p, c, cfg] = await Promise.all([
+      const [p, c, cfg, z] = await Promise.all([
         api.get("/api/printers"),
         api.get("/api/menu/categories"),
         api.get("/api/printers/ticket-config"),
+        api.get("/api/zones").catch(() => ({ data: [] })),
       ]);
       setPrinters(p.data || []);
       setCategories(c.data || []);
@@ -144,7 +155,77 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
       if (cfgData.kitchenLayout) {
         try { setKitchenLayout(JSON.parse(cfgData.kitchenLayout)); } catch {}
       }
+      setZones(z.data || []);
     } catch { setConfig({}); }
+  }
+
+  async function refreshZones() {
+    try {
+      const { data } = await api.get("/api/zones");
+      setZones(data || []);
+    } catch {}
+  }
+
+  async function createZone() {
+    const name = zoneName.trim();
+    if (!name) { setZoneError("Nombre requerido"); return; }
+    setZoneSaving(true);
+    setZoneError(null);
+    try {
+      await api.post("/api/zones", { name, icon: zoneIcon.trim() || null });
+      setZoneName("");
+      setZoneIcon("");
+      await refreshZones();
+    } catch (e: any) {
+      setZoneError(e?.response?.data?.error || "No se pudo crear la zona");
+    } finally {
+      setZoneSaving(false);
+    }
+  }
+
+  function startEditZone(z: any) {
+    setZoneEditing(z.id);
+    setZoneEditName(z.name);
+    setZoneEditIcon(z.icon || "");
+  }
+
+  async function saveEditZone(id: string) {
+    const name = zoneEditName.trim();
+    if (!name) { setZoneError("Nombre requerido"); return; }
+    setZoneError(null);
+    try {
+      await api.patch(`/api/zones/${id}`, { name, icon: zoneEditIcon.trim() || null });
+      setZoneEditing(null);
+      await refreshZones();
+    } catch (e: any) {
+      setZoneError(e?.response?.data?.error || "No se pudo actualizar");
+    }
+  }
+
+  async function deleteZone(z: any) {
+    if (!confirm(`¿Desactivar la zona "${z.name}"?\nLas mesas vinculadas quedarán "sin zona".`)) return;
+    try {
+      await api.delete(`/api/zones/${z.id}`);
+      await refreshZones();
+    } catch (e: any) {
+      setZoneError(e?.response?.data?.error || "No se pudo desactivar");
+    }
+  }
+
+  async function moveZone(idx: number, delta: number) {
+    const next = idx + delta;
+    if (next < 0 || next >= zones.length) return;
+    const reordered = [...zones];
+    const [moved] = reordered.splice(idx, 1);
+    reordered.splice(next, 0, moved);
+    setZones(reordered);
+    try {
+      await Promise.all(reordered.map((z, i) =>
+        z.order === i ? null : api.patch(`/api/zones/${z.id}`, { order: i })
+      ).filter(Boolean));
+    } catch {
+      await refreshZones();
+    }
   }
 
   function openForm(printer?: any) {
@@ -276,6 +357,7 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
     { id:"ticket",   label:"🧾 Cobro" },
     { id:"kitchen",  label:"🍳 Cocina" },
     { id:"display",  label:"🖥️ Pantalla" },
+    { id:"zones",    label:"🏷️ Zonas" },
   ];
 
   const connTypeColor: Record<string,string> = { NETWORK:"#3b82f6", USB:"#f97316", BLUETOOTH:"#8b5cf6" };
@@ -606,6 +688,115 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
                 style={{background:saved?"#22c55e":"var(--gold)",color:"#000"}}>
                 {saved?"✅ Guardado":"💾 Guardar configuración"}
               </button>
+            </div>
+          )}
+
+          {/* ══ ZONAS ══ */}
+          {tab === "zones" && (
+            <div className="flex flex-col gap-4">
+              <div className="rounded-2xl border p-4" style={{background:"var(--surf2)",borderColor:"var(--border)"}}>
+                <div className="text-xs font-black uppercase tracking-wider mb-1" style={{color:"var(--gold)"}}>Áreas del salón</div>
+                <p className="text-xs mb-3" style={{color:"var(--muted)"}}>
+                  Crea las zonas de tu negocio: <b>Mostrador</b>, <b>Terraza</b>, <b>Barra</b>, <b>Patio</b>, etc. Cada mesa puede asignarse a una. Las mesas sin zona aparecen como <i>Sin zona</i>.
+                </p>
+
+                {/* Form crear */}
+                <div className="flex gap-2 mb-3">
+                  <input
+                    value={zoneIcon}
+                    onChange={e => setZoneIcon(e.target.value)}
+                    maxLength={4}
+                    placeholder="🌴"
+                    className="w-14 px-2 py-2 rounded-xl text-center text-lg outline-none"
+                    style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--text)"}}
+                  />
+                  <input
+                    value={zoneName}
+                    onChange={e => setZoneName(e.target.value)}
+                    placeholder="Nombre (ej. Terraza)"
+                    onKeyDown={e => { if (e.key === 'Enter') createZone(); }}
+                    className="flex-1 px-3 py-2 rounded-xl text-sm outline-none"
+                    style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--text)"}}
+                  />
+                  <button
+                    onClick={createZone}
+                    disabled={zoneSaving || !zoneName.trim()}
+                    className="px-4 py-2 rounded-xl font-bold text-sm"
+                    style={{background:zoneSaving?"var(--muted)":"var(--gold)",color:"#000",opacity:!zoneName.trim()?0.5:1}}>
+                    {zoneSaving?"…":"➕ Crear"}
+                  </button>
+                </div>
+
+                {zoneError && (
+                  <div className="text-xs p-2 rounded-xl mb-3" style={{background:"rgba(239,68,68,0.1)",color:"#ef4444"}}>
+                    {zoneError}
+                  </div>
+                )}
+
+                {/* Lista */}
+                {zones.length === 0 ? (
+                  <div className="text-xs text-center py-6" style={{color:"var(--muted)"}}>
+                    Aún no hay zonas. Empieza creando la primera arriba.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {zones.map((z, idx) => (
+                      <div key={z.id}
+                        className="flex items-center gap-2 p-2 rounded-xl"
+                        style={{background:"var(--surf)",border:"1px solid var(--border)"}}>
+                        {zoneEditing === z.id ? (
+                          <>
+                            <input
+                              value={zoneEditIcon}
+                              onChange={e => setZoneEditIcon(e.target.value)}
+                              maxLength={4}
+                              className="w-12 px-2 py-1.5 rounded-lg text-center text-base outline-none"
+                              style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}}
+                            />
+                            <input
+                              value={zoneEditName}
+                              onChange={e => setZoneEditName(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') saveEditZone(z.id); if (e.key === 'Escape') setZoneEditing(null); }}
+                              autoFocus
+                              className="flex-1 px-2 py-1.5 rounded-lg text-sm outline-none"
+                              style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}}
+                            />
+                            <button onClick={() => saveEditZone(z.id)}
+                              className="w-8 h-8 rounded-lg text-sm" style={{background:"var(--gold)",color:"#000"}}>✓</button>
+                            <button onClick={() => setZoneEditing(null)}
+                              className="w-8 h-8 rounded-lg text-sm" style={{background:"var(--surf2)",color:"var(--muted)"}}>✕</button>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0"
+                              style={{background:"var(--surf2)"}}>
+                              {z.icon || "📍"}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-bold text-sm truncate">{z.name}</div>
+                              <div className="text-xs" style={{color:"var(--muted)"}}>
+                                {z.tablesCount ?? 0} mesa{(z.tablesCount ?? 0) === 1 ? "" : "s"}
+                              </div>
+                            </div>
+                            <button onClick={() => moveZone(idx, -1)}
+                              disabled={idx === 0}
+                              className="w-7 h-7 rounded-lg text-xs"
+                              style={{background:"var(--surf2)",color:"var(--muted)",opacity:idx===0?0.3:1}}>↑</button>
+                            <button onClick={() => moveZone(idx, 1)}
+                              disabled={idx === zones.length - 1}
+                              className="w-7 h-7 rounded-lg text-xs"
+                              style={{background:"var(--surf2)",color:"var(--muted)",opacity:idx===zones.length-1?0.3:1}}>↓</button>
+                            <button onClick={() => startEditZone(z)}
+                              className="w-8 h-8 rounded-lg text-sm" style={{background:"var(--surf2)",color:"var(--muted)"}}>✏️</button>
+                            <button onClick={() => deleteZone(z)}
+                              className="w-8 h-8 rounded-lg text-sm" style={{background:"rgba(239,68,68,0.1)",color:"#ef4444"}}>🗑</button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

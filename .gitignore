@@ -1,49 +1,53 @@
-# Dependencies
-node_modules
-.pnpm-store
+# Dependencias (El mayor ahorro)
+node_modules/
+**/node_modules/
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
 
-# Build outputs
-.next
-dist
-build
-out
-*.tsbuildinfo
+# Directorios de compilación y temporales
+.next/
+**/build/
+**/dist/
+**/out/
+.cache/
+.vercel/
+.turbo/
 
-# Turbo
-.turbo
-
-# Env files
-.env
-.env.local
-.env.*.local
-tests/e2e/.env.test
-
-# Playwright results y sesiones auth
-tests/e2e/results/
-tests/e2e/.auth/
-
-# Logs
+# Archivos de sistema y logs
+.git/
+.svn/
+.hg/
 *.log
-npm-debug.log*
-pnpm-debug.log*
-
-# OS
 .DS_Store
 Thumbs.db
 
-# Prisma
-*.db
-*.db-journal
-packages/database/generated/
+# Multimedia y Assets pesados
+public/assets/
+**/images/
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.gif
+*.ico
+*.pdf
+*.mp4
 
-# Editor
-.vscode
-.idea
+# Configuración de entorno (Seguridad)
+.env
+.env.*
 
-# Claude Code worktrees (sesiones anteriores, no código del repo)
-**/.claude/worktrees/
+# Scratch local de Claude / herramientas
+.superpowers/
+.claude/worktrees/
 
-# Design System (carpetas pesadas de assets/previews)
-Design System/images/
-Design System/uploads/
-Design System/export/
+# Logs y dumps locales
+build_log.txt
+*.tmp
+*.bak
+
+# Reportes generados por Playwright
+tests/e2e-report/
+tests/e2e/results/
+playwright-report/

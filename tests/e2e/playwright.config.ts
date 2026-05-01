@@ -31,7 +31,13 @@ export default defineConfig({
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'] },
     },
-    // 3) Resto sin dependencias
+    // 3) Tests de validación de roles y seguridad
+    {
+      name: 'security',
+      testMatch: '06-role-security.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    // 4) Resto sin dependencias
     {
       name: 'chromium',
       testMatch: '{01-login,02-tpv,03-kds}.spec.ts',
