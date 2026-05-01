@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import api from "@/lib/api";
+import ModifierGroupsEditor from "@/components/admin/ModifierGroupsEditor";
 
 // ── Componente para aplicar grupo de variantes ────────────────────────────
 function ApplyTemplateButton({ itemId, onApplied }: { itemId: string, onApplied: (v: any[]) => void }) {
@@ -674,6 +675,16 @@ export default function MenuPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Modificadores (solo al editar item ya creado) */}
+                {editItem && (
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold mb-2 uppercase tracking-wider" style={{color:"var(--muted)"}}>
+                      Modificadores <span style={{color:"var(--muted)",fontWeight:400,textTransform:"none",letterSpacing:0}}>(Sin costo o con extra)</span>
+                    </label>
+                    <ModifierGroupsEditor itemId={editItem.id} />
+                  </div>
+                )}
 
                 {/* Promoción por día */}
                 <div className="col-span-2">
