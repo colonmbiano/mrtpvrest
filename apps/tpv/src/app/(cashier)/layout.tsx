@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 
 import SidebarTicket from "@/components/pos/SidebarTicket";
 import { useThemeStore } from "@/store/themeStore";
+import { useAuthStore } from "@/store/authStore";
 
 export default function CashierLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -122,8 +123,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
             <div className="h-8 w-[1px] bg-bd mx-1" />
             
             <div className="flex flex-col items-end">
-              <span className="text-[12px] font-bold uppercase tracking-tight">CAJERO</span>
-              <span className="text-[10px] text-success font-black uppercase tracking-widest">TURNO ACTIVO</span>
+              <span className="text-[12px] font-bold uppercase tracking-tight">
+                {useAuthStore.getState().employee?.name || "Sin sesión"}
+              </span>
+              <span className="text-[10px] text-success font-black uppercase tracking-widest">
+                {useAuthStore.getState().employee?.role || "Desconocido"}
+              </span>
             </div>
           </div>
         </header>
