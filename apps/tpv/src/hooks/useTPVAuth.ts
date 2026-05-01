@@ -29,12 +29,23 @@ export function useTPVAuth() {
   }, [router, auth.isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Redirección por roles tras autenticación exitosa
+  // NOTA: Esto redirige al HOME por rol, pero NO protege rutas individuales.
+  // La protección real ocurre en los layouts con validación de roles.
   useEffect(() => {
     if (auth.isAuthenticated && auth.employee) {
-      if (auth.employee.role === "WAITER") {
+      const role = auth.employee.role;
+
+      if (role === "WAITER") {
         router.push("/meseros");
-      } else if (auth.employee.role === "KITCHEN") {
+      } else if (role === "KITCHEN") {
         router.push("/kds");
+      } else if (role === "CASHIER" || role === "OWNER" || role === "ADMIN" || role === "MANAGER") {
+        // CASHIER y admins van al home (/(cashier)/)
+        router.push("/");
+      } else {
+        // Rol desconocido o no soportado
+        console.warn(`Rol no soportado: ${role}`);
+        router.push("/");
       }
     }
   }, [auth.isAuthenticated, auth.employee, router]);

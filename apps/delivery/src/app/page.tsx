@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 import api from "@/lib/api";
+import { getApiUrl } from "@/lib/config";
 import GPSTracker from "@/components/delivery/GPSTracker";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -125,8 +126,7 @@ export default function DeliveryApp() {
     if (driver) {
       fetchOrders(); fetchHistory();
       
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-      const socket = io(API_URL, {
+      const socket = io(getApiUrl(), {
         query: { restaurantId: localStorage.getItem("restaurantId"), locationId: localStorage.getItem("locationId") }
       });
 

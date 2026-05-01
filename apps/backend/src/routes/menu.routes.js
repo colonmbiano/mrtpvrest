@@ -276,6 +276,154 @@ router.delete('/variant-templates/:id/options/:optionId', authenticate, requireT
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Modificadores (Grupos y opciones) ─────────────────────────────────────
+//
+// Estructura: MenuItem → ModifierGroup[] → Modifier[].
+// El tenant scoping se verifica subiendo por la relación: cada grupo
+// pertenece a un MenuItem, que tiene restaurantId directo.
+
+async function assertItemBelongsToTenant(itemId, restaurantId) {
+  const item = await prisma.menuItem.findUnique({
+    where: { id: itemId },
+    select: { id: true, restaurantId: true },
+  });
+  if (!item) return { error: 'Platillo no encontrado', code: 404 };
+  if (item.restaurantId !== restaurantId) return { error: 'No autorizado', code: 403 };
+  return { item };
+}
+
+async function assertGroupBelongsToTenant(groupId, restaurantId) {
+  const group = await prisma.modifierGroup.findUnique({
+    where: { id: groupId },
+    select: { id: true, menuItem: { select: { restaurantId: true } } },
+  });
+  if (!group) return { error: 'Grupo no encontrado', code: 404 };
+  if (group.menuItem.restaurantId !== restaurantId) return { error: 'No autorizado', code: 403 };
+  return { group };
+}
+
+async function assertModifierBelongsToTenant(modifierId, restaurantId) {
+  const modifier = await prisma.modifier.findUnique({
+    where: { id: modifierId },
+    select: { id: true, group: { select: { menuItem: { select: { restaurantId: true } } } } },
+  });
+  if (!modifier) return { error: 'Modificador no encontrado', code: 404 };
+  if (modifier.group.menuItem.restaurantId !== restaurantId) {
+    return { error: 'No autorizado', code: 403 };
+  }
+  return { modifier };
+}
+
+router.post('/items/:itemId/modifier-groups', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertItemBelongsToTenant(req.params.itemId, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+
+    const { name, required, multiSelect, minSelection, maxSelection, freeModifiersLimit } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nombre requerido' });
+
+    const group = await prisma.modifierGroup.create({
+      data: {
+        menuItemId: req.params.itemId,
+        name,
+        required: !!required,
+        multiSelect: !!multiSelect,
+        minSelection: parseInt(minSelection) || 0,
+        maxSelection: parseInt(maxSelection) || 0,
+        freeModifiersLimit: parseInt(freeModifiersLimit) || 0,
+      },
+      include: { modifiers: true },
+    });
+    res.status(201).json(group);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/modifier-groups/:groupId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertGroupBelongsToTenant(req.params.groupId, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+
+    const { name, required, multiSelect, minSelection, maxSelection, freeModifiersLimit } = req.body;
+    const group = await prisma.modifierGroup.update({
+      where: { id: req.params.groupId },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(required !== undefined && { required: !!required }),
+        ...(multiSelect !== undefined && { multiSelect: !!multiSelect }),
+        ...(minSelection !== undefined && { minSelection: parseInt(minSelection) || 0 }),
+        ...(maxSelection !== undefined && { maxSelection: parseInt(maxSelection) || 0 }),
+        ...(freeModifiersLimit !== undefined && { freeModifiersLimit: parseInt(freeModifiersLimit) || 0 }),
+      },
+      include: { modifiers: true },
+    });
+    res.json(group);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/modifier-groups/:groupId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertGroupBelongsToTenant(req.params.groupId, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+
+    await prisma.modifierGroup.delete({ where: { id: req.params.groupId } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/modifier-groups/:groupId/modifiers', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertGroupBelongsToTenant(req.params.groupId, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+
+    const { name, priceAdd, isDefault } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nombre requerido' });
+
+    const modifier = await prisma.modifier.create({
+      data: {
+        groupId: req.params.groupId,
+        name,
+        priceAdd: parseFloat(priceAdd) || 0,
+        isDefault: !!isDefault,
+      },
+    });
+    res.status(201).json(modifier);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/modifiers/:modifierId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertModifierBelongsToTenant(req.params.modifierId, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+
+    const { name, priceAdd, isDefault } = req.body;
+    const modifier = await prisma.modifier.update({
+      where: { id: req.params.modifierId },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(priceAdd !== undefined && { priceAdd: parseFloat(priceAdd) || 0 }),
+        ...(isDefault !== undefined && { isDefault: !!isDefault }),
+      },
+    });
+    res.json(modifier);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/modifiers/:modifierId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertModifierBelongsToTenant(req.params.modifierId, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+
+    await prisma.modifier.delete({ where: { id: req.params.modifierId } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Menú Público (sin auth) ────────────────────────────────────────────────
 
 router.get('/public/:slug/menu', async (req, res) => {
