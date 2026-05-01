@@ -28,11 +28,6 @@ public/assets/
 *.png
 *.jpg
 *.jpeg
-*.svg
-*.gif
-*.ico
-*.pdf
-*.mp4
 
 # Configuración de entorno (Seguridad)
 .env
@@ -41,6 +36,7 @@ public/assets/
 # Scratch local de Claude / herramientas
 .superpowers/
 .claude/worktrees/
+.claude/settings.local.json
 
 # Logs y dumps locales
 build_log.txt
@@ -51,3 +47,16 @@ build_log.txt
 tests/e2e-report/
 tests/e2e/results/
 playwright-report/
+tests/e2e/.auth/
+
+# IDEs (VS Code y JetBrains/Android Studio)
+.vscode/
+**/.idea/
+*.iml
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Expo / React Native
+.expo/
+.expo-shared/
