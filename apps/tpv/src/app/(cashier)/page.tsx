@@ -3,8 +3,14 @@ import React, { useState, useEffect } from "react";
 import CategoryRail from "@/components/pos/CategoryRail";
 import ProductCard from "@/components/pos/ProductCard";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
+import ModifierPickerModal from "@/components/pos/ModifierPickerModal";
 import api from "@/lib/api";
-import { useTicketStore, type Product, type CartItem } from "@/store/ticketStore";
+import {
+  useTicketStore,
+  type Product,
+  type CartItem,
+  type ModifierSelection,
+} from "@/store/ticketStore";
 
 export default function CatalogPage() {
   const {
@@ -14,11 +20,12 @@ export default function CatalogPage() {
   } = useTicketStore();
 
   const ticket = getActiveTicket();
-  
+
   const [categories, setCategories] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [activeCat, setActiveCat] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
+  const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -42,20 +49,43 @@ export default function CatalogPage() {
     ? products 
     : products.filter((p: any) => p.categoryId === activeCat);
 
-  const handleAddToCart = (p: Product) => {
+  const handleProductClick = (p: Product) => {
+    if (p.modifierGroups && p.modifierGroups.length > 0) {
+      setPickerProduct(p);
+      return;
+    }
+    addPlainProduct(p);
+  };
+
+  const addPlainProduct = (p: Product) => {
+    const unit = p.promoPrice || p.price;
     const cartItem: CartItem = {
       ...p,
       menuItemId: p.id,
       quantity: 1,
-      subtotal: p.promoPrice || p.price,
-      price: p.promoPrice || p.price,
-      originalPrice: p.price
+      subtotal: unit,
+      price: unit,
+      originalPrice: p.price,
     };
     addItemToActive(cartItem);
   };
 
-  const subtotal = ticket.items.reduce((acc, item) => acc + item.subtotal, 0);
-  const total = subtotal - ticket.discount;
+  const handlePickerConfirm = (mods: ModifierSelection[], unitExtra: number) => {
+    if (!pickerProduct) return;
+    const base = pickerProduct.promoPrice || pickerProduct.price;
+    const unit = base + unitExtra;
+    const cartItem: CartItem = {
+      ...pickerProduct,
+      menuItemId: pickerProduct.id,
+      quantity: 1,
+      subtotal: unit,
+      price: unit,
+      originalPrice: pickerProduct.price,
+      modifiers: mods,
+    };
+    addItemToActive(cartItem);
+    setPickerProduct(null);
+  };
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-surf-0">
@@ -85,12 +115,20 @@ export default function CatalogPage() {
               <ProductCard
                 key={product.id}
                 {...product}
-                onClick={() => handleAddToCart(product)}
+                onClick={() => handleProductClick(product)}
               />
             ))}
           </div>
         )}
       </div>
+
+      {pickerProduct && (
+        <ModifierPickerModal
+          product={pickerProduct}
+          onClose={() => setPickerProduct(null)}
+          onConfirm={handlePickerConfirm}
+        />
+      )}
     </div>
   );
 }
