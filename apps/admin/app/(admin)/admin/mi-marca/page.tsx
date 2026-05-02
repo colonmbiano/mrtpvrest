@@ -208,7 +208,7 @@ export default function BrandConfigPage() {
     whatsappNumber: "",
     deliveryFee: 0,
     estimatedDelivery: 40,
-    storefrontTheme: "MOCHI"
+    storefrontTheme: "KAWAII"
   });
 
   useEffect(() => {
@@ -326,9 +326,9 @@ export default function BrandConfigPage() {
               <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-3 block tracking-widest">Estilo de Tienda Online</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[
-                  { id: "MOCHI", name: "Mochi", emoji: "🌸", desc: "Minimalista Kawaii" },
-                  { id: "BENTO", name: "Bento", emoji: "⚡", desc: "Moderno Asimétrico" },
-                  { id: "POCKET", name: "Pocket", emoji: "📱", desc: "App-First / Pocket" }
+                  { id: "KAWAII", name: "Kawaii", emoji: "🌸", desc: "Soft / Pastel / Editorial" },
+                  { id: "HALO", name: "Halo", emoji: "🛰", desc: "Sci-Fi / HUD táctico" },
+                  { id: "BRUTALIST", name: "Brutalist", emoji: "⚡", desc: "Street / Alto contraste" }
                 ].map(t => (
                   <button
                     key={t.id}

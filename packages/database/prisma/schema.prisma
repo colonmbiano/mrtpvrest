@@ -776,7 +776,7 @@ model RestaurantConfig {
   pointsPerTen     Int   @default(1)
   pointsValuePesos Float @default(0.10)
 
-  storefrontTheme  String @default("MOCHI") // MOCHI | BENTO | POCKET
+  storefrontTheme  String @default("KAWAII") // KAWAII | HALO | BRUTALIST
 
   updatedAt DateTime @updatedAt
 
