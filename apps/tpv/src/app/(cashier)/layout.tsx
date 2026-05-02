@@ -138,6 +138,36 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   return (
     <div className="flex h-screen w-full bg-surf-0 overflow-hidden font-sans text-tx-pri">
+      {/* SIDE RAIL (Linear Style) */}
+      <aside className="hidden lg:flex w-16 bg-surf-1 border-r border-bd flex-col items-center py-6 gap-8 shrink-0">
+        <div className="w-8 h-8 rounded-lg bg-iris-500 flex items-center justify-center text-white font-black text-lg shadow-lg shadow-iris-glow mb-4">
+          M
+        </div>
+        
+        <button className="text-iris-500 hover:text-tx-pri transition-colors">
+          <Menu size={20} />
+        </button>
+        
+        <button 
+          onClick={() => setShowOrders(true)}
+          className="text-tx-mut hover:text-tx-pri transition-colors relative"
+        >
+          <Receipt size={20} />
+          {openOrders.length > 0 && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-iris-500" />
+          )}
+        </button>
+
+        <div className="flex-1" />
+
+        <button 
+          onClick={() => setShowMenu(true)}
+          className="text-tx-mut hover:text-tx-pri transition-colors"
+        >
+          <UtensilsCrossed size={20} />
+        </button>
+      </aside>
+
       <ConfigMenu
         isOpen={showMenu}
         onClose={() => setShowMenu(false)}
@@ -157,70 +187,40 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       />
 
       {/* MAIN CONTENT AREA */}
-      <div className={`flex-1 flex-col min-w-0 ${mobileView === "menu" ? "flex" : "hidden"} lg:flex`}>
-        {/* TOP HEADER */}
-        <header className="h-14 sm:h-16 border-b border-bd bg-surf-1 flex items-center px-3 sm:px-4 lg:px-6 gap-2 sm:gap-3 lg:gap-4 shrink-0">
-          <Button
-            variant="ghost"
-            size="md"
-            className="w-10 px-0 shrink-0"
-            onClick={() => setShowMenu(true)}
-          >
-            <Menu size={20} />
-          </Button>
-
-          <div className="flex flex-col min-w-0">
-            <span className="text-[12px] sm:text-[14px] font-black tracking-tighter leading-none truncate">
-              {restaurantName?.toUpperCase() || "MRTPVREST"}
+      <div className={`flex-1 flex flex-col min-w-0 ${mobileView === "menu" ? "flex" : "hidden"} lg:flex`}>
+        {/* TOP HEADER (Linear Style) */}
+        <header className="h-14 sm:h-16 border-b border-bd bg-surf-0 flex items-center px-4 sm:px-6 gap-4 shrink-0">
+          <div className="flex items-center gap-3">
+            <h1 className="text-[13px] font-black tracking-widest uppercase truncate max-w-[150px]">
+              {restaurantName || "MRTPVREST"}
+            </h1>
+            <span className="hidden sm:inline-block px-2 py-0.5 rounded bg-surf-2 border border-bd text-[10px] font-bold text-tx-mut">
+              {locationName?.toUpperCase() || "SUCURSAL"}
             </span>
-            <span className="eyebrow mt-0.5 truncate">{locationName?.toUpperCase() || "SUCURSAL"}</span>
           </div>
 
-          <div className="hidden md:flex flex-1 max-w-md mx-auto relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-mut group-focus-within:text-iris-500 transition-colors" size={16} />
+          <div className="hidden md:flex flex-1 max-w-md mx-auto relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-mut" size={14} />
             <input
               placeholder="Buscar platillo o categoría..."
-              className="w-full h-10 bg-surf-2 border border-bd rounded-md pl-10 pr-4 text-[13px] focus:outline-none focus:border-iris-500 transition-pos"
+              className="w-full h-9 bg-surf-1/50 border border-bd rounded-md pl-9 pr-4 text-[13px] focus:outline-none focus:border-iris-500 transition-all placeholder:text-tx-disabled"
             />
           </div>
 
           <div className="flex-1 md:hidden" />
 
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <Button
-              variant="ghost"
-              size="md"
-              className="w-10 px-0 md:hidden"
-              aria-label="Buscar"
-            >
-              <Search size={18} />
-            </Button>
-
-            <button
-              onClick={() => setShowOrders(true)}
-              className="relative h-10 px-3 sm:px-4 rounded-md bg-surf-2 hover:bg-surf-3 border border-bd flex items-center gap-2 text-tx-pri transition-pos"
-              aria-label="Ver órdenes abiertas"
-            >
-              <Receipt size={16} className="text-iris-500" />
-              <span className="hidden sm:inline text-[11px] font-black uppercase tracking-widest">
-                Órdenes
-              </span>
-              {openOrders.length > 0 && (
-                <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-iris-500 text-white text-[10px] font-black flex items-center justify-center mono tnum">
-                  {openOrders.length}
-                </span>
-              )}
-            </button>
-
-            <div className="hidden lg:block h-8 w-[1px] bg-bd mx-1" />
-
+          <div className="flex items-center gap-4 shrink-0">
             <div className="hidden lg:flex flex-col items-end">
-              <span className="text-[12px] font-bold uppercase tracking-tight">
+              <span className="text-[12px] font-bold tracking-tight">
                 {currentEmployee?.name || "Sin sesión"}
               </span>
-              <span className="text-[10px] text-success font-black uppercase tracking-widest">
+              <span className="text-[10px] text-iris-500 font-black uppercase tracking-widest">
                 {currentEmployee?.role || "TURNO ACTIVO"}
               </span>
+            </div>
+            
+            <div className="w-8 h-8 rounded-full bg-surf-2 border border-bd flex items-center justify-center text-[10px] font-black text-tx-mut">
+              {currentEmployee?.name?.charAt(0).toUpperCase() || "E"}
             </div>
           </div>
         </header>

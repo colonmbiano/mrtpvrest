@@ -4,27 +4,27 @@
 
 @layer base {
   :root {
-    --bg: #0a0a0a;
-    --surface-1: #141414;
-    --surface-2: #1f1f1f;
-    --surface-3: #2a2a2a;
-    --surface-hover: #333333;
-    --text-primary: #ffffff;
-    --text-secondary: #a1a1aa;
-    --text-muted: #71717a;
-    --text-disabled: #52525b;
+    --bg: #08090a;
+    --surface-1: #0f1011;
+    --surface-2: #161718;
+    --surface-3: #1c1e1f;
+    --surface-hover: #212324;
+    --text-primary: #f7f8f8;
+    --text-secondary: #b1b8c9;
+    --text-muted: #8a8f98;
+    --text-disabled: #4c515a;
     --border: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.16);
+    --border-strong: rgba(255, 255, 255, 0.15);
     --border-focus: var(--brand);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 8px 16px -4px rgba(0, 0, 0, 0.6);
+    --shadow-lg: 0 16px 32px -8px rgba(0, 0, 0, 0.8);
     --shadow-glow: 0 10px 40px -10px var(--brand-glow);
-    --brand: #10b981;
-    --brand-hover: #059669;
-    --brand-active: #047857;
-    --brand-soft: rgba(16, 185, 129, 0.12);
-    --brand-glow: rgba(16, 185, 129, 0.35);
+    --brand: #5e6ad2;
+    --brand-hover: #7170ff;
+    --brand-active: #535fc0;
+    --brand-soft: rgba(94, 106, 210, 0.15);
+    --brand-glow: rgba(94, 106, 210, 0.35);
     --brand-fg: #ffffff;
     --success: #10b981;
     --success-soft: rgba(16, 185, 129, 0.12);
@@ -34,14 +34,14 @@
     --danger-soft: rgba(239, 68, 68, 0.12);
     --info: #3b82f6;
     --info-soft: rgba(59, 130, 246, 0.12);
-    --radius-sm: 0.5rem;
-    --radius-md: 0.75rem;
-    --radius-lg: 1rem;
-    --radius-xl: 1.25rem;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
     --radius-full: 9999px;
-    --font-body: var(--font-dm-sans, 'DM Sans'), system-ui, sans-serif;
-    --font-display: var(--font-syne, 'Syne'), system-ui, sans-serif;
-    --font-mono: var(--font-dm-mono, 'DM Mono'), ui-monospace, monospace;
+    --font-body: 'Inter', system-ui, sans-serif;
+    --font-display: 'Inter', system-ui, sans-serif;
+    --font-mono: 'Inter', monospace;
 
     /* Legacy aliases */
     --bg-app: var(--bg);
@@ -58,20 +58,20 @@
   }
 
   [data-mode="light"] {
-    --bg: #f8fafc;
+    --bg: #f7f8f8;
     --surface-1: #ffffff;
-    --surface-2: #f1f5f9;
-    --surface-3: #e2e8f0;
-    --surface-hover: #cbd5e1;
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --text-muted: #64748b;
-    --text-disabled: #94a3b8;
-    --border: rgba(15, 23, 42, 0.08);
-    --border-strong: rgba(15, 23, 42, 0.16);
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-    --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
-    --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
+    --surface-2: #eff1f2;
+    --surface-3: #e6e9eb;
+    --surface-hover: #dee1e3;
+    --text-primary: #08090a;
+    --text-secondary: #4c515a;
+    --text-muted: #8a8f98;
+    --text-disabled: #b1b8c9;
+    --border: rgba(0, 0, 0, 0.08);
+    --border-strong: rgba(0, 0, 0, 0.15);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 8px 16px -4px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 16px 32px -8px rgba(0, 0, 0, 0.15);
   }
 
   [data-theme="green"] {
@@ -84,20 +84,20 @@
   }
 
   [data-theme="purple"] {
-    --brand: #6366f1;
-    --brand-hover: #4f46e5;
-    --brand-active: #4338ca;
-    --brand-soft: rgba(99, 102, 241, 0.14);
-    --brand-glow: rgba(99, 102, 241, 0.35);
+    --brand: #5e6ad2;
+    --brand-hover: #7170ff;
+    --brand-active: #535fc0;
+    --brand-soft: rgba(94, 106, 210, 0.15);
+    --brand-glow: rgba(94, 106, 210, 0.35);
     --brand-fg: #ffffff;
   }
 
   [data-theme="orange"] {
-    --brand: #f97316;
-    --brand-hover: #ea580c;
-    --brand-active: #c2410c;
-    --brand-soft: rgba(249, 115, 22, 0.14);
-    --brand-glow: rgba(249, 115, 22, 0.35);
+    --brand: #ff5c35;
+    --brand-hover: #ff7c5c;
+    --brand-active: #e64d26;
+    --brand-soft: rgba(255, 92, 53, 0.14);
+    --brand-glow: rgba(255, 92, 53, 0.35);
     --brand-fg: #ffffff;
   }
 }
