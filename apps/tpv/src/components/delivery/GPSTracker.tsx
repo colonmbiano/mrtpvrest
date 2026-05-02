@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import api from "@/lib/api";
 
-const ORIGIN_THRESHOLD = 50; // metros para activar tracking automático
 const TRACK_INTERVAL   = 60000; // 1 minuto
 
 interface Props {
@@ -15,7 +14,7 @@ interface Props {
 
 export default function GPSTracker({ driverId, activeOrderId, onRouteStart, onRouteEnd }: Props) {
   const [tracking, setTracking]       = useState(false);
-  const [routeId, setRouteId]         = useState<string|null>(null);
+  const [, setRouteId]                = useState<string|null>(null);
   const [distFromOrigin, setDistFromOrigin] = useState<number|null>(null);
   const [accuracy, setAccuracy]       = useState<number|null>(null);
   const [permDenied, setPermDenied]   = useState(false);

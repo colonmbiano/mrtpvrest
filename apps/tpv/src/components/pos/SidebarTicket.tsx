@@ -1,13 +1,16 @@
 "use client";
-import React from "react";
-import { Plus, Trash2, Printer, CreditCard, ShoppingCart } from "lucide-react";
+import React, { useState } from "react";
+import { Plus, Trash2, CreditCard, ShoppingCart } from "lucide-react";
 import Button from "@/components/ui/Button";
 import TicketLine from "@/components/pos/TicketLine";
+import PaymentModal from "@/components/pos/PaymentModal";
 import { useTicketStore } from "@/store/ticketStore";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
 export default function SidebarTicket() {
+  const [showPayment, setShowPayment] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const { 
     tickets,
     activeIndex,
@@ -53,6 +56,48 @@ export default function SidebarTicket() {
     } catch (error: any) {
       toast.error("Error al enviar pedido: " + (error.response?.data?.error || error.message));
     }
+  };
+
+  const handleProcessPayment = async (method: string) => {
+    if (ticket.items.length === 0) return;
+    setProcessing(true);
+    try {
+      const orderData = {
+        orderType: ticket.type,
+        items: ticket.items.map(item => ({
+          menuItemId: item.menuItemId,
+          quantity: item.quantity,
+          notes: item.notes || "",
+          modifiers: (item.modifiers || []).map(m => ({ modifierId: m.id })),
+        })),
+        tableId: ticket.tableId || null,
+        customerName: ticket.name || "Publico General",
+        customerPhone: ticket.phone || null,
+        subtotal,
+        discount: ticket.discount,
+        total,
+        paymentMethod: method,
+        status: "DELIVERED",
+      };
+
+      const { data: order } = await api.post("/api/orders/tpv", orderData);
+      await api.put(`/api/orders/${order.id}/payment`, { paymentMethod: method });
+      toast.success("Cobro procesado");
+      clearActiveItems();
+      setShowPayment(false);
+    } catch (error: any) {
+      toast.error("Error al cobrar: " + (error.response?.data?.error || error.message));
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleOpenPayment = () => {
+    if (ticket.items.length === 0) {
+      toast.error("El ticket está vacío");
+      return;
+    }
+    setShowPayment(true);
   };
 
   return (
@@ -150,23 +195,32 @@ export default function SidebarTicket() {
            </div>
         </div>
 
-        <button 
-          onClick={handleSendToKitchen}
-          disabled={ticket.items.length === 0}
-          className="w-full bg-iris-500 hover:bg-iris-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md py-4 text-[13px] font-bold shadow-[0_0_20px_rgba(94,106,210,0.3)] transition-all active:scale-[0.98]"
-        >
-          Pagar ahora
-        </button>
+<button
+  onClick={handleOpenPayment}
+  disabled={processing || ticket.items.length === 0}
+  className="w-full bg-iris-500 hover:bg-iris-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md py-4 text-[13px] font-bold shadow-[0_0_20px_rgba(94,106,210,0.3)] transition-all active:scale-[0.98]"
+>
+  {processing ? "Procesando…" : "Pagar ahora"}
+</button>
 
-        <div className="grid grid-cols-2 gap-2 mt-4">
-           <button className="h-9 rounded-md bg-surf-2 border border-bd text-[10px] font-bold uppercase tracking-wider text-tx-sec hover:bg-surf-3 transition-colors">🍳 Cocina</button>
-           <button 
-            onClick={() => closeTicket(activeIndex)}
-            className="h-9 rounded-md bg-surf-2 border border-bd text-[10px] font-bold uppercase tracking-wider text-tx-sec hover:bg-surf-3 transition-colors"
-           >
-            ❌ Cerrar
-           </button>
-        </div>
+<PaymentModal
+  isOpen={showPayment}
+  onClose={() => setShowPayment(false)}
+  orderNumber={String(ticket.id)}
+  total={total}
+  items={ticket.items.map((i) => ({ name: i.name, quantity: i.quantity, subtotal: i.subtotal }))}
+  onConfirm={handleProcessPayment}
+/>
+
+<div className="grid grid-cols-3 gap-2 mt-4">
+   <button onClick={handleSendToKitchen} className="h-9 rounded-md bg-surf-2 border border-bd text-[10px] font-bold uppercase tracking-wider text-tx-sec hover:bg-surf-3 transition-colors">🍳 Cocina</button>
+   <button className="h-9 rounded-md bg-surf-2 border border-bd text-[10px] font-bold uppercase tracking-wider text-tx-sec hover:bg-surf-3 transition-colors">🏷 Desc.</button>
+   <button
+    onClick={() => closeTicket(activeIndex)}
+    className="h-9 rounded-md bg-surf-2 border border-bd text-[10px] font-bold uppercase tracking-wider text-tx-sec hover:bg-surf-3 transition-colors"
+   >
+    ❌ Cerrar
+   </button>        </div>
       </div>
     </aside>
   );

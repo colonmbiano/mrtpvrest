@@ -1,8 +1,7 @@
 "use client";
 import React, { useState } from "react";
-import { X, Receipt, Search, Bike, Printer, CheckCircle2, ChevronRight, Filter } from "lucide-react";
+import { X, Receipt, Search, Bike, Printer, ChevronRight } from "lucide-react";
 import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
 import Chip from "@/components/ui/Chip";
 
 interface Order {

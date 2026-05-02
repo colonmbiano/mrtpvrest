@@ -50,21 +50,21 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Lint TPV
-        run: pnpm --filter @mrtpvrest/tpv lint
+        run: pnpm --filter @mrtpvrest/tpv run lint
 
       - name: Pruebas unitarias TPV
-        run: pnpm --filter @mrtpvrest/tpv test --ci
+        run: pnpm --filter @mrtpvrest/tpv run test --ci
         env:
           NEXT_PUBLIC_API_URL: https://api.mrtpvrest.com
 
       - name: Build TPV
-        run: pnpm --filter @mrtpvrest/tpv build
+        run: pnpm --filter @mrtpvrest/tpv run build
         env:
           NEXT_PUBLIC_API_URL: https://api.mrtpvrest.com
 
       - name: Reporte de cobertura (summary)
         if: always()
-        run: pnpm --filter @mrtpvrest/tpv test:coverage --ci --coverageReporters=text-summary
+        run: pnpm --filter @mrtpvrest/tpv run test:coverage --ci --coverageReporters=text-summary
         env:
           NEXT_PUBLIC_API_URL: https://api.mrtpvrest.com
         continue-on-error: true

@@ -55,7 +55,7 @@ export default function MenuEditorPage() {
       }
       setEditingItem(null);
       fetchData();
-    } catch (err) {
+    } catch {
       alert("Error al guardar platillo");
     }
   };
@@ -65,7 +65,7 @@ export default function MenuEditorPage() {
     try {
       await api.delete(`/api/menu/items/${id}`);
       fetchData();
-    } catch (err) {
+    } catch {
       alert("Error al eliminar platillo");
     }
   };

@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { X, CreditCard, Banknote, QrCode, Gift, CheckCircle2 } from "lucide-react";
+import { CreditCard, Banknote, QrCode, Gift, CheckCircle2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 
 interface PaymentModalProps {

@@ -51,7 +51,7 @@ export default function TicketConfigPage() {
     try {
       await api.put("/api/admin/ticket-settings", config);
       alert("Configuración guardada exitosamente");
-    } catch (err) {
+    } catch {
       alert("Error al guardar la configuración");
     } finally {
       setSaving(false);
