@@ -1,5 +1,5 @@
 import useOfflineStore from '@/store/useOfflineStore';
-import useAuthStore from '@/store/useAuthStore';
+import { useAuthStore } from '@/store/authStore';
 
 let syncInterval: NodeJS.Timeout | null = null;
 

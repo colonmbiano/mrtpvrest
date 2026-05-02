@@ -1,18 +1,22 @@
 /**
  * authStore.ts
- * Store dedicado a autenticación de empleados del TPV.
- * - Token almacenado en sessionStorage (no localStorage — mitiga XSS).
- * - Rate-limiting: bloqueo tras 5 intentos fallidos de PIN.
- * - Estado separado del tema y carrito (reducción de re-renders).
+ * UNIFIED Auth Store for MRTPV TPV.
+ * Supports:
+ * - Offline-First PIN validation (local hashing & comparison).
+ * - Online fallback / sync via API.
+ * - RBAC (Permissions).
+ * - Rate-limiting (5 failed attempts = 2 min lockout).
+ * - Persistent employee list for offline use.
  */
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import api from "@/lib/api";
+import { hashPin } from "@/lib/hash";
 
 const MAX_PIN_ATTEMPTS = 5;
 const LOCKOUT_MS = 2 * 60 * 1000; // 2 minutos
 
-export type EmployeeRole =
+export type UserRole =
   | "OWNER"
   | "ADMIN"
   | "MANAGER"
@@ -22,40 +26,60 @@ export type EmployeeRole =
   | "COOK"
   | "DELIVERY";
 
-export interface AuthEmployee {
+export type Permission =
+  | "void_item"
+  | "void_order"
+  | "apply_discount"
+  | "comp_item"
+  | "open_cash_drawer"
+  | "process_refund"
+  | "close_register"
+  | "transfer_table";
+
+export interface TPVEmployee {
   id: string;
   name: string;
-  role: EmployeeRole;
+  role: UserRole;
+  pin?: string; // SHA256 hash (only for offline cache)
+  isActive: boolean;
+  permissions: Permission[];
   locationId?: string;
   restaurantId?: string;
-  canCharge?: boolean;
-  canDiscount?: boolean;
-  canModifyTickets?: boolean;
-  canDeleteTickets?: boolean;
-  canConfigSystem?: boolean;
+  lastSync?: number;
 }
+
+// Retro-compatibility aliases
+export type EmployeeRole = UserRole;
+export type AuthEmployee = TPVEmployee;
+export type OfflineEmployee = TPVEmployee;
 
 interface AuthState {
   /* Session */
-  employee: AuthEmployee | null;
+  employee: TPVEmployee | null;
   token: string | null;
   isAuthenticated: boolean;
   activeShift: Record<string, unknown> | null;
 
+  /* Offline cache */
+  employees: TPVEmployee[];
+
+  /* UI / State */
+  loading: boolean;
+  error: string | null;
+
   /* Rate-limiting PIN */
   pinAttempts: number;
   lockedUntil: number | null; // timestamp ms
-
-  /* Computed helpers */
-  getIsAdmin: () => boolean;
-  isLocked: () => boolean;
-  getRemainingLockSeconds: () => number;
 
   /* Actions */
   loginWithPin: (
     pin: string
   ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  setEmployees: (employees: TPVEmployee[]) => void;
+  hasPermission: (permission: Permission) => boolean;
+  isLocked: () => boolean;
+  getRemainingLockSeconds: () => number;
   setActiveShift: (shift: Record<string, unknown> | null) => void;
   refreshShift: () => Promise<void>;
   hydrateFromStorage: () => void;
@@ -68,13 +92,11 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isAuthenticated: false,
       activeShift: null,
+      employees: [],
+      loading: false,
+      error: null,
       pinAttempts: 0,
       lockedUntil: null,
-
-      getIsAdmin: () => {
-        const role = get().employee?.role;
-        return role === "OWNER" || role === "ADMIN" || role === "MANAGER";
-      },
 
       isLocked: () => {
         const { lockedUntil } = get();
@@ -92,51 +114,96 @@ export const useAuthStore = create<AuthState>()(
         return Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000));
       },
 
+      hasPermission: (permission: Permission) => {
+        const { employee } = get();
+        if (!employee) return false;
+        // Owners and Admins usually have all permissions
+        if (employee.role === "OWNER" || employee.role === "ADMIN") return true;
+        return employee.permissions.includes(permission);
+      },
+
       loginWithPin: async (pin: string) => {
+        set({ loading: true, error: null });
         const state = get();
 
-        // Verificar bloqueo activo
+        // 1. Check Rate-limiting
         if (state.isLocked()) {
           const secs = state.getRemainingLockSeconds();
-          return { success: false, error: `Bloqueado. Intenta en ${secs}s` };
+          const msg = `Bloqueado. Intenta en ${secs}s`;
+          set({ loading: false, error: msg });
+          return { success: false, error: msg };
         }
 
         try {
-          const { data } = await api.post("/api/employees/login", { pin });
-          const token: string = data.token || data.accessToken;
-          const employee: AuthEmployee = data.employee || data.user;
+          // 2. Try OFFLINE validation first
+          const pinHash = await hashPin(pin);
+          const offlineMatch = state.employees.find(
+            (e) => e.pin === pinHash && e.isActive
+          );
 
-          if (!token || !employee) {
-            throw new Error("Respuesta de servidor incompleta");
+          if (offlineMatch) {
+            // Local match found!
+            set({
+              employee: offlineMatch,
+              isAuthenticated: true,
+              pinAttempts: 0,
+              lockedUntil: null,
+              loading: false,
+            });
+
+            // Set cookies/localStorage for middleware and API
+            if (typeof window !== "undefined") {
+              document.cookie = `tpv-session-active=true; path=/; SameSite=Lax`;
+              localStorage.setItem("currentEmployeeId", offlineMatch.id);
+              localStorage.setItem("currentEmployeeName", offlineMatch.name);
+              localStorage.setItem("currentEmployeeRole", offlineMatch.role);
+            }
+
+            return { success: true };
           }
 
-          // Guardar token en sessionStorage para que api.ts lo inyecte en headers
-          if (typeof window !== "undefined") {
-            sessionStorage.setItem("tpv-access-token", token);
-            sessionStorage.setItem("tpv-employee", JSON.stringify(employee));
-            // Compatibilidad con api.ts que también lee localStorage "accessToken"
-            localStorage.setItem("accessToken", token);
-            localStorage.setItem("tpv-employee-token", token);
-            localStorage.setItem("tpv-employee", JSON.stringify(employee));
-            document.cookie = `tpv-session-active=true; path=/`;
+          // 3. If no offline match, try ONLINE fallback
+          try {
+            const { data } = await api.post("/api/employees/login", { pin });
+            const token: string = data.token || data.accessToken;
+            const employee: TPVEmployee = data.employee || data.user;
+
+            if (!token || !employee) {
+              throw new Error("Respuesta incompleta");
+            }
+
+            set({
+              employee,
+              token,
+              isAuthenticated: true,
+              pinAttempts: 0,
+              lockedUntil: null,
+              loading: false,
+            });
+
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem("tpv-access-token", token);
+              localStorage.setItem("accessToken", token);
+              localStorage.setItem("tpv-employee-token", token);
+              document.cookie = `tpv-session-active=true; path=/; SameSite=Lax`;
+            }
+
+            return { success: true };
+          } catch (apiErr) {
+            // Online login also failed
+            throw new Error("PIN incorrecto");
           }
-
-          set({
-            employee,
-            token,
-            isAuthenticated: true,
-            pinAttempts: 0,
-            lockedUntil: null,
-          });
-
-          return { success: true };
-        } catch {
+        } catch (err) {
+          // Failure handling (increment attempts)
           const newAttempts = get().pinAttempts + 1;
           const shouldLock = newAttempts >= MAX_PIN_ATTEMPTS;
           set({
             pinAttempts: newAttempts,
             lockedUntil: shouldLock ? Date.now() + LOCKOUT_MS : null,
+            loading: false,
+            error: "PIN incorrecto",
           });
+
           const attemptsLeft = MAX_PIN_ATTEMPTS - newAttempts;
           const msg = shouldLock
             ? "Demasiados intentos fallidos. Bloqueado 2 minutos."
@@ -151,10 +218,11 @@ export const useAuthStore = create<AuthState>()(
           sessionStorage.removeItem("tpv-employee");
           localStorage.removeItem("accessToken");
           localStorage.removeItem("tpv-employee-token");
-          localStorage.removeItem("tpv-employee");
-          localStorage.removeItem("kdsEmployee");
-          document.cookie = `tpv-session-active=; path=/; max-age=0`;
-          // NO borrar restaurantId ni locationId (son del setup del dispositivo)
+          localStorage.removeItem("currentEmployeeId");
+          localStorage.removeItem("currentEmployeeName");
+          localStorage.removeItem("currentEmployeeRole");
+          localStorage.removeItem("currentEmployeePermissions");
+          document.cookie = `tpv-session-active=; path=/; max-age=0; SameSite=Lax`;
         }
         set({
           employee: null,
@@ -163,7 +231,12 @@ export const useAuthStore = create<AuthState>()(
           activeShift: null,
           pinAttempts: 0,
           lockedUntil: null,
+          error: null,
         });
+      },
+
+      setEmployees: (employees) => {
+        set({ employees });
       },
 
       setActiveShift: (shift) => set({ activeShift: shift }),
@@ -180,32 +253,33 @@ export const useAuthStore = create<AuthState>()(
       hydrateFromStorage: () => {
         if (typeof window === "undefined") return;
         try {
-          // Prioridad: sessionStorage > localStorage (para compatibilidad)
           const token =
             sessionStorage.getItem("tpv-access-token") ||
-            localStorage.getItem("accessToken") ||
-            localStorage.getItem("tpv-employee-token");
-          const empRaw =
-            sessionStorage.getItem("tpv-employee") ||
-            localStorage.getItem("tpv-employee");
-          if (token && empRaw) {
-            const employee: AuthEmployee = JSON.parse(empRaw);
-            set({ employee, token, isAuthenticated: true });
+            localStorage.getItem("accessToken");
+          const empId = localStorage.getItem("currentEmployeeId");
+          
+          if (token || empId) {
+             // Basic hydration logic - complex apps might need a profile check
+             // For now, let persist handle the main state.
           }
         } catch {
-          // Storage corrupto, ignorar
+          // ignore
         }
       },
     }),
     {
-      name: "tpv-auth-ratelimit",
-      // Solo persistir el rate-limiting; el token no se persiste en zustand
+      name: "tpv-auth-storage",
       storage: createJSONStorage(() =>
         typeof window !== "undefined"
-          ? sessionStorage
+          ? localStorage
           : (undefined as unknown as Storage)
       ),
+      // We persist employee session and the offline cache
       partialize: (state) => ({
+        employee: state.employee,
+        employees: state.employees,
+        isAuthenticated: state.isAuthenticated,
+        token: state.token,
         pinAttempts: state.pinAttempts,
         lockedUntil: state.lockedUntil,
       }),
