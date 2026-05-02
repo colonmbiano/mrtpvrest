@@ -21,7 +21,7 @@ const CategoryRail: React.FC<CategoryRailProps> = ({
   counts,
 }) => {
   return (
-    <div className="w-full overflow-x-auto scrollbar-hide border-b border-bd bg-surf-0 sticky top-0 z-10">
+    <div className="w-full scroll-x scrollbar-hide border-b border-bd bg-surf-0 sticky top-0 z-10 shrink-0">
       <div className="flex px-4 sm:px-6 gap-6 min-w-max">
         {categories.map((cat) => {
           const isActive = activeId === cat.id;

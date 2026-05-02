@@ -104,7 +104,7 @@ export default function SidebarTicket() {
     <aside className="w-full lg:w-[400px] lg:shrink-0 border-l border-border bg-surface flex flex-col h-full min-h-0" style={{ background: "var(--surf-1)" }}>
       {/* TABS DE TICKETS */}
       <div className="flex h-14 bg-surface-2 border-b border-border overflow-hidden shrink-0">
-        <div className="flex-1 flex overflow-x-auto scrollbar-hide min-w-0">
+        <div className="flex-1 flex scroll-x scrollbar-hide min-w-0">
           {tickets.map((t, idx) => {
             const isActive = idx === activeIndex;
             return (
@@ -161,7 +161,7 @@ export default function SidebarTicket() {
       </div>
 
       {/* LISTA DE ITEMS */}
-      <div className="flex-1 overflow-y-auto px-6 space-y-4 py-2 bg-surf-1 scrollbar-hide">
+      <div className="flex-1 min-h-0 scroll-y px-6 space-y-4 py-2 bg-surf-1 scrollbar-hide">
         {ticket.items.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-40 gap-4">
             <ShoppingCart size={48} className="text-tx-mut" />

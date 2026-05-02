@@ -88,7 +88,7 @@ export default function CatalogPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-surf-0">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-surf-0">
       <div className="px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 pb-1">
         <OrderTypeToggle
           active={ticket.type}
@@ -102,7 +102,7 @@ export default function CatalogPage() {
         onSelect={setActiveCat}
       />
       
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 scrollbar-hide">
+      <div className="flex-1 min-h-0 scroll-y p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 scrollbar-hide">
         {isLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
             {[...Array(10)].map((_, i) => (
