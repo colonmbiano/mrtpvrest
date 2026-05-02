@@ -302,7 +302,7 @@ export default function TablesFloorPlan({
                 <div className="absolute inset-0 flex items-center justify-center text-center" style={{ color: "var(--muted)" }}>
                   <div>
                     <p className="text-5xl mb-3">🪑</p>
-                    <p className="text-sm">No hay mesas. Activa "Editar layout" y agrega la primera.</p>
+                    <p className="text-sm">No hay mesas. Activa &quot;Editar layout&quot; y agrega la primera.</p>
                   </div>
                 </div>
               )}

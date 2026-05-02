@@ -70,7 +70,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
       setDescription("");
       fetchMovements();
       onRefresh();
-    } catch (e) {
+    } catch {
       alert("Error al registrar movimiento");
     } finally {
       setAdding(false);

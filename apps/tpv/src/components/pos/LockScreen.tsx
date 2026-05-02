@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { Clock, MapPin, Delete, X, ChevronRight } from "lucide-react";
+import { Clock, MapPin, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 
 interface LockScreenProps {
