@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import Link from "next/link";
-import { Settings, Printer, Monitor, ArrowLeft } from "lucide-react";
+import { Settings, Printer, Monitor, ArrowLeft, BarChart3 } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -31,6 +31,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <p className="text-xs mt-1 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>{employee.name}</p>
         </div>
         <nav className="flex-1 p-4 space-y-2">
+          <Link href="/admin/reportes" className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[#A1A1AA] hover:text-[var(--brand)]">
+            <BarChart3 size={18} /> <span className="font-semibold text-sm">Reportes</span>
+          </Link>
           <Link href="/admin/menu" className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[#A1A1AA] hover:text-[var(--brand)]">
             <Settings size={18} /> <span className="font-semibold text-sm">Menú</span>
           </Link>
