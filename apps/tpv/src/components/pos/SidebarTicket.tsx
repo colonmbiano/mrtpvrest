@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { Plus, Trash2, CreditCard, ShoppingCart } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal from "@/components/pos/PaymentModal";
@@ -101,64 +101,72 @@ export default function SidebarTicket() {
   };
 
   return (
-    <aside className="w-full lg:w-[380px] lg:shrink-0 lg:border-l border-bd bg-surf-1 flex flex-col min-w-0">
-      {/* TABS DE TICKETS (Linear Style) */}
-      <div className="flex h-12 bg-surf-0 border-b border-bd overflow-hidden">
+    <aside className="w-full lg:w-[400px] lg:shrink-0 border-l border-border bg-surface flex flex-col h-full min-h-0" style={{ background: "var(--surf-1)" }}>
+      {/* TABS DE TICKETS */}
+      <div className="flex h-14 bg-surface-2 border-b border-border overflow-hidden shrink-0">
         <div className="flex-1 flex overflow-x-auto scrollbar-hide min-w-0">
-          {tickets.map((t, idx) => (
-            <button
-              key={t.id}
-              onClick={() => setActiveIndex(idx)}
-              className={`px-6 h-full flex items-center justify-center text-[11px] font-medium border-r border-bd relative transition-all shrink-0 ${
-                idx === activeIndex ? "bg-surf-1 text-tx-pri" : "text-tx-mut hover:bg-surf-2"
-              }`}
-            >
-              ORDEN {idx + 1}
-              {idx === activeIndex && (
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-iris-500" />
-              )}
-            </button>
-          ))}
+          {tickets.map((t, idx) => {
+            const isActive = idx === activeIndex;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setActiveIndex(idx)}
+                className={`
+                  px-6 h-full flex items-center justify-center text-xs font-bold border-r border-border relative transition-all shrink-0 uppercase tracking-widest
+                  ${isActive ? "bg-surf-1 text-brand" : "text-tx-mut hover:bg-surf-3 hover:text-tx-pri"}
+                `}
+              >
+                Ticket {idx + 1}
+                {isActive && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 rounded-t-full" style={{ background: "var(--brand)" }} />
+                )}
+              </button>
+            );
+          })}
           <button
             onClick={() => addTicket()}
-            className="w-12 h-full flex items-center justify-center text-tx-mut hover:bg-surf-2 border-r border-bd transition-colors shrink-0"
+            className="w-14 h-full flex items-center justify-center text-tx-mut hover:bg-surf-3 hover:text-tx-pri border-r border-border transition-colors shrink-0"
           >
-            <Plus size={16} />
+            <Plus size={20} />
           </button>
         </div>
       </div>
 
       {/* HEADER DEL TICKET */}
-      <div className="p-5 flex flex-col gap-4">
+      <div className="p-6 pb-4 flex flex-col gap-4 shrink-0 bg-surf-1">
         <div className="flex justify-between items-center">
-          <h2 className="text-[14px] font-bold text-tx-pri">Ticket Actual</h2>
-          <span className="text-[10px] font-bold text-tx-mut uppercase tracking-widest">
-            ORDEN #{ticket.id.toString().slice(-4)}
+          <h2 className="text-sm font-bold text-tx-mut tracking-widest uppercase">Orden Actual</h2>
+          <span className="text-[10px] font-black text-tx-mut uppercase tracking-widest bg-surf-2 px-2 py-1 rounded-md border border-border">
+            #{ticket.id.toString().slice(-4)}
           </span>
         </div>
 
         <div className="flex gap-2">
-          <div className="flex-1 min-w-0 bg-surf-2/50 border border-bd rounded-md h-9 flex items-center px-3 gap-2">
+          <div className="flex-1 min-w-0 bg-surf-2 border border-border rounded-xl h-12 flex items-center px-4 gap-3 focus-within:border-brand focus-within:ring-1 focus-within:ring-brand/30 transition-all">
+            <User size={16} className="text-tx-mut" />
             <input
               placeholder="Nombre del cliente..."
-              className="bg-transparent border-none outline-none text-[12px] font-medium text-tx-pri w-full"
+              className="bg-transparent border-none outline-none text-sm font-semibold text-tx-pri w-full placeholder:text-tx-mut placeholder:font-normal"
               value={ticket.name || ""}
               onChange={(e) => useTicketStore.getState().updateTicket({ name: e.target.value })}
             />
           </div>
-          <Button variant="ghost" size="sm" className="w-9 h-9 p-0 shrink-0 border-bd" onClick={clearActiveItems}>
-            <Trash2 size={14} className="text-tx-mut hover:text-danger transition-colors" />
-          </Button>
+          <button 
+            className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border border-border bg-surf-2 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/30 text-tx-mut transition-all" 
+            onClick={clearActiveItems}
+          >
+            <Trash2 size={18} />
+          </button>
         </div>
       </div>
 
       {/* LISTA DE ITEMS */}
-      <div className="flex-1 overflow-y-auto px-5 space-y-4">
+      <div className="flex-1 overflow-y-auto px-6 space-y-4 py-2 bg-surf-1 scrollbar-hide">
         {ticket.items.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center opacity-10 gap-4 py-20">
-            <ShoppingCart size={40} />
-            <p className="text-[11px] font-medium uppercase tracking-widest text-center">
-              Sin productos
+          <div className="h-full flex flex-col items-center justify-center opacity-40 gap-4">
+            <ShoppingCart size={48} className="text-tx-mut" />
+            <p className="text-xs font-bold uppercase tracking-widest text-center text-tx-mut">
+              Agrega productos al ticket
             </p>
           </div>
         ) : (
@@ -176,51 +184,69 @@ export default function SidebarTicket() {
         )}
       </div>
 
-      {/* FOOTER DEL TICKET (Linear Style) */}
-      <div className="p-6 bg-surf-0 border-t border-bd mt-auto">
-        <div className="flex flex-col gap-2 mb-6">
-           <div className="flex justify-between items-center text-[12px]">
-             <span className="text-tx-mut">Subtotal</span>
-             <span className="font-medium text-tx-pri mono tnum">${subtotal.toFixed(2)}</span>
+      {/* FOOTER DEL TICKET */}
+      <div className="p-6 bg-surf-2 border-t border-border mt-auto shrink-0 relative overflow-hidden">
+        {/* Glow effect matching brand */}
+        <div className="absolute -top-20 -right-20 w-40 h-40 bg-brand/10 blur-[50px] rounded-full pointer-events-none" />
+
+        <div className="flex flex-col gap-3 mb-6 relative z-10">
+           <div className="flex justify-between items-center text-sm">
+             <span className="text-tx-mut font-medium tracking-wide">Subtotal</span>
+             <span className="font-bold text-tx-pri mono tnum">${subtotal.toFixed(2)}</span>
            </div>
            {ticket.discount > 0 && (
-              <div className="flex justify-between items-center text-[12px] text-success">
-                <span className="font-medium">Descuento</span>
-                <span className="mono tnum">−${ticket.discount.toFixed(2)}</span>
+              <div className="flex justify-between items-center text-sm text-success">
+                <span className="font-medium tracking-wide">Descuento</span>
+                <span className="font-bold mono tnum">−${ticket.discount.toFixed(2)}</span>
               </div>
            )}
-           <div className="flex justify-between items-baseline mt-2 pt-4 border-t border-bd/30">
-             <span className="text-[11px] font-bold text-tx-mut uppercase tracking-widest">Total</span>
-             <span className="text-3xl font-medium text-tx-pri mono tnum tracking-tighter">${total.toFixed(2)}</span>
+           <div className="flex justify-between items-end mt-3 pt-4 border-t border-border/50">
+             <span className="text-[11px] font-black text-tx-mut uppercase tracking-widest mb-1">Total a cobrar</span>
+             <span className="text-4xl font-semibold text-tx-pri mono tnum tracking-tighter" style={{ color: "var(--brand)" }}>
+               ${total.toFixed(2)}
+             </span>
            </div>
         </div>
 
-<button
-  onClick={handleOpenPayment}
-  disabled={processing || ticket.items.length === 0}
-  className="w-full bg-iris-500 hover:bg-iris-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md py-4 text-[13px] font-bold shadow-[0_0_20px_rgba(94,106,210,0.3)] transition-all active:scale-[0.98]"
->
-  {processing ? "Procesando…" : "Pagar ahora"}
-</button>
+        <div className="relative z-10">
+          <button
+            onClick={handleOpenPayment}
+            disabled={processing || ticket.items.length === 0}
+            className="w-full h-16 bg-brand hover:brightness-110 disabled:opacity-50 disabled:grayscale text-brand-fg rounded-2xl text-base font-bold tracking-wider shadow-[0_0_24px_rgba(255,132,0,0.25)] transition-all active:scale-[0.98] uppercase flex items-center justify-center gap-3"
+            style={{ background: "var(--brand)", color: "var(--brand-fg)" }}
+          >
+            {processing ? "Procesando…" : "Cobrar Ticket"}
+          </button>
+        </div>
 
-<PaymentModal
-  isOpen={showPayment}
-  onClose={() => setShowPayment(false)}
-  orderNumber={String(ticket.id)}
-  total={total}
-  items={ticket.items.map((i) => ({ name: i.name, quantity: i.quantity, subtotal: i.subtotal }))}
-  onConfirm={handleProcessPayment}
-/>
+        <PaymentModal
+          isOpen={showPayment}
+          onClose={() => setShowPayment(false)}
+          orderNumber={String(ticket.id)}
+          total={total}
+          items={ticket.items.map((i) => ({ name: i.name, quantity: i.quantity, subtotal: i.subtotal }))}
+          onConfirm={handleProcessPayment}
+        />
 
-<div className="grid grid-cols-3 gap-2 mt-4">
-   <button onClick={handleSendToKitchen} className="h-9 rounded-md bg-surf-2 border border-bd text-[10px] font-bold uppercase tracking-wider text-tx-sec hover:bg-surf-3 transition-colors">🍳 Cocina</button>
-   <button className="h-9 rounded-md bg-surf-2 border border-bd text-[10px] font-bold uppercase tracking-wider text-tx-sec hover:bg-surf-3 transition-colors">🏷 Desc.</button>
-   <button
-    onClick={() => closeTicket(activeIndex)}
-    className="h-9 rounded-md bg-surf-2 border border-bd text-[10px] font-bold uppercase tracking-wider text-tx-sec hover:bg-surf-3 transition-colors"
-   >
-    ❌ Cerrar
-   </button>        </div>
+        <div className="grid grid-cols-3 gap-3 mt-4 relative z-10">
+           <button 
+             onClick={handleSendToKitchen} 
+             className="h-12 rounded-xl bg-surf-3 border border-border text-[10px] font-bold uppercase tracking-widest text-tx-pri hover:bg-surf-4 hover:border-brand/30 transition-all flex flex-col items-center justify-center gap-1"
+           >
+             <UtensilsCrossed size={16} /> Cocina
+           </button>
+           <button 
+             className="h-12 rounded-xl bg-surf-3 border border-border text-[10px] font-bold uppercase tracking-widest text-tx-pri hover:bg-surf-4 transition-all flex flex-col items-center justify-center gap-1"
+           >
+             <span className="text-lg leading-none mt-1">%</span> Desc.
+           </button>
+           <button
+            onClick={() => closeTicket(activeIndex)}
+            className="h-12 rounded-xl bg-surf-3 border border-border text-[10px] font-bold uppercase tracking-widest text-danger hover:bg-red-500/10 hover:border-red-500/30 transition-all flex flex-col items-center justify-center gap-1"
+           >
+            <X size={16} /> Cerrar
+           </button>        
+        </div>
       </div>
     </aside>
   );
