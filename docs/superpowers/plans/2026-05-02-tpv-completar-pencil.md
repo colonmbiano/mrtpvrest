@@ -48,8 +48,8 @@
 
 **Pencil ANTLd derecha:** Order #138 con items + subtotal + IVA + propina + descuento + total grande verde + botón "Cobrar" naranja primario.
 
-- [ ] **Step 1:** Crear `pos/layout.tsx` con grid `[1fr_400px]` que envuelva `{children}` en la columna izq y renderice `<OrderPanel />` en la der. Layout sticky a la altura completa.
-- [ ] **Step 2:** Crear `OrderPanel.tsx` que lea `useTicketStore.getActiveTicket()` y muestre:
+- [x] **Step 1:** Crear `pos/layout.tsx` con grid `[1fr_400px]` que envuelva `{children}` en la columna izq y renderice `<OrderPanel />` en la der. Layout sticky a la altura completa.
+- [x] **Step 2:** Crear `OrderPanel.tsx` que lea `useTicketStore.getActiveTicket()` y muestre:
   - Header: `Order #${ticket.id.slice(-3)}` + badge tipo de orden + botón cerrar
   - Lista scroll de items con qty controls + price + remove
   - Footer fijo: subtotal, IVA 16%, propina (input), descuento (input), TOTAL grande
@@ -62,9 +62,9 @@
 
 **Pencil v6zVvJ:** modal central con numpad PIN cuando se va a marcar orden como entregada (auditoria + RBAC).
 
-- [ ] **Step 1:** En `KDSPage`, cuando se hace click en botón "ENTREGAR" de una card, abrir modal con `<NumpadPIN />` (componente ya existe en `components/NumpadPIN.tsx`).
-- [ ] **Step 2:** Validar PIN contra `useAuthStore.loginEmployee` (silent re-auth). Si OK → POST `/api/kds/orders/:id/deliver`, refresh.
-- [ ] **Step 3:** Mostrar nombre del empleado que entregó en la orden cerrada.
+- [x] **Step 1:** En `KDSPage`, cuando se hace click en botón "ENTREGAR" de una card, abrir modal con `<NumpadPIN />` (componente ya existe en `components/NumpadPIN.tsx`).
+- [x] **Step 2:** Validar PIN contra `useAuthStore.loginEmployee` (silent re-auth). Si OK → POST `/api/kds/orders/:id/deliver`, refresh.
+- [x] **Step 3:** Mostrar nombre del empleado que entregó en la orden cerrada.
 
 #### Task 3: Header rico de Meseros + counts en categorías
 **Files:**
@@ -73,9 +73,9 @@
 
 **Pencil lG6SJ:** Header muestra "Mesa 4 · 2 invitados", estados promo, sucursal, total acumulado. Categorías con count "BURGERS 8".
 
-- [ ] **Step 1:** Reemplazar el `ChevronLeft + nombre` por header con grid: izq info mesa + center stats acumulados + right botón cerrar mesa.
-- [ ] **Step 2:** Modificar `CategoryRail` para aceptar prop `counts: Record<string, number>` y mostrar pill numérico junto a cada categoría.
-- [ ] **Step 3:** Calcular counts iterando `products` por `categoryId`.
+- [x] **Step 1:** Reemplazar el `ChevronLeft + nombre` por header con grid: izq info mesa + center stats acumulados + right botón cerrar mesa.
+- [x] **Step 2:** Modificar `CategoryRail` para aceptar prop `counts: Record<string, number>` y mostrar pill numérico junto a cada categoría.
+- [x] **Step 3:** Calcular counts iterando `products` por `categoryId`.
 
 ---
 

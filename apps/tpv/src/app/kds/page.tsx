@@ -2,6 +2,9 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import NumpadPIN from "@/components/NumpadPIN";
+import { useAuthStore } from "@/store/authStore";
+import { hashPin } from "@/lib/hash";
 
 const EMPLOYEE_TOKEN_KEY = "tpv-employee-token";
 const EMPLOYEE_DATA_KEY = "tpv-employee";
@@ -36,6 +39,10 @@ export default function KDSPage() {
   const [authError, setAuthError] = useState("");
   const prevIds = useRef<string[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [confirmOrderId, setConfirmOrderId] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState("");
+  const [confirmedBy, setConfirmedBy] = useState<string>("");
+  const offlineEmployees = useAuthStore((s) => s.employees);
 
   // Verificar que hay un empleado KITCHEN logueado
   useEffect(() => {
@@ -128,11 +135,31 @@ export default function KDSPage() {
     } catch {}
   }
 
-  async function markReady(orderId: string) {
+  async function markReady(orderId: string, deliveredBy?: string) {
     try {
-      await api.put(`/api/kds/order/${orderId}/ready`);
+      await api.put(`/api/kds/order/${orderId}/ready`, deliveredBy ? { deliveredBy } : {});
       setOrders(prev => prev.filter(o => o.id !== orderId));
     } catch {}
+  }
+
+  async function handlePinConfirm(pin: string) {
+    if (!confirmOrderId) return;
+    setConfirmError("");
+    try {
+      const pinHash = await hashPin(pin);
+      const match = offlineEmployees.find(e => e.pin === pinHash && e.isActive);
+      if (!match) {
+        setConfirmError("PIN no autorizado");
+        return;
+      }
+      const orderId = confirmOrderId;
+      setConfirmedBy(match.name);
+      setConfirmOrderId(null);
+      await markReady(orderId, match.id);
+      setTimeout(() => setConfirmedBy(""), 2500);
+    } catch {
+      setConfirmError("Error al validar PIN");
+    }
   }
 
   async function sendMessage() {
@@ -333,14 +360,15 @@ export default function KDSPage() {
                         className="flex-1 py-4 rounded-xl text-xs font-black border border-yellow-500/20 bg-yellow-500/5 text-yellow-400 hover:bg-yellow-500/10 transition-colors">
                         📢 Avisar
                       </button>
-                      <button onClick={() => markReady(order.id)}
+                      <button
+                        onClick={() => allDone ? setConfirmOrderId(order.id) : markReady(order.id)}
                         className="flex-[2] py-4 rounded-xl text-sm font-black transition-all active:scale-95"
                         style={{
                           background: allDone ? "#22c55e" : "#1A1A1E",
                           color: allDone ? "#000" : "#FAFAFA",
                           border: `1px solid ${allDone ? "#22c55e" : "#27272A"}`,
                         }}>
-                        {allDone ? "✓  LISTO" : "Marcar listo"}
+                        {allDone ? "✓  ENTREGAR (PIN)" : "Marcar listo"}
                       </button>
                     </div>
                   </div>
@@ -398,6 +426,38 @@ export default function KDSPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── MODAL CONFIRMAR ENTREGA CON PIN ─────────────────────── */}
+      {confirmOrderId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0C0C0E]/90 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-[24px] border border-[#27272A] bg-[#131316] shadow-2xl p-6">
+            <div className="text-center mb-5">
+              <div className="text-3xl mb-2">🔒</div>
+              <h3 className="font-black text-base text-white">Confirmar entrega</h3>
+              <p className="text-xs text-white/50 mt-1">PIN del responsable de entrega</p>
+            </div>
+            <NumpadPIN onSubmit={handlePinConfirm} disabled={false} />
+            {confirmError && (
+              <div className="mt-4 p-3 rounded-lg text-xs text-center" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+                {confirmError}
+              </div>
+            )}
+            <button
+              onClick={() => { setConfirmOrderId(null); setConfirmError(""); }}
+              className="w-full mt-4 py-3 rounded-xl text-sm font-bold bg-[#1A1A1E] text-white/60 border border-[#27272A]">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TOAST: ENTREGA CONFIRMADA */}
+      {confirmedBy && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-full text-sm font-bold flex items-center gap-2 shadow-2xl"
+          style={{ background: "#22c55e", color: "#000" }}>
+          ✓ Entregado por <span className="font-black">{confirmedBy}</span>
         </div>
       )}
     </div>

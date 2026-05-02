@@ -91,6 +91,16 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   const cartCount = cart.reduce((acc, l) => acc + l.quantity, 0);
   const total = cart.reduce((acc, l) => acc + l.price * l.quantity, 0);
 
+  // Counts por categoría (para badges del rail)
+  const categoryCounts = useMemo(() => {
+    const map: Record<string, number> = { all: products.length };
+    for (const p of products) {
+      const k = p.categoryId || "_unknown";
+      map[k] = (map[k] || 0) + 1;
+    }
+    return map;
+  }, [products]);
+
   const handleSend = async () => {
     if (cart.length === 0) return;
     setSubmitting(true);
@@ -118,16 +128,37 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   return (
     <div className="h-full flex flex-col bg-surf-0">
       {/* HEADER */}
-      <div className="p-4 border-b border-bd bg-surf-1 flex items-center gap-4 shrink-0">
+      <div
+        className="px-4 py-3 border-b border-bd flex items-center gap-3 shrink-0"
+        style={{ background: "#1A1A1A", color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace" }}
+      >
         <button
           onClick={() => router.back()}
-          className="w-10 h-10 rounded-xl bg-surf-2 border border-bd flex items-center justify-center text-tx-sec"
+          className="w-10 h-10 rounded-xl flex items-center justify-center"
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
         >
-          <ChevronLeft size={20} />
+          <ChevronLeft size={18} />
         </button>
-        <div className="flex flex-col">
-          <span className="eyebrow !text-[10px]">NUEVA COMANDA</span>
-          <h2 className="text-[16px] font-black leading-none">Mesa {tableId}</h2>
+        <div className="flex flex-col flex-1">
+          <span className="text-[10px] font-bold tracking-[0.15em]" style={{ color: "#666" }}>NUEVA COMANDA</span>
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-lg font-bold leading-none">Mesa {tableId}</h2>
+            <span className="text-[11px]" style={{ color: "#B8B9B6" }}>· en preparación</span>
+          </div>
+        </div>
+        <div className="hidden sm:flex flex-col items-end px-3 py-1.5 rounded-xl gap-0.5"
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <span className="text-[9px] font-bold tracking-wider" style={{ color: "#666" }}>EN COMANDA</span>
+          <span className="text-sm font-bold tabular-nums">
+            {cartCount} {cartCount === 1 ? "producto" : "productos"}
+          </span>
+        </div>
+        <div className="flex flex-col items-end px-3 py-1.5 rounded-xl gap-0.5"
+          style={{ background: "rgba(136,214,108,0.1)", border: "1px solid rgba(136,214,108,0.3)" }}>
+          <span className="text-[9px] font-bold tracking-wider" style={{ color: "#88D66C" }}>TOTAL</span>
+          <span className="text-sm font-bold tabular-nums" style={{ color: "#88D66C" }}>
+            ${total.toFixed(2)}
+          </span>
         </div>
       </div>
 
@@ -145,7 +176,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
       </div>
 
       {/* CATEGORIES */}
-      <CategoryRail categories={categories} activeId={activeCat} onSelect={setActiveCat} />
+      <CategoryRail categories={categories} activeId={activeCat} onSelect={setActiveCat} counts={categoryCounts} />
 
       {/* PRODUCTS GRID */}
       <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
