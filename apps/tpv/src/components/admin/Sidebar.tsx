@@ -58,7 +58,7 @@ export default function Sidebar() {
             <span className="text-2xl">🍔</span>
           )}
           <div>
-            <div className="font-syne font-black text-sm leading-tight" style={{color:"var(--text)"}}>Master Burger's</div>
+            <div className="font-syne font-black text-sm leading-tight" style={{color:"var(--text)"}}>Master Burger&apos;s</div>
             <div className="text-xs font-bold" style={{color:"var(--gold)"}}>Panel Admin</div>
           </div>
         </div>
