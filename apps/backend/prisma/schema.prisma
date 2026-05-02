@@ -53,6 +53,7 @@ model Tenant {
   vehicles     Vehicle[]
   rides        Ride[]
   expenses     Expense[]
+  devices      Device[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -320,6 +321,9 @@ model Location {
   tables            Table[]
   taxConfigs        TaxConfig[]
 
+  devices           Device[]
+  tasks             Task[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -435,6 +439,7 @@ model MenuItem {
   isAvailable     Boolean  @default(true)
   isPopular       Boolean  @default(false)
   isPromo         Boolean  @default(false)
+  promoPrice      Float?
   barcode         String?
   activeDays      String[]
   hasVariants     Boolean  @default(false)
@@ -994,6 +999,8 @@ model Employee {
   shifts       EmployeeShift[]
   shiftsOpened CashShift[]     @relation("ShiftOpenedBy")
   shiftsClosed CashShift[]     @relation("ShiftClosedBy")
+  taskLogs     TaskLog[]
+
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 }
@@ -1491,4 +1498,70 @@ model AccessLog {
   @@index([action])
   @@index([restaurantId])
   @@map("access_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HARDWARE PROVISIONING
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Device {
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  locationId   String
+  location     Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  
+  name         String
+  type         String    // "POS", "KDS", "WAITER"
+  deviceToken  String    @unique
+  isActive     Boolean   @default(true)
+  lastPingAt   DateTime?
+  
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([locationId])
+  @@index([tenantId])
+  @@map("devices")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAMIFICACIÓN KDS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Task {
+  id           String     @id @default(cuid())
+  locationId   String
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  
+  title        String
+  description  String?
+  type         String
+  pointsReward Int        @default(10)
+  frequency    String?
+  isActive     Boolean    @default(true)
+
+  logs         TaskLog[]
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([locationId])
+  @@map("tasks")
+}
+
+model TaskLog {
+  id           String    @id @default(cuid())
+  taskId       String
+  task         Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  employeeId   String
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  pointsEarned Int
+  completedAt  DateTime  @default(now())
+  notes        String?
+
+  @@index([employeeId])
+  @@index([taskId])
+  @@map("task_logs")
 }
