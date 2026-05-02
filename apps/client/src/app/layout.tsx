@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Syne, DM_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -17,7 +17,20 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "Pedidos Online | MRTPVREST",
   description: "Haz tu pedido en línea de forma fácil y rápida.",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
+  applicationName: "MRTPVREST Tienda",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Tienda",
+  },
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#000000",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

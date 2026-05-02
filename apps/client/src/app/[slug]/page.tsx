@@ -4,6 +4,7 @@ import { BentoTheme } from '@/components/themes/BentoTheme';
 import { PocketTheme } from '@/components/themes/PocketTheme';
 import { getApiUrl } from '@/lib/config';
 import StorefrontClient from './StorefrontClient';
+import InstallPWABanner from '@/components/InstallPWABanner';
 
 const API = getApiUrl();
 
@@ -102,6 +103,13 @@ export default async function StorefrontPage({
           />
         </div>
       )}
+
+      {/* PWA — banner flotante de instalación con branding del tenant */}
+      <InstallPWABanner
+        title={`Instala ${store.name}`}
+        description="Tu menú a un toque, sin abrir el navegador."
+        accentColor={primary}
+      />
     </div>
   );
 }
