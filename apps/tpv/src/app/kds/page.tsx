@@ -156,8 +156,8 @@ export default function KDSPage() {
 
   if (authError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black p-6 text-white">
-        <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-[#111] p-8 text-center shadow-2xl">
+      <div className="min-h-screen flex items-center justify-center bg-[#0C0C0E] p-6 text-white font-mono">
+        <div className="w-full max-w-lg rounded-[24px] border border-[#27272A] bg-[#131316] p-8 text-center shadow-2xl">
           <p className="text-xs font-black uppercase tracking-[0.25em] text-red-400">KDS bloqueado</p>
           <h1 className="mt-4 text-3xl font-black">Sesion no disponible</h1>
           <p className="mt-4 text-sm leading-6 text-white/60">{authError}</p>
@@ -174,7 +174,7 @@ export default function KDSPage() {
 
   if (!authReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black text-white">
+      <div className="min-h-screen flex items-center justify-center bg-[#0C0C0E] text-white font-mono">
         <div className="text-sm font-black uppercase tracking-[0.3em] text-white/40">
           Cargando cocina...
         </div>
@@ -183,10 +183,10 @@ export default function KDSPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-black text-white font-mono select-none">
+    <div className="min-h-screen flex flex-col bg-[#0C0C0E] text-[#FAFAFA] font-mono select-none">
 
       {/* ── HEADER ─────────────────────────────────────────────────── */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-white/5 bg-[#0a0a0a] flex-shrink-0">
+      <header className="flex items-center justify-between px-7 py-4 border-b border-[#27272A] bg-[#131316] flex-shrink-0">
         <div className="flex items-center gap-4">
           <span className="font-black text-base tracking-tight" style={{ color: stationInfo.color }}>
             {stationInfo.label}
@@ -195,11 +195,12 @@ export default function KDSPage() {
           <div className="flex gap-2">
             {STATIONS.map(s => (
               <button key={s.value} onClick={() => setStation(s.value)}
-                className="px-4 py-1.5 rounded-xl text-xs font-black transition-all"
+                className="px-4 py-2 rounded-xl text-xs font-black transition-all"
                 style={{
-                  background: station === s.value ? s.color : "#111",
-                  color: station === s.value ? "#000" : "#555",
-                  border: `1px solid ${station === s.value ? s.color : "#222"}`,
+                  background: station === s.value ? s.color : "#1A1A1E",
+                  color: station === s.value ? "#000" : "#A1A1AA",
+                  border: `1px solid ${station === s.value ? s.color : "#27272A"}`,
+                  boxShadow: station === s.value ? `0 4px 12px ${s.color}40` : "none"
                 }}>
                 {s.label}
               </button>
@@ -211,12 +212,12 @@ export default function KDSPage() {
           <span className="text-xs font-black text-white/20">
             {new Date(now).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
           </span>
-          <div className="px-3 py-1.5 rounded-xl text-xs font-black bg-white/5 border border-white/5"
+          <div className="px-4 py-2 rounded-xl text-xs font-black bg-[#1A1A1E] border border-[#27272A]"
             style={{ color: stationInfo.color }}>
             {orders.length} pedidos
           </div>
           <button onClick={fetchOrders}
-            className="w-8 h-8 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center text-sm">
+            className="w-9 h-9 rounded-xl bg-[#1A1A1E] border border-[#27272A] flex items-center justify-center text-sm transition-colors hover:bg-[#27272A]">
             🔄
           </button>
           {employee && (
@@ -229,7 +230,7 @@ export default function KDSPage() {
       </header>
 
       {/* ── GRID DE PEDIDOS ────────────────────────────────────────── */}
-      <main className="flex-1 overflow-auto p-4">
+      <main className="flex-1 overflow-auto p-5">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="text-3xl animate-pulse text-white/20">Cargando...</div>
@@ -255,13 +256,13 @@ export default function KDSPage() {
                 const allDone = order.items.every((i: any) => i.done);
                 return (
                   <div key={order.id}
-                    className="rounded-2xl overflow-hidden flex flex-col"
+                    className="rounded-[24px] overflow-hidden flex flex-col"
                     style={{
-                      background: "#111",
-                      border: `2px solid ${allDone ? "#22c55e" : urg.color}`,
+                      background: "#131316",
+                      border: `1px solid ${allDone ? "#22c55e" : urg.color}`,
                       boxShadow: allDone
-                        ? "0 0 24px rgba(34,197,94,0.2)"
-                        : mins >= 15 ? "0 0 24px rgba(239,68,68,0.25)" : "none",
+                        ? "0 8px 32px rgba(34,197,94,0.15)"
+                        : mins >= 15 ? "0 8px 32px rgba(239,68,68,0.20)" : "0 4px 20px rgba(0,0,0,0.5)",
                     }}>
 
                     {/* Cabecera tarjeta */}
@@ -295,15 +296,15 @@ export default function KDSPage() {
                       {order.items.map((item: any) => (
                         <button key={item.id}
                           onClick={() => toggleItem(order.id, item.id, item.done)}
-                          className="flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all active:scale-95"
+                          className="flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all active:scale-95"
                           style={{
-                            background: item.done ? "rgba(34,197,94,0.06)" : "#1a1a1a",
-                            border: `1px solid ${item.done ? "#22c55e33" : "#2a2a2a"}`,
+                            background: item.done ? "rgba(34,197,94,0.06)" : "#1A1A1E",
+                            border: `1px solid ${item.done ? "#22c55e33" : "#27272A"}`,
                             opacity: item.done ? 0.65 : 1,
                           }}>
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 font-black text-sm"
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 font-black text-sm"
                             style={{
-                              background: item.done ? "#22c55e" : "#2a2a2a",
+                              background: item.done ? "#22c55e" : "#27272A",
                               color: item.done ? "#000" : stationInfo.color,
                             }}>
                             {item.done ? "✓" : item.quantity}
@@ -329,15 +330,15 @@ export default function KDSPage() {
                     {/* Acciones */}
                     <div className="px-3 pb-3 flex gap-2">
                       <button onClick={() => { setMsgModal(order); setMsgText(""); }}
-                        className="flex-1 py-3 rounded-xl text-xs font-black border border-yellow-500/20 bg-yellow-500/5 text-yellow-400">
+                        className="flex-1 py-4 rounded-xl text-xs font-black border border-yellow-500/20 bg-yellow-500/5 text-yellow-400 hover:bg-yellow-500/10 transition-colors">
                         📢 Avisar
                       </button>
                       <button onClick={() => markReady(order.id)}
-                        className="flex-[2] py-3 rounded-xl text-sm font-black transition-all active:scale-95"
+                        className="flex-[2] py-4 rounded-xl text-sm font-black transition-all active:scale-95"
                         style={{
-                          background: allDone ? "#22c55e" : "#1a1a1a",
-                          color: allDone ? "#000" : "#444",
-                          border: `1px solid ${allDone ? "#22c55e" : "#2a2a2a"}`,
+                          background: allDone ? "#22c55e" : "#1A1A1E",
+                          color: allDone ? "#000" : "#FAFAFA",
+                          border: `1px solid ${allDone ? "#22c55e" : "#27272A"}`,
                         }}>
                         {allDone ? "✓  LISTO" : "Marcar listo"}
                       </button>
@@ -351,15 +352,15 @@ export default function KDSPage() {
 
       {/* ── MODAL MENSAJE AL TPV ───────────────────────────────────── */}
       {msgModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/90">
-          <div className="w-full max-w-md rounded-2xl border border-white/5 overflow-hidden bg-[#111]">
-            <div className="px-6 py-4 border-b border-white/5 bg-[#0a0a0a] flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-[#0C0C0E]/90 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[24px] border border-[#27272A] overflow-hidden bg-[#131316] shadow-2xl">
+            <div className="px-6 py-5 border-b border-[#27272A] bg-[#131316] flex items-center justify-between">
               <div>
                 <div className="font-black text-base text-yellow-400">📢 Avisar al TPV</div>
-                <div className="text-xs text-white/30 mt-0.5">{msgModal.orderNumber} · {stationInfo.label}</div>
+                <div className="text-xs text-white/50 mt-1">{msgModal.orderNumber} · {stationInfo.label}</div>
               </div>
               <button onClick={() => setMsgModal(null)}
-                className="w-8 h-8 rounded-xl bg-white/5 text-white/30 flex items-center justify-center">
+                className="w-8 h-8 rounded-xl bg-[#1A1A1E] text-white/50 flex items-center justify-center hover:bg-[#27272A]">
                 ✕
               </button>
             </div>
@@ -367,11 +368,11 @@ export default function KDSPage() {
               <div className="grid grid-cols-2 gap-2">
                 {["Falta ingrediente", "Platillo agotado", "Orden va a tardar", "Error en la orden", "Necesito confirmación", "Pedido listo pronto"].map(msg => (
                   <button key={msg} onClick={() => setMsgText(msg)}
-                    className="py-2.5 px-3 rounded-xl text-xs font-bold text-left transition-all"
+                    className="py-3 px-3 rounded-xl text-xs font-bold text-left transition-all"
                     style={{
-                      background: msgText === msg ? "rgba(245,158,11,0.15)" : "#1a1a1a",
-                      color: msgText === msg ? "#f59e0b" : "#555",
-                      border: `1px solid ${msgText === msg ? "#f59e0b44" : "#222"}`,
+                      background: msgText === msg ? "rgba(245,158,11,0.15)" : "#1A1A1E",
+                      color: msgText === msg ? "#f59e0b" : "#A1A1AA",
+                      border: `1px solid ${msgText === msg ? "#f59e0b44" : "#27272A"}`,
                     }}>
                     {msg}
                   </button>
@@ -380,10 +381,10 @@ export default function KDSPage() {
               <textarea value={msgText} onChange={e => setMsgText(e.target.value)}
                 placeholder="O escribe un mensaje..."
                 rows={2}
-                className="w-full px-4 py-3 rounded-xl text-sm bg-black border border-white/5 text-white outline-none resize-none" />
-              <div className="flex gap-3">
+                className="w-full px-4 py-4 rounded-xl text-sm bg-[#1A1A1E] border border-[#27272A] text-white outline-none resize-none focus:border-yellow-500/50" />
+              <div className="flex gap-3 pt-2">
                 <button onClick={() => setMsgModal(null)}
-                  className="flex-1 py-3 rounded-xl font-bold text-sm bg-white/5 text-white/30">
+                  className="flex-1 py-4 rounded-xl font-bold text-sm bg-[#1A1A1E] text-white/50 border border-[#27272A]">
                   Cancelar
                 </button>
                 <button onClick={sendMessage} disabled={sending || !msgText.trim()}

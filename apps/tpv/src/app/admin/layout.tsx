@@ -20,29 +20,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="flex h-screen w-full" style={{ backgroundColor: "#0a0a0c", color: "#f8fafc", fontFamily: "'Outfit', sans-serif" }}>
+    <div className="flex h-screen w-full font-mono select-none" style={{ backgroundColor: "#0C0C0E", color: "var(--text-primary)" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
       `}</style>
       {/* SIDEBAR CONDICIONAL */}
-      <aside className="w-64 border-r border-[#2d2d30] flex flex-col" style={{ backgroundColor: "#141417" }}>
-        <div className="p-6 border-b border-[#2d2d30]">
-          <h2 className="text-xl font-black tracking-tight" style={{ color: "#ffb84d" }}>Admin Panel</h2>
-          <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest">{employee.name}</p>
+      <aside className="w-64 border-r border-[#27272A] flex flex-col" style={{ backgroundColor: "#131316" }}>
+        <div className="p-6 border-b border-[#27272A]">
+          <h2 className="text-xl font-black tracking-tight" style={{ color: "var(--brand)" }}>Admin Panel</h2>
+          <p className="text-xs mt-1 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>{employee.name}</p>
         </div>
         <nav className="flex-1 p-4 space-y-2">
-          <Link href="/admin/menu" className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-[#ffb84d]/10 text-gray-300 hover:text-[#ffb84d]">
+          <Link href="/admin/menu" className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[#A1A1AA] hover:text-[var(--brand)]">
             <Settings size={18} /> <span className="font-semibold text-sm">Menú</span>
           </Link>
-          <Link href="/admin/impresoras" className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-[#ffb84d]/10 text-gray-300 hover:text-[#ffb84d]">
+          <Link href="/admin/impresoras" className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[#A1A1AA] hover:text-[var(--brand)]">
             <Printer size={18} /> <span className="font-semibold text-sm">Impresoras</span>
           </Link>
-          <Link href="/admin/tickets" className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-[#ffb84d]/10 text-gray-300 hover:text-[#ffb84d]">
+          <Link href="/admin/tickets" className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[#A1A1AA] hover:text-[var(--brand)]">
             <Monitor size={18} /> <span className="font-semibold text-sm">Tickets</span>
           </Link>
         </nav>
-        <div className="p-4 border-t border-[#2d2d30]">
-          <Link href="/" className="flex items-center gap-2 px-4 py-3 rounded-xl transition-colors text-gray-400 hover:text-white hover:bg-[#2d2d30]">
+        <div className="p-4 border-t border-[#27272A]">
+          <Link href="/" className="flex items-center gap-2 px-4 py-3 rounded-xl transition-colors text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#1A1A1E]">
             <ArrowLeft size={18} /> <span className="font-semibold text-sm">Volver al TPV</span>
           </Link>
         </div>

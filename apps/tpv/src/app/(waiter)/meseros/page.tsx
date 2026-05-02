@@ -100,7 +100,7 @@ export default function WaiterFloorPlanPage() {
               onClick={() => setActiveZone("all")}
               className={`shrink-0 h-9 px-4 rounded-full border text-[12px] font-bold uppercase tracking-wider transition-pos ${
                 activeZone === "all"
-                  ? "bg-iris-500 border-iris-500 text-iris-fg"
+                  ? "bg-brand border-brand text-brand-fg shadow-[0_0_15px_color-mix(in_srgb,var(--brand)_40%,transparent)]"
                   : "bg-surf-2 border-bd text-tx-sec hover:text-tx-pri"
               }`}
             >
@@ -115,7 +115,7 @@ export default function WaiterFloorPlanPage() {
                   onClick={() => setActiveZone(z.id)}
                   className={`shrink-0 h-9 px-4 rounded-full border text-[12px] font-bold uppercase tracking-wider transition-pos flex items-center gap-1.5 ${
                     isActive
-                      ? "bg-iris-500 border-iris-500 text-iris-fg"
+                      ? "bg-brand border-brand text-brand-fg shadow-[0_0_15px_color-mix(in_srgb,var(--brand)_40%,transparent)]"
                       : "bg-surf-2 border-bd text-tx-sec hover:text-tx-pri"
                   }`}
                 >
