@@ -127,10 +127,10 @@ El sidebar del Pencil `pXWJr` muestra estas rutas — solo están **Reportes**, 
 ### Tier 4 — Pulido fino (opcional)
 
 #### Task 8: Auditar diseño de pantallas existentes vs Pencil
-- [ ] `/setup` (steps Login/Location/Device) vs `wNV9I` + `qRu4a`
-- [ ] `/locked` vs `VrFon` (numpad y dot indicators)
-- [ ] `/pos/order-type` vs `JJuHG` (6 cards Comer Aquí/Llevar/Domicilio/Drive/Reserva/Rápido)
-- [ ] `/admin/impresoras` vs `ZksX6` (sidebar + grid devices + side preview ticket)
+- [ ] `/setup` (steps Login/Location/Device) vs `wNV9I` + `qRu4a` — diseño actual ya alineado, sin cambios necesarios
+- [x] `/locked` vs `VrFon` — añadido status pill "TERMINAL VINCULADA · {workspace}" + glows decorativos
+- [x] `/pos/order-type` vs `JJuHG` — wired openOrdersCount real desde /api/orders, botón Tickets abiertos visible cuando hay órdenes
+- [x] `/admin/impresoras` vs `ZksX6` — header rebrandeado a "Hardware e Impresoras" + 3 stats tiles (Dispositivos / Estaciones / Próximo ping)
 
 Para cada uno: tomar screenshot de implementación corriendo, comparar lado-a-lado con `get_screenshot` del Pencil, listar diferencias visuales, aplicar correcciones quirúrgicas.
 
