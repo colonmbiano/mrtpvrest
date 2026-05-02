@@ -88,26 +88,26 @@ El sidebar del Pencil `pXWJr` muestra estas rutas — solo están **Reportes**, 
 - Crear: `apps/tpv/src/app/admin/usuarios/page.tsx`
 - Backend ya tiene: `GET /api/employees`, `POST /api/employees`, `PUT /api/employees/:id`, `DELETE /api/employees/:id`
 
-- [ ] **Step 1:** Tabla con columnas: nombre, role, email, last sync, isActive toggle, acciones (edit/delete).
-- [ ] **Step 2:** Botón "+ Nuevo empleado" abre modal con form (name, role, pin, permissions checkboxes).
-- [ ] **Step 3:** Añadir link al sidebar en `apps/tpv/src/app/admin/layout.tsx`.
+- [x] **Step 1:** Tabla con columnas: nombre, role, email, last sync, isActive toggle, acciones (edit/delete).
+- [x] **Step 2:** Botón "+ Nuevo empleado" abre modal con form (name, role, pin, permissions checkboxes).
+- [x] **Step 3:** Añadir link al sidebar en `apps/tpv/src/app/admin/layout.tsx`.
 
 #### Task 5: `/admin/pagos` (configuración pagos e impuestos)
 **Files:**
 - Crear: `apps/tpv/src/app/admin/pagos/page.tsx`
 
-- [ ] **Step 1:** Form: IVA % default, propina sugerida %, métodos de pago habilitados (toggles: efectivo, tarjeta, transferencia, vales, cortesía).
-- [ ] **Step 2:** PUT a `/api/admin/config` (endpoint ya admite `taxRate` etc.).
-- [ ] **Step 3:** Añadir link al sidebar.
+- [x] **Step 1:** Form: IVA % default, propina sugerida %, métodos de pago habilitados (toggles: efectivo, tarjeta, transferencia, vales, cortesía).
+- [x] **Step 2:** PUT a `/api/admin/config` (endpoint ya admite `taxRate` etc.).
+- [x] **Step 3:** Añadir link al sidebar.
 
 #### Task 6: `/admin/seguridad` (RBAC + auditoría)
 **Files:**
 - Crear: `apps/tpv/src/app/admin/seguridad/page.tsx`
 
-- [ ] **Step 1:** Sección 1: matriz de permisos por rol (heredar de `ROLE_DEFAULTS` en `employees.routes.js`).
-- [ ] **Step 2:** Sección 2: tabla AccessLog últimos 100 (modelo ya existe en Prisma).
-- [ ] **Step 3:** Toggles para: requerir PIN supervisor en void, cancelar orden, descuento >X%.
-- [ ] **Step 4:** Añadir link al sidebar.
+- [x] **Step 1:** Sección 1: matriz de permisos por rol (heredar de `ROLE_DEFAULTS` en `employees.routes.js`).
+- [x] **Step 2:** Sección 2: tabla AccessLog últimos 100 (modelo ya existe en Prisma).
+- [x] **Step 3:** Toggles para: requerir PIN supervisor en void, cancelar orden, descuento >X%.
+- [x] **Step 4:** Añadir link al sidebar.
 
 ---
 
@@ -118,9 +118,9 @@ El sidebar del Pencil `pXWJr` muestra estas rutas — solo están **Reportes**, 
 - Eliminar: `apps/tpv/src/app/spa/` (carpeta completa)
 - Eliminar: `apps/tpv/src/app/v2/` (carpeta completa)
 
-- [ ] **Step 1:** Verificar con `grep -r "from.*['\"].*spa\|v2['\"]" apps/tpv/src` que no haya imports activos.
-- [ ] **Step 2:** Si limpio, `rm -rf apps/tpv/src/app/spa apps/tpv/src/app/v2`.
-- [ ] **Step 3:** Build check: `cd apps/tpv && npm run build`.
+- [x] **Step 1:** Verificar con `grep -r "from.*['\"].*spa\|v2['\"]" apps/tpv/src` que no haya imports activos.
+- [x] **Step 2:** Si limpio, `rm -rf apps/tpv/src/app/spa apps/tpv/src/app/v2`.
+- [x] **Step 3:** Build check: `cd apps/tpv && npm run build`.
 
 ---
 

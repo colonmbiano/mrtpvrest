@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import Link from "next/link";
-import { Settings, Printer, Monitor, ArrowLeft, BarChart3 } from "lucide-react";
+import { Settings, Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -42,6 +42,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Link>
           <Link href="/admin/tickets" className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[#A1A1AA] hover:text-[var(--brand)]">
             <Monitor size={18} /> <span className="font-semibold text-sm">Tickets</span>
+          </Link>
+          <Link href="/admin/usuarios" className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[#A1A1AA] hover:text-[var(--brand)]">
+            <Users size={18} /> <span className="font-semibold text-sm">Usuarios</span>
+          </Link>
+          <Link href="/admin/pagos" className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[#A1A1AA] hover:text-[var(--brand)]">
+            <CreditCard size={18} /> <span className="font-semibold text-sm">Pagos e Impuestos</span>
+          </Link>
+          <Link href="/admin/seguridad" className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[#A1A1AA] hover:text-[var(--brand)]">
+            <ShieldCheck size={18} /> <span className="font-semibold text-sm">Seguridad</span>
           </Link>
         </nav>
         <div className="p-4 border-t border-[#27272A]">
