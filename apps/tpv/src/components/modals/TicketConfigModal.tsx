@@ -44,7 +44,7 @@ export default function TicketConfigModal({ isOpen, onClose }: { isOpen: boolean
         try {
           const { data } = await api.get("/api/printers/ticket-config");
           setCfg({ ...EMPTY, ...data });
-        } catch (e: any) {
+        } catch {
           setError("No se pudo cargar la configuración");
         } finally {
           setLoading(false);

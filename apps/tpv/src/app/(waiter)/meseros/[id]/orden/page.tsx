@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
-import { ChevronLeft, Search, ShoppingCart, Send, Minus, Plus, X } from "lucide-react";
+import { ChevronLeft, Search, Send, Minus, Plus, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import CategoryRail from "@/components/pos/CategoryRail";
 import ProductCard from "@/components/pos/ProductCard";
@@ -46,7 +46,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         ]);
         setCategories([{ id: "all", name: "Todos" }, ...catsRes.data]);
         setProducts(itemsRes.data);
-      } catch (e: any) {
+      } catch {
         toast.error("No se pudo cargar el menu");
       } finally {
         setIsLoading(false);
