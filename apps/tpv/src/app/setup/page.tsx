@@ -30,7 +30,7 @@ export default function SetupPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [restaurants, setRestaurants] = useState([]);
+  const [, setRestaurants] = useState<any[]>([]);
   const [authToken, setAuthToken] = useState('');
 
   // Check if already linked
