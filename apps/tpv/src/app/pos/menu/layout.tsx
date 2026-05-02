@@ -170,21 +170,21 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   }, [currentEmployee, router]);
 
   return (
-    <div className="flex h-screen w-full bg-surf-0 overflow-hidden font-sans text-tx-pri">
+    <div className="flex h-[100dvh] w-full bg-surf-0 overflow-hidden font-sans text-tx-pri">
       {/* SIDE RAIL */}
       <aside className="hidden lg:flex w-20 bg-surface-1 border-r border-border flex-col items-center py-6 gap-8 shrink-0 relative z-20">
         <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl text-brand-fg shadow-[0_0_15px_rgba(255,132,0,0.3)] transition-all hover:scale-105" style={{ background: "var(--brand)" }}>
           M
         </div>
-        
-        <button 
+
+        <button
           onClick={() => setShowMenu(true)}
           className="w-12 h-12 flex items-center justify-center rounded-2xl text-tx-mut hover:text-tx-pri hover:bg-surface-2 transition-all active:scale-95"
         >
           <Menu size={24} />
         </button>
-        
-        <button 
+
+        <button
           onClick={() => setShowOrders(true)}
           className="w-12 h-12 flex items-center justify-center rounded-2xl text-tx-mut hover:text-tx-pri hover:bg-surface-2 transition-all relative active:scale-95"
         >
@@ -196,7 +196,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
         <div className="flex-1" />
 
-        <button 
+        <button
           onClick={() => setShowMenu(true)}
           className="w-12 h-12 flex items-center justify-center rounded-2xl text-tx-mut hover:text-tx-pri hover:bg-surface-2 transition-all active:scale-95"
         >
@@ -248,7 +248,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       )}
 
       {/* MAIN CONTENT AREA */}
-      <div className={`flex-1 flex flex-col min-w-0 ${mobileView === "menu" ? "flex" : "hidden"} lg:flex`}>
+      <div className={`flex-1 flex flex-col min-w-0 min-h-0 ${mobileView === "menu" ? "flex" : "hidden"} lg:flex`}>
         {/* TOP HEADER */}
         <header className="h-16 sm:h-20 border-b border-border bg-surface-1 flex items-center px-6 gap-6 shrink-0 z-10">
           <div className="flex items-center gap-3">
@@ -292,12 +292,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         </header>
 
         {/* PAGE CONTENT */}
-        <main className="flex-1 overflow-hidden flex flex-col">
+        <main className="flex-1 overflow-hidden flex flex-col min-h-0">
           {children}
         </main>
       </div>
 
-      <div className={`${mobileView === "ticket" ? "flex" : "hidden"} lg:flex w-full lg:w-auto relative z-20`}>
+      <div className={`${mobileView === "ticket" ? "flex" : "hidden"} lg:flex w-full lg:w-auto min-h-0 relative z-20`}>
         <SidebarTicket />
       </div>
 
