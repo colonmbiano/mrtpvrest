@@ -5,6 +5,9 @@ import { io } from "socket.io-client";
 import api from "@/lib/api";
 import { getApiUrl } from "@/lib/config";
 import GPSTracker from "@/components/delivery/GPSTracker";
+import { useOfflineStore } from "@/store/useOfflineStore";
+import { initBackgroundSync } from "@/lib/offline";
+import { useDeliveryStore } from "@/store/useDeliveryStore";
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING:"Pendiente", CONFIRMED:"Confirmado", PREPARING:"Preparando",
@@ -69,6 +72,9 @@ export default function DeliveryApp() {
     window.addEventListener('online',  () => setIsOnline(true));
     window.addEventListener('offline', () => setIsOnline(false));
     audioRef.current = new Audio('/notification.mp3');
+
+    // Iniciar sincronización en background
+    initBackgroundSync();
 
     const restId = localStorage.getItem("restaurantId");
     const locId = localStorage.getItem("locationId");
@@ -188,11 +194,24 @@ export default function DeliveryApp() {
   }
 
   async function changeStatus(order: any, status: string, method?: string) {
+    const data = {
+      orderId: order.id,
+      status,
+      ...(method ? { paymentMethod: method } : {})
+    };
+
+    if (!navigator.onLine) {
+      useOfflineStore.getState().addToQueue({ type: 'CONFIRM_DELIVERY', data });
+      if (status === "DELIVERED") {
+        setOrders(orders.filter(o => o.id !== order.id));
+        setScreen("home");
+      }
+      return;
+    }
+
     try {
-      const { data } = await api.put(`/api/delivery/${driver.id}/orders/${order.id}/status`, {
-        status, ...(method ? { paymentMethod: method } : {})
-      });
-      setSelectedOrder(data);
+      const { data: updated } = await api.put(`/api/delivery/${driver.id}/orders/${order.id}/status`, data);
+      setSelectedOrder(updated);
       fetchOrders();
       if (status === "DELIVERED") setScreen("home");
     } catch (err: any) { alert(err.response?.data?.error || "Error"); }
@@ -200,13 +219,25 @@ export default function DeliveryApp() {
 
   async function saveExpense() {
     if (!expenseAmt || Number(expenseAmt) <= 0) return;
+    
+    const expenseData = {
+      type: "EXPENSE",
+      category: expenseCat,
+      amount: expenseAmt,
+      description: expenseDesc,
+      driverId: driver.id
+    };
+
+    if (!navigator.onLine) {
+      useOfflineStore.getState().addToQueue({ type: 'LOG_EXPENSE', data: expenseData });
+      setScreen("caja");
+      return;
+    }
+
     setSavingExpense(true);
     try {
       const formData = new FormData();
-      formData.append("type", "EXPENSE");
-      formData.append("category", expenseCat);
-      formData.append("amount", expenseAmt);
-      formData.append("description", expenseDesc);
+      Object.entries(expenseData).forEach(([k, v]) => formData.append(k, v as string));
       await api.post(`/api/driver-cash/${driver.id}/movements`, formData);
       setScreen("caja");
     } catch {} finally { setSavingExpense(false); }
@@ -214,9 +245,18 @@ export default function DeliveryApp() {
 
   async function sendMessage() {
     if (!newMsg.trim() || !selectedOrder) return;
+    const msgData = { orderId: selectedOrder.id, message: newMsg, fromDriver: true };
+
+    if (!navigator.onLine) {
+      useOfflineStore.getState().addToQueue({ type: 'CHAT_MESSAGE', data: msgData });
+      setMessages([...messages, { ...msgData, id: Date.now().toString(), createdAt: new Date() }]);
+      setNewMsg("");
+      return;
+    }
+
     try {
       setSending(true);
-      await api.post(`/api/delivery/orders/${selectedOrder.id}/messages`, { message: newMsg });
+      await api.post(`/api/delivery/orders/${selectedOrder.id}/messages`, msgData);
       setNewMsg("");
       fetchMessages(selectedOrder.id);
     } catch {} finally { setSending(false); }
