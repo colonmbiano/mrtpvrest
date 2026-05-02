@@ -35,6 +35,7 @@ public/assets/
 
 # Scratch local de Claude / herramientas
 .superpowers/
+.worktrees/
 .claude/worktrees/
 .claude/settings.local.json
 
