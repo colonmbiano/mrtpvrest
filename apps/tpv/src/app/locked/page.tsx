@@ -26,7 +26,7 @@ export default function LockedPage() {
       }
 
       if (sessionActive) {
-        router.replace('/pos/order-type');
+        router.replace('/hub');
         return;
       }
     };
@@ -54,7 +54,7 @@ export default function LockedPage() {
       initBackgroundSync();
 
       // Redirect to order type selector
-      router.replace('/pos/order-type');
+      router.replace('/hub');
     } catch (err) {
       console.error('PIN validation error:', err);
       setError('Error al validar PIN');
