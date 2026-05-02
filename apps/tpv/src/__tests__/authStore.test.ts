@@ -1,15 +1,23 @@
 /**
  * authStore.test.ts
- * Pruebas unitarias para el authStore del TPV.
+ * Pruebas unitarias para el authStore del TPV (offline-first).
  * Ejecutar: pnpm --filter @mrtpvrest/tpv test
  */
 import { renderHook, act } from "@testing-library/react";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthStore, type TPVEmployee } from "@/store/authStore";
 
 // Mock de api
 jest.mock("@/lib/api", () => ({
-  post: jest.fn(),
-  get: jest.fn(),
+  __esModule: true,
+  default: {
+    post: jest.fn(),
+    get: jest.fn(),
+  },
+}));
+
+// Mock de hashPin para evitar dependencia de crypto.subtle en jsdom
+jest.mock("@/lib/hash", () => ({
+  hashPin: jest.fn(async (pin: string) => `hash-${pin}`),
 }));
 
 import api from "@/lib/api";
@@ -37,7 +45,7 @@ Object.defineProperty(window, "localStorage", {
   },
 });
 
-describe("useAuthStore", () => {
+describe("useAuthStore (offline-first)", () => {
   beforeEach(() => {
     // Resetear store
     useAuthStore.setState({
@@ -45,6 +53,9 @@ describe("useAuthStore", () => {
       token: null,
       isAuthenticated: false,
       activeShift: null,
+      employees: [],
+      loading: false,
+      error: null,
       pinAttempts: 0,
       lockedUntil: null,
     });
@@ -53,9 +64,15 @@ describe("useAuthStore", () => {
     jest.clearAllMocks();
   });
 
-  describe("loginWithPin", () => {
-    it("debe autenticar con PIN correcto", async () => {
-      const mockEmployee = { id: "emp-1", name: "Juan", role: "CASHIER" as const };
+  describe("loginWithPin (online fallback)", () => {
+    it("debe autenticar via API cuando no hay match offline", async () => {
+      const mockEmployee: TPVEmployee = {
+        id: "emp-1",
+        name: "Juan",
+        role: "CASHIER",
+        isActive: true,
+        permissions: [],
+      };
       mockApi.post.mockResolvedValueOnce({
         data: { token: "tok-abc", employee: mockEmployee },
       } as never);
@@ -72,6 +89,7 @@ describe("useAuthStore", () => {
       expect(result.current.employee).toEqual(mockEmployee);
       expect(result.current.token).toBe("tok-abc");
       expect(result.current.pinAttempts).toBe(0);
+      expect(mockApi.post).toHaveBeenCalledWith("/api/employees/login", { pin: "1234" });
     });
 
     it("debe contar intentos fallidos y bloquear tras 5", async () => {
@@ -101,7 +119,13 @@ describe("useAuthStore", () => {
     });
 
     it("debe resetear intentos tras login exitoso", async () => {
-      const mockEmployee = { id: "emp-1", name: "Ana", role: "ADMIN" as const };
+      const mockEmployee: TPVEmployee = {
+        id: "emp-1",
+        name: "Ana",
+        role: "ADMIN",
+        isActive: true,
+        permissions: [],
+      };
       // Primero un intento fallido
       mockApi.post.mockRejectedValueOnce(new Error("401"));
       const { result } = renderHook(() => useAuthStore());
@@ -118,10 +142,94 @@ describe("useAuthStore", () => {
     });
   });
 
+  describe("loginWithPin (offline-first)", () => {
+    it("debe autenticar offline si el PIN match en cache local (sin tocar API)", async () => {
+      const localEmployee: TPVEmployee = {
+        id: "emp-local-1",
+        name: "Local Cashier",
+        role: "CASHIER",
+        pin: "hash-1234", // matches mocked hashPin("1234")
+        isActive: true,
+        permissions: ["void_item"],
+      };
+      useAuthStore.setState({ employees: [localEmployee] });
+
+      const { result } = renderHook(() => useAuthStore());
+      let res: { success: boolean; error?: string };
+      await act(async () => {
+        res = await result.current.loginWithPin("1234");
+      });
+
+      expect(res!.success).toBe(true);
+      expect(result.current.isAuthenticated).toBe(true);
+      expect(result.current.employee).toEqual(localEmployee);
+      expect(mockApi.post).not.toHaveBeenCalled();
+    });
+
+    it("NO debe autenticar offline si el empleado está inactivo", async () => {
+      const localEmployee: TPVEmployee = {
+        id: "emp-inactive",
+        name: "Disabled",
+        role: "CASHIER",
+        pin: "hash-1234",
+        isActive: false,
+        permissions: [],
+      };
+      useAuthStore.setState({ employees: [localEmployee] });
+      mockApi.post.mockRejectedValueOnce(new Error("401"));
+
+      const { result } = renderHook(() => useAuthStore());
+      await act(async () => {
+        await result.current.loginWithPin("1234");
+      });
+
+      // Cae al fallback online (que falla)
+      expect(result.current.isAuthenticated).toBe(false);
+      expect(mockApi.post).toHaveBeenCalled();
+    });
+  });
+
+  describe("hasPermission", () => {
+    it("ADMIN tiene todas las permissions", () => {
+      useAuthStore.setState({
+        employee: {
+          id: "e1",
+          name: "Admin",
+          role: "ADMIN",
+          isActive: true,
+          permissions: [],
+        },
+      });
+      const { result } = renderHook(() => useAuthStore());
+      expect(result.current.hasPermission("void_item")).toBe(true);
+      expect(result.current.hasPermission("close_register")).toBe(true);
+    });
+
+    it("CASHIER solo tiene las permissions explícitas", () => {
+      useAuthStore.setState({
+        employee: {
+          id: "e1",
+          name: "Cashier",
+          role: "CASHIER",
+          isActive: true,
+          permissions: ["void_item"],
+        },
+      });
+      const { result } = renderHook(() => useAuthStore());
+      expect(result.current.hasPermission("void_item")).toBe(true);
+      expect(result.current.hasPermission("close_register")).toBe(false);
+    });
+
+    it("retorna false si no hay employee", () => {
+      const { result } = renderHook(() => useAuthStore());
+      expect(result.current.hasPermission("void_item")).toBe(false);
+    });
+  });
+
   describe("logout", () => {
     it("debe limpiar sesión completamente", async () => {
       useAuthStore.setState({
-        employee: { id: "e1", name: "Test", role: "CASHIER" },
+        employee: { id: "e1", name: "Test", role: "CASHIER", isActive: true, permissions: [] },
         token: "tok-123",
         isAuthenticated: true,
         activeShift: { id: "s1" },
@@ -172,7 +280,7 @@ describe("useAuthStore", () => {
         useAuthStore.setState({ lockedUntil: Date.now() - 1000, pinAttempts: 5 });
       });
       const { result } = renderHook(() => useAuthStore());
-      
+
       let locked;
       act(() => {
         locked = result.current.isLocked();
