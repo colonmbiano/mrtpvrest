@@ -24,7 +24,8 @@ export default function StorefrontClient({
   store: StoreProps;
   categories: any[];
 }) {
-  const theme = store.storefrontTheme || 'MOCHI';
+  const rawTheme = store.storefrontTheme || 'KAWAII';
+  const theme = ({ MOCHI: 'KAWAII', BENTO: 'HALO', POCKET: 'BRUTALIST' } as Record<string, string>)[rawTheme] || rawTheme;
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
@@ -86,36 +87,36 @@ export default function StorefrontClient({
   const primary = store.primaryColor || '#ff5c35';
 
   const THEMES = {
-    MOCHI: {
-      radius: '24px',
-      bg: '#ffffff',
-      surf: '#f9fafb',
+    KAWAII: {
+      radius: '32px',
+      bg: '#FFFAF5',
+      surf: '#FFFFFF',
       font: 'font-sans',
       header: 'flex flex-col items-center py-8 px-6 text-center gap-4',
-      card: 'bg-white rounded-[32px] p-4 shadow-sm border border-gray-100 flex flex-col items-center text-center',
-      btn: 'rounded-full font-black uppercase tracking-widest',
+      card: 'bg-white rounded-[24px] p-4 shadow-[0_8px_20px_rgba(255,183,206,0.25)] border border-pink-100 flex flex-col items-center text-center',
+      btn: 'rounded-full font-bold',
     },
-    BENTO: {
+    HALO: {
       radius: '12px',
-      bg: '#f3f4f6',
-      surf: '#ffffff',
-      font: 'font-display',
-      header: 'flex items-center justify-between py-6 px-8 bg-white border-b border-gray-200',
-      card: 'bg-white rounded-[16px] p-5 shadow-premium border border-gray-100 flex gap-4',
-      btn: 'rounded-lg font-bold',
+      bg: '#0C0C0E',
+      surf: '#131316',
+      font: 'font-mono',
+      header: 'flex items-center justify-between py-6 px-6 bg-black/40 backdrop-blur border-b border-white/10 text-white',
+      card: 'bg-white/5 rounded-[12px] p-4 border border-white/10 flex gap-4 text-white',
+      btn: 'rounded-lg font-bold uppercase tracking-widest',
     },
-    POCKET: {
+    BRUTALIST: {
       radius: '0px',
-      bg: '#ffffff',
-      surf: '#ffffff',
+      bg: '#FFFFFF',
+      surf: '#FFFFFF',
       font: 'font-sans',
-      header: 'px-6 py-4 flex items-center justify-between border-b border-gray-100 sticky top-0 bg-white z-40',
-      card: 'bg-white p-3 border-b border-gray-100 flex gap-3',
-      btn: 'rounded-md font-medium',
+      header: 'px-6 py-4 flex items-center justify-between border-b-4 border-black sticky top-0 bg-white z-40',
+      card: 'bg-white p-4 border-[3px] border-black shadow-[6px_6px_0_#000] flex gap-3',
+      btn: 'rounded-none font-black uppercase border-[3px] border-black',
     }
   };
 
-  const themeStyles = THEMES[theme as keyof typeof THEMES] || THEMES.MOCHI;
+  const themeStyles = THEMES[theme as keyof typeof THEMES] || THEMES.KAWAII;
 
   if (orderSuccess) {
     return (
@@ -141,7 +142,7 @@ export default function StorefrontClient({
     >
       {/* ── HEADER ────────────────────────────────────────────── */}
       <header className={themeStyles.header}>
-        {theme === 'MOCHI' ? (
+        {theme === 'KAWAII' ? (
           <>
             <div className="w-20 h-20 rounded-[28px] overflow-hidden shadow-xl bg-white p-1">
                <img src={store.logo || '/placeholder.png'} className="w-full h-full object-cover rounded-[24px]" />
@@ -151,7 +152,7 @@ export default function StorefrontClient({
               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-green-500 bg-green-50 px-3 py-1 rounded-full mt-2 inline-block">Abierto</span>
             </div>
           </>
-        ) : theme === 'BENTO' ? (
+        ) : theme === 'HALO' ? (
           <>
             <div className="flex items-center gap-4">
               <img src={store.logo || '/placeholder.png'} className="w-10 h-10 rounded-xl object-cover" />
@@ -168,7 +169,7 @@ export default function StorefrontClient({
       </header>
 
       {/* ── CATEGORIES ────────────────────────────────────────── */}
-      <nav className={`sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 px-6 py-4 flex gap-3 overflow-x-auto no-scrollbar ${theme === 'POCKET' ? 'top-[57px]' : ''}`}>
+      <nav className={`sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 px-6 py-4 flex gap-3 overflow-x-auto no-scrollbar ${theme === 'BRUTALIST' ? 'top-[57px]' : ''}`}>
         {categories.map(cat => (
           <button 
             key={cat.id} 
@@ -184,15 +185,15 @@ export default function StorefrontClient({
       </nav>
 
       {/* ── MENU CONTENT ──────────────────────────────────────── */}
-      <main className={`p-6 space-y-12 ${theme === 'POCKET' ? 'p-0 space-y-0' : ''}`}>
+      <main className={`p-6 space-y-12 ${theme === 'BRUTALIST' ? 'p-0 space-y-0' : ''}`}>
         {categories.map(cat => (
-          <section key={cat.id} ref={el => { catRefs.current[cat.id] = el; }} className={theme === 'POCKET' ? 'border-b-4 border-gray-50' : ''}>
-            <div className={`flex items-center gap-2 mb-6 ${theme === 'POCKET' ? 'bg-gray-50/50 p-4 mb-0 border-b border-gray-100' : ''}`}>
+          <section key={cat.id} ref={el => { catRefs.current[cat.id] = el; }} className={theme === 'BRUTALIST' ? 'border-b-4 border-gray-50' : ''}>
+            <div className={`flex items-center gap-2 mb-6 ${theme === 'BRUTALIST' ? 'bg-gray-50/50 p-4 mb-0 border-b border-gray-100' : ''}`}>
               <h2 className="text-xl font-black uppercase tracking-tighter">{cat.name}</h2>
               <span className="h-1 w-10 bg-brand/20 rounded-full" style={{ backgroundColor: `${primary}33` }} />
             </div>
 
-            <div className={theme === 'MOCHI' ? 'grid grid-cols-2 gap-4' : 'flex flex-col gap-4'}>
+            <div className={theme === 'KAWAII' ? 'grid grid-cols-2 gap-4' : 'flex flex-col gap-4'}>
               {cat.items?.map((item: any) => {
                 const line = lines.find(l => l.id === item.id);
                 const price = item.isPromo && item.promoPrice ? item.promoPrice : item.price;
@@ -201,8 +202,8 @@ export default function StorefrontClient({
                   <div key={item.id} className={themeStyles.card}>
                     {/* Image */}
                     <div className={`${
-                      theme === 'MOCHI' ? 'w-full aspect-square mb-3' : 
-                      theme === 'BENTO' ? 'w-24 h-24 shrink-0' : 
+                      theme === 'KAWAII' ? 'w-full aspect-square mb-3' : 
+                      theme === 'HALO' ? 'w-24 h-24 shrink-0' : 
                       'w-20 h-20 shrink-0'
                     } rounded-[--radius] overflow-hidden bg-gray-50 relative`}>
                       <img src={item.imageUrl || '/placeholder.png'} className="w-full h-full object-cover" />
@@ -212,11 +213,11 @@ export default function StorefrontClient({
                     {/* Info */}
                     <div className="flex-1 flex flex-col justify-between min-w-0">
                       <div>
-                        <h3 className={`font-black ${theme === 'MOCHI' ? 'text-sm mb-1' : 'text-base mb-0.5'} truncate`}>{item.name}</h3>
+                        <h3 className={`font-black ${theme === 'KAWAII' ? 'text-sm mb-1' : 'text-base mb-0.5'} truncate`}>{item.name}</h3>
                         <p className="text-[10px] text-gray-400 line-clamp-2 leading-tight">{item.description}</p>
                       </div>
 
-                      <div className={`flex items-center justify-between mt-4 ${theme === 'MOCHI' ? 'w-full' : ''}`}>
+                      <div className={`flex items-center justify-between mt-4 ${theme === 'KAWAII' ? 'w-full' : ''}`}>
                         <span className="font-display font-black text-lg" style={{ color: primary }}>{fmt(price)}</span>
                         
                         {line ? (
@@ -246,11 +247,11 @@ export default function StorefrontClient({
 
       {/* ── FOOTER / CART ──────────────────────────────────────── */}
       {quantity > 0 && (
-        <div className={`fixed bottom-0 left-0 w-full p-6 z-50 transition-all ${theme === 'POCKET' ? 'p-0' : ''}`}>
+        <div className={`fixed bottom-0 left-0 w-full p-6 z-50 transition-all ${theme === 'BRUTALIST' ? 'p-0' : ''}`}>
           <button 
             onClick={() => setShowCheckout(true)}
-            className={`w-full max-w-lg mx-auto flex items-center justify-between bg-black text-white p-5 shadow-2xl hover:scale-[1.02] active:scale-95 transition-all ${theme === 'POCKET' ? 'rounded-none' : 'rounded-[24px]'}`}
-            style={theme === 'POCKET' ? {} : { borderRadius: themeStyles.radius }}
+            className={`w-full max-w-lg mx-auto flex items-center justify-between bg-black text-white p-5 shadow-2xl hover:scale-[1.02] active:scale-95 transition-all ${theme === 'BRUTALIST' ? 'rounded-none' : 'rounded-[24px]'}`}
+            style={theme === 'BRUTALIST' ? {} : { borderRadius: themeStyles.radius }}
           >
             <div className="flex items-center gap-3">
               <span className="bg-white/20 px-2 py-0.5 rounded-md text-xs font-black">{quantity}</span>

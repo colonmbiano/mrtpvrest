@@ -98,7 +98,7 @@ router.get('/info', async (req, res) => {
     location: location ? { id: location.id, name: location.name, address: location.address } : null,
     hasWebStore:    tenantConfig.hasWebStore,
     whatsappNumber: config?.whatsappNumber || tenantConfig.whatsappNumber,
-    storefrontTheme: config?.storefrontTheme || "MOCHI",
+    storefrontTheme: (() => { const t = config?.storefrontTheme; const map = { MOCHI: "KAWAII", BENTO: "HALO", POCKET: "BRUTALIST" }; return map[t] || t || "KAWAII"; })(),
     primaryColor:    restaurant.accentColor || "#ff5c35",
   });
 });
