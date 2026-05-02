@@ -7,7 +7,16 @@ type Printer = {
   name: string;
   connectionType: "USB" | "NETWORK" | "BLUETOOTH";
   ip?: string | null;
+  port?: number | null;
   type: string;
+};
+
+const DEFAULT_FORM: Partial<Printer> = {
+  name: "",
+  connectionType: "NETWORK",
+  ip: "",
+  port: 9100,
+  type: "CASHIER",
 };
 
 export default function ImpresorasPage() {
@@ -15,13 +24,9 @@ export default function ImpresorasPage() {
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
 
-  const [form, setForm] = useState<Partial<Printer>>({
-    name: "",
-    connectionType: "NETWORK",
-    ip: "",
-    type: "RECEIPT",
-  });
+  const [form, setForm] = useState<Partial<Printer>>(DEFAULT_FORM);
 
   useEffect(() => {
     fetchPrinters();
@@ -30,8 +35,7 @@ export default function ImpresorasPage() {
   const fetchPrinters = async () => {
     setLoading(true);
     try {
-      // The API endpoint should match the backend router for printers
-      const { data } = await api.get("/api/admin/printers");
+      const { data } = await api.get("/api/printers");
       setPrinters(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
@@ -44,22 +48,26 @@ export default function ImpresorasPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...form,
+        port: form.port ? parseInt(String(form.port), 10) || 9100 : 9100,
+      };
       if (editingId) {
-        await api.put(`/api/admin/printers/${editingId}`, form);
+        await api.put(`/api/printers/${editingId}`, payload);
       } else {
-        await api.post("/api/admin/printers", form);
+        await api.post("/api/printers", payload);
       }
       setIsFormOpen(false);
       setEditingId(null);
-      setForm({ name: "", connectionType: "NETWORK", ip: "", type: "RECEIPT" });
+      setForm(DEFAULT_FORM);
       fetchPrinters();
-    } catch {
-      alert("Error guardando impresora");
+    } catch (err: any) {
+      alert("Error guardando impresora: " + (err?.response?.data?.error || err?.message || ""));
     }
   };
 
   const handleEdit = (p: Printer) => {
-    setForm(p);
+    setForm({ ...DEFAULT_FORM, ...p });
     setEditingId(p.id);
     setIsFormOpen(true);
   };
@@ -67,10 +75,22 @@ export default function ImpresorasPage() {
   const handleDelete = async (id: string) => {
     if (!confirm("¿Eliminar impresora?")) return;
     try {
-      await api.delete(`/api/admin/printers/${id}`);
+      await api.delete(`/api/printers/${id}`);
       fetchPrinters();
     } catch {
       alert("Error eliminando impresora");
+    }
+  };
+
+  const handleTest = async (id: string) => {
+    setTestingId(id);
+    try {
+      await api.post(`/api/printers/${id}/test`);
+      alert("Prueba de impresión enviada");
+    } catch (err: any) {
+      alert("Error en prueba: " + (err?.response?.data?.error || err?.message || ""));
+    } finally {
+      setTestingId(null);
     }
   };
 
@@ -116,9 +136,10 @@ export default function ImpresorasPage() {
                 onChange={(e) => setForm({ ...form, type: e.target.value })}
                 className="w-full bg-[#0a0a0c] border border-[#2d2d30] rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#ffb84d]"
               >
-                <option value="RECEIPT">Recibos / Caja</option>
+                <option value="CASHIER">Recibos / Caja</option>
                 <option value="KITCHEN">Cocina</option>
                 <option value="BAR">Barra</option>
+                <option value="FRYER">Freidora</option>
               </select>
             </div>
             <div>
@@ -134,15 +155,27 @@ export default function ImpresorasPage() {
               </select>
             </div>
             {form.connectionType === "NETWORK" && (
-              <div>
-                <label className="block text-sm font-bold text-gray-400 mb-1">Dirección IP</label>
-                <input
-                  value={form.ip || ""}
-                  onChange={(e) => setForm({ ...form, ip: e.target.value })}
-                  className="w-full bg-[#0a0a0c] border border-[#2d2d30] rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#ffb84d]"
-                  placeholder="192.168.1.x"
-                />
-              </div>
+              <>
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-1">Dirección IP</label>
+                  <input
+                    value={form.ip || ""}
+                    onChange={(e) => setForm({ ...form, ip: e.target.value })}
+                    className="w-full bg-[#0a0a0c] border border-[#2d2d30] rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#ffb84d]"
+                    placeholder="192.168.1.x"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-1">Puerto</label>
+                  <input
+                    type="number"
+                    value={form.port ?? 9100}
+                    onChange={(e) => setForm({ ...form, port: parseInt(e.target.value, 10) || 9100 })}
+                    className="w-full bg-[#0a0a0c] border border-[#2d2d30] rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#ffb84d]"
+                    placeholder="9100"
+                  />
+                </div>
+              </>
             )}
           </div>
           <div className="flex gap-3 justify-end">
@@ -184,19 +217,28 @@ export default function ImpresorasPage() {
                   {p.connectionType === "NETWORK" ? `IP: ${p.ip}` : p.connectionType}
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
                 <button
-                  onClick={() => handleEdit(p)}
-                  className="flex-1 bg-[#2d2d30] hover:bg-gray-600 text-white py-1.5 rounded-lg text-xs font-bold transition-colors"
+                  onClick={() => handleTest(p.id)}
+                  disabled={testingId === p.id}
+                  className="bg-[#ffb84d]/10 hover:bg-[#ffb84d]/20 text-[#ffb84d] py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
                 >
-                  Editar
+                  {testingId === p.id ? "Enviando…" : "Probar impresión"}
                 </button>
-                <button
-                  onClick={() => handleDelete(p.id)}
-                  className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                >
-                  Eliminar
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleEdit(p)}
+                    className="flex-1 bg-[#2d2d30] hover:bg-gray-600 text-white py-1.5 rounded-lg text-xs font-bold transition-colors"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => handleDelete(p.id)}
+                    className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                  >
+                    Eliminar
+                  </button>
+                </div>
               </div>
             </div>
           ))}
