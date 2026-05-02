@@ -62,10 +62,27 @@ export default function LockedPage() {
     }
   };
 
+  const locationName = typeof window !== "undefined" ? localStorage.getItem("activeWorkspaceName") || "Caja Principal" : "Caja Principal";
+
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-background p-4">
+    <div className="relative min-h-screen w-full flex items-center justify-center bg-background p-4 overflow-hidden">
+      {/* Glows decorativos */}
+      <div aria-hidden className="pointer-events-none absolute -top-48 -left-48 w-[700px] h-[700px] rounded-full opacity-50"
+        style={{ background: "radial-gradient(circle, rgba(255,132,0,0.16) 0%, transparent 70%)" }} />
+      <div aria-hidden className="pointer-events-none absolute -bottom-48 -right-48 w-[600px] h-[600px] rounded-full opacity-40"
+        style={{ background: "radial-gradient(circle, rgba(136,214,108,0.14) 0%, transparent 70%)" }} />
+
+      {/* Status pill terminal vinculada (esquina superior derecha) */}
+      <div className="absolute top-6 right-6 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full"
+        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#88D66C", boxShadow: "0 0 8px #88D66C80" }} />
+        <span className="text-[10px] font-bold tracking-wider" style={{ color: "#88D66C" }}>TERMINAL VINCULADA</span>
+        <span className="text-[10px]" style={{ color: "#666" }}>·</span>
+        <span className="text-[10px] font-semibold" style={{ color: "#FFFFFF" }}>{locationName}</span>
+      </div>
+
       {/* Glassmorphic container */}
-      <div className="w-full max-w-sm glass rounded-3xl p-8 border border-border shadow-lg glow-orange">
+      <div className="relative z-10 w-full max-w-sm glass rounded-3xl p-8 border border-border shadow-lg glow-orange">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2 font-mono">

@@ -1,19 +1,28 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
 import OrderTypeSelector from "@/components/pos/OrderTypeSelector";
 import type { ExtendedOrderType } from "@/components/pos/OrderTypeSelector";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
+import api from "@/lib/api";
 
 export default function OrderTypePage() {
   const router = useRouter();
+  const [openOrders, setOpenOrders] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get("/api/orders", { params: { status: "OPEN,PENDING,PREPARING" } })
+      .then(({ data }) => {
+        if (!cancelled) setOpenOrders(Array.isArray(data) ? data.length : (data?.length || 0));
+      })
+      .catch(() => { /* silent */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const handlePickType = (type: ExtendedOrderType) => {
-    // Inicializar el estado de la orden
     useTicketStore.getState().updateTicket({ type: type as any });
-    
-    // Redirigir a la toma de pedidos (POS Menu)
     router.replace("/pos/menu");
   };
 
@@ -24,9 +33,11 @@ export default function OrderTypePage() {
 
   return (
     <div className="flex h-screen w-full bg-[#0C0C0E] overflow-auto">
-      <OrderTypeSelector 
-        onSelect={handlePickType} 
+      <OrderTypeSelector
+        onSelect={handlePickType}
         onClose={handleLogout}
+        openOrdersCount={openOrders}
+        onOpenTickets={openOrders > 0 ? () => router.replace("/pos/menu") : undefined}
       />
     </div>
   );

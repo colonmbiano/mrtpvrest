@@ -94,12 +94,18 @@ export default function ImpresorasPage() {
     }
   };
 
+  // Stats agregados
+  const totalCount = printers.length;
+  const networkCount = printers.filter(p => p.connectionType === "NETWORK").length;
+  const stationsByType = new Set(printers.map(p => p.type)).size;
+
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex justify-between items-end mb-8">
+    <div className="p-8 max-w-6xl mx-auto" style={{ fontFamily: "JetBrains Mono, monospace" }}>
+      <div className="flex justify-between items-end mb-6">
         <div>
-          <h1 className="text-3xl font-black mb-2">Gestión de Impresoras</h1>
-          <p className="text-gray-400">Configura impresoras térmicas para recibos y KDS.</p>
+          <p className="text-[10px] font-bold tracking-wider" style={{ color: "#666" }}>HARDWARE</p>
+          <h1 className="text-2xl font-bold mb-1 text-white">Hardware e Impresoras</h1>
+          <p className="text-xs" style={{ color: "#B8B9B6" }}>Dispositivos en red local · Configura recibos, KDS y barra.</p>
         </div>
         <button
           onClick={() => {
@@ -112,6 +118,13 @@ export default function ImpresorasPage() {
           + Nueva Impresora
         </button>
       </div>
+
+      {/* Stats row */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+        <StatTile label="DISPOSITIVOS" value={totalCount} sub={`${networkCount} en red`} accent="#FF8400" />
+        <StatTile label="ESTACIONES" value={stationsByType} sub="distintas" accent="#88D66C" />
+        <StatTile label="PRÓXIMO PING" value={loading ? "—" : "auto"} sub="cada 30s" accent="#FFB84D" />
+      </section>
 
       {isFormOpen && (
         <form onSubmit={handleSave} className="bg-[#141417] p-6 rounded-2xl border border-[#2d2d30] mb-8">
@@ -244,6 +257,19 @@ export default function ImpresorasPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function StatTile({ label, value, sub, accent }: { label: string; value: number | string; sub: string; accent: string }) {
+  return (
+    <div className="rounded-2xl p-4 flex flex-col gap-1"
+      style={{ background: "#1A1A1A", border: "1px solid #2E2E2E" }}>
+      <span className="text-[10px] font-bold tracking-wider" style={{ color: "#666" }}>{label}</span>
+      <div className="flex items-baseline gap-2">
+        <span className="text-2xl font-bold tabular-nums" style={{ color: accent }}>{value}</span>
+        <span className="text-[10px]" style={{ color: "#B8B9B6" }}>{sub}</span>
+      </div>
     </div>
   );
 }
