@@ -459,6 +459,46 @@
               "children": [
                 {
                   "type": "frame",
+                  "id": "YffaX",
+                  "name": "Motivational Pill",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF05",
+                  "cornerRadius": 999,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#FFFFFF10"
+                  },
+                  "gap": 8,
+                  "padding": [
+                    8,
+                    16
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "GeCfB",
+                      "name": "pillIcon",
+                      "content": "✨",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "J1FByz",
+                      "name": "pillText",
+                      "fill": "#B8B9B6",
+                      "content": "Maneja con precaución, hay reporte de lluvia en tu ruta.",
+                      "fontFamily": "Geist",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
                   "id": "NVSLK",
                   "name": "summaryCard",
                   "width": "fill_container",
@@ -552,6 +592,109 @@
                               "fontWeight": "normal"
                             }
                           ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "N91jp4",
+                  "name": "Mandados Banner",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF10",
+                  "cornerRadius": 24,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#FF840060"
+                  },
+                  "effect": {
+                    "type": "background_blur",
+                    "radius": 20
+                  },
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Tmwa6",
+                      "name": "errandHeader",
+                      "width": "fill_container",
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "zBXHs",
+                          "name": "errandIconWrap",
+                          "width": 32,
+                          "height": 32,
+                          "fill": "#FF840020",
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "cwt3T",
+                              "name": "errandIcon",
+                              "width": 16,
+                              "height": 16,
+                              "iconFontName": "shopping-cart",
+                              "iconFontFamily": "lucide",
+                              "fill": "#FF8400"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "C548c9",
+                          "name": "errandTitle",
+                          "fill": "#FF8400",
+                          "content": "Mandado Prioritario",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 14,
+                          "fontWeight": "bold"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "N2flgH",
+                      "name": "errandDesc",
+                      "fill": "#FFFFFF",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Pasar a OXXO por 3 bolsas de hielo grande para la sucursal.",
+                      "fontFamily": "Geist",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "W8DFZi",
+                      "name": "doneBtn",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#10B98120",
+                      "cornerRadius": 12,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#10B98140"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "N20DO",
+                          "name": "doneText",
+                          "fill": "#10B981",
+                          "content": "Marcar como Completado",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 12,
+                          "fontWeight": "bold"
                         }
                       ]
                     }
@@ -675,119 +818,6 @@
                   ]
                 }
               ]
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "Jr8Q5",
-          "layoutPosition": "absolute",
-          "x": 20,
-          "y": 60,
-          "name": "Push Notification",
-          "width": 350,
-          "height": 90,
-          "fill": "#FFFFFF15",
-          "cornerRadius": 24,
-          "stroke": {
-            "thickness": 1,
-            "fill": "#FFFFFF30"
-          },
-          "effect": [
-            {
-              "type": "background_blur",
-              "radius": 20
-            },
-            {
-              "type": "shadow",
-              "shadowType": "outer",
-              "color": "#00000040",
-              "offset": {
-                "x": 0,
-                "y": 8
-              },
-              "blur": 24
-            }
-          ],
-          "gap": 16,
-          "padding": 16,
-          "alignItems": "center",
-          "children": [
-            {
-              "type": "frame",
-              "id": "insLK",
-              "name": "notifIconWrap",
-              "width": 48,
-              "height": 48,
-              "fill": "#FF8400",
-              "cornerRadius": 16,
-              "effect": {
-                "type": "shadow",
-                "shadowType": "outer",
-                "color": "#FF840040",
-                "offset": {
-                  "x": 0,
-                  "y": 4
-                },
-                "blur": 8
-              },
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "icon_font",
-                  "id": "V6UBX",
-                  "name": "notifIcon",
-                  "width": 24,
-                  "height": 24,
-                  "iconFontName": "bell-ring",
-                  "iconFontFamily": "lucide",
-                  "fill": "#FFFFFF"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "bmjaV",
-              "name": "notifTextCont",
-              "width": "fill_container",
-              "layout": "vertical",
-              "gap": 2,
-              "children": [
-                {
-                  "type": "text",
-                  "id": "l2BOX",
-                  "name": "notifTitle",
-                  "fill": "#FFFFFF",
-                  "content": "Nuevo Pedido Asignado",
-                  "fontFamily": "JetBrains Mono",
-                  "fontSize": 14,
-                  "fontWeight": "bold"
-                },
-                {
-                  "type": "text",
-                  "id": "Dctpb",
-                  "name": "notifSub",
-                  "fill": "#CCCCCC",
-                  "content": "Orden #4505 · 1.2 km de distancia",
-                  "fontFamily": "Geist",
-                  "fontSize": 12,
-                  "fontWeight": "normal"
-                }
-              ]
-            },
-            {
-              "type": "icon_font",
-              "id": "w8PCGk",
-              "layoutPosition": "absolute",
-              "x": 320,
-              "y": 12,
-              "name": "closeIcon",
-              "width": 16,
-              "height": 16,
-              "iconFontName": "x",
-              "iconFontFamily": "lucide",
-              "fill": "#888888"
             }
           ]
         }
@@ -1486,7 +1516,7 @@
     {
       "type": "frame",
       "id": "pxx8Y",
-      "x": 2001,
+      "x": 1951,
       "y": 944,
       "name": "Driver Cash (Enhanced)",
       "clip": true,

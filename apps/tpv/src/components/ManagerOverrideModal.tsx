@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Permission } from '@/store/useAuthStore';
-import useAuthStore from '@/store/useAuthStore';
-import useOfflineStore from '@/store/useOfflineStore';
+import { Permission, useAuthStore } from '@/store/authStore';
+import { useOfflineStore } from '@/store/useOfflineStore';
 import NumpadPIN from './NumpadPIN';
 import { hashPin } from '@/lib/hash';
 
@@ -23,7 +22,7 @@ export default function ManagerOverrideModal({
   const [error, setError] = useState('');
   const [validating, setValidating] = useState(false);
   const employees = useAuthStore((state) => state.employees);
-  const currentEmployee = useAuthStore((state) => state.currentEmployee);
+  const employee = useAuthStore((state) => state.employee);
   const addToQueue = useOfflineStore((state) => state.addToQueue);
 
   if (!isOpen) return null;
