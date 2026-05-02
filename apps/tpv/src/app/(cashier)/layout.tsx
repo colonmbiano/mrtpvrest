@@ -1,11 +1,13 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
-import { Search, Menu, Receipt, ShoppingCart, UtensilsCrossed } from "lucide-react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Search, Menu, Receipt, ShoppingCart, UtensilsCrossed, Utensils, ShoppingBag, Bike, ListChecks } from "lucide-react";
 import Button from "@/components/ui/Button";
 import ConfigMenu from "@/components/pos/ConfigMenu";
 import LockScreen from "@/components/pos/LockScreen";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
+import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
+import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
 import api from "@/lib/api";
@@ -49,6 +51,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const itemCount = activeTicket.items.reduce((acc, i) => acc + i.quantity, 0);
 
   const [openOrders, setOpenOrders] = useState<any[]>([]);
+  const [payOrder, setPayOrder] = useState<any | null>(null);
+  const [shiftOpen, setShiftOpen] = useState<boolean | null>(null);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const prevLockedRef = useRef<boolean | null>(null);
 
   const {
     isLocked,
@@ -76,6 +82,60 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     const id = setInterval(fetchOpenOrders, 30000);
     return () => clearInterval(id);
   }, [isLocked, fetchOpenOrders]);
+
+  const fetchShift = useCallback(async () => {
+    try {
+      const { data } = await api.get("/api/shifts/active");
+      setShiftOpen(Boolean(data?.isOpen ?? data?.id));
+    } catch {
+      setShiftOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isLocked) return;
+    fetchShift();
+    const id = setInterval(fetchShift, 60000);
+    return () => clearInterval(id);
+  }, [isLocked, fetchShift]);
+
+  const handleConfirmDrawerPayment = async (method: string) => {
+    if (!payOrder) return;
+    try {
+      await api.put(`/api/orders/${payOrder.id}/payment`, { paymentMethod: method });
+      toast.success("Cobro procesado");
+      setPayOrder(null);
+      fetchOpenOrders();
+    } catch (err: any) {
+      toast.error("Error al cobrar: " + (err?.response?.data?.error || err?.message || ""));
+    }
+  };
+
+  const handleSelectOrder = async (o: any) => {
+    try {
+      const { data } = await api.get(`/api/orders/${o.id}`);
+      setPayOrder(data);
+    } catch {
+      setPayOrder(o);
+    }
+  };
+
+  useEffect(() => {
+    if (prevLockedRef.current === true && !isLocked) {
+      setShowStartPicker(true);
+    }
+    prevLockedRef.current = isLocked;
+  }, [isLocked]);
+
+  const handlePickType = (type: "DINE_IN" | "TAKEOUT" | "DELIVERY") => {
+    useTicketStore.getState().updateTicket({ type });
+    setShowStartPicker(false);
+  };
+
+  const handlePickOpenTickets = () => {
+    setShowStartPicker(false);
+    setShowOrders(true);
+  };
 
   useEffect(() => {
     if (showOrders) fetchOpenOrders();
@@ -151,9 +211,73 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         isOpen={showOrders}
         onClose={() => setShowOrders(false)}
         orders={drawerOrders}
-        onSelectOrder={(o) => console.log("Select:", o)}
-        onConfirmPayment={(o) => console.log("Pay:", o)}
+        onSelectOrder={handleSelectOrder}
+        onConfirmPayment={handleSelectOrder}
       />
+
+      {showStartPicker && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowStartPicker(false)} />
+          <div className="relative w-full max-w-2xl bg-surf-1 border border-bd rounded-3xl shadow-2xl p-8 sm:p-10 animate-in zoom-in-95 duration-200">
+            <div className="space-y-2 mb-8">
+              <span className="eyebrow">¡HOLA, {(currentEmployee?.name || "").toUpperCase().split(" ")[0]}!</span>
+              <h2 className="text-2xl sm:text-3xl font-black tracking-tight">¿Qué vas a hacer?</h2>
+              <p className="text-sm text-tx-sec">Elige el tipo de pedido o continúa con un ticket abierto.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+              {[
+                { id: "DINE_IN", label: "Mesa", desc: "Cuenta abierta", Icon: Utensils },
+                { id: "TAKEOUT", label: "Llevar", desc: "Para retirar", Icon: ShoppingBag },
+                { id: "DELIVERY", label: "Domicilio", desc: "A domicilio", Icon: Bike },
+              ].map(({ id, label, desc, Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => handlePickType(id as "DINE_IN" | "TAKEOUT" | "DELIVERY")}
+                  className="group h-32 sm:h-36 rounded-2xl bg-surf-2 hover:bg-iris-soft hover:border-iris-500 border border-bd flex flex-col items-center justify-center gap-2 transition-all active:scale-95"
+                >
+                  <Icon size={28} className="text-tx-sec group-hover:text-iris-500 transition-colors" />
+                  <span className="text-base font-black uppercase tracking-widest">{label}</span>
+                  <span className="text-[10px] font-bold text-tx-dis uppercase tracking-wider">{desc}</span>
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={handlePickOpenTickets}
+              className="w-full h-14 rounded-2xl bg-surf-2 hover:bg-surf-3 border border-bd flex items-center justify-center gap-3 transition-pos"
+            >
+              <ListChecks size={18} className="text-iris-500" />
+              <span className="text-xs font-black uppercase tracking-widest">
+                Tickets abiertos {openOrders.length > 0 && `(${openOrders.length})`}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setShowStartPicker(false)}
+              className="w-full mt-4 h-9 text-[11px] font-black uppercase tracking-widest text-tx-dis hover:text-tx-mut transition-colors"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {payOrder && (
+        <PaymentModal
+          isOpen={!!payOrder}
+          onClose={() => setPayOrder(null)}
+          orderNumber={payOrder.orderNumber || String(payOrder.id).slice(-6).toUpperCase()}
+          tableName={payOrder.table?.name || payOrder.tableNumber || undefined}
+          total={Number(payOrder.total ?? 0)}
+          items={(payOrder.items || []).map((i: any) => ({
+            name: i.name || i.menuItem?.name || "Producto",
+            quantity: i.quantity ?? 1,
+            subtotal: Number(i.subtotal ?? 0),
+          }))}
+          onConfirm={handleConfirmDrawerPayment}
+        />
+      )}
 
       {/* MAIN CONTENT AREA */}
       <div className={`flex-1 flex-col min-w-0 ${mobileView === "menu" ? "flex" : "hidden"} lg:flex`}>
@@ -217,8 +341,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
               <span className="text-[12px] font-bold uppercase tracking-tight">
                 {currentEmployee?.name || "Sin sesión"}
               </span>
-              <span className="text-[10px] text-success font-black uppercase tracking-widest">
-                {currentEmployee?.role || "TURNO ACTIVO"}
+              <span
+                className={`text-[10px] font-black uppercase tracking-widest ${
+                  shiftOpen === false ? "text-danger" : "text-success"
+                }`}
+              >
+                {shiftOpen === false ? "TURNO CERRADO" : shiftOpen ? "TURNO ACTIVO" : (currentEmployee?.role || "—")}
               </span>
             </div>
           </div>
