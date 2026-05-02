@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { Plus, Trash2, Printer, CreditCard, ShoppingCart } from "lucide-react";
+import { Plus, Trash2, CreditCard, ShoppingCart } from "lucide-react";
 import Button from "@/components/ui/Button";
 import TicketLine from "@/components/pos/TicketLine";
 import { useTicketStore } from "@/store/ticketStore";
