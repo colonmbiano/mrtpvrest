@@ -65,19 +65,54 @@ export default function SetupPage() {
     try {
       const response = await axios.post('/api/auth/login', { email, password });
       const token = response.data.accessToken;
+      const role = response.data.user?.role;
       setAuthToken(token);
 
-      // Fetch restaurants
-      const restResponse = await axios.get('/api/admin/config', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      let restaurantData = null;
 
-      setRestaurants([restResponse.data]);
+      if (role === 'SUPER_ADMIN') {
+        const res = await axios.get('/api/saas/tpv-configs', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const rows = res.data || [];
+        const byRestaurant = new Map();
+        for (const row of rows) {
+          if (!byRestaurant.has(row.restaurantId)) {
+            byRestaurant.set(row.restaurantId, {
+              id: row.restaurantId,
+              name: row.restaurantName,
+              locations: []
+            });
+          }
+          if (row.locationId) {
+            byRestaurant.get(row.restaurantId).locations.push({
+              id: row.locationId,
+              name: row.locationName
+            });
+          }
+        }
+        const restaurantsList = Array.from(byRestaurant.values()).filter(r => r.locations.length > 0);
+        if (restaurantsList.length === 0) throw new Error("No hay sucursales activas");
+        restaurantData = restaurantsList[0];
+      } else {
+        const restResponse = await axios.get('/api/admin/config', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const locResponse = await axios.get('/api/admin/locations', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        restaurantData = {
+          ...restResponse.data,
+          locations: locResponse.data.filter((l: any) => l.isActive !== false)
+        };
+      }
+
+      setRestaurants([restaurantData]);
       setState((s) => ({
         ...s,
         email,
         password,
-        selectedRestaurant: restResponse.data,
+        selectedRestaurant: restaurantData,
       }));
 
       setStep('location');
@@ -138,7 +173,10 @@ export default function SetupPage() {
 
       // Fetch and cache employees
       const empResponse = await axios.get('/api/employees/sync', {
-        headers: { Authorization: `Bearer ${authToken}` },
+        headers: { 
+          Authorization: `Bearer ${authToken}`,
+          'x-location-id': state.selectedLocation.id
+        },
       });
       
       // Use unified store to persist employees
