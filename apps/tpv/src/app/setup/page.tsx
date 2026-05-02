@@ -6,6 +6,7 @@ import axios from 'axios';
 import LoginStep from './steps/LoginStep';
 import LocationStep from './steps/LocationStep';
 import DeviceStep from './steps/DeviceStep';
+import { useAuthStore } from '@/store/authStore';
 
 type SetupStep = 'login' | 'location' | 'device' | 'saving';
 
@@ -139,7 +140,9 @@ export default function SetupPage() {
       const empResponse = await axios.get('/api/employees/sync', {
         headers: { Authorization: `Bearer ${authToken}` },
       });
-      localStorage.setItem('employees', JSON.stringify(empResponse.data));
+      
+      // Use unified store to persist employees
+      useAuthStore.getState().setEmployees(empResponse.data);
 
       // Set device cookie
       const expires = new Date();

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Syne, DM_Sans, DM_Mono } from "next/font/google";
 import "./globals.css";
 import ModalRoot from "@/components/tpv/ModalRoot";
+import SyncInitializer from "@/components/SyncInitializer";
 
 const syne = Syne({
   subsets: ["latin"],
@@ -39,6 +40,7 @@ export default function RootLayout({
       <body
         className={`${syne.variable} ${dmSans.variable} ${dmMono.variable} antialiased`}
       >
+        <SyncInitializer />
         <ModalRoot>{children}</ModalRoot>
       </body>
     </html>

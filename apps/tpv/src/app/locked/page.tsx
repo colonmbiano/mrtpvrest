@@ -3,17 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import NumpadPIN from '@/components/NumpadPIN';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useAuthStore } from '@/store/authStore';
 import { useOfflineStore } from '@/store/useOfflineStore';
 import { initBackgroundSync } from '@/lib/offline';
-import { hashPin } from '@/lib/hash';
 
 export default function LockedPage() {
   const router = useRouter();
   const [error, setError] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const employees = useAuthStore((state) => state.employees);
-  const setCurrentEmployee = useAuthStore((state) => state.setCurrentEmployee);
+  const loginWithPin = useAuthStore((state) => state.loginWithPin);
 
   // On mount: validate device is linked, check if already in session
   useEffect(() => {
@@ -43,29 +42,13 @@ export default function LockedPage() {
     setError('');
 
     try {
-      // Hash the entered PIN
-      const enteredHash = await hashPin(pin);
+      const res = await loginWithPin(pin);
 
-      // Find employee with matching PIN hash
-      const employee = employees.find((emp) => emp.pin === enteredHash && emp.isActive);
-
-      if (!employee) {
-        setError('PIN incorrecto o empleado inactivo');
+      if (!res.success) {
+        setError(res.error || 'PIN incorrecto');
         setIsValidating(false);
         return;
       }
-
-      // Set current employee in auth store
-      setCurrentEmployee(employee);
-
-      // Set session cookie (session = expires when browser closes)
-      document.cookie = 'tpv-session-active=true; path=/; SameSite=Lax';
-
-      // Store employee data in localStorage for access on next page
-      localStorage.setItem('currentEmployeeId', employee.id);
-      localStorage.setItem('currentEmployeeName', employee.name);
-      localStorage.setItem('currentEmployeeRole', employee.role);
-      localStorage.setItem('currentEmployeePermissions', JSON.stringify(employee.permissions));
 
       // Initialize background sync
       initBackgroundSync();

@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
+const crypto  = require('crypto');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
@@ -11,6 +12,54 @@ const ROLE_DEFAULTS = {
   DELIVERY: { canCharge:true,  canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:true,  canTakeTakeout:false, canManageShifts:false },
   COOK:     { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:false, canManageShifts:false },
 };
+
+// GET /api/employees/sync — descarga lista para uso offline
+router.get('/sync', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const locationId = req.locationId || req.headers['x-location-id'];
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const employees = await prisma.employee.findMany({
+      where: { locationId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        offlinePin: true, // SHA256 para validación local
+        isActive: true,
+        canCharge: true,
+        canDiscount: true,
+        canModifyTickets: true,
+        canDeleteTickets: true,
+        canConfigSystem: true,
+        canTakeDelivery: true,
+        canTakeTakeout: true,
+        canManageShifts: true,
+      }
+    });
+
+    // Mapear permisos a formato de Permission[]
+    const formatted = employees.map(e => {
+      const perms = [];
+      if (e.canCharge) perms.push('open_cash_drawer');
+      if (e.canDiscount) perms.push('apply_discount');
+      if (e.canModifyTickets) perms.push('void_item');
+      if (e.canDeleteTickets) perms.push('void_order');
+      
+      return {
+        id: e.id,
+        name: e.name,
+        role: e.role,
+        pin: e.offlinePin,
+        isActive: e.isActive,
+        permissions: perms,
+        lastSync: Date.now()
+      };
+    });
+
+    res.json(formatted);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // GET todos los empleados (Filtrado por Sucursal)
 router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
@@ -64,11 +113,12 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
     }
 
     const pinHash = await bcrypt.hash(pin, 10);
+    const offlinePin = crypto.createHash('sha256').update(pin).digest('hex');
     const defaults = ROLE_DEFAULTS[role] || ROLE_DEFAULTS.WAITER;
     const emp = await prisma.employee.create({
       data: {
         locationId: req.locationId,
-        name, phone: phone||null, pin: pinHash, role: role||'WAITER',
+        name, phone: phone||null, pin: pinHash, offlinePin, role: role||'WAITER',
         photo: photo||null, tables: tables||[],
         scheduleStart: scheduleStart||null, scheduleEnd: scheduleEnd||null,
         scheduleDays: scheduleDays||[],
@@ -125,6 +175,7 @@ router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, 
       }
       
       updateData.pin = await bcrypt.hash(pin, 10);
+      updateData.offlinePin = crypto.createHash('sha256').update(pin).digest('hex');
     }
 
     // 4. Guardar en BD
@@ -186,9 +237,13 @@ router.post('/login', async (req, res) => {
     if (!emp) return res.status(401).json({ error: 'PIN incorrecto o empleado no pertenece a esta sucursal' });
 
     // Migrar PIN legacy a hash
-    if (needsRehash) {
+    if (needsRehash || !emp.offlinePin) {
       const pinHash = await bcrypt.hash(pin, 10);
-      await prisma.employee.update({ where: { id: emp.id }, data: { pin: pinHash } }).catch(() => {});
+      const offlinePin = crypto.createHash('sha256').update(pin).digest('hex');
+      await prisma.employee.update({ 
+        where: { id: emp.id }, 
+        data: { pin: pinHash, offlinePin } 
+      }).catch(() => {});
     }
 
     const restaurantId = emp.location?.restaurantId ?? req.user?.restaurantId ?? req.restaurantId ?? null;

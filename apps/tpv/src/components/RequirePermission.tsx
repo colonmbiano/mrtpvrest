@@ -1,8 +1,7 @@
 'use client';
 
 import { ReactNode, useState } from 'react';
-import { Permission } from '@/store/useAuthStore';
-import useAuthStore from '@/store/useAuthStore';
+import { Permission, useAuthStore } from '@/store/authStore';
 import ManagerOverrideModal from './ManagerOverrideModal';
 
 interface RequirePermissionProps {

@@ -980,6 +980,7 @@ model Employee {
   photo         String?
   phone         String?
   pin           String   @unique
+  offlinePin    String?
   role          String   @default("WAITER")
   isActive      Boolean  @default(true)
   tables        String[]
