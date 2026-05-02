@@ -3,10 +3,10 @@
 import { usePOSStore } from "@/store/usePOSStore";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, SunMoon, ShoppingCart, User, Store, LogOut, ChevronRight, Search, Plus, Minus, X, Trash2, Receipt } from "lucide-react";
+import { Lock, ShoppingCart, User, Store, LogOut, ChevronRight, Search, Plus, Minus, X, Trash2, Receipt } from "lucide-react";
 
 export default function POS_SPA() {
-  const { isAuthenticated, login, theme, setTheme } = usePOSStore();
+  const { isAuthenticated, theme } = usePOSStore();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

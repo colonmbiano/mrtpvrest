@@ -43,7 +43,6 @@ function SetupContent() {
   const setPalette = usePOSStore((s) => s.setPalette);
   const setMode = usePOSStore((s) => s.setMode);
   const setThemeChosen = usePOSStore((s) => s.setThemeChosen);
-  const themeChosen = usePOSStore((s) => s.themeChosen);
 
   const [alreadyLinked, setAlreadyLinked] = useState<null | {
     restaurantName: string;
@@ -55,7 +54,7 @@ function SetupContent() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [picked, setPicked] = useState<{ restaurant: Restaurant; location: Location } | null>(null);
+  const [, setPicked] = useState<{ restaurant: Restaurant; location: Location } | null>(null);
   const [serverUrl, setServerUrl] = useState("");
 
   useEffect(() => {
