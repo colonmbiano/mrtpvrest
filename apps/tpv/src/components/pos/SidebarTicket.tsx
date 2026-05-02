@@ -1,13 +1,16 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { Plus, Trash2, CreditCard, ShoppingCart } from "lucide-react";
 import Button from "@/components/ui/Button";
 import TicketLine from "@/components/pos/TicketLine";
+import PaymentModal from "@/components/pos/PaymentModal";
 import { useTicketStore } from "@/store/ticketStore";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
 export default function SidebarTicket() {
+  const [showPayment, setShowPayment] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const { 
     tickets,
     activeIndex,
@@ -53,6 +56,48 @@ export default function SidebarTicket() {
     } catch (error: any) {
       toast.error("Error al enviar pedido: " + (error.response?.data?.error || error.message));
     }
+  };
+
+  const handleProcessPayment = async (method: string) => {
+    if (ticket.items.length === 0) return;
+    setProcessing(true);
+    try {
+      const orderData = {
+        orderType: ticket.type,
+        items: ticket.items.map(item => ({
+          menuItemId: item.menuItemId,
+          quantity: item.quantity,
+          notes: item.notes || "",
+          modifiers: (item.modifiers || []).map(m => ({ modifierId: m.id })),
+        })),
+        tableId: ticket.tableId || null,
+        customerName: ticket.name || "Publico General",
+        customerPhone: ticket.phone || null,
+        subtotal,
+        discount: ticket.discount,
+        total,
+        paymentMethod: method,
+        status: "DELIVERED",
+      };
+
+      const { data: order } = await api.post("/api/orders/tpv", orderData);
+      await api.put(`/api/orders/${order.id}/payment`, { paymentMethod: method });
+      toast.success("Cobro procesado");
+      clearActiveItems();
+      setShowPayment(false);
+    } catch (error: any) {
+      toast.error("Error al cobrar: " + (error.response?.data?.error || error.message));
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleOpenPayment = () => {
+    if (ticket.items.length === 0) {
+      toast.error("El ticket está vacío");
+      return;
+    }
+    setShowPayment(true);
   };
 
   return (
@@ -151,10 +196,26 @@ export default function SidebarTicket() {
            </div>
         </div>
 
-        <Button variant="primary" size="xl" fullWidth className="h-12 sm:h-14 text-xs sm:text-sm tracking-[0.15em] sm:tracking-[0.2em] font-black uppercase shadow-glow">
+        <Button
+          variant="primary"
+          size="xl"
+          fullWidth
+          className="h-12 sm:h-14 text-xs sm:text-sm tracking-[0.15em] sm:tracking-[0.2em] font-black uppercase shadow-glow disabled:opacity-50"
+          onClick={handleOpenPayment}
+          disabled={processing || ticket.items.length === 0}
+        >
           <CreditCard size={18} className="mr-2" />
-          Procesar cobro
+          {processing ? "Procesando…" : "Procesar cobro"}
         </Button>
+
+        <PaymentModal
+          isOpen={showPayment}
+          onClose={() => setShowPayment(false)}
+          orderNumber={String(ticket.id)}
+          total={total}
+          items={ticket.items.map((i) => ({ name: i.name, quantity: i.quantity, subtotal: i.subtotal }))}
+          onConfirm={handleProcessPayment}
+        />
 
         <div className="grid grid-cols-3 gap-2 mt-3">
            <Button variant="soft" size="md" className="text-[10px] font-black uppercase" onClick={handleSendToKitchen}>🍳 Cocina</Button>

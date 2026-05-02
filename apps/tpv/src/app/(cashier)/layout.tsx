@@ -5,7 +5,9 @@ import Button from "@/components/ui/Button";
 import ConfigMenu from "@/components/pos/ConfigMenu";
 import LockScreen from "@/components/pos/LockScreen";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
+import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
+import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
 import api from "@/lib/api";
@@ -49,6 +51,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const itemCount = activeTicket.items.reduce((acc, i) => acc + i.quantity, 0);
 
   const [openOrders, setOpenOrders] = useState<any[]>([]);
+  const [payOrder, setPayOrder] = useState<any | null>(null);
+  const [shiftOpen, setShiftOpen] = useState<boolean | null>(null);
 
   const {
     isLocked,
@@ -76,6 +80,43 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     const id = setInterval(fetchOpenOrders, 30000);
     return () => clearInterval(id);
   }, [isLocked, fetchOpenOrders]);
+
+  const fetchShift = useCallback(async () => {
+    try {
+      const { data } = await api.get("/api/shifts/active");
+      setShiftOpen(Boolean(data?.isOpen ?? data?.id));
+    } catch {
+      setShiftOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isLocked) return;
+    fetchShift();
+    const id = setInterval(fetchShift, 60000);
+    return () => clearInterval(id);
+  }, [isLocked, fetchShift]);
+
+  const handleConfirmDrawerPayment = async (method: string) => {
+    if (!payOrder) return;
+    try {
+      await api.put(`/api/orders/${payOrder.id}/payment`, { paymentMethod: method });
+      toast.success("Cobro procesado");
+      setPayOrder(null);
+      fetchOpenOrders();
+    } catch (err: any) {
+      toast.error("Error al cobrar: " + (err?.response?.data?.error || err?.message || ""));
+    }
+  };
+
+  const handleSelectOrder = async (o: any) => {
+    try {
+      const { data } = await api.get(`/api/orders/${o.id}`);
+      setPayOrder(data);
+    } catch {
+      setPayOrder(o);
+    }
+  };
 
   useEffect(() => {
     if (showOrders) fetchOpenOrders();
@@ -151,9 +192,25 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         isOpen={showOrders}
         onClose={() => setShowOrders(false)}
         orders={drawerOrders}
-        onSelectOrder={(o) => console.log("Select:", o)}
-        onConfirmPayment={(o) => console.log("Pay:", o)}
+        onSelectOrder={handleSelectOrder}
+        onConfirmPayment={handleSelectOrder}
       />
+
+      {payOrder && (
+        <PaymentModal
+          isOpen={!!payOrder}
+          onClose={() => setPayOrder(null)}
+          orderNumber={payOrder.orderNumber || String(payOrder.id).slice(-6).toUpperCase()}
+          tableName={payOrder.table?.name || payOrder.tableNumber || undefined}
+          total={Number(payOrder.total ?? 0)}
+          items={(payOrder.items || []).map((i: any) => ({
+            name: i.name || i.menuItem?.name || "Producto",
+            quantity: i.quantity ?? 1,
+            subtotal: Number(i.subtotal ?? 0),
+          }))}
+          onConfirm={handleConfirmDrawerPayment}
+        />
+      )}
 
       {/* MAIN CONTENT AREA */}
       <div className={`flex-1 flex-col min-w-0 ${mobileView === "menu" ? "flex" : "hidden"} lg:flex`}>
@@ -217,8 +274,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
               <span className="text-[12px] font-bold uppercase tracking-tight">
                 {currentEmployee?.name || "Sin sesión"}
               </span>
-              <span className="text-[10px] text-success font-black uppercase tracking-widest">
-                {currentEmployee?.role || "TURNO ACTIVO"}
+              <span
+                className={`text-[10px] font-black uppercase tracking-widest ${
+                  shiftOpen === false ? "text-danger" : "text-success"
+                }`}
+              >
+                {shiftOpen === false ? "TURNO CERRADO" : shiftOpen ? "TURNO ACTIVO" : (currentEmployee?.role || "—")}
               </span>
             </div>
           </div>
