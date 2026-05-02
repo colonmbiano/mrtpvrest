@@ -18,8 +18,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Hub + POS + KDS routes: require device + session
-  if (pathname.startsWith('/hub') || pathname.startsWith('/pos') || pathname.startsWith('/kds')) {
+  // Hub + POS + KDS + Cierre routes: require device + session
+  if (pathname.startsWith('/hub') || pathname.startsWith('/pos') || pathname.startsWith('/kds') || pathname.startsWith('/cierre')) {
     if (!device) {
       return NextResponse.redirect(new URL('/setup', request.url));
     }
@@ -33,5 +33,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/setup/:path*', '/locked/:path*', '/hub/:path*', '/pos/:path*', '/kds/:path*'],
+  matcher: ['/setup/:path*', '/locked/:path*', '/hub/:path*', '/pos/:path*', '/kds/:path*', '/cierre/:path*'],
 };
