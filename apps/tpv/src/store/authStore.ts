@@ -118,6 +118,7 @@ export const useAuthStore = create<AuthState>()(
             localStorage.setItem("accessToken", token);
             localStorage.setItem("tpv-employee-token", token);
             localStorage.setItem("tpv-employee", JSON.stringify(employee));
+            document.cookie = `tpv-session-active=true; path=/`;
           }
 
           set({
@@ -152,6 +153,7 @@ export const useAuthStore = create<AuthState>()(
           localStorage.removeItem("tpv-employee-token");
           localStorage.removeItem("tpv-employee");
           localStorage.removeItem("kdsEmployee");
+          document.cookie = `tpv-session-active=; path=/; max-age=0`;
           // NO borrar restaurantId ni locationId (son del setup del dispositivo)
         }
         set({
