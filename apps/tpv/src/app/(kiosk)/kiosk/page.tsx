@@ -100,7 +100,6 @@ export default function KioskPage() {
 
   function addToCart(item: MenuItem, mods: CartItem["modifiers"]) {
     setCart((prev) => {
-      const key = item.id + JSON.stringify(mods);
       const existing = prev.find(
         (c) => c.menuItemId === item.id && JSON.stringify(c.modifiers) === JSON.stringify(mods)
       );
@@ -117,10 +116,6 @@ export default function KioskPage() {
       ];
     });
     setSelectedItem(null);
-  }
-
-  function removeFromCart(idx: number) {
-    setCart((prev) => prev.filter((_, i) => i !== idx));
   }
 
   function updateQty(idx: number, delta: number) {
@@ -372,8 +367,6 @@ export default function KioskPage() {
   }
 
   // ─── Menu screen ──────────────────────────────────────────────────────────
-
-  const allItems = categories.flatMap((c) => c.items);
 
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col">

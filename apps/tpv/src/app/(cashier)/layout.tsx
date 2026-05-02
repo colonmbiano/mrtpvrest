@@ -12,7 +12,6 @@ import api from "@/lib/api";
 
 import SidebarTicket from "@/components/pos/SidebarTicket";
 import { useThemeStore } from "@/store/themeStore";
-import { useAuthStore } from "@/store/authStore";
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
   DINE_IN: "MESA",

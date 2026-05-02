@@ -53,7 +53,7 @@ export default function ImpresorasPage() {
       setEditingId(null);
       setForm({ name: "", connectionType: "NETWORK", ip: "", type: "RECEIPT" });
       fetchPrinters();
-    } catch (err) {
+    } catch {
       alert("Error guardando impresora");
     }
   };
@@ -69,7 +69,7 @@ export default function ImpresorasPage() {
     try {
       await api.delete(`/api/admin/printers/${id}`);
       fetchPrinters();
-    } catch (e) {
+    } catch {
       alert("Error eliminando impresora");
     }
   };
