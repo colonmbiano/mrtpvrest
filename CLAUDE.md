@@ -17,7 +17,16 @@
 3. **Multi-tenancy:** Siempre filtrar consultas por `restaurant_id`.
 4. **Resiliencia:** Manejar errores 429/500 con respuestas controladas 503.
 
+## Git Workflow (overrides parent CLAUDE.md)
+
+**Push directo a `master` está permitido y es el flujo preferido en este proyecto.**
+Esto anula explícitamente la regla "Never push directly to main" del `C:\Users\colon\Downloads\CLAUDE.md` (que pertenece a otro proyecto, Antigravity Kit).
+
+- Para hotfixes pequeños: commitear y `git push origin master` directamente.
+- Master push dispara los deploys de Vercel (admin, tpv, landing, saas, delivery, client) y Railway (backend).
+- PRs siguen siendo válidos para cambios grandes o cuando se quiera review formal, pero no son obligatorios.
+
 ## Comandos Frecuentes
 - Dev: `pnpm dev`
 - Build TPV: `pnpm --filter @mrtpvrest/tpv build`
-- Deploy: Push directo a `master` para Railway.
+- Deploy: Push directo a `master` (Vercel + Railway lo recogen automáticamente).
