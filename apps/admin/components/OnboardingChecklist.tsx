@@ -13,7 +13,7 @@ interface ChecklistState {
 }
 
 const ITEMS = [
-  { key: "hasLogo",       label: "Sube tu logo",               href: "/onboarding",           icon: "🎨" },
+  { key: "hasLogo",       label: "Sube tu logo",               href: "/admin/mi-marca",        icon: "🎨" },
   { key: "hasMenu",       label: "Configura tu menú",          href: "/admin/menu",            icon: "📋" },
   { key: "hasEmployees",  label: "Crea empleados con PIN",     href: "/admin/empleados",       icon: "👥" },
   { key: "hasLocation",   label: "Configura tu sucursal",      href: "/admin/configuracion",   icon: "📍" },

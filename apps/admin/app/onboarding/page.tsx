@@ -259,7 +259,10 @@ export default function OnboardingPage() {
       const nextHistory: Message[] = isGreeting ? [aiMsg] : [...historyToSend, aiMsg];
       setHistory(nextHistory);
 
-      if (data.currentStep === "done") {
+      // Solo redirigir cuando el backend efectivamente persistió el onboarding.
+      // Sin readyToConfirm, /api/onboarding/chat NO marca isOnboarded en el tenant
+      // y /api/tenant/me devolvería isOnboarded:false → loop a /onboarding.
+      if (data.currentStep === "done" && data.readyToConfirm === true) {
         setTimeout(() => router.replace("/admin"), 2000);
       }
     } catch {
