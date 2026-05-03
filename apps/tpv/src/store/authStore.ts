@@ -189,11 +189,11 @@ export const useAuthStore = create<AuthState>()(
             }
 
             return { success: true };
-          } catch (apiErr) {
+          } catch (_apiErr) {
             // Online login also failed
             throw new Error("PIN incorrecto");
           }
-        } catch (err) {
+        } catch (_err) {
           // Failure handling (increment attempts)
           const newAttempts = get().pinAttempts + 1;
           const shouldLock = newAttempts >= MAX_PIN_ATTEMPTS;

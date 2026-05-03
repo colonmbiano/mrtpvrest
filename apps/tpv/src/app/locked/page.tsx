@@ -4,14 +4,12 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import NumpadPIN from '@/components/NumpadPIN';
 import { useAuthStore } from '@/store/authStore';
-import { useOfflineStore } from '@/store/useOfflineStore';
 import { initBackgroundSync } from '@/lib/offline';
 
 export default function LockedPage() {
   const router = useRouter();
   const [error, setError] = useState('');
   const [isValidating, setIsValidating] = useState(false);
-  const employees = useAuthStore((state) => state.employees);
   const loginWithPin = useAuthStore((state) => state.loginWithPin);
 
   // On mount: validate device is linked, check if already in session
