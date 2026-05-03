@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
+import axios from '@/lib/api';
 import { Sun, Moon } from 'lucide-react';
 import LoginStep from './steps/LoginStep';
 import LocationStep from './steps/LocationStep';
