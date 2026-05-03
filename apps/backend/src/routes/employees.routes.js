@@ -1,9 +1,21 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 const crypto  = require('crypto');
+const rateLimit = require('express-rate-limit');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
+
+// Rate-limit para login con PIN: max 10 intentos / 15 min por IP+location.
+// (PIN es 4 dígitos = 10000 combinaciones; sin esto, fuerza bruta tarda < 1min)
+const pinLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `${req.ip}:${req.locationId || 'no-loc'}`,
+  message: { error: 'Demasiados intentos de PIN. Espera 15 minutos.' },
+});
 
 const ROLE_DEFAULTS = {
   ADMIN:    { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:true,  canConfigSystem:true,  canTakeDelivery:true,  canTakeTakeout:true,  canManageShifts:true  },
@@ -218,8 +230,8 @@ router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, async (re
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// POST login con PIN
-router.post('/login', async (req, res) => {
+// POST login con PIN — rate-limit 10/15min por IP+location
+router.post('/login', pinLoginLimiter, async (req, res) => {
   try {
     const { pin } = req.body;
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
