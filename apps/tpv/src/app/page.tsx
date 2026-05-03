@@ -1,9 +1,20 @@
-import { redirect } from "next/navigation";
+"use client";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-// force-dynamic evita que Next prerenderice esta respuesta y Vercel cachee un 307 sin Location.
-// El middleware ya maneja las redirecciones; este page.tsx solo actúa como fallback.
-export const dynamic = "force-dynamic";
-
+// En Vercel: el middleware intercepta "/" antes de llegar acá.
+// En Capacitor (output: export): no hay middleware, así que el redirect
+// debe ser client-side. Por eso esta página es un client component.
 export default function RootPage() {
-  redirect("/pos/menu");
+  const router = useRouter();
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const device = document.cookie.includes("tpv-device-linked=true");
+    const session = document.cookie.includes("tpv-session-active=true");
+    if (!device) router.replace("/setup");
+    else if (!session) router.replace("/locked");
+    else router.replace("/hub");
+  }, [router]);
+
+  return null;
 }
