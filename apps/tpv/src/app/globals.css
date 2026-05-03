@@ -55,6 +55,19 @@
     --tx-mut: var(--text-secondary);
     --tx-dim: var(--text-muted);
     --bd-main: var(--border);
+
+    /* Aliases para pantallas de setup (LoginStep/LocationStep/DeviceStep) */
+    --background: var(--bg);
+    --foreground: var(--text-primary);
+    --foreground-secondary: var(--text-secondary);
+    --card: var(--surface-1);
+    --muted: var(--surface-2);
+    --primary: var(--brand);
+    --primary-soft: var(--brand-soft);
+    --danger: #ef4444;
+    --danger-soft: rgba(239, 68, 68, 0.12);
+    --font-primary: var(--font-display);
+    --font-secondary: var(--font-body);
   }
 
   [data-mode="light"] {
@@ -150,6 +163,23 @@ html, body {
 }
 
 .pos-shadow { box-shadow: var(--shadow-glow); }
+
+/* Utilities usadas por las pantallas de setup (LoginStep/LocationStep/DeviceStep) */
+.rounded-m { border-radius: var(--radius-lg); }
+
+.glow-orange {
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(255,132,0,0.18) 0%, transparent 70%);
+  filter: blur(40px);
+  opacity: 0.55;
+}
+
+.glow-green {
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(136,214,108,0.14) 0%, transparent 70%);
+  filter: blur(40px);
+  opacity: 0.45;
+}
 
 @layer utilities {
   .eyebrow {
