@@ -130,7 +130,7 @@ html, body {
 
 @layer utilities {
   .eyebrow {
-    @apply text-[10px] font-bold uppercase tracking-[0.2em] text-tx-mut leading-none;
+    @apply text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500 leading-none;
   }
   .mono {
     @apply font-mono;
