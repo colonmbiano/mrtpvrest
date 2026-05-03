@@ -8,16 +8,20 @@ const PLATFORM = {
   tenantSlug: 'mrtpvrest-platform',
   tenantName: 'MRTPVREST Platform',
   restaurantSlug: 'mrtpvrest-platform-system',
-  superEmail: 'super@mrtpvrest.com',
-  superPassword: 'SuperAdmin1234!',
+  superEmail: process.env.SUPERADMIN_EMAIL || 'super@mrtpvrest.com',
+  superPassword: process.env.SUPERADMIN_PASSWORD || (() => {
+    throw new Error('Falta SUPERADMIN_PASSWORD en env para seed')
+  })(),
 }
 
 const CUSTOMER = {
   tenantSlug: 'master-burgers-colo',
   tenantName: "Master Burger's Colo",
   restaurantSlug: 'master-burgers-colo-rest',
-  adminEmail: 'admin@mrtpvrest.com',
-  adminPassword: 'Admin1234!',
+  adminEmail: process.env.SEED_ADMIN_EMAIL || 'admin@mrtpvrest.com',
+  adminPassword: process.env.SEED_ADMIN_PASSWORD || (() => {
+    throw new Error('Falta SEED_ADMIN_PASSWORD en env para seed')
+  })(),
 }
 
 async function seedPlatform() {

@@ -1,1 +1,6 @@
-{ "framework": "nextjs" }
+{
+  "framework": "nextjs",
+  "installCommand": "cd ../.. && npx pnpm@9.15.0 install --no-frozen-lockfile",
+  "buildCommand": "cd ../.. && npx pnpm@9.15.0 turbo build --filter @mrtpvrest/saas",
+  "outputDirectory": ".next"
+}

@@ -1,9 +1,9 @@
 {
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile.backend"
+    "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "node apps/backend/src/index.js"
+    "startCommand": "node src/index.js"
   }
 }
