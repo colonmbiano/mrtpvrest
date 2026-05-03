@@ -154,6 +154,7 @@ export const useAuthStore = create<AuthState>()(
             // Set cookies/localStorage for middleware and API
             if (typeof window !== "undefined") {
               document.cookie = `tpv-session-active=true; path=/; SameSite=Lax`;
+              document.cookie = `tpv-role=${encodeURIComponent(offlineMatch.role)}; path=/; SameSite=Lax`;
               localStorage.setItem("currentEmployeeId", offlineMatch.id);
               localStorage.setItem("currentEmployeeName", offlineMatch.name);
               localStorage.setItem("currentEmployeeRole", offlineMatch.role);
@@ -186,6 +187,9 @@ export const useAuthStore = create<AuthState>()(
               localStorage.setItem("accessToken", token);
               localStorage.setItem("tpv-employee-token", token);
               document.cookie = `tpv-session-active=true; path=/; SameSite=Lax`;
+              if (employee?.role) {
+                document.cookie = `tpv-role=${encodeURIComponent(employee.role)}; path=/; SameSite=Lax`;
+              }
             }
 
             return { success: true };
@@ -223,6 +227,7 @@ export const useAuthStore = create<AuthState>()(
           localStorage.removeItem("currentEmployeeRole");
           localStorage.removeItem("currentEmployeePermissions");
           document.cookie = `tpv-session-active=; path=/; max-age=0; SameSite=Lax`;
+          document.cookie = `tpv-role=; path=/; max-age=0; SameSite=Lax`;
         }
         set({
           employee: null,

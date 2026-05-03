@@ -1,0 +1,19 @@
+node_modules/
+**/node_modules/
+.next/
+**/build/
+**/dist/
+**/out/
+.turbo/
+.vercel/
+.git/
+**/.git/
+*.log
+public/assets/
+**/images/
+.worktrees/
+android/app/build/
+**/android/app/build/
+
+# Repo standalone clonado dentro (referencia, no parte del proyecto)
+open-design/

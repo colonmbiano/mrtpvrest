@@ -1,9 +1,16 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware');
+const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 router.use(authenticate, requireTenantAccess);
+
+// Roles autorizados para acciones KDS de cocina (escrituras).
+// Lectura es libre para cualquier empleado autenticado del tenant
+// (mesero/cajero pueden ver el estado para coordinarse).
+const kdsWriteRoles = requireRole(
+  'COOK', 'KITCHEN', 'ADMIN', 'OWNER', 'MANAGER', 'SUPER_ADMIN'
+);
 
 // GET pedidos activos para una estación
 router.get('/orders/:station', async (req, res) => {
@@ -63,7 +70,7 @@ router.get('/orders/:station', async (req, res) => {
 });
 
 // PUT marcar item como listo
-router.put('/item/:orderItemId/done', async (req, res) => {
+router.put('/item/:orderItemId/done', kdsWriteRoles, async (req, res) => {
   try {
     const { station, orderId, done } = req.body;
     await prisma.kdsItemStatus.upsert({
@@ -94,7 +101,7 @@ router.put('/item/:orderItemId/done', async (req, res) => {
 });
 
 // PUT marcar orden completa como lista
-router.put('/order/:orderId/ready', async (req, res) => {
+router.put('/order/:orderId/ready', kdsWriteRoles, async (req, res) => {
   try {
     await prisma.order.update({
       where: { id: req.params.orderId },
@@ -105,7 +112,7 @@ router.put('/order/:orderId/ready', async (req, res) => {
 });
 
 // POST enviar mensaje desde cocina al TPV
-router.post('/message', async (req, res) => {
+router.post('/message', kdsWriteRoles, async (req, res) => {
   try {
     const { orderId, station, message } = req.body;
     const msg = await prisma.kdsMessage.create({
@@ -127,7 +134,7 @@ router.get('/messages/unread', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// PUT marcar mensajes como leídos
+// PUT marcar mensajes como leídos (TPV los lee → cualquier rol del tenant)
 router.put('/messages/:id/read', async (req, res) => {
   try {
     await prisma.kdsMessage.update({

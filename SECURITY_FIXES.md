@@ -262,8 +262,13 @@ pnpm --filter tpv dev
 
 ### Próximos Pasos Recomendados
 
-- [ ] Agregar rate-limiting en backend (`POST /api/employees/login`)
-- [ ] Agregar validación de rol en middleware de Next.js
-- [ ] Conectar "Mis mesas" de mesero a API real
-- [ ] Auditoría de permisos en KDS
-- [ ] Considerar 2FA para OWNER/ADMIN
+- [x] Agregar rate-limiting en backend (`POST /api/employees/login`) — 10 intentos / 15 min por IP+location (ver `apps/backend/src/routes/employees.routes.js`)
+- [x] Agregar validación de rol en middleware de Next.js — TPV middleware ahora valida rol vs path (`/kds`, `/cierre`, `/pos`) usando cookie `tpv-role`. Defensa en profundidad — backend sigue siendo la autoridad real
+- [x] Conectar "Mis mesas" de mesero a API real — fetch a `GET /api/tables`. **Caveat:** muestra todas las mesas con orden activa de la sucursal; filtrar por mesero requiere migración para agregar `Order.waiterEmployeeId`
+- [x] Auditoría de permisos en KDS — agregado `requireRole('COOK','KITCHEN','ADMIN','OWNER','MANAGER','SUPER_ADMIN')` a los 4 endpoints de escritura (item/done, order/ready, message)
+- [ ] Considerar 2FA para OWNER/ADMIN — pausado por scope/tiempo
+
+### Pendientes derivados (no críticos pero recomendados)
+
+- [ ] Agregar campo `Order.waiterEmployeeId` (Prisma migration) para que "Mis mesas" filtre realmente por mesero asignado
+- [ ] El password `SuperAdmin1234!` estuvo en el código (commits previos a 2026-05-03). Ya está parametrizado vía env, pero **rotar el password en producción** y purgar del historial git si es viable
