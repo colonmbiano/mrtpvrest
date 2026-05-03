@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd ../.. && pnpm --filter @mrtpvrest/landing build",
-  "outputDirectory": ".next",
   "framework": "nextjs",
-  "installCommand": "npm install -g pnpm@9.15.0 && cd ../.. && pnpm install --filter @mrtpvrest/landing..."
+  "installCommand": "cd ../.. && npx pnpm@9.15.0 install --no-frozen-lockfile",
+  "buildCommand": "cd ../.. && npx pnpm@9.15.0 turbo build --filter @mrtpvrest/landing",
+  "outputDirectory": ".next"
 }
