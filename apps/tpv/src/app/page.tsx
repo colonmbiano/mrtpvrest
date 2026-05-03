@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 
+// force-dynamic evita que Next prerenderice esta respuesta y Vercel cachee un 307 sin Location.
+// El middleware ya maneja las redirecciones; este page.tsx solo actúa como fallback.
+export const dynamic = "force-dynamic";
+
 export default function RootPage() {
-  // El middleware ya maneja las redirecciones, pero Next.js requiere un page.tsx en la raíz
-  // para evitar errores 404 si el middleware llega a fallar o no se ejecuta.
   redirect("/pos/menu");
 }
