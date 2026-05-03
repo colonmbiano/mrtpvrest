@@ -79,6 +79,22 @@ function normalizeBusinessType(raw) {
   return BUSINESS_TYPE_MAP[lower] ?? 'OTHER'
 }
 
+// -- Sanitización de campos persistidos (vienen de la IA, no se confía en ellos)
+function sanitizeText(raw, maxLen) {
+  if (typeof raw !== 'string') return null
+  // strip control chars, collapse whitespace, trim, cap length
+  const clean = raw.replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, ' ').trim()
+  if (!clean) return null
+  return clean.slice(0, maxLen)
+}
+
+function sanitizePhone(raw) {
+  if (typeof raw !== 'string') return null
+  // permite +, dígitos, espacios, guiones, paréntesis; max 20 chars
+  const clean = raw.replace(/[^\d+\-\s()]/g, '').trim()
+  return clean ? clean.slice(0, 20) : null
+}
+
 // ── POST /api/onboarding/chat ────────────────────────────────────────────────
 
 router.post('/chat', async (req, res) => {
@@ -86,6 +102,20 @@ router.post('/chat', async (req, res) => {
 
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'El campo "message" es requerido' })
+  }
+
+  // Bloquear re-ejecución del onboarding una vez completado.
+  // El frontend redirige al admin si isOnboarded, pero un token válido + curl
+  // podría sobrescribir name/businessType/activeModules sin esta defensa.
+  const tenantId = req.user.tenantId
+  if (tenantId) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { isOnboarded: true },
+    })
+    if (tenant?.isOnboarded) {
+      return res.status(409).json({ error: 'El onboarding ya fue completado para este negocio.' })
+    }
   }
 
   // El onboarding es un flujo de plataforma: siempre usa la key de plataforma.
@@ -133,47 +163,45 @@ router.post('/chat', async (req, res) => {
 
   // ── Persistir cuando el onboarding está completo ──────────────────────────
   if (aiJson.currentStep === 'done' && aiJson.readyToConfirm === true) {
-    const tenantId     = req.user.tenantId
     const restaurantId = req.user.restaurantId
 
     if (tenantId) {
       try {
         const bd      = aiJson.businessData ?? {}
         const modules = Array.isArray(aiJson.activatedModules) ? aiJson.activatedModules : []
-        // pos_standard siempre presente
         if (!modules.includes('pos_standard')) modules.unshift('pos_standard')
 
-        // 1. Actualizar Tenant (incluyendo activeModules)
+        // Sanitizar campos antes de persistir (vienen de la IA, no son confiables)
+        const safeName    = sanitizeText(bd.name, 120)
+        const safeAddress = sanitizeText(bd.address, 240)
+        const safePhone   = sanitizePhone(bd.phone)
+        const safeType    = bd.businessType ? normalizeBusinessType(bd.businessType) : null
+
         const tenantUpdate = {
           isOnboarded:   true,
           onboardingDone: true,
           activeModules: modules,
         }
-        if (bd.name)         tenantUpdate.name         = bd.name
-        if (bd.businessType) tenantUpdate.businessType = normalizeBusinessType(bd.businessType)
+        if (safeName) tenantUpdate.name         = safeName
+        if (safeType) tenantUpdate.businessType = safeType
 
         await prisma.tenant.update({ where: { id: tenantId }, data: tenantUpdate })
 
-        // 2. Actualizar RestaurantConfig si hay restaurante asociado
-        if (restaurantId && (bd.phone || bd.address)) {
+        if (restaurantId && (safePhone || safeAddress)) {
+          const cfgFields = {
+            ...(safePhone   && { phone:   safePhone }),
+            ...(safeAddress && { address: safeAddress }),
+          }
           await prisma.restaurantConfig.upsert({
             where:  { restaurantId },
-            update: {
-              ...(bd.phone   && { phone:   bd.phone }),
-              ...(bd.address && { address: bd.address }),
-            },
-            create: {
-              restaurantId,
-              ...(bd.phone   && { phone:   bd.phone }),
-              ...(bd.address && { address: bd.address }),
-            },
+            update: cfgFields,
+            create: { restaurantId, ...cfgFields },
           })
         }
 
-        // 3. Crear categorías sugeridas en el restaurante
         if (restaurantId && Array.isArray(aiJson.suggestedCategories)) {
           for (let i = 0; i < aiJson.suggestedCategories.length; i++) {
-            const name = String(aiJson.suggestedCategories[i]).trim()
+            const name = sanitizeText(aiJson.suggestedCategories[i], 60)
             if (!name) continue
             await prisma.category.upsert({
               where:  { restaurantId_name: { restaurantId, name } },
