@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
+import { Sun, Moon } from 'lucide-react';
 import LoginStep from './steps/LoginStep';
 import LocationStep from './steps/LocationStep';
 import DeviceStep from './steps/DeviceStep';
 import { useAuthStore } from '@/store/authStore';
+import { useThemeStore } from '@/store/themeStore';
 
 type SetupStep = 'login' | 'location' | 'device' | 'saving';
 
@@ -32,6 +34,7 @@ export default function SetupPage() {
   const [loading, setLoading] = useState(false);
   const [, setRestaurants] = useState<any[]>([]);
   const [authToken, setAuthToken] = useState('');
+  const { mode, toggleMode } = useThemeStore();
 
   // Check if already linked
   useEffect(() => {
@@ -214,6 +217,21 @@ export default function SetupPage() {
         className="absolute pointer-events-none glow-green"
         style={{ width: 900, height: 900, bottom: -150, right: -150 }}
       />
+
+      <button
+        type="button"
+        onClick={toggleMode}
+        aria-label={mode === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+        title={mode === 'dark' ? 'Tema claro' : 'Tema oscuro'}
+        className="fixed top-5 right-5 z-20 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+        style={{
+          background: 'var(--surface-2)',
+          color: 'var(--text-primary)',
+          border: '1px solid var(--border)',
+        }}
+      >
+        {mode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+      </button>
 
       <div className="w-full max-w-lg relative z-10">
         <div
