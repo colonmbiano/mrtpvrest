@@ -61,3 +61,6 @@ tests/e2e/.auth/
 # Expo / React Native
 .expo/
 .expo-shared/
+
+# Repo standalone clonado dentro (referencia, no parte del proyecto)
+open-design/
