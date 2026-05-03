@@ -5,6 +5,13 @@ export function middleware(request: NextRequest) {
   const device = request.cookies.get('tpv-device-linked');
   const session = request.cookies.get('tpv-session-active');
 
+  // Root: redirigir según estado de auth (evita prerender roto en page.tsx)
+  if (pathname === '/') {
+    if (!device) return NextResponse.redirect(new URL('/setup', request.url));
+    if (!session) return NextResponse.redirect(new URL('/locked', request.url));
+    return NextResponse.redirect(new URL('/pos/menu', request.url));
+  }
+
   // Setup route: allow anyone
   if (pathname.startsWith('/setup')) {
     return NextResponse.next();
@@ -33,5 +40,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/setup/:path*', '/locked/:path*', '/hub/:path*', '/pos/:path*', '/kds/:path*', '/cierre/:path*'],
+  matcher: ['/', '/setup/:path*', '/locked/:path*', '/hub/:path*', '/pos/:path*', '/kds/:path*', '/cierre/:path*'],
 };
