@@ -64,15 +64,33 @@ router.get('/sync', authenticate, requireTenantAccess, async (req, res) => {
 // GET todos los empleados (Filtrado por Sucursal)
 router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
+    // Permitir resolver locationId desde múltiples fuentes para no romper
+    // clientes que envían x-location-id en lugar de tenerlo en el JWT.
+    const locationId =
+      req.locationId ||
+      req.headers['x-location-id'] ||
+      req.user?.locationId ||
+      null;
+
+    if (!locationId) {
+      // Mejor 400 explícito que 500 críptico cuando falta el contexto.
+      return res.status(400).json({
+        error: 'Sucursal no identificada — envía header x-location-id o selecciona una sucursal antes de consultar empleados.',
+      });
+    }
+
     const employees = await prisma.employee.findMany({
-      where: { locationId: req.locationId }, // Cambio: locationId
+      where: { locationId },
       include: {
         shifts: { where: { endAt: null }, take: 1, orderBy: { startAt: 'desc' } }
       },
       orderBy: { name: 'asc' }
     });
     res.json(employees);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    console.error('GET /api/employees failed:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // GET un empleado
