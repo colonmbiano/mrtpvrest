@@ -1,8 +1,12 @@
 const axios = require('axios');
 
-const API_URL = 'http://localhost:3001'; // Default port for backend
-const EMAIL = 'super@mrtpvrest.com';
-const PASSWORD = 'SuperAdmin1234!';
+const API_URL = process.env.API_URL || 'http://localhost:3001';
+const EMAIL = process.env.SUPERADMIN_EMAIL || 'super@mrtpvrest.com';
+const PASSWORD = process.env.SUPERADMIN_PASSWORD;
+if (!PASSWORD) {
+  console.error('Falta SUPERADMIN_PASSWORD en env');
+  process.exit(1);
+}
 
 async function runTest() {
   console.log(`🚀 Iniciando prueba de integración con credenciales de SuperAdmin: ${EMAIL}`);

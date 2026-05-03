@@ -7,9 +7,14 @@ dotenv.config({ path: path.resolve(__dirname, '../apps/backend/.env') });
 const prisma = new PrismaClient();
 
 async function fixSuperAdmin() {
-  const passwordHash = await bcrypt.hash('SuperAdmin1234!', 12);
+  const email = process.env.SUPERADMIN_EMAIL || 'super@mrtpvrest.com';
+  const password = process.env.SUPERADMIN_PASSWORD;
+  if (!password) {
+    throw new Error('Falta SUPERADMIN_PASSWORD en env');
+  }
+  const passwordHash = await bcrypt.hash(password, 12);
   const user = await prisma.user.update({
-    where: { email: 'super@mrtpvrest.com' },
+    where: { email },
     data: { passwordHash, isActive: true }
   });
   console.log('Fixed Super Admin:', user.email);

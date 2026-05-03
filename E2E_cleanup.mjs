@@ -17,10 +17,15 @@ async function call(method, path, { token, body } = {}) {
 }
 
 async function main() {
+  const email = process.env.SUPERADMIN_EMAIL
+  const password = process.env.SUPERADMIN_PASSWORD
+  if (!email || !password) {
+    throw new Error('Faltan SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD en env')
+  }
   // 1. Login como SuperAdmin
-  console.log('> Login super@mrtpvrest.com')
+  console.log('> Login', email)
   const login = await call('POST', '/api/auth/login', {
-    body: { email: 'super@mrtpvrest.com', password: 'SuperAdmin1234!' },
+    body: { email, password },
   })
   const token = login.accessToken
   console.log('  OK token obtenido')
