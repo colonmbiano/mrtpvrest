@@ -1,9 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Search, Menu, Receipt, ShoppingCart, UtensilsCrossed, Utensils, ShoppingBag, Bike, ListChecks } from "lucide-react";
-import Button from "@/components/ui/Button";
+import { Search, Menu, Receipt, ShoppingCart, UtensilsCrossed } from "lucide-react";
 import ConfigMenu from "@/components/pos/ConfigMenu";
-import LockScreen from "@/components/pos/LockScreen";
 import OrderTypeSelector from "@/components/pos/OrderTypeSelector";
 import type { ExtendedOrderType } from "@/components/pos/OrderTypeSelector";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
@@ -45,8 +43,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const router = useRouter();
   const [showMenu, setShowMenu] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
-  const [pinInput, setPinInput] = useState("");
-  const [pinMode, setPinMode] = useState<"login" | "unlink">("login");
   const [mobileView, setMobileView] = useState<"menu" | "ticket">("menu");
 
   const { palette, mode, setPalette, toggleMode } = useThemeStore();
@@ -63,9 +59,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     isLocked,
     restaurantName,
     locationName,
-    isVerifying,
     currentEmployee,
-    loginWithPin,
     logout,
   } = useTPVAuth();
 

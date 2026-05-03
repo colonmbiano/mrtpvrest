@@ -2,8 +2,8 @@
 
 import React, { useMemo, useState } from "react";
 import {
-  X, Plus, Minus, Trash2, Percent, ReceiptText, CreditCard,
-  Tag, ShoppingBag, ChevronDown,
+  Plus, Minus, Trash2, Percent, ReceiptText, CreditCard,
+  Tag, ShoppingBag,
 } from "lucide-react";
 import { useTicketStore } from "@/store/ticketStore";
 
@@ -30,7 +30,7 @@ export default function OrderPanel() {
   const updateTicket = useTicketStore((s) => s.updateTicket);
 
   const [tipPct, setTipPct] = useState<number>(0);
-  const [showActions, setShowActions] = useState(false);
+  const [, setShowActions] = useState(false);
 
   const subtotal = useMemo(
     () => ticket.items.reduce((s, it) => s + it.subtotal * it.quantity, 0),

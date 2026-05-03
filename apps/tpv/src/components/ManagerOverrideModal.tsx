@@ -22,7 +22,6 @@ export default function ManagerOverrideModal({
   const [error, setError] = useState('');
   const [validating, setValidating] = useState(false);
   const employees = useAuthStore((state) => state.employees);
-  const employee = useAuthStore((state) => state.employee);
   const addToQueue = useOfflineStore((state) => state.addToQueue);
 
   if (!isOpen) return null;
