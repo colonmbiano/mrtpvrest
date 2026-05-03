@@ -139,7 +139,7 @@ export default function SetupPage() {
       }));
 
       setStep('device');
-    } catch (err: any) {
+    } catch (_err) {
       setError('Error al cargar sucursal');
     } finally {
       setLoading(false);

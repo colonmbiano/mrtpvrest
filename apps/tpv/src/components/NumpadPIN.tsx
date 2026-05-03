@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 interface NumpadPINProps {
   onSubmit: (pin: string) => void | Promise<void>;
@@ -49,11 +49,6 @@ export default function NumpadPIN({
   const handleDelete = () => {
     if (disabled) return;
     setPin(pin.slice(0, -1));
-  };
-
-  const handleClear = () => {
-    if (disabled) return;
-    setPin('');
   };
 
   const handleOK = () => {

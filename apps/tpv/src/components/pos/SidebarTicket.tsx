@@ -1,7 +1,6 @@
 "use client";
 import React, { useState } from "react";
 import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X } from "lucide-react";
-import Button from "@/components/ui/Button";
 import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal from "@/components/pos/PaymentModal";
 import { useTicketStore } from "@/store/ticketStore";
