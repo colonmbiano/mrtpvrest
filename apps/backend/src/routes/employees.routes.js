@@ -272,7 +272,15 @@ router.post('/login', pinLoginLimiter, async (req, res) => {
       }
     }
 
-    if (!emp) return res.status(401).json({ error: 'PIN incorrecto o empleado no pertenece a esta sucursal' });
+    if (!emp) {
+      return res.status(401).json({
+        error: candidates.length === 0
+          ? 'No hay empleados activos en esta sucursal. Verifica que el empleado esté creado y asignado a la sucursal donde está vinculado el TPV.'
+          : `PIN incorrecto. Se probó contra ${candidates.length} empleado(s) activos de esta sucursal.`,
+        candidates: candidates.length,
+        locationId: req.locationId,
+      });
+    }
 
     // Migrar PIN legacy a hash
     if (needsRehash || !emp.offlinePin) {
