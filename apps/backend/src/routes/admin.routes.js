@@ -119,6 +119,25 @@ router.get('/locations', authenticate, requireTenantAccess, requireAdmin, async 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/admin/locations/:id — detalle de una sucursal.
+// SUPER_ADMIN puede leer cualquier sucursal (provisión de TPV cross-tenant).
+// ADMIN solo dentro de su restaurante.
+router.get('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const location = await prisma.location.findUnique({ where: { id: req.params.id } });
+    if (!location) return res.status(404).json({ error: 'Sucursal no encontrada' });
+
+    if (req.user?.role !== 'SUPER_ADMIN') {
+      const restaurantId = req.restaurantId || req.user?.restaurantId;
+      if (!restaurantId || location.restaurantId !== restaurantId) {
+        return res.status(404).json({ error: 'Sucursal no encontrada' });
+      }
+    }
+
+    res.json(location);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name, slug, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount } = req.body;
