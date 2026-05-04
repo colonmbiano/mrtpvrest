@@ -1,7 +1,13 @@
 const { prisma } = require('@mrtpvrest/database');
 const jwt = require('jsonwebtoken');
 
-const IGNORED_SUBDOMAINS = new Set(['www', 'api', 'admin', 'localhost', '127']);
+// Subdominios que NO corresponden a un restaurante (apps de la plataforma o
+// hosts de infra). Si el backend recibe una request con estos hosts, el
+// subdominio no se interpreta como slug de restaurante.
+const IGNORED_SUBDOMAINS = new Set([
+  'www', 'api', 'admin', 'localhost', '127',
+  'tpv', 'app', 'pos', 'kds', 'kiosk', 'client', 'delivery', 'landing', 'saas', 'cdn',
+]);
 
 const tenantMiddleware = async (req, res, next) => {
   // ── 1. HEADERS (mayor prioridad) ──────────────────────────────────────────
@@ -24,19 +30,19 @@ const tenantMiddleware = async (req, res, next) => {
   }
 
   // ── 3. JWT (solo decode, sin verify) ─────────────────────────────────────
-  // Solo aplica si todavía no tenemos restaurantId
-  if (!restaurantId) {
-    const authHeader = req.headers['authorization'];
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.slice(7);
-        const payload = jwt.decode(token);
-        if (payload?.restaurantId) {
-          restaurantId = payload.restaurantId;
-        }
-      } catch (_) {
-        // token malformado — ignorar, no bloquear
+  // Decodificamos el JWT si existe, tanto para extraer restaurantId (si aún
+  // no lo tenemos) como para conocer el rol — un SUPER_ADMIN puede operar
+  // sin tenant identificado (provisión de TPV cross-tenant, etc.).
+  let jwtPayload = null;
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      jwtPayload = jwt.decode(authHeader.slice(7));
+      if (!restaurantId && jwtPayload?.restaurantId) {
+        restaurantId = jwtPayload.restaurantId;
       }
+    } catch (_) {
+      // token malformado — ignorar, no bloquear
     }
   }
 
@@ -80,6 +86,12 @@ const tenantMiddleware = async (req, res, next) => {
     }
 
     if (!restaurant) {
+      // SUPER_ADMIN puede operar sin tenant resuelto en el middleware. Los
+      // handlers downstream son responsables de validar/derivar el contexto
+      // (típicamente desde body, params o lookup por locationId).
+      if (jwtPayload?.role === 'SUPER_ADMIN') {
+        return next();
+      }
       return res.status(404).json({
         error: 'Restaurante no identificado. Proporcione x-restaurant-id/slug, subdominio o token con restaurantId.'
       });
