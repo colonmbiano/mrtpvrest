@@ -85,6 +85,17 @@ const tenantMiddleware = async (req, res, next) => {
       });
     }
 
+    // Fallback: si el JWT trae tenantId pero no resolvimos restaurante por
+    // id/slug (p.ej. restaurantId stale tras recrear el restaurante, o
+    // ADMIN a nivel de tenant sin restaurantId), tomar el primer restaurante
+    // activo del tenant. Mantiene el aislamiento por tenant.
+    if (!restaurant && jwtPayload?.tenantId) {
+      restaurant = await prisma.restaurant.findFirst({
+        where: { tenantId: jwtPayload.tenantId, isActive: true },
+        include
+      });
+    }
+
     if (!restaurant) {
       // SUPER_ADMIN puede operar sin tenant resuelto en el middleware. Los
       // handlers downstream son responsables de validar/derivar el contexto

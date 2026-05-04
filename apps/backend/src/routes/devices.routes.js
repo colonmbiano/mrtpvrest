@@ -39,9 +39,26 @@ router.post('/create', authenticate, requireTenantAccess, async (req, res) => {
 
     if (!tenantId) return res.status(400).json({ error: 'No se pudo resolver el tenant de esta sucursal' });
 
+    // Verificar que el tenant existe ANTES de crear el device. Sin esto, una
+    // FK huérfana (restaurant.tenantId apuntando a un tenant ya borrado)
+    // explota como `Foreign key constraint violated: devices_tenantId_fkey`,
+    // un mensaje opaco que no permite diagnosticar.
+    const tenantExists = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true },
+    });
+    if (!tenantExists) {
+      return res.status(409).json({
+        error: `Inconsistencia: el restaurante referencia un tenant inexistente (tenantId=${tenantId}). Contacta soporte.`,
+        code: 'ORPHAN_TENANT',
+        tenantId,
+        restaurantId,
+      });
+    }
+
     // Generar device token
     const deviceToken = crypto.randomBytes(32).toString('hex');
-    
+
     const device = await prisma.device.create({
       data: {
         tenantId,
