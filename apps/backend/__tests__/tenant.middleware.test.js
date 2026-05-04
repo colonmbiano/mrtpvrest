@@ -3,7 +3,7 @@
 // Mocks antes de require()
 jest.mock('@mrtpvrest/database', () => ({
   prisma: {
-    restaurant: { findUnique: jest.fn() },
+    restaurant: { findUnique: jest.fn(), findFirst: jest.fn() },
     tenant:     { findUnique: jest.fn() },
     location:   { findUnique: jest.fn(), findFirst: jest.fn() },
   },
@@ -133,6 +133,68 @@ describe('tenantMiddleware — SUPER_ADMIN bypass', () => {
 
   test('Sin Authorization header → 404 (no hay rol que evaluar)', async () => {
     const req = makeReq();
+    const res = makeRes();
+    const next = jest.fn();
+
+    await tenantMiddleware(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(next).not.toHaveBeenCalled();
+  });
+});
+
+describe('tenantMiddleware — fallback por tenantId del JWT', () => {
+  test('ADMIN con restaurantId stale resuelve por tenantId', async () => {
+    // findUnique por id falla (restaurantId stale)
+    prisma.restaurant.findUnique.mockResolvedValue(null);
+    // findFirst por tenantId encuentra el restaurant real
+    const restaurant = { id: 'r-real', tenantId: 't-1', isActive: true, config: {} };
+    prisma.restaurant.findFirst.mockResolvedValue(restaurant);
+    prisma.tenant.findUnique.mockResolvedValue({ id: 't-1', subscription: null });
+
+    const token = jwt.sign(
+      { userId: 'u1', role: 'ADMIN', restaurantId: 'r-stale', tenantId: 't-1' },
+      JWT_SECRET
+    );
+    const req = makeReq({ headers: { authorization: `Bearer ${token}` } });
+    const next = jest.fn();
+
+    await tenantMiddleware(req, makeRes(), next);
+
+    expect(prisma.restaurant.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { tenantId: 't-1', isActive: true } })
+    );
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.restaurantId).toBe('r-real');
+  });
+
+  test('ADMIN sin restaurantId pero con tenantId también funciona', async () => {
+    const restaurant = { id: 'r-tenant-default', tenantId: 't-9', isActive: true, config: {} };
+    prisma.restaurant.findFirst.mockResolvedValue(restaurant);
+    prisma.tenant.findUnique.mockResolvedValue({ id: 't-9', subscription: null });
+
+    const token = jwt.sign(
+      { userId: 'u9', role: 'ADMIN', restaurantId: null, tenantId: 't-9' },
+      JWT_SECRET
+    );
+    const req = makeReq({ headers: { authorization: `Bearer ${token}` } });
+    const next = jest.fn();
+
+    await tenantMiddleware(req, makeRes(), next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.restaurantId).toBe('r-tenant-default');
+  });
+
+  test('ADMIN sin tenantId y sin restaurant resoluble → 404', async () => {
+    prisma.restaurant.findUnique.mockResolvedValue(null);
+    prisma.restaurant.findFirst.mockResolvedValue(null);
+
+    const token = jwt.sign(
+      { userId: 'u', role: 'ADMIN', restaurantId: 'r-stale', tenantId: null },
+      JWT_SECRET
+    );
+    const req = makeReq({ headers: { authorization: `Bearer ${token}` } });
     const res = makeRes();
     const next = jest.fn();
 
