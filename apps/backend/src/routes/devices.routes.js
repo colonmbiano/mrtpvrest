@@ -5,6 +5,7 @@ const { authenticate, requireTenantAccess } = require('../middleware/auth.middle
 const router = express.Router();
 
 // POST /api/devices/create — Vincular un nuevo dispositivo (Hardware Provisioning)
+// Build cache buster: forzar Railway a re-snapshot este archivo tras a450769.
 router.post('/create', authenticate, requireTenantAccess, async (req, res) => {
   try {
     const { locationId: bodyLocationId, deviceType, restaurantId: bodyRestaurantId } = req.body;
