@@ -79,14 +79,22 @@ export default function LockedPage() {
         <span className="text-[10px] font-semibold" style={{ color: "#FFFFFF" }}>{locationName}</span>
       </div>
 
-      {/* Glassmorphic container */}
-      <div className="relative z-10 w-full max-w-sm glass rounded-3xl p-8 border border-border shadow-glow">
+      {/* Glassmorphic container — usar inline styles para no depender de
+          Tailwind aliases que podrían no estar generados en el bundle */}
+      <div
+        className="relative z-10 w-full max-w-sm rounded-3xl p-8"
+        style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          boxShadow: 'var(--shadow-glow)',
+        }}
+      >
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2 font-mono">
+          <h1 className="text-3xl font-bold mb-2 font-mono" style={{ color: 'var(--foreground)' }}>
             Ingresa tu PIN
           </h1>
-          <p className="text-muted text-sm">
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
             4 dígitos para acceder
           </p>
         </div>
@@ -101,8 +109,11 @@ export default function LockedPage() {
 
         {/* Error message */}
         {error && (
-          <div className="text-center mb-4 p-3 bg-danger/10 border border-danger rounded-lg">
-            <p className="text-danger text-sm font-medium">{error}</p>
+          <div
+            className="text-center mb-4 p-3 rounded-lg"
+            style={{ background: 'var(--danger-soft)', border: '1px solid var(--danger)' }}
+          >
+            <p className="text-sm font-medium" style={{ color: 'var(--danger)' }}>{error}</p>
           </div>
         )}
 
@@ -110,15 +121,18 @@ export default function LockedPage() {
         {isValidating && (
           <div className="text-center">
             <div className="inline-block animate-spin">
-              <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+              <div
+                className="h-6 w-6 border-2 rounded-full"
+                style={{ borderColor: 'var(--brand)', borderTopColor: 'transparent' }}
+              />
             </div>
-            <p className="text-muted text-sm mt-2">Validando...</p>
+            <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Validando...</p>
           </div>
         )}
 
         {/* Offline indicator */}
         <div className="mt-6 text-center">
-          <p className="text-muted text-xs">
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
             {typeof navigator !== 'undefined' && navigator.onLine ? '🟢 Conectado' : '🔴 Offline'}
           </p>
         </div>
