@@ -15,8 +15,11 @@ router.post('/create', authenticate, requireTenantAccess, async (req, res) => {
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada (locationId faltante)' });
     if (!deviceType) return res.status(400).json({ error: 'Tipo de dispositivo no proporcionado' });
 
-    // Determinar el tenantId a partir del restaurante
-    let tenantId = req.tenant?.id;
+    // Determinar el tenantId a partir del restaurante.
+    // Ojo: el middleware setea `req.tenant = { ...restaurant, tenant }`, así
+    // que `req.tenant.id` es el id del Restaurant, NO del Tenant. Usamos
+    // `req.restaurant.tenantId` que sí es el id correcto del tenant.
+    let tenantId = req.restaurant?.tenantId;
     if (!tenantId && restaurantId) {
       const restaurant = await prisma.restaurant.findUnique({
         where: { id: restaurantId },
