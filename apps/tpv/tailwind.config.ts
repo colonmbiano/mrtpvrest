@@ -48,12 +48,22 @@ const config: Config = {
         background: "var(--bg)",
         foreground: "var(--text-primary)",
         bgApp: "var(--bg)",
+        // Aliases usados por NumpadPIN, /locked y componentes legacy.
+        // Sin estos, Tailwind no genera bg-card/bg-primary/border-border/etc.
+        // y los buttons quedan sin fondo (invisibles sobre el bg oscuro).
+        card:    "var(--card)",
+        primary: "var(--brand)",
+        border:  "var(--border)",
+        muted:   "var(--text-muted)",
       },
       borderRadius: {
         sm: "8px",
         md: "12px",
         lg: "16px",
         xl: "20px",
+        // Legacy aliases (rounded-m / rounded-pill usados en /setup, etc.)
+        m:    "16px",
+        pill: "999px",
       },
       fontFamily: {
         sans:    ["var(--font-dm-sans)", "DM Sans", "system-ui", "sans-serif"],
