@@ -71,7 +71,11 @@ export default function EmpleadosPage() {
     setEditEmp(emp || null);
     if (emp) {
       setForm({
-        name: emp.name, phone: emp.phone||"", pin: emp.pin, role: emp.role,
+        // PIN intencionalmente vacío en edit. emp.pin del backend es el hash
+        // bcrypt — pre-llenarlo provocaba que al "Guardar" sin tocar el campo
+        // se mandara el hash como nuevo PIN, el regex /\d{4,6}/ del backend
+        // lo rechazaba, y el cambio no surtía efecto. Vacío = no cambia.
+        name: emp.name, phone: emp.phone||"", pin: "", role: emp.role,
         photo: emp.photo||null, tables: emp.tables||[],
         scheduleStart: emp.scheduleStart||"", scheduleEnd: emp.scheduleEnd||"",
         scheduleDays: emp.scheduleDays||[], isActive: emp.isActive,
@@ -451,10 +455,20 @@ export default function EmpleadosPage() {
                     style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>PIN (4-6 dígitos)</label>
-                  <input value={form.pin} onChange={e => setForm((p:any)=>({...p,pin:e.target.value}))} required maxLength={6}
+                  <label className="block text-xs font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>
+                    {editEmp ? "PIN nuevo (vacío = no cambia)" : "PIN (4-6 dígitos)"}
+                  </label>
+                  <input
+                    value={form.pin}
+                    onChange={e => setForm((p:any)=>({...p,pin:e.target.value.replace(/\D/g, "").slice(0,6)}))}
+                    inputMode="numeric"
+                    pattern="\d*"
+                    {...(!editEmp && { required: true })}
+                    maxLength={6}
+                    placeholder={editEmp ? "Sin cambios" : "1234"}
                     className="w-full px-4 py-2.5 rounded-xl text-sm outline-none font-mono tracking-widest"
-                    style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+                    style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}}
+                  />
                 </div>
               </div>
 
