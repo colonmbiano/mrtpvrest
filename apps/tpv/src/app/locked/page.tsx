@@ -80,7 +80,7 @@ export default function LockedPage() {
       </div>
 
       {/* Glassmorphic container */}
-      <div className="relative z-10 w-full max-w-sm glass rounded-3xl p-8 border border-border shadow-lg glow-orange">
+      <div className="relative z-10 w-full max-w-sm glass rounded-3xl p-8 border border-border shadow-glow">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2 font-mono">

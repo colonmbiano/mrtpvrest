@@ -167,6 +167,13 @@ html, body {
 /* Utilities usadas por las pantallas de setup (LoginStep/LocationStep/DeviceStep) */
 .rounded-m { border-radius: var(--radius-lg); }
 
+/* Glassmorphism container (usado en /locked, /hub y otros). */
+.glass {
+  background: color-mix(in srgb, var(--surface-1) 70%, transparent);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+
 .glow-orange {
   border-radius: 9999px;
   background: radial-gradient(circle, rgba(255,132,0,0.18) 0%, transparent 70%);
