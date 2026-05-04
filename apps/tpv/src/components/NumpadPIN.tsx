@@ -56,6 +56,23 @@ export default function NumpadPIN({
     onSubmit(pin);
   };
 
+  // Estilos via CSS vars para no depender de aliases Tailwind no generados.
+  const digitBtnStyle = {
+    background: 'var(--card)',
+    color: 'var(--foreground)',
+    border: '1px solid var(--border)',
+  } as const;
+  const delBtnStyle = {
+    background: 'var(--danger-soft)',
+    color: 'var(--danger)',
+    border: '1px solid var(--danger)',
+  } as const;
+  const okBtnStyle = {
+    background: 'var(--success)',
+    color: 'var(--background)',
+    border: '1px solid var(--success)',
+  } as const;
+
   return (
     <div className="w-full">
       {/* PIN Display */}
@@ -63,13 +80,14 @@ export default function NumpadPIN({
         {Array.from({ length: maxDigits }).map((_, i) => (
           <div
             key={i}
-            className={`h-10 w-10 rounded-full border-2 flex items-center justify-center transition-colors ${
+            className="h-10 w-10 rounded-full border-2 flex items-center justify-center transition-colors"
+            style={
               i < pin.length
-                ? 'bg-primary border-primary'
-                : 'border-border bg-transparent'
-            }`}
+                ? { background: 'var(--brand)', borderColor: 'var(--brand)' }
+                : { background: 'transparent', borderColor: 'var(--border)' }
+            }
           >
-            <span className="text-foreground font-bold">
+            <span className="font-bold" style={{ color: 'var(--foreground)' }}>
               {i < pin.length ? '●' : '○'}
             </span>
           </div>
@@ -83,7 +101,8 @@ export default function NumpadPIN({
             key={digit}
             onClick={() => handleDigitClick(digit)}
             disabled={disabled || pin.length >= maxDigits}
-            className="bg-card hover:bg-card/80 disabled:opacity-50 disabled:cursor-not-allowed border border-border rounded-lg py-4 text-lg font-bold text-foreground transition-colors"
+            className="rounded-lg py-4 text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            style={digitBtnStyle}
           >
             {digit}
           </button>
@@ -93,7 +112,8 @@ export default function NumpadPIN({
         <button
           onClick={handleDelete}
           disabled={disabled || pin.length === 0}
-          className="bg-danger/10 hover:bg-danger/20 disabled:opacity-50 disabled:cursor-not-allowed border border-danger rounded-lg py-4 text-sm font-bold text-danger transition-colors"
+          className="rounded-lg py-4 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          style={delBtnStyle}
         >
           DEL
         </button>
@@ -102,7 +122,8 @@ export default function NumpadPIN({
         <button
           onClick={() => handleDigitClick('0')}
           disabled={disabled || pin.length >= maxDigits}
-          className="bg-card hover:bg-card/80 disabled:opacity-50 disabled:cursor-not-allowed border border-border rounded-lg py-4 text-lg font-bold text-foreground transition-colors"
+          className="rounded-lg py-4 text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          style={digitBtnStyle}
         >
           0
         </button>
@@ -111,7 +132,8 @@ export default function NumpadPIN({
         <button
           onClick={handleOK}
           disabled={disabled || pin.length === 0}
-          className="bg-success hover:bg-success/80 disabled:opacity-50 disabled:cursor-not-allowed border border-success rounded-lg py-4 text-sm font-bold text-background transition-colors col-span-1"
+          className="rounded-lg py-4 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors col-span-1"
+          style={okBtnStyle}
         >
           OK
         </button>
