@@ -254,13 +254,21 @@ router.post('/login', pinLoginLimiter, async (req, res) => {
 
     let emp = null;
     let needsRehash = false;
+    const sha256Pin = crypto.createHash('sha256').update(pin).digest('hex');
     for (const c of candidates) {
-      if (c.pin.startsWith('$2')) {
+      if (c.pin && c.pin.startsWith('$2')) {
         // PIN hasheado con bcrypt
         if (await bcrypt.compare(pin, c.pin)) { emp = c; break; }
-      } else {
+      } else if (c.pin && c.pin === pin) {
         // PIN legacy en texto plano — migrar al vuelo
-        if (c.pin === pin) { emp = c; needsRehash = true; break; }
+        emp = c; needsRehash = true; break;
+      }
+      // Fallback: comparar contra offlinePin (SHA256). Cubre casos de
+      // desincronización entre `pin` (bcrypt) y `offlinePin` (SHA256) por
+      // migraciones antiguas o creaciones que solo poblaron uno. Si match,
+      // forzamos re-hash del bcrypt para alinearlos en el siguiente request.
+      if (c.offlinePin && c.offlinePin === sha256Pin) {
+        emp = c; needsRehash = true; break;
       }
     }
 
