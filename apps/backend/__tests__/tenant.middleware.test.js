@@ -90,9 +90,14 @@ describe('tenantMiddleware — SUPER_ADMIN bypass', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  test('ADMIN normal sin restaurante resuelto → 404 (sin bypass)', async () => {
+  test('ADMIN con JWT decodable pasa al handler aunque no se resuelva restaurant', async () => {
+    // Sin tenantId el fallback no resuelve, y el JWT decoded permite pasar.
+    // El handler downstream es responsable de validar req.user.tenantId.
+    prisma.restaurant.findUnique.mockResolvedValue(null);
+    prisma.restaurant.findFirst.mockResolvedValue(null);
+
     const token = jwt.sign(
-      { userId: 'u2', role: 'ADMIN', restaurantId: null, tenantId: 't1' },
+      { userId: 'u2', role: 'ADMIN', restaurantId: null, tenantId: null },
       JWT_SECRET
     );
     const req = makeReq({ headers: { authorization: `Bearer ${token}` } });
@@ -101,13 +106,8 @@ describe('tenantMiddleware — SUPER_ADMIN bypass', () => {
 
     await tenantMiddleware(req, res, next);
 
-    expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        error: expect.stringContaining('Restaurante no identificado'),
-      })
-    );
-    expect(next).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
   });
 
   test('SUPER_ADMIN con restaurantId válido en JWT sí carga el contexto', async () => {
@@ -186,7 +186,7 @@ describe('tenantMiddleware — fallback por tenantId del JWT', () => {
     expect(req.restaurantId).toBe('r-tenant-default');
   });
 
-  test('ADMIN sin tenantId y sin restaurant resoluble → 404', async () => {
+  test('ADMIN sin tenantId y sin restaurant resoluble pasa al handler (JWT decoded)', async () => {
     prisma.restaurant.findUnique.mockResolvedValue(null);
     prisma.restaurant.findFirst.mockResolvedValue(null);
 
@@ -200,8 +200,10 @@ describe('tenantMiddleware — fallback por tenantId del JWT', () => {
 
     await tenantMiddleware(req, res, next);
 
-    expect(res.status).toHaveBeenCalledWith(404);
-    expect(next).not.toHaveBeenCalled();
+    // El middleware delega al handler — el handler protegido (authenticate +
+    // requireTenantAccess) es quien decide si rechaza o no.
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
   });
 });
 

@@ -97,10 +97,14 @@ const tenantMiddleware = async (req, res, next) => {
     }
 
     if (!restaurant) {
-      // SUPER_ADMIN puede operar sin tenant resuelto en el middleware. Los
-      // handlers downstream son responsables de validar/derivar el contexto
-      // (típicamente desde body, params o lookup por locationId).
-      if (jwtPayload?.role === 'SUPER_ADMIN') {
+      // Si la request trae un JWT decodificable, dejamos pasar — los routers
+      // protegidos ya validan firma con `authenticate` y resuelven contexto
+      // desde `req.user.tenantId` / `req.user.restaurantId`. Esto evita 404s
+      // espurios cuando el header x-restaurant-id está stale o falta y el
+      // JWT por sí solo tenía toda la info necesaria.
+      // Bloqueo se mantiene para requests SIN JWT (anónimas) que no
+      // resolvieron tenant ni por id, slug o subdominio.
+      if (jwtPayload) {
         return next();
       }
       return res.status(404).json({
