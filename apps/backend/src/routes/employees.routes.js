@@ -98,7 +98,14 @@ router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res
       },
       orderBy: { name: 'asc' }
     });
-    res.json(employees);
+    // Nunca devolver hashes de PIN al cliente (el panel admin los pre-llenaba
+    // en el form y al "Guardar" mandaba el bcrypt como nuevo PIN, generando
+    // un 400 silencioso del regex \d{4,6}). hasPin permite UI condicional.
+    const safe = employees.map(({ pin, offlinePin, ...rest }) => ({
+      ...rest,
+      hasPin: Boolean(pin),
+    }));
+    res.json(safe);
   } catch (e) {
     console.error('GET /api/employees failed:', e);
     res.status(500).json({ error: e.message });
@@ -113,7 +120,8 @@ router.get('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, 
       include: { shifts: { orderBy: { startAt: 'desc' }, take: 30 } }
     });
     if (!emp) return res.status(404).json({ error: 'Empleado no encontrado en esta sucursal' });
-    res.json(emp);
+    const { pin, offlinePin, ...rest } = emp;
+    res.json({ ...rest, hasPin: Boolean(pin) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -162,7 +170,8 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
         canManageShifts:  canManageShifts  !== undefined ? canManageShifts  : defaults.canManageShifts,
       }
     });
-    res.json(emp);
+    const { pin: _p, offlinePin: _op, ...rest } = emp;
+    res.json({ ...rest, hasPin: Boolean(_p) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // PUT actualizar empleado
@@ -214,7 +223,8 @@ router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, 
       data: updateData
     });
 
-    res.json(emp);
+    const { pin: _p, offlinePin: _op, ...rest } = emp;
+    res.json({ ...rest, hasPin: Boolean(_p) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // DELETE eliminar empleado
