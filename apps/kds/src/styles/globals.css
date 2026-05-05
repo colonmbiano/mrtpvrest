@@ -1,0 +1,74 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+:root {
+  /* Colors */
+  --primary: #FF8400;
+  --primary-soft: rgba(255, 132, 0, 0.15);
+  --success: #88D66C;
+  --success-soft: rgba(136, 214, 108, 0.15);
+  --danger: #FF5C33;
+  --danger-soft: rgba(255, 92, 51, 0.15);
+
+  --background: #0C0C0E;
+  --card: #131316;
+  --foreground: #FFFFFF;
+  --foreground-secondary: #B8B9B6;
+  --border: #27272A;
+  --muted: #2E2E2E;
+
+  /* Typography */
+  --font-primary: "JetBrains Mono", monospace;
+  --font-secondary: "Geist", sans-serif;
+
+  /* Spacing */
+  --radius-m: 16px;
+  --radius-pill: 999px;
+
+  /* Effects */
+  --shadow-glow: 0 4px 20px rgba(255, 132, 0, 0.4);
+  --shadow-glow-sm: 0 2px 8px rgba(255, 132, 0, 0.2);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-secondary);
+  line-height: 1.6;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-primary);
+  font-weight: 600;
+}
+
+/* Glassmorphic Utilities */
+.glass {
+  background: rgba(19, 19, 22, 0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+}
+
+.glow-orange {
+  background: radial-gradient(circle, rgba(255, 132, 0, 0.2) 0%, rgba(255, 132, 0, 0) 70%);
+}
+
+.glow-green {
+  background: radial-gradient(circle, rgba(136, 214, 108, 0.15) 0%, rgba(136, 214, 108, 0) 70%);
+}
+
+/* Focus States */
+input:focus,
+button:focus,
+select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 132, 0, 0.2);
+}
