@@ -220,9 +220,31 @@ export default function PedidosPage() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-    const t = setInterval(fetchData, 8000);
-    return () => clearInterval(t);
+    // Esperamos a que locationId esté disponible en localStorage antes de empezar.
+    // El Sidebar lo escribe asíncronamente; si ya está listo, arrancamos de inmediato.
+    let interval: ReturnType<typeof setInterval>;
+
+    const startPolling = () => {
+      fetchData();
+      interval = setInterval(fetchData, 8000);
+    };
+
+    const locationId = localStorage.getItem("locationId");
+    if (locationId) {
+      startPolling();
+    } else {
+      const handleReady = () => {
+        startPolling();
+        window.removeEventListener('locationChanged', handleReady);
+      };
+      window.addEventListener('locationChanged', handleReady);
+      return () => {
+        window.removeEventListener('locationChanged', handleReady);
+        clearInterval(interval);
+      };
+    }
+
+    return () => clearInterval(interval);
   }, [fetchData]);
 
   async function changeStatus(orderId: string, status: string) {

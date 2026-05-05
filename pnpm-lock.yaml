@@ -300,6 +300,9 @@ importers:
 
   apps/kiosk:
     dependencies:
+      '@capacitor/core':
+        specifier: ^8.3.1
+        version: 8.3.1
       axios:
         specifier: ^1.13.6
         version: 1.14.0
@@ -313,6 +316,12 @@ importers:
         specifier: ^18
         version: 18.3.1(react@18.3.1)
     devDependencies:
+      '@capacitor/android':
+        specifier: ^8.3.1
+        version: 8.3.1(@capacitor/core@8.3.1)
+      '@capacitor/cli':
+        specifier: ^8.3.1
+        version: 8.3.1
       '@mrtpvrest/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -325,6 +334,9 @@ importers:
       '@types/react-dom':
         specifier: ^18
         version: 18.3.7(@types/react@18.3.28)
+      cross-env:
+        specifier: ^10.1.0
+        version: 10.1.0
       eslint:
         specifier: ^8
         version: 8.57.1

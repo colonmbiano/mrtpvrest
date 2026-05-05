@@ -11,10 +11,10 @@ const IGNORED_SUBDOMAINS = new Set([
 
 const tenantMiddleware = async (req, res, next) => {
   // ── 1. HEADERS (mayor prioridad) ──────────────────────────────────────────
-  let restaurantId   = req.headers['x-restaurant-id']   || req.query.restaurantId;
+  let restaurantId = req.headers['x-restaurant-id'] || req.query.restaurantId;
   let restaurantSlug = req.headers['x-restaurant-slug'] || req.query.r || req.query.restaurant;
-  let locationId     = req.headers['x-location-id']     || req.query.l || req.query.locationId;
-  let locationSlug   = req.headers['x-location-slug'];
+  let locationId = req.headers['x-location-id'] || req.query.l || req.query.locationId;
+  let locationSlug = req.headers['x-location-slug'];
 
   // ── 2. SUBDOMINIO ─────────────────────────────────────────────────────────
   // masterburguer.mrtpvrest.com → slug = "masterburguer"
@@ -152,9 +152,9 @@ const tenantMiddleware = async (req, res, next) => {
 
     // ── ADJUNTAR AL REQUEST ───────────────────────────────────────────────
     req.restaurantId = restaurant.id;
-    req.restaurant   = restaurant;
-    req.tenant       = { ...restaurant, tenant };
-    req.plan         = sub?.plan ?? null; // controllers: req.plan.hasKDS, req.plan.maxLocations
+    req.restaurant = restaurant;
+    req.tenant = { ...restaurant, tenant };
+    req.plan = sub?.plan ?? null; // controllers: req.plan.hasKDS, req.plan.maxLocations
 
     // ── RESOLVER SUCURSAL (sin cambios) ──────────────────────────────────
     let location = null;
@@ -173,7 +173,7 @@ const tenantMiddleware = async (req, res, next) => {
         return res.status(403).json({ error: 'Esta sucursal se encuentra temporalmente inactiva.' });
       }
       req.locationId = location.id;
-      req.location   = location;
+      req.location = location;
     }
 
     next();

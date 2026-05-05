@@ -132,9 +132,13 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
           const saved = localStorage.getItem("locationId");
           if (saved && list.some((l: any) => l.id === saved)) {
             setActiveLocationId(saved);
+            // Notificar que el contexto de sucursal ya está listo
+            window.dispatchEvent(new Event('locationChanged'));
           } else if (list.length > 0) {
             localStorage.setItem("locationId", list[0].id);
             setActiveLocationId(list[0].id);
+            // Notificar que el contexto de sucursal ya está listo (primera carga)
+            window.dispatchEvent(new Event('locationChanged'));
           }
         } catch {
           setLocations([]);

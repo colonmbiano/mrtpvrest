@@ -1,4 +1,4 @@
-package com.mrtpvrest.tpv;
+package com.mrtpvrest.kiosk;
 
 import android.os.Bundle;
 import android.os.StrictMode;
