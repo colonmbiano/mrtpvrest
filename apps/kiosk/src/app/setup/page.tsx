@@ -57,18 +57,27 @@ export default function SetupPage() {
       const me = await authed.get("/api/tenant/me");
       const rs: Restaurant[] = me.data.restaurants || [];
       if (rs.length === 0) throw new Error("Este usuario no tiene restaurantes");
-      // If restaurants don't yet include locations (backend not updated), fetch separately
-      const needLocations = rs.some(r => !Array.isArray((r as any).locations));
-      if (needLocations) {
-        await Promise.all(rs.map(async (r) => {
-          try {
-            const locs = await authed.get(`/api/tenant/restaurants/${r.id}/locations`);
-            (r as any).locations = locs.data || [];
-          } catch {
-            (r as any).locations = [];
-          }
-        }));
-      }
+
+      // Fix: Fetch locations using the correct admin endpoint
+      await Promise.all(rs.map(async (r) => {
+        try {
+          const locs = await authed.get("/api/admin/locations", {
+            headers: { "x-restaurant-id": r.id }
+          });
+          r.locations = locs.data || [];
+          
+          // Get additional config (like kioskStyle)
+          const conf = await authed.get("/api/admin/config", {
+            headers: { "x-restaurant-id": r.id }
+          });
+          r.kioskStyle = conf.data?.kioskStyle || "oled";
+          r.accentColor = conf.data?.accentColor || null;
+        } catch (e) {
+          console.error(`Error fetching data for restaurant ${r.id}:`, e);
+          r.locations = [];
+        }
+      }));
+
       setRestaurants(rs);
       setStep("pick");
     } catch (err: any) {
