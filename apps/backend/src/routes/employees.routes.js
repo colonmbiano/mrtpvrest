@@ -244,14 +244,16 @@ router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, async (re
 router.post('/login', pinLoginLimiter, async (req, res) => {
   try {
     const { pin } = req.body;
-    if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+    // locationId viene de tenant middleware o directo del header (ruta en globalPaths)
+    const locationId = req.locationId || req.headers['x-location-id'];
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada. Envía header x-location-id.' });
     if (!pin) return res.status(400).json({ error: 'PIN requerido' });
 
     // Buscar todos los empleados activos de la sucursal y comparar PIN.
     // Incluimos location → restaurant para resolver tenantId/restaurantId del empleado
     // (Employee no tiene esos campos directos; viven en la cadena de relaciones).
     const candidates = await prisma.employee.findMany({
-      where: { locationId: req.locationId, isActive: true },
+      where: { locationId, isActive: true },
       include: {
         location: {
           select: {
@@ -288,7 +290,7 @@ router.post('/login', pinLoginLimiter, async (req, res) => {
           ? 'No hay empleados activos en esta sucursal. Verifica que el empleado esté creado y asignado a la sucursal donde está vinculado el TPV.'
           : `PIN incorrecto. Se probó contra ${candidates.length} empleado(s) activos de esta sucursal.`,
         candidates: candidates.length,
-        locationId: req.locationId,
+        locationId,
       });
     }
 
@@ -311,7 +313,7 @@ router.post('/login', pinLoginLimiter, async (req, res) => {
 
     const jwt = require('jsonwebtoken');
     const token = jwt.sign(
-      { id: emp.id, role: emp.role, tenantId, restaurantId, locationId: req.locationId },
+      { id: emp.id, role: emp.role, tenantId, restaurantId, locationId },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     );

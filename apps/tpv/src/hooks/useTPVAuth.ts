@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 
@@ -28,25 +28,23 @@ export function useTPVAuth() {
     }
   }, [router, auth.isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Redirección por roles tras autenticación exitosa
-  // NOTA: Esto redirige al HOME por rol, pero NO protege rutas individuales.
-  // La protección real ocurre en los layouts con validación de roles.
+  // Redirección por roles especiales tras autenticación.
+  // NOTA: Solo redirigimos a WAITER y KITCHEN porque acceden a aplicaciones
+  // completamente distintas. CASHIER/ADMIN/MANAGER/OWNER permanecen en el POS
+  // donde estén — el redirect en cada layout causaría un loop infinito.
+  const prevAuthRef = useRef(false);
   useEffect(() => {
-    if (auth.isAuthenticated && auth.employee) {
+    if (auth.isAuthenticated && auth.employee && !prevAuthRef.current) {
+      prevAuthRef.current = true;
       const role = auth.employee.role;
-
       if (role === "WAITER") {
         router.push("/meseros");
-      } else if (role === "KITCHEN") {
+      } else if (role === "KITCHEN" || role === "COOK") {
         router.push("/kds");
-      } else if (role === "CASHIER" || role === "OWNER" || role === "ADMIN" || role === "MANAGER") {
-        // CASHIER y admins van al home (/(cashier)/)
-        router.push("/");
-      } else {
-        // Rol desconocido o no soportado
-        console.warn(`Rol no soportado: ${role}`);
-        router.push("/");
       }
+      // CASHIER, OWNER, ADMIN, MANAGER → no redirigimos, ya están en el POS
+    } else if (!auth.isAuthenticated) {
+      prevAuthRef.current = false;
     }
   }, [auth.isAuthenticated, auth.employee, router]);
 
