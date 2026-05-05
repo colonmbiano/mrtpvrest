@@ -6,19 +6,28 @@
     "dev": "next dev -p 3007",
     "build": "next build",
     "start": "next start -p 3007",
-    "lint": "next lint"
+    "lint": "next lint",
+    "build:apk": "cross-env CAPACITOR_BUILD=true next build && npx cap sync android",
+    "apk:debug": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleDebug && cd ..",
+    "apk:release": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleRelease && cd ..",
+    "cap:open": "npx cap open android",
+    "cap:sync": "npx cap sync android"
   },
   "dependencies": {
+    "@capacitor/core": "^8.3.1",
     "axios": "^1.13.6",
     "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/cli": "^8.3.1",
     "@mrtpvrest/config": "workspace:*",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "cross-env": "^10.1.0",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
     "postcss": "^8",
