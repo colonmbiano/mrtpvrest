@@ -56,15 +56,32 @@ export default function EmpleadosPage() {
       // Importante: El interceptor de API ya envía x-restaurant-id y x-location-id
       const { data } = await api.get("/api/employees");
       setEmployees(data);
-    } catch {} finally { setLoading(false); }
+    } catch (err: any) {
+      console.error('Error cargando empleados:', err?.response?.data || err);
+    } finally { setLoading(false); }
   }
 
   useEffect(() => {
-    fetchEmployees();
+    // Esperamos a que locationId esté disponible en localStorage.
+    // El Sidebar lo escribe de forma asíncrona: si ya está listo lo usamos
+    // de inmediato; si no, esperamos el evento 'locationChanged'.
+    const locationId = localStorage.getItem("locationId");
+    if (locationId) {
+      fetchEmployees();
+    } else {
+      const handleReady = () => {
+        fetchEmployees();
+        window.removeEventListener('locationChanged', handleReady);
+      };
+      window.addEventListener('locationChanged', handleReady);
+      return () => window.removeEventListener('locationChanged', handleReady);
+    }
+
     // Escuchar cambios de sucursal
     const handleRefresh = () => fetchEmployees();
     window.addEventListener('locationChanged', handleRefresh);
     return () => window.removeEventListener('locationChanged', handleRefresh);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function openForm(emp?: any) {

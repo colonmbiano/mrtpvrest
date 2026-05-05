@@ -51,11 +51,6 @@ export function getApiUrl(): string {
   const baked = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL;
 
   const normalizeUrl = (url: string) => {
-    if (!url) return url;
-    // Si estamos en Android y la URL apunta a localhost, redirigir al host de la máquina (10.0.2.2)
-    if (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform() === 'android') {
-      return url.replace(/localhost|127\.0\.0\.1/g, "10.0.2.2");
-    }
     return url;
   };
 
