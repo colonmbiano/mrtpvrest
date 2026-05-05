@@ -197,8 +197,17 @@ async function main() {
       hasDelivery: true,
       hasWebStore: true,
       activeModules: JSON.stringify(['pos', 'delivery', 'kds']),
+      emailVerifiedAt: new Date(), // Bypass verificación para seeds de prueba
+      emailVerificationToken: null,
+      emailVerificationExpiry: null,
     },
-    update: { isOnboarded: true, onboardingDone: true },
+    update: { 
+      isOnboarded: true, 
+      onboardingDone: true,
+      emailVerifiedAt: new Date(),
+      emailVerificationToken: null,
+      emailVerificationExpiry: null,
+    },
   });
   console.log(`✅ Tenant: ${tenant.name} (${tenant.id})`);
 

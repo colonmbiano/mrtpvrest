@@ -83,11 +83,32 @@
 
 | ID | Descripción | Severidad | Estado |
 |:---|:---|:---:|:---|
-| B1 | PIN de BubbleLab rechazado: terminal vinculada a otro restaurante (localStorage stale) | 🔴 Alta | Fix aplicado: limpiar localStorage antes del test |
+| B1 | `emailVerifiedAt` null en seed → bloqueaba login | 🔴 Alta | ✅ Corregido |
+| B2 | `/api/employees/login` retornaba 404 (no estaba en globalPaths del middleware) | 🔴 Alta | ✅ Corregido |
+| B3 | Modal de tipo de orden se reabre infinitamente bloqueando el POS | 🔴 Alta | 🔧 Pendiente |
+| B4 | Hub muestra "Cargando espacios..." infinito + 404 en `/api/orders` | 🟡 Media | 🔧 Pendiente |
+| B5 | KDS (`/kds`) no reconoce la sesión activa del TPV | 🟡 Media | 🔧 Pendiente |
+| B6 | Errores de hidratación Next.js en hub/POS | 🟡 Media | 🔧 Pendiente |
 
 ---
 
 ## 📈 Conclusión de Sesión
 
-**Resultado Global:** En progreso  
-**Próximos Pasos:** [x] Limpiar localStorage → [ ] Re-test completo → [ ] Generar APK Release
+**Resultado Global:** ✅ Auth/Setup funciona — ❌ POS bloqueado por modal (B3)
+
+| Caso | Estado |
+|---|:---:|
+| A1 Setup (Login + Vincular) | ✅ |
+| A3 PIN 1111 (Sofía / ADMIN) | ✅ |
+| P1 Menú carga (parcial) | ⚠️ |
+| P2 Carrito | ❌ Bloqueado |
+| P5 Pago | ❌ No alcanzado |
+| K1 KDS | ❌ Sesión no reconocida |
+| D1 Delivery PIN 3333 | ❌ No alcanzado |
+
+**Próximos Pasos:**
+- [x] Fix `emailVerifiedAt` en seeds
+- [x] Fix `/api/employees/login` en globalPaths + `locationId` desde headers
+- [ ] **Fix B3 (PRIORIDAD):** Modal order-type se reabre en loop
+- [ ] **Fix B4:** `GET /api/orders` 404 en hub
+- [ ] **Fix B5:** Sesión KDS no persistida desde TPV
