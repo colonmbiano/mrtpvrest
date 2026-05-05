@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MRTPV KDS</string>
+    <string name="title_activity_main">MRTPV KDS</string>
+    <string name="package_name">com.mrtpvrest.kds</string>
+    <string name="custom_url_scheme">com.mrtpvrest.kds</string>
+</resources>
