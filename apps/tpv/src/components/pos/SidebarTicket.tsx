@@ -7,7 +7,12 @@ import { useTicketStore } from "@/store/ticketStore";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
-export default function SidebarTicket() {
+interface Props {
+  onOpenShift?: () => void;
+  isShiftOpen?: boolean;
+}
+
+export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props) {
   const [showPayment, setShowPayment] = useState(false);
   const [processing, setProcessing] = useState(false);
   const { 
@@ -84,6 +89,7 @@ export default function SidebarTicket() {
       toast.success("Cobro procesado");
       clearActiveItems();
       setShowPayment(false);
+      // Opcional: si tienes una función para refrescar órdenes abiertas en el hub, llámala aquí.
     } catch (error: any) {
       toast.error("Error al cobrar: " + (error.response?.data?.error || error.message));
     } finally {
@@ -100,9 +106,9 @@ export default function SidebarTicket() {
   };
 
   return (
-    <aside className="w-full lg:w-[400px] lg:shrink-0 border-l border-border bg-surface flex flex-col h-full min-h-0" style={{ background: "var(--surf-1)" }}>
+    <aside className="w-full lg:w-[420px] lg:shrink-0 border-l border-white/5 bg-[#0a0a0c] flex flex-col h-full min-h-0 relative z-20">
       {/* TABS DE TICKETS */}
-      <div className="flex h-14 bg-surface-2 border-b border-border overflow-hidden shrink-0">
+      <div className="flex h-16 bg-[#121316] border-b border-white/5 overflow-hidden shrink-0">
         <div className="flex-1 flex scroll-x scrollbar-hide min-w-0">
           {tickets.map((t, idx) => {
             const isActive = idx === activeIndex;
@@ -111,61 +117,61 @@ export default function SidebarTicket() {
                 key={t.id}
                 onClick={() => setActiveIndex(idx)}
                 className={`
-                  px-6 h-full flex items-center justify-center text-xs font-bold border-r border-border relative transition-all shrink-0 uppercase tracking-widest
-                  ${isActive ? "bg-surf-1 text-brand" : "text-tx-mut hover:bg-surf-3 hover:text-tx-pri"}
+                  px-8 h-full flex items-center justify-center text-[11px] font-black border-r border-white/5 relative transition-all shrink-0 uppercase tracking-[0.2em] active:scale-95
+                  ${isActive ? "bg-[#0a0a0c] text-amber-500" : "text-zinc-500"}
                 `}
               >
                 Ticket {idx + 1}
                 {isActive && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 rounded-t-full" style={{ background: "var(--brand)" }} />
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-amber-500 rounded-t-full shadow-[0_0_10px_rgba(255,184,77,0.5)]" />
                 )}
               </button>
             );
           })}
           <button
             onClick={() => addTicket()}
-            className="w-14 h-full flex items-center justify-center text-tx-mut hover:bg-surf-3 hover:text-tx-pri border-r border-border transition-colors shrink-0"
+            className="w-16 h-full flex items-center justify-center text-zinc-600 active:text-amber-500 border-r border-white/5 transition-colors shrink-0 active:scale-90"
           >
-            <Plus size={20} />
+            <Plus size={22} />
           </button>
         </div>
       </div>
 
       {/* HEADER DEL TICKET */}
-      <div className="p-6 pb-4 flex flex-col gap-4 shrink-0 bg-surf-1">
+      <div className="p-8 pb-6 flex flex-col gap-5 shrink-0 bg-[#0a0a0c]">
         <div className="flex justify-between items-center">
-          <h2 className="text-sm font-bold text-tx-mut tracking-widest uppercase">Orden Actual</h2>
-          <span className="text-[10px] font-black text-tx-mut uppercase tracking-widest bg-surf-2 px-2 py-1 rounded-md border border-border">
-            #{ticket.id.toString().slice(-4)}
+          <h2 className="text-[11px] font-black text-zinc-500 tracking-[0.2em] uppercase">Orden en curso</h2>
+          <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
+            ID: {String(ticket.id).slice(-4)}
           </span>
         </div>
 
-        <div className="flex gap-2">
-          <div className="flex-1 min-w-0 bg-surf-2 border border-border rounded-xl h-12 flex items-center px-4 gap-3 focus-within:border-brand focus-within:ring-1 focus-within:ring-brand/30 transition-all">
-            <User size={16} className="text-tx-mut" />
+        <div className="flex gap-3">
+          <div className="flex-1 min-w-0 bg-[#121316] border border-white/5 rounded-2xl h-14 flex items-center px-5 gap-4 focus-within:border-amber-500/50 transition-all">
+            <User size={18} className="text-zinc-600" />
             <input
               placeholder="Nombre del cliente..."
-              className="bg-transparent border-none outline-none text-sm font-semibold text-tx-pri w-full placeholder:text-tx-mut placeholder:font-normal"
+              className="bg-transparent border-none outline-none text-sm font-bold text-white w-full placeholder:text-zinc-600 placeholder:font-bold tracking-tight"
               value={ticket.name || ""}
               onChange={(e) => useTicketStore.getState().updateTicket({ name: e.target.value })}
             />
           </div>
           <button 
-            className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border border-border bg-surf-2 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/30 text-tx-mut transition-all" 
+            className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border border-white/5 bg-[#121316] text-zinc-600 active:bg-red-500/10 active:text-red-500 active:border-red-500/20 transition-all active:scale-95" 
             onClick={clearActiveItems}
           >
-            <Trash2 size={18} />
+            <Trash2 size={20} />
           </button>
         </div>
       </div>
 
       {/* LISTA DE ITEMS */}
-      <div className="flex-1 min-h-0 scroll-y px-6 space-y-4 py-2 bg-surf-1 scrollbar-hide">
+      <div className="flex-1 min-h-0 scroll-y px-8 space-y-5 py-4 bg-[#0a0a0c] scrollbar-hide">
         {ticket.items.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center opacity-40 gap-4">
-            <ShoppingCart size={48} className="text-tx-mut" />
-            <p className="text-xs font-bold uppercase tracking-widest text-center text-tx-mut">
-              Agrega productos al ticket
+          <div className="h-full flex flex-col items-center justify-center opacity-20 gap-6">
+            <ShoppingCart size={64} className="text-zinc-500" />
+            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-center text-zinc-500">
+              Ticket vacío
             </p>
           </div>
         ) : (
@@ -184,38 +190,61 @@ export default function SidebarTicket() {
       </div>
 
       {/* FOOTER DEL TICKET */}
-      <div className="p-6 bg-surf-2 border-t border-border mt-auto shrink-0 relative overflow-hidden">
-        {/* Glow effect matching brand */}
-        <div className="absolute -top-20 -right-20 w-40 h-40 bg-brand/10 blur-[50px] rounded-full pointer-events-none" />
+      <div className="p-8 bg-[#121316] border-t border-white/5 mt-auto shrink-0 relative overflow-hidden">
+        {/* Glow effect Warm Tech */}
+        <div className="absolute -top-24 -right-24 w-48 h-48 bg-amber-500/5 blur-[60px] rounded-full pointer-events-none" />
 
-        <div className="flex flex-col gap-3 mb-6 relative z-10">
-           <div className="flex justify-between items-center text-sm">
-             <span className="text-tx-mut font-medium tracking-wide">Subtotal</span>
-             <span className="font-bold text-tx-pri mono tnum">${subtotal.toFixed(2)}</span>
+        <div className="flex flex-col gap-4 mb-8 relative z-10">
+           <div className="flex justify-between items-center text-sm font-bold">
+             <span className="text-zinc-500 tracking-tight">Subtotal</span>
+             <span className="text-zinc-300 mono tnum">${subtotal.toFixed(2)}</span>
            </div>
            {ticket.discount > 0 && (
-              <div className="flex justify-between items-center text-sm text-success">
-                <span className="font-medium tracking-wide">Descuento</span>
-                <span className="font-bold mono tnum">−${ticket.discount.toFixed(2)}</span>
+              <div className="flex justify-between items-center text-sm font-bold text-amber-500/80">
+                <span className="tracking-tight">Descuento aplicado</span>
+                <span className="mono tnum">−${ticket.discount.toFixed(2)}</span>
               </div>
            )}
-           <div className="flex justify-between items-end mt-3 pt-4 border-t border-border/50">
-             <span className="text-[11px] font-black text-tx-mut uppercase tracking-widest mb-1">Total a cobrar</span>
-             <span className="text-4xl font-semibold text-tx-pri mono tnum tracking-tighter" style={{ color: "var(--brand)" }}>
+           <div className="flex justify-between items-end mt-4 pt-6 border-t border-white/5">
+             <span className="text-[11px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2">Total a cobrar</span>
+             <span className="text-5xl font-black text-white mono tnum tracking-tight shadow-amber-500/20">
                ${total.toFixed(2)}
              </span>
            </div>
         </div>
 
-        <div className="relative z-10">
+        <div className="relative z-10 flex flex-col gap-4">
           <button
-            onClick={handleOpenPayment}
+            onClick={isShiftOpen ? handleOpenPayment : onOpenShift}
             disabled={processing || ticket.items.length === 0}
-            className="w-full h-16 bg-brand hover:brightness-110 disabled:opacity-50 disabled:grayscale text-brand-fg rounded-2xl text-base font-bold tracking-wider shadow-[0_0_24px_rgba(255,132,0,0.25)] transition-all active:scale-[0.98] uppercase flex items-center justify-center gap-3"
-            style={{ background: "var(--brand)", color: "var(--brand-fg)" }}
+            className={`w-full h-20 rounded-[1.25rem] text-base font-black tracking-[0.2em] uppercase flex items-center justify-center gap-3 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale ${
+              isShiftOpen 
+                ? "bg-amber-500 text-black shadow-[0_10px_40px_-10px_rgba(255,184,77,0.4)]" 
+                : "bg-red-500 text-white shadow-[0_10px_40px_-10px_rgba(239,68,68,0.4)]"
+            }`}
           >
-            {processing ? "Procesando…" : "Cobrar Ticket"}
+            {processing ? "Cargando..." : isShiftOpen ? "Cobrar Ticket" : "Abrir Turno de Caja"}
           </button>
+
+          <div className="grid grid-cols-3 gap-3">
+             <button 
+               onClick={handleSendToKitchen} 
+               className="h-14 rounded-2xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-widest text-zinc-400 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex flex-col items-center justify-center gap-1.5"
+             >
+               <UtensilsCrossed size={18} /> Cocina
+             </button>
+             <button 
+               className="h-14 rounded-2xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-widest text-zinc-400 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex flex-col items-center justify-center gap-1"
+             >
+               <span className="text-xl leading-none font-black">%</span> Descuento
+             </button>
+             <button
+              onClick={() => closeTicket(activeIndex)}
+              className="h-14 rounded-2xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-widest text-zinc-600 active:text-red-400 active:bg-red-500/5 transition-all active:scale-95 flex flex-col items-center justify-center gap-1.5"
+             >
+              <X size={18} /> Cerrar
+             </button>        
+          </div>
         </div>
 
         <PaymentModal
@@ -223,29 +252,10 @@ export default function SidebarTicket() {
           onClose={() => setShowPayment(false)}
           orderNumber={String(ticket.id)}
           total={total}
+          discount={ticket.discount}
           items={ticket.items.map((i) => ({ name: i.name, quantity: i.quantity, subtotal: i.subtotal }))}
           onConfirm={handleProcessPayment}
         />
-
-        <div className="grid grid-cols-3 gap-3 mt-4 relative z-10">
-           <button 
-             onClick={handleSendToKitchen} 
-             className="h-12 rounded-xl bg-surf-3 border border-border text-[10px] font-bold uppercase tracking-widest text-tx-pri hover:bg-surf-4 hover:border-brand/30 transition-all flex flex-col items-center justify-center gap-1"
-           >
-             <UtensilsCrossed size={16} /> Cocina
-           </button>
-           <button 
-             className="h-12 rounded-xl bg-surf-3 border border-border text-[10px] font-bold uppercase tracking-widest text-tx-pri hover:bg-surf-4 transition-all flex flex-col items-center justify-center gap-1"
-           >
-             <span className="text-lg leading-none mt-1">%</span> Desc.
-           </button>
-           <button
-            onClick={() => closeTicket(activeIndex)}
-            className="h-12 rounded-xl bg-surf-3 border border-border text-[10px] font-bold uppercase tracking-widest text-danger hover:bg-red-500/10 hover:border-red-500/30 transition-all flex flex-col items-center justify-center gap-1"
-           >
-            <X size={16} /> Cerrar
-           </button>        
-        </div>
       </div>
     </aside>
   );

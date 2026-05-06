@@ -1,6 +1,8 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import api from "@/lib/api";
+import { Monitor, Printer as PrinterIcon, Network, Usb, Bluetooth, Trash2, Edit3, Plus } from "lucide-react";
+import KDSConfigModal from "@/components/pos/KDSConfigModal";
 
 type Printer = {
   id: string;
@@ -9,6 +11,7 @@ type Printer = {
   ip?: string | null;
   port?: number | null;
   type: string;
+  isVirtual?: boolean;
 };
 
 const DEFAULT_FORM: Partial<Printer> = {
@@ -23,6 +26,7 @@ export default function ImpresorasPage() {
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isKDSModalOpen, setIsKDSModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
 
@@ -45,12 +49,11 @@ export default function ImpresorasPage() {
     }
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (data: Partial<Printer>) => {
     try {
       const payload = {
-        ...form,
-        port: form.port ? parseInt(String(form.port), 10) || 9100 : 9100,
+        ...data,
+        port: data.port ? parseInt(String(data.port), 10) || 9100 : 9100,
       };
       if (editingId) {
         await api.put(`/api/printers/${editingId}`, payload);
@@ -58,27 +61,33 @@ export default function ImpresorasPage() {
         await api.post("/api/printers", payload);
       }
       setIsFormOpen(false);
+      setIsKDSModalOpen(false);
       setEditingId(null);
       setForm(DEFAULT_FORM);
       fetchPrinters();
     } catch (err: any) {
-      alert("Error guardando impresora: " + (err?.response?.data?.error || err?.message || ""));
+      alert("Error guardando: " + (err?.response?.data?.error || err?.message || ""));
     }
   };
 
   const handleEdit = (p: Printer) => {
-    setForm({ ...DEFAULT_FORM, ...p });
     setEditingId(p.id);
-    setIsFormOpen(true);
+    if (p.isVirtual || p.ip === "0.0.0.0") {
+      setForm(p);
+      setIsKDSModalOpen(true);
+    } else {
+      setForm({ ...DEFAULT_FORM, ...p });
+      setIsFormOpen(true);
+    }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("¿Eliminar impresora?")) return;
+    if (!confirm("¿Eliminar este dispositivo?")) return;
     try {
       await api.delete(`/api/printers/${id}`);
       fetchPrinters();
     } catch {
-      alert("Error eliminando impresora");
+      alert("Error eliminando dispositivo");
     }
   };
 
@@ -86,7 +95,7 @@ export default function ImpresorasPage() {
     setTestingId(id);
     try {
       await api.post(`/api/printers/${id}/test`);
-      alert("Prueba de impresión enviada");
+      alert("Prueba de envío completada");
     } catch (err: any) {
       alert("Error en prueba: " + (err?.response?.data?.error || err?.message || ""));
     } finally {
@@ -94,182 +103,254 @@ export default function ImpresorasPage() {
     }
   };
 
-  // Stats agregados
-  const totalCount = printers.length;
-  const networkCount = printers.filter(p => p.connectionType === "NETWORK").length;
-  const stationsByType = new Set(printers.map(p => p.type)).size;
-
   return (
-    <div className="p-8 max-w-6xl mx-auto" style={{ fontFamily: "JetBrains Mono, monospace" }}>
-      <div className="flex justify-between items-end mb-6">
+    <div className="p-8 max-w-6xl mx-auto min-h-screen font-sans">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10">
         <div>
-          <p className="text-[10px] font-bold tracking-wider" style={{ color: "#666" }}>HARDWARE</p>
-          <h1 className="text-2xl font-bold mb-1 text-white">Hardware e Impresoras</h1>
-          <p className="text-xs" style={{ color: "#B8B9B6" }}>Dispositivos en red local · Configura recibos, KDS y barra.</p>
+          <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500 block mb-2">Infraestructura</span>
+          <h1 className="text-3xl font-black text-white tracking-tight mb-1">Red e Impresoras</h1>
+          <p className="text-sm text-zinc-400 font-medium">Gestiona tus impresoras físicas y estaciones KDS virtuales.</p>
         </div>
-        <button
-          onClick={() => {
-            setForm({ name: "", connectionType: "NETWORK", ip: "", type: "RECEIPT" });
-            setEditingId(null);
-            setIsFormOpen(true);
-          }}
-          className="bg-[#ffb84d] text-black px-5 py-2.5 rounded-xl font-bold transition-transform hover:scale-105 active:scale-95"
-        >
-          + Nueva Impresora
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => {
+              setForm({ name: "", connectionType: "NETWORK", ip: "", type: "KITCHEN" });
+              setEditingId(null);
+              setIsKDSModalOpen(true);
+            }}
+            className="flex items-center gap-2 bg-[#121316] border border-white/5 text-zinc-300 px-5 py-3 rounded-2xl font-bold transition-all hover:bg-[#1a1b1f] active:scale-95"
+          >
+            <Monitor size={18} className="text-amber-500" /> + Nuevo KDS
+          </button>
+          <button
+            onClick={() => {
+              setForm(DEFAULT_FORM);
+              setEditingId(null);
+              setIsFormOpen(true);
+            }}
+            className="flex items-center gap-2 bg-amber-500 text-[#0a0a0c] px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-all hover:scale-105 active:scale-95 shadow-lg shadow-amber-500/20"
+          >
+            <Plus size={18} /> Nueva Impresora
+          </button>
+        </div>
       </div>
 
-      {/* Stats row */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-        <StatTile label="DISPOSITIVOS" value={totalCount} sub={`${networkCount} en red`} accent="#FF8400" />
-        <StatTile label="ESTACIONES" value={stationsByType} sub="distintas" accent="#88D66C" />
-        <StatTile label="PRÓXIMO PING" value={loading ? "—" : "auto"} sub="cada 30s" accent="#FFB84D" />
-      </section>
+      {/* STATS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+        <StatCard label="Dispositivos" value={printers.length} sub="En línea" icon={<Network size={20} />} color="amber" />
+        <StatCard label="Estaciones" value={new Set(printers.map(p => p.type)).size} sub="Activas" icon={<PrinterIcon size={20} />} color="blue" />
+        <StatCard label="Pantallas" value={printers.filter(p => p.ip === "0.0.0.0" || p.isVirtual).length} sub="KDS Cloud" icon={<Monitor size={20} />} color="emerald" />
+      </div>
 
+      {/* FORMULARIO TRADICIONAL */}
       {isFormOpen && (
-        <form onSubmit={handleSave} className="bg-[#141417] p-6 rounded-2xl border border-[#2d2d30] mb-8">
-          <h2 className="text-xl font-bold mb-4" style={{ color: "#ffb84d" }}>
-            {editingId ? "Editar Impresora" : "Nueva Impresora"}
-          </h2>
-          <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <form 
+            onSubmit={(e) => { e.preventDefault(); handleSave(form); }} 
+            className="w-full max-w-lg bg-[#0a0a0c] p-8 rounded-[2rem] border border-white/10 shadow-2xl space-y-6"
+          >
             <div>
-              <label className="block text-sm font-bold text-gray-400 mb-1">Nombre</label>
-              <input
-                required
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full bg-[#0a0a0c] border border-[#2d2d30] rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#ffb84d]"
-                placeholder="Ej. Barra 1"
-              />
+              <h2 className="text-2xl font-black text-white tracking-tight mb-1">
+                {editingId ? "Editar Impresora" : "Nueva Impresora"}
+              </h2>
+              <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Hardware Físico</p>
             </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-400 mb-1">Rol / Tipo</label>
-              <select
-                value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value })}
-                className="w-full bg-[#0a0a0c] border border-[#2d2d30] rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#ffb84d]"
-              >
-                <option value="CASHIER">Recibos / Caja</option>
-                <option value="KITCHEN">Cocina</option>
-                <option value="BAR">Barra</option>
-                <option value="FRYER">Freidora</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-400 mb-1">Conexión</label>
-              <select
-                value={form.connectionType}
-                onChange={(e) => setForm({ ...form, connectionType: e.target.value as any })}
-                className="w-full bg-[#0a0a0c] border border-[#2d2d30] rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#ffb84d]"
-              >
-                <option value="NETWORK">Red (IP/WiFi)</option>
-                <option value="USB">USB</option>
-                <option value="BLUETOOTH">Bluetooth</option>
-              </select>
-            </div>
-            {form.connectionType === "NETWORK" && (
-              <>
-                <div>
-                  <label className="block text-sm font-bold text-gray-400 mb-1">Dirección IP</label>
-                  <input
-                    value={form.ip || ""}
-                    onChange={(e) => setForm({ ...form, ip: e.target.value })}
-                    className="w-full bg-[#0a0a0c] border border-[#2d2d30] rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#ffb84d]"
-                    placeholder="192.168.1.x"
-                  />
+            
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Nombre</label>
+                <input
+                  required
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500"
+                  placeholder="Ej. Comandas Cocina"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Rol</label>
+                  <select
+                    value={form.type}
+                    onChange={(e) => setForm({ ...form, type: e.target.value })}
+                    className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500 appearance-none"
+                  >
+                    <option value="CASHIER">Caja / Recibos</option>
+                    <option value="KITCHEN">Cocina</option>
+                    <option value="BAR">Barra / Drinks</option>
+                  </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-400 mb-1">Puerto</label>
-                  <input
-                    type="number"
-                    value={form.port ?? 9100}
-                    onChange={(e) => setForm({ ...form, port: parseInt(e.target.value, 10) || 9100 })}
-                    className="w-full bg-[#0a0a0c] border border-[#2d2d30] rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#ffb84d]"
-                    placeholder="9100"
-                  />
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Conexión</label>
+                  <select
+                    value={form.connectionType}
+                    onChange={(e) => setForm({ ...form, connectionType: e.target.value as any })}
+                    className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500 appearance-none"
+                  >
+                    <option value="NETWORK">Ethernet / WiFi</option>
+                    <option value="USB">USB Local</option>
+                    <option value="BLUETOOTH">Bluetooth</option>
+                  </select>
                 </div>
-              </>
-            )}
-          </div>
-          <div className="flex gap-3 justify-end">
-            <button
-              type="button"
-              onClick={() => setIsFormOpen(false)}
-              className="px-4 py-2 text-gray-400 hover:text-white"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="bg-[#ffb84d] text-black px-5 py-2 rounded-xl font-bold"
-            >
-              Guardar
-            </button>
-          </div>
-        </form>
+              </div>
+
+              {form.connectionType === "NETWORK" && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2 space-y-1.5">
+                    <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Dirección IP</label>
+                    <input
+                      required
+                      value={form.ip || ""}
+                      onChange={(e) => setForm({ ...form, ip: e.target.value })}
+                      className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500"
+                      placeholder="192.168.1..."
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Puerto</label>
+                    <input
+                      type="number"
+                      value={form.port ?? 9100}
+                      onChange={(e) => setForm({ ...form, port: parseInt(e.target.value, 10) || 9100 })}
+                      className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={() => setIsFormOpen(false)}
+                className="flex-1 h-14 rounded-2xl bg-zinc-900 text-zinc-400 font-bold hover:text-white"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="flex-[2] h-14 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-widest text-xs"
+              >
+                Guardar Dispositivo
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
+      {/* KDS MODAL */}
+      <KDSConfigModal 
+        isOpen={isKDSModalOpen}
+        onClose={() => { setIsKDSModalOpen(false); setEditingId(null); setForm(DEFAULT_FORM); }}
+        onSave={handleSave}
+        initialData={form}
+      />
+
+      {/* GRID DISPOSITIVOS */}
       {loading ? (
-        <div className="text-center py-10 text-gray-400">Cargando impresoras...</div>
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+          <span className="text-zinc-500 font-bold uppercase tracking-widest text-[10px]">Sincronizando dispositivos...</span>
+        </div>
       ) : printers.length === 0 ? (
-        <div className="bg-[#141417] p-10 rounded-2xl border border-[#2d2d30] text-center text-gray-400">
-          No hay impresoras configuradas.
+        <div className="bg-[#121316] rounded-[2.5rem] p-20 border border-white/5 text-center">
+          <div className="w-20 h-20 bg-zinc-900 rounded-3xl flex items-center justify-center mx-auto mb-6 text-zinc-700">
+            <PrinterIcon size={40} />
+          </div>
+          <h3 className="text-xl font-black text-white mb-2">Sin hardware configurado</h3>
+          <p className="text-zinc-500 max-w-xs mx-auto text-sm font-medium">Empieza agregando una impresora de tickets o una pantalla KDS para cocina.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {printers.map((p) => (
-            <div key={p.id} className="bg-[#141417] p-5 rounded-2xl border border-[#2d2d30] flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-bold text-lg text-white">{p.name}</h3>
-                  <span className="bg-[#ffb84d]/10 text-[#ffb84d] text-[10px] font-black uppercase px-2 py-1 rounded">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {printers.map((p) => {
+            const isKDS = p.isVirtual || p.ip === "0.0.0.0";
+            return (
+              <div key={p.id} className="group relative bg-[#121316] p-6 rounded-[2rem] border border-white/5 hover:border-amber-500/30 transition-all hover:shadow-2xl hover:shadow-amber-500/5">
+                <div className="flex justify-between items-start mb-6">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isKDS ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"}`}>
+                    {isKDS ? <Monitor size={24} /> : <PrinterIcon size={24} />}
+                  </div>
+                  <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl ${isKDS ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"}`}>
                     {p.type}
                   </span>
                 </div>
-                <div className="text-sm text-gray-400 mb-4">
-                  {p.connectionType === "NETWORK" ? `IP: ${p.ip}` : p.connectionType}
+
+                <div className="mb-8">
+                  <h3 className="text-lg font-black text-white tracking-tight mb-1">{p.name}</h3>
+                  <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold">
+                    {p.connectionType === "NETWORK" ? (
+                      <>
+                        <Network size={14} className="text-zinc-600" />
+                        <span>{isKDS ? "Virtual / Cloud" : p.ip}</span>
+                      </>
+                    ) : p.connectionType === "USB" ? (
+                      <>
+                        <Usb size={14} className="text-zinc-600" />
+                        <span>USB Local</span>
+                      </>
+                    ) : (
+                      <>
+                        <Bluetooth size={14} className="text-zinc-600" />
+                        <span>Bluetooth</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => handleTest(p.id)}
+                    disabled={testingId === p.id}
+                    className="w-full h-12 bg-white/5 hover:bg-white/10 text-zinc-300 rounded-xl text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                  >
+                    {testingId === p.id ? "Conectando..." : isKDS ? "Refrescar Pantalla" : "Test de Impresión"}
+                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEdit(p)}
+                      className="flex-1 h-12 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 rounded-xl flex items-center justify-center transition-all"
+                    >
+                      <Edit3 size={18} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(p.id)}
+                      className="flex-1 h-12 bg-red-500/5 hover:bg-red-500/10 text-red-500/50 hover:text-red-500 rounded-xl flex items-center justify-center transition-all"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => handleTest(p.id)}
-                  disabled={testingId === p.id}
-                  className="bg-[#ffb84d]/10 hover:bg-[#ffb84d]/20 text-[#ffb84d] py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
-                >
-                  {testingId === p.id ? "Enviando…" : "Probar impresión"}
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEdit(p)}
-                    className="flex-1 bg-[#2d2d30] hover:bg-gray-600 text-white py-1.5 rounded-lg text-xs font-bold transition-colors"
-                  >
-                    Editar
-                  </button>
-                  <button
-                    onClick={() => handleDelete(p.id)}
-                    className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-function StatTile({ label, value, sub, accent }: { label: string; value: number | string; sub: string; accent: string }) {
+function StatCard({ label, value, sub, icon, color }: { label: string; value: number | string; sub: string; icon: React.ReactNode; color: string }) {
+  const colors: Record<string, string> = {
+    amber: "text-amber-500 bg-amber-500/10",
+    blue: "text-blue-500 bg-blue-500/10",
+    emerald: "text-emerald-500 bg-emerald-500/10",
+  };
+
   return (
-    <div className="rounded-2xl p-4 flex flex-col gap-1"
-      style={{ background: "#1A1A1A", border: "1px solid #2E2E2E" }}>
-      <span className="text-[10px] font-bold tracking-wider" style={{ color: "#666" }}>{label}</span>
-      <div className="flex items-baseline gap-2">
-        <span className="text-2xl font-bold tabular-nums" style={{ color: accent }}>{value}</span>
-        <span className="text-[10px]" style={{ color: "#B8B9B6" }}>{sub}</span>
+    <div className="bg-[#121316] p-6 rounded-[2rem] border border-white/5 flex items-center gap-5">
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${colors[color]}`}>
+        {icon}
+      </div>
+      <div className="flex flex-col">
+        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{label}</span>
+        <div className="flex items-baseline gap-2">
+          <span className="text-2xl font-black text-white tracking-tight">{value}</span>
+          <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider">{sub}</span>
+        </div>
       </div>
     </div>
   );
 }
+

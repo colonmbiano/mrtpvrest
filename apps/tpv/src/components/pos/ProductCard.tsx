@@ -13,27 +13,17 @@ export interface ProductCardProps {
   currency?: string;
 }
 
-// Paleta tipo "bento colorido" del Pencil ANTLd. Cada tile rellena con un color
-// sólido determinístico derivado del nombre del producto, dándole identidad
-// visual sin requerir foto. Si hay imageUrl, la foto cubre el tile.
+// Paleta de colores Warm Tech para productos sin imagen
 const TILE_PALETTE = [
-  "#FF8400", "#FFB84D", "#88D66C", "#F472B6", "#A78BFA", "#60A5FA",
-  "#34D399", "#F87171", "#FB923C", "#C084FC", "#FACC15", "#22D3EE",
+  "#121316", // Base Obsidian
+  "#1a1b1f", // Surface 2
+  "#22242a", // Surface 3
 ];
 
 function hashColor(seed: string) {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return TILE_PALETTE[h % TILE_PALETTE.length];
-}
-
-// Aproximación de luminancia para decidir si el texto va negro o blanco
-function isLight(hex: string) {
-  const c = hex.replace("#", "");
-  const r = parseInt(c.slice(0, 2), 16);
-  const g = parseInt(c.slice(2, 4), 16);
-  const b = parseInt(c.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) > 160;
 }
 
 const ProductCard: React.FC<ProductCardProps> = ({
@@ -47,19 +37,14 @@ const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
   const hasPromo = promoPrice && promoPrice < price;
   const displayPrice = hasPromo ? promoPrice : price;
-
   const tileColor = hashColor(id || name);
-  const lightTile = isLight(tileColor);
-  const textOnTile = lightTile ? "#0C0C0E" : "#FFFFFF";
-  const subtextOnTile = lightTile ? "rgba(12,12,14,0.7)" : "rgba(255,255,255,0.85)";
 
   return (
     <button
       onClick={onClick}
-      className="group relative flex flex-col text-left rounded-2xl overflow-hidden p-3.5 min-h-[140px] transition-all hover:scale-[1.02] active:scale-[0.98]"
+      className="group relative flex flex-col text-left rounded-3xl overflow-hidden p-4 min-h-[160px] transition-all active:scale-[0.98] border border-white/5 shadow-xl"
       style={{
-        background: imageUrl ? "transparent" : tileColor,
-        boxShadow: `0 6px 18px ${tileColor}40, 0 1px 2px rgba(0,0,0,0.2)`,
+        background: imageUrl ? "#0a0a0c" : tileColor,
       }}
     >
       {imageUrl && (
@@ -67,62 +52,35 @@ const ProductCard: React.FC<ProductCardProps> = ({
           <img
             src={imageUrl}
             alt={name}
-            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="absolute inset-0 w-full h-full object-cover opacity-60 transition-transform duration-700 group-active:scale-110"
           />
           <div
             className="absolute inset-0"
             style={{
-              background:
-                "linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.55) 100%)",
+              background: "linear-gradient(180deg, rgba(10,10,12,0) 0%, rgba(10,10,12,0.8) 100%)",
             }}
           />
         </>
       )}
 
       {hasPromo && (
-        <span
-          className="relative z-10 self-start inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold mb-1"
-          style={{
-            background: imageUrl
-              ? "rgba(255,255,255,0.95)"
-              : (lightTile ? "rgba(12,12,14,0.85)" : "rgba(255,255,255,0.95)"),
-            color: imageUrl
-              ? "#0C0C0E"
-              : (lightTile ? "#FFFFFF" : "#0C0C0E"),
-          }}
-        >
+        <span className="relative z-10 self-start px-2.5 py-1 rounded-lg text-[9px] font-black tracking-widest bg-amber-500 text-black shadow-lg">
           PROMO
         </span>
       )}
 
       <div className="flex-1" />
 
-      <div className="relative z-10 flex flex-col gap-0.5">
-        <span
-          className="text-[13px] font-bold leading-tight line-clamp-2"
-          style={{ color: imageUrl ? "#FFFFFF" : textOnTile }}
-        >
+      <div className="relative z-10 flex flex-col gap-1">
+        <span className="text-sm font-black leading-tight text-white tracking-tight line-clamp-2 pr-4">
           {name}
         </span>
-        <div className="flex items-baseline gap-1.5">
-          <span
-            className="text-base font-bold tabular-nums"
-            style={{
-              color: imageUrl ? "#FFFFFF" : textOnTile,
-              fontFamily: "JetBrains Mono, monospace",
-            }}
-          >
-            {currency}
-            {(displayPrice ?? 0).toFixed(0)}
+        <div className="flex items-baseline gap-2">
+          <span className="text-lg font-black tabular-nums text-white mono">
+            {currency}{(displayPrice ?? 0).toFixed(0)}
           </span>
           {hasPromo && (
-            <span
-              className="text-[10px] line-through tabular-nums"
-              style={{
-                color: imageUrl ? "rgba(255,255,255,0.7)" : subtextOnTile,
-                fontFamily: "JetBrains Mono, monospace",
-              }}
-            >
+            <span className="text-[11px] line-through tabular-nums text-zinc-500 font-bold mono">
               {price.toFixed(0)}
             </span>
           )}
@@ -131,14 +89,9 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
       <span
         aria-hidden
-        className="absolute z-10 right-2.5 bottom-2.5 w-7 h-7 rounded-full flex items-center justify-center transition-transform group-hover:scale-110 group-active:scale-95"
-        style={{
-          background: "#FF8400",
-          color: "#0C0C0E",
-          boxShadow: "0 3px 8px rgba(0,0,0,0.4)",
-        }}
+        className="absolute z-10 right-3 bottom-3 w-8 h-8 rounded-2xl flex items-center justify-center transition-all bg-amber-500 text-[#0a0a0c] shadow-[0_5px_15px_rgba(255,184,77,0.3)] group-active:scale-90"
       >
-        <Plus size={14} strokeWidth={3} />
+        <Plus size={18} strokeWidth={3} />
       </span>
     </button>
   );

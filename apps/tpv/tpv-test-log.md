@@ -85,14 +85,17 @@
 |:---|:---|:---:|:---|
 | B1 | `emailVerifiedAt` null en seed → bloqueaba login | 🔴 Alta | ✅ Corregido |
 | B2 | `/api/employees/login` retornaba 404 (no estaba en globalPaths del middleware) | 🔴 Alta | ✅ Corregido |
-| B3 | Modal de tipo de orden se reabre infinitamente bloqueando el POS | 🔴 Alta | 🔧 Pendiente |
-| B4 | Hub muestra "Cargando espacios..." infinito + 404 en `/api/orders` | 🟡 Media | 🔧 Pendiente |
-| B5 | KDS (`/kds`) no reconoce la sesión activa del TPV | 🟡 Media | 🔧 Pendiente |
+| B3 | Modal de tipo de orden se reabre (Hub), pero POS funciona con "Pedido Rápido" | 🟡 Media | ⚠️ Parcial |
+| B4 | Hub muestra "Cargando espacios..." infinito + error en `/api/orders` | 🔴 Alta | 🔧 Pendiente |
+| B5 | KDS (`/kds`) muestra "Sesión no disponible" — no hereda sesión del TPV | 🟡 Media | 🔧 Pendiente |
+| B6 | Errores de hidratación Next.js en hub/POS | 🟡 Media | 🔧 Pendiente |
+| B7 | Modal de pago: Subtotal muestra $576 (debería $135). Descuento -$34 sin razón | 🔴 Alta | ✅ Corregido |
+| B8 | Botón "Confirmar Pago" muestra ✅ pero modal no se cierra / orden no se crea | 🔴 Alta | ✅ Corregido |
 | B6 | Errores de hidratación Next.js en hub/POS | 🟡 Media | 🔧 Pendiente |
 
 ---
 
-## 📈 Conclusión de Sesión
+## 📈 Conclusión — Sesión 1 (5 mayo 2026)
 
 **Resultado Global:** ✅ Auth/Setup funciona — ❌ POS bloqueado por modal (B3)
 
@@ -106,9 +109,26 @@
 | K1 KDS | ❌ Sesión no reconocida |
 | D1 Delivery PIN 3333 | ❌ No alcanzado |
 
-**Próximos Pasos:**
+---
+
+## 📈 Conclusión — Sesión 2 (5 mayo 2026)
+
+**Resultado Global:** ✅ Auth + Menú + Carrito + Pago — ❌ Hub/KDS sin funcionar
+
+| Caso | Estado | Notas |
+|---|:---:|---|
+| A1 Setup (Login + Vincular) | ✅ | Terminal ya vinculada |
+| A2 Persistencia sesión | ✅ | locationId persiste |
+| A3 PIN 1111 (Sofía / ADMIN) | ✅ | Funciona correctamente |
+| P1 Menú carga | ✅ | 3 categorías + productos BubbleLab |
+| P2 Carrito | ✅ | Items $65 + $70 = $135 correcto |
+| P5 Pago Efectivo | ✅ | Corregido cálculo de subtotal y cierre de modal |
+| H1 Hub | ❌ | "Cargando espacios..." infinito (B4) |
+| K1 KDS | ❌ | "Sesión no disponible" (B5) |
+
+**Próximos pasos (prioridad):**
 - [x] Fix `emailVerifiedAt` en seeds
 - [x] Fix `/api/employees/login` en globalPaths + `locationId` desde headers
-- [ ] **Fix B3 (PRIORIDAD):** Modal order-type se reabre en loop
-- [ ] **Fix B4:** `GET /api/orders` 404 en hub
-- [ ] **Fix B5:** Sesión KDS no persistida desde TPV
+- [ ] **🔴 Fix B7/B8:** Cálculo de subtotal incorrecto en modal de pago + botón bloqueado
+- [ ] **🔴 Fix B4:** Hub → `GET /api/orders` falla, "Cargando espacios..." infinito
+- [ ] **🟡 Fix B5:** KDS no hereda sesión del TPV

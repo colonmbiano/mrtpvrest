@@ -68,7 +68,6 @@ export default function ReportesPage() {
     return () => { cancelled = true; };
   }, [period]);
 
-  // Derived: deltas vs prev period (mocked from byDay halves)
   const { revenueDelta, orderDelta, ticketDelta, refundDelta } = useMemo(() => {
     if (byDay.length < 2) return { revenueDelta: 0, orderDelta: 0, ticketDelta: 0, refundDelta: 0 };
     const half = Math.floor(byDay.length / 2);
@@ -84,104 +83,104 @@ export default function ReportesPage() {
       revenueDelta: pct(rCurr, rPrev),
       orderDelta: pct(oCurr, oPrev),
       ticketDelta: pct(tCurr, tPrev),
-      refundDelta: 0, // backend no lo expone aún
+      refundDelta: 0, 
     };
   }, [byDay]);
 
-  // Chart bars
   const maxRev = Math.max(1, ...byDay.map(d => d.revenue));
   const peak   = byDay.reduce((m, d) => (d.revenue > (m?.revenue ?? -1) ? d : m), byDay[0] || null);
   const peakIdx = peak ? byDay.findIndex(d => d.date === peak.date) : -1;
 
   return (
-    <div className="min-h-full" style={{ background: '#0C0C0E', color: '#FFFFFF', fontFamily: 'JetBrains Mono, monospace' }}>
+    <div className="min-h-full" style={{ background: 'var(--bg)', color: 'var(--text-primary)' }}>
       {/* Topbar */}
-      <header className="flex items-end justify-between gap-6 px-8 py-6" style={{ borderBottom: '1px solid #1F1F23' }}>
+      <header className="flex items-end justify-between gap-6 px-8 py-6 border-b border-border bg-surface-1/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-1.5 text-[11px]" style={{ color: '#666' }}>
+          <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-widest text-tx-mut uppercase">
             <span>Analytics</span>
             <ChevronRight size={11} />
-            <span style={{ color: '#FFFFFF' }}>Reportes de Ventas</span>
+            <span style={{ color: 'var(--brand)' }}>Reportes de Ventas</span>
           </div>
-          <h1 className="text-2xl font-bold">Reportes de Ventas</h1>
+          <h1 className="text-3xl font-black">Dashboard</h1>
         </div>
-        <div className="flex items-center gap-2.5">
-          <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs"
-            style={{ background: '#1A1A1A', border: '1px solid #2A2A2E' }}>
-            <CalendarRange size={13} style={{ color: '#FFB84D' }} />
+        <div className="flex items-center gap-3">
+          <div className="inline-flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-xs bg-surface-2 border border-border shadow-sm">
+            <CalendarRange size={14} style={{ color: 'var(--brand)' }} />
             <select value={period} onChange={(e) => setPeriod(e.target.value as Period)}
-              className="bg-transparent outline-none cursor-pointer font-semibold" style={{ color: '#FFFFFF' }}>
-              <option value="7D" className="bg-zinc-900">Últimos 7 días</option>
-              <option value="30D" className="bg-zinc-900">Últimos 30 días</option>
-              <option value="AÑO" className="bg-zinc-900">Este año</option>
+              className="bg-transparent outline-none cursor-pointer font-bold text-tx-pri">
+              <option value="7D" className="bg-surface-1">Últimos 7 días</option>
+              <option value="30D" className="bg-surface-1">Últimos 30 días</option>
+              <option value="AÑO" className="bg-surface-1">Este año</option>
             </select>
           </div>
-          <button className="inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-xs font-bold transition hover:bg-white/10"
-            style={{ background: '#1A1A1A', border: '1px solid #2A2A2E' }}>
-            <Share2 size={13} /> Exportar PDF
+          <button className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all bg-surface-2 border border-border hover:bg-surface-hover shadow-sm active:scale-95">
+            <Share2 size={14} /> PDF
           </button>
-          <button className="inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-xs font-bold text-black"
-            style={{ background: '#FF8400' }}>
-            Compartir reporte
+          <button className="inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg"
+            style={{ background: 'var(--brand)', color: 'var(--brand-fg)', boxShadow: '0 8px 16px var(--brand-glow)' }}>
+            Compartir
           </button>
         </div>
       </header>
 
       {/* KPI Row */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 px-8 pt-6">
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 px-8 pt-8">
         <KPICard
-          icon={<TrendingUp size={16} style={{ color: '#88D66C' }} />}
+          icon={<TrendingUp size={18} />}
           label="Ventas Totales"
           value={fmtMoney(summary?.totalRevenue ?? 0)}
           delta={revenueDelta}
           loading={loading}
+          themeColor="#10b981"
         />
         <KPICard
-          icon={<Receipt size={16} style={{ color: '#FFB84D' }} />}
+          icon={<Receipt size={18} />}
           label="Ticket Promedio"
           value={fmtMoney(summary?.averageTicket ?? 0)}
           delta={ticketDelta}
           loading={loading}
+          themeColor="#f59e0b"
         />
         <KPICard
-          icon={<ShoppingCart size={16} style={{ color: '#FF8400' }} />}
-          label="Órdenes Completadas"
+          icon={<ShoppingCart size={18} />}
+          label="Órdenes"
           value={fmtCount(summary?.totalOrders ?? 0)}
           delta={orderDelta}
           loading={loading}
+          themeColor="#6366f1"
         />
         <KPICard
-          icon={<RotateCcw size={16} style={{ color: '#FF5C33' }} />}
+          icon={<RotateCcw size={18} />}
           label="Devoluciones"
           value={fmtMoney(summary?.totalDiscount ?? 0)}
           delta={refundDelta}
           inverted
           loading={loading}
+          themeColor="#ef4444"
         />
       </section>
 
       {/* Chart + Top sellers */}
-      <section className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5 px-8 py-6">
+      <section className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 px-8 py-8">
         {/* Chart */}
-        <div className="rounded-2xl p-6 flex flex-col gap-4 min-h-[420px]"
-          style={{ background: '#1A1A1A', border: '1px solid #2E2E2E' }}>
+        <div className="rounded-2xl p-8 flex flex-col gap-6 min-h-[460px] bg-surface-1 border border-border shadow-sm">
           <div className="flex items-start justify-between">
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold tracking-[0.15em]" style={{ color: '#666' }}>VENTAS POR DÍA</span>
-              <h2 className="text-lg font-bold">Tendencia de ingresos</h2>
+              <span className="text-[10px] font-black tracking-widest text-tx-mut uppercase">VENTAS POR DÍA</span>
+              <h2 className="text-xl font-black tracking-tight">Tendencia de ingresos</h2>
             </div>
-            <div className="flex items-center gap-3.5">
+            <div className="flex items-center gap-4">
               <div className="flex flex-col items-end">
-                <span className="text-[10px]" style={{ color: '#666' }}>Pico</span>
-                <span className="text-base font-bold" style={{ color: '#88D66C' }}>
+                <span className="text-[10px] font-bold text-tx-mut uppercase tracking-wider">Pico de Ventas</span>
+                <span className="text-xl font-black tabular-nums" style={{ color: 'var(--brand)' }}>
                   {peak ? fmtMoney(peak.revenue) : '—'}
                 </span>
               </div>
               {peak && (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-                  style={{ background: '#88D66C26', border: '1px solid #88D66C40' }}>
-                  <ArrowUpRight size={11} style={{ color: '#88D66C' }} />
-                  <span className="text-[10px] font-bold" style={{ color: '#88D66C' }}>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border"
+                  style={{ background: 'var(--brand-soft)', border: '1px solid var(--brand-glow)', color: 'var(--brand)' }}>
+                  <ArrowUpRight size={14} />
+                  <span className="text-[11px] font-black">
                     {dayLabel(peak.date)}
                   </span>
                 </div>
@@ -190,28 +189,30 @@ export default function ReportesPage() {
           </div>
 
           {/* Bars */}
-          <div className="flex-1 flex items-end gap-2 pt-3 min-h-[280px]">
+          <div className="flex-1 flex items-end gap-3 pt-6 min-h-[300px]">
             {byDay.length === 0 && !loading && (
-              <div className="w-full text-center text-xs" style={{ color: '#666' }}>
-                Sin datos en este período.
+              <div className="w-full text-center text-sm text-tx-mut italic opacity-60">
+                Sin datos disponibles en este período.
               </div>
             )}
             {byDay.map((d, i) => {
               const h = (d.revenue / maxRev) * 100;
               const isPeak = i === peakIdx;
               return (
-                <div key={d.date} className="flex-1 h-full flex flex-col items-center gap-1.5 justify-end group">
-                  <span className="text-[9px] font-bold tabular-nums opacity-0 group-hover:opacity-100 transition"
-                    style={{ color: isPeak ? '#88D66C' : '#FFB84D' }}>
-                    {fmtMoney(d.revenue).replace('$', '')}
-                  </span>
-                  <div className="w-full rounded-t-md transition-all"
-                    style={{
-                      height: `${Math.max(h, 2)}%`,
-                      background: isPeak ? '#88D66C' : '#FF8400',
-                      boxShadow: isPeak ? '0 0 16px #88D66C50' : 'none',
-                    }} />
-                  <span className="text-[9px]" style={{ color: '#666' }}>
+                <div key={d.date} className="flex-1 h-full flex flex-col items-center gap-2 justify-end group">
+                  <div className="relative w-full flex flex-col items-center group">
+                    <span className="absolute -top-7 text-[10px] font-black tabular-nums opacity-0 group-hover:opacity-100 transition-all transform -translate-y-1 group-hover:translate-y-0"
+                      style={{ color: isPeak ? 'var(--brand)' : 'var(--text-secondary)' }}>
+                      {fmtMoney(d.revenue).replace('$', '')}
+                    </span>
+                    <div className="w-full rounded-t-xl transition-all duration-500 ease-out shadow-sm group-hover:shadow-lg"
+                      style={{
+                        height: `${Math.max(h, 4)}%`,
+                        background: isPeak ? 'var(--brand)' : 'var(--surface-3)',
+                        opacity: isPeak ? 1 : 0.8,
+                      }} />
+                  </div>
+                  <span className="text-[10px] font-bold text-tx-mut uppercase tracking-tighter">
                     {dayLabel(d.date).split(' ')[1]}
                   </span>
                 </div>
@@ -221,44 +222,42 @@ export default function ReportesPage() {
         </div>
 
         {/* Top sellers */}
-        <aside className="rounded-2xl flex flex-col overflow-hidden"
-          style={{ background: '#1A1A1A', border: '1px solid #2E2E2E' }}>
-          <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <aside className="rounded-2xl flex flex-col overflow-hidden bg-surface-1 border border-border shadow-sm">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-border bg-surface-2/50">
             <div className="flex flex-col">
-              <span className="text-[10px] font-bold tracking-[0.15em]" style={{ color: '#666' }}>RANKING</span>
-              <h3 className="text-sm font-bold">Top productos</h3>
+              <span className="text-[10px] font-black tracking-widest text-tx-mut uppercase">RANKING</span>
+              <h3 className="text-base font-black tracking-tight">Top Productos</h3>
             </div>
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold"
-              style={{ background: 'rgba(255,255,255,0.08)', color: '#B8B9B6' }}>
-              {period === '7D' ? '7 días' : period === '30D' ? '30 días' : 'Año'}
+            <span className="inline-flex items-center px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest bg-surface-3 text-tx-sec">
+              {period === '7D' ? '7 Días' : period === '30D' ? '30 Días' : 'Año'}
             </span>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-2">
+          <div className="flex-1 overflow-y-auto px-5 py-4 divide-y divide-border/30 scrollbar-hide">
             {topItems.length === 0 && !loading && (
-              <p className="text-xs text-center py-8" style={{ color: '#666' }}>
-                Aún no hay ventas registradas.
-              </p>
+              <div className="flex flex-col items-center justify-center py-16 opacity-40">
+                 <ShoppingCart size={32} className="mb-3" />
+                 <p className="text-xs font-bold">Sin ventas aún</p>
+              </div>
             )}
             {topItems.map((it, idx) => {
-              const colors = ['#FF8400', '#88D66C', '#FFB84D', '#FFFFFF', '#FFFFFF', '#FFFFFF'];
               return (
-                <div key={it.name + idx} className="flex items-center gap-3 px-2 py-2.5 rounded-lg hover:bg-white/5 transition">
-                  <div className="w-7 h-7 rounded-md flex items-center justify-center text-[11px] font-bold"
+                <div key={it.name + idx} className="flex items-center gap-4 py-4 px-2 hover:bg-surface-hover rounded-xl transition-all group">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black shadow-sm transition-transform group-hover:scale-110"
                     style={{
-                      background: idx < 3 ? `${colors[idx]}20` : 'rgba(255,255,255,0.04)',
-                      color: idx < 3 ? colors[idx] : '#B8B9B6',
-                      border: `1px solid ${idx < 3 ? colors[idx] + '40' : 'rgba(255,255,255,0.08)'}`,
+                      background: idx < 3 ? 'var(--brand-soft)' : 'var(--surface-2)',
+                      color: idx < 3 ? 'var(--brand)' : 'var(--text-muted)',
+                      border: `1px solid ${idx < 3 ? 'var(--brand-glow)' : 'var(--border)'}`,
                     }}>
-                    {String(idx + 1).padStart(2, '0')}
+                    {idx + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold truncate">{it.name}</p>
-                    <p className="text-[10px]" style={{ color: '#B8B9B6' }}>
-                      {fmtCount(it.quantity)} unidades
+                    <p className="text-sm font-black text-tx-pri truncate">{it.name}</p>
+                    <p className="text-[10px] font-bold text-tx-mut uppercase tracking-widest">
+                      {fmtCount(it.quantity)} Vendidos
                     </p>
                   </div>
-                  <span className="text-xs font-bold tabular-nums" style={{ color: '#88D66C' }}>
+                  <span className="text-sm font-black tabular-nums" style={{ color: 'var(--success)' }}>
                     {fmtMoney(it.total)}
                   </span>
                 </div>
@@ -266,23 +265,22 @@ export default function ReportesPage() {
             })}
           </div>
 
-          <div className="flex items-center justify-between px-5 py-3.5"
-            style={{ background: '#0C0C0E', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="px-6 py-5 bg-surface-2/50 border-t border-border flex items-center justify-between">
             <div className="flex flex-col">
-              <span className="text-[10px]" style={{ color: '#666' }}>Total productos</span>
-              <span className="text-xs font-bold">{topItems.length}</span>
+              <span className="text-[9px] font-black text-tx-mut uppercase tracking-widest">Total SKU</span>
+              <span className="text-sm font-black">{topItems.length}</span>
             </div>
-            <button className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-black"
-              style={{ background: '#FF8400' }}>
-              Ver todo →
+            <button className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-md"
+              style={{ background: 'var(--brand)', color: 'var(--brand-fg)' }}>
+              Ver Todos →
             </button>
           </div>
         </aside>
       </section>
 
       {error && (
-        <div className="mx-8 mb-8 rounded-xl p-4 text-xs"
-          style={{ background: '#FF5C3315', border: '1px solid #FF5C3340', color: '#FF5C33' }}>
+        <div className="mx-8 mb-8 rounded-2xl p-4 text-xs font-bold animate-in zoom-in-95 duration-200"
+          style={{ background: 'var(--danger-soft)', border: '1px solid var(--danger)', color: 'var(--danger)' }}>
           {error}
         </div>
       )}
@@ -290,34 +288,34 @@ export default function ReportesPage() {
   );
 }
 
-function KPICard({ icon, label, value, delta, inverted = false, loading }:
-  { icon: React.ReactNode; label: string; value: string; delta: number; inverted?: boolean; loading?: boolean }) {
+function KPICard({ icon, label, value, delta, inverted = false, loading, themeColor }:
+  { icon: React.ReactNode; label: string; value: string; delta: number; inverted?: boolean; loading?: boolean; themeColor: string }) {
   const positive = inverted ? delta < 0 : delta > 0;
-  const color = positive ? '#88D66C' : delta === 0 ? '#666' : '#FF5C33';
+  const color = positive ? 'var(--success)' : delta === 0 ? 'var(--text-muted)' : 'var(--danger)';
   return (
-    <div className="rounded-2xl p-5 flex flex-col gap-3.5"
-      style={{ background: '#1A1A1A', border: '1px solid #262626' }}>
+    <div className="rounded-2xl p-6 flex flex-col gap-4 bg-surface-1 border border-border shadow-sm hover:shadow-md transition-all group">
       <div className="flex items-center justify-between">
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center"
-          style={{ background: 'rgba(255,255,255,0.04)' }}>
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 shadow-sm"
+          style={{ background: `${themeColor}15`, color: themeColor }}>
           {icon}
         </div>
         {!loading && (
-          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
-            style={{ background: `${color}20`, color }}>
-            {positive ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black tabular-nums transition-all"
+            style={{ background: `${color}15`, color }}>
+            {positive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
             {Math.abs(delta).toFixed(1)}%
           </div>
         )}
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-[10px] font-bold tracking-wider" style={{ color: '#666' }}>
-          {label.toUpperCase()}
+        <span className="text-[10px] font-black tracking-widest text-tx-mut uppercase">
+          {label}
         </span>
-        <span className="text-2xl font-bold tabular-nums">
+        <span className="text-2xl font-black tabular-nums tracking-tight text-tx-pri">
           {loading ? '—' : value}
         </span>
       </div>
     </div>
   );
 }
+

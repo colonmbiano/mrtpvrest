@@ -2,8 +2,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Search, Menu, Receipt, ShoppingCart, UtensilsCrossed } from "lucide-react";
 import ConfigMenu from "@/components/pos/ConfigMenu";
-import OrderTypeSelector from "@/components/pos/OrderTypeSelector";
-import type { ExtendedOrderType } from "@/components/pos/OrderTypeSelector";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
 import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
@@ -13,7 +11,11 @@ import { useTicketStore } from "@/store/ticketStore";
 import api from "@/lib/api";
 
 import SidebarTicket from "@/components/pos/SidebarTicket";
+import MainSidebar from "@/components/pos/MainSidebar";
+import ShiftModal from "@/components/admin/ShiftModal";
 import { useThemeStore } from "@/store/themeStore";
+import NotificationsPanel from "@/components/pos/NotificationsPanel";
+import { useNotifications, useNotifStore } from "@/hooks/useNotifications";
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
   DINE_IN: "MESA",
@@ -41,9 +43,16 @@ function timeAgo(iso: string): string {
 
 export default function CashierLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
+  const [showNotifs, setShowNotifs] = useState(false);
   const [mobileView, setMobileView] = useState<"menu" | "ticket">("menu");
+  const bellRef = useRef<HTMLButtonElement>(null);
+
+  // Sistema de notificaciones en tiempo real vía Socket.io
+  useNotifications();
+  const unreadCount = useNotifStore((s) => s.unreadCount);
 
   const { palette, mode, setPalette, toggleMode } = useThemeStore();
   const activeTicket = useTicketStore((s) => s.getActiveTicket());
@@ -52,8 +61,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [openOrders, setOpenOrders] = useState<any[]>([]);
   const [payOrder, setPayOrder] = useState<any | null>(null);
   const [shiftOpen, setShiftOpen] = useState<boolean | null>(null);
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const prevLockedRef = useRef<boolean | null>(null);
+  const [showShift, setShowShift] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const {
     isLocked,
@@ -74,11 +86,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   }, []);
 
   useEffect(() => {
-    if (isLocked) return;
+    if (!mounted || isLocked) return;
     fetchOpenOrders();
     const id = setInterval(fetchOpenOrders, 30000);
     return () => clearInterval(id);
-  }, [isLocked, fetchOpenOrders]);
+  }, [mounted, isLocked, fetchOpenOrders]);
 
   const fetchShift = useCallback(async () => {
     try {
@@ -90,11 +102,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   }, []);
 
   useEffect(() => {
-    if (isLocked) return;
+    if (!mounted || isLocked) return;
     fetchShift();
     const id = setInterval(fetchShift, 60000);
     return () => clearInterval(id);
-  }, [isLocked, fetchShift]);
+  }, [mounted, isLocked, fetchShift]);
 
   const handleConfirmDrawerPayment = async (method: string) => {
     if (!payOrder) return;
@@ -117,22 +129,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     }
   };
 
-  useEffect(() => {
-    if (prevLockedRef.current === true && !isLocked) {
-      setShowStartPicker(true);
-    }
-    prevLockedRef.current = isLocked;
-  }, [isLocked]);
-
-  const handlePickType = (type: ExtendedOrderType) => {
-    useTicketStore.getState().updateTicket({ type: type as any });
-    setShowStartPicker(false);
-  };
-
-  const handlePickOpenTickets = () => {
-    setShowStartPicker(false);
-    setShowOrders(true);
-  };
+  // Tras desbloquear, /pos/order-type ya es la pantalla canónica de elección
+  // de tipo. Reabrir el modal aquí causaba un loop infinito al hidratarse
+  // Zustand (B3). Mantenemos solo el botón "Tickets abiertos" del drawer.
 
   useEffect(() => {
     if (showOrders) fetchOpenOrders();
@@ -152,7 +151,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   // VALIDACIÓN DE ROL
   useEffect(() => {
-    if (currentEmployee) {
+    if (mounted && currentEmployee) {
       const allowedRoles = ["CASHIER", "OWNER", "ADMIN", "MANAGER"];
       if (!allowedRoles.includes(currentEmployee.role)) {
         console.warn(
@@ -161,42 +160,20 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         router.replace("/");
       }
     }
-  }, [currentEmployee, router]);
+  }, [mounted, currentEmployee, router]);
+
+  if (!mounted) return <div className="h-screen w-full bg-surf-0" />;
 
   return (
     <div className="flex h-[100dvh] w-full bg-surf-0 overflow-hidden font-sans text-tx-pri">
       {/* SIDE RAIL */}
-      <aside className="hidden lg:flex w-20 bg-surface-1 border-r border-border flex-col items-center py-6 gap-8 shrink-0 relative z-20">
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl text-brand-fg shadow-[0_0_15px_rgba(255,132,0,0.3)] transition-all hover:scale-105" style={{ background: "var(--brand)" }}>
-          M
-        </div>
-
-        <button
-          onClick={() => setShowMenu(true)}
-          className="w-12 h-12 flex items-center justify-center rounded-2xl text-tx-mut hover:text-tx-pri hover:bg-surface-2 transition-all active:scale-95"
-        >
-          <Menu size={24} />
-        </button>
-
-        <button
-          onClick={() => setShowOrders(true)}
-          className="w-12 h-12 flex items-center justify-center rounded-2xl text-tx-mut hover:text-tx-pri hover:bg-surface-2 transition-all relative active:scale-95"
-        >
-          <Receipt size={24} />
-          {openOrders.length > 0 && (
-            <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full shadow-[0_0_8px_var(--brand)]" style={{ background: "var(--brand)" }} />
-          )}
-        </button>
-
-        <div className="flex-1" />
-
-        <button
-          onClick={() => setShowMenu(true)}
-          className="w-12 h-12 flex items-center justify-center rounded-2xl text-tx-mut hover:text-tx-pri hover:bg-surface-2 transition-all active:scale-95"
-        >
-          <UtensilsCrossed size={24} />
-        </button>
-      </aside>
+      <MainSidebar 
+        onOpenMenu={() => setShowMenu(true)} 
+        onOpenOrders={() => setShowOrders(true)}
+        onOpenNotifs={() => setShowNotifs((v) => !v)}
+        hasOpenOrders={openOrders.length > 0}
+        unreadNotifs={unreadCount}
+      />
 
       <ConfigMenu
         isOpen={showMenu}
@@ -216,14 +193,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         onConfirmPayment={handleSelectOrder}
       />
 
-      {showStartPicker && (
-        <OrderTypeSelector 
-          onSelect={handlePickType} 
-          openOrdersCount={openOrders.length}
-          onOpenTickets={handlePickOpenTickets}
-          onClose={() => setShowStartPicker(false)}
-        />
-      )}
+      <NotificationsPanel
+        isOpen={showNotifs}
+        onClose={() => setShowNotifs(false)}
+      />
 
       {payOrder && (
         <PaymentModal
@@ -265,13 +238,16 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           <div className="flex-1 md:hidden" />
 
           <div className="flex items-center gap-4 shrink-0">
-            <div className="hidden lg:flex flex-col items-end">
+            <div 
+              className={`hidden lg:flex flex-col items-end cursor-pointer hover:opacity-80 transition-all`}
+              onClick={() => !shiftOpen && setShowShift(true)}
+            >
               <span className="text-sm font-bold tracking-tight text-tx-pri">
                 {currentEmployee?.name || "Sin sesión"}
               </span>
               <span
                 className={`text-[10px] font-black uppercase tracking-widest ${
-                  shiftOpen === false ? "text-danger" : ""
+                  shiftOpen === false ? "text-danger underline decoration-dotted" : ""
                 }`}
                 style={{ color: shiftOpen !== false ? "var(--brand)" : undefined }}
               >
@@ -292,8 +268,18 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       </div>
 
       <div className={`${mobileView === "ticket" ? "flex" : "hidden"} lg:flex w-full lg:w-auto min-h-0 relative z-20`}>
-        <SidebarTicket />
+        <SidebarTicket onOpenShift={() => setShowShift(true)} isShiftOpen={!!shiftOpen} />
       </div>
+
+      {showShift && currentEmployee && (
+        <ShiftModal 
+          employee={currentEmployee} 
+          onClose={() => {
+            setShowShift(false);
+            fetchShift();
+          }} 
+        />
+      )}
 
       {/* MOBILE FAB: TOGGLE MENU/TICKET */}
       <button

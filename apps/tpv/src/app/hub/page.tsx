@@ -61,12 +61,28 @@ export default function HubPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const selectWorkspace = (w: Workspace) => {
+  const selectWorkspace = async (w: Workspace) => {
     localStorage.setItem('activeWorkspaceId', w.id);
     localStorage.setItem('activeRestaurantId', w.restaurantId);
     localStorage.setItem('activeLocationId', w.id);
     localStorage.setItem('activeWorkspaceName', `${w.restaurantName} · ${w.name}`);
-    router.replace('/pos/order-type');
+    
+    try {
+      // Verificar si hay un turno abierto en esta sucursal
+      const { data } = await api.get('/api/shifts/active');
+      const isShiftOpen = Boolean(data?.isOpen ?? data?.id);
+      
+      if (isShiftOpen) {
+        router.replace('/pos/order-type');
+      } else {
+        // Si no hay turno abierto, redirigir a la pantalla de apertura de caja
+        router.replace('/pos/shift/open');
+      }
+    } catch (err) {
+      console.error('Error verificando turno:', err);
+      // Por seguridad, si falla el check, mandamos a apertura
+      router.replace('/pos/shift/open');
+    }
   };
 
   const handleLogout = () => {

@@ -48,7 +48,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
       />
       
       {/* DRAWER */}
-      <aside className="relative w-full max-w-[440px] h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 ease-out overflow-hidden" style={{ background: "#0C0C0E" }}>
+      <aside className="relative w-full max-w-[440px] h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 ease-out overflow-hidden" style={{ background: "var(--surface-1)" }}>
         {/* Halo Glows for Drawer */}
         <div 
           className="absolute pointer-events-none"

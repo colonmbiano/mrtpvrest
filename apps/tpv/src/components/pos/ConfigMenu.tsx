@@ -49,121 +49,110 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
 
   const roleLabel = employee?.role ? ROLE_LABEL[employee.role] : "Sin sesión";
 
+  // Temas Warm Tech actualizados
   const themes = [
-    { id: "green",  label: "Esmeralda", color: "#10b981" },
-    { id: "purple", label: "Índigo",    color: "#6366f1" },
-    { id: "orange", label: "Ámbar",     color: "#f97316" },
+    { id: "amber",  label: "Miel",   color: "#ffb84d" },
+    { id: "purple", label: "Cian",   color: "#3b82f6" },
+    { id: "green",  label: "Lima",   color: "#10b981" },
   ];
 
   return (
     <div className="fixed inset-0 z-[120] flex font-sans">
       {/* OVERLAY */}
       <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300" 
+        className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-300" 
         onClick={onClose} 
       />
       
-      {/* DRAWER CONTENT */}
-      <div className="relative w-full max-w-[400px] h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 ease-out overflow-hidden" style={{ background: "#0C0C0E" }}>
-        {/* Halo Glows */}
-        <div 
-          className="absolute pointer-events-none"
-          style={{
-            width: 600, height: 600, top: -100, left: -200,
-            background: "radial-gradient(circle, #FF840015 0%, #FF840000 70%)"
-          }}
-        />
-        <div 
-          className="absolute pointer-events-none"
-          style={{
-            width: 600, height: 600, bottom: -100, right: -200,
-            background: "radial-gradient(circle, #88D66C10 0%, #88D66C00 70%)"
-          }}
-        />
+      {/* DRAWER CONTENT - WARM TECH */}
+      <div className="relative w-full max-w-[400px] h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 ease-out overflow-hidden bg-[#0a0a0c] border-r border-white/5">
+        {/* Glows */}
+        <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
+          <div className="absolute -top-40 -left-40 w-80 h-80 bg-amber-500/5 blur-[80px] rounded-full" />
+          <div className="absolute -bottom-40 -right-40 w-80 h-80 bg-amber-500/5 blur-[80px] rounded-full" />
+        </div>
 
         {/* HEADER */}
-        <div className="relative z-10 p-6 border-b border-border flex justify-between items-center bg-surf-1/50 backdrop-blur-md">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black tracking-widest uppercase text-tx-mut">Configuración</span>
-            <span className="text-xl font-bold tracking-tight text-tx-pri">Menú Principal</span>
+        <div className="relative z-10 p-8 border-b border-white/5 flex justify-between items-center bg-[#0a0a0c]/80 backdrop-blur-xl">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500">Configuración</span>
+            <span className="text-2xl font-black tracking-tight text-white">Centro de Control</span>
           </div>
-          <button onClick={onClose} className="p-2 w-10 h-10 flex items-center justify-center rounded-full bg-surf-2 text-tx-mut hover:text-tx-pri hover:bg-surf-3 transition-colors">
+          <button 
+            onClick={onClose} 
+            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-[#121316] text-zinc-400 active:text-white transition-all active:scale-90 border border-white/5"
+          >
             <X size={20} />
           </button>
         </div>
 
         {/* CONTENT */}
-        <div className="relative z-10 flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">
+        <div className="relative z-10 flex-1 overflow-y-auto p-8 space-y-10 scrollbar-hide">
           {/* SESIÓN */}
-          <section className="space-y-4">
-            <span className="text-[10px] font-bold text-tx-mut tracking-widest uppercase ml-1">Sesión Actual</span>
-            <div className="flex items-center gap-4 bg-surf-2/50 backdrop-blur-sm p-4 rounded-2xl border border-border transition-all hover:border-brand/30">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg" style={{ background: "var(--brand-soft)", color: "var(--brand)" }}>
+          <section className="space-y-5">
+            <span className="text-[11px] font-black text-zinc-500 tracking-[0.2em] uppercase ml-1">Sesión Activa</span>
+            <div className="flex items-center gap-5 bg-[#121316] p-5 rounded-[1.5rem] border border-white/5 shadow-xl">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl bg-amber-500 text-[#0a0a0c] shadow-[0_0_15px_rgba(255,184,77,0.2)]">
                 {initials}
               </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-bold text-tx-pri tracking-wide">{employee?.name ?? "Sin sesión"}</span>
-                <span className="text-[10px] uppercase font-bold tracking-widest mt-0.5" style={{ color: "var(--brand)" }}>{roleLabel}</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-base font-black text-white tracking-tight">{employee?.name ?? "Invitado"}</span>
+                <span className="text-[10px] uppercase font-black tracking-[0.15em] text-amber-500/80">{roleLabel}</span>
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-2">
-              <Button variant="soft" className="justify-start gap-3 h-12 rounded-xl bg-surf-2 border border-border hover:bg-surf-3">
-                <User size={18} /> Mi cuenta
-              </Button>
-              <Button variant="soft" className="justify-start gap-3 h-12 rounded-xl bg-surf-2 border border-border hover:bg-surf-3">
-                <Clock size={18} /> Ver reporte de turno
-              </Button>
+            <div className="grid grid-cols-1 gap-3">
+              <button className="flex items-center gap-4 h-14 px-5 rounded-2xl bg-[#121316] border border-white/5 text-zinc-300 font-bold text-sm active:scale-95 transition-all active:bg-[#1a1b1f]">
+                <User size={18} className="text-amber-500" /> Mi perfil y cuenta
+              </button>
+              <button className="flex items-center gap-4 h-14 px-5 rounded-2xl bg-[#121316] border border-white/5 text-zinc-300 font-bold text-sm active:scale-95 transition-all active:bg-[#1a1b1f]">
+                <Clock size={18} className="text-amber-500" /> Reporte de turno actual
+              </button>
             </div>
           </section>
 
           {/* OPERACIONES */}
-          <section className="space-y-4">
-            <span className="text-[10px] font-bold text-tx-mut tracking-widest uppercase ml-1">Operaciones</span>
-            <div className="grid grid-cols-1 gap-2">
+          <section className="space-y-5">
+            <span className="text-[11px] font-black text-zinc-500 tracking-[0.2em] uppercase ml-1">Atajos Operativos</span>
+            <div className="grid grid-cols-1 gap-3">
               <Link href="/kds" onClick={onClose} className="block">
-                <Button variant="soft" fullWidth className="justify-start gap-3 h-12 rounded-xl bg-surf-2 border border-border hover:bg-surf-3">
-                  <Monitor size={18} /> Monitoreo KDS
-                </Button>
+                <button className="w-full flex items-center gap-4 h-14 px-5 rounded-2xl bg-[#121316] border border-white/5 text-zinc-300 font-bold text-sm active:scale-95 transition-all active:bg-[#1a1b1f]">
+                  <Monitor size={18} className="text-zinc-500" /> Monitoreo de Cocina (KDS)
+                </button>
               </Link>
               <Link href="/meseros" onClick={onClose} className="block">
-                <Button variant="soft" fullWidth className="justify-start gap-3 h-12 rounded-xl bg-surf-2 border border-border hover:bg-surf-3">
-                  <LayoutGrid size={18} /> Salones y Mesas
-                </Button>
+                <button className="w-full flex items-center gap-4 h-14 px-5 rounded-2xl bg-[#121316] border border-white/5 text-zinc-300 font-bold text-sm active:scale-95 transition-all active:bg-[#1a1b1f]">
+                  <LayoutGrid size={18} className="text-zinc-500" /> Gestión de Salones
+                </button>
               </Link>
             </div>
           </section>
 
           {/* ADMIN */}
           {(employee?.role === "ADMIN" || employee?.role === "OWNER") && (
-            <section className="space-y-4">
-              <span className="text-[10px] font-bold tracking-widest uppercase ml-1" style={{ color: "var(--brand)" }}>Administración</span>
-              <div className="grid grid-cols-1 gap-2">
+            <section className="space-y-5">
+              <span className="text-[11px] font-black tracking-[0.2em] uppercase ml-1 text-amber-500">Panel Administrativo</span>
+              <div className="grid grid-cols-1 gap-3">
                 <Link href="/admin/menu" onClick={onClose} className="block">
-                  <Button variant="soft" fullWidth className="justify-start gap-3 h-12 rounded-xl bg-surf-2 hover:bg-surf-3 border-y border-r border-border" style={{ borderLeft: "3px solid var(--brand)" }}>
-                    <Settings size={18} style={{ color: "var(--brand)" }} /> Editor de Menú
-                  </Button>
+                  <button className="w-full flex items-center gap-4 h-14 px-5 rounded-2xl bg-[#121316] border border-white/5 border-l-4 border-l-amber-500 text-zinc-200 font-bold text-sm active:scale-95 transition-all active:bg-[#1a1b1f]">
+                    <Settings size={18} className="text-amber-500" /> Editor de Menú y Precios
+                  </button>
                 </Link>
                 <Link href="/admin/impresoras" onClick={onClose} className="block">
-                  <Button variant="soft" fullWidth className="justify-start gap-3 h-12 rounded-xl bg-surf-2 hover:bg-surf-3 border-y border-r border-border" style={{ borderLeft: "3px solid var(--brand)" }}>
-                    <Printer size={18} style={{ color: "var(--brand)" }} /> Gestión de Impresoras
-                  </Button>
-                </Link>
-                <Link href="/admin/tickets" onClick={onClose} className="block">
-                  <Button variant="soft" fullWidth className="justify-start gap-3 h-12 rounded-xl bg-surf-2 hover:bg-surf-3 border-y border-r border-border" style={{ borderLeft: "3px solid var(--brand)" }}>
-                    <Monitor size={18} style={{ color: "var(--brand)" }} /> Configurador de Tickets
-                  </Button>
+                  <button className="w-full flex items-center gap-4 h-14 px-5 rounded-2xl bg-[#121316] border border-white/5 border-l-4 border-l-amber-500 text-zinc-200 font-bold text-sm active:scale-95 transition-all active:bg-[#1a1b1f]">
+                    <Printer size={18} className="text-amber-500" /> Red e Impresoras
+                  </button>
                 </Link>
               </div>
             </section>
           )}
 
           {/* APARIENCIA */}
-          <section className="space-y-4">
-            <span className="text-[10px] font-bold text-tx-mut tracking-widest uppercase ml-1">Apariencia</span>
-            <div className="space-y-4">
-              <div className="flex flex-col gap-3">
-                <span className="text-xs font-bold text-tx-sec tracking-wide ml-1">Color de acento</span>
-                <div className="flex gap-2">
+          <section className="space-y-6">
+            <span className="text-[11px] font-black text-zinc-500 tracking-[0.2em] uppercase ml-1">Personalización</span>
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4">
+                <span className="text-[11px] font-bold text-zinc-400 tracking-wide ml-1">Paleta de Acento</span>
+                <div className="flex gap-3">
                   {themes.map((t) => {
                     const isActive = currentTheme === t.id;
                     return (
@@ -171,11 +160,11 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
                         key={t.id}
                         onClick={() => onThemeChange(t.id)}
                         className={`
-                          flex-1 flex flex-col items-center justify-center gap-2 py-3 rounded-xl border text-[11px] font-bold transition-all
-                          ${isActive ? "bg-surf-3 border-brand text-tx-pri shadow-[0_0_12px_var(--brand-soft)]" : "bg-surf-2 border-border text-tx-sec hover:bg-surf-3 hover:border-brand/30"}
+                          flex-1 flex flex-col items-center justify-center gap-3 h-20 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95
+                          ${isActive ? "bg-[#1a1b1f] border-amber-500 text-white shadow-[0_0_15px_rgba(255,184,77,0.2)]" : "bg-[#121316] border-white/5 text-zinc-600"}
                         `}
                       >
-                        <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: t.color }} />
+                        <div className="w-5 h-5 rounded-full shadow-lg" style={{ backgroundColor: t.color }} />
                         {t.label}
                       </button>
                     );
@@ -183,17 +172,19 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between bg-surf-2/50 backdrop-blur-sm p-4 rounded-xl border border-border">
-                <div className="flex items-center gap-3">
-                  <Palette size={18} className="text-tx-mut" />
-                  <span className="text-sm font-bold text-tx-pri tracking-wide">Modo Oscuro</span>
+              <div className="flex items-center justify-between bg-[#121316] p-5 rounded-2xl border border-white/5">
+                <div className="flex items-center gap-4">
+                  <Palette size={20} className="text-zinc-500" />
+                  <span className="text-sm font-bold text-zinc-200">Interfaz Nocturna</span>
                 </div>
                 <button 
                   onClick={onToggleMode}
-                  className={`w-12 h-6 rounded-full relative transition-colors duration-200`}
-                  style={{ background: isDark ? "var(--brand)" : "var(--border)" }}
+                  className={`w-14 h-7 rounded-full relative transition-all duration-300 shadow-inner`}
+                  style={{ background: isDark ? "#ffb84d" : "#1a1b1f" }}
                 >
-                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-200 shadow-sm ${isDark ? "left-7" : "left-1"}`} />
+                  <div 
+                    className={`absolute top-1 w-5 h-5 rounded-full transition-all duration-300 shadow-lg ${isDark ? "left-8 bg-[#0a0a0c]" : "left-1 bg-zinc-600"}`} 
+                  />
                 </button>
               </div>
             </div>
@@ -201,17 +192,15 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
         </div>
 
         {/* FOOTER */}
-        <div className="relative z-10 p-6 border-t border-border bg-surf-1">
-          <Button 
-            variant="danger" 
-            fullWidth 
-            className="gap-2 h-14 uppercase tracking-widest font-bold text-xs rounded-2xl bg-danger/10 text-danger border border-danger/20 hover:bg-danger hover:text-white transition-all"
+        <div className="relative z-10 p-8 border-t border-white/5 bg-[#0a0a0c]">
+          <button 
+            className="w-full flex items-center justify-center gap-3 h-16 rounded-[1.25rem] bg-red-500/10 text-red-500 border border-red-500/20 font-black uppercase tracking-[0.2em] text-xs transition-all active:scale-95 active:bg-red-500 active:text-white"
             onClick={onLogout}
           >
-            <LogOut size={18} /> Bloquear / Salir
-          </Button>
-          <div className="mt-5 text-center">
-            <span className="text-[10px] text-tx-dis font-black uppercase tracking-widest opacity-60">MRTPVREST v2.4.0</span>
+            <LogOut size={20} /> Bloquear Terminal
+          </button>
+          <div className="mt-8 text-center">
+            <span className="text-[10px] text-zinc-700 font-black uppercase tracking-[0.3em]">MRTPVREST · WARM TECH ENGINE</span>
           </div>
         </div>
       </div>
