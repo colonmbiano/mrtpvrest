@@ -1,20 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Power, X, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Power, X, Search, ShieldCheck } from "lucide-react";
 import api from "@/lib/api";
 
 const ROLES = ["OWNER", "ADMIN", "MANAGER", "CASHIER", "WAITER", "KITCHEN", "COOK", "DELIVERY"];
 
 const PERM_KEYS = [
-  { key: "canCharge", label: "Cobrar / cash drawer" },
-  { key: "canDiscount", label: "Aplicar descuentos" },
-  { key: "canModifyTickets", label: "Modificar tickets" },
-  { key: "canDeleteTickets", label: "Eliminar tickets" },
-  { key: "canConfigSystem", label: "Configurar sistema" },
-  { key: "canTakeDelivery", label: "Atender delivery" },
-  { key: "canTakeTakeout", label: "Atender para llevar" },
-  { key: "canManageShifts", label: "Gestionar turnos" },
+  { key: "canCharge", label: "Cobrar / Apertura Cajón" },
+  { key: "canDiscount", label: "Aplicar Descuentos" },
+  { key: "canModifyTickets", label: "Modificar Comandas" },
+  { key: "canDeleteTickets", label: "Eliminar Registros" },
+  { key: "canConfigSystem", label: "Configurar Sistema" },
+  { key: "canTakeDelivery", label: "Atender Domicilios" },
+  { key: "canTakeTakeout", label: "Atender Llevar" },
+  { key: "canManageShifts", label: "Gestión de Turnos" },
 ] as const;
 
 interface Employee {
@@ -33,15 +33,15 @@ interface Employee {
   canManageShifts: boolean;
 }
 
-const ROLE_BADGE: Record<string, { bg: string; fg: string }> = {
-  OWNER:    { bg: "rgba(255,132,0,0.18)",  fg: "#FF8400" },
-  ADMIN:    { bg: "rgba(255,132,0,0.18)",  fg: "#FF8400" },
-  MANAGER:  { bg: "rgba(168,139,250,0.2)", fg: "#A78BFA" },
-  CASHIER:  { bg: "rgba(96,165,250,0.2)",  fg: "#60A5FA" },
-  WAITER:   { bg: "rgba(136,214,108,0.2)", fg: "#88D66C" },
-  KITCHEN:  { bg: "rgba(255,184,77,0.2)",  fg: "#FFB84D" },
-  COOK:     { bg: "rgba(255,184,77,0.2)",  fg: "#FFB84D" },
-  DELIVERY: { bg: "rgba(34,211,238,0.2)",  fg: "#22D3EE" },
+const ROLE_STYLE: Record<string, { bg: string; text: string }> = {
+  OWNER:    { bg: "bg-amber-500/10", text: "text-amber-500" },
+  ADMIN:    { bg: "bg-amber-500/10", text: "text-amber-500" },
+  MANAGER:  { bg: "bg-blue-500/10",  text: "text-blue-400" },
+  CASHIER:  { bg: "bg-zinc-800",     text: "text-zinc-300" },
+  WAITER:   { bg: "bg-emerald-500/10", text: "text-emerald-400" },
+  KITCHEN:  { bg: "bg-orange-500/10", text: "text-orange-400" },
+  COOK:     { bg: "bg-orange-500/10", text: "text-orange-400" },
+  DELIVERY: { bg: "bg-cyan-500/10",   text: "text-cyan-400" },
 };
 
 export default function UsuariosAdmin() {
@@ -58,7 +58,7 @@ export default function UsuariosAdmin() {
       const { data } = await api.get("/api/employees");
       setEmployees(data);
     } catch (e: any) {
-      setError(e?.response?.data?.error || "No pudimos cargar los empleados");
+      setError(e?.response?.data?.error || "Error de conexión con el servidor");
     } finally {
       setLoading(false);
     }
@@ -72,7 +72,7 @@ export default function UsuariosAdmin() {
   );
 
   const handleDelete = async (emp: Employee) => {
-    if (!confirm(`¿Eliminar a ${emp.name}? Esta acción no se puede deshacer.`)) return;
+    if (!confirm(`¿Eliminar a ${emp.name}? Esta acción es permanente.`)) return;
     try {
       await api.delete(`/api/employees/${emp.id}`);
       refresh();
@@ -91,100 +91,107 @@ export default function UsuariosAdmin() {
   };
 
   return (
-    <div className="min-h-full p-8" style={{ background: "#0C0C0E", color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace" }}>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <p className="text-[10px] font-bold tracking-wider" style={{ color: "#666" }}>ADMINISTRACIÓN</p>
-          <h1 className="text-2xl font-bold">Usuarios</h1>
-          <p className="text-xs mt-1" style={{ color: "#B8B9B6" }}>
-            {employees.length} empleados · {employees.filter(e => e.isActive).length} activos
+    <div className="min-h-full p-6 sm:p-10 font-sans bg-[#0a0a0c]">
+      {/* Header WARM TECH */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-8 mb-12">
+        <div className="space-y-1.5">
+          <span className="eyebrow text-amber-500/80">Recursos Humanos</span>
+          <h1 className="text-4xl font-black text-white tracking-tight leading-none">Gestión de Personal</h1>
+          <p className="text-sm font-bold text-zinc-500">
+            {employees.length} usuarios registrados en la plataforma
           </p>
         </div>
         <button onClick={() => setCreating(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold text-black"
-          style={{ background: "#FF8400", boxShadow: "0 6px 14px rgba(255,132,0,0.3)" }}>
-          <Plus size={15} /> Nuevo empleado
+          className="h-14 px-8 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-[0.2em] text-xs flex items-center gap-3 transition-all active:scale-95 shadow-[0_10px_30px_rgba(255,184,77,0.25)]">
+          <Plus size={20} strokeWidth={3} /> Nuevo empleado
         </button>
       </div>
 
-      {/* Search */}
-      <div className="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-xl"
-        style={{ background: "#1A1A1A", border: "1px solid #27272A" }}>
-        <Search size={14} style={{ color: "#666" }} />
-        <input value={search} onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por nombre o rol…"
-          className="flex-1 bg-transparent text-xs outline-none placeholder:text-zinc-600" />
+      {/* Search - TOUCH OPTIMIZED */}
+      <div className="relative mb-10">
+        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-zinc-600" size={18} />
+        <input 
+          value={search} 
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Filtrar por nombre, cargo o ID…"
+          className="w-full h-16 bg-[#121316] border border-white/5 rounded-2xl pl-14 pr-6 text-white font-bold outline-none focus:border-amber-500/50 transition-all placeholder:text-zinc-700" 
+        />
       </div>
 
       {error && (
-        <div className="mb-4 rounded-xl p-3 text-xs"
-          style={{ background: "#FF5C3315", border: "1px solid #FF5C3340", color: "#FF5C33" }}>
-          {error}
+        <div className="mb-10 rounded-[1.25rem] p-5 text-sm font-black uppercase tracking-widest bg-red-500/10 border border-red-500/20 text-red-500 animate-in fade-in">
+          Error: {error}
         </div>
       )}
 
-      {/* Table */}
-      <div className="rounded-2xl overflow-hidden" style={{ background: "#1A1A1A", border: "1px solid #2E2E2E" }}>
-        <div className="grid grid-cols-[1fr_120px_120px_100px_140px] gap-3 px-5 py-3 text-[10px] font-bold tracking-wider"
-          style={{ color: "#666", borderBottom: "1px solid #27272A" }}>
-          <span>NOMBRE</span>
-          <span>ROL</span>
-          <span>TELÉFONO</span>
-          <span className="text-center">ESTADO</span>
-          <span className="text-right">ACCIONES</span>
+      {/* Employees Table - OBSIDIAN STYLE */}
+      <div className="rounded-[2.5rem] bg-[#121316] border border-white/5 shadow-2xl overflow-hidden">
+        <div className="grid grid-cols-[1fr_160px_160px_140px_160px] gap-6 px-10 py-6 text-[10px] font-black tracking-[0.3em] uppercase bg-black/20 text-zinc-600 border-b border-white/5">
+          <span>Identidad</span>
+          <span>Jerarquía</span>
+          <span>Contacto</span>
+          <span className="text-center">Estado</span>
+          <span className="text-right">Controles</span>
         </div>
 
         {loading ? (
-          <div className="px-5 py-12 text-center text-xs" style={{ color: "#666" }}>Cargando…</div>
+          <div className="px-10 py-24 text-center">
+             <div className="w-10 h-10 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mx-auto mb-4" />
+             <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Sincronizando base de datos...</span>
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="px-5 py-12 text-center text-xs" style={{ color: "#666" }}>
-            {search ? "Sin resultados" : "Aún no hay empleados"}
+          <div className="px-10 py-24 text-center opacity-40">
+            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-zinc-500 italic">
+              {search ? "No hay coincidencias para el filtro" : "Lista de personal vacía"}
+            </p>
           </div>
         ) : (
-          filtered.map(emp => {
-            const badge = ROLE_BADGE[emp.role] || ROLE_BADGE.WAITER;
-            return (
-              <div key={emp.id}
-                className="grid grid-cols-[1fr_120px_120px_100px_140px] gap-3 px-5 py-3 items-center text-sm hover:bg-white/5 transition"
-                style={{ borderBottom: "1px solid #1F1F23" }}>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs"
-                    style={{ background: badge.bg, color: badge.fg }}>
-                    {emp.name.charAt(0).toUpperCase()}
+          <div className="divide-y divide-white/5">
+            {filtered.map(emp => {
+              const style = ROLE_STYLE[emp.role] || ROLE_STYLE.WAITER;
+              return (
+                <div key={emp.id}
+                  className="grid grid-cols-[1fr_160px_160px_140px_160px] gap-6 px-10 py-6 items-center active:bg-white/[0.02] transition-colors group">
+                  <div className="flex items-center gap-5">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shadow-xl ${style.bg} ${style.text}`}>
+                      {emp.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex flex-col">
+                       <span className="font-black text-white tracking-tight">{emp.name}</span>
+                       <span className="text-[10px] text-zinc-600 font-bold uppercase">ID: {emp.id.slice(-6).toUpperCase()}</span>
+                    </div>
                   </div>
-                  <span className="font-bold truncate">{emp.name}</span>
+                  <div>
+                    <span className={`inline-flex items-center px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-white/5 ${style.bg} ${style.text}`}>
+                      {emp.role}
+                    </span>
+                  </div>
+                  <span className="text-[13px] font-black mono text-zinc-400">{emp.phone || "—"}</span>
+                  <div className="flex justify-center">
+                    <button onClick={() => handleToggle(emp)}
+                      className={`h-10 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-90 flex items-center gap-2 border ${
+                        emp.isActive 
+                          ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" 
+                          : "bg-zinc-800 text-zinc-500 border-white/5"
+                      }`}>
+                      <Power size={12} strokeWidth={3} />
+                      {emp.isActive ? "Activo" : "Baja"}
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-end gap-3">
+                    <button onClick={() => setEditing(emp)}
+                      className="w-12 h-12 rounded-xl flex items-center justify-center bg-white/5 text-zinc-500 active:text-amber-500 transition-all active:scale-90 border border-white/5">
+                      <Pencil size={18} />
+                    </button>
+                    <button onClick={() => handleDelete(emp)}
+                      className="w-12 h-12 rounded-xl flex items-center justify-center bg-red-500/5 text-zinc-700 active:text-red-500 transition-all active:scale-90 border border-red-500/10">
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </div>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold w-fit"
-                  style={{ background: badge.bg, color: badge.fg }}>
-                  {emp.role}
-                </span>
-                <span className="text-xs" style={{ color: "#B8B9B6" }}>{emp.phone || "—"}</span>
-                <button onClick={() => handleToggle(emp)}
-                  className="mx-auto inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold"
-                  style={{
-                    background: emp.isActive ? "rgba(136,214,108,0.18)" : "rgba(255,255,255,0.04)",
-                    color: emp.isActive ? "#88D66C" : "#666",
-                    border: `1px solid ${emp.isActive ? "rgba(136,214,108,0.4)" : "rgba(255,255,255,0.08)"}`,
-                  }}>
-                  <Power size={10} />
-                  {emp.isActive ? "Activo" : "Inactivo"}
-                </button>
-                <div className="flex items-center justify-end gap-1.5">
-                  <button onClick={() => setEditing(emp)}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/10 transition"
-                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <Pencil size={13} style={{ color: "#FFB84D" }} />
-                  </button>
-                  <button onClick={() => handleDelete(emp)}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/10 transition"
-                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,92,51,0.2)" }}>
-                    <Trash2 size={13} style={{ color: "#FF5C33" }} />
-                  </button>
-                </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -230,92 +237,89 @@ function EmployeeModal({ employee, onClose, onSaved }:
       if (isEdit) {
         await api.put(`/api/employees/${employee!.id}`, payload);
       } else {
-        if (!payload.pin) throw new Error("El PIN es requerido para nuevos empleados");
+        if (!payload.pin) throw new Error("PIN requerido");
         await api.post("/api/employees", payload);
       }
       onSaved();
     } catch (e: any) {
-      setErr(e?.response?.data?.error || e.message || "Error al guardar");
+      setErr(e?.response?.data?.error || e.message || "Error al procesar solicitud");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-300"
       onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl overflow-hidden"
-        style={{ background: "#131316", border: "1px solid #2E2E2E", color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace" }}>
-        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid #27272A" }}>
-          <h2 className="text-base font-bold">{isEdit ? "Editar empleado" : "Nuevo empleado"}</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/10">
-            <X size={14} />
+        className="w-full max-w-2xl bg-[#121316] rounded-[2.5rem] border border-white/5 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        
+        <div className="flex items-center justify-between p-10 border-b border-white/5 bg-black/20">
+          <div className="flex flex-col gap-1">
+             <span className="eyebrow text-amber-500">Expediente de Personal</span>
+             <h2 className="text-3xl font-black text-white tracking-tight">{isEdit ? "Editar Colaborador" : "Registrar Empleado"}</h2>
+          </div>
+          <button onClick={onClose} className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[#0a0a0c] text-zinc-500 active:text-white transition-all active:scale-90 border border-white/5">
+            <X size={24} />
           </button>
         </div>
 
-        <form onSubmit={submit} className="px-6 py-4 max-h-[70vh] overflow-y-auto flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Nombre">
+        <form onSubmit={submit} className="p-10 max-h-[70vh] overflow-y-auto flex flex-col gap-10 scrollbar-hide">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+            <Field label="Nombre del Colaborador">
               <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-[#0C0C0E] border border-[#27272A] text-sm outline-none focus:border-orange-500/60" />
+                placeholder="Nombre completo"
+                className="w-full h-14 px-6 rounded-2xl bg-[#0a0a0c] border border-white/5 text-white font-bold outline-none focus:border-amber-500/50 transition-all placeholder:text-zinc-700" />
             </Field>
-            <Field label="Rol">
+            <Field label="Cargo Operativo">
               <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-[#0C0C0E] border border-[#27272A] text-sm outline-none">
-                {ROLES.map(r => <option key={r} value={r} className="bg-[#131316]">{r}</option>)}
+                className="w-full h-14 px-6 rounded-2xl bg-[#0a0a0c] border border-white/5 text-white font-bold outline-none focus:border-amber-500/50 transition-all appearance-none cursor-pointer">
+                {ROLES.map(r => <option key={r} value={r} className="bg-[#121316]">{r}</option>)}
               </select>
             </Field>
-            <Field label="Teléfono (opcional)">
+            <Field label="Teléfono de Contacto">
               <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-[#0C0C0E] border border-[#27272A] text-sm outline-none" />
+                placeholder="+52 000 000 0000"
+                className="w-full h-14 px-6 rounded-2xl bg-[#0a0a0c] border border-white/5 text-white font-black mono outline-none focus:border-amber-500/50 transition-all placeholder:text-zinc-700" />
             </Field>
-            <Field label={isEdit ? "PIN nuevo (vacío = no cambia)" : "PIN (4-6 dígitos)"}>
+            <Field label={isEdit ? "Cambiar PIN de Acceso" : "PIN Inicial (4-6 dígitos)"}>
               <input type="password" inputMode="numeric" pattern="\d*" value={form.pin}
                 onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "") })}
-                placeholder={isEdit ? "Sin cambios" : "1234"} maxLength={6}
-                className="w-full px-3 py-2 rounded-lg bg-[#0C0C0E] border border-[#27272A] text-sm outline-none" />
+                placeholder={isEdit ? "••••••" : "Ej. 2580"} maxLength={6}
+                className="w-full h-14 px-6 rounded-2xl bg-[#0a0a0c] border border-white/5 text-white font-black mono text-lg outline-none focus:border-amber-500/50 transition-all placeholder:text-zinc-700" />
             </Field>
           </div>
 
           <div>
-            <p className="text-[10px] font-bold tracking-wider mb-2" style={{ color: "#666" }}>PERMISOS</p>
-            <div className="grid grid-cols-2 gap-1">
+            <div className="flex items-center gap-3 mb-6 ml-1">
+               <ShieldCheck size={18} className="text-amber-500" />
+               <p className="text-[11px] font-black uppercase tracking-[0.2em] text-zinc-500">Privilegios y Permisos de Sistema</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {PERM_KEYS.map(p => (
-                <label key={p.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer">
-                  <input type="checkbox" checked={(form as any)[p.key]}
+                <label key={p.key} className="group flex items-center gap-4 px-6 py-4 rounded-2xl bg-[#0a0a0c] border border-white/5 active:bg-white/[0.03] cursor-pointer transition-all active:scale-95">
+                  <input type="checkbox" className="w-5 h-5 accent-amber-500 rounded-lg" checked={(form as any)[p.key]}
                     onChange={(e) => setForm({ ...form, [p.key]: e.target.checked })} />
-                  <span className="text-xs">{p.label}</span>
+                  <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400 group-active:text-white">{p.label}</span>
                 </label>
               ))}
             </div>
           </div>
 
-          {isEdit && (
-            <label className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer">
-              <input type="checkbox" checked={form.isActive}
-                onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
-              <span className="text-xs">Empleado activo</span>
-            </label>
-          )}
-
           {err && (
-            <div className="rounded-lg p-2.5 text-xs"
-              style={{ background: "#FF5C3315", border: "1px solid #FF5C3340", color: "#FF5C33" }}>
+            <div className="rounded-2xl p-5 text-[10px] font-black uppercase tracking-widest bg-red-500/10 border border-red-500/20 text-red-500">
               {err}
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex gap-4 mt-4">
             <button type="button" onClick={onClose}
-              className="px-4 py-2 rounded-full text-xs font-bold"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#B8B9B6" }}>
-              Cancelar
+              className="flex-1 h-16 rounded-2xl bg-white/5 text-zinc-500 font-black uppercase tracking-[0.2em] text-[10px] active:scale-95 transition-all active:text-white">
+              Cerrar
             </button>
             <button type="submit" disabled={submitting}
-              className="px-5 py-2 rounded-full text-xs font-bold text-black disabled:opacity-50"
-              style={{ background: "#FF8400" }}>
-              {submitting ? "Guardando…" : (isEdit ? "Guardar cambios" : "Crear empleado")}
+              className="flex-[2] h-16 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-[0.2em] text-[10px] active:scale-95 transition-all shadow-xl disabled:opacity-20 shadow-amber-500/20">
+              {submitting ? "Procesando..." : (isEdit ? "Guardar Cambios" : "Dar de Alta Empleado")}
             </button>
           </div>
         </form>
@@ -326,8 +330,8 @@ function EmployeeModal({ employee, onClose, onSaved }:
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[10px] font-bold tracking-wider" style={{ color: "#666" }}>{label.toUpperCase()}</label>
+    <div className="flex flex-col gap-3">
+      <label className="text-[10px] font-black tracking-[0.2em] text-zinc-500 uppercase ml-1">{label}</label>
       {children}
     </div>
   );

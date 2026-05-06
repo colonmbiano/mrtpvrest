@@ -173,9 +173,9 @@ export default function TicketConfigPage() {
                 <span className="text-xs font-bold">LOGO</span>
               </div>
             )}
-            
+
             <p className="text-sm font-bold mb-4 whitespace-pre-wrap">{config?.headerText || "Encabezado"}</p>
-            
+
             {config?.showAddress && <p className="text-xs mb-1">Av. Principal 123, Ciudad</p>}
             {config?.showPhone && <p className="text-xs mb-4">Tel: (555) 123-4567</p>}
 

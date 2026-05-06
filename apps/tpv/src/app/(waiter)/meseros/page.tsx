@@ -21,7 +21,6 @@ interface Zone extends ZoneRef {
   tablesCount: number;
 }
 
-// Sentinela para el filtro "Sin zona". El backend usa null.
 const NO_ZONE = "__none__";
 
 export default function WaiterFloorPlanPage() {
@@ -49,14 +48,13 @@ export default function WaiterFloorPlanPage() {
 
   const getStatusConfig = (status: string) => {
     switch (status) {
-      case "AVAILABLE": return { label: "Libre", color: "text-tx-dis", dot: "bg-tx-dis" };
-      case "OCCUPIED": return { label: "Ocupada", color: "text-info", dot: "bg-info" };
-      case "DIRTY": return { label: "Sucia", color: "text-warning", dot: "bg-warning" };
-      default: return { label: "Desconocido", color: "text-tx-dis", dot: "bg-tx-dis" };
+      case "AVAILABLE": return { label: "Libre", color: "text-zinc-500", dot: "bg-zinc-500" };
+      case "OCCUPIED": return { label: "Ocupada", color: "text-amber-500", dot: "bg-amber-500" };
+      case "DIRTY": return { label: "Sucia", color: "text-red-500", dot: "bg-red-500" };
+      default: return { label: "???", color: "text-zinc-600", dot: "bg-zinc-600" };
     }
   };
 
-  // Determinar si hay mesas "sin zona" para mostrar el chip extra.
   const hasOrphans = useMemo(() => tables.some(t => !t.zoneId), [tables]);
 
   const filteredTables = useMemo(() => {
@@ -66,45 +64,49 @@ export default function WaiterFloorPlanPage() {
   }, [tables, activeZone]);
 
   return (
-    <div className="h-full flex flex-col bg-surf-0">
-      {/* HEADER ESPECÍFICO */}
-      <div className="p-4 sm:p-5 lg:p-6 border-b border-bd bg-surf-1 flex flex-col gap-4 sm:gap-5 lg:gap-6 shrink-0">
-        <div className="flex justify-between items-start gap-3">
-          <div className="space-y-1 min-w-0">
-            <span className="eyebrow">DISTRIBUCIÓN EN VIVO</span>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-tx-pri truncate">
+    <div className="h-full flex flex-col bg-[#0a0a0c] font-sans">
+      {/* HEADER WARM TECH */}
+      <div className="p-6 sm:p-8 border-b border-white/5 bg-[#0a0a0c] flex flex-col gap-8 shrink-0 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+          <div className="absolute -top-40 -left-40 w-80 h-80 bg-amber-500/5 blur-[80px] rounded-full" />
+        </div>
+
+        <div className="relative z-10 flex justify-between items-start gap-4">
+          <div className="space-y-1.5 min-w-0">
+            <span className="eyebrow text-amber-500/80">Gestión de Salón</span>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white truncate leading-none">
               {activeZone === "all"
-                ? "Salón completo"
+                ? "Planta Completa"
                 : activeZone === NO_ZONE
-                ? "Sin zona"
+                ? "Mesas Libres"
                 : zones.find(z => z.id === activeZone)?.name || "Salón"}
             </h1>
           </div>
-          <div className="flex bg-surf-2 p-1 rounded-xl border border-bd shrink-0">
-            <button className="p-2 rounded-lg bg-surf-3 text-tx-pri shadow-sm"><LayoutGrid size={18} /></button>
-            <button className="p-2 rounded-lg text-tx-mut hover:text-tx-pri"><LayoutList size={18} /></button>
+          <div className="flex bg-[#121316] p-1.5 rounded-2xl border border-white/5 shrink-0 shadow-inner">
+            <button className="w-12 h-12 flex items-center justify-center rounded-xl bg-amber-500 text-black shadow-[0_5px_15px_rgba(255,184,77,0.2)] transition-all active:scale-90"><LayoutGrid size={22} /></button>
+            <button className="w-12 h-12 flex items-center justify-center rounded-xl text-zinc-600 active:text-white active:bg-white/5 transition-all active:scale-90"><LayoutList size={22} /></button>
           </div>
         </div>
 
-        {/* Leyenda de estados */}
-        <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto scrollbar-hide">
-          <Chip variant="info" size="sm" dot>Ocupadas</Chip>
-          <Chip variant="success" size="sm" dot>Disponibles</Chip>
-          <Chip variant="warning" size="sm" dot>Sucia / Cuenta</Chip>
+        {/* Legend */}
+        <div className="relative z-10 flex items-center gap-3 overflow-x-auto scrollbar-hide">
+          <Chip variant="info" size="md" className="!bg-amber-500/10 !text-amber-500 border-amber-500/20" dot>Ocupadas</Chip>
+          <Chip variant="success" size="md" className="!bg-zinc-800 !text-zinc-400 border-white/5" dot>Disponibles</Chip>
+          <Chip variant="warning" size="md" className="!bg-red-500/10 !text-red-500 border-red-500/20" dot>Limpieza</Chip>
         </div>
 
-        {/* Filtros por zona */}
+        {/* Zone Filters - TOUCH OPTIMIZED */}
         {(zones.length > 0 || hasOrphans) && (
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
+          <div className="relative z-10 flex items-center gap-3 overflow-x-auto scrollbar-hide -mx-2 px-2">
             <button
               onClick={() => setActiveZone("all")}
-              className={`shrink-0 h-9 px-4 rounded-full border text-[12px] font-bold uppercase tracking-wider transition-pos ${
+              className={`shrink-0 h-12 px-6 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] transition-all active:scale-95 ${
                 activeZone === "all"
-                  ? "bg-brand border-brand text-brand-fg shadow-[0_0_15px_color-mix(in_srgb,var(--brand)_40%,transparent)]"
-                  : "bg-surf-2 border-bd text-tx-sec hover:text-tx-pri"
+                  ? "bg-amber-500 border-amber-500 text-[#0a0a0c] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                  : "bg-[#121316] border-white/5 text-zinc-500 active:bg-white/5 active:text-white"
               }`}
             >
-              Todas · {tables.length}
+              General · {tables.length}
             </button>
             {zones.map(z => {
               const count = tables.filter(t => t.zoneId === z.id).length;
@@ -113,83 +115,91 @@ export default function WaiterFloorPlanPage() {
                 <button
                   key={z.id}
                   onClick={() => setActiveZone(z.id)}
-                  className={`shrink-0 h-9 px-4 rounded-full border text-[12px] font-bold uppercase tracking-wider transition-pos flex items-center gap-1.5 ${
+                  className={`shrink-0 h-12 px-6 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2 active:scale-95 ${
                     isActive
-                      ? "bg-brand border-brand text-brand-fg shadow-[0_0_15px_color-mix(in_srgb,var(--brand)_40%,transparent)]"
-                      : "bg-surf-2 border-bd text-tx-sec hover:text-tx-pri"
+                      ? "bg-amber-500 border-amber-500 text-[#0a0a0c] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                      : "bg-[#121316] border-white/5 text-zinc-500 active:bg-white/5 active:text-white"
                   }`}
                 >
                   {z.icon && <span className="text-sm">{z.icon}</span>}
                   <span>{z.name}</span>
-                  <span className="opacity-70">· {count}</span>
+                  <span className="opacity-50">/ {count}</span>
                 </button>
               );
             })}
             {hasOrphans && (
               <button
                 onClick={() => setActiveZone(NO_ZONE)}
-                className={`shrink-0 h-9 px-4 rounded-full border text-[12px] font-bold uppercase tracking-wider transition-pos ${
+                className={`shrink-0 h-12 px-6 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] transition-all active:scale-95 ${
                   activeZone === NO_ZONE
-                    ? "bg-tx-mut/20 border-tx-mut text-tx-pri"
-                    : "bg-surf-2 border-bd text-tx-sec hover:text-tx-pri"
+                    ? "bg-zinc-700 border-zinc-600 text-white"
+                    : "bg-[#121316] border-white/5 text-zinc-500 active:bg-white/5 active:text-white"
                 }`}
               >
-                Sin zona · {tables.filter(t => !t.zoneId).length}
+                Otros · {tables.filter(t => !t.zoneId).length}
               </button>
             )}
           </div>
         )}
       </div>
 
-      {/* TABLES GRID */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6 scrollbar-hide">
+      {/* TABLES GRID - OBSIDIAN STYLE */}
+      <div className="flex-1 overflow-y-auto p-6 sm:p-8 scrollbar-hide bg-[#0a0a0c]">
         {isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4 lg:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6 sm:gap-8">
             {[...Array(12)].map((_, i) => (
-              <div key={i} className="aspect-square bg-surf-1 animate-pulse rounded-[2rem]" />
+              <div key={i} className="aspect-square bg-[#121316] animate-pulse rounded-[2.5rem] border border-white/5" />
             ))}
           </div>
         ) : filteredTables.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center opacity-40 gap-3 py-16 text-center">
-            <span className="text-5xl">🪑</span>
-            <p className="text-[12px] font-bold uppercase tracking-widest">
-              No hay mesas en esta zona
+          <div className="h-full flex flex-col items-center justify-center opacity-20 gap-4 py-20 text-center">
+            <LayoutGrid size={80} className="text-zinc-600" />
+            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-zinc-500">
+              Zona sin mesas configuradas
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4 lg:gap-6 pb-24">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6 sm:gap-8 pb-32">
             {filteredTables.map((table) => {
               const cfg = getStatusConfig(table.status);
+              const isOccupied = table.status === "OCCUPIED";
+              
               return (
                 <Link
                   key={table.id}
                   href={`/meseros/${table.id}`}
                   className={`
-                    aspect-square rounded-[1.5rem] sm:rounded-[2rem] bg-surf-1 border border-bd p-3 sm:p-4 lg:p-5 flex flex-col items-start justify-between
-                    transition-all active:scale-95 hover:bg-surf-2 group relative overflow-hidden
-                    ${table.status === "OCCUPIED" ? "border-info/20 shadow-lg shadow-info/5" : ""}
+                    aspect-square rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-6 lg:p-7 flex flex-col items-start justify-between
+                    transition-all active:scale-95 group relative overflow-hidden border
+                    ${isOccupied 
+                      ? "bg-[#121316] border-amber-500/50 shadow-[0_10px_30px_-10px_rgba(255,184,77,0.15)]" 
+                      : "bg-[#121316] border-white/5 shadow-xl"}
                   `}
                 >
-                  <div className="flex justify-between items-start w-full">
-                    <span className={`text-xl sm:text-2xl font-black group-hover:scale-110 transition-transform ${table.status === "OCCUPIED" ? "text-info" : "text-tx-pri"}`}>
+                  <div className="flex justify-between items-start w-full relative z-10">
+                    <span className={`text-2xl sm:text-3xl font-black tracking-tighter transition-all group-active:scale-90 ${isOccupied ? "text-amber-500" : "text-white"}`}>
                       {table.name.replace("Mesa ", "M")}
                     </span>
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cfg.dot}`} />
+                    <span className={`w-3 h-3 rounded-full shrink-0 ${cfg.dot} shadow-lg ${isOccupied ? "animate-pulse" : ""}`} />
                   </div>
 
-                  <div className="space-y-1 min-w-0 w-full">
-                    <div className="eyebrow !text-[10px] !text-tx-dis truncate">
+                  <div className="space-y-1.5 min-w-0 w-full relative z-10">
+                    <div className="text-[10px] font-black uppercase tracking-[0.15em] text-zinc-600 truncate">
                       {cfg.label}
                       {table.zone && (
-                        <> · {table.zone.icon ? table.zone.icon + " " : ""}{table.zone.name}</>
+                        <span className="opacity-50"> · {table.zone.name}</span>
                       )}
                     </div>
                     {table.activeOrder && (
-                      <div className="mono tnum text-[15px] font-black tracking-tight text-tx-pri">
+                      <div className="mono tnum text-lg font-black tracking-tight text-white">
                         ${Number(table.activeOrder.total).toFixed(0)}
                       </div>
                     )}
                   </div>
+                  
+                  {isOccupied && (
+                    <div className="absolute inset-0 bg-amber-500/[0.02] pointer-events-none" />
+                  )}
                 </Link>
               );
             })}

@@ -19,12 +19,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" data-theme="green" data-mode="dark" suppressHydrationWarning>
+    <html lang="es" data-theme="amber" data-mode="dark" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Syne:wght@600;700;800&family=DM+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
       </head>
@@ -34,7 +34,7 @@ export default function RootLayout({
           // Definimos los CSS vars que tailwind.config.ts referencia, ahora
           // que las fuentes vienen del <link> en lugar de next/font/google.
           ["--font-syne" as any]: "'Syne', sans-serif",
-          ["--font-dm-sans" as any]: "'DM Sans', system-ui, sans-serif",
+          ["--font-outfit" as any]: "'Outfit', system-ui, sans-serif",
           ["--font-dm-mono" as any]: "'DM Mono', ui-monospace, monospace",
         }}
       >
