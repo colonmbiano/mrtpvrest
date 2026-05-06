@@ -22,12 +22,12 @@ export default function LoginStep({ onSubmit, loading, error }: LoginStepProps) 
     <form onSubmit={handleSubmit} className="flex flex-col gap-8">
       <div className="flex flex-col items-center text-center">
         <div
-          className="w-16 h-16 rounded-m flex items-center justify-center"
+          className="w-16 h-16 rounded-xl flex items-center justify-center"
           style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}
         >
           <Lock size={32} />
         </div>
-        <h1 className="text-2xl font-bold mt-4" style={{ color: 'var(--foreground)', fontFamily: 'var(--font-primary)' }}>
+        <h1 className="text-3xl font-bold mt-6 tracking-tight" style={{ color: 'var(--foreground)', fontFamily: 'var(--font-primary)' }}>
           Configuración Inicial
         </h1>
         <p className="mt-2 text-base" style={{ color: 'var(--foreground-secondary)', fontFamily: 'var(--font-secondary)' }}>
@@ -37,7 +37,7 @@ export default function LoginStep({ onSubmit, loading, error }: LoginStepProps) 
 
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-3">
-          <label htmlFor="email" className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+          <label htmlFor="email" className="text-[11px] font-black uppercase tracking-[0.15em] ml-1" style={{ color: 'var(--foreground-secondary)' }}>
             Correo Electrónico
           </label>
           <input
@@ -47,9 +47,9 @@ export default function LoginStep({ onSubmit, loading, error }: LoginStepProps) 
             onChange={(e) => setEmail(e.target.value)}
             placeholder="admin@restaurant.com"
             required
-            className="w-full rounded-m text-base outline-none transition-all p-4"
+            className="w-full rounded-xl text-base outline-none transition-all p-5 font-bold"
             style={{
-              background: 'var(--muted)',
+              background: 'var(--bg)',
               color: 'var(--foreground)',
               border: '1px solid var(--border)',
             }}
@@ -57,7 +57,7 @@ export default function LoginStep({ onSubmit, loading, error }: LoginStepProps) 
         </div>
 
         <div className="flex flex-col gap-3">
-          <label htmlFor="password" className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+          <label htmlFor="password" className="text-[11px] font-black uppercase tracking-[0.15em] ml-1" style={{ color: 'var(--foreground-secondary)' }}>
             Contraseña
           </label>
           <input
@@ -67,9 +67,9 @@ export default function LoginStep({ onSubmit, loading, error }: LoginStepProps) 
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••••••"
             required
-            className="w-full rounded-m text-base outline-none transition-all p-4"
+            className="w-full rounded-xl text-base outline-none transition-all p-5 font-bold"
             style={{
-              background: 'var(--muted)',
+              background: 'var(--bg)',
               color: 'var(--foreground)',
               border: '1px solid var(--border)',
             }}
@@ -79,8 +79,8 @@ export default function LoginStep({ onSubmit, loading, error }: LoginStepProps) 
 
       {error && (
         <div
-          className="p-3 rounded-m text-sm"
-          style={{ background: 'var(--danger-soft)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+          className="p-4 rounded-xl text-sm font-bold border"
+          style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
         >
           {error}
         </div>
@@ -89,7 +89,7 @@ export default function LoginStep({ onSubmit, loading, error }: LoginStepProps) 
       <button
         type="submit"
         disabled={loading}
-        className="w-full py-4 rounded-m font-bold text-base transition-all"
+        className="w-full py-5 rounded-xl font-black uppercase tracking-[0.2em] text-xs transition-all active:scale-[0.98]"
         style={{
           background: 'var(--primary)',
           color: '#000',

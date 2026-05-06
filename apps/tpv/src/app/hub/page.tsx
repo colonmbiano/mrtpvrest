@@ -35,6 +35,7 @@ const fmtMoney = (n: number) =>
 
 export default function HubPage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const employee = useAuthStore((s) => s.employee);
   const logout = useAuthStore((s) => s.logout);
   const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
@@ -42,6 +43,7 @@ export default function HubPage() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   useEffect(() => {
+    setMounted(true);
     let cancelled = false;
     (async () => {
       try {
@@ -92,6 +94,8 @@ export default function HubPage() {
 
   const firstName = employee?.name?.split(' ')[0] || 'usuario';
   const userInitial = firstName.charAt(0).toUpperCase();
+
+  if (!mounted) return <div className="min-h-screen w-full bg-[#0C0C0E]" />;
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden" style={{ background: '#0C0C0E' }}>

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "turbo build",
-    "dev": "turbo dev",
+    "dev": "turbo dev --concurrency 20",
     "lint": "turbo lint",
     "type-check": "turbo type-check",
     "db:generate": "turbo db:generate",
@@ -26,6 +26,6 @@
   },
   "packageManager": "pnpm@9.15.0",
   "dependencies": {
-    "next": "^16.2.4"
+    "next": "^16.2.5"
   }
 }
