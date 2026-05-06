@@ -30,6 +30,7 @@ export default function RootLayout({
       </head>
       <body
         className="antialiased"
+        suppressHydrationWarning
         style={{
           // Definimos los CSS vars que tailwind.config.ts referencia, ahora
           // que las fuentes vienen del <link> en lugar de next/font/google.
