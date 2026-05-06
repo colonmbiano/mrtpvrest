@@ -22,6 +22,7 @@ interface SetupState {
 
 export default function SetupPage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [step, setStep] = useState<SetupStep>('login');
   const [state, setState] = useState<SetupState>({
     email: '',
@@ -35,6 +36,10 @@ export default function SetupPage() {
   const [, setRestaurants] = useState<any[]>([]);
   const [authToken, setAuthToken] = useState('');
   const { mode, toggleMode } = useThemeStore();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Check if already linked
   useEffect(() => {
@@ -218,25 +223,31 @@ export default function SetupPage() {
         style={{ width: 900, height: 900, bottom: -150, right: -150 }}
       />
 
-      <button
-        type="button"
-        onClick={toggleMode}
-        aria-label={mode === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
-        title={mode === 'dark' ? 'Tema claro' : 'Tema oscuro'}
-        className="fixed top-5 right-5 z-20 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-        style={{
-          background: 'var(--surface-2)',
-          color: 'var(--text-primary)',
-          border: '1px solid var(--border)',
-        }}
-      >
-        {mode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-      </button>
+      {mounted && (
+        <button
+          type="button"
+          onClick={toggleMode}
+          aria-label={mode === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+          title={mode === 'dark' ? 'Tema claro' : 'Tema oscuro'}
+          className="fixed top-5 right-5 z-20 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+          style={{
+            background: 'var(--surface-2)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          {mode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+      )}
 
       <div className="w-full max-w-lg relative z-10">
         <div
-          className="rounded-m p-12"
-          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+          className="rounded-2xl p-12"
+          style={{ 
+            background: 'var(--card)', 
+            border: '1px solid var(--border)',
+            boxShadow: 'var(--shadow-lg)'
+          }}
         >
           {step === 'login' && (
             <LoginStep onSubmit={handleLogin} loading={loading} error={error} />
