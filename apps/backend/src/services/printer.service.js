@@ -23,12 +23,21 @@ const CMD = {
   DRAWER_KICK: ESC + 'p' + '\x00' + '\x19' + '\xFA',
 };
 
-function printToIp(ip, port, data) {
+async function printToIp(ip, port, data, isKDS = false) {
+  if (ip === '0.0.0.0' || !ip) {
+    console.log('[printer] Skip printToIp for virtual device (0.0.0.0)');
+    return Promise.resolve();
+  }
+
+  // Si es un KDS nativo, podemos enviar JSON en lugar de ESC/POS crudo
+  // pero mantendremos compatibilidad enviando el buffer de datos solicitado.
+  const payload = isKDS ? data : Buffer.from(data, 'binary');
+
   return new Promise((resolve, reject) => {
     const client = new net.Socket();
     const timeout = setTimeout(() => { client.destroy(); reject(new Error('Timeout')); }, 5000);
     client.connect(port || 9100, ip, () => {
-      client.write(Buffer.from(data, 'binary'));
+      client.write(payload);
       client.end();
     });
     client.on('close', () => { clearTimeout(timeout); resolve(); });

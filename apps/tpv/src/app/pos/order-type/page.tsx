@@ -13,11 +13,14 @@ export default function OrderTypePage() {
 
   useEffect(() => {
     let cancelled = false;
-    api.get("/api/orders", { params: { status: "OPEN,PENDING,PREPARING" } })
+    const ACTIVE = new Set(["OPEN", "PENDING", "PREPARING", "CONFIRMED", "READY", "OUT_FOR_DELIVERY"]);
+    api.get("/api/orders/admin")
       .then(({ data }) => {
-        if (!cancelled) setOpenOrders(Array.isArray(data) ? data.length : (data?.length || 0));
+        if (cancelled) return;
+        const list = Array.isArray(data) ? data : [];
+        setOpenOrders(list.filter((o: any) => ACTIVE.has(o.status)).length);
       })
-      .catch(() => { /* silent */ });
+      .catch(() => { /* silent — endpoint requires admin role */ });
     return () => { cancelled = true; };
   }, []);
 
