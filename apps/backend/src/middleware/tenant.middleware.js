@@ -56,6 +56,7 @@ const tenantMiddleware = async (req, res, next) => {
     '/api/admin/tenants',
     '/api/admin/global-config',
     '/api/admin/config',
+    '/api/admin/logs',
     '/api/saas/register',
     '/api/saas/plans',
     '/api/saas',
