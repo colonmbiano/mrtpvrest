@@ -144,6 +144,7 @@ app.use('/api/tpv/config',   require('./routes/tpv-config.routes'));
 app.use('/api/kiosk',        require('./routes/kiosk.routes'));
 app.use('/api/modules',      require('./routes/modules.routes'));
 app.use('/api/tasks',        require('./routes/tasks.routes'));
+app.use('/api/admin/logs',   require('./routes/logs.routes'));
 
 app.get('/health', (req, res) => {
   res.json({
