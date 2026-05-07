@@ -170,6 +170,21 @@ export const useAuthStore = create<AuthState>()(
                   localStorage.setItem("currentEmployeeRole", employee.role);
                 }
 
+                // Hidratar nombre de restaurante + sucursal desde backend.
+                // No bloquea el login: si falla, los fallback de useTPVAuth siguen.
+                try {
+                  const meRes = await api.get("/api/employees/me");
+                  const me = meRes?.data;
+                  if (me?.restaurant?.name && me?.location?.name && typeof window !== "undefined") {
+                    localStorage.setItem("restaurantId", me.restaurant.id);
+                    localStorage.setItem("restaurantName", me.restaurant.name);
+                    localStorage.setItem("locationId", me.location.id);
+                    localStorage.setItem("locationName", me.location.name);
+                  }
+                } catch {
+                  // Sin red o backend caído — ignorar, useTPVAuth reintentará al hidratar.
+                }
+
                 return { success: true };
               }
               // Respuesta incompleta del backend — tratar como error y NO caer

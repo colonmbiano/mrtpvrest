@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
+import api from "@/lib/api";
 
 export function useTPVAuth() {
   const router = useRouter();
@@ -13,14 +14,44 @@ export function useTPVAuth() {
     // Verificar si el dispositivo está vinculado
     const restId = localStorage.getItem("restaurantId");
     const locId = localStorage.getItem("locationId");
-    
+
     if (!restId || !locId) {
       router.replace("/setup");
       return;
     }
 
-    setRestaurantName(localStorage.getItem("restaurantName") || "MRTPVREST");
-    setLocationName(localStorage.getItem("locationName") || "Sucursal");
+    const cachedRest = localStorage.getItem("restaurantName");
+    const cachedLoc = localStorage.getItem("locationName");
+    setRestaurantName(cachedRest || "MRTPVREST");
+    setLocationName(cachedLoc || "Sucursal");
+
+    // Backfill desde backend si la cache está vacía o trae fallback genérico
+    // y tenemos token para autenticar la petición.
+    const hasToken = Boolean(
+      sessionStorage.getItem("tpv-access-token") ||
+      localStorage.getItem("accessToken") ||
+      localStorage.getItem("tpv-employee-token")
+    );
+    const needsBackfill =
+      !cachedRest || !cachedLoc ||
+      cachedRest === "MRTPVREST" || cachedLoc === "Sucursal";
+
+    if (hasToken && needsBackfill) {
+      api.get("/api/employees/me")
+        .then(({ data }) => {
+          if (data?.restaurant?.name && data?.location?.name) {
+            localStorage.setItem("restaurantId", data.restaurant.id);
+            localStorage.setItem("restaurantName", data.restaurant.name);
+            localStorage.setItem("locationId", data.location.id);
+            localStorage.setItem("locationName", data.location.name);
+            setRestaurantName(data.restaurant.name);
+            setLocationName(data.location.name);
+          }
+        })
+        .catch(() => {
+          // Sin red o sesión inválida — mantener fallback.
+        });
+    }
 
     // Intentar hidratar sesión desde storage si no está autenticado en estado
     if (!auth.isAuthenticated) {

@@ -255,9 +255,15 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
               </span>
             </div>
             
-            <div className="w-10 h-10 rounded-full bg-surface-2 border border-border flex items-center justify-center text-xs font-black text-tx-pri" style={{ color: "var(--brand)" }}>
+            <button
+              type="button"
+              onClick={() => setShowMenu(true)}
+              aria-label="Abrir menú de configuración"
+              className="w-10 h-10 rounded-full bg-surface-2 border border-border flex items-center justify-center text-xs font-black text-tx-pri active:scale-95 transition-all hover:border-brand/50 focus:outline-none focus:ring-2 focus:ring-brand/40"
+              style={{ color: "var(--brand)" }}
+            >
               {currentEmployee?.name?.charAt(0).toUpperCase() || "E"}
-            </div>
+            </button>
           </div>
         </header>
 
