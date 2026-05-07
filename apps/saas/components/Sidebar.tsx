@@ -43,6 +43,13 @@ const IconKey = () => (
     <path d="M9.5 9.5L14 14M12 12.5v2M10.5 14h2"/>
   </svg>
 );
+const IconAlert = () => (
+  <svg className="db-nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 1.5L1.5 13.5h13z"/>
+    <line x1="8" y1="6" x2="8" y2="9.5"/>
+    <circle cx="8" cy="11.5" r="0.6" fill="currentColor"/>
+  </svg>
+);
 const IconLogOut = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
     <path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3"/>
@@ -76,6 +83,7 @@ const negoItems = [
 const sysItems = [
   { href: "/tpv-config", label: "TPV Config", icon: <IconTerminal /> },
   { href: "/logs",       label: "Logs",       icon: <IconTerminal /> },
+  { href: "/errors",     label: "Errores",    icon: <IconAlert /> },
   { href: "/api-keys",   label: "API Keys",   icon: <IconKey /> },
 ];
 
