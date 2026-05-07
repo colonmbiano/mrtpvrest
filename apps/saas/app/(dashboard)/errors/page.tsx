@@ -47,7 +47,7 @@ const LEVEL_STYLE: Record<SystemLogLevel, { bg: string; fg: string; halo: string
 
 // ── Página ────────────────────────────────────────────────────────────────
 
-export default function SuperErrorsPage() {
+export default function SaasErrorsPage() {
   const [records, setRecords] = useState<SystemLogRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [paused, setPaused]   = useState(false);
@@ -59,7 +59,7 @@ export default function SuperErrorsPage() {
   const [exporting, setExporting] = useState(false);
   const [copied, setCopied]   = useState(false);
 
-  // Polling DB.
+  // Polling SystemLog DB.
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -93,7 +93,6 @@ export default function SuperErrorsPage() {
     };
   }, [paused, activeLevels]);
 
-  // Filtrado client-side por búsqueda libre.
   const filtered = useMemo<SystemLogRecord[]>(() => {
     const q = search.trim().toLowerCase();
     if (!q) return records;
@@ -107,7 +106,6 @@ export default function SuperErrorsPage() {
     });
   }, [records, search]);
 
-  // Conteo por nivel para resumen.
   const counts = useMemo(() => {
     const c: Record<SystemLogLevel, number> = { CRITICAL: 0, ERROR: 0, WARN: 0, INFO: 0 };
     for (const r of records) if (r.level in c) c[r.level] += 1;
@@ -159,7 +157,10 @@ export default function SuperErrorsPage() {
   };
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-[#0a0a0c]">
+    <div
+      className="relative min-h-screen w-full overflow-hidden"
+      style={{ background: "#0a0a0c", color: "white", fontFamily: "'Outfit', system-ui, sans-serif" }}
+    >
       {/* Halo glows */}
       <div
         aria-hidden
@@ -277,14 +278,12 @@ export default function SuperErrorsPage() {
           </span>
         </div>
 
-        {/* Error banner */}
         {error && (
           <div className="mb-4 rounded-2xl p-3 text-sm font-semibold bg-[rgba(255,92,51,0.10)] border border-[rgba(255,92,51,0.30)] text-[#FF8B6E]">
             {error}
           </div>
         )}
 
-        {/* List */}
         <div className="rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.40)]">
           {loading && records.length === 0 ? (
             <p className="text-white/40 text-sm font-bold py-16 text-center">
