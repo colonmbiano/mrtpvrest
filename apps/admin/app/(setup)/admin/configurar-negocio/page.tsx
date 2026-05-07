@@ -24,7 +24,7 @@ interface TypeCard {
   title: string;
   subtitle: string;
   description: string;
-  icon: JSX.Element;
+  icon: React.ReactNode;
 }
 
 const CARDS: TypeCard[] = [
