@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { Monitor, Printer as PrinterIcon, Network, Usb, Bluetooth, Trash2, Edit3, Plus } from "lucide-react";
 import KDSConfigModal from "@/components/pos/KDSConfigModal";
+import BackButton from "@/components/BackButton";
 
 type Printer = {
   id: string;
@@ -112,10 +113,13 @@ export default function ImpresorasPage() {
     <div className="p-8 max-w-6xl mx-auto min-h-screen font-sans">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10">
-        <div>
-          <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500 block mb-2">Infraestructura</span>
-          <h1 className="text-3xl font-black text-white tracking-tight mb-1">Red e Impresoras</h1>
-          <p className="text-sm text-zinc-400 font-medium">Gestiona tus impresoras físicas y estaciones KDS virtuales.</p>
+        <div className="flex items-start gap-4">
+          <BackButton ariaLabel="Volver al panel admin" />
+          <div>
+            <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500 block mb-2">Infraestructura</span>
+            <h1 className="text-3xl font-black text-white tracking-tight mb-1">Red e Impresoras</h1>
+            <p className="text-sm text-zinc-400 font-medium">Gestiona tus impresoras físicas y estaciones KDS virtuales.</p>
+          </div>
         </div>
         <div className="flex gap-3">
           <button

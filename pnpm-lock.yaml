@@ -518,6 +518,9 @@ importers:
 
   apps/tpv:
     dependencies:
+      '@capacitor/app':
+        specifier: ^7.1.2
+        version: 7.1.2(@capacitor/core@8.3.1)
       '@capacitor/core':
         specifier: ^8.3.1
         version: 8.3.1
@@ -597,76 +600,6 @@ importers:
       jest-environment-jsdom:
         specifier: ^29.7.0
         version: 29.7.0
-      postcss:
-        specifier: ^8
-        version: 8.5.8
-      tailwindcss:
-        specifier: ^3.4.1
-        version: 3.4.19(tsx@4.21.0)(yaml@2.8.3)
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
-  apps/waiters:
-    dependencies:
-      '@capacitor/core':
-        specifier: ^8.3.1
-        version: 8.3.1
-      axios:
-        specifier: ^1.13.6
-        version: 1.14.0
-      framer-motion:
-        specifier: ^12.38.0
-        version: 12.38.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      lucide-react:
-        specifier: ^1.11.0
-        version: 1.11.0(react@19.2.6)
-      next:
-        specifier: 16.2.5
-        version: 16.2.5(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      react:
-        specifier: 19.2.6
-        version: 19.2.6
-      react-dom:
-        specifier: 19.2.6
-        version: 19.2.6(react@19.2.6)
-      react-hotkeys-hook:
-        specifier: ^5.2.4
-        version: 5.2.4(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      sonner:
-        specifier: ^2.0.7
-        version: 2.0.7(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      zustand:
-        specifier: ^4.5.5
-        version: 4.5.7(@types/react@19.2.14)(react@19.2.6)
-    devDependencies:
-      '@capacitor/android':
-        specifier: ^8.3.1
-        version: 8.3.1(@capacitor/core@8.3.1)
-      '@capacitor/cli':
-        specifier: ^8.3.1
-        version: 8.3.1
-      '@mrtpvrest/config':
-        specifier: workspace:*
-        version: link:../../packages/config
-      '@types/node':
-        specifier: ^20
-        version: 20.19.39
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.14
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.2.3(@types/react@19.2.14)
-      cross-env:
-        specifier: ^10.1.0
-        version: 10.1.0
-      eslint:
-        specifier: ^9.21.0
-        version: 9.39.4(jiti@2.7.0)
-      eslint-config-next:
-        specifier: 16.2.5
-        version: 16.2.5(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)
       postcss:
         specifier: ^8
         version: 8.5.8
@@ -1334,6 +1267,11 @@ packages:
     resolution: {integrity: sha512-hjskIG8YcBEh3X4yaTXvE9gcqpdcxunTgFruSKnuPxtMxAUzEK4Oq25x0Z1g3cz+MQPc+lRG09R7Ovc+ydKsNw==}
     peerDependencies:
       '@capacitor/core': ^8.3.0
+
+  '@capacitor/app@7.1.2':
+    resolution: {integrity: sha512-d4I/oF/PRu4megL7/IGKYfe5j7yzSON1FRFgq6kH+m5kH6g7V+wyjHRLauCzGNjdRx4S+nWOumINds0qcRBtKg==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@capacitor/cli@8.3.1':
     resolution: {integrity: sha512-1sPGW4THTDfR6YjXwZ0jM7oAfAtciPOHN00qs/3sNAQx1kKrrEYSfDPwCm1/xlAgi0OeL69SiRfw314Ans+1sw==}
@@ -7992,6 +7930,10 @@ snapshots:
   '@bcoe/v8-coverage@0.2.3': {}
 
   '@capacitor/android@8.3.1(@capacitor/core@8.3.1)':
+    dependencies:
+      '@capacitor/core': 8.3.1
+
+  '@capacitor/app@7.1.2(@capacitor/core@8.3.1)':
     dependencies:
       '@capacitor/core': 8.3.1
 
