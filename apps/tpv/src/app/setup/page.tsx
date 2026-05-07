@@ -173,20 +173,28 @@ export default function SetupPage() {
 
       const { deviceToken, deviceId } = response.data;
 
+      // Mapear deviceType del UI ("CAJA"/"KDS"/"MESERO") a roles canónicos
+      // que coinciden con Device.type del schema Prisma ("POS"/"KDS"/"WAITER").
+      const deviceRole =
+        deviceType === 'KDS'    ? 'KDS' :
+        deviceType === 'MESERO' ? 'WAITER' :
+                                  'POS';
+
       // Save device info
       localStorage.setItem('deviceToken', deviceToken);
       localStorage.setItem('deviceId', deviceId);
+      localStorage.setItem('deviceRole', deviceRole);
       localStorage.setItem('locationId', state.selectedLocation.id);
       localStorage.setItem('restaurantId', state.selectedRestaurant.id);
 
-      // Fetch and cache employees
+      // Fetch and cache employees (offline cache para validar PINs en tareas).
       const empResponse = await axios.get('/api/employees/sync', {
-        headers: { 
+        headers: {
           Authorization: `Bearer ${authToken}`,
           'x-location-id': state.selectedLocation.id
         },
       });
-      
+
       // Use unified store to persist employees
       useAuthStore.getState().setEmployees(empResponse.data);
 
@@ -197,9 +205,11 @@ export default function SetupPage() {
 
       setStep('saving');
 
-      // Redirect after short delay
+      // Redirección por rol del dispositivo. KDS no requiere login PIN —
+      // entra directo a /kds con el deviceToken como auth de máquina.
+      const target = deviceRole === 'KDS' ? '/kds' : '/locked';
       setTimeout(() => {
-        router.replace('/locked');
+        router.replace(target);
       }, 500);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al vincular dispositivo');
