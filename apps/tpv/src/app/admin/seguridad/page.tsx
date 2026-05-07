@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ShieldCheck, Save, Lock, AlertCircle, Activity } from "lucide-react";
 import api from "@/lib/api";
+import BackButton from "@/components/BackButton";
 
 interface SecurityConfig {
   requirePinForVoid: boolean;
@@ -94,14 +95,17 @@ export default function SeguridadAdmin() {
 
       <div className="relative z-10">
         <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
-          <div>
-            <p className="text-[10px] font-black tracking-[0.25em] text-white/40">ADMINISTRACIÓN</p>
-            <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-2">
-              <ShieldCheck size={26} className="text-[#ffb84d]" /> Seguridad
-            </h1>
-            <p className="text-sm font-medium text-white/55 mt-1">
-              Define qué acciones requieren autorización con PIN supervisor.
-            </p>
+          <div className="flex items-start gap-4">
+            <BackButton ariaLabel="Volver al panel admin" />
+            <div>
+              <p className="text-[10px] font-black tracking-[0.25em] text-white/40">ADMINISTRACIÓN</p>
+              <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-2">
+                <ShieldCheck size={26} className="text-[#ffb84d]" /> Seguridad
+              </h1>
+              <p className="text-sm font-medium text-white/55 mt-1">
+                Define qué acciones requieren autorización con PIN supervisor.
+              </p>
+            </div>
           </div>
           <button
             onClick={save}
