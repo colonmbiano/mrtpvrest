@@ -7,11 +7,11 @@ async function test() {
   const genAI = new GoogleGenerativeAI(apiKey);
   
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent("Dime hola");
-    console.log(`✅ gemini-1.5-flash funcionó:`, result.response.text().trim());
+    console.log(`✅ gemini-2.5-flash funcionó:`, result.response.text().trim());
   } catch (e) {
-    console.error(`❌ gemini-1.5-flash falló:`, e.message);
+    console.error(`❌ gemini-2.5-flash falló:`, e.message);
   }
 }
 test();
