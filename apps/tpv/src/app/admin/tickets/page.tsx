@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import api from "@/lib/api";
+import BackButton from "@/components/BackButton";
 
 type TicketConfig = {
   id?: string;
@@ -64,8 +65,13 @@ export default function TicketConfigPage() {
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
-      <h1 className="text-3xl font-black mb-2 text-white">Configurador de Tickets</h1>
-      <p className="text-gray-400 mb-8">Personaliza la información que aparece en los tickets impresos.</p>
+      <div className="flex items-start gap-4 mb-8">
+        <BackButton ariaLabel="Volver al panel admin" />
+        <div>
+          <h1 className="text-3xl font-black mb-2 text-white">Configurador de Tickets</h1>
+          <p className="text-gray-400">Personaliza la información que aparece en los tickets impresos.</p>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <form onSubmit={handleSave} className="bg-[#141417] p-6 rounded-2xl border border-[#2d2d30] space-y-4">
