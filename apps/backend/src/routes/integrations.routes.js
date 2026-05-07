@@ -1,6 +1,8 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { validateBody } = require('../lib/validate');
+const { upsertIntegrationSchema } = require('../schemas/integrations.schema');
 const crypto = require('crypto');
 const router = express.Router();
 
@@ -36,7 +38,7 @@ router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res
 });
 
 // PUT guardar/actualizar integración (Por Restaurante)
-router.put('/:type', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.put('/:type', authenticate, requireTenantAccess, requireAdmin, validateBody(upsertIntegrationSchema), async (req, res) => {
   try {
     const { enabled, mode, config } = req.body;
     const type = req.params.type.toUpperCase();
