@@ -40,6 +40,14 @@ const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
+const { validateBody } = require('../lib/validate');
+const {
+  createOrderSchema,
+  addItemsSchema,
+  updateStatusSchema,
+  updatePaymentSchema,
+  messageSchema,
+} = require('../schemas/orders.schema');
 const router = express.Router();
 
 
@@ -99,7 +107,7 @@ router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
 });
 
 // ── POST /tpv — Crear pedido ──────────────────────────────────────────
-router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActiveShift, async (req, res) => {
+router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActiveShift, validateBody(createOrderSchema), async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
@@ -358,8 +366,8 @@ async function addRoundHandler(req, res) {
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
 
-router.post('/:id/items',  authenticate, requireTenantAccess, requireAdmin, addRoundHandler);
-router.post('/:id/rounds', authenticate, requireTenantAccess, requireAdmin, addRoundHandler);
+router.post('/:id/items',  authenticate, requireTenantAccess, requireAdmin, validateBody(addItemsSchema), addRoundHandler);
+router.post('/:id/rounds', authenticate, requireTenantAccess, requireAdmin, validateBody(addItemsSchema), addRoundHandler);
 
 // ── GESTIÓN DE PAGOS Y CUENTAS ──
 
@@ -434,7 +442,7 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/:id/status', authenticate, requireTenantAccess, async (req, res) => {
+router.put('/:id/status', authenticate, requireTenantAccess, validateBody(updateStatusSchema), async (req, res) => {
   try {
     const { status } = req.body;
     const order = await prisma.order.update({
@@ -451,7 +459,7 @@ router.put('/:id/status', authenticate, requireTenantAccess, async (req, res) =>
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/:id/payment', authenticate, requireTenantAccess, async (req, res) => {
+router.put('/:id/payment', authenticate, requireTenantAccess, validateBody(updatePaymentSchema), async (req, res) => {
   try {
     const { paymentMethod } = req.body;
     const order = await prisma.order.update({
@@ -553,7 +561,7 @@ router.get('/:id/messages', authenticate, requireTenantAccess, async (req, res) 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/:id/messages', authenticate, requireTenantAccess, async (req, res) => {
+router.post('/:id/messages', authenticate, requireTenantAccess, validateBody(messageSchema), async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) {
@@ -567,9 +575,6 @@ router.post('/:id/messages', authenticate, requireTenantAccess, async (req, res)
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
 
     const { message, fromDriver } = req.body;
-    if (!message || typeof message !== 'string' || !message.trim()) {
-      return res.status(400).json({ error: 'Mensaje vacío' });
-    }
 
     const msg = await prisma.deliveryMessage.create({
       data: { orderId: req.params.id, message: message.trim(), fromDriver: fromDriver || false }

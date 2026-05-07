@@ -1,6 +1,8 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { validateBody } = require('../lib/validate');
+const { openShiftSchema, closeShiftSchema } = require('../schemas/shifts.schema');
 const router = express.Router();
 
 // Gate: solo empleados/usuarios con permiso pueden abrir/cerrar turnos
@@ -67,7 +69,7 @@ router.get('/active', authenticate, requireTenantAccess, requireLocation, async 
 });
 
 // ── POST abrir turno (solo en la sucursal del request) ───────────────────
-router.post('/open', authenticate, requireTenantAccess, requireLocation, requireCanManageShifts, async (req, res) => {
+router.post('/open', authenticate, requireTenantAccess, requireLocation, requireCanManageShifts, validateBody(openShiftSchema), async (req, res) => {
   try {
     const { openingFloat, employeeId: bodyEmployeeId, employeeName: bodyEmployeeName, blindClose } = req.body;
 
@@ -113,7 +115,7 @@ router.post('/open', authenticate, requireTenantAccess, requireLocation, require
 });
 
 // ── POST cerrar turno (solo el de la sucursal del request) ───────────────
-router.post('/:id/close', authenticate, requireTenantAccess, requireLocation, requireCanManageShifts, async (req, res) => {
+router.post('/:id/close', authenticate, requireTenantAccess, requireLocation, requireCanManageShifts, validateBody(closeShiftSchema), async (req, res) => {
   try {
     const { closingFloat, notes, employeeId: bodyEmployeeId } = req.body;
     const shiftId = req.params.id;
