@@ -1,11 +1,17 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X } from "lucide-react";
 import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal from "@/components/pos/PaymentModal";
 import { useTicketStore } from "@/store/ticketStore";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import {
+  printKitchenTickets,
+  printCustomerReceipt,
+  type PrinterRecord,
+  type TicketItem,
+} from "@/lib/printer-tcp";
 
 interface Props {
   onOpenShift?: () => void;
@@ -27,9 +33,43 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
   } = useTicketStore();
   
   const ticket = getActiveTicket();
-  
+
   const subtotal = ticket.items.reduce((acc, item) => acc + item.subtotal, 0);
   const total = subtotal - ticket.discount;
+
+  // Cache de impresoras de la sucursal. Se carga una vez al montar y se
+  // refresca cuando llega evento `printers-changed` (ej. tras agregar
+  // una impresora desde admin). La lista vive en memoria del componente
+  // para que el handler de cobro la lea sin esperar fetch de red.
+  const [printers, setPrinters] = useState<PrinterRecord[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const { data } = await api.get<PrinterRecord[]>("/api/printers");
+        if (!cancelled) setPrinters(Array.isArray(data) ? data : []);
+      } catch {
+        if (!cancelled) setPrinters([]);
+      }
+    };
+    load();
+    const onRefresh = () => load();
+    window.addEventListener("printers-changed", onRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("printers-changed", onRefresh);
+    };
+  }, []);
+
+  // Convierte CartItem[] del store al shape genérico de printer-tcp.
+  const buildTicketItems = (): TicketItem[] =>
+    ticket.items.map((it) => ({
+      name: it.name,
+      quantity: it.quantity,
+      price: it.price,
+      notes: it.notes,
+      modifiers: (it.modifiers || []).map((m) => ({ name: m.name, priceAdd: m.priceAdd })),
+    }));
 
   const handleSendToKitchen = async () => {
     if (ticket.items.length === 0) {
@@ -54,9 +94,26 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
         total: total,
       };
 
-      await api.post("/api/orders/tpv", orderData);
+      const { data: order } = await api.post("/api/orders/tpv", orderData);
       toast.success("Pedido enviado a cocina");
+      // Capturar items ANTES de limpiar el ticket activo.
+      const printItems = buildTicketItems();
+      const ticketContext = {
+        orderNumber: order?.orderNumber ?? null,
+        orderType:   ticket.type ?? null,
+        tableNumber: ticket.tableNumber ?? null,
+        customerName: ticket.name ?? null,
+      };
       clearActiveItems();
+      // Fire-and-forget: imprimir comanda en KITCHEN/BAR. La impresión
+      // NO debe bloquear ni revertir la orden si la impresora falla.
+      printKitchenTickets(printers, { ...ticketContext, items: printItems })
+        .then((res) => {
+          if (res.failed.length > 0) {
+            toast.warning(`Comanda: ${res.ok} ok / ${res.failed.length} fallaron`);
+          }
+        })
+        .catch(() => { /* tragar error silenciosamente */ });
     } catch (error: any) {
       toast.error("Error al enviar pedido: " + (error.response?.data?.error || error.message));
     }
@@ -87,9 +144,39 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
       const { data: order } = await api.post("/api/orders/tpv", orderData);
       await api.put(`/api/orders/${order.id}/payment`, { paymentMethod: method });
       toast.success("Cobro procesado");
+      // Capturar contexto antes de limpiar el ticket activo.
+      const printItems = buildTicketItems();
+      const ticketContext = {
+        orderNumber: order?.orderNumber ?? null,
+        orderType:   ticket.type ?? null,
+        tableNumber: ticket.tableNumber ?? null,
+        customerName: ticket.name ?? null,
+        customerPhone: ticket.phone ?? null,
+      };
+      const totals = {
+        subtotal,
+        discount: ticket.discount,
+        total,
+        paymentMethod: method,
+      };
       clearActiveItems();
       setShowPayment(false);
-      // Opcional: si tienes una función para refrescar órdenes abiertas en el hub, llámala aquí.
+
+      // Fire-and-forget: comanda en KITCHEN/BAR + recibo en CASHIER.
+      // No bloquea cobro si las impresoras fallan.
+      printKitchenTickets(printers, { ...ticketContext, items: printItems })
+        .catch(() => { /* silencio */ });
+      printCustomerReceipt(printers, {
+        ...ticketContext,
+        ...totals,
+        items: printItems,
+      })
+        .then((res) => {
+          if (res.ok === 0 && res.failed.length > 0) {
+            toast.warning("Recibo: ninguna impresora respondió");
+          }
+        })
+        .catch(() => { /* silencio */ });
     } catch (error: any) {
       toast.error("Error al cobrar: " + (error.response?.data?.error || error.message));
     } finally {
@@ -106,7 +193,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
   };
 
   return (
-    <aside className="w-full lg:w-[420px] lg:shrink-0 border-l border-white/5 bg-[#0a0a0c] flex flex-col h-full min-h-0 relative z-20">
+    <aside className="w-full md:w-[380px] md:shrink-0 border-l border-white/5 bg-[#0a0a0c] flex flex-col h-full min-h-0 relative z-20">
       {/* TABS DE TICKETS */}
       <div className="flex h-16 bg-[#121316] border-b border-white/5 overflow-hidden shrink-0">
         <div className="flex-1 flex scroll-x scrollbar-hide min-w-0">
