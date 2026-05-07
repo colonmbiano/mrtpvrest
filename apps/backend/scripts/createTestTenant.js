@@ -1,7 +1,5 @@
-const { PrismaClient } = require('@mrtpvrest/database');
+const { prisma } = require('@mrtpvrest/database');
 const bcrypt = require('bcryptjs');
-
-const prisma = new PrismaClient();
 
 async function main() {
   const email = "agent-test@mrtpvrest.com";
