@@ -1,8 +1,14 @@
 import { PrismaClient, Role } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 import bcrypt from 'bcryptjs'
 import 'dotenv/config'
 
-const prisma = new PrismaClient()
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL is required')
+}
+
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
+const prisma = new PrismaClient({ adapter })
 
 const PLATFORM = {
   tenantSlug: 'mrtpvrest-platform',
