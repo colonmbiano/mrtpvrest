@@ -83,6 +83,12 @@ function normalizePrinterPayload(body) {
 
 router.get('/', requireAdmin, async (req, res) => {
   try {
+    if (!req.locationId) {
+      return res.status(400).json({
+        error: 'Sucursal no identificada (envía x-location-id)',
+        code: 'LOCATION_REQUIRED',
+      });
+    }
     const printers = await prisma.printer.findMany({
       where: { locationId: req.locationId },
       orderBy: { createdAt: 'desc' },
