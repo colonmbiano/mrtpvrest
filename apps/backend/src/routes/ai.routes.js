@@ -2,7 +2,7 @@ const express = require('express');
 const { scanMenuFromImages, scanInventoryFromImages } = require('../services/ai.service');
 const { runAssistant } = require('../services/assistant.service');
 const { runVoiceAgent } = require('../services/voice-agent.service');
-const { resolveAiKey } = require('../services/ai-key.service');
+const { resolveGeminiKey } = require('../services/ai-key.service');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
 const multer = require('multer');
@@ -30,37 +30,35 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB por imagen
 });
 
-// Escanear MENÚ (Platos y Precios)
+// Escanear MENÚ (Platos y Precios) — visión, usa Gemini con key de plataforma.
 router.post('/scan-menu', authenticate, requireTenantAccess, requireAdmin, upload.array('images', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No se recibieron imágenes.' });
-    const restaurantId = req.user?.restaurantId || req.restaurantId;
-    const { apiKey } = await resolveAiKey({ restaurantId });
-    console.log(`🤖 Iniciando escaneo de ${req.files.length} imágenes de MENÚ con IA...`);
+    const { apiKey } = resolveGeminiKey();
+    console.log(`🤖 Iniciando escaneo de ${req.files.length} imágenes de MENÚ con IA (Gemini Vision)...`);
     const base64Images = req.files.map(file => file.buffer.toString('base64'));
     const menuData = await scanMenuFromImages(base64Images, apiKey);
     res.json({ message: 'Menú analizado con éxito', data: menuData });
   } catch (error) {
     if (error?.code) return sendAiError(res, error);
-    console.error('Error en AI Menu Route:', error.message);
-    res.status(500).json({ error: 'Hubo un problema al procesar las imágenes con IA.' });
+    console.error('Error en AI Menu Route:', error);
+    res.status(500).json({ error: error?.message || 'Hubo un problema al procesar las imágenes con IA.' });
   }
 });
 
-// Escanear INVENTARIO (Facturas y Listas de Stock)
+// Escanear INVENTARIO (Facturas y Listas de Stock) — visión, usa Gemini.
 router.post('/scan-inventory', authenticate, requireTenantAccess, requireAdmin, upload.array('images', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No se recibieron imágenes.' });
-    const restaurantId = req.user?.restaurantId || req.restaurantId;
-    const { apiKey } = await resolveAiKey({ restaurantId });
-    console.log(`🤖 Iniciando escaneo de ${req.files.length} imágenes de INVENTARIO con IA...`);
+    const { apiKey } = resolveGeminiKey();
+    console.log(`🤖 Iniciando escaneo de ${req.files.length} imágenes de INVENTARIO con IA (Gemini Vision)...`);
     const base64Images = req.files.map(file => file.buffer.toString('base64'));
     const inventoryData = await scanInventoryFromImages(base64Images, apiKey);
     res.json({ message: 'Inventario analizado con éxito', data: inventoryData });
   } catch (error) {
     if (error?.code) return sendAiError(res, error);
-    console.error('Error en AI Inventory Route:', error.message);
-    res.status(500).json({ error: 'Hubo un problema al procesar el inventario con IA.' });
+    console.error('Error en AI Inventory Route:', error);
+    res.status(500).json({ error: error?.message || 'Hubo un problema al procesar el inventario con IA.' });
   }
 });
 
