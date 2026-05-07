@@ -10,7 +10,6 @@ import {
   CreditCard,
   ShieldCheck,
   ChevronRight,
-  Activity,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -62,13 +61,6 @@ const SECTIONS = [
     desc: "PINs, autorizaciones y bitácora",
     icon: ShieldCheck,
     accent: "#ef4444",
-  },
-  {
-    href: "/admin/logs",
-    label: "Logs en vivo",
-    desc: "Stream del backend api.mrtpvrest.com",
-    icon: Activity,
-    accent: "#34d399",
   },
 ];
 

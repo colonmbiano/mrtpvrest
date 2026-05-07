@@ -1599,3 +1599,27 @@ model TaskLog {
   @@index([taskId])
   @@map("task_logs")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OBSERVABILIDAD — Errores y eventos críticos del backend
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String   // INFO | WARN | ERROR | CRITICAL
+  message   String
+  stack     String?
+  path      String?
+  method    String?
+  tenantId  String?
+  // Metadata libre serializada como JSON: ip, userId, deviceId, restaurantId,
+  // requestId, etc. Mantener en JSON evita tener que migrar el schema cada
+  // vez que un handler quiera agregar contexto.
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([level])
+  @@index([tenantId])
+  @@index([createdAt])
+  @@map("system_logs")
+}
