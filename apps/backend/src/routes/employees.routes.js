@@ -25,6 +25,42 @@ const ROLE_DEFAULTS = {
   COOK:     { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:false, canManageShifts:false },
 };
 
+// GET /api/employees/me — devuelve sesión actual con restaurante y sucursal
+router.get('/me', authenticate, async (req, res) => {
+  try {
+    if (!req.user?.isEmployee) {
+      return res.status(403).json({ error: 'Solo empleados' });
+    }
+    const emp = await prisma.employee.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        isActive: true,
+        location: {
+          select: {
+            id: true,
+            name: true,
+            restaurant: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+    if (!emp || !emp.location) {
+      return res.status(404).json({ error: 'Empleado o sucursal no encontrada' });
+    }
+    const { location, ...employee } = emp;
+    return res.json({
+      employee,
+      restaurant: location.restaurant,
+      location: { id: location.id, name: location.name },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/employees/sync — descarga lista para uso offline
 router.get('/sync', authenticate, requireTenantAccess, async (req, res) => {
   try {
