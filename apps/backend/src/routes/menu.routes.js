@@ -3,15 +3,31 @@ const prisma   = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const router   = express.Router()
 
+// ── Helper: resuelve restaurantId del request o devuelve 400 explícito ─────
+// El catálogo es público (lo consume la tienda online), pero NO puede listarse
+// sin contexto de tenant — sin esta guarda Prisma trataría `restaurantId:
+// undefined` como "sin filtro" y devolvería items de todos los restaurantes.
+function resolveRestaurantId(req, res) {
+  const id = req.user?.restaurantId || req.restaurantId;
+  if (!id) {
+    res.status(400).json({
+      error: 'Restaurante no identificado. Envíe x-restaurant-id, x-restaurant-slug o subdominio.',
+      code: 'TENANT_REQUIRED',
+    });
+    return null;
+  }
+  return id;
+}
+
 // ── Categorías ────────────────────────────────────────────────────────────
 
 router.get('/categories', async (req, res) => {
   try {
+    const restaurantId = resolveRestaurantId(req, res);
+    if (!restaurantId) return;
+
     const categories = await prisma.category.findMany({
-      where: {
-        isActive: true,
-        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId // Filtrado por Tenant
-      },
+      where: { isActive: true, restaurantId },
       orderBy: { sortOrder: 'asc' }
     })
     res.json(categories)
@@ -63,11 +79,11 @@ router.delete('/categories/:id', authenticate, requireTenantAccess, requireAdmin
 
 router.get('/items', async (req, res) => {
   try {
+    const restaurantId = resolveRestaurantId(req, res);
+    if (!restaurantId) return;
+
     const { categoryId } = req.query
-    const where = {
-      isAvailable: true,
-      restaurantId: req.user?.restaurantId || req.restaurantId
-    }
+    const where = { isAvailable: true, restaurantId }
     if (categoryId) where.categoryId = categoryId
 
     const items = await prisma.menuItem.findMany({
@@ -95,11 +111,13 @@ router.get('/items', async (req, res) => {
 
 router.get('/items/:id', async (req, res) => {
   try {
-    const item = await prisma.menuItem.findUnique({
-      where: {
-        id: req.params.id,
-        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId
-      },
+    const restaurantId = resolveRestaurantId(req, res);
+    if (!restaurantId) return;
+
+    // findFirst en lugar de findUnique para que el filtro restaurantId aplique
+    // (findUnique con campo no-único en where puede ignorarlo silenciosamente).
+    const item = await prisma.menuItem.findFirst({
+      where: { id: req.params.id, restaurantId },
       include: {
         category: true,
         variants: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
@@ -177,11 +195,16 @@ router.delete('/items/:id', authenticate, requireTenantAccess, requireAdmin, asy
 
 router.get('/:id/variants', async (req, res) => {
   try {
-    // Las variantes pertenecen a un producto, que ya pertenece al restaurante
+    const restaurantId = resolveRestaurantId(req, res);
+    if (!restaurantId) return;
+
+    // Las variantes pertenecen a un producto que ya pertenece al restaurante.
+    // Filtramos por la relación menuItem.restaurantId para no exponer variantes
+    // de productos de otros tenants.
     const variants = await prisma.menuItemVariant.findMany({
       where: {
         menuItemId: req.params.id,
-        menuItem: { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId } // Doble check de seguridad
+        menuItem: { restaurantId }
       },
       orderBy: { sortOrder: 'asc' }
     });
