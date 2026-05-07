@@ -10,6 +10,7 @@
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "postinstall": "node scripts/patch-android-plugins.js",
     "build:apk": "cross-env CAPACITOR_BUILD=true next build && npx cap sync android",
     "apk:debug": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleDebug && cd ..",
     "apk:release": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleRelease && cd ..",
@@ -19,7 +20,7 @@
   "dependencies": {
     "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^8.3.1",
-    "@deedarb/capacitor-tcp-socket": "^7.2.1",
+    "capacitor-tcp-socket": "^7.1.0",
     "axios": "^1.13.6",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.11.0",
