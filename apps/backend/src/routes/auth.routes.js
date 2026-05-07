@@ -6,6 +6,7 @@ const { z }      = require('zod')
 const prisma     = require('@mrtpvrest/database').prisma
 const { authenticate } = require('../middleware/auth.middleware')
 const rateLimit  = require('express-rate-limit')
+const { refreshLimiter, resendVerifyLimiter } = require('../lib/rate-limiters')
 const { sendEmail, verificationEmailHtml } = require('../utils/mailer')
 const log = require('../lib/logger')('auth')
 
@@ -347,7 +348,7 @@ router.get('/verify-email/:token', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // REENVIAR EMAIL DE VERIFICACIÓN — POST /api/auth/resend-verification
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/resend-verification', authenticate, async (req, res) => {
+router.post('/resend-verification', resendVerifyLimiter, authenticate, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
@@ -381,7 +382,7 @@ router.post('/resend-verification', authenticate, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // REFRESH TOKEN — POST /api/auth/refresh
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', refreshLimiter, async (req, res) => {
   const { refreshToken } = req.body
   if (!refreshToken) return res.status(400).json({ error: 'refreshToken requerido' })
 
