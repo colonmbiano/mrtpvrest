@@ -52,9 +52,21 @@ export default function HubPage() {
         const list: Workspace[] = data.workspaces || [];
         setWorkspaces(list);
 
+        if (list.length === 0) return;
+
         // Auto-skip si solo hay un espacio
         if (list.length === 1) {
           selectWorkspace(list[0]);
+          return;
+        }
+
+        // Auto-skip si ya hay un workspace seleccionado y sigue siendo válido.
+        // Evita que el selector vuelva a aparecer cada vez que el usuario
+        // navega de regreso al hub o que el flujo lo redirija acá.
+        const persistedId = localStorage.getItem('activeWorkspaceId');
+        const persisted = persistedId ? list.find(w => w.id === persistedId) : null;
+        if (persisted) {
+          selectWorkspace(persisted);
         }
       } catch (err: any) {
         if (!cancelled) setError(err?.response?.data?.error || 'No pudimos cargar tus espacios');
