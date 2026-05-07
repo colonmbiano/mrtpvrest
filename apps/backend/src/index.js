@@ -170,12 +170,53 @@ app.use((req, res) => {
 // Sentry errorHandler debe ir ANTES del handler de errores de la app.
 app.use(sentry.errorHandler())
 
+// Middleware global de errores. Captura cualquier excepción no manejada,
+// la persiste en SystemLog para el panel super-admin y, si es CRITICAL,
+// dispara notifyAdmin(). Status 5xx se considera CRITICAL automáticamente
+// salvo que el handler haya seteado err.status explícito en 4xx.
+const { recordSystemLog } = require('./lib/system-log');
 app.use((err, req, res, next) => {
-  console.error('Error:', err.stack)
-  res.status(err.status || 500).json({
+  const status = err.status || err.statusCode || 500;
+  const isCritical = status >= 500;
+  const level = err.level || (isCritical ? 'CRITICAL' : 'ERROR');
+
+  console.error('[middleware-error]', err.stack || err.message)
+
+  // Best-effort persist; nunca bloquear la respuesta al cliente.
+  recordSystemLog({
+    level,
+    message: err.message || 'Error sin mensaje',
+    stack:   err.stack || null,
+    path:    req.originalUrl || req.path,
+    method:  req.method,
+    tenantId: req.user?.tenantId ?? req.tenant?.tenantId ?? null,
+    metadata: {
+      status,
+      ip: req.ip,
+      userId:   req.user?.id ?? null,
+      role:     req.user?.role ?? null,
+      restaurantId: req.user?.restaurantId ?? req.restaurantId ?? null,
+      locationId:   req.user?.locationId  ?? req.locationId  ?? null,
+      isDevice: Boolean(req.user?.isDevice),
+      // Sólo guardamos cuerpo en errores 5xx para depurar; 4xx no, suelen
+      // contener payloads válidos del cliente.
+      body: isCritical && req.body ? safePayload(req.body) : null,
+    },
+  }).catch(() => { /* swallowed para no romper el request */ });
+
+  res.status(status).json({
     error: process.env.NODE_ENV === 'production' ? 'Error interno' : err.message,
   })
 })
+
+function safePayload(b) {
+  try {
+    const s = JSON.stringify(b);
+    return s.length > 2000 ? s.slice(0, 2000) + '…' : JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
 
 // ── Jobs ─────────────────────────────────────────────────────────────────────
 const { startTrialExpiryJob } = require('./jobs/trialExpiry.job')
