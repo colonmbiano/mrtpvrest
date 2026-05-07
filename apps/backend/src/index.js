@@ -143,6 +143,7 @@ app.use('/api/onboarding',   require('./routes/onboarding.routes'));
 app.use('/api/tpv/config',   require('./routes/tpv-config.routes'));
 app.use('/api/kiosk',        require('./routes/kiosk.routes'));
 app.use('/api/modules',      require('./routes/modules.routes'));
+app.use('/api/tasks',        require('./routes/tasks.routes'));
 
 app.get('/health', (req, res) => {
   res.json({

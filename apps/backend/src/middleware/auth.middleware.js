@@ -16,7 +16,36 @@ const authenticate = async (req, res, next) => {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     const id = payload.userId || payload.id;
 
-    // Intentar buscar el usuario
+    // Caso 1: JWT de dispositivo (KDS, kiosko, etc.). El "actor" es el Device.
+    // No hay user/employee humano detrás — el rol viene del payload.
+    if (payload.isDevice) {
+      const device = await prisma.device.findUnique({
+        where: { id },
+        select: {
+          id: true, type: true, isActive: true, locationId: true, tenantId: true,
+          location: { select: { restaurantId: true } },
+        },
+      });
+      if (!device || !device.isActive) {
+        increment('user_inactive');
+        return res.status(401).json({ error: 'Dispositivo desactivado' });
+      }
+      increment('success');
+      req.user = {
+        id: device.id,
+        name: `Device ${device.type}`,
+        email: null,
+        role: payload.role || 'CASHIER',
+        isActive: true,
+        isDevice: true,
+        restaurantId: device.location?.restaurantId ?? payload.restaurantId ?? null,
+        locationId:   device.locationId,
+        tenantId:     device.tenantId,
+      };
+      return next();
+    }
+
+    // Caso 2: usuario humano. Buscar como User o Employee.
     let user = await prisma.user.findUnique({
       where: { id },
       select: { id: true, name: true, email: true, role: true, isActive: true, restaurantId: true, tenantId: true },
