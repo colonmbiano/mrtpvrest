@@ -65,11 +65,19 @@ router.get('/admin', authenticate, requireTenantAccess, requireAdmin, async (req
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── GET /:id — Detalle completo ──────────────────────────────────────────
-router.get('/:id', async (req, res) => {
+// ── GET /:id — Detalle completo (requiere auth + tenant scope) ───────────
+router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
   try {
-    const order = await prisma.order.findUnique({
-      where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) {
+      return res.status(400).json({ error: 'Restaurante no identificado' });
+    }
+
+    // Filtrar por restaurantId garantiza que solo se devuelva la orden si
+    // pertenece al tenant del token. findFirst evita el undefined-bypass de
+    // findUnique que Prisma silenciosamente ignoraba.
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, restaurantId },
       include: {
         user: { select: { name: true, phone: true, email: true } },
         items: { include: { menuItem: true } },
@@ -521,10 +529,22 @@ router.put('/:id/void-payment', authenticate, requireTenantAccess, requireAdmin,
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── CHAT DE PEDIDO ──
+// ── CHAT DE PEDIDO (requiere auth + tenant scope) ─────────────────────────
 
-router.get('/:id/messages', async (req, res) => {
+router.get('/:id/messages', authenticate, requireTenantAccess, async (req, res) => {
   try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) {
+      return res.status(400).json({ error: 'Restaurante no identificado' });
+    }
+
+    // Verifica que la orden existe y pertenece al tenant antes de exponer chat.
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, restaurantId },
+      select: { id: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+
     const messages = await prisma.deliveryMessage.findMany({
       where: { orderId: req.params.id },
       orderBy: { createdAt: 'asc' }
@@ -533,11 +553,26 @@ router.get('/:id/messages', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/:id/messages', async (req, res) => {
+router.post('/:id/messages', authenticate, requireTenantAccess, async (req, res) => {
   try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) {
+      return res.status(400).json({ error: 'Restaurante no identificado' });
+    }
+
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, restaurantId },
+      select: { id: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+
     const { message, fromDriver } = req.body;
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ error: 'Mensaje vacío' });
+    }
+
     const msg = await prisma.deliveryMessage.create({
-      data: { orderId: req.params.id, message, fromDriver: fromDriver || false }
+      data: { orderId: req.params.id, message: message.trim(), fromDriver: fromDriver || false }
     });
     res.json(msg);
   } catch (e) { res.status(500).json({ error: e.message }); }

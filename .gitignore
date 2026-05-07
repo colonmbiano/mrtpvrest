@@ -64,3 +64,7 @@ tests/e2e/.auth/
 
 # Repo standalone clonado dentro (referencia, no parte del proyecto)
 open-design/
+
+# Pen design exports (no commit en repo)
+apps/*.pen
+*.pen
