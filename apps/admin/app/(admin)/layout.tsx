@@ -34,7 +34,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           aria-hidden="true"
         />
       )}
-      <div className="md:ml-56 min-h-screen flex flex-col">
+      <div className="md:ml-64 min-h-screen flex flex-col">
         <div
           className="md:hidden sticky top-0 z-20 flex items-center justify-between px-4 py-3"
           style={{ background: "var(--surf)", borderBottom: "1px solid var(--border)" }}

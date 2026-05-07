@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { toast } from "sonner";
 import api from "@/lib/api";
 import { Monitor, Printer as PrinterIcon, Network, Usb, Bluetooth, Trash2, Edit3, Plus } from "lucide-react";
 import KDSConfigModal from "@/components/pos/KDSConfigModal";
@@ -57,8 +58,10 @@ export default function ImpresorasPage() {
       };
       if (editingId) {
         await api.put(`/api/printers/${editingId}`, payload);
+        toast.success("Dispositivo actualizado");
       } else {
         await api.post("/api/printers", payload);
+        toast.success("Dispositivo creado");
       }
       setIsFormOpen(false);
       setIsKDSModalOpen(false);
@@ -66,7 +69,7 @@ export default function ImpresorasPage() {
       setForm(DEFAULT_FORM);
       fetchPrinters();
     } catch (err: any) {
-      alert("Error guardando: " + (err?.response?.data?.error || err?.message || ""));
+      toast.error("Error guardando: " + (err?.response?.data?.error || err?.message || ""));
     }
   };
 
@@ -85,19 +88,21 @@ export default function ImpresorasPage() {
     if (!confirm("¿Eliminar este dispositivo?")) return;
     try {
       await api.delete(`/api/printers/${id}`);
+      toast.success("Dispositivo eliminado");
       fetchPrinters();
     } catch {
-      alert("Error eliminando dispositivo");
+      toast.error("Error eliminando dispositivo");
     }
   };
 
   const handleTest = async (id: string) => {
     setTestingId(id);
+    toast.success("Enviando impresión de prueba...");
     try {
       await api.post(`/api/printers/${id}/test`);
-      alert("Prueba de envío completada");
+      toast.success("Prueba enviada correctamente al dispositivo");
     } catch (err: any) {
-      alert("Error en prueba: " + (err?.response?.data?.error || err?.message || ""));
+      toast.error("Error en prueba: " + (err?.response?.data?.error || err?.message || ""));
     } finally {
       setTestingId(null);
     }
