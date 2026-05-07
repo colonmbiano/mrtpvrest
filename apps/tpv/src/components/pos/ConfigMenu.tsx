@@ -1,8 +1,6 @@
 "use client";
 import React from "react";
-import Link from "next/link";
-import { X, User, Clock, Printer, Palette, LogOut, LayoutGrid, Monitor, Settings } from "lucide-react";
-import Button from "@/components/ui/Button";
+import { X, Palette, LogOut } from "lucide-react";
 import { useAuthStore, type EmployeeRole } from "@/store/authStore";
 
 const ROLE_LABEL: Record<EmployeeRole, string> = {
@@ -59,11 +57,11 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
   return (
     <div className="fixed inset-0 z-[120] flex font-sans">
       {/* OVERLAY */}
-      <div 
-        className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-300" 
-        onClick={onClose} 
+      <div
+        className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-300"
+        onClick={onClose}
       />
-      
+
       {/* DRAWER CONTENT - WARM TECH */}
       <div className="relative w-full max-w-[400px] h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 ease-out overflow-hidden bg-[#0a0a0c] border-r border-white/5">
         {/* Glows */}
@@ -78,9 +76,10 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
             <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500">Configuración</span>
             <span className="text-2xl font-black tracking-tight text-white">Centro de Control</span>
           </div>
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             className="w-12 h-12 flex items-center justify-center rounded-2xl bg-[#121316] text-zinc-400 active:text-white transition-all active:scale-90 border border-white/5"
+            aria-label="Cerrar"
           >
             <X size={20} />
           </button>
@@ -100,51 +99,7 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
                 <span className="text-[10px] uppercase font-black tracking-[0.15em] text-amber-500/80">{roleLabel}</span>
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-3">
-              <button className="flex items-center gap-4 h-14 px-5 rounded-2xl bg-[#121316] border border-white/5 text-zinc-300 font-bold text-sm active:scale-95 transition-all active:bg-[#1a1b1f]">
-                <User size={18} className="text-amber-500" /> Mi perfil y cuenta
-              </button>
-              <button className="flex items-center gap-4 h-14 px-5 rounded-2xl bg-[#121316] border border-white/5 text-zinc-300 font-bold text-sm active:scale-95 transition-all active:bg-[#1a1b1f]">
-                <Clock size={18} className="text-amber-500" /> Reporte de turno actual
-              </button>
-            </div>
           </section>
-
-          {/* OPERACIONES */}
-          <section className="space-y-5">
-            <span className="text-[11px] font-black text-zinc-500 tracking-[0.2em] uppercase ml-1">Atajos Operativos</span>
-            <div className="grid grid-cols-1 gap-3">
-              <Link href="/kds" onClick={onClose} className="block">
-                <button className="w-full flex items-center gap-4 h-14 px-5 rounded-2xl bg-[#121316] border border-white/5 text-zinc-300 font-bold text-sm active:scale-95 transition-all active:bg-[#1a1b1f]">
-                  <Monitor size={18} className="text-zinc-500" /> Monitoreo de Cocina (KDS)
-                </button>
-              </Link>
-              <Link href="/meseros" onClick={onClose} className="block">
-                <button className="w-full flex items-center gap-4 h-14 px-5 rounded-2xl bg-[#121316] border border-white/5 text-zinc-300 font-bold text-sm active:scale-95 transition-all active:bg-[#1a1b1f]">
-                  <LayoutGrid size={18} className="text-zinc-500" /> Gestión de Salones
-                </button>
-              </Link>
-            </div>
-          </section>
-
-          {/* ADMIN */}
-          {(employee?.role === "ADMIN" || employee?.role === "OWNER") && (
-            <section className="space-y-5">
-              <span className="text-[11px] font-black tracking-[0.2em] uppercase ml-1 text-amber-500">Panel Administrativo</span>
-              <div className="grid grid-cols-1 gap-3">
-                <Link href="/admin/menu" onClick={onClose} className="block">
-                  <button className="w-full flex items-center gap-4 h-14 px-5 rounded-2xl bg-[#121316] border border-white/5 border-l-4 border-l-amber-500 text-zinc-200 font-bold text-sm active:scale-95 transition-all active:bg-[#1a1b1f]">
-                    <Settings size={18} className="text-amber-500" /> Editor de Menú y Precios
-                  </button>
-                </Link>
-                <Link href="/admin/impresoras" onClick={onClose} className="block">
-                  <button className="w-full flex items-center gap-4 h-14 px-5 rounded-2xl bg-[#121316] border border-white/5 border-l-4 border-l-amber-500 text-zinc-200 font-bold text-sm active:scale-95 transition-all active:bg-[#1a1b1f]">
-                    <Printer size={18} className="text-amber-500" /> Red e Impresoras
-                  </button>
-                </Link>
-              </div>
-            </section>
-          )}
 
           {/* APARIENCIA */}
           <section className="space-y-6">
@@ -177,13 +132,14 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
                   <Palette size={20} className="text-zinc-500" />
                   <span className="text-sm font-bold text-zinc-200">Interfaz Nocturna</span>
                 </div>
-                <button 
+                <button
                   onClick={onToggleMode}
-                  className={`w-14 h-7 rounded-full relative transition-all duration-300 shadow-inner`}
+                  className="w-14 h-7 rounded-full relative transition-all duration-300 shadow-inner"
                   style={{ background: isDark ? "#ffb84d" : "#1a1b1f" }}
+                  aria-label="Alternar modo oscuro"
                 >
-                  <div 
-                    className={`absolute top-1 w-5 h-5 rounded-full transition-all duration-300 shadow-lg ${isDark ? "left-8 bg-[#0a0a0c]" : "left-1 bg-zinc-600"}`} 
+                  <div
+                    className={`absolute top-1 w-5 h-5 rounded-full transition-all duration-300 shadow-lg ${isDark ? "left-8 bg-[#0a0a0c]" : "left-1 bg-zinc-600"}`}
                   />
                 </button>
               </div>
@@ -193,7 +149,7 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
 
         {/* FOOTER */}
         <div className="relative z-10 p-8 border-t border-white/5 bg-[#0a0a0c]">
-          <button 
+          <button
             className="w-full flex items-center justify-center gap-3 h-16 rounded-[1.25rem] bg-red-500/10 text-red-500 border border-red-500/20 font-black uppercase tracking-[0.2em] text-xs transition-all active:scale-95 active:bg-red-500 active:text-white"
             onClick={onLogout}
           >

@@ -524,6 +524,9 @@ importers:
       '@capacitor/core':
         specifier: ^8.3.1
         version: 8.3.1
+      '@deedarb/capacitor-tcp-socket':
+        specifier: ^7.2.1
+        version: 7.2.1(@capacitor/core@8.3.1)
       axios:
         specifier: ^1.13.6
         version: 1.14.0
@@ -1280,6 +1283,11 @@ packages:
 
   '@capacitor/core@8.3.1':
     resolution: {integrity: sha512-UF8ItlHguU1Z6GXfPTeT2gakf+ctNI8pAS1kwSBQlsJMlfD4OPoto/SmKnOxKCQvnF4WRcdWeg6C0zREUNaAQg==}
+
+  '@deedarb/capacitor-tcp-socket@7.2.1':
+    resolution: {integrity: sha512-mkjKXPaO3LY2dQmK4Us8jBBEegj6lActq19SWMe2cuGI0Yr8YBAdzzEmP5sYN2TvVn197XkLz9r2n6h7PaB5pw==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@electric-sql/pglite-socket@0.1.1':
     resolution: {integrity: sha512-p2hoXw3Z3LQHwTeikdZNsFBOvXGqKY2hk51BBw+8NKND8eoH+8LFOtW9Z8CQKmTJ2qqGYu82ipqiyFZOTTXNfw==}
@@ -7962,6 +7970,10 @@ snapshots:
   '@capacitor/core@8.3.1':
     dependencies:
       tslib: 2.8.1
+
+  '@deedarb/capacitor-tcp-socket@7.2.1(@capacitor/core@8.3.1)':
+    dependencies:
+      '@capacitor/core': 8.3.1
 
   '@electric-sql/pglite-socket@0.1.1(@electric-sql/pglite@0.4.1)':
     dependencies:

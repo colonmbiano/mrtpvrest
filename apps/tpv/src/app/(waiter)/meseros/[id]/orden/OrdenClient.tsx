@@ -7,6 +7,7 @@ import ProductCard from "@/components/pos/ProductCard";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { printKitchenTickets, type PrinterRecord, type TicketItem } from "@/lib/printer-tcp";
 
 type Product = {
   id: string;
@@ -37,15 +38,21 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   const [showSheet, setShowSheet] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Cache de impresoras de la sucursal — usadas para imprimir comanda
+  // local en cocina/barra desde la tablet del mesero (misma LAN).
+  const [printers, setPrinters] = useState<PrinterRecord[]>([]);
+
   useEffect(() => {
     (async () => {
       try {
-        const [catsRes, itemsRes] = await Promise.all([
+        const [catsRes, itemsRes, printersRes] = await Promise.all([
           api.get("/api/menu/categories"),
           api.get("/api/menu/items"),
+          api.get<PrinterRecord[]>("/api/printers").catch(() => ({ data: [] as PrinterRecord[] })),
         ]);
         setCategories([{ id: "all", name: "Todos" }, ...catsRes.data]);
         setProducts(itemsRes.data);
+        setPrinters(Array.isArray(printersRes.data) ? printersRes.data : []);
       } catch {
         toast.error("No se pudo cargar el menu");
       } finally {
@@ -105,7 +112,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
     if (cart.length === 0) return;
     setSubmitting(true);
     try {
-      await api.post("/api/orders/tpv", {
+      const { data: order } = await api.post("/api/orders/tpv", {
         type: "DINE_IN",
         tableId,
         items: cart.map((l) => ({
@@ -117,6 +124,28 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         total,
       });
       toast.success("Comanda enviada a cocina");
+
+      // Fire-and-forget: imprimir comanda en KITCHEN/BAR desde la tablet
+      // del mesero (LAN local). No bloquea ni revierte la orden si la
+      // impresora falla.
+      const printItems: TicketItem[] = cart.map((l) => ({
+        name: l.name,
+        quantity: l.quantity,
+        price: l.price,
+      }));
+      printKitchenTickets(printers, {
+        orderNumber: order?.orderNumber ?? null,
+        orderType: "DINE_IN",
+        tableNumber: tableId,
+        items: printItems,
+      })
+        .then((res) => {
+          if (res.failed.length > 0) {
+            toast.warning(`Comanda: ${res.ok} ok / ${res.failed.length} fallaron`);
+          }
+        })
+        .catch(() => { /* silencio */ });
+
       router.push(`/meseros/${tableId}`);
     } catch (e: any) {
       toast.error("Error al enviar: " + (e.response?.data?.error || e.message));

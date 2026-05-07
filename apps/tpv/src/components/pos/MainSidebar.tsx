@@ -72,7 +72,7 @@ export default function MainSidebar({
   ];
 
   return (
-    <aside className="hidden lg:flex w-20 flex-col items-center py-8 gap-10 shrink-0 relative z-30 bg-[#0a0a0c] border-r border-white/5">
+    <aside className="hidden md:flex w-20 flex-col items-center py-8 gap-10 shrink-0 relative z-30 bg-[#0a0a0c] border-r border-white/5">
       {/* LOGO WARM TECH */}
       <div className="flex flex-col items-center gap-3">
         <div
