@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">MRTPV Meseros</string>
-    <string name="title_activity_main">MRTPV Meseros</string>
-    <string name="package_name">com.mrtpvrest.waiters</string>
-    <string name="custom_url_scheme">com.mrtpvrest.waiters</string>
-</resources>
