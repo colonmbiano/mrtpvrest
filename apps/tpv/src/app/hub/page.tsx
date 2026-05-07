@@ -35,6 +35,10 @@ const fmtMoney = (n: number) =>
 
 export default function HubPage() {
   const router = useRouter();
+  // mounted se queda en false mientras decidimos si el selector debe pintarse.
+  // Si hay activeWorkspaceId persistido, redirigimos sin renderizar UI para
+  // que el botón "Atrás" del WebView nunca recale en este selector después
+  // del primer setup.
   const [mounted, setMounted] = useState(false);
   const employee = useAuthStore((s) => s.employee);
   const logout = useAuthStore((s) => s.logout);
@@ -56,8 +60,33 @@ export default function HubPage() {
   }, [menuOpen]);
 
   useEffect(() => {
-    setMounted(true);
     let cancelled = false;
+
+    // Atajo silencioso: si ya hay workspace activo en localStorage, brincar
+    // directo a /pos/order-type (o /pos/shift/open) sin esperar el fetch
+    // ni mostrar la pantalla de "Cargando espacios". Esto evita que el
+    // selector reaparezca al hacer "Atrás" desde el POS.
+    const persistedId = typeof window !== 'undefined'
+      ? localStorage.getItem('activeWorkspaceId')
+      : null;
+
+    if (persistedId) {
+      (async () => {
+        try {
+          const { data } = await api.get('/api/shifts/active');
+          if (cancelled) return;
+          const isShiftOpen = Boolean(data?.isOpen ?? data?.id);
+          router.replace(isShiftOpen ? '/pos/order-type' : '/pos/shift/open');
+        } catch {
+          if (!cancelled) router.replace('/pos/shift/open');
+        }
+      })();
+      return () => { cancelled = true; };
+    }
+
+    // Sin workspace persistido — flujo de primera vez (o tras logout):
+    // pinta el selector con el catálogo de espacios.
+    setMounted(true);
     (async () => {
       try {
         const { data } = await api.get('/api/workspaces/me');
@@ -66,16 +95,8 @@ export default function HubPage() {
         setWorkspaces(list);
 
         if (list.length === 0) return;
-
         if (list.length === 1) {
           selectWorkspace(list[0]);
-          return;
-        }
-
-        const persistedId = localStorage.getItem('activeWorkspaceId');
-        const persisted = persistedId ? list.find(w => w.id === persistedId) : null;
-        if (persisted) {
-          selectWorkspace(persisted);
         }
       } catch (err: any) {
         if (!cancelled) setError(err?.response?.data?.error || 'No pudimos cargar tus espacios');
