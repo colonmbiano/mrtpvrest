@@ -10,10 +10,13 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
   const router = useRouter();
   const { currentEmployee, isLocked } = useTPVAuth();
 
-  // VALIDACIÓN DE ROL: Solo WAITER puede acceder a /(waiter)
+  // VALIDACIÓN DE ROL: WAITER y roles administrativos (OWNER/ADMIN/MANAGER)
+  // pueden ver el salón. Los administrativos lo usan para supervisión y para
+  // abrir el "Mapa de Mesas" desde el dashboard del TPV.
   useEffect(() => {
     if (currentEmployee && !isLocked) {
-      if (currentEmployee.role !== "WAITER") {
+      const allowedRoles = ["WAITER", "OWNER", "ADMIN", "MANAGER"];
+      if (!allowedRoles.includes(currentEmployee.role)) {
         console.warn(
           `[SECURITY] Acceso denegado a /(waiter): rol ${currentEmployee.role} no autorizado`
         );
