@@ -15,13 +15,15 @@ interface OrderTypeSelectorProps {
   onConfig?: () => void;
 }
 
-const TYPES: Array<{
+type OrderTypeCard = {
   id: OrderType;
   title: string;
   desc: string;
   icon: typeof Utensils;
   color: string;
-}> = [
+};
+
+const ORDER_TYPES: OrderTypeCard[] = [
   {
     id: "DINE_IN",
     title: "Comer Aquí",
@@ -38,7 +40,7 @@ const TYPES: Array<{
   },
   {
     id: "DELIVERY",
-    title: "A Domicilio",
+    title: "Delivery",
     desc: "Preparación y entrega al cliente",
     icon: Bike,
     color: "#10b981",
@@ -56,7 +58,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-auto bg-[#0a0a0c] font-sans">
-      {/* Warm Tech Ambient Glows */}
+      {/* Warm Tech ambient glow */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-60 -left-60 w-[600px] h-[600px] bg-amber-500/5 blur-[120px] rounded-full" />
         <div className="absolute -bottom-60 -right-60 w-[600px] h-[600px] bg-amber-500/5 blur-[120px] rounded-full" />
@@ -76,7 +78,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
           </p>
         </div>
 
-        {/* === Sección Nueva Orden === */}
+        {/* === Grid principal: SOLO 3 tipos operativos === */}
         <div className="w-full mb-10">
           <div className="flex items-center gap-3 mb-4 px-1">
             <span className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-500">
@@ -86,22 +88,22 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {TYPES.map((t) => {
+            {ORDER_TYPES.map((t) => {
               const Icon = t.icon;
               const isPrimary = t.id === "DINE_IN";
               return (
                 <button
                   key={t.id}
                   onClick={() => onSelect(t.id)}
-                  style={{ minHeight: 56 }}
                   className={`
-                    group relative flex flex-col items-start text-left p-7 rounded-[2rem] transition-all duration-200
-                    active:scale-95 border border-white/5 bg-[#121316] shadow-xl overflow-hidden
+                    group relative flex flex-col items-start text-left p-7 rounded-[2rem]
+                    min-h-[64px] py-4 transition-transform duration-150 active:scale-95
+                    border border-white/5 bg-[#121316] shadow-xl overflow-hidden
                     ${isPrimary ? "ring-2 ring-amber-500/50" : ""}
                   `}
                 >
                   <div
-                    className="w-14 h-14 rounded-2xl flex items-center justify-center mb-6 shadow-2xl transition-transform group-active:scale-90"
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center mb-6 shadow-2xl"
                     style={{
                       background: isPrimary ? "#ffb84d" : "#1a1b1f",
                       color: isPrimary ? "#0a0a0c" : t.color,
@@ -116,7 +118,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   </p>
 
                   <div
-                    className={`absolute bottom-6 right-6 transition-transform group-active:translate-x-1 ${
+                    className={`absolute bottom-6 right-6 ${
                       isPrimary ? "text-amber-500" : "text-zinc-700"
                     }`}
                   >
@@ -134,12 +136,12 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
           </div>
         </div>
 
-        {/* === Sección Acciones Operativas === */}
+        {/* === Acciones Rápidas === */}
         {(onTables || onShiftClose || onOpenTickets) && (
           <div className="w-full mb-10">
             <div className="flex items-center gap-3 mb-4 px-1">
               <span className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
-                Acciones Operativas
+                Acciones Rápidas
               </span>
               <div className="flex-1 h-px bg-white/5" />
             </div>
@@ -148,15 +150,14 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               {onTables && (
                 <button
                   onClick={onTables}
-                  style={{ minHeight: 56 }}
-                  className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-[#121316] border border-white/5 active:scale-95 transition-all hover:border-amber-500/30 group"
+                  className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-[#121316] border border-white/5 active:scale-95 transition-transform duration-150"
                 >
                   <div className="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0">
                     <LayoutGrid size={22} strokeWidth={2.5} />
                   </div>
                   <div className="flex flex-col items-start min-w-0">
                     <span className="text-sm font-black text-white tracking-tight">Mapa de Mesas</span>
-                    <span className="text-[11px] text-zinc-500 font-bold truncate">Estado de salón en tiempo real</span>
+                    <span className="text-[11px] text-zinc-500 font-bold truncate">Estado del salón en tiempo real</span>
                   </div>
                 </button>
               )}
@@ -164,8 +165,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               {onShiftClose && (
                 <button
                   onClick={onShiftClose}
-                  style={{ minHeight: 56 }}
-                  className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-[#121316] border border-white/5 active:scale-95 transition-all hover:border-emerald-500/30 group"
+                  className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-[#121316] border border-white/5 active:scale-95 transition-transform duration-150"
                 >
                   <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center flex-shrink-0">
                     <Wallet size={22} strokeWidth={2.5} />
@@ -180,8 +180,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               {onOpenTickets && (
                 <button
                   onClick={onOpenTickets}
-                  style={{ minHeight: 56 }}
-                  className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-[#121316] border border-white/5 active:scale-95 transition-all hover:border-amber-500/30 group"
+                  className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-[#121316] border border-white/5 active:scale-95 transition-transform duration-150"
                 >
                   <div className="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0 relative">
                     <ShoppingBag size={22} strokeWidth={2.5} />
@@ -193,7 +192,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   </div>
                   <div className="flex flex-col items-start min-w-0">
                     <span className="text-sm font-black text-white tracking-tight">Tickets Abiertos</span>
-                    <span className="text-[11px] text-zinc-500 font-bold truncate">Continuar con pedidos en curso</span>
+                    <span className="text-[11px] text-zinc-500 font-bold truncate">Continuar pedidos en curso</span>
                   </div>
                 </button>
               )}
@@ -201,24 +200,22 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
           </div>
         )}
 
-        {/* === Botón Configuración (único punto de entrada al admin) === */}
+        {/* === Botón Configuración (destacado) === */}
         {onConfig && (
           <button
             onClick={onConfig}
-            style={{ minHeight: 56 }}
-            className="w-full max-w-md flex items-center justify-center gap-3 px-6 py-4 rounded-2xl bg-[#121316] border border-amber-500/30 text-amber-500 font-black uppercase tracking-[0.2em] text-xs active:scale-95 transition-all hover:bg-amber-500/5 hover:border-amber-500/50"
+            className="w-full max-w-md flex items-center justify-center gap-3 px-6 py-4 min-h-[64px] rounded-2xl bg-[#ffb84d] text-[#0a0a0c] font-black uppercase tracking-[0.2em] text-xs active:scale-95 transition-transform duration-150 shadow-[0_10px_30px_rgba(255,184,77,0.25)]"
           >
             <Settings size={18} strokeWidth={2.5} />
             <span>Configuración</span>
           </button>
         )}
 
-        {/* Botón cerrar sesión (solo si está disponible) */}
+        {/* Cerrar sesión (secundario) */}
         {onClose && (
           <button
             onClick={onClose}
-            style={{ minHeight: 56 }}
-            className="mt-6 w-full max-w-md h-14 rounded-2xl bg-transparent border border-white/5 flex items-center justify-center transition-all active:scale-95 text-[11px] font-black uppercase tracking-[0.25em] text-zinc-600 hover:text-zinc-400"
+            className="mt-6 w-full max-w-md min-h-[64px] py-4 rounded-2xl bg-transparent border border-white/5 flex items-center justify-center text-[11px] font-black uppercase tracking-[0.25em] text-zinc-600 active:scale-95 transition-transform duration-150"
           >
             Cerrar Sesión
           </button>
