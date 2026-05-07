@@ -7,8 +7,6 @@ export type ExtendedOrderType = OrderType;
 
 interface OrderTypeSelectorProps {
   onSelect: (type: ExtendedOrderType) => void;
-  openOrdersCount?: number;
-  onOpenTickets?: () => void;
   onClose?: () => void;
   onTables?: () => void;
   onShiftClose?: () => void;
@@ -49,8 +47,6 @@ const ORDER_TYPES: OrderTypeCard[] = [
 
 const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onSelect,
-  openOrdersCount = 0,
-  onOpenTickets,
   onClose,
   onTables,
   onShiftClose,
@@ -136,86 +132,68 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
           </div>
         </div>
 
-        {/* === Acciones Rápidas === */}
-        {(onTables || onShiftClose || onOpenTickets) && (
-          <div className="w-full mb-10">
-            <div className="flex items-center gap-3 mb-4 px-1">
-              <span className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
-                Acciones Rápidas
-              </span>
-              <div className="flex-1 h-px bg-white/5" />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {onTables && (
-                <button
-                  onClick={onTables}
-                  className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-[#121316] border border-white/5 active:scale-95 transition-transform duration-150"
-                >
-                  <div className="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0">
-                    <LayoutGrid size={22} strokeWidth={2.5} />
-                  </div>
-                  <div className="flex flex-col items-start min-w-0">
-                    <span className="text-sm font-black text-white tracking-tight">Mapa de Mesas</span>
-                    <span className="text-[11px] text-zinc-500 font-bold truncate">Estado del salón en tiempo real</span>
-                  </div>
-                </button>
-              )}
-
-              {onShiftClose && (
-                <button
-                  onClick={onShiftClose}
-                  className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-[#121316] border border-white/5 active:scale-95 transition-transform duration-150"
-                >
-                  <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center flex-shrink-0">
-                    <Wallet size={22} strokeWidth={2.5} />
-                  </div>
-                  <div className="flex flex-col items-start min-w-0">
-                    <span className="text-sm font-black text-white tracking-tight">Corte de Caja</span>
-                    <span className="text-[11px] text-zinc-500 font-bold truncate">Cerrar turno y cuadrar dinero</span>
-                  </div>
-                </button>
-              )}
-
-              {onOpenTickets && (
-                <button
-                  onClick={onOpenTickets}
-                  className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-[#121316] border border-white/5 active:scale-95 transition-transform duration-150"
-                >
-                  <div className="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0 relative">
-                    <ShoppingBag size={22} strokeWidth={2.5} />
-                    {openOrdersCount > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-[#0a0a0c] text-[10px] font-black flex items-center justify-center">
-                        {openOrdersCount}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-start min-w-0">
-                    <span className="text-sm font-black text-white tracking-tight">Tickets Abiertos</span>
-                    <span className="text-[11px] text-zinc-500 font-bold truncate">Continuar pedidos en curso</span>
-                  </div>
-                </button>
-              )}
-            </div>
+        {/* === Atajos Operativos: SOLO Mapa de Mesas, Corte de Caja, Configuración === */}
+        <div className="w-full mb-10">
+          <div className="flex items-center gap-3 mb-4 px-1">
+            <span className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
+              Atajos Operativos
+            </span>
+            <div className="flex-1 h-px bg-white/5" />
           </div>
-        )}
 
-        {/* === Botón Configuración (destacado) === */}
-        {onConfig && (
-          <button
-            onClick={onConfig}
-            className="w-full max-w-md flex items-center justify-center gap-3 px-6 py-4 min-h-[64px] rounded-2xl bg-[#ffb84d] text-[#0a0a0c] font-black uppercase tracking-[0.2em] text-xs active:scale-95 transition-transform duration-150 shadow-[0_10px_30px_rgba(255,184,77,0.25)]"
-          >
-            <Settings size={18} strokeWidth={2.5} />
-            <span>Configuración</span>
-          </button>
-        )}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {onTables && (
+              <button
+                onClick={onTables}
+                className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-[#121316] border border-white/5 active:scale-95 transition-transform duration-150"
+              >
+                <div className="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0">
+                  <LayoutGrid size={22} strokeWidth={2.5} />
+                </div>
+                <div className="flex flex-col items-start min-w-0">
+                  <span className="text-sm font-black text-white tracking-tight">Mapa de Mesas</span>
+                  <span className="text-[11px] text-zinc-500 font-bold truncate">Estado del salón en tiempo real</span>
+                </div>
+              </button>
+            )}
 
-        {/* Cerrar sesión (secundario) */}
+            {onShiftClose && (
+              <button
+                onClick={onShiftClose}
+                className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-[#121316] border border-white/5 active:scale-95 transition-transform duration-150"
+              >
+                <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center flex-shrink-0">
+                  <Wallet size={22} strokeWidth={2.5} />
+                </div>
+                <div className="flex flex-col items-start min-w-0">
+                  <span className="text-sm font-black text-white tracking-tight">Corte de Caja</span>
+                  <span className="text-[11px] text-zinc-500 font-bold truncate">Cerrar turno y cuadrar dinero</span>
+                </div>
+              </button>
+            )}
+
+            {onConfig && (
+              <button
+                onClick={onConfig}
+                className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-[#ffb84d] text-[#0a0a0c] active:scale-95 transition-transform duration-150 shadow-[0_10px_30px_rgba(255,184,77,0.25)]"
+              >
+                <div className="w-11 h-11 rounded-xl bg-[#0a0a0c]/10 text-[#0a0a0c] flex items-center justify-center flex-shrink-0">
+                  <Settings size={22} strokeWidth={2.5} />
+                </div>
+                <div className="flex flex-col items-start min-w-0">
+                  <span className="text-sm font-black tracking-tight">Configuración</span>
+                  <span className="text-[11px] font-bold truncate opacity-80">Administrar el sistema</span>
+                </div>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Cerrar sesión */}
         {onClose && (
           <button
             onClick={onClose}
-            className="mt-6 w-full max-w-md min-h-[64px] py-4 rounded-2xl bg-transparent border border-white/5 flex items-center justify-center text-[11px] font-black uppercase tracking-[0.25em] text-zinc-600 active:scale-95 transition-transform duration-150"
+            className="mt-2 w-full max-w-md min-h-[64px] py-4 rounded-2xl bg-transparent border border-white/5 flex items-center justify-center text-[11px] font-black uppercase tracking-[0.25em] text-zinc-600 active:scale-95 transition-transform duration-150"
           >
             Cerrar Sesión
           </button>
