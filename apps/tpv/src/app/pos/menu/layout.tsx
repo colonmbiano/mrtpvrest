@@ -215,7 +215,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       )}
 
       {/* MAIN CONTENT AREA */}
-      <div className={`flex-1 flex flex-col min-w-0 min-h-0 ${mobileView === "menu" ? "flex" : "hidden"} lg:flex`}>
+      <div className={`flex-1 flex flex-col min-w-0 min-h-0 ${mobileView === "menu" ? "flex" : "hidden"} md:flex`}>
         {/* TOP HEADER */}
         <header className="h-16 sm:h-20 border-b border-border bg-surface-1 flex items-center px-6 gap-6 shrink-0 z-10">
           <div className="flex items-center gap-3">
@@ -239,7 +239,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
           <div className="flex items-center gap-4 shrink-0">
             <div 
-              className={`hidden lg:flex flex-col items-end cursor-pointer hover:opacity-80 transition-all`}
+              className={`hidden md:flex flex-col items-end cursor-pointer hover:opacity-80 transition-all`}
               onClick={() => !shiftOpen && setShowShift(true)}
             >
               <span className="text-sm font-bold tracking-tight text-tx-pri">
@@ -257,8 +257,17 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
             
             <button
               type="button"
-              onClick={() => setShowMenu(true)}
-              aria-label="Abrir menú de configuración"
+              onClick={() => {
+                // Roles administrativos van directo al panel /admin.
+                // Cajeros y demás no tienen acceso → ConfigMenu modal.
+                const role = currentEmployee?.role;
+                if (role === "ADMIN" || role === "OWNER" || role === "MANAGER") {
+                  router.push("/admin");
+                } else {
+                  setShowMenu(true);
+                }
+              }}
+              aria-label="Abrir configuración"
               className="w-10 h-10 rounded-full bg-surface-2 border border-border flex items-center justify-center text-xs font-black text-tx-pri active:scale-95 transition-all hover:border-brand/50 focus:outline-none focus:ring-2 focus:ring-brand/40"
               style={{ color: "var(--brand)" }}
             >
@@ -273,7 +282,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         </main>
       </div>
 
-      <div className={`${mobileView === "ticket" ? "flex" : "hidden"} lg:flex w-full lg:w-auto min-h-0 relative z-20`}>
+      <div className={`${mobileView === "ticket" ? "flex" : "hidden"} md:flex w-full md:w-auto min-h-0 relative z-20`}>
         <SidebarTicket onOpenShift={() => setShowShift(true)} isShiftOpen={!!shiftOpen} />
       </div>
 
@@ -290,7 +299,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       {/* MOBILE FAB: TOGGLE MENU/TICKET */}
       <button
         onClick={() => setMobileView(mobileView === "menu" ? "ticket" : "menu")}
-        className="lg:hidden fixed bottom-6 right-6 z-50 h-16 w-16 rounded-full text-brand-fg shadow-[0_0_24px_rgba(255,132,0,0.4)] flex items-center justify-center active:scale-95 transition-all"
+        className="md:hidden fixed bottom-6 right-6 z-50 h-16 w-16 rounded-full text-brand-fg shadow-[0_0_24px_rgba(255,132,0,0.4)] flex items-center justify-center active:scale-95 transition-all"
         style={{ background: "var(--brand)" }}
         aria-label={mobileView === "menu" ? "Ver ticket" : "Ver menú"}
       >

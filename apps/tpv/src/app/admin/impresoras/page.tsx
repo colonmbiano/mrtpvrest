@@ -5,6 +5,7 @@ import api from "@/lib/api";
 import { Monitor, Printer as PrinterIcon, Network, Usb, Bluetooth, Trash2, Edit3, Plus } from "lucide-react";
 import KDSConfigModal from "@/components/pos/KDSConfigModal";
 import BackButton from "@/components/BackButton";
+import { printTestTicket, type PrinterStation } from "@/lib/printer-tcp";
 
 type Printer = {
   id: string;
@@ -69,6 +70,10 @@ export default function ImpresorasPage() {
       setEditingId(null);
       setForm(DEFAULT_FORM);
       fetchPrinters();
+      // Avisa a SidebarTicket (POS) que refresque su cache de impresoras.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("printers-changed"));
+      }
     } catch (err: any) {
       toast.error("Error guardando: " + (err?.response?.data?.error || err?.message || ""));
     }
@@ -91,19 +96,48 @@ export default function ImpresorasPage() {
       await api.delete(`/api/printers/${id}`);
       toast.success("Dispositivo eliminado");
       fetchPrinters();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("printers-changed"));
+      }
     } catch {
       toast.error("Error eliminando dispositivo");
     }
   };
 
   const handleTest = async (id: string) => {
+    const printer = printers.find((p) => p.id === id);
+    if (!printer) {
+      toast.error("Impresora no encontrada");
+      return;
+    }
+    if (printer.isVirtual || printer.ip === "0.0.0.0") {
+      toast.success("Refrescando pantalla KDS…");
+      // KDS virtual no requiere ESC/POS — el server hace push vía socket.
+      return;
+    }
+    if (printer.connectionType !== "NETWORK") {
+      toast.error(`Conexión ${printer.connectionType} no soportada todavía`);
+      return;
+    }
+    if (!printer.ip) {
+      toast.error("Impresora NETWORK sin IP configurada");
+      return;
+    }
+
     setTestingId(id);
     toast.success("Enviando impresión de prueba...");
     try {
-      await api.post(`/api/printers/${id}/test`);
+      // Imprimir directo desde la tablet vía TCP nativo (Capacitor plugin).
+      // El backend Railway no puede alcanzar IPs LAN del cliente, así que
+      // la impresión real ocurre acá en la misma red de la impresora.
+      await printTestTicket(
+        { ip: printer.ip, port: printer.port },
+        (printer.type as PrinterStation) || "KITCHEN"
+      );
       toast.success("Prueba enviada correctamente al dispositivo");
-    } catch (err: any) {
-      toast.error("Error en prueba: " + (err?.response?.data?.error || err?.message || ""));
+    } catch (err) {
+      const e = err as { message?: string };
+      toast.error("Error en prueba: " + (e?.message || "fallo TCP"));
     } finally {
       setTestingId(null);
     }
