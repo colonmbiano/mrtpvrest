@@ -153,6 +153,14 @@ app.get('/health', (req, res) => {
   })
 })
 
+// /health/auth — métricas in-memory del middleware de autenticación.
+// Útil para detectar oleadas de token_expired (clock skew, refresh roto)
+// o token_malformed (cliente enviando bearer mal formado).
+const { getAuthCounters } = require('./lib/auth-metrics');
+app.get('/health/auth', (req, res) => {
+  res.json({ status: 'ok', ...getAuthCounters() });
+})
+
 app.use((req, res) => {
   res.status(404).json({ error: 'Ruta no encontrada: ' + req.method + ' ' + req.path })
 })

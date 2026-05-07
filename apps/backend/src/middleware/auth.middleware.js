@@ -1,11 +1,16 @@
 ﻿const jwt    = require('jsonwebtoken')
 const prisma = require('@mrtpvrest/database').prisma
+const { increment } = require('../lib/auth-metrics');
+const log = require('../lib/logger')('auth');
 
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer '))
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      increment('token_missing');
+      log.warn('token_missing', { path: req.path, method: req.method, ip: req.ip });
       return res.status(401).json({ error: 'Token requerido' });
+    }
 
     const token = authHeader.split(' ')[1];
     const payload = jwt.verify(token, process.env.JWT_SECRET);
@@ -55,14 +60,28 @@ const authenticate = async (req, res, next) => {
       }
     }
 
-    if (!user || !user.isActive)
-      return res.status(401).json({ error: 'Sesión no válida o usuario inactivo' });
+    if (!user) {
+      increment('user_not_found');
+      log.warn('user_not_found', { id, path: req.path });
+      return res.status(401).json({ error: 'Sesión no válida' });
+    }
+    if (!user.isActive) {
+      increment('user_inactive');
+      log.warn('user_inactive', { id, role: user.role });
+      return res.status(401).json({ error: 'Usuario inactivo' });
+    }
 
+    increment('success');
     req.user = user;
     next();
   } catch (error) {
-    if (error.name === 'TokenExpiredError')
+    if (error.name === 'TokenExpiredError') {
+      increment('token_expired');
+      log.warn('token_expired', { path: req.path, method: req.method });
       return res.status(401).json({ error: 'Token expirado', code: 'TOKEN_EXPIRED' });
+    }
+    increment('token_malformed');
+    log.warn('token_malformed', { path: req.path, errName: error.name, errMsg: error.message });
     return res.status(401).json({ error: 'Token invalido' });
   }
 };
