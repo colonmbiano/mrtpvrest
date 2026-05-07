@@ -6,6 +6,13 @@ import { usePathname } from "next/navigation";
 import { logout, getUser } from "@/lib/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import api from "@/lib/api";
+import type {
+  AdminUser,
+  AdminRestaurant,
+  AdminLocation,
+  AdminBrandConfig,
+  TenantMeResponse,
+} from "@/types/admin";
 
 // ── SVG Icon system ───────────────────────────────────────────
 type IconProps = { size?: number };
@@ -89,29 +96,29 @@ type SidebarProps = { isOpen?: boolean; onClose?: () => void };
 
 export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
   const path = usePathname();
-  const [user, setUser]             = useState<any>(null);
-  const [locations, setLocations]   = useState<any[]>([]);
-  const [brands, setBrands]         = useState<any[]>([]);
+  const [user, setUser]             = useState<AdminUser | null>(null);
+  const [locations, setLocations]   = useState<AdminLocation[]>([]);
+  const [brands, setBrands]         = useState<AdminRestaurant[]>([]);
   const [activeLocationId, setActiveLocationId] = useState<string>("");
   const [activeBrandId, setActiveBrandId]       = useState<string>("");
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
   const [imgError, setImgError]     = useState(false);
   const [open, setOpen]             = useState<Record<string, boolean>>({});
-  const [brand, setBrand]           = useState<{ name: string; logoUrl: string | null }>({ name: "", logoUrl: null });
+  const [brand, setBrand]           = useState<AdminBrandConfig>({ name: "", logoUrl: null });
 
   useEffect(() => {
-    const currentUser = getUser();
+    const currentUser = getUser() as AdminUser | null;
     setUser(currentUser);
     if (currentUser) {
       // 1. Cargar contexto de Tenant y sus marcas
       (async () => {
         try {
-          const { data: tenant } = await api.get("/api/tenant/me");
+          const { data: tenant } = await api.get<TenantMeResponse>("/api/tenant/me");
           const restaurantList = tenant.restaurants || [];
           setBrands(restaurantList);
-          
+
           const currentBrandId = localStorage.getItem("restaurantId");
-          if (currentBrandId && restaurantList.some((r: any) => r.id === currentBrandId)) {
+          if (currentBrandId && restaurantList.some((r) => r.id === currentBrandId)) {
             setActiveBrandId(currentBrandId);
           } else if (restaurantList.length > 0) {
             const firstId = restaurantList[0].id;
@@ -126,11 +133,11 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
       // 2. Cargar sucursales de la marca activa
       (async () => {
         try {
-          const { data } = await api.get("/api/admin/locations");
-          const list = Array.isArray(data) ? data : [];
+          const { data } = await api.get<AdminLocation[]>("/api/admin/locations");
+          const list: AdminLocation[] = Array.isArray(data) ? data : [];
           setLocations(list);
           const saved = localStorage.getItem("locationId");
-          if (saved && list.some((l: any) => l.id === saved)) {
+          if (saved && list.some((l) => l.id === saved)) {
             setActiveLocationId(saved);
             // Notificar que el contexto de sucursal ya está listo
             window.dispatchEvent(new Event('locationChanged'));
@@ -150,7 +157,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
       // 3. Cargar configuración visual de la marca
       (async () => {
         try {
-          const { data } = await api.get("/api/admin/config");
+          const { data } = await api.get<AdminBrandConfig & Record<string, unknown>>("/api/admin/config");
           setBrand({ name: data.name || "", logoUrl: data.logoUrl || null });
         } catch {
           /* sin config todavía */
