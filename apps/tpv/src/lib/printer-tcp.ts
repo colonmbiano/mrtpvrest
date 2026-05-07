@@ -16,12 +16,12 @@
 
 import type { Plugin } from "@capacitor/core";
 
-// Tipo mínimo que necesitamos del plugin. Mantenerlo aquí evita acoplar
-// nuestro código a su API completa (open/close/etc. variando por versión).
+// API del plugin `capacitor-tcp-socket` v7+. Tipo local — no exponemos
+// el namespace completo del paquete para no acoplarnos.
 interface TCPSocketPlugin extends Plugin {
-  open(opts: { ipAddress: string; port: number }): Promise<{ client: number }>;
-  write(opts: { client: number; data: string }): Promise<void>;
-  close(opts: { client: number }): Promise<void>;
+  connect(opts: { ipAddress: string; port?: number }): Promise<{ client: number }>;
+  send(opts: { client: number; data: string; encoding?: "utf8" | "base64" | "hex" }): Promise<void>;
+  disconnect(opts: { client: number }): Promise<{ client: number }>;
 }
 
 // ── Comandos ESC/POS estándar ────────────────────────────────────────────
@@ -86,9 +86,14 @@ let cachedPlugin: TCPSocketPlugin | null | undefined;
 async function getPlugin(): Promise<TCPSocketPlugin | null> {
   if (cachedPlugin !== undefined) return cachedPlugin;
   try {
-    const mod = await import("@deedarb/capacitor-tcp-socket");
-    cachedPlugin =
-      (mod as unknown as { TCPSocket?: TCPSocketPlugin }).TCPSocket ?? null;
+    const mod = await import("capacitor-tcp-socket");
+    // El plugin exporta `TcpSocket` como nombre canónico.
+    const exported = mod as unknown as {
+      TcpSocket?: TCPSocketPlugin;
+      TCPSocket?: TCPSocketPlugin;
+      default?: TCPSocketPlugin;
+    };
+    cachedPlugin = exported.TcpSocket ?? exported.TCPSocket ?? exported.default ?? null;
   } catch {
     cachedPlugin = null;
   }
@@ -128,12 +133,14 @@ export async function sendRawTcp(target: PrintTarget, payload: string): Promise<
   );
 
   try {
-    const open = await Promise.race([plugin.open({ ipAddress: ip, port }), timeoutPromise]);
-    clientId = open.client;
-    await Promise.race([plugin.write({ client: clientId, data: payload }), timeoutPromise]);
+    const conn = await Promise.race([plugin.connect({ ipAddress: ip, port }), timeoutPromise]);
+    clientId = conn.client;
+    // ESC/POS es binario pero el plugin acepta utf8 → enviamos como string
+    // raw porque buildXTicket genera bytes en code page latin1 compatible.
+    await Promise.race([plugin.send({ client: clientId, data: payload, encoding: "utf8" }), timeoutPromise]);
   } finally {
     if (clientId !== null) {
-      try { await plugin.close({ client: clientId }); } catch { /* noop */ }
+      try { await plugin.disconnect({ client: clientId }); } catch { /* noop */ }
     }
   }
 }
