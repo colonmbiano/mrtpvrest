@@ -6,6 +6,7 @@ import {
   TrendingUp, Receipt, ShoppingCart, RotateCcw, ChevronRight,
 } from 'lucide-react';
 import api from '@/lib/api';
+import BackButton from '@/components/BackButton';
 
 type Period = '7D' | '30D' | 'AÑO';
 
@@ -95,13 +96,16 @@ export default function ReportesPage() {
     <div className="min-h-full" style={{ background: 'var(--bg)', color: 'var(--text-primary)' }}>
       {/* Topbar */}
       <header className="flex items-end justify-between gap-6 px-8 py-6 border-b border-border bg-surface-1/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-widest text-tx-mut uppercase">
-            <span>Analytics</span>
-            <ChevronRight size={11} />
-            <span style={{ color: 'var(--brand)' }}>Reportes de Ventas</span>
+        <div className="flex items-end gap-4">
+          <BackButton ariaLabel="Volver al panel admin" />
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-widest text-tx-mut uppercase">
+              <span>Analytics</span>
+              <ChevronRight size={11} />
+              <span style={{ color: 'var(--brand)' }}>Reportes de Ventas</span>
+            </div>
+            <h1 className="text-3xl font-black">Dashboard</h1>
           </div>
-          <h1 className="text-3xl font-black">Dashboard</h1>
         </div>
         <div className="flex items-center gap-3">
           <div className="inline-flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-xs bg-surface-2 border border-border shadow-sm">

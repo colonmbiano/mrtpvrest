@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Power, X, Search, ShieldCheck } from "lucide-react";
 import api from "@/lib/api";
+import BackButton from "@/components/BackButton";
 
 const ROLES = ["OWNER", "ADMIN", "MANAGER", "CASHIER", "WAITER", "KITCHEN", "COOK", "DELIVERY"];
 
@@ -94,12 +95,15 @@ export default function UsuariosAdmin() {
     <div className="min-h-full p-6 sm:p-10 font-sans bg-[#0a0a0c]">
       {/* Header WARM TECH */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-8 mb-12">
-        <div className="space-y-1.5">
-          <span className="eyebrow text-amber-500/80">Recursos Humanos</span>
-          <h1 className="text-4xl font-black text-white tracking-tight leading-none">Gestión de Personal</h1>
-          <p className="text-sm font-bold text-zinc-500">
-            {employees.length} usuarios registrados en la plataforma
-          </p>
+        <div className="flex items-start gap-4">
+          <BackButton ariaLabel="Volver al panel admin" />
+          <div className="space-y-1.5">
+            <span className="eyebrow text-amber-500/80">Recursos Humanos</span>
+            <h1 className="text-4xl font-black text-white tracking-tight leading-none">Gestión de Personal</h1>
+            <p className="text-sm font-bold text-zinc-500">
+              {employees.length} usuarios registrados en la plataforma
+            </p>
+          </div>
         </div>
         <button onClick={() => setCreating(true)}
           className="h-14 px-8 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-[0.2em] text-xs flex items-center gap-3 transition-all active:scale-95 shadow-[0_10px_30px_rgba(255,184,77,0.25)]">
