@@ -68,104 +68,148 @@ export default function PagosAdmin() {
     }
   };
 
-  const methods: Array<{ key: keyof PaymentConfig; label: string; sub: string; icon: React.ReactNode; color: string }> = [
-    { key: "acceptCash",     label: "Efectivo",       sub: "Cash drawer + corte ciego",   icon: <Banknote size={16} />, color: "#88D66C" },
-    { key: "acceptCard",     label: "Tarjeta",        sub: "Crédito / débito presencial", icon: <CreditCard size={16} />, color: "#FF8400" },
-    { key: "acceptTransfer", label: "Transferencia",  sub: "SPEI / OXXO / digital",       icon: <Wifi size={16} />, color: "#22D3EE" },
-    { key: "acceptVoucher",  label: "Vales de despensa", sub: "Sodexo, Edenred, Si Vale", icon: <Receipt size={16} />, color: "#A78BFA" },
-    { key: "acceptCourtesy", label: "Cortesía",       sub: "Comp / on-the-house",         icon: <Gift size={16} />, color: "#FFB84D" },
+  const methods: Array<{
+    key: keyof PaymentConfig;
+    label: string;
+    sub: string;
+    icon: React.ReactNode;
+    color: string;
+  }> = [
+    { key: "acceptCash",     label: "Efectivo",          sub: "Cash drawer + corte ciego",   icon: <Banknote size={18} />,   color: "#88D66C" },
+    { key: "acceptCard",     label: "Tarjeta",           sub: "Crédito / débito presencial", icon: <CreditCard size={18} />, color: "#ffb84d" },
+    { key: "acceptTransfer", label: "Transferencia",     sub: "SPEI / OXXO / digital",       icon: <Wifi size={18} />,       color: "#22D3EE" },
+    { key: "acceptVoucher",  label: "Vales de despensa", sub: "Sodexo, Edenred, Si Vale",   icon: <Receipt size={18} />,    color: "#A78BFA" },
+    { key: "acceptCourtesy", label: "Cortesía",          sub: "Comp / on-the-house",         icon: <Gift size={18} />,       color: "#ffb84d" },
   ];
 
   return (
-    <div className="min-h-full p-8" style={{ background: "#0C0C0E", color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace" }}>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <p className="text-[10px] font-bold tracking-wider" style={{ color: "#666" }}>ADMINISTRACIÓN</p>
-          <h1 className="text-2xl font-bold">Pagos e Impuestos</h1>
-          <p className="text-xs mt-1" style={{ color: "#B8B9B6" }}>
-            Configura los métodos de pago aceptados, IVA y propina sugerida.
-          </p>
-        </div>
-        <button onClick={save} disabled={saving || loading}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold text-black disabled:opacity-50"
-          style={{ background: "#FF8400", boxShadow: "0 6px 14px rgba(255,132,0,0.3)" }}>
-          <Save size={15} /> {saving ? "Guardando…" : "Guardar cambios"}
-        </button>
-      </div>
+    <div
+      className="relative min-h-full p-6 md:p-8 bg-[#0a0a0c] text-white overflow-hidden"
+      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
+    >
+      {/* Glow */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full blur-[120px] opacity-30"
+        style={{ background: 'radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)' }}
+      />
 
-      {msg && (
-        <div className="mb-4 rounded-xl p-3 text-xs"
-          style={{
-            background: msg.kind === "ok" ? "rgba(136,214,108,0.12)" : "#FF5C3315",
-            border: `1px solid ${msg.kind === "ok" ? "rgba(136,214,108,0.4)" : "#FF5C3340"}`,
-            color: msg.kind === "ok" ? "#88D66C" : "#FF5C33",
-          }}>
-          {msg.text}
-        </div>
-      )}
-
-      {/* Tax + Tip */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="rounded-2xl p-5" style={{ background: "#1A1A1A", border: "1px solid #2E2E2E" }}>
-          <p className="text-[10px] font-bold tracking-wider mb-2" style={{ color: "#666" }}>IVA POR DEFECTO (%)</p>
-          <input type="number" min={0} max={50} step={0.01} value={config.taxRate}
-            onChange={(e) => setConfig({ ...config, taxRate: Number(e.target.value) })}
-            className="w-full bg-transparent text-3xl font-bold tabular-nums outline-none" />
-          <p className="text-[10px] mt-2" style={{ color: "#B8B9B6" }}>
-            México: 16%. Frontera: 8%. Cero rated: 0%.
-          </p>
-        </div>
-        <div className="rounded-2xl p-5" style={{ background: "#1A1A1A", border: "1px solid #2E2E2E" }}>
-          <p className="text-[10px] font-bold tracking-wider mb-2" style={{ color: "#666" }}>PROPINA SUGERIDA (%)</p>
-          <input type="number" min={0} max={30} step={1} value={config.defaultTipPct}
-            onChange={(e) => setConfig({ ...config, defaultTipPct: Number(e.target.value) })}
-            className="w-full bg-transparent text-3xl font-bold tabular-nums outline-none" />
-          <p className="text-[10px] mt-2" style={{ color: "#B8B9B6" }}>
-            Aparece preseleccionada en el panel de orden.
-          </p>
-        </div>
-      </section>
-
-      {/* Methods */}
-      <section className="rounded-2xl overflow-hidden mb-6" style={{ background: "#1A1A1A", border: "1px solid #2E2E2E" }}>
-        <div className="px-5 py-3" style={{ borderBottom: "1px solid #27272A" }}>
-          <p className="text-[10px] font-bold tracking-wider" style={{ color: "#666" }}>MÉTODOS DE PAGO</p>
-          <p className="text-sm font-bold">Habilitar / deshabilitar opciones en el TPV</p>
-        </div>
-        <div className="divide-y divide-[#1F1F23]">
-          {methods.map(m => (
-            <label key={String(m.key)}
-              className="flex items-center gap-3 px-5 py-3.5 cursor-pointer hover:bg-white/5 transition">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ background: `${m.color}20`, color: m.color }}>
-                {m.icon}
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-bold">{m.label}</p>
-                <p className="text-[10px]" style={{ color: "#B8B9B6" }}>{m.sub}</p>
-              </div>
-              <input type="checkbox" className="scale-125 accent-orange-500"
-                checked={Boolean((config as any)[m.key])}
-                onChange={(e) => setConfig({ ...config, [m.key]: e.target.checked })} />
-            </label>
-          ))}
-        </div>
-      </section>
-
-      {/* Receipt setting */}
-      <section className="rounded-2xl p-5" style={{ background: "#1A1A1A", border: "1px solid #2E2E2E" }}>
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input type="checkbox" className="scale-125 accent-orange-500"
-            checked={config.printReceiptDefault}
-            onChange={(e) => setConfig({ ...config, printReceiptDefault: e.target.checked })} />
+      <div className="relative z-10">
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
           <div>
-            <p className="text-sm font-bold">Imprimir ticket por defecto</p>
-            <p className="text-[10px]" style={{ color: "#B8B9B6" }}>
-              Cuando se cobra una orden, el ticket se envía a impresora automáticamente.
+            <p className="text-[10px] font-black tracking-[0.25em] text-white/40">ADMINISTRACIÓN</p>
+            <h1 className="text-3xl font-black text-white tracking-tight">Pagos e Impuestos</h1>
+            <p className="text-sm font-medium text-white/55 mt-1">
+              Configura los métodos de pago aceptados, IVA y propina sugerida.
             </p>
           </div>
-        </label>
-      </section>
+          <button
+            onClick={save}
+            disabled={saving || loading}
+            className="inline-flex items-center gap-2 px-5 py-3 min-h-[48px] rounded-2xl text-sm font-black tracking-tight text-[#0a0a0c] bg-[#ffb84d] active:scale-95 transition-transform disabled:opacity-40 shadow-[0_15px_40px_rgba(255,184,77,0.25)]"
+          >
+            <Save size={16} strokeWidth={3} /> {saving ? "Guardando…" : "Guardar cambios"}
+          </button>
+        </div>
+
+        {msg && (
+          <div
+            className="mb-5 rounded-2xl p-3 text-xs font-semibold"
+            style={{
+              background: msg.kind === "ok" ? "rgba(136,214,108,0.12)" : "rgba(255,92,51,0.10)",
+              border: `1px solid ${msg.kind === "ok" ? "rgba(136,214,108,0.4)" : "rgba(255,92,51,0.30)"}`,
+              color: msg.kind === "ok" ? "#88D66C" : "#FF5C33",
+            }}
+          >
+            {msg.text}
+          </div>
+        )}
+
+        {/* Tax + Tip */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10">
+            <p className="text-[10px] font-black tracking-[0.2em] text-white/40 mb-2">IVA POR DEFECTO (%)</p>
+            <input
+              type="number"
+              min={0}
+              max={50}
+              step={0.01}
+              value={config.taxRate}
+              onChange={(e) => setConfig({ ...config, taxRate: Number(e.target.value) })}
+              className="w-full bg-transparent text-4xl font-black tabular-nums text-white outline-none"
+            />
+            <p className="text-[11px] font-medium mt-2 text-white/55">
+              México: 16%. Frontera: 8%. Cero rated: 0%.
+            </p>
+          </div>
+          <div className="rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10">
+            <p className="text-[10px] font-black tracking-[0.2em] text-white/40 mb-2">PROPINA SUGERIDA (%)</p>
+            <input
+              type="number"
+              min={0}
+              max={30}
+              step={1}
+              value={config.defaultTipPct}
+              onChange={(e) => setConfig({ ...config, defaultTipPct: Number(e.target.value) })}
+              className="w-full bg-transparent text-4xl font-black tabular-nums text-white outline-none"
+            />
+            <p className="text-[11px] font-medium mt-2 text-white/55">
+              Aparece preseleccionada en el panel de orden.
+            </p>
+          </div>
+        </section>
+
+        {/* Methods */}
+        <section className="rounded-3xl overflow-hidden mb-6 bg-white/5 backdrop-blur-md border border-white/10">
+          <div className="px-6 py-4 border-b border-white/10">
+            <p className="text-[10px] font-black tracking-[0.2em] text-white/40">MÉTODOS DE PAGO</p>
+            <p className="text-sm font-black text-white">Habilitar / deshabilitar opciones en el TPV</p>
+          </div>
+          <div className="divide-y divide-white/5">
+            {methods.map((m) => (
+              <label
+                key={String(m.key)}
+                className="flex items-center gap-3 px-6 py-4 cursor-pointer hover:bg-white/5 transition-colors"
+              >
+                <div
+                  className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: `${m.color}1A`, border: `1px solid ${m.color}33`, color: m.color }}
+                >
+                  {m.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black text-white">{m.label}</p>
+                  <p className="text-[11px] font-medium text-white/55">{m.sub}</p>
+                </div>
+                <input
+                  type="checkbox"
+                  className="scale-125 accent-[#ffb84d]"
+                  checked={Boolean((config as any)[m.key])}
+                  onChange={(e) => setConfig({ ...config, [m.key]: e.target.checked })}
+                />
+              </label>
+            ))}
+          </div>
+        </section>
+
+        {/* Receipt setting */}
+        <section className="rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10">
+          <label className="flex items-center gap-4 cursor-pointer">
+            <input
+              type="checkbox"
+              className="scale-125 accent-[#ffb84d]"
+              checked={config.printReceiptDefault}
+              onChange={(e) => setConfig({ ...config, printReceiptDefault: e.target.checked })}
+            />
+            <div>
+              <p className="text-sm font-black text-white">Imprimir ticket por defecto</p>
+              <p className="text-[11px] font-medium text-white/55">
+                Cuando se cobra una orden, el ticket se envía a impresora automáticamente.
+              </p>
+            </div>
+          </label>
+        </section>
+      </div>
     </div>
   );
 }

@@ -226,6 +226,18 @@ export default function ImpresorasPage() {
               )}
             </div>
 
+            {/* Botón Test de Impresión (solo en edición — necesita id existente) */}
+            {editingId && (
+              <button
+                type="button"
+                onClick={() => handleTest(editingId)}
+                disabled={testingId === editingId}
+                className="w-full h-12 rounded-2xl bg-white/5 hover:bg-white/10 text-amber-500 border border-amber-500/30 font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-50"
+              >
+                {testingId === editingId ? "Enviando…" : "🖨️ Test de Impresión"}
+              </button>
+            )}
+
             <div className="flex gap-3 pt-4">
               <button
                 type="button"
@@ -236,9 +248,9 @@ export default function ImpresorasPage() {
               </button>
               <button
                 type="submit"
-                className="flex-[2] h-14 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-widest text-xs"
+                className="flex-[2] h-14 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-widest text-xs active:scale-95 transition-transform"
               >
-                Guardar Dispositivo
+                {editingId ? "Guardar cambios" : "Guardar Dispositivo"}
               </button>
             </div>
           </form>

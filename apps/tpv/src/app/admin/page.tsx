@@ -1,0 +1,145 @@
+"use client";
+import React from "react";
+import Link from "next/link";
+import {
+  BarChart3,
+  Settings,
+  Printer,
+  Monitor,
+  Users,
+  CreditCard,
+  ShieldCheck,
+  ChevronRight,
+} from "lucide-react";
+
+const SECTIONS = [
+  {
+    href: "/admin/reportes",
+    label: "Analítica y Reportes",
+    desc: "Ventas, productos top, rendimiento del turno",
+    icon: BarChart3,
+    accent: "#ffb84d",
+  },
+  {
+    href: "/admin/menu",
+    label: "Catálogo de Menú",
+    desc: "Productos, categorías, precios e imágenes",
+    icon: Settings,
+    accent: "#3b82f6",
+  },
+  {
+    href: "/admin/impresoras",
+    label: "Red e Impresión",
+    desc: "Impresoras de tickets y estaciones KDS",
+    icon: Printer,
+    accent: "#10b981",
+  },
+  {
+    href: "/admin/tickets",
+    label: "Diseño de Tickets",
+    desc: "Encabezado, pie de página y formato",
+    icon: Monitor,
+    accent: "#a78bfa",
+  },
+  {
+    href: "/admin/usuarios",
+    label: "Gestión de Personal",
+    desc: "Empleados, roles y PINs",
+    icon: Users,
+    accent: "#f59e0b",
+  },
+  {
+    href: "/admin/pagos",
+    label: "Pagos e Impuestos",
+    desc: "IVA, propina y métodos de pago",
+    icon: CreditCard,
+    accent: "#22d3ee",
+  },
+  {
+    href: "/admin/seguridad",
+    label: "Ciberseguridad",
+    desc: "PINs, autorizaciones y bitácora",
+    icon: ShieldCheck,
+    accent: "#ef4444",
+  },
+];
+
+export default function AdminLandingPage() {
+  return (
+    <div
+      className="relative min-h-full p-6 md:p-10 bg-[#0a0a0c] text-white overflow-hidden"
+      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
+    >
+      {/* Glow */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full blur-[120px] opacity-30"
+        style={{ background: 'radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)' }}
+      />
+
+      <div className="relative z-10">
+        {/* Header */}
+        <div className="mb-10">
+          <p className="text-[10px] font-black tracking-[0.25em] text-white/40 mb-2">
+            CONFIGURACIÓN
+          </p>
+          <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
+            Panel Central
+          </h1>
+          <p className="text-base font-medium text-white/55 mt-2 max-w-2xl">
+            Administra el catálogo, hardware, personal y políticas de tu sucursal.
+          </p>
+        </div>
+
+        {/* Grid de secciones */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {SECTIONS.map((s) => {
+            const Icon = s.icon;
+            return (
+              <Link
+                key={s.href}
+                href={s.href}
+                className="group relative flex items-center gap-4 p-5 min-h-[64px] rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 active:scale-95 transition-transform duration-150 overflow-hidden"
+              >
+                {/* Halo del color de acento */}
+                <div
+                  aria-hidden
+                  className="absolute -top-12 -right-12 w-32 h-32 rounded-full blur-[60px] opacity-20"
+                  style={{ background: s.accent }}
+                />
+
+                {/* Icono */}
+                <div
+                  className="relative w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: `${s.accent}1A`,
+                    border: `1px solid ${s.accent}40`,
+                    color: s.accent,
+                  }}
+                >
+                  <Icon size={22} strokeWidth={2.5} />
+                </div>
+
+                {/* Texto */}
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-sm font-black text-white tracking-tight">
+                    {s.label}
+                  </span>
+                  <span className="text-[11px] font-medium text-white/55 truncate">
+                    {s.desc}
+                  </span>
+                </div>
+
+                <ChevronRight
+                  size={18}
+                  strokeWidth={3}
+                  className="text-white/30 flex-shrink-0"
+                />
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
