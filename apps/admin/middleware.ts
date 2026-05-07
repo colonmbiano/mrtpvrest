@@ -20,11 +20,10 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // SUPER_ADMIN: panel principal vive en saas.mrtpvrest.com, pero las
-  // rutas /super/* (observabilidad, logs, etc.) sí se sirven desde aquí
-  // para no duplicar la lógica del dashboard de errores.
+  // SUPER_ADMIN ya no tiene panel aquí → redirigir a la app SaaS.
+  // getSaasUrl aplica fallback prod (saas.mrtpvrest.com); nunca envía a
+  // localhost en producción.
   if (role === "SUPER_ADMIN") {
-    if (pathname.startsWith("/super")) return NextResponse.next();
     return NextResponse.redirect(new URL("/dashboard", getSaasUrl()));
   }
 
