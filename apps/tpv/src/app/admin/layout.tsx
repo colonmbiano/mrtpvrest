@@ -1,25 +1,51 @@
 "use client";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import Link from "next/link";
 import { Settings, Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, ChevronRight } from "lucide-react";
 
+const ADMIN_ROLES = ["OWNER", "ADMIN", "MANAGER"] as const;
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const employee = useAuthStore(s => s.employee);
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const hydrateFromStorage = useAuthStore(s => s.hydrateFromStorage);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Esperar a que Zustand hidrate desde storage antes de validar el rol.
+  // Sin este gate el employee queda null en el primer render, el guard
+  // dispara router.replace('/') y se forma un loop con / → /hub → /pos/order-type.
+  useEffect(() => {
+    if (!isAuthenticated) hydrateFromStorage();
+    setHydrated(true);
+  }, [isAuthenticated, hydrateFromStorage]);
 
   useEffect(() => {
-    if (!employee || (employee.role !== "ADMIN" && employee.role !== "OWNER")) {
+    if (!hydrated) return;
+    if (!employee) return; // todavía sin employee tras hidratar — esperar
+    if (!ADMIN_ROLES.includes(employee.role as typeof ADMIN_ROLES[number])) {
       router.replace("/");
     }
-  }, [employee, router]);
+  }, [hydrated, employee, router]);
 
-  if (!employee || (employee.role !== "ADMIN" && employee.role !== "OWNER")) {
+  // Loader mientras hidrata o mientras llega el employee.
+  if (!hydrated || !employee) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-[#0a0a0c] text-white">
         <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-4" />
         <span className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Verificando Credenciales...</span>
+      </div>
+    );
+  }
+
+  // Rol no autorizado tras hidratar — el effect ya lanzó replace; mostrar loader.
+  if (!ADMIN_ROLES.includes(employee.role as typeof ADMIN_ROLES[number])) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-[#0a0a0c] text-white">
+        <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-4" />
+        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Redirigiendo…</span>
       </div>
     );
   }
