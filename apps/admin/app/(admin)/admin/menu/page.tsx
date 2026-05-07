@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import api from "@/lib/api";
 import ModifierGroupsEditor from "@/components/admin/ModifierGroupsEditor";
+import { uploadMenuImage } from "@/lib/supabaseUpload";
 
 // ── Componente para aplicar grupo de variantes ────────────────────────────
 function ApplyTemplateButton({ itemId, onApplied }: { itemId: string, onApplied: (v: any[]) => void }) {
@@ -92,6 +93,11 @@ export default function MenuPage() {
   const [editingVariant, setEditingVariant] = useState<string|null>(null);
   const [editVariantForm, setEditVariantForm] = useState({ name: '', price: '' });
   const [activeTab, setActiveTab] = useState<'complements'|'variants'>('variants');
+
+  // Crear categoría al vuelo (inline en el modal de platillo)
+  const [showNewCat, setShowNewCat] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [creatingCat, setCreatingCat] = useState(false);
 
   async function fetchData() {
     try {
@@ -200,6 +206,8 @@ export default function MenuPage() {
     setEditingVariant(null);
     setActiveTab('variants');
     setImageFile(null);
+    setShowNewCat(false);
+    setNewCatName("");
     setShowForm(true);
   }
 
@@ -215,11 +223,26 @@ export default function MenuPage() {
     if (!imageFile) return form.imageUrl;
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append("image", imageFile);
-      const { data } = await api.post("/api/upload/image", fd, { headers: { "Content-Type": "multipart/form-data" } });
-      return data.url;
+      // Sube a Supabase Storage (bucket "menu-images") con fallback al backend.
+      return await uploadMenuImage(imageFile);
     } finally { setUploading(false); }
+  }
+
+  async function createCategoryInline() {
+    const name = newCatName.trim();
+    if (!name || creatingCat) return;
+    setCreatingCat(true);
+    try {
+      const { data } = await api.post("/api/menu/categories", { name });
+      setCats(prev => [...prev, data]);
+      setForm(p => ({ ...p, categoryId: data.id }));
+      setNewCatName("");
+      setShowNewCat(false);
+    } catch (e: any) {
+      alert(e?.response?.data?.error || "No se pudo crear la categoría");
+    } finally {
+      setCreatingCat(false);
+    }
   }
 
   // ── Variantes ──────────────────────────────────────────────────
@@ -623,10 +646,57 @@ export default function MenuPage() {
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>Categoría</label>
-                  <select value={form.categoryId} onChange={e => setForm(p=>({...p,categoryId:e.target.value}))} required className="w-full px-4 py-2.5 rounded-xl text-sm" style={{background:"var(--surf2)",border:"1.5px solid var(--border)",color:"var(--text)"}}>
-                    <option value="">Seleccionar...</option>
-                    {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      value={form.categoryId}
+                      onChange={e => setForm(p=>({...p,categoryId:e.target.value}))}
+                      required={!showNewCat}
+                      className="flex-1 px-4 py-2.5 rounded-xl text-sm"
+                      style={{background:"var(--surf2)",border:"1.5px solid var(--border)",color:"var(--text)"}}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewCat(s => !s); setNewCatName(""); }}
+                      className="px-3 py-2.5 rounded-xl text-xs font-black border whitespace-nowrap transition-all"
+                      style={{
+                        background: showNewCat ? "var(--gold)" : "transparent",
+                        color: showNewCat ? "#000" : "var(--gold)",
+                        borderColor: "var(--gold)",
+                      }}
+                      aria-label="Crear nueva categoría"
+                    >
+                      {showNewCat ? "✕ Cerrar" : "+ Nueva"}
+                    </button>
+                  </div>
+
+                  {showNewCat && (
+                    <div className="mt-2 flex gap-2 p-2 rounded-xl" style={{background:"var(--surf2)",border:"1px dashed var(--gold)"}}>
+                      <input
+                        autoFocus
+                        value={newCatName}
+                        onChange={e => setNewCatName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") { e.preventDefault(); createCategoryInline(); }
+                          if (e.key === "Escape") { setShowNewCat(false); setNewCatName(""); }
+                        }}
+                        placeholder="Nombre de la nueva categoría"
+                        className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
+                        style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--text)"}}
+                      />
+                      <button
+                        type="button"
+                        onClick={createCategoryInline}
+                        disabled={creatingCat || !newCatName.trim()}
+                        className="px-4 py-2 rounded-lg text-xs font-black transition-all disabled:opacity-50"
+                        style={{background:"var(--gold)",color:"#000"}}
+                      >
+                        {creatingCat ? "..." : "Crear"}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Grupos de Variantes */}
