@@ -114,6 +114,12 @@ export default function KDSPage() {
   const [deviceId, setDeviceId]     = useState<string>("");
   const [locationId, setLocationId] = useState<string>("");
 
+  // Modo simulación: si el dispositivo NO está vinculado como KDS,
+  // mostramos una preview con datos mock para que el admin del POS pueda
+  // ver cómo luce la pantalla de cocina sin tocar backend ni necesitar
+  // re-vincular la tablet. La caja principal NO debe operar el KDS real.
+  const [simulated, setSimulated] = useState(false);
+
   // UI principal
   const [tab, setTab]               = useState<TabKey>("orders");
   const [station, setStation]       = useState<StationCode>("KITCHEN");
@@ -143,6 +149,21 @@ export default function KDSPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // 0. Si el dispositivo NO está vinculado como KDS, entrar en
+      //    modo simulación: UI completa pero con datos demo y sin
+      //    llamadas al backend. La caja/mesero usan esto solo como
+      //    preview de cómo ve cocina las comandas.
+      const role = typeof window !== "undefined" ? localStorage.getItem("deviceRole") : null;
+      if (role && role !== "KDS") {
+        if (!cancelled) {
+          setSimulated(true);
+          setAuthReady(true);
+          setOrders(buildSimulatedOrders());
+          setLoadingOrders(false);
+        }
+        return;
+      }
+
       // 1. Validar que el dispositivo está vinculado
       const deviceToken = typeof window !== "undefined" ? localStorage.getItem("deviceToken") : null;
       const restId     = typeof window !== "undefined" ? localStorage.getItem("restaurantId")   : null;
@@ -242,11 +263,12 @@ export default function KDSPage() {
 
   useEffect(() => {
     if (!authReady) return;
+    if (simulated) return; // modo demo: no llamar backend KDS
     setLoadingOrders(true);
     fetchOrders();
     const t = setInterval(fetchOrders, 12_000);
     return () => clearInterval(t);
-  }, [authReady, fetchOrders]);
+  }, [authReady, simulated, fetchOrders]);
 
   // ── Polling de tareas ───────────────────────────────────────────────────
 
@@ -265,12 +287,26 @@ export default function KDSPage() {
   useEffect(() => {
     if (!authReady) return;
     if (tab !== "tasks") return;
+    if (simulated) {
+      setTasks(buildSimulatedTasks());
+      setLoadingTasks(false);
+      return;
+    }
     fetchTasks();
-  }, [authReady, tab, fetchTasks]);
+  }, [authReady, tab, simulated, fetchTasks]);
 
   // ── Acciones de orden ───────────────────────────────────────────────────
 
   async function toggleItem(orderId: string, itemId: string, done: boolean) {
+    // En simulación solo actualiza UI local — no toca backend.
+    if (simulated) {
+      setOrders((prev) => prev.map((o) => {
+        if (o.id !== orderId) return o;
+        const items = o.items.map((i) => (i.id === itemId ? { ...i, done: !done } : i));
+        return { ...o, items, allDone: items.every((i) => i.done) };
+      }));
+      return;
+    }
     try {
       await api.put(`/api/kds/item/${itemId}/done`, { station, orderId, done: !done });
       setOrders((prev) => prev.map((o) => {
@@ -285,6 +321,10 @@ export default function KDSPage() {
 
   async function finalizeOrder(orderId: string) {
     // Un solo toque — sin PIN. La velocidad manda en cocina.
+    if (simulated) {
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      return;
+    }
     try {
       await api.put(`/api/kds/order/${orderId}/ready`, {});
       setOrders((prev) => prev.filter((o) => o.id !== orderId));
@@ -298,6 +338,14 @@ export default function KDSPage() {
   async function handleTaskPinSubmit(pin: string) {
     if (!taskPinFor) return;
     setTaskPinError("");
+
+    // En simulación NO valida PIN ni llama backend — preview solamente.
+    if (simulated) {
+      setRecentXp({ task: taskPinFor.title, points: taskPinFor.pointsReward, ts: Date.now() });
+      setTaskPinFor(null);
+      return;
+    }
+
     const clientId = `${taskPinFor.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     if (!navigator.onLine) {
@@ -397,6 +445,21 @@ export default function KDSPage() {
         className="pointer-events-none absolute -top-60 -right-40 w-[700px] h-[700px] rounded-full blur-[120px] opacity-40"
         style={{ background: "radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)" }}
       />
+
+      {/* Banner modo simulación */}
+      {simulated && (
+        <div className="relative z-20 px-5 py-2 bg-amber-500/15 border-b border-amber-500/30 flex items-center gap-3 text-[11px] font-bold text-amber-200">
+          <span className="px-2 py-0.5 rounded bg-amber-500 text-[#0a0a0c] text-[10px] font-black tracking-widest">DEMO</span>
+          Vista previa simulada — esta tablet está vinculada como <code className="text-white/85">{typeof window !== "undefined" ? localStorage.getItem("deviceRole") || "POS" : "POS"}</code>. Para usar el KDS real, vincula otra tablet como <strong>KDS</strong> en /setup.
+          <button
+            type="button"
+            onClick={() => router.replace("/")}
+            className="ml-auto px-3 py-1 rounded-lg bg-white/10 border border-white/15 text-white text-[10px] font-black active:scale-95"
+          >
+            Volver al POS
+          </button>
+        </div>
+      )}
 
       {/* HEADER glass */}
       <header className="relative z-10 flex items-center justify-between gap-4 px-5 py-4 bg-white/5 backdrop-blur-md border-b border-white/10 flex-wrap">
@@ -924,6 +987,59 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
+
+function buildSimulatedOrders(): KdsOrder[] {
+  const now = new Date();
+  const ago = (mins: number) => new Date(now.getTime() - mins * 60_000).toISOString();
+  return [
+    {
+      id: "demo-1",
+      orderNumber: "DEMO-001",
+      orderType: "DINE_IN",
+      tableNumber: "5",
+      customerName: null,
+      createdAt: ago(2),
+      items: [
+        { id: "i1", menuItemName: "Hamburguesa Doble", quantity: 1, done: false, notes: "Sin cebolla" },
+        { id: "i2", menuItemName: "Papas grandes", quantity: 1, done: false },
+        { id: "i3", menuItemName: "Refresco Cola", quantity: 2, done: false },
+      ],
+    },
+    {
+      id: "demo-2",
+      orderNumber: "DEMO-002",
+      orderType: "TAKEOUT",
+      tableNumber: null,
+      customerName: "Juan Pérez",
+      createdAt: ago(9),
+      items: [
+        { id: "i4", menuItemName: "Pizza Margherita", quantity: 1, done: true },
+        { id: "i5", menuItemName: "Ensalada César", quantity: 1, done: false },
+      ],
+    },
+    {
+      id: "demo-3",
+      orderNumber: "DEMO-003",
+      orderType: "DELIVERY",
+      tableNumber: null,
+      customerName: "María López",
+      createdAt: ago(17),
+      items: [
+        { id: "i6", menuItemName: "Pollo Rostizado", quantity: 1, done: false },
+        { id: "i7", menuItemName: "Arroz", quantity: 2, done: false, notes: "Extra picante" },
+      ],
+    },
+  ];
+}
+
+function buildSimulatedTasks(): KdsTask[] {
+  return [
+    { id: "t1", title: "Limpieza de freidora", description: "Profunda + cambio de aceite", type: "CLEAN", pointsReward: 50, frequency: "daily" },
+    { id: "t2", title: "Prep de insumos AM",   description: "Cortar verduras y porcionar carnes", type: "PREP",  pointsReward: 30, frequency: "daily" },
+    { id: "t3", title: "Inventario de barra",  description: "Conteo físico de bebidas",          type: "STOCK", pointsReward: 20, frequency: "weekly" },
+    { id: "t4", title: "Sanitización superficies", description: "Mesas + barras",               type: "CLEAN", pointsReward: 15, frequency: "shift" },
+  ];
+}
 
 function playBeep(): void {
   try {
