@@ -126,21 +126,20 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   };
 
   return (
-    <div className="h-full flex flex-col bg-surf-0">
+    <div
+      className="h-full flex flex-col bg-[#0a0a0c]"
+      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
+    >
       {/* HEADER */}
-      <div
-        className="px-4 py-3 border-b border-bd flex items-center gap-3 shrink-0"
-        style={{ background: "#1A1A1A", color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace" }}
-      >
+      <div className="px-4 py-3 bg-white/5 backdrop-blur-md border-b border-white/10 flex items-center gap-3 shrink-0 text-white">
         <button
           onClick={() => router.back()}
-          className="w-10 h-10 rounded-xl flex items-center justify-center"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+          className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform"
         >
           <ChevronLeft size={18} />
         </button>
         <div className="flex flex-col flex-1">
-          <span className="text-[10px] font-bold tracking-[0.15em]" style={{ color: "#666" }}>NUEVA COMANDA</span>
+          <span className="text-[10px] font-black tracking-[0.25em] text-white/40">NUEVA COMANDA</span>
           <div className="flex items-baseline gap-2">
             <h2 className="text-lg font-bold leading-none">Mesa {tableId}</h2>
             <span className="text-[11px]" style={{ color: "#B8B9B6" }}>· en preparación</span>
