@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import api from "@/lib/api";
 import { Plus, Edit2, Trash2, Check, XCircle } from "lucide-react";
+import BackButton from "@/components/BackButton";
 
 type Category = {
   id: string;
@@ -84,10 +85,13 @@ export default function MenuEditorPage() {
     <div className="p-6 sm:p-10 max-w-6xl mx-auto font-sans bg-[#0a0a0c] min-h-full">
       {/* HEADER WARM TECH */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-12">
-        <div className="space-y-1.5">
-          <span className="eyebrow text-amber-500/80">Gestión Administrativa</span>
-          <h1 className="text-4xl font-black text-white tracking-tight leading-none">Catálogo de Menú</h1>
-          <p className="text-zinc-500 font-bold text-sm">Configura la oferta gastronómica y precios de la sucursal.</p>
+        <div className="flex items-start gap-4">
+          <BackButton ariaLabel="Volver al panel admin" />
+          <div className="space-y-1.5">
+            <span className="eyebrow text-amber-500/80">Gestión Administrativa</span>
+            <h1 className="text-4xl font-black text-white tracking-tight leading-none">Catálogo de Menú</h1>
+            <p className="text-zinc-500 font-bold text-sm">Configura la oferta gastronómica y precios de la sucursal.</p>
+          </div>
         </div>
         <button
           onClick={() => setEditingItem({ name: "", price: 0, categoryId: "", isAvailable: true })}

@@ -49,10 +49,23 @@ export default function BaseModal({
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // Marcar modal abierto para que useHardwareBack delegue el botón
+    // físico Atrás de Android a este modal en lugar de navegar la app.
+    document.body.dataset.modalOpen = "true";
     return () => {
       document.body.style.overflow = prev;
+      delete document.body.dataset.modalOpen;
     };
   }, [open]);
+
+  // Cierra el modal cuando llega el evento de hardware-back de Capacitor.
+  // useHardwareBack lo dispara cuando data-modal-open es "true".
+  useEffect(() => {
+    if (!open) return;
+    const onBack = () => onClose();
+    window.addEventListener("hardware-back", onBack as EventListener);
+    return () => window.removeEventListener("hardware-back", onBack as EventListener);
+  }, [open, onClose]);
 
   if (!open) return null;
 
