@@ -4,8 +4,13 @@ const { runAssistant } = require('../services/assistant.service');
 const { runVoiceAgent } = require('../services/voice-agent.service');
 const { resolveGeminiKey } = require('../services/ai-key.service');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { aiLimiter } = require('../lib/rate-limiters');
 const router = express.Router();
 const multer = require('multer');
+
+// Rate limit aplica a todas las rutas IA (vision + chat + agent). 30/min/IP.
+// Va antes de authenticate para no gastar verificación de JWT en abusadores.
+router.use(aiLimiter);
 
 // Mapea errores de resolveAiKey / assistant service a códigos HTTP consistentes.
 function sendAiError(res, error, fallback = 500) {
