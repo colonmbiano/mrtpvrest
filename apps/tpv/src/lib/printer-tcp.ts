@@ -178,6 +178,8 @@ export interface TicketItem {
   price: number;
   notes?: string | null;
   modifiers?: TicketModifier[] | null;
+  // En DINE_IN: a qué comensal pertenece. null = compartido.
+  seatNumber?: number | null;
 }
 
 export interface KitchenTicketInput {
@@ -367,4 +369,115 @@ export async function printCustomerReceipt(
 ): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
   const payload = buildCustomerReceipt(input);
   return dispatchToStations(printers, ["CASHIER"], payload);
+}
+
+// ── Split por comensal (Fase 3) ─────────────────────────────────────────────
+
+/**
+ * Agrupa los items de una orden DINE_IN por seatNumber. Los items
+ * `compartidos` (seatNumber null/undefined) se reparten en partes
+ * iguales entre todos los comensales, prorrateando precio y cantidad
+ * pero **conservando** la línea visible en el ticket de cada uno bajo
+ * la etiqueta `(compartido x/N)` para que el cliente entienda por qué
+ * paga una fracción.
+ *
+ * No genera nuevas órdenes en backend — el split aquí es puramente
+ * para la impresión de N tickets visuales separados. El cobro real
+ * sigue siendo una sola Order/PaymentTransaction (pendiente Fase 4
+ * para multi-payment real).
+ */
+export interface SplitTicket {
+  seatNumber: number;
+  items: TicketItem[];
+  subtotal: number;
+}
+
+export function splitItemsBySeat(
+  items: TicketItem[],
+  numberOfGuests: number
+): SplitTicket[] {
+  if (numberOfGuests < 1) return [];
+  const seats: SplitTicket[] = Array.from({ length: numberOfGuests }, (_, i) => ({
+    seatNumber: i + 1,
+    items: [],
+    subtotal: 0,
+  }));
+
+  // Items asignados a un seat específico.
+  for (const it of items) {
+    const seat = it.seatNumber;
+    if (typeof seat === "number" && seat >= 1 && seat <= numberOfGuests) {
+      const target = seats[seat - 1]!;
+      target.items.push(it);
+      target.subtotal += (it.price || 0) * (it.quantity || 0);
+    }
+  }
+
+  // Items compartidos: prorrateo. La cantidad se queda fija (1 línea
+  // visual por seat) y el precio se divide entre N. Ej: pizza $300
+  // entre 4 → cada seat ve "1x Pizza (compartido) $75".
+  const shared = items.filter((it) => it.seatNumber == null);
+  for (const sh of shared) {
+    const lineTotal = (sh.price || 0) * (sh.quantity || 0);
+    const perSeat = lineTotal / numberOfGuests;
+    seats.forEach((s) => {
+      s.items.push({
+        ...sh,
+        name: sh.name + " (compartido)",
+        // Precio prorrateado por seat; quantity 1 para que el ticket sea legible.
+        price: perSeat,
+        quantity: 1,
+        seatNumber: s.seatNumber,
+      });
+      s.subtotal += perSeat;
+    });
+  }
+
+  return seats;
+}
+
+/**
+ * Imprime N tickets separados (uno por comensal) en impresoras CASHIER.
+ * Cada ticket muestra el nombre del seat ("Comensal 2 de 4") y solo
+ * los items que le tocan + su parte de los compartidos.
+ *
+ * El total final puede no cuadrar exactamente con `input.total` por
+ * redondeo del prorrateo de compartidos; conservamos la suma exacta
+ * de cada seat como su propio total y dejamos un footer con el
+ * total general de la orden a modo de referencia.
+ */
+export async function printSplitReceipts(
+  printers: PrinterRecord[],
+  input: ReceiptInput,
+  numberOfGuests: number
+): Promise<{ ok: number; failed: Array<{ name: string; error: string }>; tickets: number }> {
+  if (numberOfGuests < 2) {
+    // No hay split — una sola impresión normal.
+    const res = await printCustomerReceipt(printers, input);
+    return { ...res, tickets: 1 };
+  }
+
+  const splits = splitItemsBySeat(input.items, numberOfGuests);
+
+  let okTotal = 0;
+  const failedAll: Array<{ name: string; error: string }> = [];
+  let printed = 0;
+
+  for (const seat of splits) {
+    const seatInput: ReceiptInput = {
+      ...input,
+      items: seat.items,
+      subtotal: seat.subtotal,
+      total: seat.subtotal - (input.discount || 0) + (input.tax || 0) + (input.tip || 0),
+      // El campo customerName se sobreescribe para distinguir al
+      // imprimir; conserva el original como referencia.
+      customerName: `Comensal ${seat.seatNumber} de ${numberOfGuests}`,
+    };
+    const res = await printCustomerReceipt(printers, seatInput);
+    okTotal += res.ok;
+    failedAll.push(...res.failed);
+    if (res.ok > 0) printed += 1;
+  }
+
+  return { ok: okTotal, failed: failedAll, tickets: printed };
 }

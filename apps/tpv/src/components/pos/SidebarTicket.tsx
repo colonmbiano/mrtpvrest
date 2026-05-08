@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import {
   printKitchenTickets,
   printCustomerReceipt,
+  printSplitReceipts,
   type PrinterRecord,
   type TicketItem,
 } from "@/lib/printer-tcp";
@@ -65,12 +66,14 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
   }, []);
 
   // Convierte CartItem[] del store al shape genérico de printer-tcp.
+  // Conserva seatNumber para el split por comensal en la impresión.
   const buildTicketItems = (): TicketItem[] =>
     ticket.items.map((it) => ({
       name: it.name,
       quantity: it.quantity,
       price: it.price,
       notes: it.notes,
+      seatNumber: it.seatNumber ?? null,
       modifiers: (it.modifiers || []).map((m) => ({ name: m.name, priceAdd: m.priceAdd })),
     }));
 
@@ -87,9 +90,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
           menuItemId: item.menuItemId,
           quantity: item.quantity,
           notes: item.notes || "",
+          seatNumber: item.seatNumber ?? null,
           modifiers: (item.modifiers || []).map(m => ({ modifierId: m.id })),
         })),
         tableId: ticket.tableId || null,
+        numberOfGuests: ticket.numberOfGuests ?? null,
         customerName: ticket.name || "Publico General",
         customerPhone: ticket.phone || null,
         subtotal: subtotal,
@@ -132,9 +137,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
           menuItemId: item.menuItemId,
           quantity: item.quantity,
           notes: item.notes || "",
+          seatNumber: item.seatNumber ?? null,
           modifiers: (item.modifiers || []).map(m => ({ modifierId: m.id })),
         })),
         tableId: ticket.tableId || null,
+        numberOfGuests: ticket.numberOfGuests ?? null,
         customerName: ticket.name || "Publico General",
         customerPhone: ticket.phone || null,
         subtotal,
@@ -169,17 +176,37 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
       // No bloquea cobro si las impresoras fallan.
       printKitchenTickets(printers, { ...ticketContext, items: printItems })
         .catch(() => { /* silencio */ });
-      printCustomerReceipt(printers, {
-        ...ticketContext,
-        ...totals,
-        items: printItems,
-      })
-        .then((res) => {
-          if (res.ok === 0 && res.failed.length > 0) {
-            toast.warning("Recibo: ninguna impresora respondió");
-          }
+
+      const guests = ticket.numberOfGuests ?? 0;
+      const isDineInSplit = ticket.type === "DINE_IN" && guests >= 2;
+      if (isDineInSplit) {
+        // N tickets separados, uno por comensal.
+        printSplitReceipts(
+          printers,
+          { ...ticketContext, ...totals, items: printItems },
+          guests,
+        )
+          .then((res) => {
+            if (res.tickets === 0) {
+              toast.warning("Recibos divididos: ninguna impresora respondió");
+            } else {
+              toast.success(`Tickets divididos impresos: ${res.tickets}/${guests}`);
+            }
+          })
+          .catch(() => { /* silencio */ });
+      } else {
+        printCustomerReceipt(printers, {
+          ...ticketContext,
+          ...totals,
+          items: printItems,
         })
-        .catch(() => { /* silencio */ });
+          .then((res) => {
+            if (res.ok === 0 && res.failed.length > 0) {
+              toast.warning("Recibo: ninguna impresora respondió");
+            }
+          })
+          .catch(() => { /* silencio */ });
+      }
     } catch (error: any) {
       toast.error("Error al cobrar: " + (error.response?.data?.error || error.message));
     } finally {

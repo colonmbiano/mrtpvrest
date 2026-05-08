@@ -567,6 +567,11 @@ model Order {
   tableNumber      Int?
   tableId          String?
   table            Table?    @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  // Cantidad de comensales declarada al iniciar la orden DINE_IN. Se usa
+  // para generar tabs por comensal en el POS y para split del ticket al
+  // cobrar. Nullable porque flujos no-dine-in (TAKEOUT/DELIVERY) no la
+  // tienen, y orders previas a este campo tampoco.
+  numberOfGuests   Int?
   source           String    @default("ONLINE")
   deliveryDriverId String?
   deliveryAddress  String?
@@ -653,7 +658,15 @@ model OrderItem {
   roundId String?
   round   OrderRound? @relation(fields: [roundId], references: [id], onDelete: SetNull)
 
+  // Comensal al que pertenece este ítem dentro de la orden DINE_IN
+  // (1..numberOfGuests). Nullable para flujos no-dine-in y para items
+  // compartidos por toda la mesa (entrada, postre para todos, etc.). El
+  // split del ticket al cobrar agrupa por seatNumber; los nullables van a
+  // la cuenta común.
+  seatNumber Int?
+
   @@index([roundId])
+  @@index([seatNumber])
   @@map("order_items")
 }
 

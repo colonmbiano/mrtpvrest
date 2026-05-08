@@ -52,6 +52,8 @@ export type CartItem = Product & {
   variantName?: string | null;
   originalPrice?: number | null;
   modifiers?: ModifierSelection[];
+  // Comensal al que pertenece (solo DINE_IN). null/undefined = compartido.
+  seatNumber?: number | null;
 };
 
 export function modifierKey(mods?: ModifierSelection[]): string {
@@ -71,6 +73,11 @@ export type TicketData = {
   items: CartItem[];
   discount: number;
   discountType: "percent" | "fixed";
+  // Comensales declarados al iniciar la cuenta DINE_IN.
+  numberOfGuests?: number | null;
+  // Comensal activo al que se asignan los items que se agregan ahora
+  // (1..numberOfGuests). null = compartido / sin asignar.
+  activeSeat?: number | null;
 };
 
 interface TicketState {
@@ -109,6 +116,8 @@ const emptyTicket = (
   items: [],
   discount: 0,
   discountType: "percent",
+  numberOfGuests: null,
+  activeSeat: null,
 });
 
 export const useTicketStore = create<TicketState>()((set, get) => ({
@@ -160,12 +169,19 @@ export const useTicketStore = create<TicketState>()((set, get) => ({
     set((state) => ({
       tickets: state.tickets.map((t, i) => {
         if (i !== state.activeIndex) return t;
-        const incomingModKey = modifierKey(item.modifiers);
+        // En DINE_IN auto-tag con el seat activo si el item no trae uno
+        // explícito. En otros tipos seatNumber siempre queda null.
+        const seat = t.type === "DINE_IN"
+          ? (item.seatNumber ?? t.activeSeat ?? null)
+          : null;
+        const tagged: CartItem = { ...item, seatNumber: seat };
+        const incomingModKey = modifierKey(tagged.modifiers);
         const existing = t.items.find(
           (ci) =>
-            ci.menuItemId === item.menuItemId &&
-            ci.variantId === item.variantId &&
-            ci.notes === item.notes &&
+            ci.menuItemId === tagged.menuItemId &&
+            ci.variantId === tagged.variantId &&
+            ci.notes === tagged.notes &&
+            (ci.seatNumber ?? null) === (tagged.seatNumber ?? null) &&
             modifierKey(ci.modifiers) === incomingModKey
         );
         if (existing) {
@@ -182,7 +198,7 @@ export const useTicketStore = create<TicketState>()((set, get) => ({
             ),
           };
         }
-        return { ...t, items: [...t.items, item] };
+        return { ...t, items: [...t.items, tagged] };
       }),
     }));
   },
