@@ -657,8 +657,17 @@ function PinTaskModal({
 function InfoModal({
   onClose, online, serverOk, pendingLogs,
 }: { onClose: () => void; online: boolean; serverOk: boolean; pendingLogs: number }) {
-  const deviceId = typeof window !== "undefined" ? localStorage.getItem("deviceId") || "—" : "—";
-  const locationId = typeof window !== "undefined" ? localStorage.getItem("locationId") || "—" : "—";
+  // IP local del dispositivo — útil para que el admin sepa cómo
+  // configurar la impresora apuntando a esta tablet o al revés. Detección
+  // best-effort vía WebRTC ICE candidates.
+  const [localIp, setLocalIp] = useState<string>("—");
+
+  useEffect(() => {
+    let cancelled = false;
+    getLocalIp().then((ip) => { if (!cancelled && ip) setLocalIp(ip); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
@@ -692,19 +701,49 @@ function InfoModal({
               {serverOk ? "Disponible" : "No responde"}
             </span>
           </Row>
-          <Row label="Device ID">
-            <code className="text-xs font-mono text-white/85 truncate max-w-[180px]" title={deviceId}>{deviceId}</code>
-          </Row>
-          <Row label="Location ID">
-            <code className="text-xs font-mono text-white/85 truncate max-w-[180px]" title={locationId}>{locationId}</code>
+          <Row label="IP local">
+            <code className="text-xs font-mono text-white/85" title={localIp}>{localIp}</code>
           </Row>
           <Row label="Tareas en cola">
             <span className="text-xs font-black text-white">{pendingLogs}</span>
           </Row>
         </ul>
+
+        <p className="text-[10px] font-medium text-white/40 mt-4 px-1 leading-relaxed">
+          La IP local es la dirección de esta tablet en tu red WiFi. Úsala para
+          configurar impresoras o paneles auxiliares dentro del local.
+        </p>
       </div>
     </div>
   );
+}
+
+// Detección best-effort de IP local del dispositivo via WebRTC.
+function getLocalIp(): Promise<string | null> {
+  return new Promise((resolve) => {
+    try {
+      const RTCPeer = (window as unknown as { RTCPeerConnection?: typeof RTCPeerConnection }).RTCPeerConnection;
+      if (!RTCPeer) return resolve(null);
+      const pc = new RTCPeer({ iceServers: [] });
+      pc.createDataChannel("");
+      pc.createOffer().then((o) => pc.setLocalDescription(o)).catch(() => {});
+      const timer = setTimeout(() => {
+        try { pc.close(); } catch { /* noop */ }
+        resolve(null);
+      }, 1500);
+      pc.onicecandidate = (e) => {
+        if (!e.candidate) return;
+        const m = e.candidate.candidate.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
+        if (m && !m[1].startsWith("0.")) {
+          clearTimeout(timer);
+          try { pc.close(); } catch { /* noop */ }
+          resolve(m[1]);
+        }
+      };
+    } catch {
+      resolve(null);
+    }
+  });
 }
 
 function LogoutModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
