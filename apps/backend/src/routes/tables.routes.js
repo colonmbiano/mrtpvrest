@@ -106,7 +106,7 @@ router.post('/', requireRole(...MANAGE_ROLES), async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
-    const { name, x, y, zoneId } = req.body || {};
+    const { name, x, y, zoneId, capacity } = req.body || {};
     if (!name?.trim()) return res.status(400).json({ error: 'Nombre requerido' });
 
     // Validar zona (opcional): si llega zoneId, debe pertenecer al mismo
@@ -119,6 +119,12 @@ router.post('/', requireRole(...MANAGE_ROLES), async (req, res) => {
       if (!zone) return res.status(400).json({ error: 'Zona inválida' });
     }
 
+    // Capacidad: clamp 1..50 — más de 50 es seguramente un dedazo del admin.
+    const cap = Number(capacity);
+    const safeCapacity = Number.isFinite(cap) && cap >= 1 && cap <= 50
+      ? Math.floor(cap)
+      : 4;
+
     const table = await prisma.table.create({
       data: {
         locationId: req.locationId,
@@ -126,6 +132,7 @@ router.post('/', requireRole(...MANAGE_ROLES), async (req, res) => {
         x: Number.isFinite(Number(x)) ? Number(x) : 0,
         y: Number.isFinite(Number(y)) ? Number(y) : 0,
         zoneId: zoneId || null,
+        capacity: safeCapacity,
       },
       include: { zone: { select: { id: true, name: true, icon: true, isActive: true } } },
     });
@@ -146,11 +153,18 @@ router.patch('/:id', requireRole(...MANAGE_ROLES), async (req, res) => {
     });
     if (!existing) return res.status(404).json({ error: 'Mesa no encontrada' });
 
-    const { name, x, y, status, isActive, zoneId } = req.body || {};
+    const { name, x, y, status, isActive, zoneId, capacity } = req.body || {};
     const data = {};
     if (name !== undefined) data.name = String(name).trim();
     if (x !== undefined && Number.isFinite(Number(x))) data.x = Number(x);
     if (y !== undefined && Number.isFinite(Number(y))) data.y = Number(y);
+    if (capacity !== undefined) {
+      const cap = Number(capacity);
+      if (!Number.isFinite(cap) || cap < 1 || cap > 50) {
+        return res.status(400).json({ error: 'Capacidad inválida (1..50)' });
+      }
+      data.capacity = Math.floor(cap);
+    }
     if (status !== undefined) {
       if (!VALID_STATUS.includes(status)) {
         return res.status(400).json({ error: `Status inválido. Usa uno de: ${VALID_STATUS.join(', ')}` });
