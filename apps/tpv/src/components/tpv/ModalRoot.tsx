@@ -1,9 +1,24 @@
 "use client";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Toaster } from "sonner";
 import { ModalProvider } from "@/contexts/ModalContext";
 import { usePOSStore } from "@/store/usePOSStore";
 import { useHardwareBack } from "@/hooks/useHardwareBack";
+
+/**
+ * Aplica el tamaño de letra UI persistido en localStorage al boot.
+ * El usuario lo cambia desde ConfigMenu → Personalización → Tamaño.
+ */
+function useUiScale(): void {
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const v = localStorage.getItem("uiScale");
+    const scale = v === "small" || v === "large" ? v : "medium";
+    document.documentElement.dataset.uiScale = scale;
+    document.documentElement.style.fontSize =
+      scale === "small" ? "13px" : scale === "large" ? "19px" : "16px";
+  }, []);
+}
 
 /**
  * Lightweight root: provides ModalContext + Toaster app-wide.
@@ -17,6 +32,7 @@ import { useHardwareBack } from "@/hooks/useHardwareBack";
 export default function ModalRoot({ children }: { children: ReactNode }) {
   const mode = usePOSStore((s) => s.mode);
   useHardwareBack();
+  useUiScale();
 
   return (
     <ModalProvider>
