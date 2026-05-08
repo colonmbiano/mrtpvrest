@@ -324,6 +324,7 @@ model Location {
 
   devices           Device[]
   tasks             Task[]
+  printerGroups     PrinterGroup[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -420,6 +421,8 @@ model Category {
   isActive    Boolean    @default(true)
   items       MenuItem[]
 
+  printerGroups CategoryPrinterGroup[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -456,6 +459,8 @@ model MenuItem {
   variants       MenuItemVariant[]
   complements    MenuItemComplement[]
   recipeItems    RecipeItem[]
+
+  printerGroups MenuItemPrinterGroup[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -866,8 +871,79 @@ model Printer {
   // tradicionales). Permite que un KDS tipo "cocina central" muestre
   // pedidos de varias estaciones a la vez.
   stations   String[] @default([])
+
+  // Printer Groups (modelo Loyverse): un Printer puede pertenecer a N
+  // grupos de impresión. Las comandas se enrutan al group de su
+  // categoría / item, y todas las impresoras del group reciben copia.
+  printerGroups PrinterGroupMember[]
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// PRINTER GROUPS — Modelo Loyverse de enrutamiento de comandas.
+//
+// Un grupo agrupa N impresoras (térmicas + KDS) que reciben las mismas
+// comandas. Las categorías y los items se asignan a uno o más grupos:
+// cuando se cobra una orden, cada item se enruta al grupo definido en
+// su Item (override) o, si no tiene, al grupo de su Categoría.
+// Multi-grupo: un mismo item puede ir a varios grupos a la vez (cocina
+// + barra), lo cual genera una copia del ticket en cada uno.
+// ──────────────────────────────────────────────────────────────────────────
+
+model PrinterGroup {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members    PrinterGroupMember[]
+  categories CategoryPrinterGroup[]
+  items      MenuItemPrinterGroup[]
+
+  @@unique([locationId, name])
+  @@index([locationId])
+  @@map("printer_groups")
+}
+
+model PrinterGroupMember {
+  id              String       @id @default(cuid())
+  printerGroupId  String
+  printerGroup    PrinterGroup @relation(fields: [printerGroupId], references: [id], onDelete: Cascade)
+  printerId       String
+  printer         Printer      @relation(fields: [printerId], references: [id], onDelete: Cascade)
+
+  @@unique([printerGroupId, printerId])
+  @@index([printerId])
+  @@map("printer_group_members")
+}
+
+model CategoryPrinterGroup {
+  id              String       @id @default(cuid())
+  categoryId      String
+  category        Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  printerGroupId  String
+  printerGroup    PrinterGroup @relation(fields: [printerGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, printerGroupId])
+  @@index([printerGroupId])
+  @@map("category_printer_groups")
+}
+
+model MenuItemPrinterGroup {
+  id              String       @id @default(cuid())
+  menuItemId      String
+  menuItem        MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  printerGroupId  String
+  printerGroup    PrinterGroup @relation(fields: [printerGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, printerGroupId])
+  @@index([printerGroupId])
+  @@map("menu_item_printer_groups")
 }
 
 model Banner {

@@ -126,6 +126,14 @@ router.get('/', requireAdmin, async (req, res) => {
     }
     const printers = await prisma.printer.findMany({
       where: { locationId: req.locationId },
+      include: {
+        // Printer Groups a los que pertenece — el TPV los consume para
+        // enrutar comandas a la impresora correcta cuando el item /
+        // categoría tiene route asignada.
+        printerGroups: {
+          include: { printerGroup: { select: { id: true, name: true } } },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
     res.json(printers);

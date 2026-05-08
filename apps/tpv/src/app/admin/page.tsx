@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Grid3x3,
   Palette,
+  Layers,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -42,6 +43,13 @@ const SECTIONS = [
     desc: "Impresoras de tickets y estaciones KDS",
     icon: Printer,
     accent: "#10b981",
+  },
+  {
+    href: "/admin/grupos-impresoras",
+    label: "Grupos de Impresoras",
+    desc: "Enrutamiento Loyverse — qué impresoras reciben cada categoría",
+    icon: Layers,
+    accent: "#fbbf24",
   },
   {
     href: "/admin/apariencia",

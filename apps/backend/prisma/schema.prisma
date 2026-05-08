@@ -323,6 +323,7 @@ model Location {
 
   devices           Device[]
   tasks             Task[]
+  printerGroups     PrinterGroup[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -419,6 +420,8 @@ model Category {
   isActive    Boolean    @default(true)
   items       MenuItem[]
 
+  printerGroups CategoryPrinterGroup[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -452,6 +455,8 @@ model MenuItem {
   variants       MenuItemVariant[]
   complements    MenuItemComplement[]
   recipeItems    RecipeItem[]
+
+  printerGroups MenuItemPrinterGroup[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -848,8 +853,67 @@ model Printer {
   isActive   Boolean  @default(true)
   categories String[]
   stations   String[] @default([])
+
+  printerGroups PrinterGroupMember[]
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+// ── Printer Groups (modelo Loyverse) ────────────────────────────────────
+
+model PrinterGroup {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members    PrinterGroupMember[]
+  categories CategoryPrinterGroup[]
+  items      MenuItemPrinterGroup[]
+
+  @@unique([locationId, name])
+  @@index([locationId])
+  @@map("printer_groups")
+}
+
+model PrinterGroupMember {
+  id              String       @id @default(cuid())
+  printerGroupId  String
+  printerGroup    PrinterGroup @relation(fields: [printerGroupId], references: [id], onDelete: Cascade)
+  printerId       String
+  printer         Printer      @relation(fields: [printerId], references: [id], onDelete: Cascade)
+
+  @@unique([printerGroupId, printerId])
+  @@index([printerId])
+  @@map("printer_group_members")
+}
+
+model CategoryPrinterGroup {
+  id              String       @id @default(cuid())
+  categoryId      String
+  category        Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  printerGroupId  String
+  printerGroup    PrinterGroup @relation(fields: [printerGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, printerGroupId])
+  @@index([printerGroupId])
+  @@map("category_printer_groups")
+}
+
+model MenuItemPrinterGroup {
+  id              String       @id @default(cuid())
+  menuItemId      String
+  menuItem        MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  printerGroupId  String
+  printerGroup    PrinterGroup @relation(fields: [printerGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, printerGroupId])
+  @@index([printerGroupId])
+  @@map("menu_item_printer_groups")
 }
 
 model Banner {
