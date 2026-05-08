@@ -10,6 +10,8 @@ import {
   CreditCard,
   ShieldCheck,
   ChevronRight,
+  Grid3x3,
+  Palette,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -28,11 +30,25 @@ const SECTIONS = [
     accent: "#3b82f6",
   },
   {
+    href: "/admin/mesas",
+    label: "Mesas y Zonas",
+    desc: "Capacidad, layout y estado en vivo",
+    icon: Grid3x3,
+    accent: "#88D66C",
+  },
+  {
     href: "/admin/impresoras",
     label: "Red e Impresión",
     desc: "Impresoras de tickets y estaciones KDS",
     icon: Printer,
     accent: "#10b981",
+  },
+  {
+    href: "/admin/apariencia",
+    label: "Apariencia",
+    desc: "Tipografía, ancho del panel, paleta y modo",
+    icon: Palette,
+    accent: "#ec4899",
   },
   {
     href: "/admin/tickets",
