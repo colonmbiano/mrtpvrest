@@ -28,6 +28,10 @@ public/assets/
 *.png
 *.jpg
 *.jpeg
+# … pero los icons/splash de Capacitor Android sí van al repo:
+!**/android/**/*.png
+!**/android/**/*.jpg
+!**/android/**/*.jpeg
 
 # Configuración de entorno (Seguridad)
 .env
