@@ -201,6 +201,12 @@ export interface PrinterRecord {
   // un Printer con stations=[KITCHEN,BAR] recibirá comandas de
   // ambas estaciones aunque su `type` siga siendo KITCHEN.
   stations?: string[];
+  // Printer Groups de los que este Printer es miembro. Llenado por el
+  // caller cuando GET /api/printers regrese los joins (ver
+  // SidebarTicket.fetchPrinters). Vacío = el printer no participa del
+  // enrutamiento por groups y solo le llegan tickets si está en el
+  // fallback legacy (type/stations match).
+  printerGroupIds?: string[];
 }
 
 export interface TicketModifier {
@@ -216,6 +222,10 @@ export interface TicketItem {
   modifiers?: TicketModifier[] | null;
   // En DINE_IN: a qué comensal pertenece. null = compartido.
   seatNumber?: number | null;
+  // Printer Groups resueltos para este item — override item-level si
+  // existe, default heredado de la categoría si no. El dispatcher usa
+  // este array para enrutar la comanda a las impresoras correctas.
+  printerGroupIds?: string[];
 }
 
 export interface KitchenTicketInput {
@@ -389,14 +399,87 @@ async function dispatchToStations(
 
 /**
  * Imprime comandas en cocina (KITCHEN + BAR).
- * Devuelve resumen, no lanza — la impresión no debe romper el flow del POS.
+ *
+ * Algoritmo de enrutamiento (Loyverse-like):
+ *   1. Si CUALQUIER item del ticket tiene `printerGroupIds`, agrupamos
+ *      items por printer destino (resuelto via PrinterGroupMember) y
+ *      mandamos un ticket POR PRINTER con SOLO los items que le tocan.
+ *      Multi-grupo: un item con N groups manda a printers de los N
+ *      groups, deduplicado.
+ *   2. Si NINGÚN item trae printerGroupIds → fallback al comportamiento
+ *      legacy (dispatchToStations KITCHEN+BAR), igual que antes para no
+ *      romper instalaciones que aún no han configurado groups.
+ *
+ * No lanza — la impresión no debe romper el flow del POS.
  */
 export async function printKitchenTickets(
   printers: PrinterRecord[],
   input: KitchenTicketInput
 ): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
-  const payload = buildKitchenTicket(input);
-  return dispatchToStations(printers, ["KITCHEN", "BAR"], payload);
+  const itemsWithGroups = input.items.filter(
+    (it) => Array.isArray(it.printerGroupIds) && it.printerGroupIds.length > 0,
+  );
+
+  // Fallback legacy: ningún item asignado a Printer Groups → mandar
+  // todo a KITCHEN+BAR como antes.
+  if (itemsWithGroups.length === 0) {
+    const payload = buildKitchenTicket(input);
+    return dispatchToStations(printers, ["KITCHEN", "BAR"], payload);
+  }
+
+  // Mapa printerId → items[] que debe imprimir.
+  const itemsByPrinter = new Map<string, TicketItem[]>();
+  for (const item of input.items) {
+    const groupIds = item.printerGroupIds ?? [];
+    if (groupIds.length === 0) continue; // item sin ruta — se ignora con groups activos.
+
+    // Resolver printers de cada group para este item, deduplicados.
+    const seen = new Set<string>();
+    for (const printer of printers) {
+      if (!printer.isActive) continue;
+      if (printer.connectionType !== "NETWORK") continue;
+      if (!printer.ip || printer.ip === "0.0.0.0") continue;
+      // El PrinterRecord debe traer una referencia a sus groups
+      // (printerGroups[].printerGroup.id) — si el caller no la
+      // proveyó, este printer no participa del enrutamiento por groups.
+      const printerGroupIds = (printer as unknown as { printerGroupIds?: string[] }).printerGroupIds ?? [];
+      if (printerGroupIds.length === 0) continue;
+      if (printerGroupIds.some((gid) => groupIds.includes(gid))) {
+        if (seen.has(printer.id)) continue;
+        seen.add(printer.id);
+        const arr = itemsByPrinter.get(printer.id) ?? [];
+        arr.push(item);
+        itemsByPrinter.set(printer.id, arr);
+      }
+    }
+  }
+
+  // Si la resolución por groups no encontró targets, fallback legacy.
+  if (itemsByPrinter.size === 0) {
+    const payload = buildKitchenTicket(input);
+    return dispatchToStations(printers, ["KITCHEN", "BAR"], payload);
+  }
+
+  // Mandamos un ticket por printer con sus items asignados.
+  let okTotal = 0;
+  const failed: Array<{ name: string; error: string }> = [];
+
+  await Promise.all(
+    Array.from(itemsByPrinter.entries()).map(async ([printerId, items]) => {
+      const printer = printers.find((p) => p.id === printerId);
+      if (!printer) return;
+      const payload = buildKitchenTicket({ ...input, items });
+      try {
+        await sendRawTcp({ ip: printer.ip as string, port: printer.port }, payload);
+        okTotal += 1;
+      } catch (e) {
+        const err = e as { message?: string };
+        failed.push({ name: printer.name, error: err?.message || "fallo TCP" });
+      }
+    }),
+  );
+
+  return { ok: okTotal, failed };
 }
 
 /**
