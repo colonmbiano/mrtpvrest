@@ -80,24 +80,53 @@ export function buildTestTicket(station: PrinterStation): string {
 }
 
 // ── Detección de plugin ──────────────────────────────────────────────────
+//
+// IMPORTANTE: el objeto que devuelve `registerPlugin` de @capacitor/core es
+// un Proxy que intercepta TODO acceso a propiedades, incluido `.then`. Si
+// devolvemos esa instancia desde una función `async` (o la pasamos a
+// `Promise.resolve`/`new Promise(res => res(p))`), el runtime la trata como
+// "thenable" e invoca `plugin.then(resolve, reject)` como parte del unwrap.
+// Capacitor Android responde con el error nativo:
+//
+//     "TcpSocket.then() is not implemented on android"
+//
+// y la promesa que la envuelve se rechaza para SIEMPRE → el botón "Test
+// impresión" se queda en "conectando" sin disparar nada útil.
+//
+// Solución: separar la inicialización (async, vía dynamic import) de la
+// consulta del plugin (sync, lee de un wrapper { plugin } que NO es
+// thenable). Así en `sendRawTcp` hacemos `await ensurePlugin()` y luego
+// `const plugin = getPluginSync()` que devuelve la instancia sin pasar por
+// ningún Promise.
 
-let cachedPlugin: TCPSocketPlugin | null | undefined;
+let cachedBox: { plugin: TCPSocketPlugin | null } | null = null;
+let initPromise: Promise<void> | null = null;
 
-async function getPlugin(): Promise<TCPSocketPlugin | null> {
-  if (cachedPlugin !== undefined) return cachedPlugin;
-  try {
-    const mod = await import("capacitor-tcp-socket");
-    // El plugin exporta `TcpSocket` como nombre canónico.
-    const exported = mod as unknown as {
-      TcpSocket?: TCPSocketPlugin;
-      TCPSocket?: TCPSocketPlugin;
-      default?: TCPSocketPlugin;
-    };
-    cachedPlugin = exported.TcpSocket ?? exported.TCPSocket ?? exported.default ?? null;
-  } catch {
-    cachedPlugin = null;
+function getPluginSync(): TCPSocketPlugin | null {
+  return cachedBox?.plugin ?? null;
+}
+
+async function ensurePlugin(): Promise<void> {
+  if (cachedBox) return;
+  if (!initPromise) {
+    initPromise = (async () => {
+      try {
+        const mod = await import("capacitor-tcp-socket");
+        const exported = mod as unknown as {
+          TcpSocket?: TCPSocketPlugin;
+          TCPSocket?: TCPSocketPlugin;
+          default?: TCPSocketPlugin;
+        };
+        // OJO: leemos en variable local para que el resto de esta función
+        // no devuelva el plugin directamente. Lo guardamos detrás del box.
+        const plugin = exported.TcpSocket ?? exported.TCPSocket ?? exported.default ?? null;
+        cachedBox = { plugin };
+      } catch {
+        cachedBox = { plugin: null };
+      }
+    })();
   }
-  return cachedPlugin;
+  await initPromise;
 }
 
 // ── Envío TCP ────────────────────────────────────────────────────────────
@@ -122,7 +151,8 @@ export async function sendRawTcp(target: PrintTarget, payload: string): Promise<
     throw new Error("IP de impresora no configurada");
   }
 
-  const plugin = await getPlugin();
+  await ensurePlugin();
+  const plugin = getPluginSync();
   if (!plugin) {
     throw new Error("Plugin TCP no disponible (corre el APK; en web usa el TPV nativo).");
   }
