@@ -1408,6 +1408,11 @@ model Table {
   // para que mesas creadas por API sin layout no rompan.
   x        Float       @default(0)
   y        Float       @default(0)
+  // Capacidad nominal (comensales por defecto). El TPV la usa para
+  // pre-llenar el modal "Cuántos comensales" al iniciar una orden DINE_IN
+  // y para validar que no se sobrepase de forma accidental. Default 4 que
+  // es la mesa estándar en restaurantes mexicanos.
+  capacity Int         @default(4)
   status   TableStatus @default(AVAILABLE)
   isActive Boolean     @default(true)
 
