@@ -28,6 +28,13 @@ router.get('/categories', async (req, res) => {
 
     const categories = await prisma.category.findMany({
       where: { isActive: true, restaurantId },
+      include: {
+        // Default route por categoría (Printer Groups). El TPV lo
+        // consume al cobrar para enrutar items sin override propio.
+        printerGroups: {
+          include: { printerGroup: { select: { id: true, name: true } } },
+        },
+      },
       orderBy: { sortOrder: 'asc' }
     })
     res.json(categories)
@@ -92,8 +99,21 @@ router.get('/items', async (req, res) => {
     const items = await prisma.menuItem.findMany({
       where,
       include: {
-        category: { select: { id: true, name: true } },
-        modifierGroups: { include: { modifiers: true } }
+        category: {
+          select: {
+            id: true, name: true,
+            // El default route del item se hereda de su categoría si
+            // el item no tiene override propio. Lo incluimos para que
+            // el TPV resuelva todo client-side al cobrar.
+            printerGroups: {
+              include: { printerGroup: { select: { id: true, name: true } } },
+            },
+          },
+        },
+        modifierGroups: { include: { modifiers: true } },
+        printerGroups: {
+          include: { printerGroup: { select: { id: true, name: true } } },
+        },
       },
       orderBy: [{ isFavorite: 'desc' }, { isPromo: 'desc' }, { isPopular: 'desc' }, { name: 'asc' }],
     })

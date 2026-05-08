@@ -70,8 +70,24 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
     let cancelled = false;
     const load = async () => {
       try {
-        const { data } = await api.get<PrinterRecord[]>("/api/printers");
-        if (!cancelled) setPrinters(Array.isArray(data) ? data : []);
+        // Backend devuelve printerGroups: [{ printerGroup: { id, name } }]
+        // y necesitamos derivar printerGroupIds: string[] que es lo que
+        // el dispatcher consume para enrutar comandas.
+        type RawPrinter = PrinterRecord & {
+          printerGroups?: Array<{ printerGroup?: { id: string } }>;
+        };
+        const { data } = await api.get<RawPrinter[]>("/api/printers");
+        if (!Array.isArray(data) || cancelled) {
+          if (!cancelled) setPrinters([]);
+          return;
+        }
+        const normalized: PrinterRecord[] = data.map((p) => ({
+          ...p,
+          printerGroupIds: (p.printerGroups ?? [])
+            .map((m) => m.printerGroup?.id)
+            .filter((id): id is string => Boolean(id)),
+        }));
+        setPrinters(normalized);
       } catch {
         if (!cancelled) setPrinters([]);
       }
@@ -86,16 +102,33 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
   }, []);
 
   // Convierte CartItem[] del store al shape genérico de printer-tcp.
-  // Conserva seatNumber para el split por comensal en la impresión.
+  // Conserva seatNumber para el split por comensal en la impresión y
+  // resuelve printerGroupIds — override item-level si existe, default
+  // heredado de la categoría si no. El dispatcher usa este array para
+  // enrutar la comanda a las impresoras correctas.
   const buildTicketItems = (): TicketItem[] =>
-    ticket.items.map((it) => ({
-      name: it.name,
-      quantity: it.quantity,
-      price: it.price,
-      notes: it.notes,
-      seatNumber: it.seatNumber ?? null,
-      modifiers: (it.modifiers || []).map((m) => ({ name: m.name, priceAdd: m.priceAdd })),
-    }));
+    ticket.items.map((it) => {
+      const raw = it as unknown as {
+        printerGroups?: Array<{ printerGroup?: { id: string } }>;
+        category?: { printerGroups?: Array<{ printerGroup?: { id: string } }> };
+      };
+      const itemOverride = (raw.printerGroups ?? [])
+        .map((m) => m.printerGroup?.id)
+        .filter((id): id is string => Boolean(id));
+      const categoryDefault = (raw.category?.printerGroups ?? [])
+        .map((m) => m.printerGroup?.id)
+        .filter((id): id is string => Boolean(id));
+      const printerGroupIds = itemOverride.length > 0 ? itemOverride : categoryDefault;
+      return {
+        name: it.name,
+        quantity: it.quantity,
+        price: it.price,
+        notes: it.notes,
+        seatNumber: it.seatNumber ?? null,
+        printerGroupIds,
+        modifiers: (it.modifiers || []).map((m) => ({ name: m.name, priceAdd: m.priceAdd })),
+      };
+    });
 
   const handleSendToKitchen = async () => {
     if (ticket.items.length === 0) {
