@@ -54,11 +54,31 @@ router.put('/ticket-config', requireAdmin, async (req, res) => {
 // Printers CRUD
 // ────────────────────────────────────────────────────────────────────────────
 
+// Whitelist de columnas que aceptamos del cliente. Cualquier otra cosa
+// (p. ej. `isVirtual`, flags de UI) se descarta antes de tocar Prisma para
+// que el frontend no nos tumbe el endpoint con un 500 si manda un campo
+// fantasma.
+const PRINTER_ALLOWED_FIELDS = [
+  'name',
+  'type',
+  'connectionType',
+  'ip',
+  'port',
+  'usbPort',
+  'bluetoothAddress',
+  'supportsCashDrawer',
+  'isActive',
+  'categories',
+];
+
 // Normaliza el payload según connectionType: vacía los campos irrelevantes
 // para que no queden "IPs zombi" cuando se cambia de NETWORK a USB.
 function normalizePrinterPayload(body) {
-  const { id, locationId, createdAt, updatedAt, ...rest } = body || {};
-  const payload = { ...rest };
+  const src = body || {};
+  const payload = {};
+  for (const k of PRINTER_ALLOWED_FIELDS) {
+    if (src[k] !== undefined) payload[k] = src[k];
+  }
   const conn = payload.connectionType || 'NETWORK';
   if (conn === 'NETWORK') {
     payload.usbPort = null;
