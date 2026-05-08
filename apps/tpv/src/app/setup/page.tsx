@@ -173,12 +173,10 @@ export default function SetupPage() {
 
       const { deviceToken, deviceId } = response.data;
 
-      // Mapear deviceType del UI ("CAJA"/"KDS"/"MESERO") a roles canónicos
-      // que coinciden con Device.type del schema Prisma ("POS"/"KDS"/"WAITER").
-      const deviceRole =
-        deviceType === 'KDS'    ? 'KDS' :
-        deviceType === 'MESERO' ? 'WAITER' :
-                                  'POS';
+      // Mapear deviceType del UI ("CAJA"/"MESERO") a roles canónicos
+      // que coinciden con Device.type del schema Prisma ("POS"/"WAITER").
+      // KDS se vincula desde la app independiente apps/kds, no aquí.
+      const deviceRole = deviceType === 'MESERO' ? 'WAITER' : 'POS';
 
       // Save device info
       localStorage.setItem('deviceToken', deviceToken);
@@ -205,11 +203,9 @@ export default function SetupPage() {
 
       setStep('saving');
 
-      // Redirección por rol del dispositivo. KDS no requiere login PIN —
-      // entra directo a /kds con el deviceToken como auth de máquina.
-      const target = deviceRole === 'KDS' ? '/kds' : '/locked';
+      // Tras vinculación pasa a /locked para login PIN del empleado.
       setTimeout(() => {
-        router.replace(target);
+        router.replace('/locked');
       }, 500);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al vincular dispositivo');

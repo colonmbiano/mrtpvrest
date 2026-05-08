@@ -1,20 +1,32 @@
 "use client";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 
-// En Vercel: el middleware intercepta "/" antes de llegar acá.
-// En Capacitor (output: export): no hay middleware, así que el redirect
-// debe ser client-side. Por eso esta página es un client component.
-export default function RootPage() {
-  const router = useRouter();
+import { useEffect, useState } from "react";
+import LoginScreen from "./LoginScreen";
+import KdsScreen from "./KdsScreen";
+
+export default function HomePage() {
+  // Auth determinada por presencia de accessToken válido en localStorage.
+  // KDS app independiente: una sola pantalla — login o KDS.
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
+
   useEffect(() => {
-    if (typeof document === "undefined") return;
-    const device = document.cookie.includes("tpv-device-linked=true");
-    const session = document.cookie.includes("tpv-session-active=true");
-    if (!device) router.replace("/setup");
-    else if (!session) router.replace("/locked");
-    else router.replace("/hub");
-  }, [router]);
+    if (typeof window === "undefined") return;
+    const tok = localStorage.getItem("accessToken");
+    const loc = localStorage.getItem("locationId");
+    setHasSession(Boolean(tok && loc));
+  }, []);
 
-  return null;
+  if (hasSession === null) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-[#0a0a0c]">
+        <div className="w-12 h-12 border-4 border-amber-500/20 border-t-[#ffb84d] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!hasSession) {
+    return <LoginScreen onSuccess={() => setHasSession(true)} />;
+  }
+
+  return <KdsScreen onLogout={() => setHasSession(false)} />;
 }

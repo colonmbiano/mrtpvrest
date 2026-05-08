@@ -14,17 +14,13 @@
     "cap:sync": "npx cap sync android"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
     "@capacitor/core": "^8.3.1",
     "axios": "^1.13.6",
-    "framer-motion": "^12.38.0",
     "lucide-react": "^1.11.0",
     "next": "16.2.5",
     "react": "19.2.6",
-    "react-dom": "19.2.6",
-    "react-hotkeys-hook": "^5.2.4",
-    "socket.io-client": "^4.8.3",
-    "sonner": "^2.0.7",
-    "zustand": "^4.5.5"
+    "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.1",

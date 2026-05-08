@@ -70,9 +70,10 @@ export function useTPVAuth() {
       const role = auth.employee.role;
       if (role === "WAITER") {
         router.push("/meseros");
-      } else if (role === "KITCHEN" || role === "COOK") {
-        router.push("/kds");
       }
+      // KITCHEN/COOK ya no redirigen a /kds — esa pantalla vive en la APK
+      // independiente apps/kds. Si un cocinero pone su PIN en el TPV se
+      // queda en el flujo POS sin pantalla específica.
       // CASHIER, OWNER, ADMIN, MANAGER → no redirigimos, ya están en el POS
     } else if (!auth.isAuthenticated) {
       prevAuthRef.current = false;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Laptop, Monitor, Users, Check, ArrowRight } from 'lucide-react';
+import { Laptop, Users, Check, ArrowRight } from 'lucide-react';
 
 interface DeviceStepProps {
   onSubmit: (deviceType: string) => Promise<void>;
@@ -9,7 +9,7 @@ interface DeviceStepProps {
   error: string;
 }
 
-type DeviceTypeKey = 'CAJA' | 'KDS' | 'MESERO';
+type DeviceTypeKey = 'CAJA' | 'MESERO';
 
 const OPTIONS: Array<{
   key: DeviceTypeKey;
@@ -26,13 +26,6 @@ const OPTIONS: Array<{
     accent: '#ffb84d',
   },
   {
-    key: 'KDS',
-    title: 'KDS Cocina',
-    desc: 'Pantalla en cocina, sin login PIN, finaliza pedidos en 1 toque',
-    icon: Monitor,
-    accent: '#10b981',
-  },
-  {
     key: 'MESERO',
     title: 'Tablet Mesero',
     desc: 'Mapa de mesas y comandas para meseros',
@@ -40,6 +33,8 @@ const OPTIONS: Array<{
     accent: '#3b82f6',
   },
 ];
+// Para vincular un KDS de cocina, instalá la APK independiente
+// "MRTPV KDS" (apps/kds). El TPV ya no incluye ese rol.
 
 export default function DeviceStep({ onSubmit, loading, error }: DeviceStepProps) {
   // Sin selección por defecto — fuerza al admin a elegir explícitamente

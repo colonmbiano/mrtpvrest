@@ -17,17 +17,9 @@ export default function RootPage() {
       return;
     }
 
-    // Dispositivos KDS NO usan login PIN — el deviceToken es la auth.
-    // Entran directo a la pantalla de cocina al boot.
-    const role = typeof window !== "undefined"
-      ? localStorage.getItem("deviceRole")
-      : null;
-
-    if (role === "KDS") {
-      router.replace("/kds");
-      return;
-    }
-
+    // El rol KDS ya no aplica al TPV — esa pantalla vive en una APK
+    // independiente (apps/kds). Cualquier dispositivo que se haya
+    // vinculado como KDS aquí simplemente sigue el flujo normal de POS.
     const session = document.cookie.includes("tpv-session-active=true");
     if (!session) {
       router.replace("/locked");

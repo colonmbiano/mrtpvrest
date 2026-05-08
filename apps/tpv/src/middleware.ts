@@ -5,10 +5,10 @@ import { NextRequest, NextResponse } from 'next/server';
 // Si el rol no machea, redirigimos a /hub donde el usuario verá solo lo
 // que sí puede usar.
 const PATH_ROLES: Array<{ prefix: string; roles: string[] }> = [
-  { prefix: '/kds',     roles: ['COOK', 'KITCHEN', 'ADMIN', 'OWNER', 'MANAGER', 'SUPER_ADMIN'] },
   { prefix: '/cierre',  roles: ['CASHIER', 'ADMIN', 'OWNER', 'MANAGER', 'SUPER_ADMIN'] },
   { prefix: '/pos',     roles: ['CASHIER', 'WAITER', 'ADMIN', 'OWNER', 'MANAGER', 'SUPER_ADMIN'] },
   // /hub y /meseros no se restringen a un rol concreto — son selectores.
+  // /kds vive ahora en una APK independiente (apps/kds/), no en el TPV.
 ];
 
 function roleAllowed(pathname: string, role: string | null): boolean {
@@ -49,7 +49,6 @@ export function middleware(request: NextRequest) {
   if (
     pathname.startsWith('/hub') ||
     pathname.startsWith('/pos') ||
-    pathname.startsWith('/kds') ||
     pathname.startsWith('/cierre') ||
     pathname.startsWith('/meseros')
   ) {
@@ -75,7 +74,6 @@ export const config = {
     '/locked/:path*',
     '/hub/:path*',
     '/pos/:path*',
-    '/kds/:path*',
     '/cierre/:path*',
     '/meseros/:path*',
   ],
