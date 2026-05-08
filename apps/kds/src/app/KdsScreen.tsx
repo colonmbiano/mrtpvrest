@@ -4,15 +4,34 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Info, Wifi, WifiOff, Server, ServerOff,
   X, Check, ListChecks, Bike, Utensils, ShoppingBag,
-  Trophy, RefreshCcw, LogOut,
+  Trophy, RefreshCcw, LogOut, Radio, Trash2,
 } from "lucide-react";
 import api from "@/lib/api";
 import NumpadPIN from "@/components/NumpadPIN";
+import { startTcpListener, stopTcpListener, listenForData } from "@/lib/tcpListener";
+import { parseEscPos } from "@/lib/escpos-parser";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────
 
 type StationCode = "KITCHEN" | "BAR" | "FRYER";
-type TabKey = "orders" | "tasks";
+type TabKey = "orders" | "tasks" | "tcp";
+
+/**
+ * Comanda recibida vía TCP (ESC/POS) desde el TPV actuando como
+ * impresora térmica. KDS escucha en port 9100; cada payload se
+ * convierte en un card. Estado solo en memoria — los tickets TCP son
+ * efímeros como una comanda en papel.
+ */
+interface TcpTicket {
+  id: string;
+  receivedAt: number;
+  from: string;
+  lines: string[];
+  isKitchen: boolean;
+  isReceipt: boolean;
+  orderNumber: string | null;
+  tableLabel: string | null;
+}
 
 interface KdsOrderItem {
   id: string;
@@ -112,6 +131,49 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
   const [serverOk, setServerOk]     = useState<boolean>(true);
   const [showInfo, setShowInfo]     = useState<boolean>(false);
   const [showLogout, setShowLogout] = useState<boolean>(false);
+
+  // Tickets recibidos por TCP (KDS-as-printer). Estado efímero.
+  const [tcpTickets, setTcpTickets] = useState<TcpTicket[]>([]);
+  const [tcpListening, setTcpListening] = useState<boolean>(false);
+
+  // Arranca el TCP listener en port 9100 al montar; al desmontar (o
+  // logout) lo detiene. listenForData mantiene una sola subscripción
+  // viva — `parseEscPos` traduce el binario a líneas legibles y
+  // pusheamos el ticket al tope de la lista.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await startTcpListener(9100);
+        if (cancelled) return;
+        setTcpListening(true);
+        await listenForData((ev) => {
+          const parsed = parseEscPos(ev.text);
+          if (parsed.lines.length === 0) return;
+          const ticket: TcpTicket = {
+            id: `tcp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            receivedAt: Date.now(),
+            from: ev.from,
+            lines: parsed.lines,
+            isKitchen: parsed.isKitchen,
+            isReceipt: parsed.isReceipt,
+            orderNumber: parsed.orderNumber,
+            tableLabel: parsed.tableLabel,
+          };
+          setTcpTickets((curr) => [ticket, ...curr].slice(0, 50));
+        });
+      } catch {
+        // Plugin no disponible (web build) o port ocupado: el KDS sigue
+        // funcionando con el polling /api/kds/orders, solo no recibe
+        // comandas vía TCP. No es bloqueante.
+        if (!cancelled) setTcpListening(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stopTcpListener().catch(() => { /* noop */ });
+    };
+  }, []);
 
   // Network listeners
   useEffect(() => {
@@ -286,6 +348,10 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
             <ListChecks size={14} /> Tareas
             {pendingCount > 0 && <Counter value={pendingCount} tone="warn" />}
           </TabPill>
+          <TabPill active={tab === "tcp"} onClick={() => setTab("tcp")}>
+            <Radio size={14} /> TCP
+            {tcpTickets.length > 0 && <Counter value={tcpTickets.length} />}
+          </TabPill>
         </div>
 
         <div className="flex items-center gap-2">
@@ -342,7 +408,7 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
             onToggleItem={toggleItem}
             onFinalize={finalizeOrder}
           />
-        ) : (
+        ) : tab === "tasks" ? (
           <TasksList
             loading={loadingTasks}
             tasks={tasks}
@@ -350,6 +416,13 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
             pendingCount={pendingCount}
             onPick={(t) => { setTaskPinError(""); setTaskPinFor(t); }}
             onSync={() => flushPendingLogs()}
+          />
+        ) : (
+          <TcpTicketsView
+            tickets={tcpTickets}
+            listening={tcpListening}
+            onDismiss={(id) => setTcpTickets((curr) => curr.filter((t) => t.id !== id))}
+            onClear={() => setTcpTickets([])}
           />
         )}
       </main>
@@ -734,10 +807,11 @@ function getLocalIp(): Promise<string | null> {
       pc.onicecandidate = (e) => {
         if (!e.candidate) return;
         const m = e.candidate.candidate.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
-        if (m && !m[1].startsWith("0.")) {
+        const ip = m?.[1];
+        if (ip && !ip.startsWith("0.")) {
           clearTimeout(timer);
           try { pc.close(); } catch { /* noop */ }
-          resolve(m[1]);
+          resolve(ip);
         }
       };
     } catch {
@@ -800,4 +874,123 @@ function playBeep(): void {
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.4);
   } catch { /* sin audio */ }
+}
+
+// ── TCP Tickets view (KDS-as-printer) ─────────────────────────────────────
+
+function TcpTicketsView({
+  tickets, listening, onDismiss, onClear,
+}: {
+  tickets: TcpTicket[];
+  listening: boolean;
+  onDismiss: (id: string) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3 px-1">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{
+              background: listening ? "rgba(136,214,108,0.15)" : "rgba(255,92,51,0.15)",
+              color:      listening ? "#88D66C" : "#FF8B6E",
+              border:     `1px solid ${listening ? "rgba(136,214,108,0.30)" : "rgba(255,92,51,0.30)"}`,
+            }}
+          >
+            <Radio size={18} />
+          </div>
+          <div>
+            <p className="text-sm font-black text-white tracking-tight">
+              {listening ? "Escuchando port 9100" : "Listener inactivo"}
+            </p>
+            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">
+              {tickets.length === 0
+                ? "Esperando comandas TCP…"
+                : `${tickets.length} ticket${tickets.length !== 1 ? "s" : ""} recibido${tickets.length !== 1 ? "s" : ""}`}
+            </p>
+          </div>
+        </div>
+        {tickets.length > 0 && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="inline-flex items-center gap-2 px-4 h-10 rounded-2xl bg-white/5 border border-white/10 text-xs font-black uppercase tracking-widest text-white/85 active:scale-95"
+          >
+            <Trash2 size={14} /> Limpiar
+          </button>
+        )}
+      </div>
+
+      {tickets.length === 0 ? (
+        <div className="rounded-3xl bg-white/5 border border-white/10 p-12 text-center">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-white/5 flex items-center justify-center mb-4 text-white/40">
+            <Radio size={24} />
+          </div>
+          <p className="text-sm font-black text-white/85 mb-1">Sin comandas todavía</p>
+          <p className="text-xs font-medium text-white/40 max-w-sm mx-auto">
+            Configura esta tablet como impresora térmica en el TPV usando la
+            IP local que aparece en Diagnóstico (Info) y port 9100. Cada
+            comanda enviada llegará aquí en tiempo real.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {tickets.map((t) => (
+            <TcpTicketCard key={t.id} ticket={t} onDismiss={() => onDismiss(t.id)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TcpTicketCard({ ticket, onDismiss }: { ticket: TcpTicket; onDismiss: () => void }) {
+  const tag = ticket.isReceipt
+    ? { label: "RECIBO",  color: "#ffb84d" }
+    : ticket.isKitchen
+      ? { label: "COMANDA", color: "#88D66C" }
+      : { label: "TICKET",  color: "#94a3b8" };
+  const time = new Date(ticket.receivedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  return (
+    <div
+      className="rounded-3xl bg-white/5 border border-white/10 p-5 flex flex-col gap-3 relative"
+      style={{ borderColor: tag.color + "40" }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <span
+            className="inline-block text-[10px] font-black tracking-[0.25em] px-2 py-1 rounded-lg"
+            style={{ background: tag.color + "20", color: tag.color }}
+          >
+            {tag.label}
+          </span>
+          {ticket.orderNumber && (
+            <p className="text-xl font-black text-white tracking-tight mt-2">#{ticket.orderNumber}</p>
+          )}
+          {ticket.tableLabel && (
+            <p className="text-[11px] font-bold text-white/55 mt-1">Mesa {ticket.tableLabel}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 text-white/55"
+          aria-label="Marcar como completado"
+        >
+          <Check size={16} />
+        </button>
+      </div>
+
+      <pre className="text-[11px] leading-relaxed font-mono text-white/85 whitespace-pre-wrap break-words bg-black/20 rounded-xl p-3 max-h-[280px] overflow-y-auto scrollbar-hide">
+{ticket.lines.join("\n")}
+      </pre>
+
+      <div className="flex items-center justify-between text-[10px] font-bold text-white/40 uppercase tracking-widest">
+        <span>{time}</span>
+        <span title={ticket.from}>{ticket.from}</span>
+      </div>
+    </div>
+  );
 }
