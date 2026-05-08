@@ -1,8 +1,9 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X, MapPin } from "lucide-react";
 import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal from "@/components/pos/PaymentModal";
+import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import { useTicketStore } from "@/store/ticketStore";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -20,16 +21,18 @@ interface Props {
 
 export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props) {
   const [showPayment, setShowPayment] = useState(false);
+  const [showTables, setShowTables] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const { 
+  const {
     tickets,
     activeIndex,
-    getActiveTicket, 
+    getActiveTicket,
     addTicket,
     setActiveIndex,
     closeTicket,
-    changeItemQty, 
-    clearActiveItems 
+    changeItemQty,
+    clearActiveItems,
+    updateTicket,
   } = useTicketStore();
   
   const ticket = getActiveTicket();
@@ -243,13 +246,66 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
               onChange={(e) => useTicketStore.getState().updateTicket({ name: e.target.value })}
             />
           </div>
-          <button 
-            className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border border-white/5 bg-[#121316] text-zinc-600 active:bg-red-500/10 active:text-red-500 active:border-red-500/20 transition-all active:scale-95" 
+          <button
+            className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border border-white/5 bg-[#121316] text-zinc-600 active:bg-red-500/10 active:text-red-500 active:border-red-500/20 transition-all active:scale-95"
             onClick={clearActiveItems}
           >
             <Trash2 size={20} />
           </button>
         </div>
+
+        {/* Asignación de mesa — solo aplica a DINE_IN */}
+        {ticket.type === "DINE_IN" && (
+          <button
+            type="button"
+            onClick={() => setShowTables(true)}
+            className="flex items-center gap-3 px-4 py-3 min-h-[56px] rounded-2xl bg-[#121316] border border-white/5 active:scale-95 transition-transform text-left"
+            style={{
+              borderColor: ticket.tableId ? "rgba(136,214,108,0.35)" : "rgba(255,255,255,0.06)",
+            }}
+          >
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                 style={{
+                   background: ticket.tableId ? "rgba(136,214,108,0.15)" : "rgba(255,184,77,0.10)",
+                   color: ticket.tableId ? "#88D66C" : "#ffb84d",
+                 }}>
+              <MapPin size={18} />
+            </div>
+            <div className="flex flex-col items-start min-w-0 flex-1">
+              {ticket.tableId ? (
+                <>
+                  <span className="text-[10px] font-black tracking-[0.2em] uppercase text-emerald-400">
+                    Mesa asignada
+                  </span>
+                  <span className="text-sm font-black text-white tracking-tight truncate w-full">
+                    {ticket.tableName || ticket.table || "Mesa"}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-[10px] font-black tracking-[0.2em] uppercase text-amber-500">
+                    Sin mesa
+                  </span>
+                  <span className="text-sm font-bold text-white/85 tracking-tight">
+                    Asignar mesa
+                  </span>
+                </>
+              )}
+            </div>
+            {ticket.tableId && (
+              <span
+                role="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  updateTicket({ tableId: "", tableName: "", table: "" });
+                }}
+                className="px-2.5 py-1 rounded-lg text-[10px] font-black tracking-widest text-zinc-400 bg-white/5 border border-white/10 active:scale-95 transition-transform"
+              >
+                Cambiar
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* LISTA DE ITEMS */}
@@ -342,6 +398,16 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
           discount={ticket.discount}
           items={ticket.items.map((i) => ({ name: i.name, quantity: i.quantity, subtotal: i.subtotal }))}
           onConfirm={handleProcessPayment}
+        />
+
+        <TablePickerModal
+          isOpen={showTables}
+          onClose={() => setShowTables(false)}
+          onPick={(t: TableLite) => {
+            updateTicket({ tableId: t.id, tableName: t.name, table: t.name });
+            setShowTables(false);
+            toast.success(`Mesa ${t.name} asignada`);
+          }}
         />
       </div>
     </aside>

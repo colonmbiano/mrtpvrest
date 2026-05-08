@@ -39,15 +39,30 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
     try {
       const { data: loginRes } = await api.post("/api/auth/login", { email, password });
       const token = loginRes.accessToken;
+      const userRestaurantId: string | null = loginRes.user?.restaurantId || null;
       setAuthToken(token);
 
-      // Obtener sucursales accesibles para este admin.
-      const restRes  = await api.get("/api/admin/config", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const locRes = await api.get<Location[]>("/api/admin/locations", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // Persistimos el restaurantId del JWT lo antes posible para que el
+      // interceptor de api.ts ponga el header x-restaurant-id.
+      if (userRestaurantId) {
+        localStorage.setItem("restaurantId", userRestaurantId);
+      }
+
+      // Headers para garantizar resolución de tenant en el backend cuando
+      // todavía no hay restaurantId en localStorage (primer login).
+      const tenantHeaders: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      if (userRestaurantId) tenantHeaders["x-restaurant-id"] = userRestaurantId;
+
+      const restRes = await api.get("/api/admin/config", { headers: tenantHeaders });
+      const resolvedRestId: string | null = userRestaurantId || restRes.data?.id || null;
+      if (resolvedRestId) {
+        localStorage.setItem("restaurantId", resolvedRestId);
+        tenantHeaders["x-restaurant-id"] = resolvedRestId;
+      }
+
+      const locRes = await api.get<Location[]>("/api/admin/locations", { headers: tenantHeaders });
       const list: Location[] = (locRes.data || []).filter((l) => l.isActive !== false);
       if (list.length === 0) {
         setError("No hay sucursales activas en tu cuenta.");
@@ -55,7 +70,7 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
         return;
       }
 
-      setRestaurant({ id: restRes.data?.id || "", name: restRes.data?.name || "Restaurante", locations: list });
+      setRestaurant({ id: resolvedRestId || "", name: restRes.data?.name || "Restaurante", locations: list });
       setLocations(list);
       setStep("location");
     } catch (err) {
@@ -72,11 +87,19 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
     setError("");
 
     try {
-      // Crear/recuperar device KDS para esta sucursal.
+      // Crear/recuperar device KDS para esta sucursal. Mandamos x-restaurant-id
+      // y x-location-id explícitos para que el tenantMiddleware del backend
+      // resuelva el contexto sin depender solo del JWT.
       const { data: dev } = await api.post(
         "/api/devices/create",
         { locationId: loc.id, deviceType: "KDS", restaurantId: restaurant.id },
-        { headers: { Authorization: `Bearer ${authToken}` } }
+        {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+            "x-restaurant-id": restaurant.id,
+            "x-location-id":   loc.id,
+          },
+        }
       );
 
       // Canjear deviceToken por JWT de máquina (30 días, role KITCHEN).

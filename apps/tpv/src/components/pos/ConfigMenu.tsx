@@ -1,7 +1,28 @@
 "use client";
-import React from "react";
-import { X, Palette, LogOut } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { X, Palette, LogOut, Type } from "lucide-react";
 import { useAuthStore, type EmployeeRole } from "@/store/authStore";
+
+type UiScale = "small" | "medium" | "large";
+
+const SCALE_LABELS: Record<UiScale, { label: string; size: string }> = {
+  small:  { label: "Chico",   size: "13 px" },
+  medium: { label: "Mediano", size: "16 px" },
+  large:  { label: "Grande",  size: "19 px" },
+};
+
+function readScale(): UiScale {
+  if (typeof window === "undefined") return "medium";
+  const v = localStorage.getItem("uiScale");
+  return v === "small" || v === "large" ? v : "medium";
+}
+
+function applyScale(scale: UiScale): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.dataset.uiScale = scale;
+  const px = scale === "small" ? "13px" : scale === "large" ? "19px" : "16px";
+  document.documentElement.style.fontSize = px;
+}
 
 const ROLE_LABEL: Record<EmployeeRole, string> = {
   OWNER: "Propietario",
@@ -105,6 +126,9 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
           <section className="space-y-6">
             <span className="text-[11px] font-black text-zinc-500 tracking-[0.2em] uppercase ml-1">Personalización</span>
             <div className="space-y-6">
+              {/* Tamaño de letra UI */}
+              <UiScalePicker />
+
               <div className="flex flex-col gap-4">
                 <span className="text-[11px] font-bold text-zinc-400 tracking-wide ml-1">Paleta de Acento</span>
                 <div className="flex gap-3">
@@ -165,3 +189,50 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
 };
 
 export default ConfigMenu;
+
+function UiScalePicker() {
+  const [scale, setScale] = useState<UiScale>("medium");
+
+  useEffect(() => {
+    const s = readScale();
+    setScale(s);
+    applyScale(s);
+  }, []);
+
+  const choose = (s: UiScale) => {
+    setScale(s);
+    if (typeof window !== "undefined") localStorage.setItem("uiScale", s);
+    applyScale(s);
+  };
+
+  const options: UiScale[] = ["small", "medium", "large"];
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-2 ml-1">
+        <Type size={14} className="text-zinc-400" />
+        <span className="text-[11px] font-bold text-zinc-400 tracking-wide">Tamaño de letra</span>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {options.map((s) => {
+          const active = s === scale;
+          const meta = SCALE_LABELS[s];
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => choose(s)}
+              className={`
+                flex flex-col items-center justify-center gap-1 min-h-[64px] py-3 rounded-2xl border transition-all active:scale-95
+                ${active ? "bg-[#1a1b1f] border-amber-500 text-white shadow-[0_0_15px_rgba(255,184,77,0.2)]" : "bg-[#121316] border-white/5 text-zinc-500"}
+              `}
+              style={{ fontSize: s === "small" ? 12 : s === "large" ? 18 : 14 }}
+            >
+              <span className="font-black">Aa</span>
+              <span className="text-[9px] font-black uppercase tracking-widest">{meta.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
