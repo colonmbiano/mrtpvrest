@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { X, Palette, LogOut, Type } from "lucide-react";
+import { X, Palette, LogOut, Type, PanelRightClose } from "lucide-react";
 import { useAuthStore, type EmployeeRole } from "@/store/authStore";
 
 type UiScale = "small" | "medium" | "large";
@@ -129,6 +129,9 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
               {/* Tamaño de letra UI */}
               <UiScalePicker />
 
+              {/* Ancho del panel de ticket */}
+              <SidebarWidthPicker />
+
               <div className="flex flex-col gap-4">
                 <span className="text-[11px] font-bold text-zinc-400 tracking-wide ml-1">Paleta de Acento</span>
                 <div className="flex gap-3">
@@ -229,6 +232,75 @@ function UiScalePicker() {
             >
               <span className="font-black">Aa</span>
               <span className="text-[9px] font-black uppercase tracking-widest">{meta.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Sidebar width picker ──────────────────────────────────────────────────
+//
+// Controla cuán ancho se muestra el panel del ticket en /pos/menu. En
+// tablets pequeñas (Tab70 7") un sidebar de 380px deja muy poco espacio
+// para los productos; conviene bajarlo a 320. En tablets grandes 11" se
+// puede subir a 440 para ver más detalle del ticket. Persistimos el
+// preset (S/M/L) en localStorage y disparamos `sidebar-width-changed`
+// para que SidebarTicket aplique sin esperar reload.
+
+type SidebarWidthPreset = "S" | "M" | "L";
+
+const SIDEBAR_WIDTH_LABELS: Record<SidebarWidthPreset, { label: string; px: number }> = {
+  S: { label: "Estrecho", px: 320 },
+  M: { label: "Medio",    px: 380 },
+  L: { label: "Amplio",   px: 440 },
+};
+
+function readSidebarPreset(): SidebarWidthPreset {
+  if (typeof window === "undefined") return "M";
+  const v = localStorage.getItem("sidebarWidth");
+  return v === "S" || v === "L" ? v : "M";
+}
+
+function SidebarWidthPicker() {
+  const [preset, setPreset] = useState<SidebarWidthPreset>("M");
+
+  useEffect(() => {
+    setPreset(readSidebarPreset());
+  }, []);
+
+  const choose = (p: SidebarWidthPreset) => {
+    setPreset(p);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sidebarWidth", p);
+      window.dispatchEvent(new Event("sidebar-width-changed"));
+    }
+  };
+
+  const options: SidebarWidthPreset[] = ["S", "M", "L"];
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-2 ml-1">
+        <PanelRightClose size={14} className="text-zinc-400" />
+        <span className="text-[11px] font-bold text-zinc-400 tracking-wide">Ancho del panel ticket</span>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {options.map((p) => {
+          const active = p === preset;
+          const meta = SIDEBAR_WIDTH_LABELS[p];
+          return (
+            <button
+              key={p}
+              type="button"
+              onClick={() => choose(p)}
+              className={`
+                flex flex-col items-center justify-center gap-1 min-h-[64px] py-3 rounded-2xl border transition-all active:scale-95
+                ${active ? "bg-[#1a1b1f] border-amber-500 text-white shadow-[0_0_15px_rgba(255,184,77,0.2)]" : "bg-[#121316] border-white/5 text-zinc-500"}
+              `}
+            >
+              <span className="text-[10px] font-black uppercase tracking-widest">{meta.label}</span>
+              <span className="text-[9px] font-bold text-zinc-500">{meta.px}px</span>
             </button>
           );
         })}

@@ -195,6 +195,12 @@ export interface PrinterRecord {
   connectionType: "USB" | "NETWORK" | "BLUETOOTH" | string;
   isActive: boolean;
   isVirtual?: boolean;
+  // Estaciones que cubre. Cuando vacío, se usa solo `type` como
+  // fallback (impresora térmica tradicional con un único rol).
+  // Cuando tiene contenido, dispatchToStations considera la unión:
+  // un Printer con stations=[KITCHEN,BAR] recibirá comandas de
+  // ambas estaciones aunque su `type` siga siendo KITCHEN.
+  stations?: string[];
 }
 
 export interface TicketModifier {
@@ -353,14 +359,17 @@ async function dispatchToStations(
   stations: PrinterStation[],
   payload: string
 ): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
-  const targets = printers.filter(
-    (p) =>
-      p.isActive &&
-      p.connectionType === "NETWORK" &&
-      p.ip &&
-      p.ip !== "0.0.0.0" &&
-      stations.includes(p.type as PrinterStation)
-  );
+  const targets = printers.filter((p) => {
+    if (!p.isActive) return false;
+    if (p.connectionType !== "NETWORK") return false;
+    if (!p.ip || p.ip === "0.0.0.0") return false;
+    // Match por stations[] tiene prioridad cuando está definido (KDS
+    // multi-estación); si no, fallback al `type` single.
+    if (Array.isArray(p.stations) && p.stations.length > 0) {
+      return p.stations.some((s) => stations.includes(s as PrinterStation));
+    }
+    return stations.includes(p.type as PrinterStation);
+  });
 
   let ok = 0;
   const failed: Array<{ name: string; error: string }> = [];

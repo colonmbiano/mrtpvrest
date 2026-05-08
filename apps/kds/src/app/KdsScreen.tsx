@@ -13,7 +13,7 @@ import { parseEscPos } from "@/lib/escpos-parser";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────
 
-type StationCode = "KITCHEN" | "BAR" | "FRYER";
+type StationCode = "KITCHEN" | "BAR" | "GRILL" | "FRYER";
 type TabKey = "orders" | "tasks" | "tcp";
 
 /**
@@ -73,8 +73,27 @@ interface PendingTaskLog {
 const STATIONS: Array<{ value: StationCode; label: string; color: string }> = [
   { value: "KITCHEN", label: "Cocina",   color: "#ef4444" },
   { value: "BAR",     label: "Barra",    color: "#3b82f6" },
+  { value: "GRILL",   label: "Plancha",  color: "#f59e0b" },
   { value: "FRYER",   label: "Freidora", color: "#f97316" },
 ];
+
+// Lee la config persistida en LoginScreen — qué estaciones vigila este
+// KDS. Vacío / inválido = todas (modo central por defecto).
+function readKdsStations(): StationCode[] {
+  if (typeof window === "undefined") return STATIONS.map((s) => s.value);
+  try {
+    const raw = localStorage.getItem("kdsStations");
+    if (!raw) return STATIONS.map((s) => s.value);
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return STATIONS.map((s) => s.value);
+    const valid = parsed.filter((c): c is StationCode =>
+      STATIONS.some((s) => s.value === c)
+    );
+    return valid.length > 0 ? valid : STATIONS.map((s) => s.value);
+  } catch {
+    return STATIONS.map((s) => s.value);
+  }
+}
 
 const ORDER_TYPE_ICONS: Record<KdsOrder["orderType"], React.ReactNode> = {
   DINE_IN:  <Utensils size={14} />,
@@ -113,7 +132,13 @@ interface KdsScreenProps {
 
 export default function KdsScreen({ onLogout }: KdsScreenProps) {
   const [tab, setTab]               = useState<TabKey>("orders");
-  const [station, setStation]       = useState<StationCode>("KITCHEN");
+  // Estaciones que esta pantalla vigila (config del LoginScreen).
+  // visibleStations es el subset de STATIONS que coincide con kdsStations.
+  const [allowedStations] = useState<StationCode[]>(() => readKdsStations());
+  const visibleStations = STATIONS.filter((s) => allowedStations.includes(s.value));
+  const [station, setStation]       = useState<StationCode>(
+    () => allowedStations[0] ?? "KITCHEN",
+  );
 
   const [orders, setOrders]         = useState<KdsOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
@@ -375,10 +400,13 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
         </div>
       </header>
 
-      {/* Sub-header estación */}
-      {tab === "orders" && (
+      {/* Sub-header estación — visible solo cuando hay 2+ estaciones
+          configuradas. Si esta pantalla es de una sola estación
+          (config del LoginScreen) ocultamos los tabs y mostramos el
+          rótulo fijo. */}
+      {tab === "orders" && visibleStations.length > 1 && (
         <div className="relative z-10 flex items-center gap-2 px-5 py-3 border-b border-white/5 overflow-x-auto">
-          {STATIONS.map((s) => {
+          {visibleStations.map((s) => {
             const active = s.value === station;
             return (
               <button
@@ -396,6 +424,20 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
               </button>
             );
           })}
+        </div>
+      )}
+      {tab === "orders" && visibleStations.length === 1 && (
+        <div className="relative z-10 flex items-center gap-3 px-5 py-3 border-b border-white/5">
+          <span
+            className="inline-block w-3 h-3 rounded-full"
+            style={{ background: visibleStations[0]!.color }}
+          />
+          <span className="text-xs font-black uppercase tracking-[0.2em] text-white/85">
+            {visibleStations[0]!.label}
+          </span>
+          <span className="text-[10px] font-bold text-white/40">
+            · estación dedicada
+          </span>
         </div>
       )}
 

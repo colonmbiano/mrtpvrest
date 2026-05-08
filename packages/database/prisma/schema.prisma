@@ -855,6 +855,12 @@ model Printer {
 
   isActive   Boolean  @default(true)
   categories String[]
+  // stations[] aplica solo a "impresoras" virtuales tipo KDS: lista de
+  // estaciones que esa pantalla vigila (KITCHEN, BAR, GRILL, FRYER...).
+  // Vacío = fallback al campo `type` single (impresoras térmicas
+  // tradicionales). Permite que un KDS tipo "cocina central" muestre
+  // pedidos de varias estaciones a la vez.
+  stations   String[] @default([])
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }

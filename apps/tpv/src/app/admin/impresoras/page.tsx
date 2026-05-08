@@ -235,6 +235,8 @@ export default function ImpresorasPage() {
                     <option value="CASHIER">Caja / Recibos</option>
                     <option value="KITCHEN">Cocina</option>
                     <option value="BAR">Barra / Drinks</option>
+                    <option value="GRILL">Plancha</option>
+                    <option value="FRYER">Freidora</option>
                   </select>
                 </div>
                 <div className="space-y-1.5">
