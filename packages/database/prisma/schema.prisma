@@ -440,6 +440,10 @@ model MenuItem {
   isAvailable     Boolean  @default(true)
   isPopular       Boolean  @default(false)
   isPromo         Boolean  @default(false)
+  // isFavorite — items que el admin destaca como "más vendidos" o de
+  // rotación rápida. El TPV los muestra en un tile pinned arriba del
+  // grid de categorías para que el cajero los marque con un solo tap.
+  isFavorite      Boolean  @default(false)
   promoPrice      Float?
   barcode         String?
   activeDays      String[]
@@ -456,6 +460,7 @@ model MenuItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([restaurantId, isFavorite])
   @@map("menu_items")
 }
 

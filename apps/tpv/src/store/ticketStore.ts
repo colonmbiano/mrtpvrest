@@ -39,6 +39,7 @@ export type Product = {
   categoryId?: string;
   imageUrl?: string | null;
   isPromo?: boolean;
+  isFavorite?: boolean;
   promoPrice?: number | null;
   modifierGroups?: ModifierGroup[];
 };

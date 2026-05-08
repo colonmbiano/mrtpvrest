@@ -12,9 +12,11 @@ const SCALE_LABELS: Record<UiScale, { label: string; size: string }> = {
 };
 
 function readScale(): UiScale {
-  if (typeof window === "undefined") return "medium";
+  // Default "small" — alineado con la directiva Loyverse-tight: tipografía
+  // compacta out-of-the-box, el cajero puede subirla si quiere desde acá.
+  if (typeof window === "undefined") return "small";
   const v = localStorage.getItem("uiScale");
-  return v === "small" || v === "large" ? v : "medium";
+  return v === "medium" || v === "large" ? v : "small";
 }
 
 function applyScale(scale: UiScale): void {
@@ -194,7 +196,7 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
 export default ConfigMenu;
 
 function UiScalePicker() {
-  const [scale, setScale] = useState<UiScale>("medium");
+  const [scale, setScale] = useState<UiScale>("small");
 
   useEffect(() => {
     const s = readScale();

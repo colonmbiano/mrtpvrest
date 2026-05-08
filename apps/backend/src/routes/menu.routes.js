@@ -82,9 +82,12 @@ router.get('/items', async (req, res) => {
     const restaurantId = resolveRestaurantId(req, res);
     if (!restaurantId) return;
 
-    const { categoryId } = req.query
+    const { categoryId, favorites } = req.query
     const where = { isAvailable: true, restaurantId }
     if (categoryId) where.categoryId = categoryId
+    // ?favorites=true filtra solo los pinned por el admin. El TPV lo
+    // usa para el tile "★ Favoritos" del catálogo drill-down.
+    if (favorites === 'true' || favorites === '1') where.isFavorite = true
 
     const items = await prisma.menuItem.findMany({
       where,
@@ -92,7 +95,7 @@ router.get('/items', async (req, res) => {
         category: { select: { id: true, name: true } },
         modifierGroups: { include: { modifiers: true } }
       },
-      orderBy: [{ isPromo: 'desc' }, { isPopular: 'desc' }, { name: 'asc' }],
+      orderBy: [{ isFavorite: 'desc' }, { isPromo: 'desc' }, { isPopular: 'desc' }, { name: 'asc' }],
     })
 
     // Filtrar promos por día actual en timezone México
@@ -157,7 +160,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
 
 router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { name, description, price, isAvailable, isPopular, imageUrl, categoryId, isPromo, activeDays } = req.body
+    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, categoryId, isPromo, activeDays } = req.body
     const item = await prisma.menuItem.update({
       where: {
         id: req.params.id,
@@ -169,6 +172,7 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
         ...(price !== undefined && { price: parseFloat(price) }),
         ...(isAvailable !== undefined && { isAvailable }),
         ...(isPopular !== undefined && { isPopular }),
+        ...(isFavorite !== undefined && { isFavorite: !!isFavorite }),
         ...(imageUrl !== undefined && { imageUrl }),
         ...(categoryId !== undefined && { categoryId }),
         ...(isPromo !== undefined && { isPromo }),
@@ -178,6 +182,28 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
     res.json(item)
   } catch (e) { res.status(500).json({ error: 'Error al actualizar platillo' }) }
 })
+
+// PATCH dedicado para el toggle ⭐ desde /admin/menu — lighter que un PUT
+// completo y más fácil de auditar. Body: { isFavorite: boolean }.
+router.patch('/items/:id/favorite', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const { isFavorite } = req.body || {};
+    if (typeof isFavorite !== 'boolean') {
+      return res.status(400).json({ error: 'isFavorite debe ser boolean' });
+    }
+    const item = await prisma.menuItem.update({
+      where: {
+        id: req.params.id,
+        restaurantId: req.user?.restaurantId || req.restaurantId,
+      },
+      data: { isFavorite },
+      select: { id: true, isFavorite: true },
+    });
+    res.json(item);
+  } catch (e) {
+    res.status(500).json({ error: e.message || 'Error al actualizar favorito' });
+  }
+});
 
 router.delete('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
