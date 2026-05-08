@@ -26,6 +26,9 @@ export default function KDSConfigModal({
     e.preventDefault();
     setLoading(true);
     try {
+      // Nota: no enviamos `isVirtual` al backend — el modelo Printer no lo
+      // tiene. Se deriva en frontend desde `ip === "0.0.0.0"` (ver
+      // /admin/impresoras: helper isKDS).
       await onSave({
         ...initialData,
         name,
@@ -33,7 +36,6 @@ export default function KDSConfigModal({
         connectionType: "NETWORK",
         ip: ip || "0.0.0.0",
         port: parseInt(String(port), 10) || 9100,
-        isVirtual: !ip,
       });
       onClose();
     } catch (err) {
