@@ -379,33 +379,33 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
           <button
             onClick={isShiftOpen ? handleOpenPayment : onOpenShift}
             disabled={processing || ticket.items.length === 0}
-            className={`w-full h-20 rounded-[1.25rem] text-base font-black tracking-[0.2em] uppercase flex items-center justify-center gap-3 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale ${
-              isShiftOpen 
-                ? "bg-amber-500 text-black shadow-[0_10px_40px_-10px_rgba(255,184,77,0.4)]" 
-                : "bg-red-500 text-white shadow-[0_10px_40px_-10px_rgba(239,68,68,0.4)]"
+            className={`w-full h-16 rounded-2xl text-sm font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale ${
+              isShiftOpen
+                ? "bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)]"
+                : "bg-red-500 text-white shadow-[0_8px_32px_-10px_rgba(239,68,68,0.4)]"
             }`}
           >
-            {processing ? "Cargando..." : isShiftOpen ? "Cobrar Ticket" : "Abrir Turno de Caja"}
+            {processing ? "Cargando..." : isShiftOpen ? "Cobrar Ticket" : "Abrir Turno"}
           </button>
 
-          <div className="grid grid-cols-3 gap-3">
-             <button 
-               onClick={handleSendToKitchen} 
-               className="h-14 rounded-2xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-widest text-zinc-400 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex flex-col items-center justify-center gap-1.5"
+          <div className="grid grid-cols-3 gap-2">
+             <button
+               onClick={handleSendToKitchen}
+               className="h-12 rounded-xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex flex-col items-center justify-center gap-0.5"
              >
-               <UtensilsCrossed size={18} /> Cocina
+               <UtensilsCrossed size={14} /> Cocina
              </button>
-             <button 
-               className="h-14 rounded-2xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-widest text-zinc-400 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex flex-col items-center justify-center gap-1"
+             <button
+               className="h-12 rounded-xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex flex-col items-center justify-center gap-0.5"
              >
-               <span className="text-xl leading-none font-black">%</span> Descuento
+               <span className="text-sm leading-none font-black">%</span> Descuento
              </button>
              <button
               onClick={() => closeTicket(activeIndex)}
-              className="h-14 rounded-2xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-widest text-zinc-600 active:text-red-400 active:bg-red-500/5 transition-all active:scale-95 flex flex-col items-center justify-center gap-1.5"
+              className="h-12 rounded-xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-[0.15em] text-zinc-600 active:text-red-400 active:bg-red-500/5 transition-all active:scale-95 flex flex-col items-center justify-center gap-0.5"
              >
-              <X size={18} /> Cerrar
-             </button>        
+              <X size={14} /> Cerrar
+             </button>
           </div>
         </div>
 

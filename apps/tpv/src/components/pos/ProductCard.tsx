@@ -42,7 +42,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
   return (
     <button
       onClick={onClick}
-      className="group relative flex flex-col text-left rounded-3xl overflow-hidden p-4 min-h-[160px] transition-all active:scale-[0.98] border border-white/5 shadow-xl"
+      className="group relative flex flex-col text-left rounded-2xl overflow-hidden p-3 min-h-[120px] transition-all active:scale-[0.98] border border-white/5 shadow-xl"
       style={{
         background: imageUrl ? "#0a0a0c" : tileColor,
       }}
@@ -64,23 +64,23 @@ const ProductCard: React.FC<ProductCardProps> = ({
       )}
 
       {hasPromo && (
-        <span className="relative z-10 self-start px-2.5 py-1 rounded-lg text-[9px] font-black tracking-widest bg-amber-500 text-black shadow-lg">
+        <span className="relative z-10 self-start px-2 py-0.5 rounded-md text-[9px] font-black tracking-widest bg-amber-500 text-black shadow-lg">
           PROMO
         </span>
       )}
 
       <div className="flex-1" />
 
-      <div className="relative z-10 flex flex-col gap-1">
-        <span className="text-sm font-black leading-tight text-white tracking-tight line-clamp-2 pr-4">
+      <div className="relative z-10 flex flex-col gap-0.5">
+        <span className="text-[11px] font-black leading-tight text-white tracking-tight line-clamp-2 pr-8">
           {name}
         </span>
-        <div className="flex items-baseline gap-2">
-          <span className="text-lg font-black tabular-nums text-white mono">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-sm font-black tabular-nums text-white mono">
             {currency}{(displayPrice ?? 0).toFixed(0)}
           </span>
           {hasPromo && (
-            <span className="text-[11px] line-through tabular-nums text-zinc-500 font-bold mono">
+            <span className="text-[10px] line-through tabular-nums text-zinc-500 font-bold mono">
               {price.toFixed(0)}
             </span>
           )}
@@ -89,9 +89,9 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
       <span
         aria-hidden
-        className="absolute z-10 right-3 bottom-3 w-8 h-8 rounded-2xl flex items-center justify-center transition-all bg-amber-500 text-[#0a0a0c] shadow-[0_5px_15px_rgba(255,184,77,0.3)] group-active:scale-90"
+        className="absolute z-10 right-2 bottom-2 w-7 h-7 rounded-xl flex items-center justify-center transition-all bg-amber-500 text-[#0a0a0c] shadow-[0_4px_12px_rgba(255,184,77,0.3)] group-active:scale-90"
       >
-        <Plus size={18} strokeWidth={3} />
+        <Plus size={14} strokeWidth={3} />
       </span>
     </button>
   );

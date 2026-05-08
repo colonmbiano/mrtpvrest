@@ -439,6 +439,7 @@ model MenuItem {
   isAvailable     Boolean  @default(true)
   isPopular       Boolean  @default(false)
   isPromo         Boolean  @default(false)
+  isFavorite      Boolean  @default(false)
   promoPrice      Float?
   barcode         String?
   activeDays      String[]
@@ -455,6 +456,7 @@ model MenuItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([restaurantId, isFavorite])
   @@map("menu_items")
 }
 
