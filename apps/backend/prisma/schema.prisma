@@ -845,6 +845,7 @@ model Printer {
 
   isActive   Boolean  @default(true)
   categories String[]
+  stations   String[] @default([])
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }

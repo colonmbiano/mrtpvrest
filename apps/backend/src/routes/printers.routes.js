@@ -69,7 +69,10 @@ const PRINTER_ALLOWED_FIELDS = [
   'supportsCashDrawer',
   'isActive',
   'categories',
+  'stations',
 ];
+
+const VALID_STATIONS = ['CASHIER', 'KITCHEN', 'BAR', 'GRILL', 'FRYER'];
 
 // Normaliza el payload según connectionType: vacía los campos irrelevantes
 // para que no queden "IPs zombi" cuando se cambia de NETWORK a USB.
@@ -97,6 +100,18 @@ function normalizePrinterPayload(body) {
   // categories: garantizar array (el modelo es String[])
   if (payload.categories !== undefined && !Array.isArray(payload.categories)) {
     payload.categories = [];
+  }
+  // stations: array de estaciones que un KDS vigila. Sanitizamos para
+  // evitar que un cliente meta valores arbitrarios y rompa el filtro
+  // del KDS app. Si llega algo no-array lo descartamos.
+  if (payload.stations !== undefined) {
+    if (!Array.isArray(payload.stations)) {
+      payload.stations = [];
+    } else {
+      payload.stations = payload.stations
+        .map((s) => String(s).toUpperCase())
+        .filter((s) => VALID_STATIONS.includes(s));
+    }
   }
   return payload;
 }
