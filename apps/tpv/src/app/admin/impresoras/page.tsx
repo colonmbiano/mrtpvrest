@@ -32,6 +32,7 @@ export default function ImpresorasPage() {
   const [isKDSModalOpen, setIsKDSModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState<Partial<Printer>>(DEFAULT_FORM);
 
@@ -53,17 +54,20 @@ export default function ImpresorasPage() {
   };
 
   const handleSave = async (data: Partial<Printer>) => {
+    if (saving) return;
+    setSaving(true);
+    const loadingToastId = toast.loading(editingId ? "Actualizando dispositivo…" : "Guardando dispositivo…");
     try {
       const payload = {
         ...data,
         port: data.port ? parseInt(String(data.port), 10) || 9100 : 9100,
       };
       if (editingId) {
-        await api.put(`/api/printers/${editingId}`, payload);
-        toast.success("Dispositivo actualizado");
+        await api.put(`/api/printers/${editingId}`, payload, { timeout: 20000 });
+        toast.success("Dispositivo actualizado", { id: loadingToastId });
       } else {
-        await api.post("/api/printers", payload);
-        toast.success("Dispositivo creado");
+        await api.post("/api/printers", payload, { timeout: 20000 });
+        toast.success("Dispositivo creado", { id: loadingToastId });
       }
       setIsFormOpen(false);
       setIsKDSModalOpen(false);
@@ -75,7 +79,15 @@ export default function ImpresorasPage() {
         window.dispatchEvent(new Event("printers-changed"));
       }
     } catch (err: any) {
-      toast.error("Error guardando: " + (err?.response?.data?.error || err?.message || ""));
+      const code = err?.code;
+      const serverMsg = err?.response?.data?.error;
+      const msg =
+        code === "ECONNABORTED"
+          ? "Servidor no respondió a tiempo. Reintenta en unos segundos."
+          : serverMsg || err?.message || "fallo desconocido";
+      toast.error("Error guardando: " + msg, { id: loadingToastId });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -280,15 +292,22 @@ export default function ImpresorasPage() {
               <button
                 type="button"
                 onClick={() => setIsFormOpen(false)}
-                className="flex-1 h-14 rounded-2xl bg-zinc-900 text-zinc-400 font-bold hover:text-white"
+                disabled={saving}
+                className="flex-1 h-14 rounded-2xl bg-zinc-900 text-zinc-400 font-bold hover:text-white disabled:opacity-40"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="flex-[2] h-14 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-widest text-xs active:scale-95 transition-transform"
+                disabled={saving}
+                className="flex-[2] h-14 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-wait flex items-center justify-center gap-2"
               >
-                {editingId ? "Guardar cambios" : "Guardar Dispositivo"}
+                {saving ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-[#0a0a0c]/30 border-t-[#0a0a0c] rounded-full animate-spin" />
+                    Guardando…
+                  </>
+                ) : editingId ? "Guardar cambios" : "Guardar Dispositivo"}
               </button>
             </div>
           </form>
