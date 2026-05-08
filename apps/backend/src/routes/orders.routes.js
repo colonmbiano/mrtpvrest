@@ -111,7 +111,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActi
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
-    const { items, orderType, tableNumber, tableId, paymentMethod, subtotal, discount, total, customerName, customerPhone, status } = req.body;
+    const { items, orderType, tableNumber, tableId, numberOfGuests, paymentMethod, subtotal, discount, total, customerName, customerPhone, status } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'Sin productos' });
 
     const restaurantId = req.user?.restaurantId || req.restaurantId;
@@ -180,6 +180,10 @@ router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActi
       }
 
       const unitPrice = basePrice + unitExtra;
+      const seatRaw = Number(item.seatNumber);
+      const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
+        ? Math.floor(seatRaw)
+        : null;
       return {
         menuItemId: item.menuItemId,
         name: menuItem?.name || 'Producto',
@@ -187,6 +191,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActi
         quantity: item.quantity,
         subtotal: unitPrice * item.quantity,
         notes: item.notes || null,
+        seatNumber,
         _modifiers: flatMods,
       };
     }));
@@ -194,6 +199,12 @@ router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActi
     // Si es dine-in con mesa: status=OPEN (cuenta abierta) y la primera ronda
     // se crea explícita para que el flujo de rondas posteriores quede limpio.
     const order = await prisma.$transaction(async (tx) => {
+      // numberOfGuests: clamp 1..50, ignorado si no es DINE_IN.
+      const guestsRaw = Number(numberOfGuests);
+      const safeGuests = isDineInTab && Number.isFinite(guestsRaw) && guestsRaw >= 1 && guestsRaw <= 50
+        ? Math.floor(guestsRaw)
+        : null;
+
       const created = await tx.order.create({
         data: {
           restaurantId,
@@ -204,6 +215,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActi
           orderType: orderType || 'TAKEOUT',
           tableNumber: tableNumber || (table ? null : null),
           tableId: tableId || null,
+          numberOfGuests: safeGuests,
           paymentMethod: paymentMethod || 'CASH',
           subtotal: subtotal || 0,
           discount: discount || 0,
@@ -298,6 +310,10 @@ async function addRoundHandler(req, res) {
       });
       const price = menuItem?.price || 0;
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+      const seatRaw = Number(item.seatNumber);
+      const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
+        ? Math.floor(seatRaw)
+        : null;
       return {
         menuItemId: item.menuItemId,
         name: menuItem?.name || 'Producto',
@@ -305,6 +321,7 @@ async function addRoundHandler(req, res) {
         quantity: qty,
         subtotal: price * qty,
         notes: item.notes || null,
+        seatNumber,
       };
     }));
 

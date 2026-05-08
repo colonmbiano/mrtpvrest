@@ -565,6 +565,7 @@ model Order {
   // para Dine-in con cuentas abiertas. Ambos conviven por compatibilidad.
   tableNumber      Int?
   tableId          String?
+  numberOfGuests   Int?
   table            Table?    @relation(fields: [tableId], references: [id], onDelete: SetNull)
   source           String    @default("ONLINE")
   deliveryDriverId String?
@@ -652,7 +653,10 @@ model OrderItem {
   roundId String?
   round   OrderRound? @relation(fields: [roundId], references: [id], onDelete: SetNull)
 
+  seatNumber Int?
+
   @@index([roundId])
+  @@index([seatNumber])
   @@map("order_items")
 }
 
