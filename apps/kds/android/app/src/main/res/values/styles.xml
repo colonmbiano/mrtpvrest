@@ -17,9 +17,6 @@
 
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <!-- Splash screen sin imagen — usa el background warm tech del
-             attr de la app (definido en strings.xml/colors.xml).
-             Sin @drawable/splash el splash queda plano sin imagen. -->
-        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:background">@drawable/splash</item>
     </style>
 </resources>
