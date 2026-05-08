@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import Link from "next/link";
-import { Settings, Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, ChevronRight, Grid3x3 } from "lucide-react";
+import { Settings, Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, ChevronRight, Grid3x3, Palette } from "lucide-react";
 
 const ADMIN_ROLES = ["OWNER", "ADMIN", "MANAGER"] as const;
 
@@ -59,6 +59,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: "/admin/tickets",    label: "Tickets",               icon: Monitor },
     { href: "/admin/usuarios",   label: "Personal",              icon: Users },
     { href: "/admin/pagos",      label: "Pagos",                 icon: CreditCard },
+    { href: "/admin/apariencia", label: "Apariencia",            icon: Palette },
     { href: "/admin/seguridad",  label: "Seguridad",             icon: ShieldCheck },
   ];
 
