@@ -304,15 +304,15 @@ importers:
 
   apps/kds:
     dependencies:
+      '@capacitor/app':
+        specifier: ^8.1.0
+        version: 8.1.0(@capacitor/core@8.3.1)
       '@capacitor/core':
         specifier: ^8.3.1
         version: 8.3.1
       axios:
         specifier: ^1.13.6
         version: 1.14.0
-      framer-motion:
-        specifier: ^12.38.0
-        version: 12.38.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       lucide-react:
         specifier: ^1.11.0
         version: 1.11.0(react@19.2.6)
@@ -325,18 +325,6 @@ importers:
       react-dom:
         specifier: 19.2.6
         version: 19.2.6(react@19.2.6)
-      react-hotkeys-hook:
-        specifier: ^5.2.4
-        version: 5.2.4(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      socket.io-client:
-        specifier: ^4.8.3
-        version: 4.8.3
-      sonner:
-        specifier: ^2.0.7
-        version: 2.0.7(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      zustand:
-        specifier: ^4.5.5
-        version: 4.5.7(@types/react@19.2.14)(react@19.2.6)
     devDependencies:
       '@capacitor/android':
         specifier: ^8.3.1

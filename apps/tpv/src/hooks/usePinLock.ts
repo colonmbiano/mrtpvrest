@@ -91,10 +91,11 @@ export function usePinLock() {
         return;
       }
       if (employee.role === "KITCHEN" || employee.role === "COOK") {
+        // El KDS vive en una APK aparte (apps/kds). El cocinero no debe
+        // estar autenticado en el TPV — limpiamos sesión y avisamos.
         if (typeof window !== "undefined") {
-          localStorage.setItem("kdsEmployee", JSON.stringify(employee));
+          localStorage.removeItem("accessToken");
         }
-        router.replace("/kds");
         return;
       }
       // OWNER / ADMIN / MANAGER / CASHIER → dashboard TPV

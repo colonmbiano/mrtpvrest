@@ -15,7 +15,6 @@ const ROOT_OPERATIVE_PATHS = new Set<string>([
   "/hub",
   "/locked",
   "/pos/order-type",
-  "/kds",
   "/meseros",
 ]);
 

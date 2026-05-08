@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import {
   Info, Wifi, WifiOff, Server, ServerOff,
   X, Check, ListChecks, Bike, Utensils, ShoppingBag,
-  Trophy, RefreshCcw, AlertTriangle,
+  Trophy, RefreshCcw, LogOut,
 } from "lucide-react";
 import api from "@/lib/api";
 import NumpadPIN from "@/components/NumpadPIN";
@@ -52,16 +51,6 @@ interface PendingTaskLog {
   enqueuedAt: string;
 }
 
-interface DeviceAuthResponse {
-  accessToken: string;
-  deviceId: string;
-  role: string;
-  restaurantId: string;
-  locationId: string;
-}
-
-// ── Constantes ────────────────────────────────────────────────────────────
-
 const STATIONS: Array<{ value: StationCode; label: string; color: string }> = [
   { value: "KITCHEN", label: "Cocina",   color: "#ef4444" },
   { value: "BAR",     label: "Barra",    color: "#3b82f6" },
@@ -90,12 +79,8 @@ function readPendingLogs(): PendingTaskLog[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(PENDING_LOGS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+    return raw ? (JSON.parse(raw) as PendingTaskLog[]) : [];
+  } catch { return []; }
 }
 
 function writePendingLogs(logs: PendingTaskLog[]): void {
@@ -103,34 +88,19 @@ function writePendingLogs(logs: PendingTaskLog[]): void {
   localStorage.setItem(PENDING_LOGS_KEY, JSON.stringify(logs));
 }
 
-// ── Página ────────────────────────────────────────────────────────────────
+interface KdsScreenProps {
+  onLogout: () => void;
+}
 
-export default function KDSPage() {
-  const router = useRouter();
-
-  // Auth de dispositivo (sin PIN humano)
-  const [authReady, setAuthReady]   = useState(false);
-  const [authError, setAuthError]   = useState<string>("");
-  const [deviceId, setDeviceId]     = useState<string>("");
-  const [locationId, setLocationId] = useState<string>("");
-
-  // Modo simulación: si el dispositivo NO está vinculado como KDS,
-  // mostramos una preview con datos mock para que el admin del POS pueda
-  // ver cómo luce la pantalla de cocina sin tocar backend ni necesitar
-  // re-vincular la tablet. La caja principal NO debe operar el KDS real.
-  const [simulated, setSimulated] = useState(false);
-
-  // UI principal
+export default function KdsScreen({ onLogout }: KdsScreenProps) {
   const [tab, setTab]               = useState<TabKey>("orders");
   const [station, setStation]       = useState<StationCode>("KITCHEN");
 
-  // Orders
   const [orders, setOrders]         = useState<KdsOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [now, setNow]               = useState<number>(Date.now());
   const prevIds                     = useRef<string[]>([]);
 
-  // Tasks
   const [tasks, setTasks]           = useState<KdsTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [taskPinFor, setTaskPinFor] = useState<KdsTask | null>(null);
@@ -138,96 +108,21 @@ export default function KDSPage() {
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [recentXp, setRecentXp]     = useState<{ task: string; points: number; ts: number } | null>(null);
 
-  // Network state
   const [online, setOnline]         = useState<boolean>(true);
   const [serverOk, setServerOk]     = useState<boolean>(true);
-  const [localIp, setLocalIp]       = useState<string>("—");
   const [showInfo, setShowInfo]     = useState<boolean>(false);
+  const [showLogout, setShowLogout] = useState<boolean>(false);
 
-  // ── Boot: device auth + detección de IP local ───────────────────────────
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      // 0. Si el dispositivo NO está vinculado como KDS, entrar en
-      //    modo simulación: UI completa pero con datos demo y sin
-      //    llamadas al backend. La caja/mesero usan esto solo como
-      //    preview de cómo ve cocina las comandas.
-      const role = typeof window !== "undefined" ? localStorage.getItem("deviceRole") : null;
-      if (role && role !== "KDS") {
-        if (!cancelled) {
-          setSimulated(true);
-          setAuthReady(true);
-          setOrders(buildSimulatedOrders());
-          setLoadingOrders(false);
-        }
-        return;
-      }
-
-      // 1. Validar que el dispositivo está vinculado
-      const deviceToken = typeof window !== "undefined" ? localStorage.getItem("deviceToken") : null;
-      const restId     = typeof window !== "undefined" ? localStorage.getItem("restaurantId")   : null;
-      const locId      = typeof window !== "undefined" ? localStorage.getItem("locationId")     : null;
-
-      if (!deviceToken || !restId || !locId) {
-        if (!cancelled) {
-          setAuthError("Dispositivo no vinculado. Vuelve a /setup como ADMIN.");
-        }
-        return;
-      }
-
-      // 2. Canjear deviceToken por JWT (vigente 30 días). Si el accessToken
-      //    de la última sesión sigue válido, lo reusa.
-      try {
-        const cachedToken = localStorage.getItem("accessToken");
-        if (!cachedToken) {
-          const { data } = await api.post<DeviceAuthResponse>("/api/devices/auth", { deviceToken });
-          localStorage.setItem("accessToken", data.accessToken);
-          localStorage.setItem("deviceId",    data.deviceId);
-          if (!cancelled) {
-            setDeviceId(data.deviceId);
-            setLocationId(data.locationId);
-          }
-        } else {
-          if (!cancelled) {
-            setDeviceId(localStorage.getItem("deviceId") || "—");
-            setLocationId(locId);
-          }
-        }
-
-        if (!cancelled) setAuthReady(true);
-      } catch (err) {
-        if (!cancelled) setAuthError("No pudimos autenticar este dispositivo. Revisa la red o re-vincula en /setup.");
-      }
-
-      // 3. Intentar capturar IP local (best-effort vía WebRTC).
-      try {
-        const ip = await getLocalIp();
-        if (!cancelled && ip) setLocalIp(ip);
-      } catch {
-        /* sin IP, no crítico */
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  // ── Network listeners + sync de logs offline ────────────────────────────
-
+  // Network listeners
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     const updateOnline = () => setOnline(navigator.onLine);
     updateOnline();
     window.addEventListener("online", updateOnline);
     window.addEventListener("offline", updateOnline);
-
-    const onOnline = () => {
-      flushPendingLogs().catch(() => {});
-    };
+    const onOnline = () => { flushPendingLogs().catch(() => {}); };
     window.addEventListener("online", onOnline);
-
     setPendingCount(readPendingLogs().length);
-
     return () => {
       window.removeEventListener("online", updateOnline);
       window.removeEventListener("offline", updateOnline);
@@ -235,15 +130,13 @@ export default function KDSPage() {
     };
   }, []);
 
-  // ── Reloj para urgencias (refresco cada 30s) ────────────────────────────
-
+  // Reloj urgencias
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, []);
 
-  // ── Polling de órdenes ──────────────────────────────────────────────────
-
+  // Polling órdenes
   const fetchOrders = useCallback(async () => {
     try {
       const { data } = await api.get<KdsOrder[]>(`/api/kds/orders/${station}`);
@@ -262,51 +155,32 @@ export default function KDSPage() {
   }, [station]);
 
   useEffect(() => {
-    if (!authReady) return;
-    if (simulated) return; // modo demo: no llamar backend KDS
     setLoadingOrders(true);
     fetchOrders();
     const t = setInterval(fetchOrders, 12_000);
     return () => clearInterval(t);
-  }, [authReady, simulated, fetchOrders]);
+  }, [fetchOrders]);
 
-  // ── Polling de tareas ───────────────────────────────────────────────────
-
+  // Polling tareas
   const fetchTasks = useCallback(async () => {
     setLoadingTasks(true);
     try {
       const { data } = await api.get<KdsTask[]>("/api/tasks");
       setTasks(data);
     } catch {
-      // mantener cache previa
+      /* mantener cache */
     } finally {
       setLoadingTasks(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!authReady) return;
     if (tab !== "tasks") return;
-    if (simulated) {
-      setTasks(buildSimulatedTasks());
-      setLoadingTasks(false);
-      return;
-    }
     fetchTasks();
-  }, [authReady, tab, simulated, fetchTasks]);
+  }, [tab, fetchTasks]);
 
-  // ── Acciones de orden ───────────────────────────────────────────────────
-
+  // Acciones orden
   async function toggleItem(orderId: string, itemId: string, done: boolean) {
-    // En simulación solo actualiza UI local — no toca backend.
-    if (simulated) {
-      setOrders((prev) => prev.map((o) => {
-        if (o.id !== orderId) return o;
-        const items = o.items.map((i) => (i.id === itemId ? { ...i, done: !done } : i));
-        return { ...o, items, allDone: items.every((i) => i.done) };
-      }));
-      return;
-    }
     try {
       await api.put(`/api/kds/item/${itemId}/done`, { station, orderId, done: !done });
       setOrders((prev) => prev.map((o) => {
@@ -314,50 +188,24 @@ export default function KDSPage() {
         const items = o.items.map((i) => (i.id === itemId ? { ...i, done: !done } : i));
         return { ...o, items, allDone: items.every((i) => i.done) };
       }));
-    } catch {
-      /* silencio: el polling lo corrige */
-    }
+    } catch { /* polling corrige */ }
   }
 
   async function finalizeOrder(orderId: string) {
-    // Un solo toque — sin PIN. La velocidad manda en cocina.
-    if (simulated) {
-      setOrders((prev) => prev.filter((o) => o.id !== orderId));
-      return;
-    }
     try {
       await api.put(`/api/kds/order/${orderId}/ready`, {});
       setOrders((prev) => prev.filter((o) => o.id !== orderId));
-    } catch {
-      /* silencio: si falla, polling devuelve la orden */
-    }
+    } catch { /* polling corrige */ }
   }
-
-  // ── Acciones de tarea (con PIN) ─────────────────────────────────────────
 
   async function handleTaskPinSubmit(pin: string) {
     if (!taskPinFor) return;
     setTaskPinError("");
-
-    // En simulación NO valida PIN ni llama backend — preview solamente.
-    if (simulated) {
-      setRecentXp({ task: taskPinFor.title, points: taskPinFor.pointsReward, ts: Date.now() });
-      setTaskPinFor(null);
-      return;
-    }
-
     const clientId = `${taskPinFor.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     if (!navigator.onLine) {
-      // Encolar el log en localStorage. Se sincroniza con window.online.
       const queue = readPendingLogs();
-      queue.push({
-        clientId,
-        taskId: taskPinFor.id,
-        pin,
-        notes: null,
-        enqueuedAt: new Date().toISOString(),
-      });
+      queue.push({ clientId, taskId: taskPinFor.id, pin, notes: null, enqueuedAt: new Date().toISOString() });
       writePendingLogs(queue);
       setPendingCount(queue.length);
       setRecentXp({ task: taskPinFor.title, points: taskPinFor.pointsReward, ts: Date.now() });
@@ -367,9 +215,7 @@ export default function KDSPage() {
 
     try {
       const { data } = await api.post<{ pointsEarned: number }>("/api/tasks/log", {
-        taskId: taskPinFor.id,
-        pin,
-        clientId,
+        taskId: taskPinFor.id, pin, clientId,
       });
       setRecentXp({
         task: taskPinFor.title,
@@ -378,9 +224,8 @@ export default function KDSPage() {
       });
       setTaskPinFor(null);
     } catch (err) {
-      const e = err as { response?: { data?: { error?: string; code?: string } } };
-      const msg = e.response?.data?.error || "PIN inválido";
-      setTaskPinError(msg);
+      const e = err as { response?: { data?: { error?: string } } };
+      setTaskPinError(e.response?.data?.error || "PIN inválido");
     }
   }
 
@@ -391,10 +236,7 @@ export default function KDSPage() {
     for (const log of queue) {
       try {
         await api.post("/api/tasks/log", {
-          taskId:   log.taskId,
-          pin:      log.pin,
-          notes:    log.notes,
-          clientId: log.clientId,
+          taskId: log.taskId, pin: log.pin, notes: log.notes, clientId: log.clientId,
         });
       } catch {
         remaining.push(log);
@@ -404,71 +246,37 @@ export default function KDSPage() {
     setPendingCount(remaining.length);
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────
-
-  if (authError) {
-    return (
-      <FullScreenMessage
-        icon={<AlertTriangle size={40} className="text-red-400" />}
-        title="No se pudo iniciar el KDS"
-        message={authError}
-        cta={
-          <button
-            onClick={() => router.replace("/setup")}
-            className="px-5 py-3 min-h-[56px] rounded-2xl bg-[#ffb84d] text-[#0a0a0c] font-black active:scale-95 transition-transform"
-          >
-            Ir a /setup
-          </button>
-        }
-      />
-    );
+  function doLogout() {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("deviceToken");
+      localStorage.removeItem("deviceId");
+      localStorage.removeItem("restaurantId");
+      localStorage.removeItem("locationId");
+      localStorage.removeItem("locationName");
+    }
+    onLogout();
   }
 
-  if (!authReady) {
-    return (
-      <FullScreenMessage
-        icon={<RefreshCcw size={40} className="text-amber-400 animate-spin" />}
-        title="Iniciando estación"
-        message="Autenticando dispositivo y cargando configuración…"
-      />
-    );
-  }
+  const locationName = typeof window !== "undefined" ? localStorage.getItem("locationName") || "" : "";
 
   return (
-    <div
-      className="relative min-h-screen w-full bg-[#0c0c0e] text-white overflow-hidden"
-      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
-    >
-      {/* Ambient glow */}
+    <div className="relative min-h-screen w-full bg-[#0c0c0e] text-white overflow-hidden">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-60 -right-40 w-[700px] h-[700px] rounded-full blur-[120px] opacity-40"
         style={{ background: "radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)" }}
       />
 
-      {/* Banner modo simulación */}
-      {simulated && (
-        <div className="relative z-20 px-5 py-2 bg-amber-500/15 border-b border-amber-500/30 flex items-center gap-3 text-[11px] font-bold text-amber-200">
-          <span className="px-2 py-0.5 rounded bg-amber-500 text-[#0a0a0c] text-[10px] font-black tracking-widest">DEMO</span>
-          Vista previa simulada — esta tablet está vinculada como <code className="text-white/85">{typeof window !== "undefined" ? localStorage.getItem("deviceRole") || "POS" : "POS"}</code>. Para usar el KDS real, vincula otra tablet como <strong>KDS</strong> en /setup.
-          <button
-            type="button"
-            onClick={() => router.replace("/")}
-            className="ml-auto px-3 py-1 rounded-lg bg-white/10 border border-white/15 text-white text-[10px] font-black active:scale-95"
-          >
-            Volver al POS
-          </button>
-        </div>
-      )}
-
-      {/* HEADER glass */}
+      {/* HEADER */}
       <header className="relative z-10 flex items-center justify-between gap-4 px-5 py-4 bg-white/5 backdrop-blur-md border-b border-white/10 flex-wrap">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <span className="text-[10px] font-black tracking-[0.25em] text-white/40">KDS</span>
-          <span className="text-base font-black text-white tracking-tight">Estación de cocina</span>
+          <span className="text-base font-black text-white tracking-tight truncate">
+            {locationName || "Estación de cocina"}
+          </span>
         </div>
 
-        {/* Tabs */}
         <div className="flex items-center gap-2">
           <TabPill active={tab === "orders"} onClick={() => setTab("orders")}>
             <Utensils size={14} /> Pedidos
@@ -480,21 +288,28 @@ export default function KDSPage() {
           </TabPill>
         </div>
 
-        {/* Indicadores */}
         <div className="flex items-center gap-2">
           <NetIndicator online={online} serverOk={serverOk} />
           <button
             type="button"
             onClick={() => setShowInfo(true)}
-            aria-label="Información de diagnóstico"
+            aria-label="Info"
             className="w-11 h-11 min-h-[44px] rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform"
           >
             <Info size={18} />
           </button>
+          <button
+            type="button"
+            onClick={() => setShowLogout(true)}
+            aria-label="Cerrar sesión"
+            className="w-11 h-11 min-h-[44px] rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform text-red-400"
+          >
+            <LogOut size={18} />
+          </button>
         </div>
       </header>
 
-      {/* Sub-header de estación (solo en pedidos) */}
+      {/* Sub-header estación */}
       {tab === "orders" && (
         <div className="relative z-10 flex items-center gap-2 px-5 py-3 border-b border-white/5 overflow-x-auto">
           {STATIONS.map((s) => {
@@ -504,11 +319,10 @@ export default function KDSPage() {
                 key={s.value}
                 type="button"
                 onClick={() => setStation(s.value)}
-                className={`px-4 py-2 min-h-[44px] rounded-2xl text-xs font-black tracking-wider uppercase whitespace-nowrap active:scale-95 transition-transform ${
-                  active ? "text-[#0a0a0c]" : "text-white/55"
-                }`}
+                className="px-4 py-2 min-h-[44px] rounded-2xl text-xs font-black tracking-wider uppercase whitespace-nowrap active:scale-95 transition-transform"
                 style={{
                   background: active ? s.color : "rgba(255,255,255,0.05)",
+                  color:      active ? "#0a0a0c" : "rgba(255,255,255,0.55)",
                   border:     active ? `1px solid ${s.color}` : "1px solid rgba(255,255,255,0.08)",
                 }}
               >
@@ -519,7 +333,6 @@ export default function KDSPage() {
         </div>
       )}
 
-      {/* CONTENT */}
       <main className="relative z-10 p-5">
         {tab === "orders" ? (
           <OrdersGrid
@@ -541,7 +354,6 @@ export default function KDSPage() {
         )}
       </main>
 
-      {/* MODAL: PIN para tarea */}
       {taskPinFor && (
         <PinTaskModal
           task={taskPinFor}
@@ -552,17 +364,12 @@ export default function KDSPage() {
         />
       )}
 
-      {/* MODAL: información del dispositivo */}
       {showInfo && (
-        <DeviceInfoModal
-          onClose={() => setShowInfo(false)}
-          deviceId={deviceId}
-          locationId={locationId}
-          localIp={localIp}
-          online={online}
-          serverOk={serverOk}
-          pendingLogs={pendingCount}
-        />
+        <InfoModal onClose={() => setShowInfo(false)} online={online} serverOk={serverOk} pendingLogs={pendingCount} />
+      )}
+
+      {showLogout && (
+        <LogoutModal onCancel={() => setShowLogout(false)} onConfirm={doLogout} />
       )}
     </div>
   );
@@ -570,25 +377,7 @@ export default function KDSPage() {
 
 // ── Subcomponentes ────────────────────────────────────────────────────────
 
-function FullScreenMessage({
-  icon, title, message, cta,
-}: { icon: React.ReactNode; title: string; message: string; cta?: React.ReactNode }) {
-  return (
-    <div
-      className="min-h-screen w-full flex flex-col items-center justify-center bg-[#0c0c0e] text-white p-6 text-center gap-3"
-      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
-    >
-      {icon}
-      <h1 className="text-2xl font-black tracking-tight">{title}</h1>
-      <p className="text-sm font-medium text-white/55 max-w-md">{message}</p>
-      {cta && <div className="mt-4">{cta}</div>}
-    </div>
-  );
-}
-
-function TabPill({
-  active, onClick, children,
-}: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function TabPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
@@ -650,11 +439,7 @@ function OrdersGrid({
     return <p className="text-white/40 text-center py-12 text-sm font-bold">Cargando pedidos…</p>;
   }
   if (orders.length === 0) {
-    return (
-      <p className="text-white/40 text-center py-16 text-sm font-bold">
-        🎉 Sin pedidos pendientes en esta estación
-      </p>
-    );
+    return <p className="text-white/40 text-center py-16 text-sm font-bold">🎉 Sin pedidos pendientes en esta estación</p>;
   }
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -685,33 +470,26 @@ function OrderCard({
         boxShadow:   allDone ? "0 0 30px rgba(136,214,108,0.15)" : "0 12px 30px rgba(0,0,0,0.35)",
       }}
     >
-      {/* Header tarjeta */}
       <header className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span
-            className="inline-flex items-center justify-center w-8 h-8 rounded-xl"
-            style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.75)" }}
-          >
+          <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl"
+                style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.75)" }}>
             {ORDER_TYPE_ICONS[order.orderType]}
           </span>
           <span className="text-[15px] font-black tracking-tight text-white">
             {order.orderNumber || order.id.slice(-6)}
           </span>
         </div>
-        <span
-          className="px-2 py-1 rounded-full text-[10px] font-black tracking-widest"
-          style={{ background: u.bg, color: u.color }}
-        >
+        <span className="px-2 py-1 rounded-full text-[10px] font-black tracking-widest"
+              style={{ background: u.bg, color: u.color }}>
           {u.label} · {mins}m
         </span>
       </header>
 
-      {/* Mesa / cliente */}
       <div className="text-[11px] font-bold text-white/55">
         {order.tableNumber ? `Mesa ${order.tableNumber}` : (order.customerName || "Cliente")}
       </div>
 
-      {/* Items */}
       <ul className="flex flex-col gap-2">
         {order.items.map((item) => (
           <li key={item.id}>
@@ -740,18 +518,14 @@ function OrderCard({
                   textDecoration: item.done ? "line-through" : "none",
                 }}
               >
-                <span className="text-white/55 mr-1">{item.quantity}×</span>
-                {item.menuItemName}
+                <span className="text-white/55 mr-1">{item.quantity}×</span>{item.menuItemName}
               </span>
             </button>
-            {item.notes && (
-              <p className="text-[11px] font-medium text-amber-300 ml-9 mt-0.5">⚠ {item.notes}</p>
-            )}
+            {item.notes && <p className="text-[11px] font-medium text-amber-300 ml-9 mt-0.5">⚠ {item.notes}</p>}
           </li>
         ))}
       </ul>
 
-      {/* Finalizar — un solo toque, sin PIN */}
       <button
         type="button"
         onClick={() => onFinalize(order.id)}
@@ -781,19 +555,13 @@ function TasksList({
 }) {
   return (
     <div className="flex flex-col gap-4 max-w-3xl mx-auto">
-      {/* Banner XP reciente */}
       {recentXp && (
-        <div
-          className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-[#ffb84d]/10 border border-[#ffb84d]/30"
-        >
+        <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-[#ffb84d]/10 border border-[#ffb84d]/30">
           <Trophy size={18} className="text-[#ffb84d]" />
-          <span className="text-sm font-black text-white">
-            +{recentXp.points} XP · {recentXp.task}
-          </span>
+          <span className="text-sm font-black text-white">+{recentXp.points} XP · {recentXp.task}</span>
         </div>
       )}
 
-      {/* Banner cola offline */}
       {pendingCount > 0 && (
         <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/30">
           <div className="flex items-center gap-2 text-sm font-bold text-amber-300">
@@ -809,9 +577,7 @@ function TasksList({
         </div>
       )}
 
-      <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 px-1">
-        Asignaciones operativas
-      </h2>
+      <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 px-1">Asignaciones operativas</h2>
 
       {loading ? (
         <p className="text-white/40 text-sm font-bold py-6">Cargando tareas…</p>
@@ -831,13 +597,9 @@ function TasksList({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-black text-white tracking-tight">{t.title}</p>
-                  {t.description && (
-                    <p className="text-[11px] font-medium text-white/55 truncate">{t.description}</p>
-                  )}
+                  {t.description && <p className="text-[11px] font-medium text-white/55 truncate">{t.description}</p>}
                 </div>
-                <span
-                  className="px-2.5 py-1 rounded-full text-[10px] font-black tracking-widest bg-[#ffb84d]/20 text-[#ffb84d]"
-                >
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-black tracking-widest bg-[#ffb84d]/20 text-[#ffb84d]">
                   +{t.pointsReward} XP
                 </span>
               </button>
@@ -859,18 +621,13 @@ function PinTaskModal({
   onSubmit: (pin: string) => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm"
-      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
-    >
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
             <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d]">VALIDAR TAREA</span>
             <h3 className="text-xl font-black text-white tracking-tight mt-1">{task.title}</h3>
-            {task.description && (
-              <p className="text-xs font-medium text-white/55 mt-1">{task.description}</p>
-            )}
+            {task.description && <p className="text-xs font-medium text-white/55 mt-1">{task.description}</p>}
             <p className="text-xs font-bold text-[#ffb84d] mt-2">+{task.pointsReward} XP al validar</p>
           </div>
           <button
@@ -891,35 +648,19 @@ function PinTaskModal({
 
         <NumpadPIN onSubmit={onSubmit} />
 
-        {error && (
-          <p
-            className="mt-3 text-center text-xs font-bold"
-            style={{ color: "#FF5C33" }}
-          >
-            {error}
-          </p>
-        )}
+        {error && <p className="mt-3 text-center text-xs font-bold" style={{ color: "#FF5C33" }}>{error}</p>}
       </div>
     </div>
   );
 }
 
-function DeviceInfoModal({
-  onClose, deviceId, locationId, localIp, online, serverOk, pendingLogs,
-}: {
-  onClose: () => void;
-  deviceId: string;
-  locationId: string;
-  localIp: string;
-  online: boolean;
-  serverOk: boolean;
-  pendingLogs: number;
-}) {
+function InfoModal({
+  onClose, online, serverOk, pendingLogs,
+}: { onClose: () => void; online: boolean; serverOk: boolean; pendingLogs: number }) {
+  const deviceId = typeof window !== "undefined" ? localStorage.getItem("deviceId") || "—" : "—";
+  const locationId = typeof window !== "undefined" ? localStorage.getItem("locationId") || "—" : "—";
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm"
-      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
-    >
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
@@ -937,108 +678,71 @@ function DeviceInfoModal({
         </div>
 
         <ul className="flex flex-col gap-2">
-          <InfoRow label="Internet">
-            <span
-              className="inline-flex items-center gap-1.5 text-xs font-black"
-              style={{ color: online ? "#88D66C" : "#FF5C33" }}
-            >
+          <Row label="Internet">
+            <span className="inline-flex items-center gap-1.5 text-xs font-black"
+                  style={{ color: online ? "#88D66C" : "#FF5C33" }}>
               {online ? <Wifi size={14} /> : <WifiOff size={14} />}
               {online ? "Online" : "Offline"}
             </span>
-          </InfoRow>
-          <InfoRow label="Servidor">
-            <span
-              className="inline-flex items-center gap-1.5 text-xs font-black"
-              style={{ color: serverOk ? "#88D66C" : "#FF5C33" }}
-            >
+          </Row>
+          <Row label="Servidor">
+            <span className="inline-flex items-center gap-1.5 text-xs font-black"
+                  style={{ color: serverOk ? "#88D66C" : "#FF5C33" }}>
               {serverOk ? <Server size={14} /> : <ServerOff size={14} />}
               {serverOk ? "Disponible" : "No responde"}
             </span>
-          </InfoRow>
-          <InfoRow label="IP local">
-            <code className="text-xs font-mono text-white/85">{localIp}</code>
-          </InfoRow>
-          <InfoRow label="Device ID">
-            <code className="text-xs font-mono text-white/85 truncate max-w-[180px]" title={deviceId}>
-              {deviceId || "—"}
-            </code>
-          </InfoRow>
-          <InfoRow label="Location ID">
-            <code className="text-xs font-mono text-white/85 truncate max-w-[180px]" title={locationId}>
-              {locationId || "—"}
-            </code>
-          </InfoRow>
-          <InfoRow label="Tareas en cola">
+          </Row>
+          <Row label="Device ID">
+            <code className="text-xs font-mono text-white/85 truncate max-w-[180px]" title={deviceId}>{deviceId}</code>
+          </Row>
+          <Row label="Location ID">
+            <code className="text-xs font-mono text-white/85 truncate max-w-[180px]" title={locationId}>{locationId}</code>
+          </Row>
+          <Row label="Tareas en cola">
             <span className="text-xs font-black text-white">{pendingLogs}</span>
-          </InfoRow>
+          </Row>
         </ul>
       </div>
     </div>
   );
 }
 
-function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
+function LogoutModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
+        <h3 className="text-xl font-black text-white tracking-tight mb-2">Cerrar sesión</h3>
+        <p className="text-sm font-medium text-white/55 mb-5">
+          Vas a desvincular esta tablet del KDS. Necesitarás iniciar sesión de nuevo como ADMIN para volver a operar.
+        </p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 min-h-[56px] py-3 rounded-2xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-widest text-xs active:scale-95 transition-transform"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex-[2] min-h-[56px] py-3 rounded-2xl bg-red-500 text-white font-black uppercase tracking-widest text-xs active:scale-95 transition-transform"
+          >
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <li className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-white/5 border border-white/5">
       <span className="text-[10px] font-black tracking-[0.2em] text-white/40 uppercase">{label}</span>
       {children}
     </li>
   );
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────
-
-function buildSimulatedOrders(): KdsOrder[] {
-  const now = new Date();
-  const ago = (mins: number) => new Date(now.getTime() - mins * 60_000).toISOString();
-  return [
-    {
-      id: "demo-1",
-      orderNumber: "DEMO-001",
-      orderType: "DINE_IN",
-      tableNumber: "5",
-      customerName: null,
-      createdAt: ago(2),
-      items: [
-        { id: "i1", menuItemName: "Hamburguesa Doble", quantity: 1, done: false, notes: "Sin cebolla" },
-        { id: "i2", menuItemName: "Papas grandes", quantity: 1, done: false },
-        { id: "i3", menuItemName: "Refresco Cola", quantity: 2, done: false },
-      ],
-    },
-    {
-      id: "demo-2",
-      orderNumber: "DEMO-002",
-      orderType: "TAKEOUT",
-      tableNumber: null,
-      customerName: "Juan Pérez",
-      createdAt: ago(9),
-      items: [
-        { id: "i4", menuItemName: "Pizza Margherita", quantity: 1, done: true },
-        { id: "i5", menuItemName: "Ensalada César", quantity: 1, done: false },
-      ],
-    },
-    {
-      id: "demo-3",
-      orderNumber: "DEMO-003",
-      orderType: "DELIVERY",
-      tableNumber: null,
-      customerName: "María López",
-      createdAt: ago(17),
-      items: [
-        { id: "i6", menuItemName: "Pollo Rostizado", quantity: 1, done: false },
-        { id: "i7", menuItemName: "Arroz", quantity: 2, done: false, notes: "Extra picante" },
-      ],
-    },
-  ];
-}
-
-function buildSimulatedTasks(): KdsTask[] {
-  return [
-    { id: "t1", title: "Limpieza de freidora", description: "Profunda + cambio de aceite", type: "CLEAN", pointsReward: 50, frequency: "daily" },
-    { id: "t2", title: "Prep de insumos AM",   description: "Cortar verduras y porcionar carnes", type: "PREP",  pointsReward: 30, frequency: "daily" },
-    { id: "t3", title: "Inventario de barra",  description: "Conteo físico de bebidas",          type: "STOCK", pointsReward: 20, frequency: "weekly" },
-    { id: "t4", title: "Sanitización superficies", description: "Mesas + barras",               type: "CLEAN", pointsReward: 15, frequency: "shift" },
-  ];
 }
 
 function playBeep(): void {
@@ -1056,39 +760,5 @@ function playBeep(): void {
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.4);
-  } catch {
-    /* sin audio en este browser */
-  }
-}
-
-// Detección best-effort de IP local del dispositivo. WebRTC expone los
-// candidates que típicamente incluyen la IP de la NIC. En navegadores
-// recientes con privacy-mode estricto puede devolver hash mDNS.
-function getLocalIp(): Promise<string | null> {
-  return new Promise((resolve) => {
-    try {
-      const RTCPeer = (window as unknown as { RTCPeerConnection?: typeof RTCPeerConnection }).RTCPeerConnection;
-      if (!RTCPeer) return resolve(null);
-      const pc = new RTCPeer({ iceServers: [] });
-      pc.createDataChannel("");
-      pc.createOffer().then((o) => pc.setLocalDescription(o)).catch(() => {});
-
-      const timer = setTimeout(() => {
-        try { pc.close(); } catch { /* noop */ }
-        resolve(null);
-      }, 1500);
-
-      pc.onicecandidate = (e) => {
-        if (!e.candidate) return;
-        const m = e.candidate.candidate.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
-        if (m && !m[1].startsWith("0.")) {
-          clearTimeout(timer);
-          try { pc.close(); } catch { /* noop */ }
-          resolve(m[1]);
-        }
-      };
-    } catch {
-      resolve(null);
-    }
-  });
+  } catch { /* sin audio */ }
 }

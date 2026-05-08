@@ -5,7 +5,6 @@ import {
   ShoppingCart, 
   Receipt, 
   LayoutGrid, 
-  ChefHat,
   BarChart3,
   Bell
 } from "lucide-react";
@@ -55,15 +54,8 @@ export default function MainSidebar({
       active: getActive("/hub"),
       onClick: () => router.push("/hub"),
     },
-    { 
-      id: "kds", 
-      icon: ChefHat, 
-      label: "Cocina",
-      active: getActive("/kds"),
-      onClick: () => router.push("/kds"),
-    },
-    { 
-      id: "cierre", 
+    {
+      id: "cierre",
       icon: BarChart3, 
       label: "Cierre",
       active: getActive("/cierre"),
