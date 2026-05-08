@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import api from "@/lib/api";
-import { Plus, Edit2, Trash2, Check, XCircle } from "lucide-react";
+import { Plus, Edit2, Trash2, Check, XCircle, Star } from "lucide-react";
+import { toast } from "sonner";
 import BackButton from "@/components/BackButton";
 
 type Category = {
@@ -15,6 +16,7 @@ type MenuItem = {
   price: number;
   categoryId: string;
   isAvailable: boolean;
+  isFavorite?: boolean;
   category?: Category;
 };
 
@@ -78,6 +80,29 @@ export default function MenuEditorPage() {
       fetchData();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // toggleFavorite — pinea/despinea un item al tile "★ Favoritos" del POS.
+  // Soft warning si el restaurante ya tiene 10+ favoritos: el tile aún
+  // funciona con más, pero el cajero pierde la ventaja "1 tap" cuando hay
+  // demasiados; dejamos que el admin decida.
+  const toggleFavorite = async (item: MenuItem) => {
+    const next = !item.isFavorite;
+    if (next) {
+      const currentCount = items.filter((i) => i.isFavorite).length;
+      if (currentCount >= 10) {
+        toast.warning("Ya tienes 10+ favoritos — el cajero perderá la ventaja de un solo tap.");
+      }
+    }
+    try {
+      await api.patch(`/api/menu/items/${item.id}/favorite`, { isFavorite: next });
+      // Optimismo local antes del refetch.
+      setItems((curr) => curr.map((i) => i.id === item.id ? { ...i, isFavorite: next } : i));
+      toast.success(next ? `"${item.name}" marcado como favorito` : `"${item.name}" quitado de favoritos`);
+    } catch (err) {
+      console.error(err);
+      toast.error("No se pudo cambiar favorito");
     }
   };
 
@@ -238,6 +263,17 @@ export default function MenuEditorPage() {
                       </td>
                       <td className="px-8 py-6">
                         <div className="flex gap-3 justify-end">
+                          <button
+                            onClick={() => toggleFavorite(item)}
+                            title={item.isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
+                            className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all active:scale-90 border ${
+                              item.isFavorite
+                                ? "bg-amber-500/15 text-amber-400 border-amber-500/40"
+                                : "bg-white/5 text-zinc-600 active:text-amber-500 border-white/5"
+                            }`}
+                          >
+                            <Star size={18} strokeWidth={item.isFavorite ? 2.5 : 2} fill={item.isFavorite ? "currentColor" : "none"} />
+                          </button>
                           <button
                             onClick={() => setEditingItem(item)}
                             className="w-12 h-12 rounded-xl flex items-center justify-center bg-white/5 text-zinc-500 active:text-amber-500 transition-all active:scale-90 border border-white/5"
