@@ -34,12 +34,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
   const [showPayment, setShowPayment] = useState(false);
   const [showTables, setShowTables] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [sidebarWidthPx, setSidebarWidthPx] = useState<number>(380);
+  // Lazy init lee localStorage en el cliente (SSR cae a default 380).
+  const [sidebarWidthPx, setSidebarWidthPx] = useState<number>(() => readSidebarWidth());
 
-  // Aplica preset del localStorage al montar y escucha cambios desde
-  // ConfigMenu (que dispara `sidebar-width-changed` después de write).
+  // Escucha cambios desde ConfigMenu (que dispara `sidebar-width-changed` tras write).
   useEffect(() => {
-    setSidebarWidthPx(readSidebarWidth());
     const onChange = () => setSidebarWidthPx(readSidebarWidth());
     window.addEventListener("sidebar-width-changed", onChange);
     return () => window.removeEventListener("sidebar-width-changed", onChange);

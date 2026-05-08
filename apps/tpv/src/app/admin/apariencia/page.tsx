@@ -21,7 +21,7 @@
  * migren los hardcoded a tokens (--bg, --surf-1, etc.).
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Type, PanelRightClose, Palette as PaletteIcon, Sun, Moon, Info } from "lucide-react";
 import BackButton from "@/components/BackButton";
 import { useThemeStore, type Palette as PaletteType } from "@/store/themeStore";
@@ -78,13 +78,10 @@ export default function AparienciaPage() {
   const mode = useThemeStore((s) => s.mode);
   const toggleMode = useThemeStore((s) => s.toggleMode);
 
-  const [uiScale, setUiScale] = useState<UiScale>("small");
-  const [sidebarPreset, setSidebarPreset] = useState<SidebarPreset>("M");
-
-  useEffect(() => {
-    setUiScale(readUiScale());
-    setSidebarPreset(readSidebarPreset());
-  }, []);
+  // Lazy state — lee de localStorage solo en el primer render del cliente.
+  // En SSR ambos helpers devuelven el default, evitando setState en effect.
+  const [uiScale, setUiScale] = useState<UiScale>(() => readUiScale());
+  const [sidebarPreset, setSidebarPreset] = useState<SidebarPreset>(() => readSidebarPreset());
 
   const chooseUiScale = (s: UiScale) => {
     setUiScale(s);

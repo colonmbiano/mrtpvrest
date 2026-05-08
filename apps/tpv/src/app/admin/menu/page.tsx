@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import api from "@/lib/api";
 import { Plus, Edit2, Trash2, Check, XCircle, Star } from "lucide-react";
 import { toast } from "sonner";
@@ -27,11 +27,7 @@ export default function MenuEditorPage() {
   
   const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [itemsRes, catsRes] = await Promise.all([
@@ -45,7 +41,29 @@ export default function MenuEditorPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Initial fetch on mount — async IIFE pattern (rule-compliant).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [itemsRes, catsRes] = await Promise.all([
+          api.get("/api/menu/items"),
+          api.get("/api/menu/categories")
+        ]);
+        if (cancelled) return;
+        setItems(Array.isArray(itemsRes.data) ? itemsRes.data : []);
+        setCategories(Array.isArray(catsRes.data) ? catsRes.data : []);
+      } catch (e) {
+        if (cancelled) return;
+        console.error(e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

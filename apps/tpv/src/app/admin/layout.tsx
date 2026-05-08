@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import Link from "next/link";
-import { Settings, Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, ChevronRight, Grid3x3, Palette, Layers } from "lucide-react";
+import { Settings, Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, Grid3x3, Palette, Layers } from "lucide-react";
 
 const ADMIN_ROLES = ["OWNER", "ADMIN", "MANAGER"] as const;
 
@@ -19,6 +19,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // dispara router.replace('/') y se forma un loop con / → /hub → /pos/order-type.
   useEffect(() => {
     if (!isAuthenticated) hydrateFromStorage();
+    // setHydrated en effect — necesario porque hydrateFromStorage es síncrono
+    // pero queremos que el guard espere al siguiente render. Único caso donde
+    // el set-state-in-effect es deliberado.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, [isAuthenticated, hydrateFromStorage]);
 

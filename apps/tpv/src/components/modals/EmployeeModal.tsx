@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import BaseModal from "@/components/ui/BaseModal";
 import type { EmployeeDraft } from "@/contexts/ModalContext";
@@ -14,6 +14,10 @@ const ROLES: { id: EmployeeDraft["role"]; label: string }[] = [
   { id: "DRIVER",  label: "Repartidor" },
 ];
 
+function buildDraft(employee: EmployeeDraft | "new" | null): EmployeeDraft {
+  return employee && employee !== "new" ? { ...employee } : EMPTY;
+}
+
 export default function EmployeeModal({
   open,
   employee,
@@ -25,12 +29,14 @@ export default function EmployeeModal({
   onClose: () => void;
   onSave?: (draft: EmployeeDraft) => Promise<void> | void;
 }) {
-  const [draft, setDraft] = useState<EmployeeDraft>(EMPTY);
+  const [draft, setDraft] = useState<EmployeeDraft>(() => buildDraft(employee));
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (open) setDraft(employee && employee !== "new" ? { ...employee } : EMPTY);
-  }, [open, employee]);
+  // Sync draft when modal re-opens or target employee changes (derived state pattern).
+  const [prevKey, setPrevKey] = useState<{ open: boolean; employee: typeof employee }>({ open, employee });
+  if (prevKey.open !== open || prevKey.employee !== employee) {
+    setPrevKey({ open, employee });
+    if (open) setDraft(buildDraft(employee));
+  }
 
   const isNew = employee === "new" || (employee && !employee.id);
 

@@ -1,11 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { ImagePlus } from "lucide-react";
 import BaseModal from "@/components/ui/BaseModal";
 import type { ProductDraft } from "@/contexts/ModalContext";
 
 const EMPTY: ProductDraft = { name: "", price: 0, category: "", imageUrl: "", description: "" };
+
+function buildDraft(product: ProductDraft | "new" | null): ProductDraft {
+  return product && product !== "new" ? { ...product } : EMPTY;
+}
 
 export default function ProductModal({
   open,
@@ -20,12 +24,14 @@ export default function ProductModal({
   onSave?: (draft: ProductDraft) => Promise<void> | void;
   categories?: { id: string; name: string }[];
 }) {
-  const [draft, setDraft] = useState<ProductDraft>(EMPTY);
+  const [draft, setDraft] = useState<ProductDraft>(() => buildDraft(product));
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (open) setDraft(product && product !== "new" ? { ...product } : EMPTY);
-  }, [open, product]);
+  // Sync draft when modal re-opens or target product changes (derived state pattern).
+  const [prevKey, setPrevKey] = useState<{ open: boolean; product: typeof product }>({ open, product });
+  if (prevKey.open !== open || prevKey.product !== product) {
+    setPrevKey({ open, product });
+    if (open) setDraft(buildDraft(product));
+  }
 
   const isNew = product === "new" || (product && !product.id);
 

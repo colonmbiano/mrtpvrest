@@ -33,17 +33,17 @@ export default function ShiftModal({ employee, onClose }: Props) {
   const [closing, setClosing]   = useState(false);
 
   useEffect(() => {
-    fetchShift();
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get("/api/shifts/active");
+        if (cancelled) return;
+        setShift(data);
+      } catch {}
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
   }, []);
-
-  async function fetchShift() {
-    setLoading(true);
-    try {
-      const { data } = await api.get("/api/shifts/active");
-      setShift(data);
-    } catch {}
-    finally { setLoading(false); }
-  }
 
   async function openShift() {
     if (!openingFloat) { alert("Ingresa el fondo de caja"); return; }

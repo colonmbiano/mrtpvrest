@@ -87,7 +87,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
 
         {notes && (
           <p className="text-[10px] text-zinc-600 font-bold italic line-clamp-1 mt-0.5">
-            "{notes}"
+            &ldquo;{notes}&rdquo;
           </p>
         )}
 

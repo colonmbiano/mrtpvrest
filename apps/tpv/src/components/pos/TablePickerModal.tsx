@@ -44,27 +44,34 @@ export default function TablePickerModal({
   const [showOccupied, setShowOccupied] = useState(initialShowOccupied);
   const [busyId, setBusyId]   = useState<string | null>(null);
 
+  // Set loading=true en render al abrir (rule-compliant) y refetch en effect.
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (prevIsOpen !== isOpen) {
+    setPrevIsOpen(isOpen);
+    if (isOpen) {
+      setLoading(true);
+      setError("");
+    }
+  }
+
   useEffect(() => {
     if (!isOpen) return;
-    fetchTables();
-  }, [isOpen]);
-
-  async function fetchTables() {
     let cancelled = false;
-    setLoading(true);
-    setError("");
-    try {
-      const { data } = await api.get<TableLite[]>("/api/tables");
-      if (cancelled) return;
-      setTables(Array.isArray(data) ? data : []);
-    } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
-      if (!cancelled) setError(e.response?.data?.error || "No pudimos cargar las mesas");
-    } finally {
-      if (!cancelled) setLoading(false);
-    }
+    (async () => {
+      try {
+        const { data } = await api.get<TableLite[]>("/api/tables");
+        if (cancelled) return;
+        setTables(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (cancelled) return;
+        const e = err as { response?: { data?: { error?: string } } };
+        setError(e.response?.data?.error || "No pudimos cargar las mesas");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
     return () => { cancelled = true; };
-  }
+  }, [isOpen]);
 
   async function handleRelease(t: TableLite) {
     if (busyId) return;

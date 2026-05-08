@@ -41,10 +41,18 @@ export default function ReportesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    let cancelled = false;
+  // Cuando cambia el periodo necesitamos reflejar "cargando" inmediatamente.
+  // El nuevo patrón sin set-state-in-effect: comparamos el periodo previo en
+  // render y, si cambió, pisamos loading/error en render — antes del effect.
+  const [prevPeriod, setPrevPeriod] = useState(period);
+  if (prevPeriod !== period) {
+    setPrevPeriod(period);
     setLoading(true);
     setError('');
+  }
+
+  useEffect(() => {
+    let cancelled = false;
 
     const days = periodToDays(period);
     const from = new Date(); from.setDate(from.getDate() - days + 1); from.setHours(0,0,0,0);

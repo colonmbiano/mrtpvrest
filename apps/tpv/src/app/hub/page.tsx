@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   UtensilsCrossed, ChevronDown, MapPin,
@@ -38,8 +38,13 @@ export default function HubPage() {
   // mounted se queda en false mientras decidimos si el selector debe pintarse.
   // Si hay activeWorkspaceId persistido, redirigimos sin renderizar UI para
   // que el botón "Atrás" del WebView nunca recale en este selector después
-  // del primer setup.
-  const [mounted, setMounted] = useState(false);
+  // del primer setup. Inicializamos en true cuando NO hay workspace persistido
+  // (la ruta de "primera vez") para evitar setState dentro del effect.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [mounted, _setMounted] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return !localStorage.getItem('activeWorkspaceId');
+  });
   const employee = useAuthStore((s) => s.employee);
   const logout = useAuthStore((s) => s.logout);
   const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
@@ -58,6 +63,27 @@ export default function HubPage() {
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, [menuOpen]);
+
+  const selectWorkspace = useCallback(async (w: Workspace) => {
+    localStorage.setItem('activeWorkspaceId', w.id);
+    localStorage.setItem('activeRestaurantId', w.restaurantId);
+    localStorage.setItem('activeLocationId', w.id);
+    localStorage.setItem('activeWorkspaceName', `${w.restaurantName} · ${w.name}`);
+
+    try {
+      const { data } = await api.get('/api/shifts/active');
+      const isShiftOpen = Boolean(data?.isOpen ?? data?.id);
+
+      if (isShiftOpen) {
+        router.replace('/pos/order-type');
+      } else {
+        router.replace('/pos/shift/open');
+      }
+    } catch (err) {
+      console.error('Error verificando turno:', err);
+      router.replace('/pos/shift/open');
+    }
+  }, [router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +112,6 @@ export default function HubPage() {
 
     // Sin workspace persistido — flujo de primera vez (o tras logout):
     // pinta el selector con el catálogo de espacios.
-    setMounted(true);
     (async () => {
       try {
         const { data } = await api.get('/api/workspaces/me');
@@ -103,28 +128,7 @@ export default function HubPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
-
-  const selectWorkspace = async (w: Workspace) => {
-    localStorage.setItem('activeWorkspaceId', w.id);
-    localStorage.setItem('activeRestaurantId', w.restaurantId);
-    localStorage.setItem('activeLocationId', w.id);
-    localStorage.setItem('activeWorkspaceName', `${w.restaurantName} · ${w.name}`);
-
-    try {
-      const { data } = await api.get('/api/shifts/active');
-      const isShiftOpen = Boolean(data?.isOpen ?? data?.id);
-
-      if (isShiftOpen) {
-        router.replace('/pos/order-type');
-      } else {
-        router.replace('/pos/shift/open');
-      }
-    } catch (err) {
-      console.error('Error verificando turno:', err);
-      router.replace('/pos/shift/open');
-    }
-  };
+  }, [router, selectWorkspace]);
 
   const handleLogout = () => {
     logout();

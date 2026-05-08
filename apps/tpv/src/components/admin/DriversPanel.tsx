@@ -101,12 +101,25 @@ export default function DriversPanel({ open, onClose, accent }: Props) {
     }
   }
 
+  // Set loading=true en render cuando se abre el panel (rule-compliant).
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (open) setLoading(true);
+  }
+
   useEffect(() => {
     if (!open) return;
-    fetchLive(false);
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      await fetchLive(true);
+    };
+    tick();
     // Polling cada 10s mientras el panel esté abierto.
-    intervalRef.current = setInterval(() => fetchLive(true), 10000);
+    intervalRef.current = setInterval(tick, 10000);
     return () => {
+      cancelled = true;
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

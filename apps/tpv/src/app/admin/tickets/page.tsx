@@ -20,30 +20,31 @@ export default function TicketConfigPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Initial fetch on mount — async IIFE pattern (rule-compliant).
   useEffect(() => {
-    fetchConfig();
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get("/api/admin/ticket-settings");
+        if (cancelled) return;
+        if (data) setConfig(data);
+      } catch (e) {
+        if (cancelled) return;
+        console.error(e);
+        setConfig({
+          headerText: "¡Bienvenidos a nuestro restaurante!",
+          footerText: "Gracias por su preferencia",
+          showLogo: true,
+          showAddress: true,
+          showPhone: true,
+          showWifi: false,
+        });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
-
-  const fetchConfig = async () => {
-    setLoading(true);
-    try {
-      const { data } = await api.get("/api/admin/ticket-settings");
-      if (data) setConfig(data);
-    } catch (e) {
-      console.error(e);
-      // Fallback
-      setConfig({
-        headerText: "¡Bienvenidos a nuestro restaurante!",
-        footerText: "Gracias por su preferencia",
-        showLogo: true,
-        showAddress: true,
-        showPhone: true,
-        showWifi: false,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

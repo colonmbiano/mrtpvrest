@@ -53,21 +53,24 @@ export default function CatalogPage() {
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
+    let cancelled = false;
+    (async () => {
       try {
         const [catsRes, itemsRes] = await Promise.all([
           api.get("/api/menu/categories"),
           api.get("/api/menu/items"),
         ]);
+        if (cancelled) return;
         setCategories(Array.isArray(catsRes.data) ? catsRes.data : []);
         setProducts(Array.isArray(itemsRes.data) ? itemsRes.data : []);
       } catch (error) {
+        if (cancelled) return;
         console.error("Error loading data:", error);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
-    };
-    fetchData();
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // Reset al desmontar — al volver al catálogo siempre arranca en vista A.
@@ -79,11 +82,14 @@ export default function CatalogPage() {
   }, []);
 
   // Reset al cambiar ticket activo — evita que el cajero salte a otro
-  // ticket y siga "atrapado" viendo la categoría del anterior.
-  useEffect(() => {
+  // ticket y siga "atrapado" viendo la categoría del anterior. Patrón
+  // derived-state: corre en render, no en effect.
+  const [prevTicketId, setPrevTicketId] = useState(ticket.id);
+  if (prevTicketId !== ticket.id) {
+    setPrevTicketId(ticket.id);
     setView("categories");
     setActiveCat(null);
-  }, [ticket.id]);
+  }
 
   const categoryCounts = useMemo(() => {
     const map: Record<string, number> = {};

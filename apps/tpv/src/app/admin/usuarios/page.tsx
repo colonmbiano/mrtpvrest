@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Power, X, Search, ShieldCheck } from "lucide-react";
 import api from "@/lib/api";
 import BackButton from "@/components/BackButton";
@@ -53,7 +53,7 @@ export default function UsuariosAdmin() {
   const [editing, setEditing] = useState<Employee | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.get("/api/employees");
@@ -63,9 +63,25 @@ export default function UsuariosAdmin() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { refresh(); }, []);
+  // Initial fetch on mount — async IIFE pattern (rule-compliant).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get("/api/employees");
+        if (cancelled) return;
+        setEmployees(data);
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e?.response?.data?.error || "Error de conexión con el servidor");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = employees.filter(e =>
     e.name.toLowerCase().includes(search.toLowerCase()) ||

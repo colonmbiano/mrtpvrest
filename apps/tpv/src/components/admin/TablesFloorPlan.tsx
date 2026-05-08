@@ -90,23 +90,6 @@ export default function TablesFloorPlan({
   const [zones, setZones] = useState<Zone[]>([]);
   const [zonePickerId, setZonePickerId] = useState<string | null>(null);
 
-  async function fetchAll() {
-    try {
-      setLoading(true);
-      const [tablesRes, zonesRes] = await Promise.all([
-        api.get<TableRow[]>("/api/tables"),
-        api.get<Zone[]>("/api/zones").catch(() => ({ data: [] as Zone[] })),
-      ]);
-      setTables(tablesRes.data);
-      setZones(zonesRes.data || []);
-      setError("");
-    } catch (e: any) {
-      setError(e?.response?.data?.error || "No se pudo cargar las mesas");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function assignZone(tableId: string, zoneId: string | null) {
     try {
       const { data } = await api.patch<TableRow>(`/api/tables/${tableId}`, { zoneId });
@@ -118,12 +101,40 @@ export default function TablesFloorPlan({
     }
   }
 
-  useEffect(() => {
+  // Reset y refetch cuando se abre el modal.
+  // Reset de editing/dirty corre en render (derived state) para satisfacer
+  // react-hooks/set-state-in-effect; el fetch async sigue en el effect.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
     if (open) {
-      fetchAll();
       setEditing(false);
       setDirty(false);
     }
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [tablesRes, zonesRes] = await Promise.all([
+          api.get<TableRow[]>("/api/tables"),
+          api.get<Zone[]>("/api/zones").catch(() => ({ data: [] as Zone[] })),
+        ]);
+        if (cancelled) return;
+        setTables(tablesRes.data);
+        setZones(zonesRes.data || []);
+        setError("");
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e?.response?.data?.error || "No se pudo cargar las mesas");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [open]);
 
   if (!open) return null;

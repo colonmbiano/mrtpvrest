@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { getApiUrl } from "@/lib/config";
 
@@ -51,8 +51,22 @@ function cartTotal(cart: CartItem[]) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+// Lee el resultado de pago de MP desde la URL al cargar (back_urls).
+// Inicializamos con lazy state para evitar setState en useEffect — el rule
+// react-hooks/set-state-in-effect rechaza la versión con effect.
+function readInitialFromUrl(): { screen: Screen; orderId: string | null } {
+  if (typeof window === "undefined") return { screen: "menu", orderId: null };
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get("status");
+  const oid = params.get("orderId");
+  if (status === "success") return { screen: "success", orderId: oid };
+  if (status === "failure") return { screen: "error", orderId: null };
+  return { screen: "menu", orderId: null };
+}
+
 export default function KioskPage() {
-  const [screen, setScreen]         = useState<Screen>("menu");
+  const initialUrl = readInitialFromUrl();
+  const [screen, setScreen]         = useState<Screen>(initialUrl.screen);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cart, setCart]             = useState<CartItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
@@ -61,42 +75,36 @@ export default function KioskPage() {
   const [ordering, setOrdering]     = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [paymentProvider, setPaymentProvider] = useState<string | null>(null);
-  const [orderId, setOrderId]       = useState<string | null>(null);
+  const [orderId, setOrderId]       = useState<string | null>(initialUrl.orderId);
   const [tableNumber, setTableNumber] = useState<string>("");
 
-  // Lee el resultado de pago de MP desde la URL (back_urls)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const status = params.get("status");
-    const oid    = params.get("orderId");
-    if (status === "success") { setOrderId(oid); setScreen("success"); }
-    if (status === "failure") { setScreen("error"); }
-  }, []);
+    if (screen !== "menu") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const baseUrl      = getApiUrl();
+        const restaurantId = typeof window !== "undefined" ? localStorage.getItem("restaurantId") : null;
+        const locationId   = typeof window !== "undefined" ? localStorage.getItem("locationId")   : null;
+        const headers: Record<string, string> = {};
+        if (restaurantId) headers["x-restaurant-id"] = restaurantId;
+        if (locationId)   headers["x-location-id"]   = locationId;
 
-  const loadMenu = useCallback(async () => {
-    try {
-      setLoading(true);
-      const baseUrl      = getApiUrl();
-      const restaurantId = typeof window !== "undefined" ? localStorage.getItem("restaurantId") : null;
-      const locationId   = typeof window !== "undefined" ? localStorage.getItem("locationId")   : null;
-      const headers: Record<string, string> = {};
-      if (restaurantId) headers["x-restaurant-id"] = restaurantId;
-      if (locationId)   headers["x-location-id"]   = locationId;
-
-      const { data } = await axios.get(`${baseUrl}/api/kiosk/menu`, { headers });
-      const cats = (data as Category[]).filter((c) => c.items.length > 0);
-      setCategories(cats);
-      if (cats[0]) setActiveCategory(cats[0].id);
-    } catch (err: any) {
-      if (err?.response?.status === 403) setScreen("forbidden");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (screen === "menu") loadMenu();
-  }, [screen, loadMenu]);
+        const { data } = await axios.get(`${baseUrl}/api/kiosk/menu`, { headers });
+        if (cancelled) return;
+        const cats = (data as Category[]).filter((c) => c.items.length > 0);
+        setCategories(cats);
+        if (cats[0]) setActiveCategory(cats[0].id);
+      } catch (err: any) {
+        if (cancelled) return;
+        if (err?.response?.status === 403) setScreen("forbidden");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [screen]);
 
   function addToCart(item: MenuItem, mods: CartItem["modifiers"]) {
     setCart((prev) => {

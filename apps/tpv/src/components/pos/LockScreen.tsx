@@ -30,13 +30,11 @@ const LockScreen: React.FC<LockScreenProps> = ({
   const pinLength = 4;
   const digits = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-  const [terminalId, setTerminalId] = useState<string>("");
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setTerminalId(localStorage.getItem("terminalId") || localStorage.getItem("deviceName") || localStorage.getItem("mb-device-role") || "Caja Principal");
-    }
-  }, []);
+  // Lazy init lee localStorage en cliente (SSR cae a string vacío).
+  const [terminalId] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("terminalId") || localStorage.getItem("deviceName") || localStorage.getItem("mb-device-role") || "Caja Principal";
+  });
 
   const terminalLabel = terminalId ? terminalId : "Caja Principal";
 

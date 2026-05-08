@@ -33,9 +33,13 @@ export function usePinLock() {
     hydrateFromStorage();
   }, [hydrateFromStorage]);
 
-  // Countdown cuando está bloqueado
+  // Countdown cuando está bloqueado. setLockCountdown inicial corre dentro
+  // del effect — necesario para arrancar el timer cuando isLocked() pasa a
+  // true tras un setLocked en el store. El polling subsecuente vive dentro
+  // del setInterval, fuera del flush del render.
   useEffect(() => {
     if (!isLocked()) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLockCountdown(getRemainingLockSecs());
     const interval = setInterval(() => {
       const secs = getRemainingLockSecs();

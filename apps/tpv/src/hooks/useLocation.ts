@@ -34,27 +34,43 @@ const STORAGE_KEY = "locationId";
  * - Mientras carga, expone el tipo por defecto (RESTAURANT) para evitar flicker.
  */
 export function useLocation(): UseLocationResult {
+  // Inicializa loading=true sólo si hay locationId; si no, error inmediato.
+  // Lazy initializers leen localStorage en cliente (SSR cae a defaults).
+  const hasLocationId = (): boolean => {
+    if (typeof window === "undefined") return false;
+    return Boolean(localStorage.getItem(STORAGE_KEY));
+  };
+
   const [location, setLocation] = useState<Location | null>(null);
-  const [loading, setLoading]   = useState<boolean>(true);
-  const [error, setError]       = useState<string | null>(null);
+  const [loading, setLoading]   = useState<boolean>(() => hasLocationId());
+  const [error, setError]       = useState<string | null>(() =>
+    hasLocationId() ? null : (typeof window !== "undefined" ? "Sucursal no configurada" : null)
+  );
   const [tick, setTick]         = useState(0);
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
+
+  // Reset de loading/error en render cuando cambia el tick (refresh manual).
+  const [prevTick, setPrevTick] = useState(tick);
+  if (prevTick !== tick) {
+    setPrevTick(tick);
+    if (hasLocationId()) {
+      if (!loading) setLoading(true);
+      if (error !== null) setError(null);
+    } else {
+      if (loading) setLoading(false);
+      if (error !== "Sucursal no configurada") setError("Sucursal no configurada");
+      if (location !== null) setLocation(null);
+    }
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const locationId = localStorage.getItem(STORAGE_KEY);
-    if (!locationId) {
-      setLoading(false);
-      setError("Sucursal no configurada");
-      setLocation(null);
-      return;
-    }
+    if (!locationId) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
     api
       .get<Location>(`/api/locations/${locationId}`)

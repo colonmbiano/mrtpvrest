@@ -38,6 +38,9 @@ export default function SetupPage() {
   const { mode, toggleMode } = useThemeStore();
 
   useEffect(() => {
+    // Marca el componente como hidratado tras montar — necesario porque el
+    // botón de toggle de tema sólo debe pintarse client-side.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 

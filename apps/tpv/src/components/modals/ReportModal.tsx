@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Download, Loader2, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import BaseModal from "@/components/ui/BaseModal";
@@ -31,11 +31,12 @@ export default function ReportModal({
   const [data, setData] = useState<SalesReport | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!open) {
-      setData(null);
-    }
-  }, [open]);
+  // Reset en render al cerrar el modal (derived-state pattern).
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (!open) setData(null);
+  }
 
   const run = async () => {
     if (!fetchReport) return;

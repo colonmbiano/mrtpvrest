@@ -196,12 +196,13 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
 export default ConfigMenu;
 
 function UiScalePicker() {
-  const [scale, setScale] = useState<UiScale>("small");
+  // Lazy init lee localStorage en cliente (SSR cae a default).
+  const [scale, setScale] = useState<UiScale>(() => readScale());
 
   useEffect(() => {
-    const s = readScale();
-    setScale(s);
-    applyScale(s);
+    // Aplica al DOM después de montar para asegurarse de que documentElement
+    // refleja el preset persistido (no setState — sólo side-effect DOM).
+    applyScale(readScale());
   }, []);
 
   const choose = (s: UiScale) => {
@@ -266,11 +267,8 @@ function readSidebarPreset(): SidebarWidthPreset {
 }
 
 function SidebarWidthPicker() {
-  const [preset, setPreset] = useState<SidebarWidthPreset>("M");
-
-  useEffect(() => {
-    setPreset(readSidebarPreset());
-  }, []);
+  // Lazy init lee localStorage en cliente (SSR cae a default "M").
+  const [preset, setPreset] = useState<SidebarWidthPreset>(() => readSidebarPreset());
 
   const choose = (p: SidebarWidthPreset) => {
     setPreset(p);

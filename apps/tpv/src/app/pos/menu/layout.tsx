@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Search, Menu, Receipt, ShoppingCart, UtensilsCrossed } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Search, ShoppingCart, UtensilsCrossed } from "lucide-react";
 import ConfigMenu from "@/components/pos/ConfigMenu";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
 import PaymentModal from "@/components/pos/PaymentModal";
@@ -48,7 +48,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [showOrders, setShowOrders] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [mobileView, setMobileView] = useState<"menu" | "ticket">("menu");
-  const bellRef = useRef<HTMLButtonElement>(null);
 
   // Sistema de notificaciones en tiempo real vía Socket.io
   useNotifications();
@@ -64,6 +63,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [showShift, setShowShift] = useState(false);
 
   useEffect(() => {
+    // Marca el cliente como hidratado tras montar — evita SSR/CSR mismatch.
+    // setMounted dentro del effect es deliberado y único caso aceptado en
+    // este layout para diferir la UI hasta after-hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
@@ -87,6 +90,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     if (!mounted || isLocked) return;
+    // Polling de órdenes abiertas — la fetch dispara setState async, fuera
+    // del render; el rule no distingue ese matiz.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchOpenOrders();
     const id = setInterval(fetchOpenOrders, 30000);
     return () => clearInterval(id);
@@ -103,6 +109,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     if (!mounted || isLocked) return;
+    // Polling de estado del turno — fetch async fuera del render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchShift();
     const id = setInterval(fetchShift, 60000);
     return () => clearInterval(id);
@@ -134,6 +142,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // Zustand (B3). Mantenemos solo el botón "Tickets abiertos" del drawer.
 
   useEffect(() => {
+    // Refrescar lista de órdenes al abrir el drawer.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (showOrders) fetchOpenOrders();
   }, [showOrders, fetchOpenOrders]);
 

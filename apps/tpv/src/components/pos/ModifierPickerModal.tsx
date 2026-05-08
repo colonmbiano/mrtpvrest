@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { X, Check } from "lucide-react";
 import Button from "@/components/ui/Button";
 import type {
@@ -52,15 +52,17 @@ export default function ModifierPickerModal({
     }
   );
 
-  // Reset cuando cambia el producto
-  useEffect(() => {
+  // Reset cuando cambia el producto (derived state, en render).
+  const [prevGroups, setPrevGroups] = useState(groups);
+  if (prevGroups !== groups) {
+    setPrevGroups(groups);
     const init: Record<string, Modifier[]> = {};
     for (const g of groups) {
       const defaults = g.modifiers.filter((m) => m.isDefault);
       init[g.id] = g.multiSelect ? defaults : defaults.slice(0, 1);
     }
     setSelections(init);
-  }, [groups]);
+  }
 
   function toggle(group: ModifierGroup, mod: Modifier) {
     setSelections((prev) => {

@@ -13,7 +13,7 @@
  * con stepper +/− o tap directo en cuadrícula 1..max.
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { X, Users, ArrowRight, MapPin } from "lucide-react";
 
 interface GuestCountModalProps {
@@ -43,9 +43,12 @@ export default function GuestCountModal({
 
   const [guests, setGuests] = useState(defaultGuests);
 
-  useEffect(() => {
+  // Reset guests al re-abrir o cambiar la capacidad por defecto (derived state).
+  const [prevKey, setPrevKey] = useState({ isOpen, defaultGuests });
+  if (prevKey.isOpen !== isOpen || prevKey.defaultGuests !== defaultGuests) {
+    setPrevKey({ isOpen, defaultGuests });
     if (isOpen) setGuests(defaultGuests);
-  }, [isOpen, defaultGuests]);
+  }
 
   if (!isOpen) return null;
 

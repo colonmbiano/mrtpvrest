@@ -50,8 +50,29 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
     }
   }
 
+  // Refetch loading state cuando cambia driver — set en render (rule-compliant).
+  const [prevDriverId, setPrevDriverId] = useState<string | null>(driver?.id ?? null);
+  if (prevDriverId !== (driver?.id ?? null)) {
+    setPrevDriverId(driver?.id ?? null);
+    if (driver) setLoading(true);
+  }
+
   useEffect(() => {
-    if (driver) fetchMovements();
+    if (!driver) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get(`/api/driver-cash/${driver.id}/movements`);
+        if (cancelled) return;
+        setMovements(data.movements);
+      } catch (e) {
+        if (cancelled) return;
+        console.error(e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [driver]);
 
   async function handleAddMovement(e: React.FormEvent) {

@@ -6,13 +6,6 @@ export default function KDSMessages() {
   const [messages, setMessages] = useState<any[]>([]);
   const [open, setOpen]         = useState(false);
 
-  async function fetchMessages() {
-    try {
-      const { data } = await api.get("/api/kds/messages/unread");
-      setMessages(data);
-    } catch {}
-  }
-
   async function markRead(id: string) {
     try {
       await api.put(`/api/kds/messages/${id}/read`);
@@ -21,9 +14,17 @@ export default function KDSMessages() {
   }
 
   useEffect(() => {
-    fetchMessages();
-    const t = setInterval(fetchMessages, 10000);
-    return () => clearInterval(t);
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const { data } = await api.get("/api/kds/messages/unread");
+        if (cancelled) return;
+        setMessages(data);
+      } catch {}
+    };
+    tick();
+    const t = setInterval(tick, 10000);
+    return () => { cancelled = true; clearInterval(t); };
   }, []);
 
   const STATION_LABELS: Record<string,string> = {

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -38,9 +38,13 @@ const SECTIONS = [
 
 export default function Sidebar() {
   const path = usePathname();
-  const [user, setUser] = useState<any>(null);
+  // Lazy init para leer el usuario sólo en el cliente y evitar setState
+  // en useEffect (rule react-hooks/set-state-in-effect).
+  const [user] = useState<any>(() => {
+    if (typeof window === "undefined") return null;
+    return getUser();
+  });
   const [imgError, setImgError] = useState(false);
-  useEffect(() => { setUser(getUser()); }, []);
 
   return (
     <aside className="fixed left-0 top-0 h-full w-56 flex flex-col border-r z-40"

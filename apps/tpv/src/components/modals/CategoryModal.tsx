@@ -1,11 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import BaseModal from "@/components/ui/BaseModal";
 import type { CategoryDraft } from "@/contexts/ModalContext";
 
 const EMPTY: CategoryDraft = { name: "", color: "#10b981", icon: "" };
 const COLORS = ["#10b981", "#7c3aed", "#ff5c35", "#3b82f6", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899"];
+
+function buildDraft(category: CategoryDraft | "new" | null): CategoryDraft {
+  return category && category !== "new" ? { ...category } : EMPTY;
+}
 
 export default function CategoryModal({
   open,
@@ -18,12 +22,14 @@ export default function CategoryModal({
   onClose: () => void;
   onSave?: (draft: CategoryDraft) => Promise<void> | void;
 }) {
-  const [draft, setDraft] = useState<CategoryDraft>(EMPTY);
+  const [draft, setDraft] = useState<CategoryDraft>(() => buildDraft(category));
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (open) setDraft(category && category !== "new" ? { ...category } : EMPTY);
-  }, [open, category]);
+  // Sync draft when modal re-opens or target category changes (derived state pattern).
+  const [prevKey, setPrevKey] = useState<{ open: boolean; category: typeof category }>({ open, category });
+  if (prevKey.open !== open || prevKey.category !== category) {
+    setPrevKey({ open, category });
+    if (open) setDraft(buildDraft(category));
+  }
 
   const isNew = category === "new" || (category && !category.id);
 

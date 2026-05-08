@@ -47,14 +47,22 @@ export default function OrderDetailModal({
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  // Reset / loading inmediato en render cuando cambian open/orderId, en vez
+  // de hacerlo dentro del effect (set-state-in-effect rule).
+  const [prevKey, setPrevKey] = useState({ open, orderId });
+  if (prevKey.open !== open || prevKey.orderId !== orderId) {
+    setPrevKey({ open, orderId });
     if (!open || !orderId) {
       setOrder(null);
-      return;
+      setLoading(false);
+    } else if (fetchOrder) {
+      setLoading(true);
     }
-    if (!fetchOrder) return;
+  }
+
+  useEffect(() => {
+    if (!open || !orderId || !fetchOrder) return;
     let cancelled = false;
-    setLoading(true);
     fetchOrder(orderId)
       .then((o) => { if (!cancelled) setOrder(o); })
       .catch((e) => toast.error(e?.message ?? "No se pudo cargar la orden"))

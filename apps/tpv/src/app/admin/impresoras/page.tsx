@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Monitor, Printer as PrinterIcon, Network, Usb, Bluetooth, Trash2, Edit3, Plus } from "lucide-react";
@@ -36,11 +36,7 @@ export default function ImpresorasPage() {
 
   const [form, setForm] = useState<Partial<Printer>>(DEFAULT_FORM);
 
-  useEffect(() => {
-    fetchPrinters();
-  }, []);
-
-  const fetchPrinters = async () => {
+  const fetchPrinters = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.get("/api/printers");
@@ -51,7 +47,28 @@ export default function ImpresorasPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Initial fetch on mount. La fetch async dispara setState, pero esto sólo
+  // ocurre tras el primer render — es exactamente el caso aceptado por React
+  // y la advertencia del nuevo plugin no aplica al patrón "fetch on mount".
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get("/api/printers");
+        if (cancelled) return;
+        setPrinters(Array.isArray(data) ? data : []);
+      } catch (e) {
+        if (cancelled) return;
+        console.error(e);
+        setPrinters([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSave = async (data: Partial<Printer>) => {
     if (saving) return;

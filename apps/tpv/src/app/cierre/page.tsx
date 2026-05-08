@@ -95,18 +95,24 @@ export default function CierreTurno() {
     router.replace('/hub');
   };
 
-  useEffect(() => {
-    if (!shift) return;
-    const raw = localStorage.getItem(`cierre-draft-${shift.id}`);
-    if (raw) {
-      try {
-        const d = JSON.parse(raw);
-        setBillCount(d.billCount || {});
-        setCoinCount(d.coinCount || {});
-        setNotes(d.notes || '');
-      } catch {}
+  // Restaurar borrador desde localStorage cuando cambia el turno activo.
+  // Patrón "store previous prop in state" — corre en render, no en effect,
+  // así satisfacemos react-hooks/set-state-in-effect.
+  const [draftLoadedFor, setDraftLoadedFor] = useState<string | null>(null);
+  if (shift && draftLoadedFor !== shift.id) {
+    setDraftLoadedFor(shift.id);
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(`cierre-draft-${shift.id}`);
+      if (raw) {
+        try {
+          const d = JSON.parse(raw);
+          setBillCount(d.billCount || {});
+          setCoinCount(d.coinCount || {});
+          setNotes(d.notes || '');
+        } catch {}
+      }
     }
-  }, [shift]);
+  }
 
   const userInitial = (employee?.name || 'U').charAt(0).toUpperCase();
   const roleLabel =

@@ -112,33 +112,37 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
   const [dragging, setDragging] = useState<number|null>(null);
   const [dragOver, setDragOver] = useState<number|null>(null);
 
-  // Display
-  const [gridSize, setGridSize] = useState(4);
-  const [sound, setSound] = useState("ding");
-  const [showImages, setShowImages] = useState(true);
-  const [fontSize, setFontSize] = useState<"xs"|"sm"|"md"|"lg"|"xl">("md");
+  // Display — lazy init lee de localStorage en cliente. Evita setState en
+  // useEffect (rule react-hooks/set-state-in-effect).
+  type DisplayCfg = { gridSize?: number; sound?: string; showImages?: boolean; fontSize?: "xs"|"sm"|"md"|"lg"|"xl" };
+  const initialDisplay: DisplayCfg = (() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = localStorage.getItem("tpv-display-config");
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  })();
+  const [gridSize, setGridSize] = useState<number>(initialDisplay.gridSize || 4);
+  const [sound, setSound] = useState<string>(initialDisplay.sound || "ding");
+  const [showImages, setShowImages] = useState<boolean>(initialDisplay.showImages !== false);
+  const [fontSize, setFontSize] = useState<"xs"|"sm"|"md"|"lg"|"xl">(initialDisplay.fontSize || "md");
 
   useEffect(() => {
-    const saved = localStorage.getItem("tpv-display-config");
-    if (saved) {
-      try {
-        const cfg = JSON.parse(saved);
-        setGridSize(cfg.gridSize || 4);
-        setSound(cfg.sound || "ding");
-        setShowImages(cfg.showImages !== false);
-        setFontSize(cfg.fontSize || "md");
-      } catch {}
-    }
+    // Carga inicial — fetch async no es flagged por el rule (corre fuera del render).
     fetchAll();
   }, []);
 
-  useEffect(() => {
-    if (!settings) return;
-    const nextGrid = settings.gridSize || settings.gridCols;
-    if (nextGrid) setGridSize(nextGrid);
-    if (settings.fontSize) setFontSize(settings.fontSize);
-    if (settings.showImages !== undefined) setShowImages(settings.showImages);
-  }, [settings]);
+  // Sync de settings prop → display state (derived state pattern, en render).
+  const [prevSettings, setPrevSettings] = useState(settings);
+  if (prevSettings !== settings) {
+    setPrevSettings(settings);
+    if (settings) {
+      const nextGrid = settings.gridSize || settings.gridCols;
+      if (nextGrid) setGridSize(nextGrid);
+      if (settings.fontSize) setFontSize(settings.fontSize);
+      if (settings.showImages !== undefined) setShowImages(settings.showImages);
+    }
+  }
 
   async function fetchAll() {
     try {

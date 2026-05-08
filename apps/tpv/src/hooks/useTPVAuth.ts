@@ -7,8 +7,15 @@ import api from "@/lib/api";
 export function useTPVAuth() {
   const router = useRouter();
   const auth = useAuthStore();
-  const [restaurantName, setRestaurantName] = useState("MRTPVREST");
-  const [locationName, setLocationName] = useState("");
+  // Lazy init lee cache de localStorage en cliente (SSR cae a defaults).
+  const [restaurantName, setRestaurantName] = useState<string>(() => {
+    if (typeof window === "undefined") return "MRTPVREST";
+    return localStorage.getItem("restaurantName") || "MRTPVREST";
+  });
+  const [locationName, setLocationName] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("locationName") || "";
+  });
 
   useEffect(() => {
     // Verificar si el dispositivo está vinculado
@@ -22,8 +29,6 @@ export function useTPVAuth() {
 
     const cachedRest = localStorage.getItem("restaurantName");
     const cachedLoc = localStorage.getItem("locationName");
-    setRestaurantName(cachedRest || "MRTPVREST");
-    setLocationName(cachedLoc || "Sucursal");
 
     // Backfill desde backend si la cache está vacía o trae fallback genérico
     // y tenemos token para autenticar la petición.

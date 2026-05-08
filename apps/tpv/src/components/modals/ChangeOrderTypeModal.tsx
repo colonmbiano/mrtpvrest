@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Armchair, ShoppingBag, Bike, MapPin, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import BaseModal from "@/components/ui/BaseModal";
@@ -35,18 +35,22 @@ export default function ChangeOrderTypeModal({
   onAssignDriverAfter?: (orderId: string) => void;
   currency?: string;
 }) {
-  const [target, setTarget] = useState<OrderType>("TAKEOUT");
-  const [address, setAddress] = useState("");
+  const [target, setTarget] = useState<OrderType>(() =>
+    payload ? (payload.currentType === "DINE_IN" ? "TAKEOUT" : payload.currentType) : "TAKEOUT"
+  );
+  const [address, setAddress] = useState(() => payload?.address ?? "");
   const [assignNow, setAssignNow] = useState(true);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
+  // Sync local form state when modal re-opens or payload changes (derived state pattern).
+  const [prevKey, setPrevKey] = useState<{ open: boolean; payload: typeof payload }>({ open, payload });
+  if (prevKey.open !== open || prevKey.payload !== payload) {
+    setPrevKey({ open, payload });
     if (open && payload) {
       setTarget(payload.currentType === "DINE_IN" ? "TAKEOUT" : payload.currentType);
       setAddress(payload.address ?? "");
       setAssignNow(true);
     }
-  }, [open, payload]);
+  }
 
   if (!payload) return null;
   const isSame = target === payload.currentType;

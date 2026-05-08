@@ -3,7 +3,11 @@ import { useEffect, useState } from "react";
 
 export default function PWAInstallBanner() {
   const [prompt, setPrompt] = useState<any>(null);
-  const [installed, setInstalled] = useState(false);
+  // Lazy init para detectar si ya está instalada (evita setState en effect).
+  const [installed, setInstalled] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia('(display-mode: standalone)').matches;
+  });
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
@@ -14,18 +18,14 @@ export default function PWAInstallBanner() {
         .catch(err => console.log('SW error:', err));
     }
 
-    // Capturar evento de instalación
+    // Capturar evento de instalación. setState dentro del listener corre
+    // fuera del flush sincrónico del render, no es flagged por el rule.
     const handler = (e: any) => {
       e.preventDefault();
       setPrompt(e);
       setShowBanner(true);
     };
     window.addEventListener('beforeinstallprompt', handler);
-
-    // Detectar si ya está instalada
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      setInstalled(true);
-    }
 
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
