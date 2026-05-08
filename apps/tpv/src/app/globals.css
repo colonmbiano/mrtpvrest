@@ -208,3 +208,67 @@ html, body {
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Light mode overrides para clases con hex hardcoded.
+
+   Muchos componentes del POS (SidebarTicket, ConfigMenu, PaymentModal,
+   shift/open, etc.) usan colores fijos `bg-[#0a0a0c]`, `bg-[#121316]`,
+   `text-white`, `text-zinc-500`... que no respetan los tokens CSS y por
+   tanto se quedan oscuros al cambiar a `data-mode="light"`. Migrar
+   archivo por archivo a `bg-surf-0` / `text-tx-pri` es muchísimo
+   refactor; en su lugar mapeamos las clases concretas a su contraparte
+   clara con `!important` solo cuando el body tiene `data-mode="light"`.
+
+   Esto es un parche pragmático — no la solución definitiva (los hex
+   hardcoded deberían migrarse a tokens en otra pasada). Pero deja el
+   modo claro USABLE en el flujo de cobro hoy mismo.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-mode="light"] .bg-\[\#0a0a0c\] { background-color: #f7f8f8 !important; }
+[data-mode="light"] .bg-\[\#0C0C0E\] { background-color: #f7f8f8 !important; }
+[data-mode="light"] .bg-\[\#121316\] { background-color: #ffffff !important; }
+[data-mode="light"] .bg-\[\#1a1b1f\] { background-color: #eff1f2 !important; }
+[data-mode="light"] .bg-\[\#22242a\] { background-color: #e6e9eb !important; }
+
+/* Overlays con opacidad — se usan en backdrops de modales. Invertimos
+   pero conservamos algo de oscurecido para que el modal flote. */
+[data-mode="light"] .bg-\[\#0a0a0c\]\/80  { background-color: rgba(20,22,26,0.45) !important; }
+[data-mode="light"] .bg-\[\#0a0a0c\]\/85  { background-color: rgba(20,22,26,0.50) !important; }
+
+/* Texto blanco / zinc — el cuerpo de copy en el POS asume fondo oscuro. */
+[data-mode="light"] .text-white       { color: #08090a !important; }
+[data-mode="light"] .text-white\/85   { color: rgba(8,9,10,0.85) !important; }
+[data-mode="light"] .text-white\/55   { color: rgba(8,9,10,0.55) !important; }
+[data-mode="light"] .text-white\/40   { color: rgba(8,9,10,0.40) !important; }
+[data-mode="light"] .text-white\/30   { color: rgba(8,9,10,0.30) !important; }
+[data-mode="light"] .text-zinc-200    { color: #1f2024 !important; }
+[data-mode="light"] .text-zinc-300    { color: #2c2e34 !important; }
+[data-mode="light"] .text-zinc-400    { color: #4c515a !important; }
+[data-mode="light"] .text-zinc-500    { color: #6b7280 !important; }
+[data-mode="light"] .text-zinc-600    { color: #8a8f98 !important; }
+[data-mode="light"] .text-zinc-700    { color: #b1b8c9 !important; }
+[data-mode="light"] .text-stone-200   { color: #1f2024 !important; }
+[data-mode="light"] .text-stone-500   { color: #6b7280 !important; }
+[data-mode="light"] .text-stone-600   { color: #8a8f98 !important; }
+
+/* Stones del CategoryGrid drill-down. */
+[data-mode="light"] .bg-stone-900     { background-color: #ffffff !important; }
+[data-mode="light"] .hover\:bg-stone-800:hover { background-color: #eff1f2 !important; }
+[data-mode="light"] .active\:bg-stone-700:active { background-color: #e6e9eb !important; }
+[data-mode="light"] .bg-stone-800     { background-color: #eff1f2 !important; }
+[data-mode="light"] .bg-stone-700     { background-color: #e6e9eb !important; }
+
+/* Bordes blancos translúcidos — invertir a negros translúcidos. */
+[data-mode="light"] .border-white\/5  { border-color: rgba(0,0,0,0.06) !important; }
+[data-mode="light"] .border-white\/10 { border-color: rgba(0,0,0,0.10) !important; }
+[data-mode="light"] .border-white\/20 { border-color: rgba(0,0,0,0.18) !important; }
+
+/* Surfaces translúcidas tipo glassmorphism — invertir base. */
+[data-mode="light"] .bg-white\/5      { background-color: rgba(0,0,0,0.04) !important; }
+[data-mode="light"] .bg-white\/10     { background-color: rgba(0,0,0,0.08) !important; }
+[data-mode="light"] .bg-black\/80     { background-color: rgba(255,255,255,0.85) !important; }
+[data-mode="light"] .bg-black\/20     { background-color: rgba(0,0,0,0.06) !important; }
+
+/* Barra inferior tabs estación KDS y similares con fondo oscuro fijo
+   no se tocan: KDS app NO cambia de modo (siempre dark, alto contraste
+   para cocina). Esto solo aplica al TPV. */
