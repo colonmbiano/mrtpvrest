@@ -11,6 +11,8 @@ const cartItemSchema = z.object({
   // El TPV envía price y modifiers; toleramos ambos extra fields.
   price:      z.coerce.number().nonnegative().optional(),
   notes:      z.string().max(500).optional(),
+  // Comensal al que pertenece el item (1..N). null/undefined = compartido.
+  seatNumber: z.coerce.number().int().positive().max(50).optional().nullable(),
 }).passthrough();
 
 const orderTypeSchema = z.enum(['DINE_IN', 'TAKEOUT', 'DELIVERY']);
@@ -20,6 +22,8 @@ const createOrderSchema = z.object({
   orderType:     orderTypeSchema.optional(),
   tableNumber:   z.union([z.string(), z.number()]).optional(),
   tableId:       z.string().optional().nullable(),
+  // Cuántos comensales se sentaron al iniciar la cuenta DINE_IN.
+  numberOfGuests: z.coerce.number().int().positive().max(50).optional().nullable(),
   paymentMethod: z.string().optional(),
   subtotal:      z.coerce.number().nonnegative().optional(),
   discount:      z.coerce.number().nonnegative().optional(),

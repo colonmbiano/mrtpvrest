@@ -4,6 +4,7 @@ import CategoryRail from "@/components/pos/CategoryRail";
 import ProductCard from "@/components/pos/ProductCard";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
 import ModifierPickerModal from "@/components/pos/ModifierPickerModal";
+import SeatTabs from "@/components/pos/SeatTabs";
 import api from "@/lib/api";
 import {
   useTicketStore,
@@ -95,6 +96,8 @@ export default function CatalogPage() {
           onChange={(type) => updateTicket({ type })}
         />
       </div>
+
+      <SeatTabs />
 
       <CategoryRail
         categories={categories}
