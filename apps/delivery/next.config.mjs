@@ -4,6 +4,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  trailingSlash: true,
   ...(process.env.CAPACITOR_BUILD === 'true' ? {
     output: 'export',
     images: {
