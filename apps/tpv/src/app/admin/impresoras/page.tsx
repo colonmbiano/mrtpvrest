@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 import api from "@/lib/api";
-import { Monitor, Printer as PrinterIcon, Network, Usb, Bluetooth, Trash2, Edit3, Plus } from "lucide-react";
+import { Monitor, Printer as PrinterIcon, Network, Usb, Bluetooth, Trash2, Edit3, Plus, Tag } from "lucide-react";
 import KDSConfigModal from "@/components/pos/KDSConfigModal";
+import PrinterCategoriesModal from "@/components/admin/PrinterCategoriesModal";
 import BackButton from "@/components/BackButton";
 import { printTestTicket, type PrinterStation } from "@/lib/printer-tcp";
 
@@ -15,6 +16,7 @@ type Printer = {
   port?: number | null;
   type: string;
   isVirtual?: boolean;
+  categories?: string[];
 };
 
 const DEFAULT_FORM: Partial<Printer> = {
@@ -30,6 +32,7 @@ export default function ImpresorasPage() {
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isKDSModalOpen, setIsKDSModalOpen] = useState(false);
+  const [categoriesFor, setCategoriesFor] = useState<Printer | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -317,12 +320,21 @@ export default function ImpresorasPage() {
       )}
 
       {/* KDS MODAL */}
-      <KDSConfigModal 
+      <KDSConfigModal
         isOpen={isKDSModalOpen}
         onClose={() => { setIsKDSModalOpen(false); setEditingId(null); setForm(DEFAULT_FORM); }}
         onSave={handleSave}
         initialData={form}
       />
+
+      {/* CATEGORÍAS POR IMPRESORA */}
+      {categoriesFor && (
+        <PrinterCategoriesModal
+          printer={categoriesFor}
+          onClose={() => setCategoriesFor(null)}
+          onSaved={() => { fetchPrinters(); }}
+        />
+      )}
 
       {/* GRID DISPOSITIVOS */}
       {loading ? (
@@ -382,6 +394,15 @@ export default function ImpresorasPage() {
                     className="w-full h-12 bg-white/5 hover:bg-white/10 text-zinc-300 rounded-xl text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50"
                   >
                     {testingId === p.id ? "Conectando..." : isKDS ? "Refrescar Pantalla" : "Test de Impresión"}
+                  </button>
+                  <button
+                    onClick={() => setCategoriesFor(p)}
+                    className="w-full h-12 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 active:scale-95"
+                  >
+                    <Tag size={14} />
+                    {p.categories?.length
+                      ? `${p.categories.length} categoría${p.categories.length !== 1 ? "s" : ""}`
+                      : "Asignar categorías"}
                   </button>
                   <div className="flex gap-2">
                     <button
