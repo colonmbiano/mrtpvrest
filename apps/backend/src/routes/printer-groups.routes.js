@@ -13,7 +13,7 @@
  */
 
 const express = require('express');
-const { prisma } = require('../lib/prisma');
+const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireRole } = require('../middleware/auth.middleware');
 const { requireTenantAccess } = require('../middleware/tenant.middleware');
 
