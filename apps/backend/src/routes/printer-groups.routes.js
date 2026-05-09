@@ -14,8 +14,7 @@
 
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireRole } = require('../middleware/auth.middleware');
-const { requireTenantAccess } = require('../middleware/tenant.middleware');
+const { authenticate, requireRole, requireTenantAccess } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 router.use(authenticate, requireTenantAccess);
