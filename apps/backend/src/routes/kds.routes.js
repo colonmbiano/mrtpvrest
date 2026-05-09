@@ -13,22 +13,73 @@ const kdsWriteRoles = requireRole(
 );
 
 // GET pedidos activos para una estación
+//
+// Enrutamiento (en este orden, fuentes que se UNEN — no se sobrescriben):
+//   1. PrinterGroup → categorías + items: el modelo Loyverse moderno.
+//      Una categoría/item asignado a un grupo cuyo miembro sea una
+//      impresora con type=station entra al filtro de esta estación.
+//   2. Printer.categories[] (legacy): array Postgres de categoryIds en la
+//      propia impresora. Se respeta para que la pantalla "Asignar
+//      categorías" del modal por-impresora siga funcionando aunque no
+//      uses Printer Groups.
+//
+// Si NINGUNA fuente declara categorías ni items para esta estación,
+// fallback "central": muestra todos los items de las órdenes activas
+// (comportamiento KDS-único histórico).
 router.get('/orders/:station', async (req, res) => {
   try {
     const { station } = req.params;
-    // Buscar categorías asignadas a esta estación
-    const printers = await prisma.printer.findMany({
-      where: { type: station, isActive: true }
-    });
-    const catIds = printers.flatMap(p => {
-      try { return JSON.parse(p.categories || '[]'); } catch { return []; }
-    });
+    const locationId = req.locationId || null;
+
+    const printerWhere = { type: station, isActive: true };
+    if (locationId) printerWhere.locationId = locationId;
+
+    // 1) PrinterGroups que contengan al menos una impresora de esta estación
+    const groupWhere = {
+      members: { some: { printer: printerWhere } },
+    };
+    if (locationId) groupWhere.locationId = locationId;
+
+    const [groups, legacyPrinters] = await Promise.all([
+      prisma.printerGroup.findMany({
+        where: groupWhere,
+        include: {
+          categories: { select: { categoryId: true } },
+          items:      { select: { menuItemId: true } },
+        },
+      }),
+      prisma.printer.findMany({
+        where: printerWhere,
+        select: { categories: true },
+      }),
+    ]);
+
+    const catIdSet  = new Set();
+    const itemIdSet = new Set();
+
+    for (const g of groups) {
+      for (const c of g.categories) catIdSet.add(c.categoryId);
+      for (const it of g.items)     itemIdSet.add(it.menuItemId);
+    }
+    for (const p of legacyPrinters) {
+      // Postgres String[] → ya es array. Si por algún motivo viniera string
+      // (datos antiguos en JSON) lo intentamos parsear best-effort.
+      const arr = Array.isArray(p.categories)
+        ? p.categories
+        : (() => { try { return JSON.parse(p.categories || '[]'); } catch { return []; } })();
+      for (const id of arr) catIdSet.add(id);
+    }
+
+    const hasFilter = catIdSet.size > 0 || itemIdSet.size > 0;
+
+    const orderWhere = {
+      status: { in: ['CONFIRMED', 'PREPARING'] },
+      createdAt: { gte: new Date(Date.now() - 4 * 60 * 60 * 1000) },
+    };
+    if (locationId) orderWhere.locationId = locationId;
 
     const orders = await prisma.order.findMany({
-      where: {
-        status: { in: ['CONFIRMED', 'PREPARING'] },
-        createdAt: { gte: new Date(Date.now() - 4 * 60 * 60 * 1000) } // últimas 4 horas
-      },
+      where: orderWhere,
       include: {
         items: {
           include: { menuItem: { include: { category: true } } }
@@ -37,11 +88,15 @@ router.get('/orders/:station', async (req, res) => {
       orderBy: { createdAt: 'asc' }
     });
 
-    // Filtrar items por categorías de esta estación
+    // Filtrar items: pasa si su categoría OR su menuItem está enrutado
+    // a esta estación. Sin filtros declarados → modo central, todos pasan.
     const filtered = orders.map(order => {
-      const stationItems = catIds.length === 0
+      const stationItems = !hasFilter
         ? order.items
-        : order.items.filter(i => catIds.includes(i.menuItem?.categoryId));
+        : order.items.filter(i =>
+            (i.menuItem?.categoryId && catIdSet.has(i.menuItem.categoryId)) ||
+            (i.menuItem?.id && itemIdSet.has(i.menuItem.id))
+          );
       return { ...order, items: stationItems };
     }).filter(o => o.items.length > 0);
 
