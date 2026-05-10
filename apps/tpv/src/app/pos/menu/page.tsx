@@ -206,7 +206,7 @@ export default function CatalogPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-surf-0">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-surf-0 transition-colors duration-300">
       <div className="px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 pb-1">
         <OrderTypeToggle
           active={ticket.type}
@@ -223,7 +223,7 @@ export default function CatalogPage() {
         <div className="relative">
           <Search
             size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-mut pointer-events-none"
           />
           <input
             value={searchQuery}
@@ -234,14 +234,14 @@ export default function CatalogPage() {
               else setView("categories");
             }}
             placeholder="Buscar producto..."
-            className="w-full h-11 min-h-[44px] bg-stone-900 border border-white/5 rounded-2xl pl-10 pr-10 text-[12px] font-bold text-stone-200 placeholder:text-stone-600 focus:outline-none focus:border-amber-500/40"
+            className="w-full h-11 min-h-[44px] bg-surf-2 border border-bd-main rounded-2xl pl-10 pr-10 text-[12px] font-bold text-tx-pri placeholder:text-tx-mut focus:outline-none focus:border-iris-500/40"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => { setSearchQuery(""); setView("categories"); }}
               aria-label="Limpiar búsqueda"
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 min-h-[32px] rounded-xl bg-stone-800 active:bg-stone-700 text-stone-400 flex items-center justify-center"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 min-h-[32px] rounded-xl bg-surf-3 active:bg-surf-1 text-tx-sec flex items-center justify-center"
             >
               <XIcon size={14} />
             </button>
