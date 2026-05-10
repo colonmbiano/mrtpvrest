@@ -24,6 +24,10 @@ const config: Config = {
           500: '#FF8400',
         }
       },
+      fontFamily: {
+        sans: ['var(--font-geist-sans)', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-jetbrains-mono)', 'monospace'],
+      },
       borderRadius: {
         '3xl': '24px',
         '4xl': '32px',

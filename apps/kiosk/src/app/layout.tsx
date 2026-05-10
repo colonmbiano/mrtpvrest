@@ -21,10 +21,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" data-kiosk-style="oled">
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, maximum-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, maximum-scale=1, viewport-fit=cover" />
         <script dangerouslySetInnerHTML={{ __html: preHydrate }} />
       </head>
-      <body>
+      <body className="relative overflow-hidden">
+        {/* Halo Global Background Accents */}
+        <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden bg-[#0C0C0E]">
+          <div className="absolute -top-[10%] -left-[10%] w-[70%] h-[70%] halo-glow-primary opacity-20" />
+          <div className="absolute -bottom-[10%] -right-[10%] w-[80%] h-[80%] halo-glow-success opacity-10" />
+        </div>
+
         <KioskStyleInjector />
         <AccentInjector />
         <ThemeProvider>{children}</ThemeProvider>

@@ -233,6 +233,26 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
         }
       })
 
+      // 5. Employee ADMIN default para el TPV (PIN 1234)
+      // Esto permite que el dueño pueda entrar al TPV inmediatamente tras registrarse.
+      const defaultPin = "1234";
+      const pinHash = await bcrypt.hash(defaultPin, 10);
+      const offlinePin = crypto.createHash('sha256').update(defaultPin).digest('hex');
+
+      await tx.employee.create({
+        data: {
+          locationId: loc.id,
+          name:       ownerName,
+          pin:        pinHash,
+          offlinePin: offlinePin,
+          role:       'ADMIN',
+          isActive:   true,
+          canCharge: true, canDiscount: true, canModifyTickets: true, canDeleteTickets: true,
+          canConfigSystem: true, canTakeDelivery: true, canTakeTakeout: true, canManageShifts: true,
+          canCancelItems: true, canApplyDiscounts: true, canReopenTables: true, canManageUsers: true
+        }
+      })
+
       return { tenant: t, restaurant: r, user: u, location: loc }
     })
 

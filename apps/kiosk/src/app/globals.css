@@ -1,29 +1,41 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900&family=DM+Mono:wght@400;500;700&family=Poppins:wght@400;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900&family=DM+Mono:wght@400;500;700&family=Poppins:wght@400;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=JetBrains+Mono:wght@400;700;800&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════
-   OLED PREMIUM (default)
+   HALO PREMIUM (default)
    ═══════════════════════════════════════════════════════════════ */
 :root,
-[data-kiosk-style="oled"] {
-  --bg:            #080810;
-  --surf:          #0e0e18;
-  --surf2:         #13131f;
-  --surf3:         #191928;
-  --border:        #1c1c2e;
-  --border2:       #282840;
-  --text:          #eaeaf6;
-  --muted:         #6868a0;
-  --brand-primary: #7c3aed;
-  --shadow-md:     0 4px 16px rgba(0,0,0,0.45);
-  --font-body:     'DM Sans', system-ui, sans-serif;
-  --font-mono:     'DM Mono', monospace;
-  --font-display:  'DM Sans', sans-serif;
-  --radius-sm:     8px;
-  --radius-md:     14px;
-  --radius-lg:     22px;
+[data-kiosk-style="oled"],
+[data-kiosk-style="halo"] {
+  --bg:            #0C0C0E;
+  --surf:          #1A1A1A;
+  --surf2:         #242424;
+  --surf3:         #2D2D2D;
+  --border:        rgba(255, 255, 255, 0.1);
+  --border2:       rgba(255, 255, 255, 0.15);
+  --text:          #FFFFFF;
+  --muted:         #A0A0A0;
+  --brand-primary: #FF8400;
+  --brand-success: #88D66C;
+  --shadow-md:     0 20px 50px rgba(0,0,0,0.5);
+  --font-body:     'Geist', system-ui, sans-serif;
+  --font-mono:     'JetBrains Mono', monospace;
+  --font-display:  'JetBrains Mono', sans-serif;
+  --radius-sm:     12px;
+  --radius-md:     20px;
+  --radius-lg:     32px;
+}
+
+.halo-glow-primary {
+  background: radial-gradient(circle at center, rgba(255, 132, 0, 0.15) 0%, rgba(255, 132, 0, 0) 70%);
+  filter: blur(60px);
+}
+
+.halo-glow-success {
+  background: radial-gradient(circle at center, rgba(136, 214, 108, 0.1) 0%, rgba(136, 214, 108, 0) 70%);
+  filter: blur(80px);
 }
 
 /* ═══════════════════════════════════════════════════════════════
