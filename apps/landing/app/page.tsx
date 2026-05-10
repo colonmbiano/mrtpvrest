@@ -27,7 +27,7 @@ export default function HomePage() {
           <button className="nav-link">Docs</button>
           <button className="nav-link">Blog</button>
         </div>
-        <button className="nav-cta">Empezar gratis →</button>
+        <a href="https://admin.mrtpvrest.com/register" className="nav-cta" style={{ textDecoration: 'none' }}>Empezar gratis →</a>
       </nav>
 
       <div className="hero">
@@ -45,7 +45,7 @@ export default function HomePage() {
           sincronizado.
         </p>
         <div className="hero-actions">
-          <button className="btn-primary">Registrar mi restaurante →</button>
+          <a href="https://admin.mrtpvrest.com/register" className="btn-primary" style={{ textDecoration: 'none' }}>Registrar mi restaurante →</a>
           <Link href="/demo" className="btn-ghost" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             Ver demo
           </Link>
@@ -139,7 +139,7 @@ export default function HomePage() {
         <h2>Digitaliza tu restaurante hoy</h2>
         <p>Regístrate en MRTPVREST y activa las 6 apps para tu negocio desde el primer día.</p>
         <div className="cta-actions">
-          <button className="btn-primary">Registrar mi negocio →</button>
+          <a href="https://admin.mrtpvrest.com/register" className="btn-primary" style={{ textDecoration: 'none' }}>Registrar mi negocio →</a>
           <Link href="/demo" className="btn-ghost" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             Ver demo en vivo
           </Link>
