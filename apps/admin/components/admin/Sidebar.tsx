@@ -121,9 +121,11 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
           if (currentBrandId && restaurantList.some((r) => r.id === currentBrandId)) {
             setActiveBrandId(currentBrandId);
           } else if (restaurantList.length > 0) {
-            const firstId = restaurantList[0].id;
-            localStorage.setItem("restaurantId", firstId);
-            setActiveBrandId(firstId);
+            const firstId = restaurantList[0]?.id;
+            if (firstId) {
+              localStorage.setItem("restaurantId", firstId);
+              setActiveBrandId(firstId);
+            }
           }
         } catch {
           setBrands([]);
