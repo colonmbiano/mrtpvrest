@@ -144,10 +144,13 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
             // Notificar que el contexto de sucursal ya está listo
             window.dispatchEvent(new Event('locationChanged'));
           } else if (list.length > 0) {
-            localStorage.setItem("locationId", list[0].id);
-            setActiveLocationId(list[0].id);
-            // Notificar que el contexto de sucursal ya está listo (primera carga)
-            window.dispatchEvent(new Event('locationChanged'));
+            const firstLocId = list[0]?.id;
+            if (firstLocId) {
+              localStorage.setItem("locationId", firstLocId);
+              setActiveLocationId(firstLocId);
+              // Notificar que el contexto de sucursal ya está listo (primera carga)
+              window.dispatchEvent(new Event('locationChanged'));
+            }
           }
         } catch {
           setLocations([]);
