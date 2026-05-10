@@ -184,6 +184,11 @@ router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActi
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
         ? Math.floor(seatRaw)
         : null;
+      // FASE 11 · COURSING — normalizar a uppercase y permitir solo
+      // strings sanos (1..32 chars). Valores libres pero acotados para
+      // que cocina pueda agruparlos sin sorpresas (mismo string siempre).
+      const courseRaw = typeof item.course === 'string' ? item.course.trim().toUpperCase() : null;
+      const course = courseRaw && courseRaw.length > 0 && courseRaw.length <= 32 ? courseRaw : null;
       return {
         menuItemId: item.menuItemId,
         name: menuItem?.name || 'Producto',
@@ -192,6 +197,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActi
         subtotal: unitPrice * item.quantity,
         notes: item.notes || null,
         seatNumber,
+        course,
         _modifiers: flatMods,
       };
     }));
@@ -314,6 +320,8 @@ async function addRoundHandler(req, res) {
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
         ? Math.floor(seatRaw)
         : null;
+      const courseRaw = typeof item.course === 'string' ? item.course.trim().toUpperCase() : null;
+      const course = courseRaw && courseRaw.length > 0 && courseRaw.length <= 32 ? courseRaw : null;
       return {
         menuItemId: item.menuItemId,
         name: menuItem?.name || 'Producto',
@@ -322,6 +330,7 @@ async function addRoundHandler(req, res) {
         subtotal: price * qty,
         notes: item.notes || null,
         seatNumber,
+        course,
       };
     }));
 

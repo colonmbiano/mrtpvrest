@@ -576,6 +576,11 @@ function OrderCard({
   const mins = minutesElapsed(order.createdAt, now);
   const u    = urgencyOf(mins);
   const allDone = order.items.length > 0 && order.items.every((i) => i.done);
+  const orderLabel = order.tableNumber
+    ? order.customerName
+      ? `Mesa ${order.tableNumber} · ${order.customerName}`
+      : `Mesa ${order.tableNumber}`
+    : (order.customerName || "Cliente");
 
   return (
     <article
@@ -602,7 +607,7 @@ function OrderCard({
       </header>
 
       <div className="text-[11px] font-bold text-white/55">
-        {order.tableNumber ? `Mesa ${order.tableNumber}` : (order.customerName || "Cliente")}
+        {orderLabel}
       </div>
 
       <ul className="flex flex-col gap-2">

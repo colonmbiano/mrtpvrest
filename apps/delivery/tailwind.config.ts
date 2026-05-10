@@ -12,9 +12,21 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        halo: {
+          bg: 'var(--halo-bg)',
+          card: 'var(--halo-card)',
+          primary: 'var(--halo-primary)',
+          success: 'var(--halo-success)',
+          muted: 'var(--halo-muted)',
+          border: 'var(--halo-border)',
+        },
         orange: {
-          500: '#ff5c35',
+          500: '#FF8400',
         }
+      },
+      borderRadius: {
+        '3xl': '24px',
+        '4xl': '32px',
       }
     },
   },

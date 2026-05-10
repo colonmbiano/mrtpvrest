@@ -18,12 +18,26 @@ const pinLoginLimiter = rateLimit({
 });
 
 const ROLE_DEFAULTS = {
-  ADMIN:    { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:true,  canConfigSystem:true,  canTakeDelivery:true,  canTakeTakeout:true,  canManageShifts:true  },
-  CASHIER:  { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true,  canManageShifts:true  },
-  WAITER:   { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true,  canManageShifts:false },
-  DELIVERY: { canCharge:true,  canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:true,  canTakeTakeout:false, canManageShifts:false },
-  COOK:     { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:false, canManageShifts:false },
+  ADMIN:    { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:true,  canConfigSystem:true,  canTakeDelivery:true,  canTakeTakeout:true,  canManageShifts:true,
+              canCancelItems:true,  canApplyDiscounts:true,  canReopenTables:true,  canManageUsers:true  },
+  CASHIER:  { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true,  canManageShifts:true,
+              canCancelItems:false, canApplyDiscounts:true,  canReopenTables:false, canManageUsers:false },
+  WAITER:   { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true,  canManageShifts:false,
+              canCancelItems:false, canApplyDiscounts:false, canReopenTables:false, canManageUsers:false },
+  DELIVERY: { canCharge:true,  canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:true,  canTakeTakeout:false, canManageShifts:false,
+              canCancelItems:false, canApplyDiscounts:false, canReopenTables:false, canManageUsers:false },
+  COOK:     { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:false, canManageShifts:false,
+              canCancelItems:false, canApplyDiscounts:false, canReopenTables:false, canManageUsers:false },
 };
+
+// FASE 10 · Validación de booleanos. Acepta true/false explícito o
+// undefined (deja default). Cualquier otro valor (string truthy, number,
+// objeto) se descarta para evitar inyecciones tipo `canManageUsers: "1"`
+// que Prisma aceptaría como string pero el schema es Boolean.
+function asBoolOrUndef(v) {
+  if (v === true || v === false) return v;
+  return undefined;
+}
 
 // GET /api/employees/me — devuelve sesión actual con restaurante y sucursal
 router.get('/me', authenticate, async (req, res) => {
@@ -83,6 +97,12 @@ router.get('/sync', authenticate, requireTenantAccess, async (req, res) => {
         canTakeDelivery: true,
         canTakeTakeout: true,
         canManageShifts: true,
+        // Fase 10 · permisos granulares — incluidos en el sync para que
+        // el cache offline pueda evaluarlos sin pegarle al backend.
+        canCancelItems:    true,
+        canApplyDiscounts: true,
+        canReopenTables:   true,
+        canManageUsers:    true,
       }
     });
 
@@ -93,7 +113,14 @@ router.get('/sync', authenticate, requireTenantAccess, async (req, res) => {
       if (e.canDiscount) perms.push('apply_discount');
       if (e.canModifyTickets) perms.push('void_item');
       if (e.canDeleteTickets) perms.push('void_order');
-      
+      // Fase 10 · permisos granulares mapeados a strings consumibles por
+      // el authStore (Permission union type en TPV). Ojo: estos no
+      // reemplazan a los anteriores — son nuevos.
+      if (e.canCancelItems)    perms.push('cancel_items');
+      if (e.canApplyDiscounts) perms.push('apply_discount_v2');
+      if (e.canReopenTables)   perms.push('reopen_table');
+      if (e.canManageUsers)    perms.push('manage_users');
+
       return {
         id: e.id,
         name: e.name,
@@ -168,6 +195,8 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
 
     const { name, phone, pin, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays,
       canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout, canManageShifts,
+      // Fase 10 · permisos granulares
+      canCancelItems, canApplyDiscounts, canReopenTables, canManageUsers,
       locationId: bodyLocationId } = req.body;
 
     const locationId = req.locationId || bodyLocationId;
@@ -196,14 +225,20 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
         photo: photo||null, tables: tables||[],
         scheduleStart: scheduleStart||null, scheduleEnd: scheduleEnd||null,
         scheduleDays: scheduleDays||[],
-        canCharge:        canCharge        !== undefined ? canCharge        : defaults.canCharge,
-        canDiscount:      canDiscount      !== undefined ? canDiscount      : defaults.canDiscount,
-        canModifyTickets: canModifyTickets !== undefined ? canModifyTickets : defaults.canModifyTickets,
-        canDeleteTickets: canDeleteTickets !== undefined ? canDeleteTickets : defaults.canDeleteTickets,
-        canConfigSystem:  canConfigSystem  !== undefined ? canConfigSystem  : defaults.canConfigSystem,
-        canTakeDelivery:  canTakeDelivery  !== undefined ? canTakeDelivery  : defaults.canTakeDelivery,
-        canTakeTakeout:   canTakeTakeout   !== undefined ? canTakeTakeout   : defaults.canTakeTakeout,
-        canManageShifts:  canManageShifts  !== undefined ? canManageShifts  : defaults.canManageShifts,
+        canCharge:        asBoolOrUndef(canCharge)        ?? defaults.canCharge,
+        canDiscount:      asBoolOrUndef(canDiscount)      ?? defaults.canDiscount,
+        canModifyTickets: asBoolOrUndef(canModifyTickets) ?? defaults.canModifyTickets,
+        canDeleteTickets: asBoolOrUndef(canDeleteTickets) ?? defaults.canDeleteTickets,
+        canConfigSystem:  asBoolOrUndef(canConfigSystem)  ?? defaults.canConfigSystem,
+        canTakeDelivery:  asBoolOrUndef(canTakeDelivery)  ?? defaults.canTakeDelivery,
+        canTakeTakeout:   asBoolOrUndef(canTakeTakeout)   ?? defaults.canTakeTakeout,
+        canManageShifts:  asBoolOrUndef(canManageShifts)  ?? defaults.canManageShifts,
+        // Fase 10 · permisos granulares. Default por rol (mínimo
+        // privilegio — solo ADMIN los tiene encendidos por defecto).
+        canCancelItems:    asBoolOrUndef(canCancelItems)    ?? defaults.canCancelItems    ?? false,
+        canApplyDiscounts: asBoolOrUndef(canApplyDiscounts) ?? defaults.canApplyDiscounts ?? false,
+        canReopenTables:   asBoolOrUndef(canReopenTables)   ?? defaults.canReopenTables   ?? false,
+        canManageUsers:    asBoolOrUndef(canManageUsers)    ?? defaults.canManageUsers    ?? false,
       }
     });
     const { pin: _p, offlinePin: _op, ...rest } = emp;
@@ -214,7 +249,9 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
 router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const { name, phone, pin, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays, isActive,
-      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout, canManageShifts } = req.body;
+      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout, canManageShifts,
+      // Fase 10 · permisos granulares
+      canCancelItems, canApplyDiscounts, canReopenTables, canManageUsers } = req.body;
 
     // 1. Verificar que el empleado exista en esta sucursal
     const existing = await prisma.employee.findFirst({
@@ -222,10 +259,24 @@ router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, 
     });
     if (!existing) return res.status(404).json({ error: 'Empleado no encontrado' });
 
-    // 2. Preparar los datos a actualizar
+    // 2. Preparar los datos a actualizar — sólo campos provistos en el body.
+    // Pasar `undefined` a Prisma simplemente NO actualiza el campo, así que
+    // un PUT parcial (ej. toggle de isActive) no borra los permisos previos.
     const updateData = {
       name, phone, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays,
-      canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout, canManageShifts
+      canCharge:        asBoolOrUndef(canCharge),
+      canDiscount:      asBoolOrUndef(canDiscount),
+      canModifyTickets: asBoolOrUndef(canModifyTickets),
+      canDeleteTickets: asBoolOrUndef(canDeleteTickets),
+      canConfigSystem:  asBoolOrUndef(canConfigSystem),
+      canTakeDelivery:  asBoolOrUndef(canTakeDelivery),
+      canTakeTakeout:   asBoolOrUndef(canTakeTakeout),
+      canManageShifts:  asBoolOrUndef(canManageShifts),
+      // Fase 10 · permisos granulares
+      canCancelItems:    asBoolOrUndef(canCancelItems),
+      canApplyDiscounts: asBoolOrUndef(canApplyDiscounts),
+      canReopenTables:   asBoolOrUndef(canReopenTables),
+      canManageUsers:    asBoolOrUndef(canManageUsers),
     };
 
     // Actualizar estado activo/inactivo si se envía

@@ -280,6 +280,7 @@ enum BusinessType {
   RETAIL
   BAR
   CAFE
+  FAST_FOOD
 }
 
 model Location {
@@ -295,6 +296,16 @@ model Location {
 
   // Cerebro Adaptativo: tipo de negocio por sucursal
   businessType BusinessType @default(RESTAURANT)
+
+  // FASE 13 · CAPACIDADES POR SUCURSAL
+  // Flags que activan/desactivan secciones del TPV según el modelo
+  // operativo. Defaults pensados para un restaurante tradicional —
+  // bares y antros típicamente apagan delivery/takeaway/tableMap y
+  // encienden openTabs (cuentas abiertas rápidas por nombre).
+  hasDelivery Boolean @default(true)
+  hasTakeaway Boolean @default(true)
+  hasTableMap Boolean @default(true)
+  hasOpenTabs Boolean @default(false) // Cuentas abiertas rápidas por nombre — esencial en bares
 
   // Motor de Promociones Automáticas con IA
   autoPromoEnabled   Boolean @default(false)
@@ -675,8 +686,16 @@ model OrderItem {
   // la cuenta común.
   seatNumber Int?
 
+  // FASE 11 · COURSING — Tiempo en el que se debe servir este item.
+  // Valores libres por flexibilidad ("ENTRADA", "FUERTE", "POSTRE",
+  // "BEBIDA", o customs por restaurante). Cocina puede agruparlos para
+  // emitir comandas separadas por tiempo y evitar que el plato fuerte
+  // salga antes que la entrada.
+  course String?
+
   @@index([roundId])
   @@index([seatNumber])
+  @@index([course])
   @@map("order_items")
 }
 
@@ -817,8 +836,24 @@ model TicketConfig {
   footer              String  @default("Gracias por su preferencia")
   showLogo            Boolean @default(true)
   showAddress         Boolean @default(true)
+  showPhone           Boolean @default(true)
   address             String  @default("")
   phone               String  @default("")
+  
+  // Nuevas opciones de personalización
+  paperWidth          String  @default("80mm")   // "58mm" | "80mm"
+  fontFamily          String  @default("monospace") // "monospace" | "sans-serif" | "serif"
+  fontSize            String  @default("medium")    // "small" | "medium" | "large"
+  compactMode         Boolean @default(false)
+  
+  showOrderNumber     Boolean @default(true)
+  showCustomerData    Boolean @default(true)
+  showItemsPrice      Boolean @default(true)
+
+  showWifi            Boolean @default(false)
+  wifiSsid            String?
+  wifiPassword        String?
+
   showPoints          Boolean @default(true)
   showTip             Boolean @default(true)
   tipSuggestions      String  @default("[10,15,20]")
@@ -1097,6 +1132,16 @@ model Employee {
   canTakeDelivery  Boolean @default(false)
   canTakeTakeout   Boolean @default(true)
   canManageShifts  Boolean @default(false)
+
+  // FASE 10 · RBAC GRANULAR — Permisos operativos especiales.
+  // Estos refinan el rol genérico (WAITER/ADMIN/etc.) para casos donde
+  // se necesita autorizar una operación sensible a empleados puntuales
+  // sin promoverlos a un rol superior. Default false para principio de
+  // mínimo privilegio: el admin tiene que activarlos explícitamente.
+  canCancelItems     Boolean @default(false)  // Anular productos ya enviados a cocina
+  canApplyDiscounts  Boolean @default(false)  // Aplicar cortesías o descuentos al ticket
+  canReopenTables    Boolean @default(false)  // Reabrir una cuenta cerrada
+  canManageUsers     Boolean @default(false)  // Crear/editar otros empleados
 
   shifts       EmployeeShift[]
   shiftsOpened CashShift[]     @relation("ShiftOpenedBy")

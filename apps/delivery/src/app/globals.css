@@ -3,21 +3,33 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0a0a0c;
-  --surf: #121216;
-  --surf2: #1e1e24;
-  --border: #2a2a35;
-  --text: #ffffff;
-  --text-dim: #9ca3af;
-  --brand: #ff5c35;
+  --halo-bg: #0C0C0E;
+  --halo-card: #1A1A1A;
+  --halo-primary: #FF8400;
+  --halo-success: #88D66C;
+  --halo-muted: #9ca3af;
+  --halo-border: rgba(255, 255, 255, 0.05);
 }
 
 body {
-  background-color: var(--bg);
-  color: var(--text);
+  background-color: var(--halo-bg);
+  color: #FFFFFF;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  overflow-x: hidden;
 }
 
 /* Transiciones suaves */
 *, *::before, *::after {
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+/* Efectos de Glow Radial para el fondo */
+.halo-glow-primary {
+  background: radial-gradient(circle at center, rgba(255, 132, 0, 0.15) 0%, rgba(255, 132, 0, 0) 70%);
+  filter: blur(60px);
+}
+
+.halo-glow-success {
+  background: radial-gradient(circle at center, rgba(136, 214, 108, 0.1) 0%, rgba(136, 214, 108, 0) 70%);
+  filter: blur(80px);
 }

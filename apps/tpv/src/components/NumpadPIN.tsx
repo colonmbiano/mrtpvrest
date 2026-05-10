@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Delete } from 'lucide-react';
 
 interface NumpadPINProps {
   onSubmit: (pin: string) => void | Promise<void>;
@@ -8,6 +9,23 @@ interface NumpadPINProps {
   maxDigits?: number;
 }
 
+/**
+ * Numpad responsivo para ingreso de PIN.
+ *
+ * Estrategia de tamaño:
+ *  - El contenedor llena el espacio disponible del padre, hasta 380px en
+ *    portrait y se ensancha en landscape sin perder proporción.
+ *  - Los botones usan `aspect-square` con grid 3-col para que se ajusten
+ *    al ancho del contenedor — siempre cuadrados, nunca rectangulares.
+ *  - La tipografía escala con `clamp(1.5rem, 5vmin, 2.5rem)`: el `vmin`
+ *    asegura que crezca tanto en pantallas anchas como altas pero queda
+ *    acotada para no romper layout.
+ *  - El gap también es relativo (`min(2vmin, 14px)`) para que el padding
+ *    visual sea consistente en cualquier orientación.
+ *
+ * Sin :hover por mandato Warm Tech — solo `active:scale-95` para feedback
+ * táctil real en tablets.
+ */
 export default function NumpadPIN({
   onSubmit,
   disabled = false,
@@ -15,127 +33,126 @@ export default function NumpadPIN({
 }: NumpadPINProps) {
   const [pin, setPin] = useState('');
 
-  // Play sound on keypress
   const playSound = () => {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
-
-    gain.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.1);
+    if (typeof window === 'undefined') return;
+    try {
+      const ctx = new (window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 800;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.1);
+    } catch {
+      /* algún navegador sin AudioContext habilitado — silencio */
+    }
   };
 
   const handleDigitClick = (digit: string) => {
     if (disabled || pin.length >= maxDigits) return;
-
     playSound();
-    const newPin = pin + digit;
-    setPin(newPin);
-
-    if (newPin.length === maxDigits) {
-      onSubmit(newPin);
+    const next = pin + digit;
+    setPin(next);
+    if (next.length === maxDigits) {
+      onSubmit(next);
     }
   };
 
   const handleDelete = () => {
     if (disabled) return;
-    setPin(pin.slice(0, -1));
+    setPin((p) => p.slice(0, -1));
   };
 
-  const handleOK = () => {
-    if (disabled || pin.length === 0) return;
-    onSubmit(pin);
-  };
-
-  // Estilos via CSS vars para no depender de aliases Tailwind no generados.
-  const digitBtnStyle = {
-    background: 'var(--card)',
-    color: 'var(--foreground)',
-    border: '1px solid var(--border)',
-  } as const;
-  const delBtnStyle = {
-    background: 'var(--danger-soft)',
-    color: 'var(--danger)',
-    border: '1px solid var(--danger)',
-  } as const;
-  const okBtnStyle = {
-    background: 'var(--success)',
-    color: 'var(--background)',
-    border: '1px solid var(--success)',
-  } as const;
+  // Estilos compartidos. Se inyectan via tailwind clases para evitar dependencia
+  // de variables CSS personalizadas que pudieran no estar definidas en algún build.
+  const digitClass =
+    'aspect-square w-full rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 text-white font-black tabular-nums flex items-center justify-center active:scale-95 active:bg-white/10 disabled:opacity-30 disabled:active:scale-100 transition-transform select-none';
+  const delClass =
+    'aspect-square w-full rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 font-black flex items-center justify-center active:scale-95 active:bg-red-500/20 disabled:opacity-30 disabled:active:scale-100 transition-transform select-none';
 
   return (
-    <div className="w-full">
-      {/* PIN Display */}
-      <div className="flex justify-center gap-3 mb-6">
-        {Array.from({ length: maxDigits }).map((_, i) => (
-          <div
-            key={i}
-            className="h-10 w-10 rounded-full border-2 flex items-center justify-center transition-colors"
-            style={
-              i < pin.length
-                ? { background: 'var(--brand)', borderColor: 'var(--brand)' }
-                : { background: 'transparent', borderColor: 'var(--border)' }
-            }
-          >
-            <span className="font-bold" style={{ color: 'var(--foreground)' }}>
-              {i < pin.length ? '●' : '○'}
-            </span>
-          </div>
-        ))}
+    <div
+      className="w-full max-w-[420px] mx-auto flex flex-col"
+      style={{ gap: 'min(3vmin, 18px)' }}
+    >
+      {/* PIN DOTS — escalan con el ancho del contenedor */}
+      <div
+        className="flex justify-center"
+        style={{ gap: 'min(3vmin, 14px)' }}
+      >
+        {Array.from({ length: maxDigits }).map((_, i) => {
+          const filled = i < pin.length;
+          return (
+            <div
+              key={i}
+              className="rounded-full border-2 transition-all"
+              style={{
+                width: 'clamp(14px, 4vmin, 22px)',
+                height: 'clamp(14px, 4vmin, 22px)',
+                background: filled ? '#ffb84d' : 'transparent',
+                borderColor: filled ? '#ffb84d' : 'rgba(255,255,255,0.25)',
+                boxShadow: filled
+                  ? '0 0 12px rgba(255,184,77,0.5)'
+                  : 'none',
+              }}
+            />
+          );
+        })}
       </div>
 
-      {/* Numpad Grid */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* GRID 3-COL · botones aspect-square */}
+      <div
+        className="grid grid-cols-3"
+        style={{ gap: 'min(2vmin, 14px)' }}
+      >
         {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
           <button
             key={digit}
+            type="button"
             onClick={() => handleDigitClick(digit)}
             disabled={disabled || pin.length >= maxDigits}
-            className="rounded-lg py-4 text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            style={digitBtnStyle}
+            className={digitClass}
+            style={{
+              fontSize: 'clamp(1.5rem, 5vmin, 2.25rem)',
+              minHeight: 64,
+            }}
           >
             {digit}
           </button>
         ))}
 
-        {/* DEL Button */}
-        <button
-          onClick={handleDelete}
-          disabled={disabled || pin.length === 0}
-          className="rounded-lg py-4 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          style={delBtnStyle}
-        >
-          DEL
-        </button>
+        {/* Empty placeholder · mantiene el grid alineado en la fila inferior */}
+        <div aria-hidden />
 
-        {/* 0 Button */}
+        {/* 0 */}
         <button
+          type="button"
           onClick={() => handleDigitClick('0')}
           disabled={disabled || pin.length >= maxDigits}
-          className="rounded-lg py-4 text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          style={digitBtnStyle}
+          className={digitClass}
+          style={{
+            fontSize: 'clamp(1.5rem, 5vmin, 2.25rem)',
+            minHeight: 64,
+          }}
         >
           0
         </button>
 
-        {/* OK Button */}
+        {/* DEL */}
         <button
-          onClick={handleOK}
+          type="button"
+          onClick={handleDelete}
           disabled={disabled || pin.length === 0}
-          className="rounded-lg py-4 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors col-span-1"
-          style={okBtnStyle}
+          aria-label="Borrar último dígito"
+          className={delClass}
+          style={{ minHeight: 64 }}
         >
-          OK
+          <Delete style={{ width: 'clamp(20px, 4vmin, 28px)', height: 'auto' }} />
         </button>
       </div>
     </div>

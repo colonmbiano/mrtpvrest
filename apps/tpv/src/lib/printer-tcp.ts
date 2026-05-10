@@ -234,6 +234,12 @@ export interface KitchenTicketInput {
   tableNumber?: string | null;
   customerName?: string | null;
   items: TicketItem[];
+  /** Si true, prepende un banner "*** REIMPRESION ***" al ticket para
+   *  que cocina identifique la duplicación y no prepare 2 veces. */
+  isReprint?: boolean;
+  /** Si true, marca el ticket como "PARCIAL" — se está reimprimiendo
+   *  solo un subset de los items originales. */
+  isPartial?: boolean;
 }
 
 export interface ReceiptInput {
@@ -267,6 +273,20 @@ const ORDER_TYPE_LABEL: Record<string, string> = {
 export function buildKitchenTicket(input: KitchenTicketInput): string {
   const time = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
   let d = CMD.INIT + CMD.ALIGN_CENTER;
+
+  // Banner de reimpresión — bien visible para que el cocinero NO prepare
+  // los items dos veces. Va antes del header normal y usa el modo doble
+  // ancho para asegurar legibilidad incluso en quemadores con poco contraste.
+  if (input.isReprint) {
+    d += CMD.BOLD_ON + CMD.DOUBLE_ON;
+    d += "*** REIMPRESION ***\n";
+    d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
+    if (input.isPartial) {
+      d += CMD.BOLD_ON + "(parcial)\n" + CMD.BOLD_OFF;
+    }
+    d += CMD.LINE;
+  }
+
   d += CMD.BOLD_ON + CMD.DOUBLE_ON;
   d += "COMANDA\n";
   d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
@@ -596,6 +616,78 @@ export async function printSplitReceipts(
       customerName: `Comensal ${seat.seatNumber} de ${numberOfGuests}`,
     };
     const res = await printCustomerReceipt(printers, seatInput);
+    okTotal += res.ok;
+    failedAll.push(...res.failed);
+    if (res.ok > 0) printed += 1;
+  }
+
+  return { ok: okTotal, failed: failedAll, tickets: printed };
+}
+
+/**
+ * FASE 12 · SPLIT EQUITATIVO
+ *
+ * Imprime N recibos en impresoras CASHIER, todos con la misma lista
+ * completa de items pero con el total dividido en partes iguales y un
+ * encabezado "Parte X de N" para que cada cliente sepa cuál es la suya.
+ *
+ * Útil cuando los comensales piden dividir la cuenta sin haber asignado
+ * asientos individuales a los items (lo que llamarían "vamos a partes
+ * iguales sin importar quién pidió qué").
+ *
+ * El subtotal/discount/tax/tip que muestra cada ticket también se
+ * dividen para que la suma cuadre exactamente con el input original.
+ * Si la división deja decimales fraccionarios (ej. $100/3 = 33.33...),
+ * el redondeo standard de toFixed(2) es el que se imprime — la
+ * diferencia residual se acumula en el último ticket para que la suma
+ * de los N tickets sea exactamente igual al total de la orden.
+ */
+export async function printEqualSplitReceipts(
+  printers: PrinterRecord[],
+  input: ReceiptInput,
+  parts: number
+): Promise<{ ok: number; failed: Array<{ name: string; error: string }>; tickets: number }> {
+  const safeParts = Math.max(1, Math.floor(parts || 1));
+
+  if (safeParts === 1) {
+    const res = await printCustomerReceipt(printers, input);
+    return { ...res, tickets: 1 };
+  }
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const totalCents = Math.round((input.total || 0) * 100);
+  const subtotalCents = Math.round((input.subtotal || 0) * 100);
+  const discountCents = Math.round((input.discount || 0) * 100);
+  const taxCents = Math.round((input.tax || 0) * 100);
+  const tipCents = Math.round((input.tip || 0) * 100);
+
+  // División entera por partes y guardado del residuo para sumar al
+  // último ticket — así la suma de los N tickets coincide exactamente
+  // con el total de la orden y el cajero no tiene que conciliar.
+  const splitInt = (cents: number, idx: number) => {
+    const base = Math.floor(cents / safeParts);
+    const remainder = cents - base * safeParts;
+    return idx === safeParts - 1 ? base + remainder : base;
+  };
+
+  let okTotal = 0;
+  const failedAll: Array<{ name: string; error: string }> = [];
+  let printed = 0;
+
+  for (let i = 0; i < safeParts; i += 1) {
+    const partInput: ReceiptInput = {
+      ...input,
+      // Mostramos los items completos para que el cliente vea la cuenta
+      // total — la columna del precio sigue siendo el unitario real.
+      items: input.items,
+      subtotal: round2(splitInt(subtotalCents, i) / 100),
+      discount: round2(splitInt(discountCents, i) / 100),
+      tax: round2(splitInt(taxCents, i) / 100),
+      tip: round2(splitInt(tipCents, i) / 100),
+      total: round2(splitInt(totalCents, i) / 100),
+      customerName: `Parte ${i + 1} de ${safeParts}`,
+    };
+    const res = await printCustomerReceipt(printers, partInput);
     okTotal += res.ok;
     failedAll.push(...res.failed);
     if (res.ok > 0) printed += 1;

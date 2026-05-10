@@ -171,7 +171,7 @@ export default function SetupPage() {
         { headers: { Authorization: `Bearer ${authToken}` } }
       );
 
-      const { deviceToken, deviceId } = response.data;
+      const { deviceToken, deviceId, name: deviceName } = response.data;
 
       // Mapear deviceType del UI ("CAJA"/"MESERO") a roles canónicos
       // que coinciden con Device.type del schema Prisma ("POS"/"WAITER").
@@ -182,6 +182,7 @@ export default function SetupPage() {
       localStorage.setItem('deviceToken', deviceToken);
       localStorage.setItem('deviceId', deviceId);
       localStorage.setItem('deviceRole', deviceRole);
+      if (deviceName) localStorage.setItem('deviceName', deviceName);
       localStorage.setItem('locationId', state.selectedLocation.id);
       localStorage.setItem('restaurantId', state.selectedRestaurant.id);
 

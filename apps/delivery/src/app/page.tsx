@@ -7,18 +7,14 @@ import { getApiUrl } from "@/lib/config";
 import GPSTracker from "@/components/delivery/GPSTracker";
 import { useOfflineStore } from "@/store/useOfflineStore";
 import { initBackgroundSync } from "@/lib/offline";
-import { useDeliveryStore } from "@/store/useDeliveryStore";
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING:"Pendiente", CONFIRMED:"Confirmado", PREPARING:"Preparando",
   READY:"Listo para recoger", ON_THE_WAY:"En camino", DELIVERED:"Entregado", CANCELLED:"Cancelado",
 };
-const STATUS_COLORS: Record<string, string> = {
-  PENDING:"#f59e0b", CONFIRMED:"#3b82f6", PREPARING:"#8b5cf6",
-  READY:"#22c55e", ON_THE_WAY:"#f97316", DELIVERED:"#6b7280", CANCELLED:"#ef4444",
-};
+
 const EXPENSE_CATS = [
-  { value:"GASOLINE",           label:"⛽ Gasolina",          color:"#f97316" },
+  { value:"GASOLINE",           label:"⛽ Gasolina",          color:"#FF8400" },
   { value:"EMERGENCY_PURCHASE", label:"🛒 Compra emergencia", color:"#8b5cf6" },
   { value:"OTHER",              label:"📝 Otro gasto",         color:"#6b7280" },
 ];
@@ -57,11 +53,9 @@ export default function DeliveryApp() {
   const [expenseCat, setExpenseCat]   = useState("GASOLINE");
   const [expenseAmt, setExpenseAmt]   = useState("");
   const [expenseDesc, setExpenseDesc] = useState("");
-  const [expensePhoto, setExpensePhoto] = useState<string|null>(null);
   const [savingExpense, setSavingExpense] = useState(false);
   const [orderDetail, setOrderDetail] = useState<any>(null);
 
-  const fileRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement|null>(null);
   const [isOnline, setIsOnline] = useState(true);
@@ -73,7 +67,6 @@ export default function DeliveryApp() {
     window.addEventListener('offline', () => setIsOnline(false));
     audioRef.current = new Audio('/notification.mp3');
 
-    // Iniciar sincronización en background
     initBackgroundSync();
 
     const restId = localStorage.getItem("restaurantId");
@@ -155,7 +148,10 @@ export default function DeliveryApp() {
     if (screen === "chat" && selectedOrder) {
       fetchMessages(selectedOrder.id);
     }
-  }, [screen, selectedOrder, fetchMessages]);
+    if (screen === "caja") {
+      fetchCash();
+    }
+  }, [screen, selectedOrder, fetchMessages, fetchCash]);
 
   // ── FLUJO DE SETUP (DUEÑO) ──
   async function handleSetupLogin(e: React.FormEvent) {
@@ -210,8 +206,7 @@ export default function DeliveryApp() {
     }
 
     try {
-      const { data: updated } = await api.put(`/api/delivery/${driver.id}/orders/${order.id}/status`, data);
-      setSelectedOrder(updated);
+      await api.put(`/api/delivery/${driver.id}/orders/${order.id}/status`, data);
       fetchOrders();
       if (status === "DELIVERED") setScreen("home");
     } catch (err: any) { alert(err.response?.data?.error || "Error"); }
@@ -266,20 +261,23 @@ export default function DeliveryApp() {
 
   // ── VISTA SETUP ──
   if (screen === "setup") return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-black font-syne">
+    <div className="min-h-screen flex items-center justify-center p-6 font-sans">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8"><span className="text-5xl">🚀</span><h1 className="text-2xl font-black text-white mt-4 tracking-tighter">CONFIGURAR APP</h1></div>
+        <div className="text-center mb-8">
+          <span className="text-5xl">🚀</span>
+          <h1 className="text-3xl font-bold text-white mt-4 tracking-tight font-mono">CONFIGURAR</h1>
+        </div>
         {setupStep === "auth" ? (
-          <form onSubmit={handleSetupLogin} className="space-y-4 bg-[#111] p-8 rounded-[2.5rem] border border-white/5">
-            <input type="email" value={setupEmail} onChange={e=>setSetupEmail(e.target.value)} placeholder="Email Dueño" className="w-full bg-black border border-white/10 rounded-xl p-4 text-white" />
-            <input type="password" value={setupPassword} onChange={e=>setSetupPassword(e.target.value)} placeholder="Password de Marca" className="w-full bg-black border border-white/10 rounded-xl p-4 text-white" />
-            <button className="w-full py-4 bg-white text-black font-black rounded-xl active:scale-95 transition-all">SIGUIENTE →</button>
+          <form onSubmit={handleSetupLogin} className="space-y-4 bg-halo-card p-8 rounded-4xl border border-halo-border shadow-2xl">
+            <input type="email" value={setupEmail} onChange={e=>setSetupEmail(e.target.value)} placeholder="Email Dueño" className="w-full bg-black/40 border border-halo-border rounded-2xl p-4 text-white placeholder:text-halo-muted focus:border-halo-primary outline-none transition-all" />
+            <input type="password" value={setupPassword} onChange={e=>setSetupPassword(e.target.value)} placeholder="Password de Marca" className="w-full bg-black/40 border border-halo-border rounded-2xl p-4 text-white placeholder:text-halo-muted focus:border-halo-primary outline-none transition-all" />
+            <button className="w-full py-4 bg-white text-black font-bold rounded-2xl active:scale-95 transition-all uppercase tracking-widest text-sm">SIGUIENTE →</button>
           </form>
         ) : (
-          <div className="bg-[#111] p-8 rounded-[2.5rem] space-y-3 border border-white/5">
-            <p className="text-xs text-center text-gray-500 mb-4 uppercase font-black tracking-widest">¿Qué sucursal es esta?</p>
+          <div className="bg-halo-card p-8 rounded-4xl border border-halo-border shadow-2xl space-y-3">
+            <p className="text-[10px] text-center text-halo-muted mb-4 uppercase font-bold tracking-[0.2em]">Selecciona sucursal</p>
             {locations.map(loc => (
-              <button key={loc.id} onClick={()=>finishSetup(loc)} className="w-full py-4 bg-white/5 border border-white/5 rounded-xl font-bold hover:bg-orange-500 transition-all uppercase text-xs">📍 {loc.name}</button>
+              <button key={loc.id} onClick={()=>finishSetup(loc)} className="w-full py-4 bg-white/[0.03] border border-halo-border rounded-2xl font-bold hover:bg-halo-primary hover:text-black transition-all uppercase text-xs">📍 {loc.name}</button>
             ))}
           </div>
         )}
@@ -289,66 +287,122 @@ export default function DeliveryApp() {
 
   // ── VISTA LOGIN PIN ──
   if (screen === "login") return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-black font-syne">
+    <div className="min-h-screen flex items-center justify-center p-6 font-sans">
       <div className="w-full max-w-sm text-center">
-        <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter">Delivery</h1>
-        <p className="text-gray-500 text-[9px] font-black uppercase tracking-[0.3em] mb-10 opacity-50">{localStorage.getItem("locationName")}</p>
-        <div className="bg-[#111] border border-white/5 p-8 rounded-[2.5rem] space-y-6 shadow-2xl">
-          <div className="text-center text-4xl font-black tracking-[0.5em] text-orange-500 h-12 flex items-center justify-center">
-            {"●".repeat(pin.length) || <span className="text-gray-800 text-xs tracking-normal">INGRESA TU PIN</span>}
+        <h1 className="text-5xl font-bold text-white uppercase italic tracking-tighter mb-1 font-mono">DELIVERY</h1>
+        <p className="text-halo-muted text-[10px] font-bold uppercase tracking-[0.4em] mb-10 opacity-70">{localStorage.getItem("locationName")}</p>
+        
+        <div className="bg-halo-card border border-halo-border p-8 rounded-4xl space-y-8 shadow-2xl">
+          <div className="text-center text-5xl font-mono font-bold tracking-[0.4em] text-halo-primary h-12 flex items-center justify-center">
+            {pin.length > 0 ? "●".repeat(pin.length) : <span className="text-halo-muted/30 text-xs tracking-widest font-sans">INGRESA TU PIN</span>}
           </div>
+          
           {loginError && <p className="text-xs text-red-500 font-bold">{loginError}</p>}
-          <div className="grid grid-cols-3 gap-3">
+          
+          <div className="grid grid-cols-3 gap-4">
             {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((k, i) => (
               <button key={i} onClick={() => { if(k==="⌫") setPin(p=>p.slice(0,-1)); else if(k!=="") setPin(p=>p.length < 6 ? p+k : p); }}
-                className="py-5 rounded-2xl text-xl font-black bg-white/5 hover:bg-orange-500 transition-all">{k}</button>
+                className={`py-6 rounded-3xl text-2xl font-mono font-bold transition-all ${k === "" ? "opacity-0 pointer-events-none" : "bg-white/[0.03] hover:bg-white/[0.08] active:scale-90"}`}>
+                {k}
+              </button>
             ))}
           </div>
-          <button onClick={() => handlePinLogin()} disabled={pin.length < 4} className="w-full py-5 bg-orange-500 text-white font-black rounded-2xl text-lg active:scale-95 transition-all">ENTRAR</button>
+          
+          <button onClick={() => handlePinLogin()} disabled={pin.length < 4 || loggingIn} className="w-full py-5 bg-halo-primary text-black font-bold rounded-3xl text-lg active:scale-95 transition-all disabled:opacity-50">
+            {loggingIn ? "ACCEDIENDO..." : "ENTRAR"}
+          </button>
         </div>
-        <button onClick={()=>{localStorage.clear(); window.location.reload();}} className="mt-8 text-[9px] text-gray-600 font-black uppercase underline tracking-[0.2em] opacity-40">Re-configurar terminal</button>
+        
+        <button onClick={()=>{localStorage.clear(); window.location.reload();}} className="mt-12 text-[10px] text-halo-muted font-bold uppercase underline tracking-[0.2em] opacity-40 hover:opacity-100 transition-opacity">Configuración de Terminal</button>
       </div>
     </div>
   );
 
   // ── VISTA HOME ──
   if (screen === "home") return (
-    <div className="min-h-screen bg-[#020202] text-white flex flex-col font-syne uppercase">
-      <div className="px-6 py-4 flex items-center justify-between border-b border-white/5 bg-[#0a0a0a]">
+    <div className="min-h-screen flex flex-col font-sans">
+      {/* Header */}
+      <div className="px-6 py-5 flex items-center justify-between border-b border-halo-border bg-halo-bg/80 backdrop-blur-md sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-xl border border-orange-500/20"></div>
-          <div><h1 className="font-black text-sm">{driver?.name}</h1><p className="text-[9px] text-green-500 font-black">● En Línea</p></div>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={()=>{fetchHistory(); setScreen("weekly");}} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">📊</button>
-          <button onClick={()=>setScreen("caja")} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-green-500">💵</button>
-          <button onClick={()=>{setDriver(null); setScreen("login");}} className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center text-red-500">🔒</button>
-        </div>
-      </div>
-
-      <div className="pt-4">
-        <GPSTracker driverId={driver?.id} activeOrderId={orders.find(o => o.status === "ON_THE_WAY")?.id} />
-      </div>
-
-      <div className="p-6">
-        <h2 className="text-[10px] font-black text-gray-500 tracking-widest mb-6">Pedidos por Entregar ({orders.length})</h2>
-        <div className="space-y-4">
-          {orders.map(order => (
-            <div key={order.id} className="bg-[#111] border border-white/5 rounded-[2.5rem] p-6 shadow-xl">
-              <div className="flex justify-between items-start mb-4">
-                <div><h3 className="text-xl font-black text-orange-500 leading-none">{order.orderNumber}</h3><p className="text-xs text-gray-400 mt-1">{order.customerName}</p></div>
-                <span className="text-[9px] font-black uppercase px-2 py-1 bg-white/5 rounded border border-white/5">{STATUS_LABELS[order.status]}</span>
-              </div>
-              <div className="bg-black/40 p-3 rounded-xl mb-4 text-[11px] text-gray-400 border border-white/5 italic">📍 {order.deliveryAddress}</div>
-              <div className="flex gap-2">
-                <button onClick={()=>{setSelectedOrder(order); fetchOrderDetail(order.id); setScreen("detail");}} className="flex-1 py-3 bg-white/5 rounded-xl text-[10px] font-black">DETALLE</button>
-                <button onClick={()=>{setSelectedOrder(order); setScreen("chat");}} className="px-4 py-3 bg-blue-500/10 text-blue-400 rounded-xl">💬</button>
-                {order.status === "READY" && <button onClick={()=>changeStatus(order, "ON_THE_WAY")} className="flex-1 py-3 bg-orange-500 text-white font-black rounded-xl text-[10px]">📦 SALIR</button>}
-                {order.status === "ON_THE_WAY" && <button onClick={()=>{setSelectedOrder(order); setScreen("cobrar");}} className="flex-1 py-3 bg-green-500 text-white font-black rounded-xl text-[10px]">💵 COBRAR</button>}
-              </div>
+          <div className="w-12 h-12 rounded-2xl bg-halo-primary/10 flex items-center justify-center text-2xl border border-halo-primary/20">🛵</div>
+          <div>
+            <h1 className="font-bold text-base text-white">{driver?.name}</h1>
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-halo-success animate-pulse"></span>
+              <p className="text-[10px] text-halo-success font-bold uppercase tracking-wider">En Línea</p>
             </div>
-          ))}
-          {orders.length === 0 && <div className="py-20 text-center text-gray-600 text-[10px] font-black uppercase tracking-[0.3em] opacity-30 italic">No hay entregas pendientes</div>}
+          </div>
+        </div>
+        <div className="flex gap-2.5">
+          <button onClick={()=>{fetchHistory(); setScreen("weekly");}} className="w-11 h-11 rounded-2xl bg-white/[0.03] border border-halo-border flex items-center justify-center hover:bg-white/[0.08] transition-all">📊</button>
+          <button onClick={()=>setScreen("caja")} className="w-11 h-11 rounded-2xl bg-white/[0.03] border border-halo-border flex items-center justify-center text-halo-success hover:bg-halo-success/10 transition-all">💵</button>
+          <button onClick={()=>{setDriver(null); setScreen("login");}} className="w-11 h-11 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-all">🔒</button>
+        </div>
+      </div>
+
+      <div className="flex-1 pb-10">
+        {/* Ticker / Info */}
+        <div className="px-6 py-3 bg-white/[0.02] border-b border-halo-border overflow-hidden">
+          <p className="text-[10px] font-bold text-halo-muted whitespace-nowrap animate-marquee uppercase tracking-widest italic">
+            Maneja con precaución • Revisa tus pedidos antes de salir • ¡Buen turno!
+          </p>
+        </div>
+
+        <div className="mt-4">
+          <GPSTracker driverId={driver?.id} activeOrderId={orders.find(o => o.status === "ON_THE_WAY")?.id} />
+        </div>
+
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-[11px] font-bold text-halo-muted tracking-[0.2em] uppercase">Ruta Activa ({orders.length})</h2>
+            {!isOnline && <span className="text-[9px] bg-amber-500/10 text-amber-500 px-2 py-1 rounded-full font-bold">MODO OFFLINE</span>}
+          </div>
+
+          <div className="grid gap-5">
+            {orders.map(order => (
+              <div key={order.id} className="bg-halo-card border border-halo-border rounded-4xl p-6 shadow-2xl relative overflow-hidden group">
+                <div className="absolute top-0 left-0 w-1 h-full bg-halo-primary/40"></div>
+                
+                <div className="flex justify-between items-start mb-5">
+                  <div>
+                    <h3 className="text-2xl font-mono font-bold text-halo-primary leading-none">#{order.orderNumber}</h3>
+                    <p className="text-sm font-bold text-white/90 mt-1.5">{order.customerName}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold uppercase px-3 py-1.5 rounded-xl border border-white/5 ${order.status === 'ON_THE_WAY' ? 'bg-halo-primary/10 text-halo-primary' : 'bg-white/5 text-halo-muted'}`}>
+                    {STATUS_LABELS[order.status]}
+                  </span>
+                </div>
+
+                <div className="bg-black/20 p-4 rounded-2xl mb-6 text-xs text-white/80 border border-white/5 font-medium leading-relaxed">
+                  <span className="text-halo-muted block text-[10px] uppercase font-bold mb-1 tracking-wider">Dirección de Entrega:</span>
+                  {order.deliveryAddress}
+                </div>
+
+                <div className="flex gap-3">
+                  <button onClick={()=>{setSelectedOrder(order); fetchOrderDetail(order.id); setScreen("detail");}} className="flex-1 py-4 bg-white/[0.03] border border-halo-border rounded-2xl text-[11px] font-bold uppercase tracking-widest hover:bg-white/[0.08] transition-all">Detalle</button>
+                  <button onClick={()=>{setSelectedOrder(order); setScreen("chat");}} className="px-5 py-4 bg-blue-500/5 text-blue-400 border border-blue-500/10 rounded-2xl hover:bg-blue-500/10 transition-all text-xl">💬</button>
+                  
+                  {order.status === "READY" && (
+                    <button onClick={()=>changeStatus(order, "ON_THE_WAY")} className="flex-[1.5] py-4 bg-halo-primary text-black font-bold rounded-2xl text-[11px] uppercase tracking-widest shadow-lg shadow-halo-primary/20 active:scale-95 transition-all">
+                      Recoger 📦
+                    </button>
+                  )}
+                  {order.status === "ON_THE_WAY" && (
+                    <button onClick={()=>{setSelectedOrder(order); setScreen("cobrar");}} className="flex-[1.5] py-4 bg-halo-success text-black font-bold rounded-2xl text-[11px] uppercase tracking-widest shadow-lg shadow-halo-success/20 active:scale-95 transition-all">
+                      Entregar 💵
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            
+            {orders.length === 0 && (
+              <div className="py-24 text-center">
+                <p className="text-6xl mb-6 grayscale opacity-20">🥡</p>
+                <p className="text-halo-muted text-xs font-bold uppercase tracking-[0.3em] opacity-40 italic">Esperando nuevas órdenes...</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -356,50 +410,67 @@ export default function DeliveryApp() {
 
   // ── VISTA CHAT ──
   if (screen === "chat" && selectedOrder) return (
-    <div className="min-h-screen bg-black flex flex-col font-syne">
-      <div className="px-6 py-4 flex items-center justify-between border-b border-white/5 bg-[#0a0a0a]">
-        <div className="flex items-center gap-3">
-          <button onClick={()=>setScreen("home")} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-gray-500">←</button>
-          <div><h1 className="font-black text-sm">{selectedOrder.customerName}</h1><p className="text-[9px] text-gray-500">{selectedOrder.orderNumber}</p></div>
+    <div className="min-h-screen flex flex-col font-sans">
+      <div className="px-6 py-5 flex items-center gap-4 border-b border-halo-border bg-halo-bg/80 backdrop-blur-md sticky top-0 z-10">
+        <button onClick={()=>setScreen("home")} className="w-11 h-11 rounded-2xl bg-white/[0.03] border border-halo-border flex items-center justify-center text-halo-muted hover:text-white transition-all">←</button>
+        <div>
+          <h1 className="font-bold text-base text-white">{selectedOrder.customerName}</h1>
+          <p className="text-[10px] text-halo-primary font-bold font-mono tracking-widest uppercase italic">Orden #{selectedOrder.orderNumber}</p>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      
+      <div className="flex-1 overflow-y-auto p-6 space-y-5">
         {messages.map(msg => (
           <div key={msg.id} className={`flex ${msg.fromDriver ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] p-4 rounded-2xl text-xs font-bold ${msg.fromDriver ? 'bg-orange-500 text-black' : 'bg-white/5 text-white'}`}>
+            <div className={`max-w-[85%] p-5 rounded-3xl text-sm font-medium leading-relaxed shadow-lg ${msg.fromDriver ? 'bg-halo-primary text-black rounded-tr-none' : 'bg-halo-card text-white border border-halo-border rounded-tl-none'}`}>
               {msg.message}
             </div>
           </div>
         ))}
         <div ref={messagesEndRef} />
       </div>
-      <div className="p-6 bg-[#0a0a0a] border-t border-white/5 flex gap-2">
-        <input value={newMsg} onChange={e=>setNewMsg(e.target.value)} placeholder="Escribe un mensaje..." className="flex-1 bg-black border border-white/10 rounded-xl p-4 text-xs font-bold" />
-        <button onClick={sendMessage} className="w-14 h-14 bg-orange-500 text-black rounded-xl flex items-center justify-center font-black">➤</button>
+      
+      <div className="p-6 bg-halo-bg/95 backdrop-blur-md border-t border-halo-border flex gap-3">
+        <input value={newMsg} onChange={e=>setNewMsg(e.target.value)} onKeyDown={e=>e.key==='Enter' && sendMessage()} placeholder="Escribe un mensaje..." className="flex-1 bg-black/40 border border-halo-border rounded-2xl p-4 text-sm font-medium focus:border-halo-primary outline-none transition-all" />
+        <button onClick={sendMessage} disabled={!newMsg.trim() || sending} className="w-16 h-14 bg-halo-primary text-black rounded-2xl flex items-center justify-center text-xl shadow-lg shadow-halo-primary/20 active:scale-95 transition-all disabled:opacity-50">
+          ➤
+        </button>
       </div>
     </div>
   );
 
   // ── VISTA CAJA ──
   if (screen === "caja") return (
-    <div className="min-h-screen bg-[#020202] text-white flex flex-col font-syne uppercase">
-      <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center">
-        <button onClick={()=>setScreen("home")} className="text-xs font-black text-gray-500">← VOLVER</button>
-        <h2 className="text-xs font-black">MI CAJA CHICA</h2>
-        <button onClick={()=>setScreen("gasto")} className="text-xs font-black text-orange-500">+ GASTO</button>
+    <div className="min-h-screen flex flex-col font-sans">
+      <div className="px-6 py-5 border-b border-halo-border flex justify-between items-center bg-halo-bg/80 backdrop-blur-md sticky top-0 z-10">
+        <button onClick={()=>setScreen("home")} className="text-[10px] font-bold text-halo-muted hover:text-white transition-all tracking-widest uppercase">← Volver</button>
+        <h2 className="text-xs font-bold tracking-[0.2em] uppercase">Control de Caja</h2>
+        <button onClick={()=>setScreen("gasto")} className="px-4 py-2 bg-halo-primary/10 text-halo-primary border border-halo-primary/20 rounded-xl text-[10px] font-bold uppercase tracking-wider">+ Gasto</button>
       </div>
+      
       <div className="p-6">
-        <div className="bg-white/5 border border-white/5 rounded-3xl p-8 text-center mb-8">
-          <p className="text-[9px] font-black text-gray-500 mb-2">BALANCE ACTUAL</p>
-          <p className="text-5xl font-black text-green-500">${(cashSummary?.balance || 0).toFixed(0)}</p>
+        <div className="bg-halo-card border border-halo-border rounded-4xl p-10 text-center mb-8 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-halo-success"></div>
+          <p className="text-[10px] font-bold text-halo-muted mb-3 tracking-[0.3em] uppercase">Efectivo en Mano</p>
+          <p className="text-6xl font-mono font-bold text-halo-success tracking-tighter">${(cashSummary?.balance || 0).toFixed(0)}</p>
         </div>
+        
+        <h3 className="text-[10px] font-bold text-halo-muted mb-4 tracking-widest uppercase">Últimos Movimientos</h3>
         <div className="space-y-3">
           {movements.map(m => (
-            <div key={m.id} className="bg-[#111] p-4 rounded-2xl flex justify-between items-center border border-white/5">
-              <div><p className="text-[10px] font-black">{m.description || m.category}</p><p className="text-[8px] text-gray-600">{new Date(m.createdAt).toLocaleTimeString()}</p></div>
-              <p className={`font-black ${m.type === "INCOME" ? 'text-green-500' : 'text-red-500'}`}>{m.type === "INCOME" ? '+' : '-'}${m.amount}</p>
+            <div key={m.id} className="bg-halo-card p-5 rounded-3xl flex justify-between items-center border border-halo-border hover:border-white/10 transition-all">
+              <div>
+                <p className="text-sm font-bold text-white/90">{m.description || m.category}</p>
+                <p className="text-[9px] text-halo-muted uppercase tracking-wider font-mono mt-1">{new Date(m.createdAt).toLocaleTimeString()}</p>
+              </div>
+              <p className={`text-lg font-mono font-bold ${m.type === "INCOME" ? 'text-halo-success' : 'text-red-500'}`}>
+                {m.type === "INCOME" ? '+' : '-'}${m.amount}
+              </p>
             </div>
           ))}
+          {movements.length === 0 && (
+            <div className="py-10 text-center text-halo-muted text-[10px] font-bold uppercase tracking-widest opacity-30 italic">No hay movimientos registrados</div>
+          )}
         </div>
       </div>
     </div>
@@ -407,31 +478,36 @@ export default function DeliveryApp() {
 
   // ── VISTA GASTO ──
   if (screen === "gasto") return (
-    <div className="min-h-screen bg-[#020202] text-white flex flex-col font-syne uppercase">
-      <div className="px-6 py-4 border-b border-white/5 flex items-center">
-        <button onClick={()=>setScreen("caja")} className="text-xs font-black text-gray-500 mr-4">← VOLVER</button>
-        <h2 className="text-xs font-black">REGISTRAR GASTO</h2>
+    <div className="min-h-screen flex flex-col font-sans">
+      <div className="px-6 py-5 border-b border-halo-border flex items-center bg-halo-bg/80 backdrop-blur-md sticky top-0 z-10">
+        <button onClick={()=>setScreen("caja")} className="w-11 h-11 rounded-2xl bg-white/[0.03] border border-halo-border flex items-center justify-center text-halo-muted hover:text-white mr-4 transition-all">←</button>
+        <h2 className="text-xs font-bold tracking-[0.2em] uppercase">Registrar Gasto</h2>
       </div>
-      <div className="p-6 space-y-4">
+      
+      <div className="p-6 space-y-6">
         <div>
-          <label className="text-[10px] font-black text-gray-500 mb-2 block">CATEGORÍA</label>
-          <div className="grid grid-cols-1 gap-2">
+          <label className="text-[10px] font-bold text-halo-muted mb-3 block tracking-widest uppercase">Categoría</label>
+          <div className="grid gap-2.5">
             {EXPENSE_CATS.map(c => (
-              <button key={c.value} onClick={()=>setExpenseCat(c.value)} className={`p-4 rounded-xl text-xs font-black border ${expenseCat === c.value ? 'bg-orange-500/10 border-orange-500 text-orange-500' : 'bg-[#111] border-white/5 text-gray-400'}`}>
+              <button key={c.value} onClick={()=>setExpenseCat(c.value)} className={`p-5 rounded-2xl text-xs font-bold border transition-all text-left flex justify-between items-center ${expenseCat === c.value ? 'bg-halo-primary/10 border-halo-primary text-halo-primary' : 'bg-halo-card border-halo-border text-halo-muted hover:border-white/10'}`}>
                 {c.label}
+                {expenseCat === c.value && <span className="text-lg">✓</span>}
               </button>
             ))}
           </div>
         </div>
+        
         <div>
-          <label className="text-[10px] font-black text-gray-500 mb-2 block">MONTO ($)</label>
-          <input type="number" value={expenseAmt} onChange={e=>setExpenseAmt(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-xl p-4 text-white text-xl font-black" placeholder="0.00" />
+          <label className="text-[10px] font-bold text-halo-muted mb-3 block tracking-widest uppercase">Monto ($)</label>
+          <input type="number" value={expenseAmt} onChange={e=>setExpenseAmt(e.target.value)} className="w-full bg-black/40 border border-halo-border rounded-2xl p-5 text-white text-3xl font-mono font-bold focus:border-halo-primary outline-none transition-all" placeholder="0.00" />
         </div>
+        
         <div>
-          <label className="text-[10px] font-black text-gray-500 mb-2 block">DESCRIPCIÓN</label>
-          <input type="text" value={expenseDesc} onChange={e=>setExpenseDesc(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-xl p-4 text-white text-xs" placeholder="Ej. Gasolina moto" />
+          <label className="text-[10px] font-bold text-halo-muted mb-3 block tracking-widest uppercase">Descripción</label>
+          <input type="text" value={expenseDesc} onChange={e=>setExpenseDesc(e.target.value)} className="w-full bg-black/40 border border-halo-border rounded-2xl p-5 text-white text-sm font-medium focus:border-halo-primary outline-none transition-all" placeholder="Ej. Combustible para ruta norte" />
         </div>
-        <button onClick={saveExpense} disabled={savingExpense || !expenseAmt} className="w-full py-4 bg-orange-500 text-black font-black rounded-xl active:scale-95 transition-all mt-4 disabled:opacity-50">
+        
+        <button onClick={saveExpense} disabled={savingExpense || !expenseAmt} className="w-full py-5 bg-halo-primary text-black font-bold rounded-3xl active:scale-95 transition-all mt-6 disabled:opacity-50 text-base shadow-lg shadow-halo-primary/20">
           {savingExpense ? 'GUARDANDO...' : 'GUARDAR GASTO'}
         </button>
       </div>
@@ -440,94 +516,127 @@ export default function DeliveryApp() {
 
   // ── VISTA COBRAR ──
   if (screen === "cobrar" && selectedOrder) return (
-    <div className="min-h-screen bg-[#020202] text-white flex flex-col font-syne uppercase">
-      <div className="px-6 py-4 border-b border-white/5 flex items-center">
-        <button onClick={()=>setScreen("home")} className="text-xs font-black text-gray-500 mr-4">← CANCELAR</button>
-        <h2 className="text-xs font-black">COBRAR PEDIDO</h2>
+    <div className="min-h-screen flex flex-col font-sans">
+      <div className="px-6 py-5 border-b border-halo-border flex items-center bg-halo-bg/80 backdrop-blur-md sticky top-0 z-10">
+        <button onClick={()=>setScreen("home")} className="w-11 h-11 rounded-2xl bg-white/[0.03] border border-halo-border flex items-center justify-center text-halo-muted hover:text-white mr-4 transition-all">←</button>
+        <h2 className="text-xs font-bold tracking-[0.2em] uppercase">Confirmar Cobro</h2>
       </div>
-      <div className="p-6 space-y-6">
-        <div className="bg-white/5 border border-white/5 rounded-3xl p-8 text-center">
-          <p className="text-[10px] font-black text-gray-500 mb-2">TOTAL A COBRAR</p>
-          <p className="text-5xl font-black text-white">${(selectedOrder.total || 0).toFixed(2)}</p>
+      
+      <div className="p-6 space-y-8">
+        <div className="bg-halo-card border border-halo-border rounded-4xl p-10 text-center shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-halo-primary"></div>
+          <p className="text-[10px] font-bold text-halo-muted mb-3 tracking-[0.3em] uppercase">Total del Pedido</p>
+          <p className="text-6xl font-mono font-bold text-white tracking-tighter">${(selectedOrder.total || 0).toFixed(2)}</p>
         </div>
+        
         <div>
-          <label className="text-[10px] font-black text-gray-500 mb-2 block">MÉTODO DE PAGO</label>
-          <div className="flex gap-2">
-            <button onClick={()=>setPayMethod("CASH")} className={`flex-1 py-4 rounded-xl font-black text-xs border ${payMethod === "CASH" ? 'bg-orange-500/10 border-orange-500 text-orange-500' : 'bg-[#111] border-white/5 text-gray-400'}`}>💵 EFECTIVO</button>
-            <button onClick={()=>setPayMethod("TRANSFER")} className={`flex-1 py-4 rounded-xl font-black text-xs border ${payMethod === "TRANSFER" ? 'bg-orange-500/10 border-orange-500 text-orange-500' : 'bg-[#111] border-white/5 text-gray-400'}`}>💳 TRANSFER</button>
+          <label className="text-[10px] font-bold text-halo-muted mb-4 block tracking-widest uppercase text-center">Método de Pago</label>
+          <div className="flex gap-4">
+            <button onClick={()=>setPayMethod("CASH")} className={`flex-1 py-6 rounded-3xl font-bold text-xs border transition-all flex flex-col items-center gap-3 ${payMethod === "CASH" ? 'bg-halo-primary/10 border-halo-primary text-halo-primary' : 'bg-halo-card border-halo-border text-halo-muted hover:border-white/10'}`}>
+              <span className="text-3xl">💵</span>
+              EFECTIVO
+            </button>
+            <button onClick={()=>setPayMethod("TRANSFER")} className={`flex-1 py-6 rounded-3xl font-bold text-xs border transition-all flex flex-col items-center gap-3 ${payMethod === "TRANSFER" ? 'bg-halo-primary/10 border-halo-primary text-halo-primary' : 'bg-halo-card border-halo-border text-halo-muted hover:border-white/10'}`}>
+              <span className="text-3xl">💳</span>
+              TRANSFERENCIA
+            </button>
           </div>
         </div>
+        
         {payMethod === "CASH" && (
-          <div>
-            <label className="text-[10px] font-black text-gray-500 mb-2 block">EFECTIVO RECIBIDO</label>
-            <input type="number" value={cashReceived} onChange={e=>setCashReceived(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-xl p-4 text-white text-xl font-black" placeholder="0.00" />
+          <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+            <label className="text-[10px] font-bold text-halo-muted mb-3 block tracking-widest uppercase">Efectivo Recibido</label>
+            <input type="number" value={cashReceived} onChange={e=>setCashReceived(e.target.value)} className="w-full bg-black/40 border border-halo-border rounded-2xl p-5 text-white text-3xl font-mono font-bold focus:border-halo-primary outline-none transition-all" placeholder="0.00" />
             {Number(cashReceived) > selectedOrder.total && (
-              <p className="text-xs text-green-500 font-bold mt-2">Cambio a entregar: ${(Number(cashReceived) - selectedOrder.total).toFixed(2)}</p>
+              <div className="mt-4 p-4 bg-halo-success/10 border border-halo-success/20 rounded-2xl flex justify-between items-center">
+                <span className="text-[10px] font-bold text-halo-success tracking-wider uppercase">Cambio sugerido:</span>
+                <span className="text-xl font-mono font-bold text-halo-success">${(Number(cashReceived) - selectedOrder.total).toFixed(2)}</span>
+              </div>
             )}
           </div>
         )}
-        <button onClick={()=>changeStatus(selectedOrder, "DELIVERED", payMethod)} className="w-full py-4 bg-green-500 text-black font-black rounded-xl mt-4">CONFIRMAR PAGO</button>
+        
+        <button onClick={()=>changeStatus(selectedOrder, "DELIVERED", payMethod)} className="w-full py-6 bg-halo-success text-black font-bold rounded-3xl text-lg shadow-lg shadow-halo-success/20 active:scale-95 transition-all">
+          CONFIRMAR ENTREGA ✅
+        </button>
       </div>
     </div>
   );
 
   // ── VISTA DETALLE ──
   if (screen === "detail" && selectedOrder) return (
-    <div className="min-h-screen bg-[#020202] text-white flex flex-col font-syne uppercase">
-      <div className="px-6 py-4 border-b border-white/5 flex items-center">
-        <button onClick={()=>setScreen("home")} className="text-xs font-black text-gray-500 mr-4">← VOLVER</button>
-        <h2 className="text-xs font-black">PEDIDO {selectedOrder.orderNumber}</h2>
+    <div className="min-h-screen flex flex-col font-sans">
+      <div className="px-6 py-5 border-b border-halo-border flex items-center bg-halo-bg/80 backdrop-blur-md sticky top-0 z-10">
+        <button onClick={()=>setScreen("home")} className="w-11 h-11 rounded-2xl bg-white/[0.03] border border-halo-border flex items-center justify-center text-halo-muted hover:text-white mr-4 transition-all">←</button>
+        <h2 className="text-xs font-bold tracking-[0.2em] uppercase font-mono">Orden #{selectedOrder.orderNumber}</h2>
       </div>
-      <div className="p-6 space-y-4">
-        <div className="bg-[#111] border border-white/5 rounded-2xl p-4">
-          <p className="text-xs text-gray-400">CLIENTE</p>
-          <p className="text-sm font-black">{selectedOrder.customerName}</p>
-          {selectedOrder.customerPhone && <p className="text-xs text-blue-400 mt-1">📞 {selectedOrder.customerPhone}</p>}
+      
+      <div className="p-6 space-y-5 pb-20">
+        <div className="bg-halo-card border border-halo-border rounded-3xl p-6 shadow-xl">
+          <p className="text-[10px] font-bold text-halo-muted mb-2 tracking-widest uppercase">Cliente</p>
+          <p className="text-lg font-bold text-white">{selectedOrder.customerName}</p>
+          {selectedOrder.customerPhone && (
+            <a href={`tel:${selectedOrder.customerPhone}`} className="inline-flex items-center gap-2 mt-3 text-sm font-bold text-halo-primary bg-halo-primary/5 px-4 py-2 rounded-xl border border-halo-primary/10">
+              📞 {selectedOrder.customerPhone}
+            </a>
+          )}
         </div>
-        <div className="bg-[#111] border border-white/5 rounded-2xl p-4">
-          <p className="text-xs text-gray-400">DIRECCIÓN</p>
-          <p className="text-sm font-black normal-case">{selectedOrder.deliveryAddress}</p>
+        
+        <div className="bg-halo-card border border-halo-border rounded-3xl p-6 shadow-xl">
+          <p className="text-[10px] font-bold text-halo-muted mb-2 tracking-widest uppercase">Dirección de Entrega</p>
+          <p className="text-sm font-medium text-white/90 leading-relaxed">{selectedOrder.deliveryAddress}</p>
+          <button className="w-full mt-4 py-3 bg-white/[0.03] border border-halo-border rounded-xl text-[10px] font-bold tracking-widest uppercase">Abrir en Maps 🗺️</button>
         </div>
-        <div className="bg-[#111] border border-white/5 rounded-2xl p-4">
-          <p className="text-xs text-gray-400 mb-2">PRODUCTOS</p>
-          {(orderDetail?.items || []).map((item: any, i: number) => (
-            <div key={i} className="flex justify-between text-xs mb-2">
-              <span>{item.quantity}x {item.productName}</span>
-              <span>${(item.price * item.quantity).toFixed(2)}</span>
-            </div>
-          ))}
-          <div className="border-t border-white/10 mt-2 pt-2 flex justify-between font-black">
-            <span>TOTAL</span>
-            <span className="text-orange-500">${(selectedOrder.total || 0).toFixed(2)}</span>
+        
+        <div className="bg-halo-card border border-halo-border rounded-3xl p-6 shadow-xl">
+          <p className="text-[10px] font-bold text-halo-muted mb-4 tracking-widest uppercase">Resumen del Pedido</p>
+          <div className="space-y-3">
+            {(orderDetail?.items || []).map((item: any, i: number) => (
+              <div key={i} className="flex justify-between items-center text-sm">
+                <span className="text-white/80"><span className="font-mono font-bold text-halo-primary">{item.quantity}x</span> {item.productName}</span>
+                <span className="font-mono text-white/60">${(item.price * item.quantity).toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-halo-border mt-5 pt-5 flex justify-between items-center">
+            <span className="text-xs font-bold text-halo-muted tracking-widest uppercase">Total a Cobrar</span>
+            <span className="text-3xl font-mono font-bold text-halo-success">${(selectedOrder.total || 0).toFixed(2)}</span>
           </div>
         </div>
-        <button onClick={()=>setScreen("home")} className="w-full py-4 bg-white/5 border border-white/5 rounded-xl font-black">CERRAR</button>
+        
+        <button onClick={()=>setScreen("home")} className="w-full py-4 bg-white/[0.03] border border-halo-border rounded-2xl font-bold text-xs tracking-widest uppercase">Cerrar Detalle</button>
       </div>
     </div>
   );
 
   // ── VISTA HISTORIAL SEMANAL ──
   if (screen === "weekly") return (
-    <div className="min-h-screen bg-[#020202] text-white flex flex-col font-syne uppercase">
-      <div className="px-6 py-4 border-b border-white/5 flex items-center">
-        <button onClick={()=>setScreen("home")} className="text-xs font-black text-gray-500 mr-4">← VOLVER</button>
-        <h2 className="text-xs font-black">HISTORIAL ENTREGAS</h2>
+    <div className="min-h-screen flex flex-col font-sans">
+      <div className="px-6 py-5 border-b border-halo-border flex items-center bg-halo-bg/80 backdrop-blur-md sticky top-0 z-10">
+        <button onClick={()=>setScreen("home")} className="w-11 h-11 rounded-2xl bg-white/[0.03] border border-halo-border flex items-center justify-center text-halo-muted hover:text-white mr-4 transition-all">←</button>
+        <h2 className="text-xs font-bold tracking-[0.2em] uppercase">Historial de Ruta</h2>
       </div>
+      
       <div className="p-6">
-        <div className="bg-orange-500/10 border border-orange-500/20 rounded-3xl p-6 text-center mb-6">
-          <p className="text-[10px] font-black text-orange-500 mb-1">TOTAL ENTREGADOS (HOY)</p>
-          <p className="text-4xl font-black text-white">{history.filter(h=>new Date(h.updatedAt).toDateString() === new Date().toDateString()).length}</p>
+        <div className="bg-halo-primary/5 border border-halo-primary/20 rounded-4xl p-8 text-center mb-8 shadow-xl">
+          <p className="text-[10px] font-bold text-halo-primary mb-2 tracking-[0.3em] uppercase">Entregas Hoy</p>
+          <p className="text-6xl font-mono font-bold text-white">{history.filter(h=>new Date(h.updatedAt).toDateString() === new Date().toDateString()).length}</p>
         </div>
-        <div className="space-y-3">
+        
+        <h3 className="text-[10px] font-bold text-halo-muted mb-4 tracking-widest uppercase">Registro de Órdenes</h3>
+        <div className="grid gap-3">
           {history.map(h => (
-            <div key={h.id} className="bg-[#111] border border-white/5 rounded-xl p-4 flex justify-between items-center">
+            <div key={h.id} className="bg-halo-card border border-halo-border rounded-3xl p-5 flex justify-between items-center hover:border-white/10 transition-all">
               <div>
-                <p className="font-black text-xs">{h.orderNumber}</p>
-                <p className="text-[9px] text-gray-500">{new Date(h.updatedAt).toLocaleTimeString()}</p>
+                <p className="font-mono font-bold text-sm text-white">#{h.orderNumber}</p>
+                <p className="text-[9px] text-halo-muted font-mono mt-1 uppercase">{new Date(h.updatedAt).toLocaleTimeString()}</p>
               </div>
-              <span className="text-[9px] font-black bg-white/5 px-2 py-1 rounded text-green-500">ENTREGADO</span>
+              <span className="text-[10px] font-bold bg-halo-success/10 border border-halo-success/20 px-3 py-1.5 rounded-xl text-halo-success uppercase tracking-wider">Entregado</span>
             </div>
           ))}
+          {history.length === 0 && (
+            <div className="py-16 text-center text-halo-muted text-[10px] font-bold uppercase tracking-widest opacity-30 italic">No hay entregas registradas hoy</div>
+          )}
         </div>
       </div>
     </div>
