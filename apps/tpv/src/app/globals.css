@@ -272,3 +272,32 @@ html, body {
 /* Barra inferior tabs estación KDS y similares con fondo oscuro fijo
    no se tocan: KDS app NO cambia de modo (siempre dark, alto contraste
    para cocina). Esto solo aplica al TPV. */
+
+
+/* ────────────────────────────────────────────────────────────────────
+   A7 · Touch targets — Material Design 3 / Android Guidelines.
+   Mínimo 44×44 CSS px (≈8mm físicos) para todo control accionable
+   en plataforma táctil. Ayuda al cajero a no fallar taps en chips
+   pequeños, ✕ de modales, controles ± de cantidad, etc.
+
+   Aplicamos solo cuando @media (pointer: coarse) está activo, lo cual
+   detecta Android/iOS/tablet sin afectar mouse en escritorio (donde
+   un botón de 28px sí se puede clickear con precisión).
+   ──────────────────────────────────────────────────────────────────── */
+@media (pointer: coarse) {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  a[role="button"]:not(:disabled),
+  input[type="button"]:not(:disabled),
+  input[type="submit"]:not(:disabled) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  /* Inputs de texto/numéricos también en 44px para el teclado virtual. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  select,
+  textarea {
+    min-height: 44px;
+  }
+}
+

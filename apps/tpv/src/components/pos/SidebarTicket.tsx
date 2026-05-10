@@ -1,10 +1,14 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X, MapPin } from "lucide-react";
 import TicketLine from "@/components/pos/TicketLine";
-import PaymentModal from "@/components/pos/PaymentModal";
+import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
+import DiscountModal from "@/components/pos/DiscountModal";
+import { useAuthStore } from "@/store/authStore";
 import { useTicketStore } from "@/store/ticketStore";
+import { useTpvConfig } from "@/hooks/useTpvConfig";
+import { hapticMedium, hapticSuccess, hapticError } from "@/lib/haptics";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -37,8 +41,42 @@ function readSidebarWidth(): number {
 export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanMode = false }: Props) {
   const [showPayment, setShowPayment] = useState(false);
   const [showTables, setShowTables] = useState(false);
+  const [showDiscount, setShowDiscount] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [sidebarWidthPx, setSidebarWidthPx] = useState<number>(380);
+
+  // Permiso para aplicar descuento sin PIN. WAITER/CASHIER no tienen
+  // `apply_discount` por default; admin/manager sí. Si el rol actual no
+  // tiene el permiso, el modal pide autorización vía ManagerOverride.
+  const currentEmployee = useAuthStore((s) => s.currentEmployee);
+  const canApplyDiscount =
+    !!currentEmployee?.permissions?.includes("apply_discount");
+
+  // Sugerencias de propina vienen de la config remota (tpvConfig.extra) si
+  // están presentes; caso contrario default [10,15,20] por consistencia
+  // con el printer service y el schema de Restaurant.
+  const tpvConfig = useTpvConfig();
+  const tipSuggestions = useMemo<number[]>(() => {
+    const raw = (tpvConfig?.extra as Record<string, unknown> | undefined)?.tipSuggestions;
+    if (Array.isArray(raw)) {
+      const nums = raw
+        .map((n) => Number(n))
+        .filter((n) => Number.isFinite(n) && n > 0 && n <= 50);
+      if (nums.length > 0) return nums;
+    }
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const nums = parsed
+            .map((n: unknown) => Number(n))
+            .filter((n: number) => Number.isFinite(n) && n > 0 && n <= 50);
+          if (nums.length > 0) return nums;
+        }
+      } catch { /* ignore */ }
+    }
+    return [10, 15, 20];
+  }, [tpvConfig]);
 
   // Aplica preset del localStorage al montar y escucha cambios desde
   // ConfigMenu (que dispara `sidebar-width-changed` después de write).
@@ -58,6 +96,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     changeItemQty,
     clearActiveItems,
     updateTicket,
+    setItemNotes,
   } = useTicketStore();
   
   const ticket = getActiveTicket();
@@ -137,9 +176,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const handleSendToKitchen = async () => {
     if (ticket.items.length === 0) {
       toast.error("El ticket está vacío");
+      hapticError();
       return;
     }
-    
+    hapticMedium();
+
     try {
       const orderData = {
         orderType: ticket.type,
@@ -184,10 +225,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     }
   };
 
-  const handleProcessPayment = async (method: string) => {
+  const handleProcessPayment = async (method: string, tip?: PaymentTip) => {
     if (ticket.items.length === 0) return;
     setProcessing(true);
     try {
+      const tipAmount = tip?.amount ?? 0;
       const orderData = {
         orderType: ticket.type,
         items: ticket.items.map(item => ({
@@ -203,14 +245,21 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         customerPhone: ticket.phone || null,
         subtotal,
         discount: ticket.discount,
-        total,
+        total: total + tipAmount,
         paymentMethod: method,
         status: "DELIVERED",
+        // Persiste la propina como nota auditable. El backend no tiene un
+        // campo `tip` en Order todavía, pero conservamos el dato en notas
+        // para reportes y auditoría sin migración de schema.
+        notes: tip && tip.percent > 0
+          ? `Propina ${tip.percent}% ($${tipAmount.toFixed(2)})`
+          : undefined,
       };
 
       const { data: order } = await api.post("/api/orders/tpv", orderData);
       await api.put(`/api/orders/${order.id}/payment`, { paymentMethod: method });
       toast.success("Cobro procesado");
+      hapticSuccess();
       // Capturar contexto antes de limpiar el ticket activo.
       const printItems = buildTicketItems();
       const ticketContext = {
@@ -223,8 +272,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       const totals = {
         subtotal,
         discount: ticket.discount,
-        total,
+        total: total + tipAmount,
         paymentMethod: method,
+        tipPercent: tip?.percent ?? 0,
+        tipAmount,
       };
       clearActiveItems();
       setShowPayment(false);
@@ -399,9 +450,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               name={item.name}
               quantity={item.quantity}
               price={item.price}
+              notes={item.notes}
               modifiers={item.modifiers?.map(m => ({ name: m.name, priceAdd: m.priceAdd }))}
               onIncrease={() => changeItemQty(idx, 1)}
               onDecrease={() => changeItemQty(idx, -1)}
+              onUpdateNotes={(n) => setItemNotes(idx, n)}
             />
           ))
         )}
@@ -446,9 +499,21 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                <UtensilsCrossed size={14} /> Cocina
              </button>
              <button
+               onClick={() => {
+                 if (ticket.items.length === 0) {
+                   toast.error("Agrega items antes de aplicar descuento");
+                   return;
+                 }
+                 setShowDiscount(true);
+               }}
                className="h-12 rounded-xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex flex-col items-center justify-center gap-0.5"
              >
-               <span className="text-sm leading-none font-black">%</span> Descuento
+               <span className="text-sm leading-none font-black">
+                 {ticket.discount > 0 ? "✓" : "%"}
+               </span>
+               {ticket.discount > 0
+                 ? `−$${ticket.discount.toFixed(0)}`
+                 : "Descuento"}
              </button>
              <button
               onClick={() => closeTicket(activeIndex)}
@@ -465,6 +530,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           orderNumber={String(ticket.id)}
           total={total}
           discount={ticket.discount}
+          tipSuggestions={tipSuggestions}
           items={ticket.items.map((i) => ({
             name: i.name,
             quantity: i.quantity,
@@ -481,6 +547,22 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             updateTicket({ tableId: t.id, tableName: t.name, table: t.name });
             setShowTables(false);
             toast.success(`Mesa ${t.name} asignada`);
+          }}
+        />
+
+        <DiscountModal
+          isOpen={showDiscount}
+          onClose={() => setShowDiscount(false)}
+          subtotal={subtotal}
+          requiresOverride={!canApplyDiscount}
+          onApply={(type, value) => {
+            const amount = type === "percent" ? subtotal * (value / 100) : value;
+            updateTicket({ discount: amount, discountType: type });
+            toast.success(
+              `Descuento aplicado: $${amount.toFixed(2)}${
+                type === "percent" ? ` (${value}%)` : ""
+              }`,
+            );
           }}
         />
       </div>

@@ -12,7 +12,7 @@ import type {
 interface ModifierPickerModalProps {
   product: Product;
   onClose: () => void;
-  onConfirm: (mods: ModifierSelection[], unitExtra: number) => void;
+  onConfirm: (mods: ModifierSelection[], unitExtra: number, notes?: string) => void;
 }
 
 function computeUnitExtra(
@@ -52,6 +52,10 @@ export default function ModifierPickerModal({
     }
   );
 
+  // Nota libre para cocina (ej. "sin cebolla", "término medio"). Vive en
+  // el item ya creado y la imprime el printer service junto al modificador.
+  const [notes, setNotes] = useState("");
+
   // Reset cuando cambia el producto
   useEffect(() => {
     const init: Record<string, Modifier[]> = {};
@@ -60,6 +64,7 @@ export default function ModifierPickerModal({
       init[g.id] = g.multiSelect ? defaults : defaults.slice(0, 1);
     }
     setSelections(init);
+    setNotes("");
   }, [groups]);
 
   function toggle(group: ModifierGroup, mod: Modifier) {
@@ -117,7 +122,7 @@ export default function ModifierPickerModal({
         });
       }
     }
-    onConfirm(flat, unitExtra);
+    onConfirm(flat, unitExtra, notes.trim() || undefined);
   }
 
   return (
@@ -142,6 +147,9 @@ export default function ModifierPickerModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Nota para cocina — siempre visible al final del scroll. La
+              cocina la imprime en la comanda resaltada y el cajero puede
+              dejarla vacía para items sin instrucciones especiales. */}
           {groups.map((g) => {
             const selected = selections[g.id] || [];
             const selectedIds = new Set(selected.map((m) => m.id));
@@ -212,6 +220,28 @@ export default function ModifierPickerModal({
               </div>
             );
           })}
+
+          <div className="space-y-2">
+            <h3 className="text-[14px] font-black text-tx-pri">
+              Nota para cocina
+              <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-tx-mut">
+                Opcional
+              </span>
+            </h3>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value.slice(0, 200))}
+              placeholder="Sin cebolla, término medio, alergia a..."
+              rows={2}
+              maxLength={200}
+              className="w-full px-3 py-2.5 rounded-lg text-[13px] resize-none outline-none bg-surf-2 border border-bd text-tx-pri placeholder:text-tx-mut focus:border-iris-500"
+            />
+            {notes.length > 0 && (
+              <p className="text-[10px] font-bold text-tx-mut text-right tabular-nums">
+                {notes.length}/200
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="px-5 py-4 border-t border-bd bg-surf-2/50 shrink-0 flex flex-col gap-3">
