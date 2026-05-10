@@ -23,7 +23,7 @@ import {
 import SidebarTicket from "@/components/pos/SidebarTicket";
 import MainSidebar from "@/components/pos/MainSidebar";
 import ShiftModal from "@/components/admin/ShiftModal";
-import { useThemeStore } from "@/store/themeStore";
+import { useThemeStore, type Palette } from "@/store/themeStore";
 import NotificationsPanel from "@/components/pos/NotificationsPanel";
 import { useNotifications, useNotifStore } from "@/hooks/useNotifications";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
@@ -532,7 +532,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         onClose={() => setShowMenu(false)}
         onLogout={logout}
         currentTheme={palette}
-        onThemeChange={setPalette}
+        onThemeChange={(p) => setPalette(p as Palette)}
         isDark={mode === "dark"}
         onToggleMode={toggleMode}
       />

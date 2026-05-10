@@ -94,6 +94,68 @@
     --shadow-md: 0 8px 16px -4px rgba(0, 0, 0, 0.1);
     --shadow-lg: 0 16px 32px -8px rgba(0, 0, 0, 0.15);
   }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * MODO CLARO — overrides de utilidades hardcodeadas
+ * El POS tiene muchas clases tipo bg-[#0a0a0c] / text-white / border-white/5
+ * pegadas en JSX. Cuando el cajero activa el modo claro, esas clases ganan
+ * por especificidad sobre las CSS vars y dejan zonas oscuras sueltas. Estos
+ * overrides con !important fuerzan la inversión consistente.
+ *
+ * Fuera de @layer base para que !important pegue por encima de utilities.
+ * ──────────────────────────────────────────────────────────────────────── */
+[data-mode="light"] .bg-\[\#0a0a0c\],
+[data-mode="light"] .bg-\[\#0C0C0E\],
+[data-mode="light"] .bg-\[\#0c0c0e\] {
+  background-color: var(--bg) !important;
+}
+
+[data-mode="light"] .bg-\[\#121316\],
+[data-mode="light"] .bg-\[\#131316\],
+[data-mode="light"] .bg-\[\#1a1b1f\],
+[data-mode="light"] .bg-\[\#1c1c1f\] {
+  background-color: var(--surface-1) !important;
+}
+
+[data-mode="light"] .bg-\[\#22242a\],
+[data-mode="light"] .bg-\[\#2a2c33\] {
+  background-color: var(--surface-2) !important;
+}
+
+[data-mode="light"] .text-white,
+[data-mode="light"] .text-zinc-100,
+[data-mode="light"] .text-zinc-200 {
+  color: var(--text-primary) !important;
+}
+
+[data-mode="light"] .text-zinc-300,
+[data-mode="light"] .text-zinc-400 {
+  color: var(--text-secondary) !important;
+}
+
+[data-mode="light"] .text-zinc-500,
+[data-mode="light"] .text-zinc-600,
+[data-mode="light"] .text-zinc-700 {
+  color: var(--text-muted) !important;
+}
+
+[data-mode="light"] .border-white\/5,
+[data-mode="light"] .border-white\/10,
+[data-mode="light"] .border-white\/20 {
+  border-color: var(--border) !important;
+}
+
+/* El acento (--brand) NO se atenúa en modo claro — sigue siendo el mismo
+ * amber/cian/lima vibrante. Esto preserva la identidad de marca y la
+ * legibilidad de CTAs primarios sobre fondos blancos.
+ *
+ * Si más adelante se quieren tintes específicos por paleta en modo claro
+ * (ej. amber más oscuro para mejor contraste sobre blanco), añadir reglas
+ * combinadas [data-mode="light"][data-theme="amber"] acá.
+ */
+
+@layer base {
 
   [data-theme="green"] {
     --brand: #10b981;
@@ -113,14 +175,6 @@
     --brand-fg: #ffffff;
   }
 
-  [data-theme="orange"] {
-    --brand: #ff5c35;
-    --brand-hover: #ff7c5c;
-    --brand-active: #e64d26;
-    --brand-soft: rgba(255, 92, 53, 0.14);
-    --brand-glow: rgba(255, 92, 53, 0.35);
-    --brand-fg: #ffffff;
-  }
 }
 
 * { box-sizing: border-box; }
