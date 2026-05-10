@@ -48,9 +48,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // Permiso para aplicar descuento sin PIN. WAITER/CASHIER no tienen
   // `apply_discount` por default; admin/manager sí. Si el rol actual no
   // tiene el permiso, el modal pide autorización vía ManagerOverride.
-  const currentEmployee = useAuthStore((s) => s.currentEmployee);
+  const employee = useAuthStore((s) => s.employee);
   const canApplyDiscount =
-    !!currentEmployee?.permissions?.includes("apply_discount");
+    !!employee?.permissions?.includes("apply_discount");
 
   // Sugerencias de propina vienen de la config remota (tpvConfig.extra) si
   // están presentes; caso contrario default [10,15,20] por consistencia
