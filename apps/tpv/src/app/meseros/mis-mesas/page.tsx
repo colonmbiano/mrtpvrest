@@ -92,7 +92,7 @@ export default function WaiterMyTablesPage() {
           return (
             <button
               key={table.id}
-              onClick={() => router.push(`/meseros/${table.id}`)}
+              onClick={() => { window.location.href = `/meseros/${table.id}/`; }}
               className="w-full p-5 rounded-3xl bg-surf-1 border border-bd flex gap-5 text-left transition-all active:scale-[0.98] relative overflow-hidden group"
             >
               <div className={`absolute left-0 top-0 bottom-0 w-1 ${isLong ? "bg-iris-500" : "bg-info"}`} />
