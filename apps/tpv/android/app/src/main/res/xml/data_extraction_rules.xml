@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+: reglas de backup/transferencia de datos.
+  Excluimos TODO el dataDir del WebView para que ni Auto Backup (Google Drive)
+  ni device-to-device transfer restauren cookies/localStorage del TPV. Sin
+  esto, una reinstalación "limpia" reaparecía con el cookie tpv-device-linked
+  intacto y mandaba al PIN sin pasar por /setup.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+    </device-transfer>
+</data-extraction-rules>

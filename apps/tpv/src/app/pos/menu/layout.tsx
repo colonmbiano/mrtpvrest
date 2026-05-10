@@ -530,7 +530,14 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       <ConfigMenu
         isOpen={showMenu}
         onClose={() => setShowMenu(false)}
-        onLogout={logout}
+        onLogout={() => {
+          // Bloquear Terminal: cerrar sesión Y mandar al lock screen.
+          // Antes solo limpiaba state y el cajero quedaba en /pos/menu sin
+          // empleado activo, sin pedirle PIN para volver a entrar.
+          logout();
+          setShowMenu(false);
+          router.replace("/locked");
+        }}
         currentTheme={palette}
         onThemeChange={(p) => setPalette(p as Palette)}
         isDark={mode === "dark"}

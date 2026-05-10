@@ -100,6 +100,29 @@ export default function LoginStep({ onSubmit, loading, error }: LoginStepProps) 
       >
         {loading ? 'Entrando…' : 'Continuar'}
       </button>
+
+      {/* Registro: para tablets que descargan el TPV de la Play Store sin
+        * cuenta previa. Abrimos admin.mrtpvrest.com/register en el browser
+        * del sistema (Capacitor intercepta target="_system" y lanza Chrome
+        * en lugar de navegar dentro del webview).
+        */}
+      <div className="flex flex-col items-center gap-2 -mt-3">
+        <span
+          className="text-xs"
+          style={{ color: 'var(--foreground-secondary)', fontFamily: 'var(--font-secondary)' }}
+        >
+          ¿Aún no tienes cuenta?
+        </span>
+        <a
+          href="https://admin.mrtpvrest.com/register"
+          target="_system"
+          rel="noopener noreferrer"
+          className="text-sm font-bold uppercase tracking-[0.15em] underline underline-offset-4"
+          style={{ color: 'var(--primary)' }}
+        >
+          Registrar mi negocio
+        </a>
+      </div>
     </form>
   );
 }
