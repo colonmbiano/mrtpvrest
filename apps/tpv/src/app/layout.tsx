@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import ModalRoot from "@/components/tpv/ModalRoot";
 import SyncInitializer from "@/components/SyncInitializer";
+import OtaUpdater from "@/components/OtaUpdater";
 
 // Las fuentes se cargan con <link> en runtime en lugar de next/font/google
 // porque next/font descarga al BUILD time, y el runner de Android APK
@@ -40,6 +41,7 @@ export default function RootLayout({
         }}
       >
         <SyncInitializer />
+        <OtaUpdater />
         <ModalRoot>{children}</ModalRoot>
       </body>
     </html>

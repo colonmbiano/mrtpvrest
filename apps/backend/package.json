@@ -16,6 +16,7 @@
       "@google/generative-ai": "^0.24.1",
       "@mrtpvrest/database": "workspace:*",
       "@prisma/client": "^7.8.0",
+      "@supabase/supabase-js": "^2.45.0",
       "axios": "^1.6.7",
       "bcryptjs": "^2.4.3",
       "bull": "^4.12.2",
