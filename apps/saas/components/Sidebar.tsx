@@ -81,10 +81,11 @@ const negoItems = [
   { href: "/facturacion", label: "Facturación", icon: <IconReceipt /> },
 ];
 const sysItems = [
-  { href: "/tpv-config", label: "TPV Config", icon: <IconTerminal /> },
-  { href: "/logs",       label: "Logs",       icon: <IconTerminal /> },
-  { href: "/errors",     label: "Errores",    icon: <IconAlert /> },
-  { href: "/api-keys",   label: "API Keys",   icon: <IconKey /> },
+  { href: "/tpv-config",  label: "TPV Config",  icon: <IconTerminal /> },
+  { href: "/tpv-updates", label: "TPV Updates", icon: <IconTerminal /> },
+  { href: "/logs",        label: "Logs",        icon: <IconTerminal /> },
+  { href: "/errors",      label: "Errores",     icon: <IconAlert /> },
+  { href: "/api-keys",    label: "API Keys",    icon: <IconKey /> },
 ];
 
 export default function Sidebar() {

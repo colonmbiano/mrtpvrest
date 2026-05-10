@@ -1,0 +1,115 @@
+name: TPV OTA Release
+
+# Auto-publica un nuevo bundle live-update del TPV (Capacitor) cada vez que
+# se pushean cambios al directorio apps/tpv/ en master. También se puede
+# lanzar manualmente desde la UI del SaaS (botón → /api/ota/trigger-build →
+# workflow_dispatch).
+#
+# Versionado:
+#   - MAJOR.MINOR vienen de apps/tpv/package.json
+#   - PATCH = cuenta de commits del repo que tocaron apps/tpv/
+#   Resultado monotónico (ej. 0.1.42) sin necesidad de commit-back.
+#
+# Secrets requeridos:
+#   OTA_ADMIN_TOKEN — JWT de un usuario SUPER_ADMIN (lo emite el backend).
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/tpv/**'
+      - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Canal de release
+        type: choice
+        options: [production, beta, dev]
+        default: production
+      notes:
+        description: Notas del release (opcional)
+        required: false
+
+concurrency:
+  group: tpv-ota-release-${{ github.event.inputs.channel || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build + publish OTA bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout (full history para git rev-list)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+          run_install: false
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Compute version (major.minor desde package.json + patch=commits)
+        id: ver
+        run: |
+          MAJOR_MINOR=$(node -p "require('./apps/tpv/package.json').version.split('.').slice(0,2).join('.')")
+          PATCH=$(git rev-list --count HEAD -- apps/tpv/)
+          VERSION="${MAJOR_MINOR}.${PATCH}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "::notice::TPV OTA version=$VERSION"
+
+      - name: Build TPV (Next static export para Capacitor)
+        env:
+          CAPACITOR_BUILD: 'true'
+          NEXT_PUBLIC_API_URL: https://api.mrtpvrest.com
+        run: pnpm --filter @mrtpvrest/tpv build
+
+      - name: Zip out/
+        run: |
+          cd apps/tpv
+          zip -qr /tmp/bundle.zip out/
+          ls -lh /tmp/bundle.zip
+
+      - name: Resolver canal y notas
+        id: meta
+        run: |
+          CHANNEL="${{ github.event.inputs.channel }}"
+          [ -z "$CHANNEL" ] && CHANNEL="production"
+          NOTES="${{ github.event.inputs.notes }}"
+          if [ -z "$NOTES" ]; then
+            # En push automático, usa el subject del commit como notes.
+            NOTES=$(git log -1 --pretty=%s)
+          fi
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
+
+      - name: Publish a /api/ota/publish
+        env:
+          OTA_ADMIN_TOKEN: ${{ secrets.OTA_ADMIN_TOKEN }}
+        run: |
+          if [ -z "$OTA_ADMIN_TOKEN" ]; then
+            echo "::error::Falta el secret OTA_ADMIN_TOKEN. Configúralo en Settings → Secrets → Actions."
+            exit 1
+          fi
+          curl -fsSL -X POST https://api.mrtpvrest.com/api/ota/publish \
+            -H "Authorization: Bearer $OTA_ADMIN_TOKEN" \
+            -F "appId=com.mrtpvrest.tpv" \
+            -F "version=${{ steps.ver.outputs.version }}" \
+            -F "channel=${{ steps.meta.outputs.channel }}" \
+            -F "notes=${{ steps.meta.outputs.notes }}" \
+            -F "bundle=@/tmp/bundle.zip" \
+            | tee /tmp/publish.json
+          echo "::notice::Publicado v${{ steps.ver.outputs.version }} en canal ${{ steps.meta.outputs.channel }}"
