@@ -1,6 +1,6 @@
 "use client";
-import React from "react";
-import { Plus } from "lucide-react";
+import React, { useRef } from "react";
+import { Plus, Star } from "lucide-react";
 
 export interface ProductCardProps {
   id: string;
@@ -9,15 +9,17 @@ export interface ProductCardProps {
   imageUrl?: string | null;
   category?: string;
   promoPrice?: number | null;
+  isAvailable?: boolean;
+  isFavorite?: boolean;
   onClick?: () => void;
+  onLongPress?: () => void;
   currency?: string;
 }
 
-// Paleta de colores Warm Tech para productos sin imagen
 const TILE_PALETTE = [
-  "#121316", // Base Obsidian
-  "#1a1b1f", // Surface 2
-  "#22242a", // Surface 3
+  "#121316",
+  "#1a1b1f",
+  "#22242a",
 ];
 
 function hashColor(seed: string) {
@@ -26,25 +28,68 @@ function hashColor(seed: string) {
   return TILE_PALETTE[h % TILE_PALETTE.length];
 }
 
+const LONG_PRESS_MS = 500;
+
 const ProductCard: React.FC<ProductCardProps> = ({
   id,
   name,
   price,
   imageUrl,
   promoPrice,
+  isAvailable = true,
+  isFavorite = false,
   onClick,
+  onLongPress,
   currency = "$",
 }) => {
   const hasPromo = promoPrice && promoPrice < price;
   const displayPrice = hasPromo ? promoPrice : price;
   const tileColor = hashColor(id || name);
 
+  // Long-press: si el dedo se mantiene LONG_PRESS_MS sin moverse mucho ni
+  // soltarse, dispara onLongPress y suprime el onClick. Útil para abrir
+  // el menú contextual (toggle disponibilidad, marcar favorito).
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longFired = useRef(false);
+
+  const cancel = () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  };
+
+  const handlePointerDown = () => {
+    longFired.current = false;
+    if (!onLongPress) return;
+    cancel();
+    timer.current = setTimeout(() => {
+      longFired.current = true;
+      onLongPress();
+    }, LONG_PRESS_MS);
+  };
+
+  const handleClick = () => {
+    cancel();
+    if (longFired.current) {
+      longFired.current = false;
+      return;
+    }
+    onClick?.();
+  };
+
   return (
     <button
-      onClick={onClick}
-      className="group relative flex flex-col text-left rounded-2xl overflow-hidden p-3 min-h-[120px] transition-all active:scale-[0.98] border border-white/5 shadow-xl"
+      onPointerDown={handlePointerDown}
+      onPointerUp={cancel}
+      onPointerLeave={cancel}
+      onPointerCancel={cancel}
+      onClick={handleClick}
+      disabled={!isAvailable}
+      className="group relative flex flex-col text-left rounded-2xl overflow-hidden p-3 min-h-[120px] transition-all active:scale-[0.98] border border-white/5 shadow-xl disabled:active:scale-100"
       style={{
         background: imageUrl ? "#0a0a0c" : tileColor,
+        opacity: isAvailable ? 1 : 0.55,
       }}
     >
       {imageUrl && (
@@ -66,6 +111,21 @@ const ProductCard: React.FC<ProductCardProps> = ({
       {hasPromo && (
         <span className="relative z-10 self-start px-2 py-0.5 rounded-md text-[9px] font-black tracking-widest bg-amber-500 text-black shadow-lg">
           PROMO
+        </span>
+      )}
+
+      {isFavorite && (
+        <span
+          aria-label="Favorito"
+          className="absolute z-10 left-2 top-2 w-6 h-6 rounded-full bg-amber-500/90 text-black flex items-center justify-center shadow-lg"
+        >
+          <Star size={12} strokeWidth={2.5} fill="currentColor" />
+        </span>
+      )}
+
+      {!isAvailable && (
+        <span className="absolute z-10 inset-x-2 top-2 px-2 py-0.5 rounded-md text-[9px] font-black tracking-widest bg-red-500/90 text-white text-center">
+          AGOTADO
         </span>
       )}
 

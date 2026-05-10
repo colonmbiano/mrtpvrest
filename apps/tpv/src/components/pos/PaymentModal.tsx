@@ -45,6 +45,13 @@ export interface PaymentItem {
   seatNumber?: number | null;
 }
 
+export interface PaymentTip {
+  /** Porcentaje aplicado (10/15/20...). 0 = sin propina. */
+  percent: number;
+  /** Monto en moneda calculado a partir del subtotal. */
+  amount: number;
+}
+
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -53,7 +60,9 @@ interface PaymentModalProps {
   total: number;
   items: PaymentItem[];
   discount?: number;
-  onConfirm: (method: string) => void;
+  /** Sugerencias de propina en porcentaje. Default [10,15,20]. */
+  tipSuggestions?: number[];
+  onConfirm: (method: string, tip?: PaymentTip) => void;
   /** Opcional · invocado en lugar de onConfirm cuando el usuario
    *  presiona Confirmar en modo split. Si no se provee, usa onConfirm. */
   onConfirmSplit?: (
@@ -63,7 +72,8 @@ interface PaymentModalProps {
       parts: number;
       perPart?: number;
       bySeat?: { seatNumber: number | null; subtotal: number }[];
-    }
+    },
+    tip?: PaymentTip,
   ) => void;
 }
 
@@ -85,12 +95,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   total,
   items,
   discount = 0,
+  tipSuggestions,
   onConfirm,
   onConfirmSplit,
 }) => {
   const [tab, setTab] = useState<Tab>("TOTAL");
   const [splitMode, setSplitMode] = useState<SplitMode>("EQUAL");
   const [method, setMethod] = useState<string>("CARD");
+  const [tipPercent, setTipPercent] = useState<number>(0);
   const [cashReceived, setCashReceived] = useState<number>(total);
   const [equalParts, setEqualParts] = useState<number>(2);
 
@@ -105,10 +117,23 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       ? calcDiscount
       : 0;
 
-  // Re-sync cashReceived al total cuando cambie (open/close).
+  // Sugerencias de propina — fallback al default del backend (10/15/20).
+  const tipSuggested = tipSuggestions && tipSuggestions.length > 0
+    ? tipSuggestions
+    : [10, 15, 20];
+
+  const tipAmount = total * (tipPercent / 100);
+  const grandTotal = total + tipAmount;
+
+  // Re-sync cashReceived al total (incluyendo propina) cuando cambia.
   React.useEffect(() => {
-    if (isOpen) setCashReceived(total);
-  }, [isOpen, total]);
+    if (isOpen) setCashReceived(grandTotal);
+  }, [isOpen, grandTotal]);
+
+  // Reset propina al abrir.
+  React.useEffect(() => {
+    if (isOpen) setTipPercent(0);
+  }, [isOpen]);
 
   // FASE 12 · grouping por asiento. Items sin seat → "Compartidos" que
   // se prorratean entre los asientos detectados. Si no hay ningún seat
@@ -157,64 +182,72 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 
   if (!isOpen) return null;
 
-  const change = Math.max(0, cashReceived - total);
+  const change = Math.max(0, cashReceived - grandTotal);
 
   // Ajustes de partes iguales (clamp 1-20).
   const incParts = () => setEqualParts((n) => Math.min(20, n + 1));
   const decParts = () => setEqualParts((n) => Math.max(1, n - 1));
-  const perPart = total / Math.max(1, equalParts);
+  const perPart = grandTotal / Math.max(1, equalParts);
 
   const cashSuggestions = useMemo(
     () =>
       Array.from(
         new Set([
-          total,
-          Math.ceil(total / 50) * 50,
-          Math.ceil(total / 100) * 100,
-          Math.ceil(total / 100) * 100 + 100,
+          grandTotal,
+          Math.ceil(grandTotal / 50) * 50,
+          Math.ceil(grandTotal / 100) * 100,
+          Math.ceil(grandTotal / 100) * 100 + 100,
           200,
           500,
           1000,
         ])
       )
-        .filter((v) => v >= total)
+        .filter((v) => v >= grandTotal)
         .sort((a, b) => a - b)
         .slice(0, 8),
-    [total]
+    [grandTotal]
   );
+
+  const tipPayload: PaymentTip | undefined = tipPercent > 0
+    ? { percent: tipPercent, amount: tipAmount }
+    : undefined;
 
   const handleConfirm = () => {
     if (tab === "TOTAL") {
-      onConfirm(method);
+      onConfirm(method, tipPayload);
       return;
     }
     // SPLIT
     if (onConfirmSplit) {
       if (splitMode === "EQUAL") {
-        onConfirmSplit(method, {
-          kind: "EQUAL",
-          parts: equalParts,
-          perPart,
-        });
+        onConfirmSplit(
+          method,
+          { kind: "EQUAL", parts: equalParts, perPart },
+          tipPayload,
+        );
       } else {
-        onConfirmSplit(method, {
-          kind: "BY_SEAT",
-          parts:
-            seatBuckets.seats.length +
-            (seatBuckets.shared.subtotal > 0 && !seatBuckets.hasSeats ? 1 : 0),
-          bySeat: [
-            ...seatBuckets.seats.map((s) => ({
-              seatNumber: s.seatNumber,
-              subtotal: s.subtotal,
-            })),
-            ...(seatBuckets.shared.subtotal > 0 && !seatBuckets.hasSeats
-              ? [{ seatNumber: null, subtotal: seatBuckets.shared.subtotal }]
-              : []),
-          ],
-        });
+        onConfirmSplit(
+          method,
+          {
+            kind: "BY_SEAT",
+            parts:
+              seatBuckets.seats.length +
+              (seatBuckets.shared.subtotal > 0 && !seatBuckets.hasSeats ? 1 : 0),
+            bySeat: [
+              ...seatBuckets.seats.map((s) => ({
+                seatNumber: s.seatNumber,
+                subtotal: s.subtotal,
+              })),
+              ...(seatBuckets.shared.subtotal > 0 && !seatBuckets.hasSeats
+                ? [{ seatNumber: null, subtotal: seatBuckets.shared.subtotal }]
+                : []),
+            ],
+          },
+          tipPayload,
+        );
       }
     } else {
-      onConfirm(method);
+      onConfirm(method, tipPayload);
     }
   };
 
@@ -288,14 +321,19 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 cashReceived={cashReceived}
                 onCashChange={setCashReceived}
                 cashSuggestions={cashSuggestions}
-                total={total}
+                total={grandTotal}
                 change={change}
+                tipSuggestions={tipSuggested}
+                tipPercent={tipPercent}
+                tipAmount={tipAmount}
+                onTipChange={setTipPercent}
+                baseTotal={total}
               />
             ) : (
               <SplitView
                 mode={splitMode}
                 onModeChange={setSplitMode}
-                total={total}
+                total={grandTotal}
                 equalParts={equalParts}
                 onIncParts={incParts}
                 onDecParts={decParts}
@@ -303,6 +341,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 seatBuckets={seatBuckets}
                 method={method}
                 onMethodChange={setMethod}
+                tipSuggestions={tipSuggested}
+                tipPercent={tipPercent}
+                tipAmount={tipAmount}
+                onTipChange={setTipPercent}
+                baseTotal={total}
               />
             )}
           </div>
@@ -352,6 +395,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                     </span>
                   </div>
                 )}
+                {tipPercent > 0 && (
+                  <div className="flex justify-between items-baseline text-[#ffb84d] text-[12px] font-bold">
+                    <span>Propina ({tipPercent}%)</span>
+                    <span className="tabular-nums">
+                      + ${tipAmount.toFixed(2)}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -360,7 +411,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 Total
               </span>
               <span className="tabular-nums text-4xl font-black text-white tracking-tight">
-                ${total.toFixed(2)}
+                ${grandTotal.toFixed(2)}
               </span>
             </div>
           </aside>
@@ -466,6 +517,11 @@ function TotalView({
   cashSuggestions,
   total,
   change,
+  tipSuggestions,
+  tipPercent,
+  tipAmount,
+  onTipChange,
+  baseTotal,
 }: {
   method: string;
   onMethodChange: (m: string) => void;
@@ -474,9 +530,22 @@ function TotalView({
   cashSuggestions: number[];
   total: number;
   change: number;
+  tipSuggestions: number[];
+  tipPercent: number;
+  tipAmount: number;
+  onTipChange: (pct: number) => void;
+  baseTotal: number;
 }) {
   return (
     <div className="space-y-7">
+      <TipPicker
+        suggestions={tipSuggestions}
+        selected={tipPercent}
+        amount={tipAmount}
+        baseTotal={baseTotal}
+        onChange={onTipChange}
+      />
+
       <MethodGrid method={method} onChange={onMethodChange} />
 
       <div className="rounded-3xl bg-white/5 border border-white/10 p-6">
@@ -594,6 +663,11 @@ function SplitView({
   seatBuckets,
   method,
   onMethodChange,
+  tipSuggestions,
+  tipPercent,
+  tipAmount,
+  onTipChange,
+  baseTotal,
 }: {
   mode: SplitMode;
   onModeChange: (m: SplitMode) => void;
@@ -609,9 +683,22 @@ function SplitView({
   };
   method: string;
   onMethodChange: (m: string) => void;
+  tipSuggestions: number[];
+  tipPercent: number;
+  tipAmount: number;
+  onTipChange: (pct: number) => void;
+  baseTotal: number;
 }) {
   return (
     <div className="space-y-6">
+      <TipPicker
+        suggestions={tipSuggestions}
+        selected={tipPercent}
+        amount={tipAmount}
+        baseTotal={baseTotal}
+        onChange={onTipChange}
+      />
+
       {/* SUB-TABS */}
       <div className="grid grid-cols-2 gap-2 p-1 bg-white/5 border border-white/10 rounded-2xl">
         <button
@@ -812,6 +899,73 @@ function SeatSplit({
         <span className="tabular-nums text-[15px] font-black text-white">
           ${total.toFixed(2)}
         </span>
+      </div>
+    </div>
+  );
+}
+
+function TipPicker({
+  suggestions,
+  selected,
+  amount,
+  baseTotal,
+  onChange,
+}: {
+  suggestions: number[];
+  selected: number;
+  amount: number;
+  baseTotal: number;
+  onChange: (pct: number) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-3">
+        <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+          Propina (opcional)
+        </span>
+        {selected > 0 && (
+          <span className="text-[11px] font-black text-[#ffb84d] tabular-nums">
+            +${amount.toFixed(2)}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        <button
+          type="button"
+          onClick={() => onChange(0)}
+          className={`min-h-[56px] h-14 rounded-2xl border font-black tabular-nums text-[11px] uppercase tracking-widest active:scale-95 transition-transform ${
+            selected === 0
+              ? "bg-white/15 border-white/30 text-white"
+              : "bg-white/5 border-white/10 text-white/60"
+          }`}
+        >
+          Sin propina
+        </button>
+        {suggestions.map((pct) => {
+          const tip = baseTotal * (pct / 100);
+          const active = selected === pct;
+          return (
+            <button
+              key={pct}
+              type="button"
+              onClick={() => onChange(active ? 0 : pct)}
+              className={`min-h-[56px] h-14 rounded-2xl border flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-transform ${
+                active
+                  ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                  : "bg-white/5 border-white/10 text-white"
+              }`}
+            >
+              <span className="font-black text-[14px]">{pct}%</span>
+              <span
+                className={`text-[10px] tabular-nums ${
+                  active ? "text-[#0C0C0E]/80" : "text-white/40"
+                }`}
+              >
+                +${tip.toFixed(0)}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

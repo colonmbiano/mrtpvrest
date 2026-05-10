@@ -16,10 +16,41 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Configuración de firma — el keystore puede venir de:
+    //   1) variables de entorno (CI, vía GitHub Secrets) → KEYSTORE_PATH,
+    //      KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+    //   2) gradle.properties locales (override del desarrollador)
+    //   3) Sin keystore → release queda sin firma de producción y se cae en
+    //      assembleRelease, lo cual es intencional para no shipear builds
+    //      sin firmar.
+    signingConfigs {
+        release {
+            def ksPath = System.getenv("KEYSTORE_PATH") ?: project.findProperty("MRTPV_KEYSTORE_PATH")
+            def ksPassword = System.getenv("KEYSTORE_PASSWORD") ?: project.findProperty("MRTPV_KEYSTORE_PASSWORD")
+            def alias = System.getenv("KEY_ALIAS") ?: project.findProperty("MRTPV_KEY_ALIAS")
+            def keyPassword = System.getenv("KEY_PASSWORD") ?: project.findProperty("MRTPV_KEY_PASSWORD")
+
+            if (ksPath && file(ksPath).exists() && ksPassword && alias && keyPassword) {
+                storeFile file(ksPath)
+                storePassword ksPassword
+                keyAlias alias
+                keyPassword keyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+
+            // Solo aplicar la firma si efectivamente hay keystore configurado.
+            // Si no, el build de release queda sin signingConfig — assembleRelease
+            // fallará explícitamente, como debe ser.
+            def cfg = signingConfigs.release
+            if (cfg.storeFile != null) {
+                signingConfig cfg
+            }
         }
     }
 }

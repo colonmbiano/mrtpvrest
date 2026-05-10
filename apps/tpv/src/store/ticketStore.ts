@@ -40,6 +40,7 @@ export type Product = {
   imageUrl?: string | null;
   isPromo?: boolean;
   isFavorite?: boolean;
+  isAvailable?: boolean;
   promoPrice?: number | null;
   modifierGroups?: ModifierGroup[];
 };
@@ -99,6 +100,7 @@ interface TicketState {
   changeItemQty: (index: number, delta: number) => void;
   removeItem: (index: number) => void;
   clearActiveItems: () => void;
+  setItemNotes: (index: number, notes: string) => void;
 }
 
 const emptyTicket = (
@@ -234,6 +236,21 @@ export const useTicketStore = create<TicketState>()((set, get) => ({
       tickets: state.tickets.map((t, i) =>
         i === state.activeIndex ? { ...t, items: [] } : t
       ),
+    }));
+  },
+
+  setItemNotes: (index, notes) => {
+    set((state) => ({
+      tickets: state.tickets.map((t, i) => {
+        if (i !== state.activeIndex) return t;
+        const trimmed = notes.trim().slice(0, 200);
+        return {
+          ...t,
+          items: t.items.map((ci, idx) =>
+            idx === index ? { ...ci, notes: trimmed || undefined } : ci,
+          ),
+        };
+      }),
     }));
   },
 }));

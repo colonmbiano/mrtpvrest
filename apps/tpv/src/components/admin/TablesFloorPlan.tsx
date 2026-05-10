@@ -24,6 +24,27 @@ type ActiveOrder = {
   _count?: { items: number };
 };
 
+// Umbral de minutos para colorear una mesa OCCUPIED por tiempo abierto.
+// El color del borde y el badge se ajustan según en qué bucket cae la
+// orden activa, dándole al gerente una señal visual de mesas que llevan
+// demasiado tiempo (ej. esperan cuenta, sobremesa larga, etc.).
+const TIME_BUCKETS = [
+  { min: 0,  max: 30, color: "#22c55e", label: "0-30m" },
+  { min: 30, max: 60, color: "#eab308", label: "30-60m" },
+  { min: 60, max: 90, color: "#f97316", label: "60-90m" },
+  { min: 90, max: Infinity, color: "#a855f7", label: "90m+" },
+] as const;
+
+function bucketForMinutes(min: number) {
+  return TIME_BUCKETS.find((b) => min >= b.min && min < b.max) ?? TIME_BUCKETS[TIME_BUCKETS.length - 1];
+}
+
+function minutesSince(iso: string): number {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return 0;
+  return Math.max(0, (Date.now() - t) / 60000);
+}
+
 type Zone = {
   id: string;
   name: string;
@@ -71,6 +92,9 @@ export default function TablesFloorPlan({
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false); // hay cambios de layout sin guardar
   const [saving, setSaving] = useState(false);
+  // Tick para forzar re-render cada minuto y refrescar los colores por
+  // tiempo. No re-fetchea, sólo recalcula los buckets en cliente.
+  const [, setNowTick] = useState(0);
 
   // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
@@ -124,6 +148,13 @@ export default function TablesFloorPlan({
       setEditing(false);
       setDirty(false);
     }
+  }, [open]);
+
+  // Refresca los colores de tiempo cada 60s mientras el modal está abierto.
+  useEffect(() => {
+    if (!open) return;
+    const id = setInterval(() => setNowTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
   }, [open]);
 
   if (!open) return null;
@@ -311,6 +342,16 @@ export default function TablesFloorPlan({
                 const sty = STATUS_COLORS[t.status];
                 const selectable =
                   mode === "pick" ? t.status === "AVAILABLE" : true;
+                // Mesa OCCUPIED → coloreamos por tiempo abierto. El borde
+                // de la tarjeta y el badge "Ocupada" pasan al color del
+                // bucket (verde 0-30m, amarillo 30-60m, naranja 60-90m,
+                // morado 90+m). Para AVAILABLE/DIRTY conservamos el ring
+                // del estado.
+                const minutesOpen = t.status === "OCCUPIED" && t.activeOrder
+                  ? Math.floor(minutesSince(t.activeOrder.createdAt))
+                  : null;
+                const timeBucket = minutesOpen != null ? bucketForMinutes(minutesOpen) : null;
+                const ring = timeBucket?.color ?? sty.ring;
                 return (
                   <div
                     key={t.id}
@@ -326,17 +367,19 @@ export default function TablesFloorPlan({
                       width: TILE,
                       height: TILE,
                       background: `linear-gradient(145deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04)), ${sty.bg}`,
-                      border: `2px solid ${sty.ring}`,
+                      border: `2px solid ${ring}`,
                       cursor: editing ? "grab" : selectable ? "pointer" : "not-allowed",
                       opacity: selectable ? 1 : 0.55,
-                      boxShadow: dragId === t.id ? `0 18px 44px ${sty.ring}66` : `0 14px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.14)`,
+                      boxShadow: dragId === t.id ? `0 18px 44px ${ring}66` : `0 14px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.14)`,
                       touchAction: editing ? "none" : "auto",
                       backdropFilter: "blur(14px)",
                     }}
                     title={
                       mode === "pick" && !selectable
                         ? `${t.name} no disponible (${sty.label})`
-                        : t.name
+                        : minutesOpen != null
+                          ? `${t.name} · ${minutesOpen}m abierta`
+                          : t.name
                     }
                   >
                     {renameId === t.id ? (
@@ -350,14 +393,14 @@ export default function TablesFloorPlan({
                           if (e.key === "Escape") setRenameId(null);
                         }}
                         className="w-[80%] bg-black/40 text-white text-xs text-center rounded outline-none px-1 py-0.5 border"
-                        style={{ borderColor: sty.ring }}
+                        style={{ borderColor: ring }}
                       />
                     ) : (
                       <>
                         <span className="table-glyph mb-1" aria-hidden="true" />
                         <div className="font-black text-sm text-white">{t.name}</div>
-                        <div className="text-[10px] font-bold mt-0.5" style={{ color: sty.ring }}>
-                          {sty.label}
+                        <div className="text-[10px] font-bold mt-0.5" style={{ color: ring }}>
+                          {minutesOpen != null ? `${minutesOpen}m abierta` : sty.label}
                         </div>
                         {t.activeOrder && t.status === "OCCUPIED" && (
                           <div className="text-[10px] mt-0.5" style={{ color: "rgba(255,255,255,0.7)" }}>
@@ -518,11 +561,32 @@ export default function TablesFloorPlan({
               </button>
             </>
           ) : (
-            <span className="text-[11px]" style={{ color: "var(--muted)" }}>
-              {mode === "pick"
-                ? "Toca una mesa libre para iniciar la cuenta."
-                : "Toca una mesa sucia para marcarla como limpia. Activa 'Editar layout' para mover/agregar/borrar."}
-            </span>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-[11px]" style={{ color: "var(--muted)" }}>
+                {mode === "pick"
+                  ? "Toca una mesa libre para iniciar la cuenta."
+                  : "Toca una mesa sucia para marcarla como limpia. Activa 'Editar layout' para mover/agregar/borrar."}
+              </span>
+              {/* Leyenda de buckets de tiempo — visible cuando hay mesas
+                  ocupadas para que el gerente entienda los colores. */}
+              {tables.some((t) => t.status === "OCCUPIED") && (
+                <div className="flex items-center gap-2 ml-auto">
+                  {TIME_BUCKETS.map((b) => (
+                    <span
+                      key={b.label}
+                      className="flex items-center gap-1 text-[10px] font-bold"
+                      style={{ color: b.color }}
+                    >
+                      <span
+                        className="inline-block w-2 h-2 rounded-full"
+                        style={{ background: b.color }}
+                      />
+                      {b.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

@@ -395,6 +395,138 @@ async function addRoundHandler(req, res) {
 router.post('/:id/items',  authenticate, requireTenantAccess, requireAdmin, validateBody(addItemsSchema), addRoundHandler);
 router.post('/:id/rounds', authenticate, requireTenantAccess, requireAdmin, validateBody(addItemsSchema), addRoundHandler);
 
+// ── PUT /items/:itemId — Editar cantidad/notas de un item de orden abierta
+// Sólo admin/manager. Bloquea ediciones si la orden está cerrada o pagada.
+// Recalcula subtotal del item y totales de la orden, y emite order:updated
+// por socket para refresco en vivo de admin/cocina.
+router.put('/items/:itemId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const { quantity, notes } = req.body || {};
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+
+    const orderItem = await prisma.orderItem.findUnique({
+      where: { id: req.params.itemId },
+      include: { order: true, modifiers: true },
+    });
+    if (!orderItem) return res.status(404).json({ error: 'Item no encontrado' });
+    if (orderItem.order.restaurantId !== restaurantId) {
+      return res.status(403).json({ error: 'Item de otro restaurante' });
+    }
+    if (orderItem.order.locationId && req.locationId && orderItem.order.locationId !== req.locationId) {
+      return res.status(403).json({ error: 'Item de otra sucursal' });
+    }
+    if (['DELIVERED', 'CANCELLED'].includes(orderItem.order.status)) {
+      return res.status(400).json({ error: 'La orden ya está cerrada' });
+    }
+    if (orderItem.order.paymentStatus === 'PAID') {
+      return res.status(400).json({ error: 'La orden ya fue pagada' });
+    }
+
+    // Validar inputs. Si no viene quantity/notes válido, no-op para ese campo.
+    const newQty = quantity !== undefined
+      ? Math.max(1, Math.min(99, parseInt(quantity, 10) || orderItem.quantity))
+      : orderItem.quantity;
+    const newNotes = notes !== undefined
+      ? (typeof notes === 'string' ? notes.slice(0, 200) : null)
+      : orderItem.notes;
+
+    // Subtotal del item = price unitario × quantity. price ya incluye los
+    // modificadores aplicados al item (ver lógica de POST /tpv).
+    const newSubtotal = orderItem.price * newQty;
+
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      await tx.orderItem.update({
+        where: { id: req.params.itemId },
+        data: { quantity: newQty, subtotal: newSubtotal, notes: newNotes },
+      });
+
+      const remaining = await tx.orderItem.findMany({
+        where: { orderId: orderItem.orderId },
+        select: { subtotal: true },
+      });
+      const newOrderSubtotal = remaining.reduce((s, i) => s + (i.subtotal || 0), 0);
+      const discount = orderItem.order.discount || 0;
+      const deliveryFee = orderItem.order.deliveryFee || 0;
+      const newTotal = newOrderSubtotal - discount + deliveryFee;
+
+      return tx.order.update({
+        where: { id: orderItem.orderId },
+        data: { subtotal: newOrderSubtotal, total: newTotal },
+        include: {
+          items: { include: { menuItem: { select: { name: true, categoryId: true } }, modifiers: true } },
+          rounds: { orderBy: { roundNumber: 'asc' } },
+          table: true,
+        },
+      });
+    });
+
+    const io = req.app.get('io');
+    if (io && updatedOrder.locationId) {
+      io.to(`restaurant:${restaurantId}:location:${updatedOrder.locationId}:admins`)
+        .emit('order:updated', updatedOrder);
+    }
+
+    res.json(updatedOrder);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /items/:itemId — Eliminar item de orden abierta
+// Misma protección que PUT. Recalcula totales tras la eliminación.
+router.delete('/items/:itemId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+
+    const orderItem = await prisma.orderItem.findUnique({
+      where: { id: req.params.itemId },
+      include: { order: true },
+    });
+    if (!orderItem) return res.status(404).json({ error: 'Item no encontrado' });
+    if (orderItem.order.restaurantId !== restaurantId) {
+      return res.status(403).json({ error: 'Item de otro restaurante' });
+    }
+    if (orderItem.order.locationId && req.locationId && orderItem.order.locationId !== req.locationId) {
+      return res.status(403).json({ error: 'Item de otra sucursal' });
+    }
+    if (['DELIVERED', 'CANCELLED'].includes(orderItem.order.status)) {
+      return res.status(400).json({ error: 'La orden ya está cerrada' });
+    }
+    if (orderItem.order.paymentStatus === 'PAID') {
+      return res.status(400).json({ error: 'La orden ya fue pagada' });
+    }
+
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      await tx.orderItem.delete({ where: { id: req.params.itemId } });
+
+      const remaining = await tx.orderItem.findMany({
+        where: { orderId: orderItem.orderId },
+        select: { subtotal: true },
+      });
+      const newSubtotal = remaining.reduce((s, i) => s + (i.subtotal || 0), 0);
+      const discount = orderItem.order.discount || 0;
+      const deliveryFee = orderItem.order.deliveryFee || 0;
+      const newTotal = newSubtotal - discount + deliveryFee;
+
+      return tx.order.update({
+        where: { id: orderItem.orderId },
+        data: { subtotal: newSubtotal, total: newTotal },
+        include: {
+          items: { include: { menuItem: { select: { name: true, categoryId: true } }, modifiers: true } },
+          rounds: { orderBy: { roundNumber: 'asc' } },
+          table: true,
+        },
+      });
+    });
+
+    const io = req.app.get('io');
+    if (io && updatedOrder.locationId) {
+      io.to(`restaurant:${restaurantId}:location:${updatedOrder.locationId}:admins`)
+        .emit('order:updated', updatedOrder);
+    }
+
+    res.json(updatedOrder);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── GESTIÓN DE PAGOS Y CUENTAS ──
 
 // Helper: cuando un dine-in se paga, libera la mesa (OCCUPIED → DIRTY) para
@@ -510,6 +642,102 @@ router.put('/:id/payment', authenticate, requireTenantAccess, validateBody(updat
     res.json(order);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// ── POST /:id/transfer-to/:targetId — Transferir todos los items
+// de una orden abierta a otra orden abierta. La orden origen se cierra
+// (CANCELLED) y, si era dine-in, libera la mesa. Solo admin/manager.
+//
+// /merge es alias del mismo handler. Diferencia conceptual:
+//   transfer → mover toda una cuenta a otra mesa
+//   merge    → fusionar dos cuentas existentes (mismo flujo)
+// Ambos tratan los items de la origen como ítems del destino.
+async function transferOrderHandler(req, res) {
+  try {
+    const { id, targetId } = req.params;
+    if (id === targetId) return res.status(400).json({ error: 'Origen y destino son la misma orden' });
+
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+
+    const [source, target] = await Promise.all([
+      prisma.order.findUnique({ where: { id }, include: { items: true } }),
+      prisma.order.findUnique({ where: { id: targetId }, include: { items: true } }),
+    ]);
+    if (!source) return res.status(404).json({ error: 'Orden origen no encontrada' });
+    if (!target) return res.status(404).json({ error: 'Orden destino no encontrada' });
+    if (source.restaurantId !== restaurantId || target.restaurantId !== restaurantId) {
+      return res.status(403).json({ error: 'Las órdenes pertenecen a otro restaurante' });
+    }
+    if (source.locationId && target.locationId && source.locationId !== target.locationId) {
+      return res.status(400).json({ error: 'Las órdenes son de sucursales distintas' });
+    }
+    for (const o of [source, target]) {
+      if (['DELIVERED', 'CANCELLED'].includes(o.status)) {
+        return res.status(400).json({ error: `Orden ${o.id === id ? 'origen' : 'destino'} cerrada` });
+      }
+      if (o.paymentStatus === 'PAID') {
+        return res.status(400).json({ error: `Orden ${o.id === id ? 'origen' : 'destino'} ya pagada` });
+      }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Mover items origen → destino. Usamos updateMany para no perder
+      // modificadores ni roundId/seatNumber (todos viven en OrderItem).
+      await tx.orderItem.updateMany({
+        where: { orderId: id },
+        data: { orderId: targetId },
+      });
+
+      // Recalcular totales del destino con todos los items consolidados.
+      const items = await tx.orderItem.findMany({
+        where: { orderId: targetId },
+        select: { subtotal: true },
+      });
+      const newSubtotal = items.reduce((s, i) => s + (i.subtotal || 0), 0);
+      const discount = target.discount || 0;
+      const deliveryFee = target.deliveryFee || 0;
+      const newTotal = newSubtotal - discount + deliveryFee;
+
+      const updatedTarget = await tx.order.update({
+        where: { id: targetId },
+        data: { subtotal: newSubtotal, total: newTotal },
+        include: {
+          items: { include: { menuItem: { select: { name: true, categoryId: true } }, modifiers: true } },
+          rounds: { orderBy: { roundNumber: 'asc' } },
+          table: true,
+        },
+      });
+
+      // Cancelar origen (no la borramos para preservar audit trail) y
+      // liberar mesa si era dine-in.
+      await tx.order.update({
+        where: { id },
+        data: {
+          status: 'CANCELLED',
+          notes: `${source.notes ? source.notes + '\n' : ''}[Transferida a orden ${target.orderNumber || targetId.slice(-6)}]`,
+        },
+      });
+      if (source.tableId && source.orderType === 'DINE_IN') {
+        await tx.table.update({
+          where: { id: source.tableId },
+          data: { status: 'AVAILABLE' },
+        }).catch(() => { /* mesa eliminada o ya liberada */ });
+      }
+
+      return updatedTarget;
+    });
+
+    const io = req.app.get('io');
+    if (io && result.locationId) {
+      io.to(`restaurant:${restaurantId}:location:${result.locationId}:admins`)
+        .emit('order:updated', result);
+    }
+
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+router.post('/:id/transfer-to/:targetId', authenticate, requireTenantAccess, requireAdmin, transferOrderHandler);
+router.post('/:id/merge/:targetId',       authenticate, requireTenantAccess, requireAdmin, transferOrderHandler);
 
 // ── PUT /:id/void-payment — Anular un cobro (solo ADMIN) ──────────────
 // Revierte un pago marcado como PAID: deja la orden como pendiente de cobro

@@ -1,6 +1,6 @@
 "use client";
-import React from "react";
-import { X, Plus, Minus } from "lucide-react";
+import React, { useState } from "react";
+import { X, Plus, Minus, MessageSquare, Check } from "lucide-react";
 
 interface TicketLineProps {
   id?: string;
@@ -13,6 +13,7 @@ interface TicketLineProps {
   onIncrease?: () => void;
   onDecrease?: () => void;
   onRemove?: () => void;
+  onUpdateNotes?: (notes: string) => void;
   currency?: string;
 }
 
@@ -26,11 +27,27 @@ const TicketLine: React.FC<TicketLineProps> = ({
   onIncrease,
   onDecrease,
   onRemove,
+  onUpdateNotes,
   currency = "$",
 }) => {
   const inc = () => (onIncrease ? onIncrease() : onUpdateQty?.(quantity + 1));
   const dec = () =>
     onDecrease ? onDecrease() : onUpdateQty?.(Math.max(0, quantity - 1));
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(notes ?? "");
+
+  const startEdit = () => {
+    if (!onUpdateNotes) return;
+    setDraft(notes ?? "");
+    setEditing(true);
+  };
+
+  const commitEdit = () => {
+    if (!onUpdateNotes) return;
+    onUpdateNotes(draft);
+    setEditing(false);
+  };
     
   return (
     <div className="group flex items-start gap-4 py-4 border-b border-white/5 last:border-0">
@@ -85,11 +102,50 @@ const TicketLine: React.FC<TicketLineProps> = ({
           </div>
         )}
 
-        {notes && (
-          <p className="text-[10px] text-zinc-600 font-bold italic line-clamp-1 mt-0.5">
-            "{notes}"
-          </p>
-        )}
+        {editing && onUpdateNotes ? (
+          <div className="flex items-center gap-2 mt-1">
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value.slice(0, 200))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitEdit();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              placeholder="Nota para cocina..."
+              className="flex-1 min-w-0 h-8 min-h-[32px] bg-[#0a0a0c] border border-amber-500/30 rounded-lg px-2 text-[11px] text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-amber-500"
+            />
+            <button
+              onClick={commitEdit}
+              aria-label="Guardar nota"
+              className="w-8 h-8 min-h-[32px] rounded-lg bg-amber-500 text-black flex items-center justify-center active:scale-90 transition-transform"
+            >
+              <Check size={14} strokeWidth={3} />
+            </button>
+          </div>
+        ) : notes ? (
+          <button
+            type="button"
+            onClick={onUpdateNotes ? startEdit : undefined}
+            className="flex items-center gap-1.5 text-left mt-0.5 active:scale-[0.99] transition-transform"
+          >
+            <MessageSquare size={10} className="text-amber-500/70 shrink-0" />
+            <p className="text-[10px] text-zinc-400 font-bold italic line-clamp-1 flex-1 min-w-0">
+              {notes}
+            </p>
+          </button>
+        ) : onUpdateNotes ? (
+          <button
+            type="button"
+            onClick={startEdit}
+            className="flex items-center gap-1 mt-0.5 text-zinc-700 active:text-amber-500 transition-colors w-fit"
+          >
+            <MessageSquare size={10} />
+            <span className="text-[9px] font-black uppercase tracking-widest">
+              Agregar nota
+            </span>
+          </button>
+        ) : null}
 
         <div className="flex justify-between items-baseline mt-2 pt-1">
           <span className="text-[11px] text-zinc-600 font-bold mono">
