@@ -26,6 +26,8 @@ import ShiftModal from "@/components/admin/ShiftModal";
 import { useThemeStore } from "@/store/themeStore";
 import NotificationsPanel from "@/components/pos/NotificationsPanel";
 import { useNotifications, useNotifStore } from "@/hooks/useNotifications";
+import { useKeepAwake } from "@/hooks/useKeepAwake";
+import MergeTableModal from "@/components/pos/MergeTableModal";
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
   DINE_IN: "MESA",
@@ -64,6 +66,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   useNotifications();
   const unreadCount = useNotifStore((s) => s.unreadCount);
 
+  // Mantener la pantalla encendida mientras esté abierto el shell de
+  // cajero (Capacitor only — no-op en web). Si el cajero está esperando
+  // al cliente, evita que la tablet apague la pantalla cada minuto.
+  useKeepAwake(true);
+
   const { palette, mode, setPalette, toggleMode } = useThemeStore();
   const activeTicket = useTicketStore((s) => s.getActiveTicket());
   const itemCount = activeTicket.items.reduce((acc, i) => acc + i.quantity, 0);
@@ -74,6 +81,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [reprintKitchenOrder, setReprintKitchenOrder] = useState<any | null>(null);
   const [shiftOpen, setShiftOpen] = useState<boolean | null>(null);
   const [showShift, setShowShift] = useState(false);
+  const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
+  const [mergeSource, setMergeSource] = useState<any | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -101,6 +110,52 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       console.error("Error cargando órdenes abiertas:", err);
     }
   }, []);
+
+  // ── Edición/eliminación de items en orden abierta (Feature 11)
+  // Sólo expuesto al admin/manager (gateado en el render); el backend además
+  // valida tenant + estado de orden. Tras éxito, refrescamos detail + listado.
+  const canEditOpenOrderItems = currentEmployee?.role
+    ? ["ADMIN", "OWNER", "MANAGER"].includes(currentEmployee.role)
+    : false;
+
+  const handleUpdateOrderItem = useCallback(
+    async (itemId: string, patch: { quantity?: number; notes?: string }) => {
+      setUpdatingItemId(itemId);
+      try {
+        const { data: updated } = await api.put(`/api/orders/items/${itemId}`, patch);
+        setDetailOrder(updated);
+        fetchOpenOrders();
+      } catch (err: any) {
+        toast.error(
+          "Error al modificar: " +
+            (err?.response?.data?.error || err?.message || "fallo desconocido"),
+        );
+      } finally {
+        setUpdatingItemId(null);
+      }
+    },
+    [fetchOpenOrders],
+  );
+
+  const handleDeleteOrderItem = useCallback(
+    async (itemId: string) => {
+      if (!confirm("¿Eliminar este producto de la orden?")) return;
+      setUpdatingItemId(itemId);
+      try {
+        const { data: updated } = await api.delete(`/api/orders/items/${itemId}`);
+        setDetailOrder(updated);
+        fetchOpenOrders();
+      } catch (err: any) {
+        toast.error(
+          "Error al eliminar: " +
+            (err?.response?.data?.error || err?.message || "fallo desconocido"),
+        );
+      } finally {
+        setUpdatingItemId(null);
+      }
+    },
+    [fetchOpenOrders],
+  );
 
   useEffect(() => {
     if (!mounted || isLocked) return;
@@ -515,6 +570,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           discount={Number(detailOrder.discount ?? 0)}
           total={Number(detailOrder.total ?? 0)}
           items={(detailOrder.items || []).map((i: any) => ({
+            id: String(i.id),
             name: i.name || i.menuItem?.name || "Producto",
             quantity: i.quantity ?? 1,
             subtotal: Number(i.subtotal ?? 0),
@@ -523,6 +579,56 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           onReprint={handleReprintFromDetail}
           onReprintKitchen={handleReprintKitchenFromDetail}
           onCharge={isLoanMode ? undefined : handleChargeFromDetailGuarded}
+          onUpdateItem={
+            canEditOpenOrderItems &&
+            !["DELIVERED", "CANCELLED"].includes(detailOrder.status) &&
+            detailOrder.paymentStatus !== "PAID"
+              ? handleUpdateOrderItem
+              : undefined
+          }
+          onDeleteItem={
+            canEditOpenOrderItems &&
+            !["DELIVERED", "CANCELLED"].includes(detailOrder.status) &&
+            detailOrder.paymentStatus !== "PAID"
+              ? handleDeleteOrderItem
+              : undefined
+          }
+          updatingItemId={updatingItemId}
+          onMergeOrTransfer={
+            canEditOpenOrderItems &&
+            !["DELIVERED", "CANCELLED"].includes(detailOrder.status) &&
+            detailOrder.paymentStatus !== "PAID"
+              ? () => {
+                  setMergeSource(detailOrder);
+                  setDetailOrder(null);
+                }
+              : undefined
+          }
+        />
+
+      )}
+
+      {mergeSource && (
+        <MergeTableModal
+          isOpen={!!mergeSource}
+          onClose={() => setMergeSource(null)}
+          source={{
+            id: mergeSource.id,
+            orderNumber:
+              mergeSource.orderNumber ||
+              String(mergeSource.id).slice(-6).toUpperCase(),
+            total: Number(mergeSource.total ?? 0),
+            customerName: mergeSource.customerName ?? mergeSource.user?.name ?? null,
+            table: mergeSource.table ?? null,
+            tableNumber: mergeSource.tableNumber ?? null,
+            itemsCount: Array.isArray(mergeSource.items)
+              ? mergeSource.items.length
+              : 0,
+          }}
+          onSuccess={() => {
+            setMergeSource(null);
+            fetchOpenOrders();
+          }}
         />
       )}
 
