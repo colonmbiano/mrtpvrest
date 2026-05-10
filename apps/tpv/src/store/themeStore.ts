@@ -6,7 +6,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type Palette = "green" | "purple" | "orange";
+export type Palette = "green" | "purple" | "amber";
 export type Mode = "dark" | "light";
 
 // Legacy theme-id → { palette, mode }
@@ -15,18 +15,27 @@ const LEGACY_THEME_MAP: Record<string, { palette: Palette; mode: Mode }> = {
   light:       { palette: "green",  mode: "light" },
   green:       { palette: "green",  mode: "dark"  },
   purple:      { palette: "purple", mode: "dark"  },
-  orange:      { palette: "orange", mode: "dark"  },
+  amber:       { palette: "amber",  mode: "dark"  },
+  orange:      { palette: "amber",  mode: "dark"  },
   "concepto-1":{ palette: "green",  mode: "dark"  },
   "concepto-2":{ palette: "purple", mode: "dark"  },
   "concepto-3":{ palette: "green",  mode: "light" },
-  naranja:     { palette: "orange", mode: "light" },
-  amarillo:    { palette: "orange", mode: "light" },
+  naranja:     { palette: "amber",  mode: "light" },
+  amarillo:    { palette: "amber",  mode: "light" },
 };
 
 const applyDocAttrs = (palette: Palette, mode: Mode) => {
   if (typeof document === "undefined") return;
   document.documentElement.setAttribute("data-theme", palette);
   document.documentElement.setAttribute("data-mode", mode);
+};
+
+// Migra paletas obsoletas guardadas en localStorage. Cualquier valor que ya
+// no exista en el tipo Palette (ej. "orange" de versiones previas) colapsa
+// a "amber" — la paleta brand de MRTPVREST.
+const normalizePalette = (p: unknown): Palette => {
+  if (p === "green" || p === "purple" || p === "amber") return p;
+  return "amber";
 };
 
 interface ThemeState {
@@ -47,10 +56,10 @@ interface ThemeState {
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
-      palette: "green",
+      palette: "amber",
       mode: "dark",
       themeChosen: false,
-      theme: "green",
+      theme: "amber",
 
       setPalette: (palette) => {
         set({ palette, theme: palette });
@@ -72,7 +81,7 @@ export const useThemeStore = create<ThemeState>()(
 
       setTheme: (theme) => {
         const target = LEGACY_THEME_MAP[theme] ?? {
-          palette: "green" as Palette,
+          palette: "amber" as Palette,
           mode: "dark" as Mode,
         };
         set({ palette: target.palette, mode: target.mode, theme });
@@ -82,7 +91,13 @@ export const useThemeStore = create<ThemeState>()(
     {
       name: "tpv-theme",
       onRehydrateStorage: () => (state) => {
-        if (state) applyDocAttrs(state.palette, state.mode);
+        if (!state) return;
+        // Migra valores obsoletos persistidos por versiones previas y
+        // re-aplica los attrs al <html>. Sin esto, un cajero con "orange"
+        // viejo en localStorage quedaba con un data-theme inválido.
+        const safePalette = normalizePalette(state.palette);
+        if (safePalette !== state.palette) state.palette = safePalette;
+        applyDocAttrs(safePalette, state.mode);
       },
     }
   )
