@@ -23,7 +23,7 @@ export function useKeepAwake(active: boolean = true): void {
       try {
         const { Capacitor } = await import("@capacitor/core");
         if (!Capacitor.isNativePlatform()) return;
-        const { KeepAwake } = await import("@capacitor/keep-awake");
+        const { KeepAwake } = await import("@capacitor-community/keep-awake");
         if (cancelled) return;
         await KeepAwake.keepAwake();
         didKeep = true;
@@ -37,7 +37,7 @@ export function useKeepAwake(active: boolean = true): void {
       if (!didKeep) return;
       (async () => {
         try {
-          const { KeepAwake } = await import("@capacitor/keep-awake");
+          const { KeepAwake } = await import("@capacitor-community/keep-awake");
           await KeepAwake.allowSleep();
         } catch {
           /* noop */
