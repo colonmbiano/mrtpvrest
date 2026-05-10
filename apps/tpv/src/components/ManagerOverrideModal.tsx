@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Permission, useAuthStore } from '@/store/authStore';
-import { useOfflineStore } from '@/store/useOfflineStore';
+import useOfflineStore from '@/store/useOfflineStore';
 import NumpadPIN from './NumpadPIN';
 import { hashPin } from '@/lib/hash';
 
