@@ -30,27 +30,45 @@ TPV (Tab 8)                 Backend Railway              Supabase Storage
    ```
    SUPABASE_URL=https://<proyecto>.supabase.co
    SUPABASE_SERVICE_ROLE_KEY=<service_role_key>
-   OTA_BUCKET=tpv-ota   # opcional, default 'tpv-ota'
+   OTA_BUCKET=tpv-ota                 # opcional, default 'tpv-ota'
+   GITHUB_TOKEN=<PAT con scope workflow>
+   GITHUB_REPO=colonmbiano/mrtpvrest   # owner/repo
    ```
    La `service_role_key` se saca de Supabase → Project Settings → API → `service_role` (NO la `anon`).
-3. **Aplicar migración Prisma** — automático en el próximo deploy del backend (el `Dockerfile` corre `prisma migrate deploy`).
-4. **Reinstalar el APK del TPV** una vez para que el plugin Capgo nativo quede activo. Después de eso, todos los updates van por OTA.
+   El PAT se genera en https://github.com/settings/tokens — solo necesita scope `workflow`.
+3. **GitHub Secrets** (Settings → Secrets → Actions del repo):
+   - `OTA_ADMIN_TOKEN` — JWT de un usuario SUPER_ADMIN del backend (login en admin → DevTools → localStorage `token`).
+4. **Aplicar migración Prisma** — automático en el próximo deploy del backend (el `Dockerfile` corre `prisma migrate deploy`).
+5. **Reinstalar el APK del TPV** una vez para que el plugin Capgo nativo quede activo. Después de eso, todos los updates van por OTA.
 
 ## Publicar nueva versión
 
+### Opción A — Automático (recomendado)
+
+Cualquier `git push` a `master` que toque `apps/tpv/**` dispara el workflow
+`.github/workflows/tpv-ota-release.yml` que builda + zipea + publica solo.
+**Cero intervención.**
+
+Versionado: `MAJOR.MINOR` viene de `apps/tpv/package.json`, `PATCH` =
+cantidad de commits que han tocado `apps/tpv/`. Resultado: monotónico
+(ej. `0.1.42`) sin commit-back loops.
+
+### Opción B — Desde el SaaS
+
+1. https://saas.mrtpvrest.com → **TPV Updates** (sidebar).
+2. Selecciona canal (production / beta / dev).
+3. Click **"Publicar versión ahora"** → escribe notas opcionales.
+4. El backend dispara el mismo workflow vía `workflow_dispatch`.
+5. Tarda 3-5 min. Refresca la tabla para ver el bundle nuevo activo.
+
+### Opción C — Local (CLI, fallback)
+
 ```powershell
-# 1. Bumpear version en apps/tpv/package.json (ej. 0.1.0 → 0.1.1)
-# 2. Login en https://admin.mrtpvrest.com como SUPER_ADMIN, copiar token
 $env:OTA_ADMIN_TOKEN="<jwt>"
 pnpm --filter @mrtpvrest/tpv ota:release --notes "Fix botón delivery"
 ```
 
-El script:
-- Corre `next build` (con `CAPACITOR_BUILD=true`)
-- Empaqueta `out/` en zip
-- Sube a Supabase Storage y registra en BD vía `POST /api/ota/publish`
-
-Los TPVs lo recogen en el próximo `/check` (al abrir la app o reiniciarla).
+Los TPVs recogen el update en el próximo `/check` (al abrir la app o reiniciarla).
 
 ## Channels
 
@@ -59,11 +77,12 @@ Los TPVs lo recogen en el próximo `/check` (al abrir la app o reiniciarla).
 
 ## Rollback
 
-```bash
-# Listar bundles
-curl -H "Authorization: Bearer $TOKEN" https://api.mrtpvrest.com/api/ota/bundles
+Desde el SaaS → **TPV Updates** → click **Rollback** en cualquier versión activa.
+Se desactiva al instante; los TPVs vuelven a la anterior activa en el siguiente check.
 
-# Desactivar uno (los TPVs vuelven al anterior activo en el siguiente check)
+Alternativa CLI:
+
+```bash
 curl -X DELETE -H "Authorization: Bearer $TOKEN" https://api.mrtpvrest.com/api/ota/bundles/<id>
 ```
 

@@ -163,6 +163,59 @@ router.get('/bundles', authenticate, requireSuperAdmin, async (req, res) => {
   res.json({ bundles });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN: dispara manualmente el workflow de GitHub Actions que builda y
+// publica un nuevo bundle. Útil para forzar un release sin esperar al
+// próximo push (ej. desde la UI del SaaS).
+//
+// Requiere GITHUB_TOKEN (PAT con scope workflow) y GITHUB_REPO (owner/repo).
+// El PAT vive solo del lado servidor para no exponerlo en la SPA.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/trigger-build', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const channel = req.body?.channel || 'production';
+    const notes = req.body?.notes || '';
+    const ref = req.body?.ref || 'master';
+
+    const ghToken = process.env.GITHUB_TOKEN;
+    const ghRepo = process.env.GITHUB_REPO;
+    if (!ghToken || !ghRepo) {
+      return res.status(500).json({
+        error: 'GITHUB_TOKEN y GITHUB_REPO no configurados en el backend',
+      });
+    }
+
+    const url = `https://api.github.com/repos/${ghRepo}/actions/workflows/tpv-ota-release.yml/dispatches`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${ghToken}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ref, inputs: { channel, notes } }),
+    });
+
+    if (!r.ok) {
+      const text = await r.text();
+      return res.status(502).json({
+        error: `GitHub API ${r.status}: ${text.slice(0, 300)}`,
+      });
+    }
+
+    // GitHub responde 204 sin body; devolvemos OK + URL de Actions para
+    // que el SaaS ofrezca un link directo al run.
+    res.json({
+      ok: true,
+      actionsUrl: `https://github.com/${ghRepo}/actions/workflows/tpv-ota-release.yml`,
+    });
+  } catch (e) {
+    console.error('POST /api/ota/trigger-build:', e);
+    res.status(500).json({ error: e.message || 'Trigger failed' });
+  }
+});
+
 // ADMIN: desactivar un bundle (soft delete; el archivo en storage se borra).
 // Útil para rollback inmediato — cualquier TPV que aún no haya descargado
 // dejará de ver esta versión y caerá a la anterior activa.
