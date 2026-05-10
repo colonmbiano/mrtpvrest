@@ -1,12 +1,14 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
-import { ChevronLeft, Star } from "lucide-react";
+import { ChevronLeft, Star, Search, X as XIcon } from "lucide-react";
 import CategoryGrid from "@/components/pos/CategoryGrid";
 import ProductCard from "@/components/pos/ProductCard";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
 import ModifierPickerModal from "@/components/pos/ModifierPickerModal";
 import SeatTabs from "@/components/pos/SeatTabs";
+import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
 import api from "@/lib/api";
+import { hapticLight } from "@/lib/haptics";
 import {
   useTicketStore,
   type Product,
@@ -29,7 +31,7 @@ import {
  * a Ticket 2 — no debe quedar atrapado en la vista del ticket anterior).
  */
 
-type View = "categories" | "products" | "favorites";
+type View = "categories" | "products" | "favorites" | "search";
 
 interface CategoryLite {
   id: string;
@@ -51,6 +53,8 @@ export default function CatalogPage() {
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [optionsProduct, setOptionsProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -101,12 +105,17 @@ export default function CatalogPage() {
   );
 
   const filteredProducts = useMemo(() => {
+    if (view === "search") {
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return [];
+      return products.filter((p) => p.name.toLowerCase().includes(q));
+    }
     if (view === "favorites") return favoritesItems;
     if (view === "products" && activeCat) {
       return products.filter((p) => (p as unknown as { categoryId?: string }).categoryId === activeCat);
     }
     return [];
-  }, [view, activeCat, products, favoritesItems]);
+  }, [view, activeCat, products, favoritesItems, searchQuery]);
 
   const activeCategory = useMemo(
     () => categories.find((c) => c.id === activeCat) ?? null,
@@ -114,11 +123,46 @@ export default function CatalogPage() {
   );
 
   const handleProductClick = (p: Product) => {
+    hapticLight();
     if (p.modifierGroups && p.modifierGroups.length > 0) {
       setPickerProduct(p);
       return;
     }
     addPlainProduct(p);
+  };
+
+  const handleProductLongPress = (p: Product) => {
+    setOptionsProduct(p);
+  };
+
+  const handleAvailabilityToggle = async (next: boolean) => {
+    if (!optionsProduct) return;
+    const id = optionsProduct.id;
+    setProducts((prev) =>
+      prev.map((p) => (p.id === id ? ({ ...p, isAvailable: next } as Product) : p)),
+    );
+    try {
+      await api.put(`/api/menu/items/${id}`, { isAvailable: next });
+    } catch {
+      setProducts((prev) =>
+        prev.map((p) => (p.id === id ? ({ ...p, isAvailable: !next } as Product) : p)),
+      );
+    }
+  };
+
+  const handleFavoriteToggle = async (next: boolean) => {
+    if (!optionsProduct) return;
+    const id = optionsProduct.id;
+    setProducts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, isFavorite: next } : p)),
+    );
+    try {
+      await api.patch(`/api/menu/items/${id}/favorite`, { isFavorite: next });
+    } catch {
+      setProducts((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, isFavorite: !next } : p)),
+      );
+    }
   };
 
   const addPlainProduct = (p: Product) => {
@@ -134,7 +178,11 @@ export default function CatalogPage() {
     addItemToActive(cartItem);
   };
 
-  const handlePickerConfirm = (mods: ModifierSelection[], unitExtra: number) => {
+  const handlePickerConfirm = (
+    mods: ModifierSelection[],
+    unitExtra: number,
+    notes?: string,
+  ) => {
     if (!pickerProduct) return;
     const base = pickerProduct.promoPrice || pickerProduct.price;
     const unit = base + unitExtra;
@@ -146,6 +194,7 @@ export default function CatalogPage() {
       price: unit,
       originalPrice: pickerProduct.price,
       modifiers: mods,
+      notes,
     };
     addItemToActive(cartItem);
     setPickerProduct(null);
@@ -167,7 +216,40 @@ export default function CatalogPage() {
 
       <SeatTabs />
 
-      {view !== "categories" && (
+      {/* Barra de búsqueda — siempre visible para acceso rápido. Tipear
+          conmuta a vista "search" sin importar la vista previa, y al
+          limpiar vuelve a categorías. */}
+      <div className="px-3 sm:px-4 lg:px-6 pb-2 pt-1 shrink-0">
+        <div className="relative">
+          <Search
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none"
+          />
+          <input
+            value={searchQuery}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSearchQuery(v);
+              if (v.trim()) setView("search");
+              else setView("categories");
+            }}
+            placeholder="Buscar producto..."
+            className="w-full h-11 min-h-[44px] bg-stone-900 border border-white/5 rounded-2xl pl-10 pr-10 text-[12px] font-bold text-stone-200 placeholder:text-stone-600 focus:outline-none focus:border-amber-500/40"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => { setSearchQuery(""); setView("categories"); }}
+              aria-label="Limpiar búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 min-h-[32px] rounded-xl bg-stone-800 active:bg-stone-700 text-stone-400 flex items-center justify-center"
+            >
+              <XIcon size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {view !== "categories" && view !== "search" && (
         <div className="flex items-center gap-3 px-3 sm:px-4 lg:px-6 h-12 border-b border-white/5 shrink-0">
           <button
             type="button"
@@ -219,15 +301,21 @@ export default function CatalogPage() {
         ) : filteredProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <p className="text-stone-500 font-bold uppercase tracking-[0.15em] text-[11px]">
-              {view === "favorites" ? "Sin favoritos marcados aún" : "Sin productos en esta categoría"}
+              {view === "search"
+                ? "Sin resultados para tu búsqueda"
+                : view === "favorites"
+                  ? "Sin favoritos marcados aún"
+                  : "Sin productos en esta categoría"}
             </p>
-            <button
-              type="button"
-              onClick={goBackToCategories}
-              className="text-amber-500 font-black uppercase tracking-[0.15em] text-[11px] active:scale-95 transition-transform"
-            >
-              ← Volver a categorías
-            </button>
+            {view !== "search" && (
+              <button
+                type="button"
+                onClick={goBackToCategories}
+                className="text-amber-500 font-black uppercase tracking-[0.15em] text-[11px] active:scale-95 transition-transform"
+              >
+                ← Volver a categorías
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 sm:gap-3 animate-in fade-in slide-in-from-right-2 duration-200">
@@ -236,6 +324,7 @@ export default function CatalogPage() {
                 key={product.id}
                 {...product}
                 onClick={() => handleProductClick(product)}
+                onLongPress={() => handleProductLongPress(product)}
               />
             ))}
           </div>
@@ -247,6 +336,15 @@ export default function CatalogPage() {
           product={pickerProduct}
           onClose={() => setPickerProduct(null)}
           onConfirm={handlePickerConfirm}
+        />
+      )}
+
+      {optionsProduct && (
+        <ItemOptionsSheet
+          product={optionsProduct}
+          onClose={() => setOptionsProduct(null)}
+          onToggleAvailable={handleAvailabilityToggle}
+          onToggleFavorite={handleFavoriteToggle}
         />
       )}
     </div>

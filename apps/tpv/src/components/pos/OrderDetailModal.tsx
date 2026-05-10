@@ -1,8 +1,10 @@
 "use client";
-import React from "react";
-import { X, Receipt, Printer, Banknote, ChefHat } from "lucide-react";
+import React, { useState } from "react";
+import { X, Receipt, Printer, Banknote, ChefHat, Pencil, Plus, Minus, Trash2, Check } from "lucide-react";
 
 export interface OrderDetailItem {
+  /** itemId del backend (OrderItem.id). Requerido para editar/eliminar. */
+  id?: string;
   name: string;
   quantity: number;
   subtotal: number;
@@ -27,6 +29,15 @@ interface OrderDetailModalProps {
   /** Reimprime comanda completa a impresoras KITCHEN/BAR. */
   onReprintKitchen?: () => void;
   onCharge?: () => void;
+  /** Si se provee, habilita el modo edición — admin puede cambiar
+   *  cantidad/notas o eliminar items de la orden abierta. */
+  onUpdateItem?: (itemId: string, patch: { quantity?: number; notes?: string }) => Promise<void> | void;
+  onDeleteItem?: (itemId: string) => Promise<void> | void;
+  /** Estado del item actualmente en update — bloquea botones para evitar
+   *  doble envío. */
+  updatingItemId?: string | null;
+  /** Si se provee, abre el flujo de mover/fusionar la cuenta. */
+  onMergeOrTransfer?: () => void;
 }
 
 const formatTime = (iso?: string | null) => {
@@ -57,8 +68,16 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   onReprint,
   onReprintKitchen,
   onCharge,
+  onUpdateItem,
+  onDeleteItem,
+  updatingItemId,
+  onMergeOrTransfer,
 }) => {
+  const [editing, setEditing] = useState(false);
+  const [noteDraft, setNoteDraft] = useState<{ id: string; value: string } | null>(null);
+
   if (!isOpen) return null;
+  const canEditItems = !!(onUpdateItem || onDeleteItem);
 
   const showSubtotalLine =
     typeof subtotal === "number" && Math.abs(subtotal - total) > 0.001;
@@ -146,32 +165,147 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
         {/* ITEMS */}
         <div className="relative z-10 flex-1 overflow-y-auto p-5 space-y-3 scrollbar-hide">
+          {canEditItems && items.length > 0 && (
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+                Productos · {items.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setEditing((v) => !v)}
+                className={`min-h-[36px] h-9 px-3 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] flex items-center gap-1.5 active:scale-95 transition-transform ${
+                  editing
+                    ? "bg-[#ef4444]/15 border border-[#ef4444]/40 text-[#ef4444]"
+                    : "bg-white/5 border border-white/10 text-white/60"
+                }`}
+              >
+                {editing ? <Check size={12} /> : <Pencil size={12} />}
+                {editing ? "Listo" : "Editar"}
+              </button>
+            </div>
+          )}
           {items.length === 0 ? (
             <div className="text-center py-12 text-white/40 text-[12px] font-bold uppercase tracking-widest">
               Sin items
             </div>
           ) : (
-            items.map((it, idx) => (
-              <div
-                key={idx}
-                className="flex justify-between items-baseline gap-4 p-3 rounded-2xl bg-white/[0.03] border border-white/5"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-bold text-white truncate">
-                    <span className="text-[#ffb84d] mr-2">{it.quantity}×</span>
-                    {it.name}
-                  </div>
-                  {it.notes && (
-                    <div className="text-[11px] font-medium text-white/50 italic truncate mt-1">
-                      ✎ {it.notes}
+            items.map((it, idx) => {
+              const itemId = it.id ?? null;
+              const updating = !!(itemId && updatingItemId === itemId);
+              const editingThis = editing && itemId !== null;
+              const noteEditing = noteDraft?.id === itemId;
+              return (
+                <div
+                  key={itemId ?? idx}
+                  className="flex flex-col gap-2 p-3 rounded-2xl bg-white/[0.03] border border-white/5"
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    {editingThis && onUpdateItem && itemId ? (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateItem(itemId, { quantity: Math.max(1, it.quantity - 1) })
+                          }
+                          disabled={updating || it.quantity <= 1}
+                          aria-label="Restar cantidad"
+                          className="w-9 h-9 min-h-[36px] rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/70 active:scale-95 transition-transform disabled:opacity-30"
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <span className="tabular-nums text-[14px] font-black text-[#ffb84d] w-7 text-center">
+                          {updating ? "…" : it.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateItem(itemId, { quantity: it.quantity + 1 })
+                          }
+                          disabled={updating}
+                          aria-label="Sumar cantidad"
+                          className="w-9 h-9 min-h-[36px] rounded-xl bg-[#ffb84d]/15 border border-[#ffb84d]/40 text-[#ffb84d] flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[13px] font-bold text-[#ffb84d] tabular-nums shrink-0">
+                        {it.quantity}×
+                      </span>
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-bold text-white truncate">
+                        {it.name}
+                      </div>
+                      {!noteEditing && it.notes && (
+                        <div className="text-[11px] font-medium text-white/50 italic truncate mt-1">
+                          ✎ {it.notes}
+                        </div>
+                      )}
                     </div>
+
+                    <div className="tabular-nums text-[13px] font-black text-white shrink-0">
+                      ${it.subtotal.toFixed(2)}
+                    </div>
+
+                    {editingThis && onDeleteItem && itemId && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteItem(itemId)}
+                        disabled={updating}
+                        aria-label="Eliminar item"
+                        className="w-9 h-9 min-h-[36px] rounded-xl bg-[#ef4444]/10 border border-[#ef4444]/30 text-[#ef4444] flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 shrink-0"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {editingThis && onUpdateItem && itemId && (
+                    noteEditing ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          autoFocus
+                          value={noteDraft!.value}
+                          onChange={(e) =>
+                            setNoteDraft({ id: itemId, value: e.target.value.slice(0, 200) })
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              onUpdateItem(itemId, { notes: noteDraft!.value });
+                              setNoteDraft(null);
+                            }
+                            if (e.key === "Escape") setNoteDraft(null);
+                          }}
+                          placeholder="Nota para cocina..."
+                          className="flex-1 min-w-0 h-9 min-h-[36px] bg-white/5 border border-[#ffb84d]/30 rounded-xl px-3 text-[12px] text-white placeholder:text-white/30 outline-none focus:border-[#ffb84d]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onUpdateItem(itemId, { notes: noteDraft!.value });
+                            setNoteDraft(null);
+                          }}
+                          aria-label="Guardar nota"
+                          className="w-9 h-9 min-h-[36px] rounded-xl bg-[#ffb84d] text-[#0C0C0E] flex items-center justify-center active:scale-90 transition-transform"
+                        >
+                          <Check size={14} strokeWidth={3} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setNoteDraft({ id: itemId, value: it.notes ?? "" })}
+                        className="self-start text-[10px] font-black uppercase tracking-[0.15em] text-white/40 active:text-[#ffb84d] transition-colors"
+                      >
+                        {it.notes ? "✎ Editar nota" : "+ Agregar nota"}
+                      </button>
+                    )
                   )}
                 </div>
-                <div className="tabular-nums text-[13px] font-black text-white shrink-0">
-                  ${it.subtotal.toFixed(2)}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -200,7 +334,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         </div>
 
         {/* ACTIONS */}
-        {(onReprint || onReprintKitchen || onCharge) && (
+        {(onReprint || onReprintKitchen || onCharge || onMergeOrTransfer) && (
           <div className="relative z-10 p-4 border-t border-white/5 bg-[#0C0C0E] flex flex-col gap-3 shrink-0">
             {/* DUAL REPRINT (Fase 4) */}
             {(onReprint || onReprintKitchen) && (
@@ -230,6 +364,16 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   </button>
                 )}
               </div>
+            )}
+
+            {onMergeOrTransfer && (
+              <button
+                type="button"
+                onClick={onMergeOrTransfer}
+                className="min-h-[56px] h-14 rounded-2xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+              >
+                ⇄ Mover / fusionar mesa
+              </button>
             )}
 
             {/* PRIMARY: COBRAR */}
