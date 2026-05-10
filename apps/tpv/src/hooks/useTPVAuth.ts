@@ -60,16 +60,30 @@ export function useTPVAuth() {
   }, [router, auth.isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Redirección por roles especiales tras autenticación.
-  // NOTA: Solo redirigimos a WAITER y KITCHEN porque acceden a aplicaciones
-  // completamente distintas. CASHIER/ADMIN/MANAGER/OWNER permanecen en el POS
-  // donde estén — el redirect en cada layout causaría un loop infinito.
+  //
+  // FASE 6 · MODO "PRÉSTAMO DE CAJA":
+  // El WAITER solo se redirige a /meseros si la tablet fue configurada
+  // como dispositivo MESERO en /setup. Cuando es CAJA (tablet principal)
+  // el mesero entra al layout /pos como préstamo — toma órdenes pero las
+  // funciones de dinero (cobrar, cajón) quedan ocultas vía useLoanMode.
   const prevAuthRef = useRef(false);
   useEffect(() => {
     if (auth.isAuthenticated && auth.employee && !prevAuthRef.current) {
       prevAuthRef.current = true;
       const role = auth.employee.role;
       if (role === "WAITER") {
-        router.push("/meseros");
+        // setup guarda deviceRole = 'WAITER' (tablet de mesero) o 'POS'
+        // (caja principal). Si la tablet es de mesero, redirigimos como
+        // antes. Si es POS o no está marcada, dejamos al mesero entrar al
+        // /pos en modo préstamo y el layout oculta funciones de dinero.
+        const deviceRole =
+          typeof window !== "undefined"
+            ? localStorage.getItem("deviceRole")
+            : null;
+        const isWaiterDevice = deviceRole === "WAITER";
+        if (isWaiterDevice) {
+          router.push("/meseros");
+        }
       }
       // KITCHEN/COOK ya no redirigen a /kds — esa pantalla vive en la APK
       // independiente apps/kds. Si un cocinero pone su PIN en el TPV se

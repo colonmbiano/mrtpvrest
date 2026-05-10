@@ -48,7 +48,8 @@ router.get('/', async (req, res) => {
       ? await prisma.order.findMany({
           where: { tableId: { in: occupiedIds }, status: 'OPEN' },
           select: {
-            id: true, orderNumber: true, total: true, customerName: true,
+            id: true, orderNumber: true, status: true,
+            paymentStatus: true, total: true, customerName: true,
             createdAt: true, tableId: true,
             _count: { select: { items: true } },
           },

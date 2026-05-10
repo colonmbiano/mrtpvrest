@@ -18,6 +18,10 @@ import {
 interface Props {
   onOpenShift?: () => void;
   isShiftOpen?: boolean;
+  /** Fase 6: cuando un mesero usa la tablet principal en modo préstamo,
+   *  el CTA primario cambia de "Cobrar Ticket" a "Enviar a cocina" y se
+   *  oculta el flujo de PaymentModal. */
+  isLoanMode?: boolean;
 }
 
 // Map de presets a px para el ancho del sidebar. El user lo cambia
@@ -30,7 +34,7 @@ function readSidebarWidth(): number {
   return SIDEBAR_WIDTHS[v] ?? 380;
 }
 
-export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props) {
+export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanMode = false }: Props) {
   const [showPayment, setShowPayment] = useState(false);
   const [showTables, setShowTables] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -409,17 +413,30 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-amber-500/5 blur-[60px] rounded-full pointer-events-none" />
 
         <div className="relative z-10 flex flex-col gap-3">
-          <button
-            onClick={isShiftOpen ? handleOpenPayment : onOpenShift}
-            disabled={processing || ticket.items.length === 0}
-            className={`w-full h-16 rounded-2xl text-sm font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale ${
-              isShiftOpen
-                ? "bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)]"
-                : "bg-red-500 text-white shadow-[0_8px_32px_-10px_rgba(239,68,68,0.4)]"
-            }`}
-          >
-            {processing ? "Cargando..." : isShiftOpen ? "Cobrar Ticket" : "Abrir Turno"}
-          </button>
+          {isLoanMode ? (
+            // Modo préstamo (mesero en tablet de caja): CTA primario manda
+            // a cocina sin pasar por el flujo de cobro.
+            <button
+              onClick={handleSendToKitchen}
+              disabled={processing || ticket.items.length === 0}
+              className="w-full h-16 rounded-2xl text-sm font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)]"
+            >
+              <UtensilsCrossed size={16} strokeWidth={2.5} />
+              {processing ? "Enviando..." : "Enviar a cocina"}
+            </button>
+          ) : (
+            <button
+              onClick={isShiftOpen ? handleOpenPayment : onOpenShift}
+              disabled={processing || ticket.items.length === 0}
+              className={`w-full h-16 rounded-2xl text-sm font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale ${
+                isShiftOpen
+                  ? "bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)]"
+                  : "bg-red-500 text-white shadow-[0_8px_32px_-10px_rgba(239,68,68,0.4)]"
+              }`}
+            >
+              {processing ? "Cargando..." : isShiftOpen ? "Cobrar Ticket" : "Abrir Turno"}
+            </button>
+          )}
 
           <div className="grid grid-cols-3 gap-2">
              <button
@@ -443,12 +460,17 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true }: Props
         </div>
 
         <PaymentModal
-          isOpen={showPayment}
+          isOpen={showPayment && !isLoanMode}
           onClose={() => setShowPayment(false)}
           orderNumber={String(ticket.id)}
           total={total}
           discount={ticket.discount}
-          items={ticket.items.map((i) => ({ name: i.name, quantity: i.quantity, subtotal: i.subtotal }))}
+          items={ticket.items.map((i) => ({
+            name: i.name,
+            quantity: i.quantity,
+            subtotal: i.subtotal,
+            seatNumber: i.seatNumber ?? null,
+          }))}
           onConfirm={handleProcessPayment}
         />
 

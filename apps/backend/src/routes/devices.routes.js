@@ -72,6 +72,7 @@ router.post('/auth', async (req, res) => {
     res.json({
       accessToken,
       deviceId: device.id,
+      name: device.name,
       role,
       restaurantId: device.location.restaurant.id,
       locationId:   device.location.id,
@@ -151,12 +152,39 @@ router.post('/create', authenticate, requireTenantAccess, async (req, res) => {
 
     res.json({
       deviceId: device.id,
-      deviceToken
+      deviceToken,
+      name: device.name,
     });
 
   } catch (e) {
     console.error('Error en /api/devices/create:', e);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/devices/identity — Lookup ligero del nombre actual del device.
+//
+// La tablet llama esto desde la pantalla de bloqueo para mostrar la
+// identidad real del terminal ("Comandera 1") aunque el admin la haya
+// renombrado después de la vinculación. Usa deviceToken en el body
+// porque el lock screen aún no tiene JWT humano.
+router.post('/identity', async (req, res) => {
+  try {
+    const { deviceToken } = req.body || {};
+    if (!deviceToken || typeof deviceToken !== 'string') {
+      return res.status(400).json({ error: 'deviceToken requerido' });
+    }
+    const device = await prisma.device.findUnique({
+      where: { deviceToken },
+      select: { id: true, name: true, type: true, isActive: true },
+    });
+    if (!device || !device.isActive) {
+      return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    }
+    res.json({ id: device.id, name: device.name, type: device.type });
+  } catch (e) {
+    console.error('Error en /api/devices/identity:', e);
+    res.status(500).json({ error: 'Error al consultar identidad' });
   }
 });
 
