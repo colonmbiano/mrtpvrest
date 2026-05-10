@@ -89,6 +89,9 @@ app.use('/api/public', require('./routes/menu.routes'))
 app.use('/api/store',  require('./routes/store.routes'))
 app.use('/api/payments/terminal', require('./routes/terminal.routes'))
 app.use('/api/kiosk/webhook',     require('./routes/kiosk-webhook.routes'))
+// OTA — el TPV consulta esto en arranque sin contexto de tenant todavía.
+// /publish, /bundles y DELETE están protegidos con SUPER_ADMIN dentro del router.
+app.use('/api/ota',               require('./routes/ota.routes'))
 
 // --- MIDDLEWARE DE SAAS (TENANT) ---
 app.use(tenantMiddleware);

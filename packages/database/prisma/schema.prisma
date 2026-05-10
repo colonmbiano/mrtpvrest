@@ -1773,3 +1773,27 @@ model SystemLog {
   @@index([createdAt])
   @@map("system_logs")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OTA — bundles del web payload del TPV (Capacitor live updates).
+// Cada release del TPV sube un zip a Supabase Storage y registra metadata acá.
+// El plugin @capgo/capacitor-updater consulta /api/ota/check y descarga el
+// bundle si la versión es mayor que la instalada.
+// ─────────────────────────────────────────────────────────────────────────────
+model OtaBundle {
+  id          String   @id @default(cuid())
+  appId       String   @default("com.mrtpvrest.tpv")
+  version     String
+  channel     String   @default("production")
+  storagePath String
+  checksum    String
+  sizeBytes   Int
+  notes       String?
+  isActive    Boolean  @default(true)
+  minNative   String?
+  createdAt   DateTime @default(now())
+
+  @@unique([appId, channel, version])
+  @@index([appId, channel, isActive, createdAt])
+  @@map("ota_bundles")
+}
