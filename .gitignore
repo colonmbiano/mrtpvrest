@@ -14,6 +14,9 @@ yarn.lock
 .vercel/
 .turbo/
 
+# Output de skills locales (no versionar)
+graphify-out/
+
 # Archivos de sistema y logs
 .git/
 .svn/
