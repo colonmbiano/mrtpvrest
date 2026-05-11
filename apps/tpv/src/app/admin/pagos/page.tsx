@@ -100,7 +100,7 @@ export default function PagosAdmin() {
           <div className="flex items-start gap-4">
             <BackButton ariaLabel="Volver al panel admin" />
             <div>
-              <p className="text-[10px] font-black tracking-[0.25em] text-white/40">ADMINISTRACIÓN</p>
+              <p className="text-[10px] font-black tracking-[0.25em] text-white/40">CONFIGURACIÓN</p>
               <h1 className="text-3xl font-black text-white tracking-tight">Pagos e Impuestos</h1>
               <p className="text-sm font-medium text-white/55 mt-1">
                 Configura los métodos de pago aceptados, IVA y propina sugerida.

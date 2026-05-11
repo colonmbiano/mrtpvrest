@@ -109,6 +109,35 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
   } catch (e) { res.status(500).json({ error: 'Error al guardar configuracion' }) }
 })
 
+// ── BITÁCORA DE ACCESO ─────────────────────────────────────────────────
+// BUG-13 (QA): la pantalla /admin/seguridad consume GET /api/admin/access-log
+// para mostrar los últimos N eventos. Antes el endpoint no existía y devolvía
+// 404; el frontend caía a [] silenciosamente y mostraba "Sin eventos".
+router.get('/access-log', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+
+    const rows = await prisma.accessLog.findMany({
+      where: { restaurantId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    res.json(rows.map(r => ({
+      id:           r.id,
+      action:       r.action,
+      employeeName: r.actorName,
+      createdAt:    r.createdAt,
+      metadata:     r.reason || r.resource || null,
+    })));
+  } catch (e) {
+    console.error('access-log error:', e?.message || e);
+    res.status(500).json({ error: 'Error al cargar la bitácora' });
+  }
+});
+
 // ── GESTIÓN DE SUCURSALES ───────────────────────────────────────────────
 
 router.get('/locations', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {

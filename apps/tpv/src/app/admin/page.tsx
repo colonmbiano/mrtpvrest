@@ -39,7 +39,7 @@ const SECTIONS = [
   },
   {
     href: "/admin/impresoras",
-    label: "Red e Impresión",
+    label: "Red e Impresoras",
     desc: "Impresoras de tickets y estaciones KDS",
     icon: Printer,
     accent: "#10b981",
@@ -81,7 +81,7 @@ const SECTIONS = [
   },
   {
     href: "/admin/seguridad",
-    label: "Ciberseguridad",
+    label: "Seguridad",
     desc: "PINs, autorizaciones y bitácora",
     icon: ShieldCheck,
     accent: "#ef4444",

@@ -7,6 +7,7 @@ import KDSConfigModal from "@/components/pos/KDSConfigModal";
 import PrinterCategoriesModal from "@/components/admin/PrinterCategoriesModal";
 import BackButton from "@/components/BackButton";
 import { printTestTicket, type PrinterStation } from "@/lib/printer-tcp";
+import { formatDisplayName } from "@/lib/formatDisplayName";
 
 type Printer = {
   id: string;
@@ -165,7 +166,7 @@ export default function ImpresorasPage() {
         <div className="flex items-start gap-4">
           <BackButton ariaLabel="Volver al panel admin" />
           <div>
-            <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500 block mb-2">Infraestructura</span>
+            <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500 block mb-2">Configuración</span>
             <h1 className="text-3xl font-black text-white tracking-tight mb-1">Red e Impresoras</h1>
             <p className="text-sm text-zinc-400 font-medium">Gestiona tus impresoras físicas y estaciones KDS virtuales.</p>
           </div>
@@ -366,7 +367,7 @@ export default function ImpresorasPage() {
                 </div>
 
                 <div className="mb-8">
-                  <h3 className="text-lg font-black text-white tracking-tight mb-1">{p.name}</h3>
+                  <h3 className="text-lg font-black text-white tracking-tight mb-1">{formatDisplayName(p.name)}</h3>
                   <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold">
                     {p.connectionType === "NETWORK" ? (
                       <>

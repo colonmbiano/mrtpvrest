@@ -20,6 +20,7 @@ import {
   Plus, Edit3, Trash2, Layers, Printer as PrinterIcon, Tag,
 } from "lucide-react";
 import BackButton from "@/components/BackButton";
+import { formatDisplayName } from "@/lib/formatDisplayName";
 
 interface Printer { id: string; name: string; type: string; ip: string | null; }
 interface Category { id: string; name: string; }
@@ -162,7 +163,7 @@ export default function GruposImpresorasPage() {
           <BackButton ariaLabel="Volver al panel admin" />
           <div>
             <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500 block mb-2">
-              Enrutamiento
+              Configuración
             </span>
             <h1 className="text-3xl font-black text-white tracking-tight mb-1">Grupos de Impresoras</h1>
             <p className="text-sm text-zinc-400 font-medium">
@@ -226,7 +227,7 @@ export default function GruposImpresorasPage() {
                 </div>
               </div>
 
-              <h3 className="text-xl font-black text-white tracking-tight mb-4">{g.name}</h3>
+              <h3 className="text-xl font-black text-white tracking-tight mb-4">{formatDisplayName(g.name)}</h3>
 
               <div className="space-y-3">
                 <div>
@@ -332,7 +333,7 @@ export default function GruposImpresorasPage() {
                         >
                           <span className="w-3 h-3 rounded-full" style={{ background: active ? "#ffb84d" : "rgba(255,255,255,0.10)" }} />
                           <div className="flex flex-col flex-1 min-w-0">
-                            <span className="text-sm font-black text-white truncate">{p.name}</span>
+                            <span className="text-sm font-black text-white truncate">{formatDisplayName(p.name)}</span>
                             <span className="text-[10px] text-zinc-500 truncate">{p.type} · {p.ip || "sin IP"}</span>
                           </div>
                         </button>
@@ -364,7 +365,7 @@ export default function GruposImpresorasPage() {
                           }}
                         >
                           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: active ? "#ffb84d" : "rgba(255,255,255,0.10)" }} />
-                          <span className="text-[12px] font-black text-white truncate">{c.name}</span>
+                          <span className="text-[12px] font-black text-white truncate">{formatDisplayName(c.name)}</span>
                         </button>
                       );
                     })}

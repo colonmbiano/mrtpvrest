@@ -108,7 +108,7 @@ export default function AparienciaPage() {
           <BackButton ariaLabel="Volver al panel admin" />
           <div className="space-y-1.5">
             <span className="text-[10px] font-black tracking-[0.25em] text-amber-500/80 uppercase">
-              Personalización
+              Configuración
             </span>
             <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight leading-none">
               Apariencia

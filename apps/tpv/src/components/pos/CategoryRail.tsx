@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import { formatDisplayName } from "@/lib/formatDisplayName";
 
 interface Category {
   id: string;
@@ -36,7 +37,7 @@ const CategoryRail: React.FC<CategoryRailProps> = ({
                 ${isActive ? "text-tx-pri" : "text-tx-mut hover:text-tx-pri"}
               `}
             >
-              <span className="uppercase tracking-wide">{cat.name}</span>
+              <span className="uppercase tracking-wide">{formatDisplayName(cat.name)}</span>
               {typeof count === "number" && (
                 <span
                   className="text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded-full"

@@ -4,6 +4,7 @@
  * Separado de auth y tema para renderizado eficiente.
  */
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 export type Modifier = {
   id: string;
@@ -123,7 +124,13 @@ const emptyTicket = (
   activeSeat: null,
 });
 
-export const useTicketStore = create<TicketState>()((set, get) => ({
+/**
+ * BUG-15 (QA): persistimos tickets en draft en localStorage. Si el WebView
+ * crashea o el cajero pierde la sesión, al recargar la pantalla los
+ * borradores no cobrados siguen ahí. La key incluye el restaurantId para
+ * no mezclar drafts entre dispositivos compartidos.
+ */
+export const useTicketStore = create<TicketState>()(persist((set, get) => ({
   tickets: [emptyTicket(1, "T1")],
   activeIndex: 0,
 
@@ -253,4 +260,15 @@ export const useTicketStore = create<TicketState>()((set, get) => ({
       }),
     }));
   },
+}), {
+  name: "tpv-tickets-draft",
+  storage: createJSONStorage(() =>
+    typeof window === "undefined" ? (undefined as any) : window.localStorage,
+  ),
+  // Solo persistimos tickets + activeIndex. Las acciones se reconstruyen
+  // en cada montaje.
+  partialize: (state) => ({
+    tickets: state.tickets,
+    activeIndex: state.activeIndex,
+  }),
 }));

@@ -179,7 +179,7 @@ export default function MesasAdminPage() {
         <div className="flex items-start gap-4">
           <BackButton ariaLabel="Volver al panel admin" />
           <div>
-            <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500 block mb-2">Operación</span>
+            <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500 block mb-2">Configuración</span>
             <h1 className="text-3xl font-black text-white tracking-tight mb-1">Mesas y Zonas</h1>
             <p className="text-sm text-zinc-400 font-medium">
               Define cuántas mesas tienes, su capacidad y a qué zona pertenecen.
