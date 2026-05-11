@@ -1,6 +1,6 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // ── LOGIN repartidor (usa Employee con rol DELIVERY) ──────────────────────
@@ -48,8 +48,10 @@ router.get('/:driverId/history', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── PUT asignar repartidor a pedido (admin) ───────────────────────────────
-router.put('/assign', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+// ── PUT asignar repartidor a pedido ───────────────────────────────────────
+// BUG-24: el cajero (CASHIER) asigna el repartidor en el flujo de COBRAR
+// DELIVERY. Antes requería ADMIN y la asignación quedaba bloqueada en POS.
+router.put('/assign', authenticate, requireTenantAccess, requireRole('CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
   try {
     const { orderId, driverId } = req.body;
     const order = await prisma.order.update({
@@ -119,8 +121,11 @@ router.post('/orders/:orderId/messages', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── GET todos los repartidores (admin) ────────────────────────────────────
-router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+// ── GET todos los repartidores ────────────────────────────────────────────
+// BUG-24: el cajero necesita la lista para asignar repartidor al cobrar
+// DELIVERY. La lista se restringe a empleados rol=DELIVERY activos del
+// mismo tenant via requireTenantAccess.
+router.get('/', authenticate, requireTenantAccess, requireRole('CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
   try {
     const drivers = await prisma.employee.findMany({
       where: { role: 'DELIVERY', isActive: true },

@@ -140,7 +140,7 @@ export default function AparienciaPage() {
         {/* TAMAÑO DE LETRA */}
         <section className="bg-[#121316] rounded-3xl border border-white/5 p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Type size={16} className="text-amber-500" />
+            <Type size={16} style={{ color: "var(--brand)" }} />
             <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">
               Tamaño de letra
             </h2>
@@ -159,10 +159,16 @@ export default function AparienciaPage() {
                   onClick={() => chooseUiScale(s)}
                   className={`flex flex-col items-center justify-center gap-1 min-h-[72px] py-3 rounded-2xl border transition-all active:scale-95 ${
                     active
-                      ? "bg-[#1a1b1f] border-amber-500 text-white shadow-[0_0_15px_rgba(255,184,77,0.2)]"
+                      ? "bg-[#1a1b1f] text-white"
                       : "bg-[#0a0a0c] border-white/5 text-zinc-500"
                   }`}
-                  style={{ fontSize: s === "small" ? 13 : s === "large" ? 19 : 16 }}
+                  style={active ? {
+                    borderColor: "var(--brand)",
+                    boxShadow: "0 0 15px var(--brand-glow)",
+                    fontSize: s === "small" ? 13 : s === "large" ? 19 : 16,
+                  } : {
+                    fontSize: s === "small" ? 13 : s === "large" ? 19 : 16,
+                  }}
                 >
                   <span className="font-black">Aa</span>
                   <span className="text-[9px] font-black uppercase tracking-widest">{meta.label}</span>
@@ -176,7 +182,7 @@ export default function AparienciaPage() {
         {/* ANCHO PANEL TICKET */}
         <section className="bg-[#121316] rounded-3xl border border-white/5 p-6">
           <div className="flex items-center gap-2 mb-4">
-            <PanelRightClose size={16} className="text-amber-500" />
+            <PanelRightClose size={16} style={{ color: "var(--brand)" }} />
             <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">
               Ancho del panel ticket
             </h2>
@@ -195,9 +201,13 @@ export default function AparienciaPage() {
                   onClick={() => chooseSidebar(p)}
                   className={`flex flex-col items-center justify-center gap-1 min-h-[72px] py-3 rounded-2xl border transition-all active:scale-95 ${
                     active
-                      ? "bg-[#1a1b1f] border-amber-500 text-white shadow-[0_0_15px_rgba(255,184,77,0.2)]"
+                      ? "bg-[#1a1b1f] text-white"
                       : "bg-[#0a0a0c] border-white/5 text-zinc-500"
                   }`}
+                  style={active ? {
+                    borderColor: "var(--brand)",
+                    boxShadow: "0 0 15px var(--brand-glow)",
+                  } : undefined}
                 >
                   <span className="text-[11px] font-black uppercase tracking-widest">{meta.label}</span>
                   <span className="text-[10px] font-bold text-zinc-600">{meta.px}px</span>
@@ -210,7 +220,7 @@ export default function AparienciaPage() {
         {/* PALETA DE ACENTO */}
         <section className="bg-[#121316] rounded-3xl border border-white/5 p-6">
           <div className="flex items-center gap-2 mb-4">
-            <PaletteIcon size={16} className="text-amber-500" />
+            <PaletteIcon size={16} style={{ color: "var(--brand)" }} />
             <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">
               Paleta de acento
             </h2>
@@ -228,9 +238,13 @@ export default function AparienciaPage() {
                   onClick={() => setPalette(t.id)}
                   className={`flex flex-col items-center justify-center gap-3 min-h-[80px] py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 ${
                     active
-                      ? "bg-[#1a1b1f] border-amber-500 text-white shadow-[0_0_15px_rgba(255,184,77,0.2)]"
+                      ? "bg-[#1a1b1f] text-white"
                       : "bg-[#0a0a0c] border-white/5 text-zinc-600"
                   }`}
+                  style={active ? {
+                    borderColor: t.color,
+                    boxShadow: `0 0 15px ${t.color}33`,
+                  } : undefined}
                 >
                   <div className="w-6 h-6 rounded-full shadow-lg" style={{ backgroundColor: t.color }} />
                   {t.label}

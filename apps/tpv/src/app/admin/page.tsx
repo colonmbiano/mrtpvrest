@@ -123,6 +123,7 @@ export default function AdminLandingPage() {
               <Link
                 key={s.href}
                 href={s.href}
+                prefetch={false}
                 className="group relative flex items-center gap-4 p-5 min-h-[64px] rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 active:scale-95 transition-transform duration-150 overflow-hidden"
               >
                 {/* Halo del color de acento */}

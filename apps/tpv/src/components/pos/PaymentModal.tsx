@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   CreditCard,
   Banknote,
@@ -11,7 +11,9 @@ import {
   Minus,
   Plus,
   X,
+  Bike,
 } from "lucide-react";
+import api from "@/lib/api";
 
 /**
  * PaymentModal — Warm Tech rewrite con división de cuenta (Fase 12).
@@ -62,7 +64,10 @@ interface PaymentModalProps {
   discount?: number;
   /** Sugerencias de propina en porcentaje. Default [10,15,20]. */
   tipSuggestions?: number[];
-  onConfirm: (method: string, tip?: PaymentTip) => void;
+  /** Tipo de orden — necesario para gatear la asignación de repartidor
+   *  cuando es DELIVERY (BUG-24). */
+  orderType?: "DINE_IN" | "TAKEOUT" | "DELIVERY";
+  onConfirm: (method: string, tip?: PaymentTip, driverId?: string | null) => void;
   /** Opcional · invocado en lugar de onConfirm cuando el usuario
    *  presiona Confirmar en modo split. Si no se provee, usa onConfirm. */
   onConfirmSplit?: (
@@ -74,7 +79,15 @@ interface PaymentModalProps {
       bySeat?: { seatNumber: number | null; subtotal: number }[];
     },
     tip?: PaymentTip,
+    driverId?: string | null,
   ) => void;
+}
+
+interface DriverLite {
+  id: string;
+  name: string;
+  isAvailable?: boolean;
+  isActive?: boolean;
 }
 
 type Tab = "TOTAL" | "SPLIT";
@@ -96,6 +109,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   items,
   discount = 0,
   tipSuggestions,
+  orderType,
   onConfirm,
   onConfirmSplit,
 }) => {
@@ -105,6 +119,38 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const [tipPercent, setTipPercent] = useState<number>(0);
   const [cashReceived, setCashReceived] = useState<number>(total);
   const [equalParts, setEqualParts] = useState<number>(2);
+
+  // BUG-24: asignación de repartidor inline cuando es DELIVERY.
+  // Cargamos la lista de repartidores activos cuando el modal abre con
+  // type=DELIVERY; el cajero debe elegir uno antes de confirmar el cobro.
+  const [drivers, setDrivers] = useState<DriverLite[]>([]);
+  const [driverId, setDriverId] = useState<string | null>(null);
+  const [driversLoading, setDriversLoading] = useState(false);
+  const isDelivery = orderType === "DELIVERY";
+
+  useEffect(() => {
+    if (!isOpen || !isDelivery) return;
+    let cancelled = false;
+    setDriversLoading(true);
+    api.get<DriverLite[]>("/api/delivery")
+      .then(({ data }) => {
+        if (cancelled) return;
+        const active = (Array.isArray(data) ? data : []).filter(
+          (d) => d.isActive !== false,
+        );
+        setDrivers(active);
+        // Auto-seleccionar único disponible para ahorrar un tap.
+        if (active.length === 1) setDriverId(active[0]!.id);
+      })
+      .catch(() => { if (!cancelled) setDrivers([]); })
+      .finally(() => { if (!cancelled) setDriversLoading(false); });
+    return () => { cancelled = true; };
+  }, [isOpen, isDelivery]);
+
+  // Reset driver al cerrar para que la próxima orden empiece limpia.
+  useEffect(() => {
+    if (!isOpen) setDriverId(null);
+  }, [isOpen]);
 
   const subtotal = useMemo(
     () => items.reduce((acc, it) => acc + it.subtotal, 0),
@@ -180,15 +226,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     };
   }, [items]);
 
-  if (!isOpen) return null;
-
-  const change = Math.max(0, cashReceived - grandTotal);
-
-  // Ajustes de partes iguales (clamp 1-20).
-  const incParts = () => setEqualParts((n) => Math.min(20, n + 1));
-  const decParts = () => setEqualParts((n) => Math.max(1, n - 1));
-  const perPart = grandTotal / Math.max(1, equalParts);
-
+  // BUG-14 (real): este useMemo DEBE quedar antes del early `return null`
+  // para no violar Rules of Hooks. Si va después, en el segundo render
+  // (isOpen=true) se llaman más hooks que en el primero (isOpen=false) y
+  // React lanza Minified Error #310 → COBRAR crashea el WebView en
+  // Capacitor.
   const cashSuggestions = useMemo(
     () =>
       Array.from(
@@ -208,13 +250,26 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     [grandTotal]
   );
 
+  if (!isOpen) return null;
+
+  const change = Math.max(0, cashReceived - grandTotal);
+
+  // Ajustes de partes iguales (clamp 1-20).
+  const incParts = () => setEqualParts((n) => Math.min(20, n + 1));
+  const decParts = () => setEqualParts((n) => Math.max(1, n - 1));
+  const perPart = grandTotal / Math.max(1, equalParts);
+
   const tipPayload: PaymentTip | undefined = tipPercent > 0
     ? { percent: tipPercent, amount: tipAmount }
     : undefined;
 
+  // Gate de confirmación: DELIVERY exige repartidor seleccionado.
+  const canConfirm = !isDelivery || Boolean(driverId);
+
   const handleConfirm = () => {
+    if (!canConfirm) return;
     if (tab === "TOTAL") {
-      onConfirm(method, tipPayload);
+      onConfirm(method, tipPayload, driverId);
       return;
     }
     // SPLIT
@@ -224,6 +279,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           method,
           { kind: "EQUAL", parts: equalParts, perPart },
           tipPayload,
+          driverId,
         );
       } else {
         onConfirmSplit(
@@ -244,10 +300,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             ],
           },
           tipPayload,
+          driverId,
         );
       }
     } else {
-      onConfirm(method, tipPayload);
+      onConfirm(method, tipPayload, driverId);
     }
   };
 
@@ -314,6 +371,64 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         <div className="relative z-10 flex-1 min-h-0 flex overflow-hidden">
           {/* LEFT */}
           <div className="flex-1 min-w-0 p-7 sm:p-9 overflow-y-auto scrollbar-hide">
+            {/* BUG-24: sección Asignar Repartidor — solo DELIVERY.
+                Aparece arriba del TotalView/SplitView para que el cajero
+                la atienda antes que método de pago/propina. El botón
+                Confirmar queda disabled hasta que haya driverId. */}
+            {isDelivery && (
+              <section className="mb-6 rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Bike size={16} className="text-[#ffb84d]" />
+                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">
+                      Asignar repartidor
+                    </h3>
+                  </div>
+                  {driverId && (
+                    <span className="text-[10px] font-black tracking-widest uppercase text-emerald-400">
+                      Listo
+                    </span>
+                  )}
+                </div>
+                {driversLoading ? (
+                  <p className="text-xs font-medium text-white/40 py-2">
+                    Cargando repartidores…
+                  </p>
+                ) : drivers.length === 0 ? (
+                  <p className="text-xs font-medium text-amber-400/90 py-2">
+                    No hay repartidores activos. Crea uno en Configuración → Personal.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {drivers.map((d) => {
+                      const active = driverId === d.id;
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => setDriverId(d.id)}
+                          className={`min-h-[56px] px-3 py-2 rounded-xl border text-left transition-all active:scale-95 ${
+                            active
+                              ? "bg-[#ffb84d]/15 border-[#ffb84d]/50 text-white"
+                              : "bg-white/[0.03] border-white/10 text-white/75"
+                          }`}
+                        >
+                          <span className="block text-sm font-black truncate">
+                            {d.name}
+                          </span>
+                          {d.isAvailable === false && (
+                            <span className="block text-[9px] font-bold text-amber-400/80 uppercase tracking-widest">
+                              Ocupado
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
+
             {tab === "TOTAL" ? (
               <TotalView
                 method={method}
@@ -429,7 +544,9 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           <button
             type="button"
             onClick={handleConfirm}
-            className="flex-[2] min-h-[64px] h-16 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.2em] text-[11px] flex items-center justify-center gap-3 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)]"
+            disabled={!canConfirm}
+            title={!canConfirm ? "Selecciona un repartidor antes de cobrar" : undefined}
+            className="flex-[2] min-h-[64px] h-16 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.2em] text-[11px] flex items-center justify-center gap-3 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)] disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed"
           >
             <CheckCircle2 size={20} strokeWidth={2.5} />
             {tab === "SPLIT"
