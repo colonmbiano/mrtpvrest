@@ -9,7 +9,12 @@
 @layer base {
   button,
   a,
-  [role="button"] {
+  label,
+  input,
+  select,
+  [role="button"],
+  [role="switch"],
+  [role="checkbox"] {
     touch-action: manipulation;
   }
 }

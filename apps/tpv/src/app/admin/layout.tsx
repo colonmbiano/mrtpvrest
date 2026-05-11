@@ -67,11 +67,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   return (
-    <div className="flex h-screen w-full select-none bg-[#0a0a0c] font-sans">
+    <div
+      className="flex h-screen w-full select-none font-sans"
+      style={{ background: "var(--bg)" }}
+    >
       {/* SIDEBAR ADMIN — solo iconos en columna delgada para no tapar
           modales en tablets pequeñas. Drawer mobile en <md (botón hamburguesa
-          flotante). */}
-      <aside className="hidden md:flex w-20 border-r border-white/5 flex-col items-center py-6 gap-2 bg-[#0a0a0c] relative z-30 shrink-0">
+          flotante). Uses --bg directamente para que respete data-mode="light". */}
+      <aside
+        className="hidden md:flex w-20 flex-col items-center py-6 gap-2 relative z-30 shrink-0"
+        style={{
+          background: "var(--bg)",
+          borderRight: "1px solid var(--border)",
+        }}
+      >
         {/* Avatar/badge admin · click → dropdown con nombre/rol/logout */}
         <div className="relative mb-2">
           <button
@@ -127,6 +136,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               title={item.label}
               aria-label={item.label}
               className="w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-90 text-zinc-500 active:bg-white/5 active:text-amber-500 hover:text-white"
@@ -139,6 +149,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="w-8 h-px bg-white/5 my-2" />
         <Link
           href="/"
+          prefetch={false}
           title="Volver al TPV"
           aria-label="Volver al TPV"
           className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-zinc-400 active:scale-90 active:text-amber-500 transition-all"
