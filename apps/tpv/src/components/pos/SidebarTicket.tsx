@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X, MapPin } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X, MapPin, Phone, Home } from "lucide-react";
 import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
@@ -225,7 +225,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     }
   };
 
-  const handleProcessPayment = async (method: string, tip?: PaymentTip) => {
+  const handleProcessPayment = async (
+    method: string,
+    tip?: PaymentTip,
+    driverId?: string | null,
+  ) => {
     if (ticket.items.length === 0) return;
     setProcessing(true);
     try {
@@ -243,6 +247,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         numberOfGuests: ticket.numberOfGuests ?? null,
         customerName: ticket.name || "Publico General",
         customerPhone: ticket.phone || null,
+        // BUG-24: dirección de entrega para DELIVERY. El backend ya tiene
+        // el campo deliveryAddress en Order.
+        deliveryAddress: ticket.type === "DELIVERY" ? (ticket.address || null) : null,
         subtotal,
         discount: ticket.discount,
         total: total + tipAmount,
@@ -258,6 +265,22 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
       const { data: order } = await api.post("/api/orders/tpv", orderData);
       await api.put(`/api/orders/${order.id}/payment`, { paymentMethod: method });
+
+      // BUG-24: asignar repartidor inmediatamente después del cobro DELIVERY.
+      // El gate en PaymentModal garantiza que driverId esté presente aquí
+      // (sin él, el botón Confirmar está disabled). Si la asignación falla
+      // mostramos un warning pero NO revertimos el cobro — la orden ya pagó.
+      if (ticket.type === "DELIVERY" && driverId) {
+        try {
+          await api.put("/api/delivery/assign", { orderId: order.id, driverId });
+        } catch (assignErr: any) {
+          toast.warning(
+            "Cobro OK, pero falló asignar repartidor: " +
+            (assignErr?.response?.data?.error || assignErr?.message || "Error desconocido"),
+          );
+        }
+      }
+
       toast.success("Cobro procesado");
       hapticSuccess();
       // Capturar contexto antes de limpiar el ticket activo.
@@ -432,6 +455,39 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             <Trash2 size={20} />
           </button>
         </div>
+
+        {/* BUG-24: campos requeridos para DELIVERY. Sin dirección no hay
+            ruta para el repartidor; sin teléfono no puede llamar al cliente
+            al llegar. El cajero ve los campos desde el inicio del ticket. */}
+        {ticket.type === "DELIVERY" && (
+          <div className="flex flex-col gap-3">
+            <div className="flex-1 bg-[#121316] border border-white/5 rounded-2xl h-14 flex items-center px-5 gap-4 focus-within:border-amber-500/50 transition-all">
+              <Home size={18} className="text-zinc-600" />
+              <input
+                placeholder="Dirección de entrega..."
+                className="bg-transparent border-none outline-none text-sm font-bold text-white w-full placeholder:text-zinc-600 placeholder:font-bold tracking-tight"
+                value={ticket.address || ""}
+                onChange={(e) => useTicketStore.getState().updateTicket({ address: e.target.value })}
+              />
+              <span className="text-[9px] font-black tracking-[0.2em] uppercase text-amber-500/70">
+                Req
+              </span>
+            </div>
+            <div className="flex-1 bg-[#121316] border border-white/5 rounded-2xl h-14 flex items-center px-5 gap-4 focus-within:border-amber-500/50 transition-all">
+              <Phone size={18} className="text-zinc-600" />
+              <input
+                placeholder="Teléfono del cliente..."
+                inputMode="tel"
+                className="bg-transparent border-none outline-none text-sm font-bold text-white w-full placeholder:text-zinc-600 placeholder:font-bold tracking-tight tabular-nums"
+                value={ticket.phone || ""}
+                onChange={(e) => useTicketStore.getState().updateTicket({ phone: e.target.value })}
+              />
+              <span className="text-[9px] font-black tracking-[0.2em] uppercase text-amber-500/70">
+                Req
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* LISTA DE ITEMS */}
@@ -480,7 +536,24 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           ) : (
             <button
               onClick={isShiftOpen ? handleOpenPayment : onOpenShift}
-              disabled={processing || ticket.items.length === 0}
+              disabled={
+                processing ||
+                ticket.items.length === 0 ||
+                (ticket.type === "DELIVERY" &&
+                  isShiftOpen &&
+                  (!ticket.address?.trim() || !ticket.phone?.trim()))
+              }
+              title={
+                ticket.type === "DELIVERY" && isShiftOpen
+                  ? !ticket.address?.trim() && !ticket.phone?.trim()
+                    ? "Falta dirección y teléfono del cliente"
+                    : !ticket.address?.trim()
+                      ? "Falta dirección de entrega"
+                      : !ticket.phone?.trim()
+                        ? "Falta teléfono del cliente"
+                        : undefined
+                  : undefined
+              }
               className={`w-full h-16 rounded-2xl text-sm font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale ${
                 isShiftOpen
                   ? "bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)]"
@@ -528,6 +601,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           isOpen={showPayment && !isLoanMode}
           onClose={() => setShowPayment(false)}
           orderNumber={String(ticket.id)}
+          orderType={ticket.type}
           total={total}
           discount={ticket.discount}
           tipSuggestions={tipSuggestions}
