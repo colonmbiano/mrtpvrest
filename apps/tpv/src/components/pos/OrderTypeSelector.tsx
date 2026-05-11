@@ -10,6 +10,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import type { OrderType } from "@/components/tpv/TicketPanel";
+import UserBadge from "@/components/UserBadge";
 
 export type ExtendedOrderType = OrderType;
 
@@ -69,6 +70,13 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-60 -left-60 w-[700px] h-[700px] rounded-full blur-[120px] bg-amber-500/10" />
         <div className="absolute -bottom-60 -right-60 w-[700px] h-[700px] rounded-full blur-[120px] bg-amber-500/10" />
+      </div>
+
+      {/* Badge global del empleado activo. Visible en todas las pantallas
+          fuera de la orden para que el cajero siempre vea quién está
+          logueado. */}
+      <div className="absolute top-5 right-5 z-20">
+        <UserBadge />
       </div>
 
       <div className="relative z-10 w-full max-w-6xl p-6 sm:p-10 flex flex-col items-center">

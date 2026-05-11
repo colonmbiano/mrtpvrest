@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* BUG-4: en Android+Capacitor el "300ms tap delay" hace que el primer
+   click después de cerrar un modal se pierda. touch-action:manipulation
+   en botones e interactivos elimina ese delay y libera el bloqueo
+   fantasma del overlay anterior. */
+@layer base {
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+}
+
 @layer base {
   :root {
     --bg: #0C0C0E;

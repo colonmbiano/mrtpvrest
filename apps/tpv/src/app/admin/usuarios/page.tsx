@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import BackButton from "@/components/BackButton";
+import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 
 const ROLES = ["OWNER", "ADMIN", "MANAGER", "CASHIER", "WAITER", "KITCHEN", "COOK", "DELIVERY"];
 
@@ -168,7 +169,7 @@ export default function UsuariosAdmin() {
           <BackButton ariaLabel="Volver al panel admin" />
           <div className="space-y-1.5">
             <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
-              Recursos Humanos
+              Configuración
             </span>
             <h1 className="text-4xl font-black text-white tracking-tight leading-none">
               Gestión de Personal
@@ -390,17 +391,18 @@ function EmployeeModal({
   });
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState("");
+  // BUG-5: si se está cambiando el PIN de un empleado existente, requerimos
+  // que el admin re-autentique con su propio PIN antes de mandar el PATCH.
+  // El payload queda en pendingPayload hasta que el guard valide.
+  const [pendingPayload, setPendingPayload] = useState<any | null>(null);
 
   const setSpecial = (key: SpecialPermKey, value: boolean) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const persist = async (payload: any) => {
     setSubmitting(true);
     setErr("");
     try {
-      const payload = { ...form };
-      if (!payload.pin) delete (payload as { pin?: string }).pin;
       if (isEdit) {
         await api.put(`/api/employees/${employee!.id}`, payload);
       } else {
@@ -413,6 +415,23 @@ function EmployeeModal({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload: any = { ...form };
+    if (!payload.pin) delete payload.pin;
+
+    // BUG-5: gate de seguridad antes de cambiar el PIN de un empleado
+    // existente. Si solo se tocan otros campos (rol, permisos, etc.) el
+    // flujo sigue directo. Si hay un PIN nuevo en el payload, primero
+    // pedimos confirmación con el PIN del admin actual.
+    if (isEdit && payload.pin) {
+      setPendingPayload(payload);
+      return;
+    }
+
+    await persist(payload);
   };
 
   const activeSpecialCount = SPECIAL_PERMS.reduce(
@@ -559,7 +578,7 @@ function EmployeeModal({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline gap-2">
                         <span
-                          className={`text-[13px] font-black tracking-tight truncate ${
+                          className={`text-[13px] font-black tracking-tight leading-snug ${
                             active ? "text-white" : "text-white/85"
                           }`}
                         >
@@ -624,6 +643,16 @@ function EmployeeModal({
             </div>
           )}
         </form>
+
+        <AdminPinGuardModal
+          isOpen={pendingPayload !== null}
+          onClose={() => setPendingPayload(null)}
+          onSuccess={async () => {
+            const payload = pendingPayload;
+            setPendingPayload(null);
+            if (payload) await persist(payload);
+          }}
+        />
 
         {/* FOOTER */}
         <div className="p-5 sm:p-7 border-t border-white/5 bg-[#0C0C0E] flex gap-3 shrink-0">

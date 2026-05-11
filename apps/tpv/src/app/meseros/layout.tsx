@@ -79,6 +79,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
             <Link
               key={tab.id}
               href={tab.href}
+              prefetch={false}
               className={`flex-1 flex flex-col items-center justify-center gap-1 rounded-2xl active:scale-95 transition-transform ${
                 isActive
                   ? "text-[#ffb84d] bg-[#ffb84d]/10 border border-[#ffb84d]/20"

@@ -1,5 +1,7 @@
 "use client";
 
+import { formatDisplayName } from "@/lib/formatDisplayName";
+
 export type Category = { id: string; name: string };
 
 export default function CategoryTabs({
@@ -33,7 +35,7 @@ export default function CategoryTabs({
               letterSpacing: "0.08em",
             }}
           >
-            {c.name}
+            {formatDisplayName(c.name)}
           </button>
         );
       })}

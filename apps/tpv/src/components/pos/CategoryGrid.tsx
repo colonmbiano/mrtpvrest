@@ -15,6 +15,7 @@
  */
 
 import { Star, ChefHat } from "lucide-react";
+import { formatDisplayName } from "@/lib/formatDisplayName";
 
 interface CategoryLite {
   id: string;
@@ -67,12 +68,12 @@ export default function CategoryGrid({
             key={cat.id}
             type="button"
             onClick={() => onSelect(cat.id)}
-            aria-label={`Ver productos de ${cat.name}`}
+            aria-label={`Ver productos de ${formatDisplayName(cat.name)}`}
             className="group flex flex-col items-start gap-1 px-3 py-3 min-h-[88px] rounded-2xl bg-surf-1 hover:bg-surf-2 active:bg-surf-3 active:scale-[0.98] transition-all duration-100 border border-bd-main focus-visible:ring-2 focus-visible:ring-amber-500 outline-none text-left shadow-md"
           >
             <ChefHat size={12} className="text-tx-sec group-active:text-iris-500 transition-colors" />
             <span className="text-[11px] font-black uppercase tracking-[0.05em] text-tx-pri leading-tight line-clamp-2">
-              {cat.name}
+              {formatDisplayName(cat.name)}
             </span>
             <span className="text-[9px] font-bold text-tx-mut mt-auto">
               {count} {count === 1 ? "item" : "items"}

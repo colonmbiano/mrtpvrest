@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import Link from "next/link";
-import { Settings, Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, ChevronRight, Grid3x3, Palette, Layers } from "lucide-react";
+import { Settings, Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, ChevronRight, Grid3x3, Palette, Layers, BookOpen, LogOut } from "lucide-react";
 
 const ADMIN_ROLES = ["OWNER", "ADMIN", "MANAGER"] as const;
 
@@ -12,7 +12,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const employee = useAuthStore(s => s.employee);
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
   const hydrateFromStorage = useAuthStore(s => s.hydrateFromStorage);
+  const logout = useAuthStore(s => s.logout);
   const [hydrated, setHydrated] = useState(false);
+  const [avatarOpen, setAvatarOpen] = useState(false);
 
   // Esperar a que Zustand hidrate desde storage antes de validar el rol.
   // Sin este gate el employee queda null en el primer render, el guard
@@ -53,7 +55,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navItems = [
     { href: "/admin",            label: "Inicio",                icon: BarChart3 },
     { href: "/admin/reportes",   label: "Reportes",              icon: BarChart3 },
-    { href: "/admin/menu",       label: "Menú",                  icon: Settings },
+    { href: "/admin/menu",       label: "Menú",                  icon: BookOpen },
     { href: "/admin/mesas",      label: "Mesas",                 icon: Grid3x3 },
     { href: "/admin/impresoras", label: "Impresoras",            icon: Printer },
     { href: "/admin/grupos-impresoras", label: "Grupos",         icon: Layers },
@@ -70,10 +72,53 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           modales en tablets pequeñas. Drawer mobile en <md (botón hamburguesa
           flotante). */}
       <aside className="hidden md:flex w-20 border-r border-white/5 flex-col items-center py-6 gap-2 bg-[#0a0a0c] relative z-30 shrink-0">
-        {/* Avatar/badge admin */}
-        <div className="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-500 font-black text-sm border border-amber-500/30 mb-2"
-             title={`${employee.name} · ${employee.role}`}>
-          {employee.name.charAt(0).toUpperCase()}
+        {/* Avatar/badge admin · click → dropdown con nombre/rol/logout */}
+        <div className="relative mb-2">
+          <button
+            type="button"
+            onClick={() => setAvatarOpen((v) => !v)}
+            aria-label="Abrir menú de usuario"
+            aria-expanded={avatarOpen}
+            className="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-500 font-black text-sm border border-amber-500/30 active:scale-95 transition-all hover:border-amber-500/60"
+            title={`${employee.name} · ${employee.role}`}
+          >
+            {employee.name.charAt(0).toUpperCase()}
+          </button>
+          {avatarOpen && (
+            <>
+              <button
+                type="button"
+                aria-label="Cerrar menú de usuario"
+                onClick={() => setAvatarOpen(false)}
+                className="fixed inset-0 z-40 bg-transparent cursor-default"
+              />
+              <div className="absolute left-full top-0 ml-3 w-64 rounded-2xl bg-[#141417] border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.5)] p-4 z-50">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-500 font-black border border-amber-500/30 shrink-0">
+                    {employee.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-black text-white truncate">{employee.name}</p>
+                    <p className="text-[10px] font-black tracking-[0.25em] text-amber-500/80 uppercase">
+                      {employee.role}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAvatarOpen(false);
+                    logout();
+                    router.replace("/locked");
+                  }}
+                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-black uppercase tracking-[0.2em] active:scale-95 transition-all"
+                >
+                  <LogOut size={14} strokeWidth={2.5} />
+                  Cerrar sesión
+                </button>
+              </div>
+            </>
+          )}
         </div>
         <div className="w-8 h-px bg-white/5 mb-2" />
 

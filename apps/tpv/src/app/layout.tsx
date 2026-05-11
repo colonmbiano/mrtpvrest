@@ -4,6 +4,7 @@ import ModalRoot from "@/components/tpv/ModalRoot";
 import SyncInitializer from "@/components/SyncInitializer";
 import OtaUpdater from "@/components/OtaUpdater";
 import AutoLock from "@/components/AutoLock";
+import ConsolePatch from "@/components/ConsolePatch";
 
 // Las fuentes se cargan con <link> en runtime en lugar de next/font/google
 // porque next/font descarga al BUILD time, y el runner de Android APK
@@ -41,6 +42,7 @@ export default function RootLayout({
           ["--font-dm-mono" as any]: "'DM Mono', ui-monospace, monospace",
         }}
       >
+        <ConsolePatch />
         <SyncInitializer />
         <OtaUpdater />
         <AutoLock />

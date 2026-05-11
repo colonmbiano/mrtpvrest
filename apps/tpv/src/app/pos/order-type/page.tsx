@@ -6,6 +6,7 @@ import OrderTypeSelector from "@/components/pos/OrderTypeSelector";
 import type { ExtendedOrderType } from "@/components/pos/OrderTypeSelector";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import GuestCountModal from "@/components/pos/GuestCountModal";
+import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useAuthStore } from "@/store/authStore";
 
@@ -22,11 +23,13 @@ export default function OrderTypePage() {
   const router = useRouter();
 
   useTPVAuth();
-  const logout = useAuthStore((s) => s.logout);
+  const logout   = useAuthStore((s) => s.logout);
+  const employee = useAuthStore((s) => s.employee);
 
   const [pickingTable, setPickingTable] = useState(false);
   const [picked, setPicked]             = useState<TableLite | null>(null);
   const [askingGuests, setAskingGuests] = useState(false);
+  const [askingAdminPin, setAskingAdminPin] = useState(false);
 
   const handlePickType = (type: ExtendedOrderType) => {
     if (type === "DINE_IN") {
@@ -80,7 +83,17 @@ export default function OrderTypePage() {
 
   const goTables     = () => router.push("/meseros/mis-mesas");
   const goShiftClose = () => router.push("/cierre");
-  const goConfig     = () => router.push("/admin");
+  const goConfig     = () => {
+    // Solo ADMIN/OWNER entran sin segundo factor. Cualquier otro rol
+    // (MANAGER, CASHIER, WAITER…) debe ingresar un PIN admin para
+    // escalar privilegios. Bug QA: BUG-3 — Panel Central sin guard.
+    const role = employee?.role;
+    if (role === "ADMIN" || role === "OWNER") {
+      router.push("/admin");
+      return;
+    }
+    setAskingAdminPin(true);
+  };
 
   return (
     <div className="flex h-screen w-full bg-[#0a0a0c] overflow-auto">
@@ -112,6 +125,12 @@ export default function OrderTypePage() {
           });
         }}
         onConfirm={handleConfirmGuests}
+      />
+
+      <AdminPinGuardModal
+        isOpen={askingAdminPin}
+        onClose={() => setAskingAdminPin(false)}
+        onSuccess={() => router.push("/admin")}
       />
     </div>
   );

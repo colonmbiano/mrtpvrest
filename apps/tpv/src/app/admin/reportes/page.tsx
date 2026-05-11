@@ -100,7 +100,7 @@ export default function ReportesPage() {
           <BackButton ariaLabel="Volver al panel admin" />
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-widest text-tx-mut uppercase">
-              <span>Analytics</span>
+              <span>Configuración</span>
               <ChevronRight size={11} />
               <span style={{ color: 'var(--brand)' }}>Reportes de Ventas</span>
             </div>
