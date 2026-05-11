@@ -170,8 +170,8 @@ export default function TicketConfigPage() {
                   onChange={(e) => setConfig({ ...config!, paperWidth: e.target.value })}
                   className="w-full bg-[#0a0a0c] border border-[#2d2d30] rounded-lg px-3 py-2 text-white outline-none focus:border-[#ffb84d]"
                 >
-                  <option value="80mm">80mm (Estándar)</option>
-                  <option value="58mm">58mm (Portátil)</option>
+                  <option value="80mm">80mm</option>
+                  <option value="58mm">58mm</option>
                 </select>
               </div>
               <div>
@@ -181,9 +181,9 @@ export default function TicketConfigPage() {
                   onChange={(e) => setConfig({ ...config!, fontFamily: e.target.value })}
                   className="w-full bg-[#0a0a0c] border border-[#2d2d30] rounded-lg px-3 py-2 text-white outline-none focus:border-[#ffb84d]"
                 >
-                  <option value="monospace">Monospace (Terminal)</option>
-                  <option value="sans-serif">Sans Serif (Limpia)</option>
-                  <option value="serif">Serif (Clásica)</option>
+                  <option value="monospace">Monospace</option>
+                  <option value="sans-serif">Sans Serif</option>
+                  <option value="serif">Serif</option>
                 </select>
               </div>
               <div>
@@ -326,8 +326,8 @@ export default function TicketConfigPage() {
             <h2 className="text-lg font-black mb-1 uppercase">{config?.businessName || "MI NEGOCIO"}</h2>
             <p className="font-bold mb-2 whitespace-pre-wrap leading-tight">{config?.header || "Encabezado"}</p>
 
-            {config?.showAddress && <p className="opacity-80 mb-0.5">{config?.address || "Av. Principal 123"}</p>}
-            {config?.showPhone && <p className="opacity-80 mb-4">Tel: {config?.phone || "(555) 123-4567"}</p>}
+            {config?.showAddress && config?.address && <p className="opacity-80 mb-0.5">{config.address}</p>}
+            {config?.showPhone && config?.phone && <p className="opacity-80 mb-4">Tel: {config.phone}</p>}
 
             {config?.showOrderNumber && (
               <div className="w-full border-y border-dashed border-black py-2 mb-4">

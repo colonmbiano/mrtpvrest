@@ -405,6 +405,23 @@ router.post('/login', pinLoginLimiter, async (req, res) => {
       { expiresIn: '12h' }
     );
 
+    // BUG-13: registrar login en la bitácora de acceso. Fire-and-forget
+    // para no bloquear el response si la insert falla (la auditoría no
+    // debe degradar el login).
+    prisma.accessLog.create({
+      data: {
+        tenantId,
+        restaurantId,
+        locationId,
+        actorType: 'EMPLOYEE',
+        actorId:   emp.id,
+        actorName: emp.name,
+        action:    'LOGIN',
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || null,
+        userAgent: req.headers['user-agent']?.slice(0, 200) || null,
+      },
+    }).catch((e) => console.error('[audit] login log failed:', e?.message || e));
+
     // No devolvemos la relación anidada al cliente, solo el empleado plano.
     const { location, ...employeePublic } = emp;
     res.json({ employee: employeePublic, token });

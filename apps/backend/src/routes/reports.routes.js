@@ -103,11 +103,15 @@ router.get('/top-products', authenticate, requireTenantAccess, requireAdmin, asy
       ...(locationId ? { locationId } : {}),
     };
 
+    // BUG-8: rankear por ingreso (subtotal), no por unidades. Así los
+    // ítems gratis (Aderezo Extra $0, cortesías) no inflan el ranking.
+    // Adicionalmente filtramos out cualquier producto cuyo subtotal
+    // agregado sea <= 0 para no mostrarlos como "top".
     const items = await prisma.orderItem.groupBy({
       by: ['name'],
-      where: { order: orderWhere },
+      where: { order: orderWhere, subtotal: { gt: 0 } },
       _sum: { quantity: true, subtotal: true },
-      orderBy: { _sum: { quantity: 'desc' } },
+      orderBy: { _sum: { subtotal: 'desc' } },
       take: limit,
     });
 

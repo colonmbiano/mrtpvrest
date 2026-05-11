@@ -28,6 +28,7 @@ import NotificationsPanel from "@/components/pos/NotificationsPanel";
 import { useNotifications, useNotifStore } from "@/hooks/useNotifications";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
 import MergeTableModal from "@/components/pos/MergeTableModal";
+import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
   DINE_IN: "MESA",
@@ -57,6 +58,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [askingAdminPin, setAskingAdminPin] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [mobileView, setMobileView] = useState<"menu" | "ticket">("menu");
@@ -544,6 +546,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         onToggleMode={toggleMode}
       />
 
+      <AdminPinGuardModal
+        isOpen={askingAdminPin}
+        onClose={() => setAskingAdminPin(false)}
+        onSuccess={() => router.push("/admin")}
+      />
+
       <OrdersDrawer
         isOpen={showOrders}
         onClose={() => setShowOrders(false)}
@@ -770,11 +778,15 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
             <button
               type="button"
               onClick={() => {
-                // Roles administrativos van directo al panel /admin.
-                // Cajeros y demás no tienen acceso → ConfigMenu modal.
+                // Sólo ADMIN/OWNER pueden entrar directo al Panel Central.
+                // MANAGER ahora requiere PIN admin para escalar (BUG-3
+                // de QA: cualquiera con la tablet logueada como cajero
+                // podía entrar). Otros roles ven el ConfigMenu acotado.
                 const role = currentEmployee?.role;
-                if (role === "ADMIN" || role === "OWNER" || role === "MANAGER") {
+                if (role === "ADMIN" || role === "OWNER") {
                   router.push("/admin");
+                } else if (role === "MANAGER" || role === "CASHIER") {
+                  setAskingAdminPin(true);
                 } else {
                   setShowMenu(true);
                 }

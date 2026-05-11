@@ -98,7 +98,7 @@ export default function SeguridadAdmin() {
           <div className="flex items-start gap-4">
             <BackButton ariaLabel="Volver al panel admin" />
             <div>
-              <p className="text-[10px] font-black tracking-[0.25em] text-white/40">ADMINISTRACIÓN</p>
+              <p className="text-[10px] font-black tracking-[0.25em] text-white/40">CONFIGURACIÓN</p>
               <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-2">
                 <ShieldCheck size={26} className="text-[#ffb84d]" /> Seguridad
               </h1>

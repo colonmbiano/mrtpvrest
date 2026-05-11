@@ -113,7 +113,7 @@ export default function MenuEditorPage() {
         <div className="flex items-start gap-4">
           <BackButton ariaLabel="Volver al panel admin" />
           <div className="space-y-1.5">
-            <span className="eyebrow text-amber-500/80">Gestión Administrativa</span>
+            <span className="eyebrow text-amber-500/80">Configuración</span>
             <h1 className="text-4xl font-black text-white tracking-tight leading-none">Catálogo de Menú</h1>
             <p className="text-zinc-500 font-bold text-sm">Configura la oferta gastronómica y precios de la sucursal.</p>
           </div>
