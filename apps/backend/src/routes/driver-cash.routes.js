@@ -64,9 +64,23 @@ router.post('/:driverId/movements', upload.single('photo'), async (req, res) => 
 });
 
 // ── POST registrar cobro de entrega (automático al entregar) ──────────────
+// BUG-31: idempotente por (driverId, orderId, category=DELIVERY) — el backend
+// ya crea el movement al transicionar a DELIVERED desde delivery.routes.js,
+// así que /collect debe ser un no-op si ya existe para evitar duplicados.
 router.post('/:driverId/collect', async (req, res) => {
   try {
     const { orderId, amount, orderNumber } = req.body;
+    if (orderId) {
+      const existing = await prisma.driverCashMovement.findFirst({
+        where: {
+          driverId: req.params.driverId,
+          orderId,
+          category: 'DELIVERY',
+          type: 'INCOME',
+        }
+      });
+      if (existing) return res.json(existing);
+    }
     const movement = await prisma.driverCashMovement.create({
       data: {
         driverId: req.params.driverId,

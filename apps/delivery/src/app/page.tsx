@@ -630,7 +630,11 @@ export default function DeliveryApp() {
           <p className="text-[10px] font-bold text-halo-muted mb-4 tracking-[0.3em] uppercase">Ubicación de Entrega</p>
           <div className="flex gap-4 items-start">
             <span className="text-2xl mt-1">📍</span>
-            <p className="text-base font-medium text-white/90 leading-relaxed tracking-tight">{selectedOrder.deliveryAddress}</p>
+            <p className="text-base font-medium text-white/90 leading-relaxed tracking-tight">
+              {selectedOrder.deliveryAddress?.trim()
+                ? selectedOrder.deliveryAddress
+                : <span className="text-halo-muted italic opacity-70">Sin dirección registrada</span>}
+            </p>
           </div>
           <button className="w-full mt-8 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-bold tracking-[0.3em] uppercase hover:bg-white/10 transition-all flex items-center justify-center gap-3 shadow-lg">
             <span>MAPAS</span> 🗺️
@@ -640,12 +644,43 @@ export default function DeliveryApp() {
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[32px] p-8 shadow-2xl">
           <p className="text-[10px] font-bold text-halo-muted mb-6 tracking-[0.3em] uppercase">Contenido del Pedido</p>
           <div className="space-y-4">
-            {(orderDetail?.items || []).map((item: any, i: number) => (
-              <div key={i} className="flex justify-between items-center text-sm pb-4 border-b border-white/5 last:border-0 last:pb-0">
-                <span className="text-white/90"><span className="font-mono font-bold text-halo-primary mr-2">{item.quantity}x</span> {item.productName}</span>
-                <span className="font-mono text-white/40 tracking-tighter">${(item.price * item.quantity).toFixed(2)}</span>
-              </div>
-            ))}
+            {/* BUG-30: usar items embebidos en selectedOrder (vienen de
+                 /api/delivery/:driverId/orders con menuItem + modifiers).
+                 Antes leía orderDetail?.items que llegaba vacío y mostraba
+                 "1x — $135" sin nombre del producto. */}
+            {((selectedOrder.items && selectedOrder.items.length > 0)
+                ? selectedOrder.items
+                : (orderDetail?.items || [])
+              ).map((item: any, i: number) => {
+              const itemName = item.name || item.productName || item.menuItem?.name || 'Producto';
+              const mods = Array.isArray(item.modifiers) ? item.modifiers : [];
+              const lineTotal = item.subtotal != null
+                ? Number(item.subtotal)
+                : Number(item.price || 0) * Number(item.quantity || 0);
+              return (
+                <div key={item.id || i} className="text-sm pb-4 border-b border-white/5 last:border-0 last:pb-0">
+                  <div className="flex justify-between items-start gap-3">
+                    <span className="text-white/90 leading-snug">
+                      <span className="font-mono font-bold text-halo-primary mr-2">{item.quantity}x</span>
+                      <span className="font-medium">{itemName}</span>
+                    </span>
+                    <span className="font-mono text-white/60 tracking-tighter whitespace-nowrap">${lineTotal.toFixed(2)}</span>
+                  </div>
+                  {mods.length > 0 && (
+                    <ul className="mt-2 ml-10 space-y-0.5">
+                      {mods.map((m: any, mi: number) => (
+                        <li key={m.id || mi} className="text-[11px] text-halo-muted/80 leading-tight">
+                          + {m.name}{m.priceAdd > 0 ? ` ($${Number(m.priceAdd).toFixed(2)})` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {item.notes && (
+                    <p className="mt-1 ml-10 text-[11px] italic text-halo-muted/70">📝 {item.notes}</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="border-t border-white/10 mt-8 pt-8 flex justify-between items-center">
             <span className="text-xs font-bold text-halo-muted tracking-[0.2em] uppercase">Total Recaudado</span>
