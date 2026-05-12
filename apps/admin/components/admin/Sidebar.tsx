@@ -50,10 +50,11 @@ const SECTIONS = [
     icon: <IBarChart />,
     accent: "#22c55e",
     items: [
-      { href: "/admin/restaurant-dashboard", icon: <IGrid />,      label: "Dashboard" },
+      // Unificado: el dashboard regular y los reportes clásicos se eliminaron
+      // del sidebar — ambas rutas redirigen server-side a /admin/reportes/ia.
+      // Mantenemos un solo punto de entrada bajo "Reportes" con la versión IA.
+      { href: "/admin/reportes/ia",          icon: <ITrending />,  label: "Reportes" },
       { href: "/admin/mi-marca",             icon: <IBuilding />,  label: "Mi Marca" },
-      { href: "/admin/reportes",             icon: <ITrending />,  label: "Reportes" },
-      { href: "/admin/reportes/ia",          icon: <ILayoutDash />, label: "Reportes IA ✦" },
       { href: "/admin/integraciones",        icon: <IPlug />,      label: "Integraciones" },
       { href: "/admin/modulos",             icon: <IPuzzle />,    label: "Módulos" },
       { href: "/admin/billing",              icon: <ICreditCard />, label: "Facturación" },
