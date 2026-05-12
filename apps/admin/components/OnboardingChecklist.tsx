@@ -35,11 +35,19 @@ export default function OnboardingChecklist() {
       api.get(`/api/employees`).then(r => r.data).catch(() => []),
       api.get(`/api/orders/admin`).then(r => r.data).catch(() => []),
     ]).then(([tenant, menuItems, employees, orders]) => {
+      // hasLogo: el upload del wizard guarda en Restaurant.logoUrl
+      // (vía PUT /api/admin/brand). Antes evaluábamos Tenant.logoUrl,
+      // que jamás se llena por el wizard → la tarea quedaba 4/5 para
+      // siempre. Ahora miramos primero el primer restaurante del tenant;
+      // el fallback al tenant cubre integraciones futuras que sí
+      // escriban ahí.
+      const firstRestaurant = tenant?.restaurants?.[0];
+      const logoUrl = firstRestaurant?.logoUrl || tenant?.logoUrl || null;
       setState({
-        hasLogo:       !!(tenant?.logoUrl),
+        hasLogo:       !!logoUrl,
         hasMenu:       Array.isArray(menuItems) && menuItems.length > 0,
         hasEmployees:  Array.isArray(employees) && employees.length > 0,
-        hasLocation:   !!(tenant?.restaurants?.[0]),
+        hasLocation:   !!firstRestaurant,
         hasFirstOrder: Array.isArray(orders) && orders.length > 0,
       });
     }).catch(() => {});

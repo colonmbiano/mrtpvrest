@@ -27,7 +27,10 @@ router.get('/me', async (req, res) => {
         where: { id: tenantId },
         include: {
           subscription: { include: { plan: true } },
-          restaurants:  { select: { id: true, slug: true, name: true } },
+          // logoUrl: el upload del wizard "Sube tu logo" (PUT /api/admin/brand)
+          // escribe en Restaurant.logoUrl, NO en Tenant.logoUrl. El checklist
+          // de onboarding lo evalúa desde aquí, por eso lo exponemos.
+          restaurants:  { select: { id: true, slug: true, name: true, logoUrl: true } },
         }
       })
     } catch (primaryErr) {
