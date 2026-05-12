@@ -116,7 +116,12 @@ export default function ReportesIAPage() {
   const [prompt, setPrompt] = useState("");
   const [chatMsg, setChatMsg] = useState("");
   const [msgs, setMsgs] = useState<Msg[]>(INIT_MSGS);
-  const [period, setPeriod] = useState<"HOY"|"7D"|"30D"|"TRIM"|"AÑO">("30D");
+  // Períodos alineados con backend (getPeriodRange):
+  // - 90D reemplaza al antiguo "TRIM" (trimestre ~ 90 días)
+  // - AÑO ahora es rolling 365d (no año en curso)
+  // - HIST captura todo el histórico — clave para ver datos importados
+  //   antiguos que no caen en los últimos 365 días.
+  const [period, setPeriod] = useState<"HOY"|"7D"|"30D"|"90D"|"AÑO"|"HIST">("HIST");
   const chatRef = useRef<HTMLDivElement>(null);
 
   // Datos reales del dashboard (sin fallbacks mock)
@@ -250,7 +255,7 @@ export default function ReportesIAPage() {
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
               {/* Period selector */}
               <div style={{ display: "inline-flex", background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 10, padding: 3 }}>
-                {(["HOY","7D","30D","TRIM","AÑO"] as const).map(p => (
+                {(["HOY","7D","30D","90D","AÑO","HIST"] as const).map(p => (
                   <button key={p} onClick={() => setPeriod(p)} style={{
                     padding: "6px 12px", borderRadius: 7,
                     fontFamily: "'DM Mono',monospace", fontSize: 11,
