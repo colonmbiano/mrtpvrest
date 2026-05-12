@@ -35,7 +35,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
 
   return (
     <div
-      className="relative flex flex-col h-screen w-full bg-[#0a0a0c] text-white overflow-hidden max-w-[500px] mx-auto border-x border-white/10"
+      className="relative flex flex-col h-screen w-full bg-[#0a0a0c] text-white overflow-hidden"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* Ambient Warm Tech glow */}
@@ -95,7 +95,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
         <button
           type="button"
           onClick={handleTakeout}
-          className="flex-[1.2] flex items-center justify-center gap-2 bg-[#ffb84d] text-[#0a0a0c] rounded-2xl mx-1 font-black text-[11px] uppercase tracking-widest shadow-[0_10px_30px_rgba(255,184,77,0.3)] active:scale-95 transition-transform"
+          className="flex-1 flex items-center justify-center gap-2 bg-[#ffb84d] text-[#0a0a0c] rounded-2xl mx-1 font-black text-[11px] uppercase tracking-widest shadow-[0_10px_30px_rgba(255,184,77,0.3)] active:scale-95 transition-transform"
         >
           <ShoppingBag size={16} strokeWidth={2.5} />
           Llevar
