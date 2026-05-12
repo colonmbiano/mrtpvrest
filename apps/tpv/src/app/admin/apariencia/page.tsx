@@ -199,14 +199,18 @@ export default function AparienciaPage() {
                   key={p}
                   type="button"
                   onClick={() => chooseSidebar(p)}
-                  className={`flex flex-col items-center justify-center gap-1 min-h-[72px] py-3 rounded-2xl border transition-all active:scale-95 ${
+                  // BUG-20: feedback visual claro al cambiar selección.
+                  // Antes el contraste activo↔inactivo era casi imperceptible
+                  // (#1a1b1f vs #0a0a0c) y el cajero pensaba que el toggle no
+                  // respondía. Ahora el activo usa la marca como fondo.
+                  className={`flex flex-col items-center justify-center gap-1 min-h-[72px] py-3 rounded-2xl border-2 transition-all active:scale-95 ${
                     active
-                      ? "bg-[#1a1b1f] text-white"
-                      : "bg-[#0a0a0c] border-white/5 text-zinc-500"
+                      ? "text-black font-black border-transparent"
+                      : "bg-[#0a0a0c] border-white/10 text-zinc-400 hover:text-white hover:border-white/30"
                   }`}
                   style={active ? {
-                    borderColor: "var(--brand)",
-                    boxShadow: "0 0 15px var(--brand-glow)",
+                    background: "var(--brand)",
+                    boxShadow: "0 0 20px var(--brand-glow)",
                   } : undefined}
                 >
                   <span className="text-[11px] font-black uppercase tracking-widest">{meta.label}</span>
