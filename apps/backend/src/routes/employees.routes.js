@@ -139,23 +139,27 @@ router.get('/sync', authenticate, requireTenantAccess, async (req, res) => {
 // GET todos los empleados (Filtrado por Sucursal)
 router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    // Permitir resolver locationId desde múltiples fuentes para no romper
-    // clientes que envían x-location-id en lugar de tenerlo en el JWT.
+    // locationId es OPCIONAL: si se envía, filtramos por sucursal; si no,
+    // retornamos todos los empleados del restaurante. Antes 400 cuando
+    // faltaba el header tumbaba la lista en restaurantes con una sucursal
+    // o admin sin selector activo.
     const locationId =
       req.locationId ||
       req.headers['x-location-id'] ||
       req.user?.locationId ||
       null;
 
-    if (!locationId) {
-      // Mejor 400 explícito que 500 críptico cuando falta el contexto.
-      return res.status(400).json({
-        error: 'Sucursal no identificada — envía header x-location-id o selecciona una sucursal antes de consultar empleados.',
-      });
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) {
+      return res.status(400).json({ error: 'Restaurante no identificado' });
     }
 
+    const where = locationId
+      ? { locationId }
+      : { location: { restaurantId } };
+
     const employees = await prisma.employee.findMany({
-      where: { locationId },
+      where,
       include: {
         shifts: { where: { endAt: null }, take: 1, orderBy: { startAt: 'desc' } }
       },
