@@ -1,10 +1,13 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
-import { ChevronLeft, Star, Search, X as XIcon } from "lucide-react";
+import { ChevronLeft, Star, Search, X as XIcon, Settings2 } from "lucide-react";
 import CategoryGrid from "@/components/pos/CategoryGrid";
 import ProductCard from "@/components/pos/ProductCard";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
 import ModifierPickerModal from "@/components/pos/ModifierPickerModal";
+import VariantPickerModal from "@/components/modals/VariantPickerModal";
+import CatalogSettingsSheet from "@/components/modals/CatalogSettingsSheet";
+import CategoryChipRail, { FAVORITES_CHIP_ID } from "@/components/pos/CategoryChipRail";
 import SeatTabs from "@/components/pos/SeatTabs";
 import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
 import api from "@/lib/api";
@@ -14,7 +17,12 @@ import {
   type Product,
   type CartItem,
   type ModifierSelection,
+  type MenuItemVariant,
 } from "@/store/ticketStore";
+import {
+  useCatalogPrefs,
+  densityGridClasses,
+} from "@/store/catalogPrefsStore";
 
 /**
  * Catálogo POS — drill-down estilo Loyverse.
@@ -53,8 +61,17 @@ export default function CatalogPage() {
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
+  const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [optionsProduct, setOptionsProduct] = useState<Product | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  // En modo flat: chip activo del rail. null = "Todos", FAVORITES_CHIP_ID =
+  // favoritos+populares, sino es un categoryId.
+  const [flatChip, setFlatChip] = useState<string | null>(null);
+
+  const viewMode = useCatalogPrefs((s) => s.viewMode);
+  const density = useCatalogPrefs((s) => s.density);
+  const gridClass = densityGridClasses[density];
 
   useEffect(() => {
     const fetchData = async () => {
@@ -117,18 +134,80 @@ export default function CatalogPage() {
     return [];
   }, [view, activeCat, products, favoritesItems, searchQuery]);
 
+  // Modo flat: lista filtrada por el chip activo del rail.
+  // null = todos, FAVORITES_CHIP_ID = favoritos OR populares, sino categoryId.
+  const flatProducts = useMemo(() => {
+    if (flatChip === null) return products;
+    if (flatChip === FAVORITES_CHIP_ID) {
+      return products.filter((p) => p.isFavorite || (p as unknown as { isPopular?: boolean }).isPopular);
+    }
+    return products.filter(
+      (p) => (p as unknown as { categoryId?: string }).categoryId === flatChip,
+    );
+  }, [flatChip, products]);
+
   const activeCategory = useMemo(
     () => categories.find((c) => c.id === activeCat) ?? null,
     [categories, activeCat],
   );
 
+  // Filtra grupos con al menos 1 modificador. El importer CSV crea grupos
+  // sin opciones cuando la columna "modificador - X" = Y pero las opciones
+  // aún no se cargaron — no queremos abrir un modal vacío.
+  const hasUsableModifiers = (p: Product) =>
+    Array.isArray(p.modifierGroups) &&
+    p.modifierGroups.some((g) => Array.isArray(g.modifiers) && g.modifiers.length > 0);
+
   const handleProductClick = (p: Product) => {
     hapticLight();
-    if (p.modifierGroups && p.modifierGroups.length > 0) {
+    // Prioridad: variantes → modificadores → directo.
+    // Si tiene variantes Y modificadores usables, encadenamos: primero
+    // pedimos el tamaño y luego abrimos modificadores con el precio fijado.
+    if (p.hasVariants && p.variants && p.variants.length > 0) {
+      setVariantPickerProduct(p);
+      return;
+    }
+    if (hasUsableModifiers(p)) {
       setPickerProduct(p);
       return;
     }
     addPlainProduct(p);
+  };
+
+  const handleVariantConfirm = (variant: MenuItemVariant) => {
+    if (!variantPickerProduct) return;
+    const p = variantPickerProduct;
+
+    // Si el producto también tiene modificadores usables, encadenamos:
+    // cerramos el variant picker y abrimos el modifier picker usando la
+    // variante seleccionada como precio base (clonamos product con el
+    // price ya ajustado para que ModifierPickerModal calcule bien).
+    if (hasUsableModifiers(p)) {
+      setVariantPickerProduct(null);
+      setPickerProduct({
+        ...p,
+        price: variant.price,
+        promoPrice: null,
+        // Guardamos la variante elegida en campos auxiliares que
+        // recogemos al confirmar modificadores.
+        ...({ _pendingVariant: variant } as Partial<Product>),
+      });
+      return;
+    }
+
+    const cartItem: CartItem = {
+      ...p,
+      menuItemId: p.id,
+      quantity: 1,
+      subtotal: variant.price,
+      price: variant.price,
+      originalPrice: p.price,
+      variantId: variant.id,
+      variantName: variant.name,
+      name: `${p.name} (${variant.name})`,
+    };
+    addItemToActive(cartItem);
+    setVariantPickerProduct(null);
   };
 
   const handleProductLongPress = (p: Product) => {
@@ -186,6 +265,10 @@ export default function CatalogPage() {
     if (!pickerProduct) return;
     const base = pickerProduct.promoPrice || pickerProduct.price;
     const unit = base + unitExtra;
+    // Si venimos del flujo encadenado variante→modificadores,
+    // _pendingVariant contiene la variante elegida en el paso previo.
+    const pending = (pickerProduct as Product & { _pendingVariant?: MenuItemVariant })
+      ._pendingVariant;
     const cartItem: CartItem = {
       ...pickerProduct,
       menuItemId: pickerProduct.id,
@@ -193,6 +276,11 @@ export default function CatalogPage() {
       subtotal: unit,
       price: unit,
       originalPrice: pickerProduct.price,
+      ...(pending && {
+        variantId: pending.id,
+        variantName: pending.name,
+        name: `${pickerProduct.name} (${pending.name})`,
+      }),
       modifiers: mods,
       notes,
     };
@@ -216,40 +304,60 @@ export default function CatalogPage() {
 
       <SeatTabs />
 
-      {/* Barra de búsqueda — siempre visible para acceso rápido. Tipear
-          conmuta a vista "search" sin importar la vista previa, y al
-          limpiar vuelve a categorías. */}
+      {/* Barra de búsqueda + ajustes de vista. Tipear conmuta a "search";
+          el icono ⚙️ abre el sheet de preferencias (modo y densidad). */}
       <div className="px-3 sm:px-4 lg:px-6 pb-2 pt-1 shrink-0">
-        <div className="relative">
-          <Search
-            size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-mut pointer-events-none"
-          />
-          <input
-            value={searchQuery}
-            onChange={(e) => {
-              const v = e.target.value;
-              setSearchQuery(v);
-              if (v.trim()) setView("search");
-              else setView("categories");
-            }}
-            placeholder="Buscar producto..."
-            className="w-full h-11 min-h-[44px] bg-surf-2 border border-bd-main rounded-2xl pl-10 pr-10 text-[12px] font-bold text-tx-pri placeholder:text-tx-mut focus:outline-none focus:border-iris-500/40"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => { setSearchQuery(""); setView("categories"); }}
-              aria-label="Limpiar búsqueda"
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 min-h-[32px] rounded-xl bg-surf-3 active:bg-surf-1 text-tx-sec flex items-center justify-center"
-            >
-              <XIcon size={14} />
-            </button>
-          )}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-mut pointer-events-none"
+            />
+            <input
+              value={searchQuery}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSearchQuery(v);
+                if (v.trim()) setView("search");
+                else setView("categories");
+              }}
+              placeholder="Buscar producto..."
+              className="w-full h-11 min-h-[44px] bg-surf-2 border border-bd-main rounded-2xl pl-10 pr-10 text-[12px] font-bold text-tx-pri placeholder:text-tx-mut focus:outline-none focus:border-iris-500/40"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => { setSearchQuery(""); setView("categories"); }}
+                aria-label="Limpiar búsqueda"
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 min-h-[32px] rounded-xl bg-surf-3 active:bg-surf-1 text-tx-sec flex items-center justify-center"
+              >
+                <XIcon size={14} />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            aria-label="Ajustes de vista del catálogo"
+            className="w-11 h-11 min-h-[44px] min-w-[44px] shrink-0 rounded-2xl bg-surf-2 border border-bd-main active:bg-surf-3 active:scale-95 transition-pos text-tx-sec flex items-center justify-center"
+          >
+            <Settings2 size={16} />
+          </button>
         </div>
       </div>
 
-      {view !== "categories" && view !== "search" && (
+      {/* Modo flat: chip-rail horizontal con Favoritos + Todos + categorías.
+          Reemplaza el drill-down de la vista "categories". */}
+      {viewMode === "flat" && view !== "search" && (
+        <CategoryChipRail
+          categories={categories}
+          activeId={flatChip}
+          onSelect={setFlatChip}
+          showFavorites={favoritesItems.length > 0}
+        />
+      )}
+
+      {viewMode === "drilldown" && view !== "categories" && view !== "search" && (
         <div className="flex items-center gap-3 px-3 sm:px-4 lg:px-6 h-12 border-b border-white/5 shrink-0">
           <button
             type="button"
@@ -274,11 +382,35 @@ export default function CatalogPage() {
 
       <div className="flex-1 min-h-0 scroll-y p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 scrollbar-hide">
         {isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
+          <div className={`grid ${gridClass} gap-2 sm:gap-3`}>
             {[...Array(10)].map((_, i) => (
               <div key={i} className="aspect-square bg-surf-1 animate-pulse rounded-2xl" />
             ))}
           </div>
+        ) : viewMode === "flat" && view !== "search" ? (
+          // Modo flat: lista de items filtrada por chip-rail. Sin drill-down.
+          flatProducts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <p className="text-stone-500 font-bold uppercase tracking-[0.15em] text-[11px]">
+                {flatChip === FAVORITES_CHIP_ID
+                  ? "Sin favoritos marcados aún"
+                  : flatChip === null
+                    ? "Sin productos disponibles"
+                    : "Sin productos en esta categoría"}
+              </p>
+            </div>
+          ) : (
+            <div className={`grid ${gridClass} gap-2 sm:gap-3 animate-in fade-in duration-200`}>
+              {flatProducts.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  {...product}
+                  onClick={() => handleProductClick(product)}
+                  onLongPress={() => handleProductLongPress(product)}
+                />
+              ))}
+            </div>
+          )
         ) : view === "categories" ? (
           categories.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
@@ -318,7 +450,7 @@ export default function CatalogPage() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 sm:gap-3 animate-in fade-in slide-in-from-right-2 duration-200">
+          <div className={`grid ${gridClass} gap-2 sm:gap-3 animate-in fade-in slide-in-from-right-2 duration-200`}>
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}
@@ -337,6 +469,18 @@ export default function CatalogPage() {
           onClose={() => setPickerProduct(null)}
           onConfirm={handlePickerConfirm}
         />
+      )}
+
+      {variantPickerProduct && (
+        <VariantPickerModal
+          product={variantPickerProduct}
+          onClose={() => setVariantPickerProduct(null)}
+          onConfirm={handleVariantConfirm}
+        />
+      )}
+
+      {showSettings && (
+        <CatalogSettingsSheet onClose={() => setShowSettings(false)} />
       )}
 
       {optionsProduct && (

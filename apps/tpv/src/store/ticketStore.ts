@@ -32,6 +32,15 @@ export type ModifierSelection = {
   priceAdd: number;
 };
 
+export type MenuItemVariant = {
+  id: string;
+  menuItemId?: string;
+  name: string;
+  price: number;
+  isAvailable?: boolean;
+  sortOrder?: number;
+};
+
 export type Product = {
   id: string;
   name: string;
@@ -43,6 +52,8 @@ export type Product = {
   isFavorite?: boolean;
   isAvailable?: boolean;
   promoPrice?: number | null;
+  hasVariants?: boolean;
+  variants?: MenuItemVariant[];
   modifierGroups?: ModifierGroup[];
 };
 

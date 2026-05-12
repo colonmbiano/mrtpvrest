@@ -38,7 +38,7 @@ async function discountInventory(prisma, items, orderId, restaurantId, locationI
 
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
 const {
@@ -107,7 +107,7 @@ router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
 });
 
 // ── POST /tpv — Crear pedido ──────────────────────────────────────────
-router.post('/tpv', authenticate, requireTenantAccess, requireAdmin, requireActiveShift, validateBody(createOrderSchema), async (req, res) => {
+router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), requireActiveShift, validateBody(createOrderSchema), async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 

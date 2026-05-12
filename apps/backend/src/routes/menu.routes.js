@@ -111,6 +111,7 @@ router.get('/items', async (req, res) => {
           },
         },
         modifierGroups: { include: { modifiers: true } },
+        variants: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
         printerGroups: {
           include: { printerGroup: { select: { id: true, name: true } } },
         },
