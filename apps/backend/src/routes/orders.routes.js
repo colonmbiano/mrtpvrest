@@ -51,16 +51,21 @@ const {
 const router = express.Router();
 
 
-// ── GET /admin — Pedidos filtrados por SUCURSAL ──────────────────────────
+// ── GET /admin — Pedidos del restaurante (filtra por sucursal si llega) ──
+// locationId es OPCIONAL: si se envía via x-location-id/header se filtra,
+// si no, retorna todas las órdenes del restaurante. Antes devolvíamos 400
+// si faltaba, lo que tumbaba el panel para restaurantes con una sola
+// sucursal o admin sin selector activo.
 router.get('/admin', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const where = { restaurantId };
+    if (req.locationId) where.locationId = req.locationId;
 
     const orders = await prisma.order.findMany({
-      where: {
-        restaurantId: req.restaurantId || req.user?.restaurantId,
-        locationId: req.locationId
-      },
+      where,
       orderBy: { createdAt: 'desc' },
       take: 200,
       include: {
