@@ -73,6 +73,11 @@ export default function MenuPage() {
   const [filterCat, setFilterCat] = useState("all");
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Drill-down: la vista por defecto muestra categorías como tiles. Al
+  // clickear una entras a 'products' filtrado por esa categoría. La
+  // búsqueda al tipear conmuta automáticamente a vista plana de items.
+  const [view, setView] = useState<"categories" | "products">("categories");
+  const [drillCategoryId, setDrillCategoryId] = useState<string | null>(null);
 
   // IA Escaneo
   const [scanState, setScanState] = useState<{
@@ -433,10 +438,34 @@ export default function MenuPage() {
     );
   }
 
-  const filtered = items.filter(i =>
-    (filterCat === "all" || i.categoryId === filterCat) &&
-    (search === "" || (i.name || "").toLowerCase().includes(search.toLowerCase()))
-  );
+  // Reglas de filtrado:
+  // - Si hay search activa → busca en TODO el catálogo (ignora drill).
+  // - Si hay drillCategoryId → solo items de esa categoría.
+  // - Si no hay nada → todos (sólo aplica cuando view='products' sin drill).
+  const filtered = items.filter((i) => {
+    if (search.trim()) {
+      return (i.name || "").toLowerCase().includes(search.toLowerCase());
+    }
+    if (drillCategoryId) return i.categoryId === drillCategoryId;
+    if (filterCat !== "all") return i.categoryId === filterCat;
+    return true;
+  });
+
+  // Conteo de items por categoría para los tiles de la vista 'categories'.
+  const itemCountByCat = items.reduce<Record<string, number>>((acc, it) => {
+    const cid = it.categoryId || "_uncat";
+    acc[cid] = (acc[cid] || 0) + 1;
+    return acc;
+  }, {});
+
+  // Categorías filtradas por search (para que el grid también responda).
+  const filteredCats = search.trim()
+    ? cats.filter((c) => (c.name || "").toLowerCase().includes(search.toLowerCase()))
+    : cats;
+
+  const activeDrillCat = cats.find((c) => c.id === drillCategoryId) || null;
+  const showCategoriesGrid = view === "categories" && !search.trim();
+  const showItemsList = !showCategoriesGrid;
 
   return (
     <div>
@@ -461,23 +490,81 @@ export default function MenuPage() {
         </div>
       </div>
 
-      {/* Filtros */}
+      {/* Barra de búsqueda + breadcrumb */}
       <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar platillo..."
+        <input value={search} onChange={e => { setSearch(e.target.value); if (e.target.value.trim()) setView("products"); }}
+          placeholder="Buscar platillos o categorías..."
           className="px-4 py-2 rounded-xl text-sm outline-none flex-1 min-w-48"
           style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--text)"}} />
-        <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
-          className="px-4 py-2 rounded-xl text-sm outline-none"
-          style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--text)"}}>
-          <option value="all">Todas las categorías</option>
-          {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <span className="text-xs font-bold" style={{color:"var(--muted)"}}>{filtered.length} artículos</span>
+        {search.trim() && (
+          <button type="button" onClick={() => { setSearch(""); setView("categories"); setDrillCategoryId(null); }}
+            className="px-3 py-2 rounded-xl text-xs font-bold"
+            style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--muted)"}}>
+            ✕ Limpiar
+          </button>
+        )}
+        {!search.trim() && view === "products" && (
+          <button type="button" onClick={() => { setView("categories"); setDrillCategoryId(null); setFilterCat("all"); }}
+            className="px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5"
+            style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--muted)"}}>
+            ← Categorías
+          </button>
+        )}
+        <span className="text-xs font-bold" style={{color:"var(--muted)"}}>
+          {showCategoriesGrid
+            ? `${filteredCats.length} categorías`
+            : `${filtered.length} artículos${activeDrillCat ? ` en ${activeDrillCat.name}` : ""}`}
+        </span>
       </div>
 
+      {/* Grid de categorías (drill-down landing) */}
+      {!loading && showCategoriesGrid && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          {filteredCats.length === 0 ? (
+            <div className="col-span-full text-center py-20" style={{color:"var(--muted)"}}>
+              <p className="text-sm font-bold uppercase tracking-wider">Sin categorías</p>
+            </div>
+          ) : (
+            filteredCats.map((c) => {
+              const count = itemCountByCat[c.id] || 0;
+              return (
+                <button key={c.id} type="button"
+                  onClick={() => { setDrillCategoryId(c.id); setView("products"); setFilterCat("all"); }}
+                  className="flex flex-col items-start gap-2 p-5 rounded-2xl border text-left transition-all active:scale-[0.98] hover:border-[var(--gold)]"
+                  style={{background:"var(--surf)",borderColor:"var(--border)"}}>
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-2xl">📂</span>
+                    <span className="text-xs font-black px-2 py-1 rounded-full" style={{background:"var(--surf2)",color:"var(--muted)"}}>{count}</span>
+                  </div>
+                  <h3 className="font-syne font-black text-base leading-tight">{c.name}</h3>
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{color:"var(--muted)"}}>
+                    {count === 1 ? "1 producto" : `${count} productos`}
+                  </span>
+                </button>
+              );
+            })
+          )}
+          {/* Tile especial: ver todo */}
+          {!search.trim() && (
+            <button type="button"
+              onClick={() => { setDrillCategoryId(null); setView("products"); setFilterCat("all"); }}
+              className="flex flex-col items-start gap-2 p-5 rounded-2xl border border-dashed text-left transition-all active:scale-[0.98] hover:border-[var(--gold)]"
+              style={{borderColor:"var(--border)"}}>
+              <div className="flex items-center justify-between w-full">
+                <span className="text-2xl">🍽️</span>
+                <span className="text-xs font-black px-2 py-1 rounded-full" style={{background:"var(--surf2)",color:"var(--muted)"}}>{items.length}</span>
+              </div>
+              <h3 className="font-syne font-black text-base leading-tight">Ver todos los productos</h3>
+              <span className="text-[10px] font-bold uppercase tracking-widest" style={{color:"var(--muted)"}}>
+                Lista completa
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Lista estilo Loyverse */}
-      {loading ? <div className="text-center py-20">Cargando...</div> : (
+      {loading ? <div className="text-center py-20">Cargando...</div> : showItemsList && (
         <div className="rounded-2xl border overflow-hidden" style={{borderColor:"var(--border)"}}>
           <div className="grid grid-cols-12 gap-3 px-4 py-3 text-xs font-black uppercase tracking-wider border-b"
             style={{background:"var(--surf2)",borderColor:"var(--border)",color:"var(--muted)"}}>
