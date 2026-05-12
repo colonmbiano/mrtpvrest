@@ -123,31 +123,119 @@ router.get('/top-products', authenticate, requireTenantAccess, requireAdmin, asy
   } catch (e) { res.status(500).json({ error: 'Error al obtener top productos' }); }
 });
 
-// GET /api/reports/by-day?days=30 — ventas agrupadas por día
+// GET /api/reports/by-day
+// Params (todos opcionales):
+//   ?days=30                    → últimos N días (legacy, retrocompatible)
+//   ?from=YYYY-MM-DD&to=YYYY-MM-DD  → rango custom
+//   ?bucket=day|week|month      → granularidad (auto si no se pasa)
+//
+// Auto-bucket: ≤90 días → day, ≤730 → week, sino → month. Evita devolver
+// 1500 puntos al frontend para rangos de varios años.
 router.get('/by-day', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const days  = parseInt(req.query.days) || 30
-    const from  = new Date(); from.setDate(from.getDate() - days + 1); from.setHours(0,0,0,0)
+    const restaurantId = req.user?.restaurantId || req.restaurantId
+    const { from: fromParam, to: toParam, days: daysParam, bucket: bucketParam } = req.query
+
+    let from, to
+    if (fromParam) {
+      from = new Date(fromParam); from.setHours(0, 0, 0, 0)
+    } else {
+      const days = parseInt(daysParam) || 30
+      from = new Date(); from.setDate(from.getDate() - days + 1); from.setHours(0, 0, 0, 0)
+    }
+    if (toParam) {
+      to = new Date(toParam); to.setHours(23, 59, 59, 999)
+    } else {
+      to = new Date(); to.setHours(23, 59, 59, 999)
+    }
+
+    const rangeMs = to.getTime() - from.getTime()
+    const rangeDays = Math.max(1, Math.ceil(rangeMs / 86_400_000))
+
+    let bucket = (bucketParam || '').toLowerCase()
+    if (!['day', 'week', 'month'].includes(bucket)) {
+      bucket = rangeDays <= 90 ? 'day' : rangeDays <= 730 ? 'week' : 'month'
+    }
+
     const orders = await prisma.order.findMany({
-      where: { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId, status: { not: 'CANCELLED' }, createdAt: { gte: from } },
-      select: { total: true, createdAt: true }
+      where: {
+        restaurantId,
+        status: { not: 'CANCELLED' },
+        createdAt: { gte: from, lte: to },
+      },
+      select: { total: true, createdAt: true },
     })
 
-    // Agrupar por día
-    const map = {}
-    for (let i = 0; i < days; i++) {
-      const d = new Date(from); d.setDate(d.getDate() + i)
-      const key = d.toISOString().split('T')[0]
-      map[key] = { revenue: 0, orders: 0 }
-    }
-    for (const o of orders) {
-      const key = new Date(o.createdAt).toISOString().split('T')[0]
-      if (map[key]) { map[key].revenue += o.total || 0; map[key].orders += 1 }
+    // Builder de la key del bucket según granularidad. La key se usa
+    // como label en el chart y debe ser ordenable lexicográficamente.
+    function bucketKey(d) {
+      const dt = new Date(d)
+      if (bucket === 'day') return dt.toISOString().split('T')[0]
+      if (bucket === 'month') {
+        return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`
+      }
+      // week: ISO week start (lunes). Truncamos al lunes 00:00 UTC.
+      const day = dt.getUTCDay() || 7 // domingo=0→7 para que la semana arranque lunes
+      const monday = new Date(dt)
+      monday.setUTCDate(dt.getUTCDate() - day + 1)
+      return monday.toISOString().split('T')[0]
     }
 
-    const result = Object.entries(map).map(([date, v]) => ({ date, ...v }))
+    // Pre-llena buckets vacíos para que el chart tenga continuidad
+    // (sin gaps invisibles que confundan al cajero).
+    const map = {}
+    if (bucket === 'day') {
+      const cursor = new Date(from)
+      while (cursor <= to) {
+        map[bucketKey(cursor)] = { revenue: 0, orders: 0 }
+        cursor.setDate(cursor.getDate() + 1)
+      }
+    } else if (bucket === 'week') {
+      const cursor = new Date(from)
+      while (cursor <= to) {
+        map[bucketKey(cursor)] = { revenue: 0, orders: 0 }
+        cursor.setDate(cursor.getDate() + 7)
+      }
+    } else {
+      const cursor = new Date(from.getFullYear(), from.getMonth(), 1)
+      while (cursor <= to) {
+        map[bucketKey(cursor)] = { revenue: 0, orders: 0 }
+        cursor.setMonth(cursor.getMonth() + 1)
+      }
+    }
+
+    for (const o of orders) {
+      const key = bucketKey(o.createdAt)
+      if (!map[key]) map[key] = { revenue: 0, orders: 0 }
+      map[key].revenue += o.total || 0
+      map[key].orders += 1
+    }
+
+    const result = Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, v]) => ({ date, bucket, ...v }))
     res.json(result)
   } catch (e) { res.status(500).json({ error: 'Error al generar reporte por día' }) }
+})
+
+// GET /api/reports/range-bounds — fecha del primer y último pedido.
+// El frontend la usa para el botón "Todo el histórico" sin tener que
+// adivinar desde cuándo hay datos.
+router.get('/range-bounds', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId
+    const bounds = await prisma.order.aggregate({
+      where: { restaurantId, status: { not: 'CANCELLED' } },
+      _min: { createdAt: true },
+      _max: { createdAt: true },
+      _count: { id: true },
+    })
+    res.json({
+      from: bounds._min.createdAt,
+      to: bounds._max.createdAt,
+      totalOrders: bounds._count.id,
+    })
+  } catch (e) { res.status(500).json({ error: 'Error al obtener rango' }) }
 })
 
 // GET /api/reports/saved — reportes guardados por el usuario. Devuelve [] hasta
