@@ -10,33 +10,68 @@ import { Bar, Line } from "react-chartjs-2";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
-const PERIODS = [
-  { label: "7 días",  days: 7 },
-  { label: "30 días", days: 30 },
-  { label: "90 días", days: 90 },
+// Presets — el último ("Todo") se resuelve con la fecha del primer pedido
+// que devuelve /api/reports/range-bounds. "Custom" abre los date pickers.
+type PresetId = "7D" | "30D" | "90D" | "1Y" | "ALL" | "CUSTOM";
+const PRESETS: { id: PresetId; label: string; days?: number }[] = [
+  { id: "7D",  label: "7 días",  days: 7 },
+  { id: "30D", label: "30 días", days: 30 },
+  { id: "90D", label: "90 días", days: 90 },
+  { id: "1Y",  label: "1 año",   days: 365 },
+  { id: "ALL", label: "Histórico" },
+  { id: "CUSTOM", label: "Personalizado" },
 ];
 
-interface DayData { date: string; revenue: number; orders: number }
+function todayStr() { return new Date().toISOString().split("T")[0]; }
+function daysAgoStr(n: number) {
+  const d = new Date(); d.setDate(d.getDate() - n + 1);
+  return d.toISOString().split("T")[0];
+}
+
+interface DayData { date: string; revenue: number; orders: number; bucket?: string }
 
 export default function ReportesPage() {
-  const [period,   setPeriod]   = useState(30);
-  const [byDay,    setByDay]    = useState<DayData[]>([]);
-  const [stats,    setStats]    = useState<any>(null);
-  const [topItems, setTopItems] = useState<any[]>([]);
-  const [loading,  setLoading]  = useState(false);
+  const [preset,    setPreset]    = useState<PresetId>("30D");
+  const [fromDate,  setFromDate]  = useState<string>(daysAgoStr(30));
+  const [toDate,    setToDate]    = useState<string>(todayStr());
+  const [historicalFrom, setHistoricalFrom] = useState<string | null>(null);
+  const [byDay,     setByDay]     = useState<DayData[]>([]);
+  const [stats,     setStats]     = useState<any>(null);
+  const [topItems,  setTopItems]  = useState<any[]>([]);
+  const [loading,   setLoading]   = useState(false);
   const [chartType, setChartType] = useState<"bar" | "line">("bar");
+  const [bucketLabel, setBucketLabel] = useState<string>("");
 
-  async function fetchAll(days: number) {
+  // Carga el primer pedido al montar para habilitar "Todo el histórico".
+  useEffect(() => {
+    api.get("/api/reports/range-bounds").then((r) => {
+      const f = r?.data?.from ? new Date(r.data.from).toISOString().split("T")[0] : null;
+      setHistoricalFrom(f);
+    }).catch(() => setHistoricalFrom(null));
+  }, []);
+
+  // Cuando cambia el preset, ajustamos las fechas del rango.
+  useEffect(() => {
+    if (preset === "CUSTOM") return; // el user maneja los inputs
+    if (preset === "ALL") {
+      if (historicalFrom) { setFromDate(historicalFrom); setToDate(todayStr()); }
+      return;
+    }
+    const p = PRESETS.find((x) => x.id === preset);
+    if (p?.days) { setFromDate(daysAgoStr(p.days)); setToDate(todayStr()); }
+  }, [preset, historicalFrom]);
+
+  async function fetchAll(from: string, to: string) {
     setLoading(true);
     try {
-      const from = (() => { const d = new Date(); d.setDate(d.getDate() - days + 1); return d.toISOString().split("T")[0]; })();
-      const to   = new Date().toISOString().split("T")[0];
       const [bd, s, t] = await Promise.all([
-        api.get(`/api/reports/by-day?days=${days}`),
+        api.get(`/api/reports/by-day?from=${from}&to=${to}`),
         api.get(`/api/reports/sales?from=${from}&to=${to}`),
         api.get("/api/reports/top-items"),
       ]);
-      setByDay(Array.isArray(bd.data) ? bd.data : []);
+      const days = Array.isArray(bd.data) ? bd.data : [];
+      setByDay(days);
+      setBucketLabel(days[0]?.bucket || "day");
       setStats(s.data || null);
       setTopItems(Array.isArray(t.data) ? t.data : []);
     } catch {
@@ -44,11 +79,40 @@ export default function ReportesPage() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { fetchAll(period); }, [period]);
+  useEffect(() => { fetchAll(fromDate, toDate); }, [fromDate, toDate]);
+
+  // Reusable cuando un input de fecha cambia → preset auto pasa a CUSTOM.
+  const handleDateChange = (which: "from" | "to", value: string) => {
+    if (which === "from") setFromDate(value);
+    else setToDate(value);
+    setPreset("CUSTOM");
+  };
+
+  const rangeLabel = (() => {
+    const dayCount = Math.ceil((new Date(toDate).getTime() - new Date(fromDate).getTime()) / 86_400_000) + 1;
+    if (dayCount <= 31) return `${dayCount} días`;
+    if (dayCount <= 365) return `${(dayCount / 30).toFixed(0)} meses`;
+    return `${(dayCount / 365).toFixed(1)} años`;
+  })();
 
   /* Chart config */
+  // El backend devuelve labels distintos según bucket: 'YYYY-MM-DD' para
+  // day/week (week se usa la fecha del lunes) y 'YYYY-MM' para month.
   const labels  = byDay.map(d => {
-    const [, mm, dd] = d.date.split("-");
+    const parts = d.date.split("-");
+    if (bucketLabel === "month") {
+      // YYYY-MM → "may '24"
+      const [yy, mm] = parts;
+      const monthName = new Date(parseInt(yy), parseInt(mm) - 1).toLocaleDateString("es-MX", { month: "short" });
+      return `${monthName} '${yy.slice(2)}`;
+    }
+    if (bucketLabel === "week") {
+      // semana del 03/06
+      const [, mm, dd] = parts;
+      return `sem ${dd}/${mm}`;
+    }
+    // day → "DD/MM"
+    const [, mm, dd] = parts;
     return `${dd}/${mm}`;
   });
   const revenueData = byDay.map(d => d.revenue);
@@ -65,7 +129,7 @@ export default function ReportesPage() {
       borderRadius: 6,
       fill: chartType === "line",
       tension: 0.4,
-      pointRadius: period <= 30 ? 3 : 2,
+      pointRadius: byDay.length <= 30 ? 3 : 1,
       pointBackgroundColor: "#ff8c00",
     }],
   };
@@ -89,7 +153,7 @@ export default function ReportesPage() {
     scales: {
       x: {
         grid: { color: "rgba(255,255,255,0.04)" },
-        ticks: { color: "#666", font: { size: 10 }, maxTicksLimit: period <= 7 ? 7 : period <= 30 ? 15 : 20 },
+        ticks: { color: "#666", font: { size: 10 }, maxTicksLimit: byDay.length <= 7 ? 7 : byDay.length <= 30 ? 15 : byDay.length <= 60 ? 20 : 24 },
       },
       y: {
         grid: { color: "rgba(255,255,255,0.04)" },
@@ -109,7 +173,7 @@ export default function ReportesPage() {
       borderRadius: 6,
       fill: false,
       tension: 0.4,
-      pointRadius: period <= 30 ? 3 : 2,
+      pointRadius: byDay.length <= 30 ? 3 : 1,
       pointBackgroundColor: "#3b82f6",
     }],
   };
@@ -138,28 +202,52 @@ export default function ReportesPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-syne text-3xl font-black">Reportes</h1>
-        <div className="flex items-center gap-2">
-          {PERIODS.map(p => (
-            <button key={p.days} onClick={() => setPeriod(p.days)}
-              className="px-4 py-2 rounded-xl text-xs font-syne font-bold transition-all"
-              style={{
-                background: period === p.days ? "var(--orange)" : "var(--surf)",
-                color:      period === p.days ? "#000" : "var(--muted)",
-                border: "1px solid var(--border)",
-              }}>
-              {p.label}
-            </button>
-          ))}
+      <div className="mb-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <h1 className="font-syne text-3xl font-black">Reportes</h1>
+          <span className="text-xs" style={{ color: "var(--muted)" }}>
+            {fromDate} → {toDate} · <strong>{rangeLabel}</strong>
+            {bucketLabel && <> · agrupado por <strong>{bucketLabel === "day" ? "día" : bucketLabel === "week" ? "semana" : "mes"}</strong></>}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {PRESETS.map((p) => {
+            const disabled = p.id === "ALL" && !historicalFrom;
+            return (
+              <button key={p.id} onClick={() => setPreset(p.id)} disabled={disabled}
+                className="px-3 py-1.5 rounded-xl text-xs font-syne font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                style={{
+                  background: preset === p.id ? "var(--orange)" : "var(--surf)",
+                  color:      preset === p.id ? "#000" : "var(--muted)",
+                  border: "1px solid var(--border)",
+                }}>
+                {p.label}
+              </button>
+            );
+          })}
+
+          <div className="flex items-center gap-1.5 ml-auto">
+            <input type="date" value={fromDate}
+              onChange={(e) => handleDateChange("from", e.target.value)}
+              max={toDate}
+              className="px-2 py-1.5 rounded-lg text-xs font-medium"
+              style={{ background: "var(--surf)", color: "var(--fg)", border: "1px solid var(--border)" }} />
+            <span style={{ color: "var(--muted)" }} className="text-xs">→</span>
+            <input type="date" value={toDate}
+              onChange={(e) => handleDateChange("to", e.target.value)}
+              min={fromDate} max={todayStr()}
+              className="px-2 py-1.5 rounded-lg text-xs font-medium"
+              style={{ background: "var(--surf)", color: "var(--fg)", border: "1px solid var(--border)" }} />
+          </div>
         </div>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[
-          { label: "Ingresos totales",  value: `$${totalRevenue.toFixed(2)}`, sub: `últimos ${period}d`, color: "#22c55e" },
-          { label: "Total pedidos",     value: totalOrders,                    sub: `últimos ${period}d`, color: "#3b82f6" },
+          { label: "Ingresos totales",  value: `$${totalRevenue.toFixed(2)}`, sub: rangeLabel, color: "#22c55e" },
+          { label: "Total pedidos",     value: totalOrders,                    sub: rangeLabel, color: "#3b82f6" },
           { label: "Ticket promedio",   value: `$${avgTicket.toFixed(2)}`,    sub: "por pedido",         color: "var(--orange)" },
           { label: "Mejor día",         value: bestDay.revenue > 0 ? `$${bestDay.revenue.toFixed(0)}` : "—",
             sub: bestDay.date || "sin datos", color: "#a855f7" },
