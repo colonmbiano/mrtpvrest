@@ -16,7 +16,7 @@ const router = express.Router();
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-const PERIODS = new Set(['HOY', '7D', '30D', 'AÑO', 'ANIO', 'ANO']);
+const PERIODS = new Set(['HOY', '7D', '30D', '90D', '1Y', 'AÑO', 'ANIO', 'ANO', 'HISTORICO', 'HIST']);
 
 // Estados que cuentan como "pedido activo / en curso". Deben coincidir con
 // los valores del enum OrderStatus en packages/database/prisma/schema.prisma
@@ -48,8 +48,17 @@ function getPeriodRange(periodRaw) {
     from.setDate(from.getDate() - 6);
   } else if (period === '30D') {
     from.setDate(from.getDate() - 29);
-  } else if (period === 'AÑO' || period === 'ANIO' || period === 'ANO') {
-    from.setMonth(0, 1);
+  } else if (period === '90D') {
+    from.setDate(from.getDate() - 89);
+  } else if (period === '1Y' || period === 'AÑO' || period === 'ANIO' || period === 'ANO') {
+    // ANTES: from.setMonth(0,1) — "año en curso" devolvía $0 cuando no
+    // había datos en enero (típico tras importar histórico). Ahora:
+    // "AÑO" = últimos 365 días rolling — siempre captura datos recientes.
+    from.setDate(from.getDate() - 364);
+  } else if (period === 'HISTORICO' || period === 'HIST') {
+    // "Histórico" = desde siempre. Usamos epoch para que el aggregate
+    // tome todos los pedidos sin filtro inferior.
+    from.setFullYear(2000, 0, 1);
     from.setHours(0, 0, 0, 0);
   }
 

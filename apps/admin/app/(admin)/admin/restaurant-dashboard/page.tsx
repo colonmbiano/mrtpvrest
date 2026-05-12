@@ -66,7 +66,7 @@ type HourlyDistribution = {
 };
 
 type ActiveShiftResp = { shift: any; staff: StaffMember[] };
-type Period = "HOY" | "7D" | "30D" | "AÑO";
+type Period = "HOY" | "7D" | "30D" | "90D" | "AÑO" | "HISTORICO";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function fmtMoney(n: number) {
@@ -419,7 +419,9 @@ export default function RestaurantDashboard() {
     "HOY": "hoy",
     "7D":  "últimos 7 días",
     "30D": "últimos 30 días",
-    "AÑO": "este año",
+    "90D": "últimos 90 días",
+    "AÑO": "últimos 365 días",
+    "HISTORICO": "desde el primer pedido",
   };
   const deltaLabel = (d: number, prev: number) => {
     if (!stats) return "—";
@@ -539,7 +541,7 @@ export default function RestaurantDashboard() {
             )}
             {/* Segmented control (HOY/7D/30D/AÑO) */}
             <div style={{ display: "inline-flex", background: DS.surf2, border: `1px solid ${DS.bd1}`, borderRadius: 8, padding: 2 }}>
-              {(["HOY", "7D", "30D", "AÑO"] as Period[]).map(p => {
+              {(["HOY", "7D", "30D", "90D", "AÑO", "HISTORICO"] as Period[]).map(p => {
                 const on = period === p;
                 return (
                   <button key={p} onClick={() => setPeriod(p)} style={{
