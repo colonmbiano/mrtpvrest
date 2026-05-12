@@ -7,6 +7,12 @@ import { getApiUrl } from "@/lib/config";
 import GPSTracker from "@/components/delivery/GPSTracker";
 import { useOfflineStore } from "@/store/useOfflineStore";
 import { initBackgroundSync } from "@/lib/offline";
+// MIGRACIÓN: emojis sustituidos por lucide-react para alinearnos con TPV/KDS.
+import {
+  Bike, MapPin, Phone, Fuel, ShoppingCart, StickyNote, Map as MapIcon,
+  BarChart3, Wallet, DollarSign, CreditCard, MessageCircle, Package,
+  Check, CheckCircle2, Inbox, Settings, LogOut, Send, Lock,
+} from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING:"Pendiente", CONFIRMED:"Confirmado", PREPARING:"Preparando",
@@ -14,9 +20,9 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const EXPENSE_CATS = [
-  { value:"GASOLINE",           label:"⛽ Gasolina",          color:"#FF8400" },
-  { value:"EMERGENCY_PURCHASE", label:"🛒 Compra emergencia", color:"#8b5cf6" },
-  { value:"OTHER",              label:"📝 Otro gasto",         color:"#6b7280" },
+  { value:"GASOLINE",           label:"Gasolina",          icon: Fuel,         color:"var(--brand)" },
+  { value:"EMERGENCY_PURCHASE", label:"Compra emergencia", icon: ShoppingCart, color:"#8b5cf6" },
+  { value:"OTHER",              label:"Otro gasto",        icon: StickyNote,   color:"#6b7280" },
 ];
 
 type Screen = "setup" | "login" | "home" | "detail" | "chat" | "history" | "cobrar" | "caja" | "gasto" | "weekly";
@@ -265,7 +271,7 @@ export default function DeliveryApp() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-10">
           <div className="w-20 h-20 bg-halo-primary rounded-3xl flex items-center justify-center mx-auto shadow-lg shadow-halo-primary/20">
-            <span className="text-4xl text-white">⚙️</span>
+            <Settings size={32} className="text-white" strokeWidth={2.5} />
           </div>
           <h1 className="text-2xl font-bold text-white mt-6 tracking-tight font-mono uppercase">Configuración</h1>
           <p className="text-halo-muted text-sm mt-2">Vincula esta aplicación con tu sucursal</p>
@@ -295,7 +301,7 @@ export default function DeliveryApp() {
               <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                 {locations.map(loc => (
                   <button key={loc.id} onClick={()=>finishSetup(loc)} className="w-full py-4 bg-white/5 border border-white/5 rounded-2xl font-bold hover:bg-halo-primary hover:text-black transition-all uppercase text-xs flex items-center justify-center gap-2">
-                    <span className="text-base">📍</span> {loc.name}
+                    <MapPin size={14} strokeWidth={2.5} /> {loc.name}
                   </button>
                 ))}
               </div>
@@ -311,7 +317,7 @@ export default function DeliveryApp() {
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-sm text-center">
         <div className="w-20 h-20 bg-halo-primary rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-lg shadow-halo-primary/20">
-          <span className="text-4xl text-white">🛵</span>
+          <Bike size={36} className="text-white" strokeWidth={2.5} />
         </div>
         
         <h1 className="text-3xl font-bold text-white uppercase tracking-tight mb-1 font-mono">MRTPV Delivery</h1>
@@ -351,7 +357,7 @@ export default function DeliveryApp() {
       {/* Header */}
       <div className="px-6 py-5 flex items-center justify-between border-b border-white/5 bg-halo-bg/60 backdrop-blur-xl sticky top-0 z-20">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-halo-primary/10 flex items-center justify-center text-2xl border border-halo-primary/20 shadow-lg shadow-halo-primary/10">🛵</div>
+          <div className="w-12 h-12 rounded-2xl bg-brand/10 flex items-center justify-center border border-brand/20 shadow-lg shadow-brand/10 text-brand"><Bike size={22} strokeWidth={2.5} /></div>
           <div>
             <h1 className="font-bold text-base text-white tracking-tight">{driver?.name}</h1>
             <div className="flex items-center gap-2">
@@ -361,9 +367,9 @@ export default function DeliveryApp() {
           </div>
         </div>
         <div className="flex gap-3">
-          <button onClick={()=>{fetchHistory(); setScreen("weekly");}} className="w-11 h-11 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all shadow-lg">📊</button>
-          <button onClick={()=>setScreen("caja")} className="w-11 h-11 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-halo-success hover:bg-halo-success/10 transition-all shadow-lg">💵</button>
-          <button onClick={()=>{setDriver(null); setScreen("login");}} className="w-11 h-11 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-all shadow-lg">🔒</button>
+          <button onClick={()=>{fetchHistory(); setScreen("weekly");}} aria-label="Mi desempeño" className="w-11 h-11 rounded-2xl bg-surf-1 border border-bd flex items-center justify-center text-tx-pri hover:bg-surf-2 transition-all shadow-lg"><BarChart3 size={18} strokeWidth={2.5} /></button>
+          <button onClick={()=>setScreen("caja")} aria-label="Mi caja" className="w-11 h-11 rounded-2xl bg-surf-1 border border-bd flex items-center justify-center text-success hover:bg-success/10 transition-all shadow-lg"><Wallet size={18} strokeWidth={2.5} /></button>
+          <button onClick={()=>{setDriver(null); setScreen("login");}} aria-label="Cerrar sesión" className="w-11 h-11 rounded-2xl bg-danger/5 border border-danger/10 flex items-center justify-center text-danger hover:bg-danger/10 transition-all shadow-lg"><LogOut size={18} strokeWidth={2.5} /></button>
         </div>
       </div>
 
@@ -404,22 +410,22 @@ export default function DeliveryApp() {
                 </div>
 
                 <div className="bg-black/40 p-5 rounded-2xl mb-6 text-sm text-white/90 border border-white/5 leading-relaxed font-medium">
-                  <span className="text-halo-muted block text-[10px] uppercase font-bold mb-2 tracking-[0.15em]">📍 Dirección de Entrega</span>
+                  <span className="text-tx-mut text-[10px] uppercase font-bold mb-2 tracking-[0.15em] flex items-center gap-1.5"><MapPin size={12} strokeWidth={2.5} /> Dirección de Entrega</span>
                   {order.deliveryAddress}
                 </div>
 
                 <div className="flex gap-4">
-                  <button onClick={()=>{setSelectedOrder(order); fetchOrderDetail(order.id); setScreen("detail");}} className="flex-1 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-bold uppercase tracking-[0.2em] hover:bg-white/10 transition-all">Detalle</button>
-                  <button onClick={()=>{setSelectedOrder(order); setScreen("chat");}} className="w-14 h-14 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-2xl hover:bg-blue-500/20 transition-all flex items-center justify-center text-xl shadow-lg shadow-blue-500/10">💬</button>
-                  
+                  <button onClick={()=>{setSelectedOrder(order); fetchOrderDetail(order.id); setScreen("detail");}} className="flex-1 py-4 bg-surf-1 border border-bd rounded-2xl text-[10px] font-bold uppercase tracking-[0.2em] hover:bg-surf-2 transition-all">Detalle</button>
+                  <button onClick={()=>{setSelectedOrder(order); setScreen("chat");}} aria-label="Chat con cliente" className="w-14 h-14 bg-info/10 text-info border border-info/20 rounded-2xl hover:bg-info/20 transition-all flex items-center justify-center shadow-lg shadow-info/10"><MessageCircle size={20} strokeWidth={2.5} /></button>
+
                   {order.status === "READY" && (
-                    <button onClick={()=>changeStatus(order, "ON_THE_WAY")} className="flex-[1.5] py-4 bg-halo-primary text-black font-bold rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-halo-primary/30 active:scale-95 transition-all">
-                      Recoger 📦
+                    <button onClick={()=>changeStatus(order, "ON_THE_WAY")} className="flex-[1.5] py-4 bg-brand text-brand-fg font-bold rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-brand/30 active:scale-95 transition-all inline-flex items-center justify-center gap-2">
+                      <Package size={14} strokeWidth={2.5} /> Recoger
                     </button>
                   )}
                   {order.status === "ON_THE_WAY" && (
-                    <button onClick={()=>{setSelectedOrder(order); setScreen("cobrar");}} className="flex-[1.5] py-4 bg-halo-success text-black font-bold rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-halo-success/30 active:scale-95 transition-all">
-                      Entregar 💵
+                    <button onClick={()=>{setSelectedOrder(order); setScreen("cobrar");}} className="flex-[1.5] py-4 bg-success text-black font-bold rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-success/30 active:scale-95 transition-all inline-flex items-center justify-center gap-2">
+                      <DollarSign size={14} strokeWidth={2.5} /> Entregar
                     </button>
                   )}
                 </div>
@@ -428,8 +434,8 @@ export default function DeliveryApp() {
             
             {orders.length === 0 && (
               <div className="py-28 text-center bg-white/5 rounded-[40px] border border-white/5 border-dashed">
-                <p className="text-7xl mb-8 grayscale opacity-20 animate-bounce">🥡</p>
-                <p className="text-halo-muted text-[11px] font-bold uppercase tracking-[0.4em] opacity-40 italic">Esperando nuevas órdenes...</p>
+                <Inbox size={80} className="mx-auto mb-8 text-tx-dis animate-bounce" strokeWidth={1.5} />
+                <p className="text-tx-mut text-[11px] font-bold uppercase tracking-[0.4em] opacity-60 italic">Esperando nuevas órdenes...</p>
               </div>
             )}
           </div>
@@ -465,8 +471,8 @@ export default function DeliveryApp() {
       
       <div className="p-6 bg-halo-bg/95 backdrop-blur-2xl border-t border-white/5 flex gap-4">
         <input value={newMsg} onChange={e=>setNewMsg(e.target.value)} onKeyDown={e=>e.key==='Enter' && sendMessage()} placeholder="Escribe un mensaje..." className="flex-1 bg-white/5 border border-white/10 rounded-2xl p-4 text-sm font-medium focus:border-halo-primary outline-none transition-all placeholder:text-halo-muted/40" />
-        <button onClick={sendMessage} disabled={!newMsg.trim() || sending} className="w-16 h-14 bg-halo-primary text-black rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-halo-primary/30 active:scale-95 transition-all disabled:opacity-50">
-          ➤
+        <button onClick={sendMessage} disabled={!newMsg.trim() || sending} aria-label="Enviar mensaje" className="w-16 h-14 bg-brand text-brand-fg rounded-2xl flex items-center justify-center shadow-lg shadow-brand/30 active:scale-95 transition-all disabled:opacity-50">
+          <Send size={22} strokeWidth={2.5} />
         </button>
       </div>
     </div>
@@ -522,12 +528,16 @@ export default function DeliveryApp() {
           <div>
             <label className="text-[10px] font-bold text-halo-muted mb-4 block tracking-[0.2em] uppercase">Selecciona Categoría</label>
             <div className="grid gap-3">
-              {EXPENSE_CATS.map(c => (
-                <button key={c.value} onClick={()=>setExpenseCat(c.value)} className={`p-5 rounded-2xl text-xs font-bold border transition-all text-left flex justify-between items-center ${expenseCat === c.value ? 'bg-halo-primary/20 border-halo-primary/40 text-halo-primary shadow-lg shadow-halo-primary/10' : 'bg-white/5 border-white/5 text-halo-muted hover:border-white/20'}`}>
-                  <span className="flex items-center gap-3">{c.label}</span>
-                  {expenseCat === c.value && <span className="text-xl animate-in zoom-in-50">✓</span>}
-                </button>
-              ))}
+              {EXPENSE_CATS.map(c => {
+                const CatIcon = c.icon;
+                const active = expenseCat === c.value;
+                return (
+                  <button key={c.value} onClick={()=>setExpenseCat(c.value)} className={`p-5 rounded-2xl text-xs font-bold border transition-all text-left flex justify-between items-center ${active ? 'bg-brand/20 border-brand/40 text-brand shadow-lg shadow-brand/10' : 'bg-surf-1 border-bd text-tx-mut hover:border-white/20'}`}>
+                    <span className="flex items-center gap-3"><CatIcon size={16} strokeWidth={2.5} style={{ color: c.color }} /> {c.label}</span>
+                    {active && <Check size={18} className="animate-in zoom-in-50" />}
+                  </button>
+                );
+              })}
             </div>
           </div>
           
@@ -571,12 +581,12 @@ export default function DeliveryApp() {
           <div>
             <label className="text-[10px] font-bold text-halo-muted mb-6 block tracking-[0.3em] uppercase text-center">Método de Pago Seleccionado</label>
             <div className="flex gap-4">
-              <button onClick={()=>setPayMethod("CASH")} className={`flex-1 py-8 rounded-[28px] font-bold text-[10px] border transition-all flex flex-col items-center gap-4 tracking-[0.2em] shadow-lg ${payMethod === "CASH" ? 'bg-halo-primary/20 border-halo-primary/40 text-halo-primary shadow-halo-primary/10' : 'bg-black/40 border-white/5 text-halo-muted hover:border-white/20'}`}>
-                <span className="text-4xl">💵</span>
+              <button onClick={()=>setPayMethod("CASH")} className={`flex-1 py-8 rounded-[28px] font-bold text-[10px] border transition-all flex flex-col items-center gap-4 tracking-[0.2em] shadow-lg ${payMethod === "CASH" ? 'bg-brand/20 border-brand/40 text-brand shadow-brand/10' : 'bg-surf-1 border-bd text-tx-mut hover:border-white/20'}`}>
+                <DollarSign size={32} strokeWidth={2.5} />
                 EFECTIVO
               </button>
-              <button onClick={()=>setPayMethod("TRANSFER")} className={`flex-1 py-8 rounded-[28px] font-bold text-[10px] border transition-all flex flex-col items-center gap-4 tracking-[0.2em] shadow-lg ${payMethod === "TRANSFER" ? 'bg-halo-primary/20 border-halo-primary/40 text-halo-primary shadow-halo-primary/10' : 'bg-black/40 border-white/5 text-halo-muted hover:border-white/20'}`}>
-                <span className="text-4xl">💳</span>
+              <button onClick={()=>setPayMethod("TRANSFER")} className={`flex-1 py-8 rounded-[28px] font-bold text-[10px] border transition-all flex flex-col items-center gap-4 tracking-[0.2em] shadow-lg ${payMethod === "TRANSFER" ? 'bg-brand/20 border-brand/40 text-brand shadow-brand/10' : 'bg-surf-1 border-bd text-tx-mut hover:border-white/20'}`}>
+                <CreditCard size={32} strokeWidth={2.5} />
                 TRANSFERENCIA
               </button>
             </div>
@@ -598,8 +608,8 @@ export default function DeliveryApp() {
             </div>
           )}
           
-          <button onClick={()=>changeStatus(selectedOrder, "DELIVERED", payMethod)} className="w-full py-6 bg-halo-success text-black font-bold rounded-2xl text-base tracking-[0.2em] shadow-xl shadow-halo-success/30 active:scale-95 transition-all uppercase">
-            Confirmar Entrega ✅
+          <button onClick={()=>changeStatus(selectedOrder, "DELIVERED", payMethod)} className="w-full py-6 bg-success text-black font-bold rounded-2xl text-base tracking-[0.2em] shadow-xl shadow-success/30 active:scale-95 transition-all uppercase inline-flex items-center justify-center gap-3">
+            <CheckCircle2 size={22} strokeWidth={2.5} /> Confirmar Entrega
           </button>
         </div>
       </div>
@@ -620,24 +630,24 @@ export default function DeliveryApp() {
           <p className="text-[10px] font-bold text-halo-muted mb-3 tracking-[0.3em] uppercase">Datos del Cliente</p>
           <p className="text-2xl font-bold text-white tracking-tight">{selectedOrder.customerName}</p>
           {selectedOrder.customerPhone && (
-            <a href={`tel:${selectedOrder.customerPhone}`} className="inline-flex items-center gap-3 mt-5 text-sm font-bold text-halo-primary bg-halo-primary/10 px-6 py-3 rounded-2xl border border-halo-primary/20 shadow-lg shadow-halo-primary/5 hover:bg-halo-primary/20 transition-all">
-              <span className="text-lg">📞</span> {selectedOrder.customerPhone}
+            <a href={`tel:${selectedOrder.customerPhone}`} className="inline-flex items-center gap-3 mt-5 text-sm font-bold text-brand bg-brand/10 px-6 py-3 rounded-2xl border border-brand/20 shadow-lg shadow-brand/5 hover:bg-brand/20 transition-all">
+              <Phone size={16} strokeWidth={2.5} /> {selectedOrder.customerPhone}
             </a>
           )}
         </div>
         
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[32px] p-8 shadow-2xl">
-          <p className="text-[10px] font-bold text-halo-muted mb-4 tracking-[0.3em] uppercase">Ubicación de Entrega</p>
+          <p className="text-[10px] font-bold text-tx-mut mb-4 tracking-[0.3em] uppercase">Ubicación de Entrega</p>
           <div className="flex gap-4 items-start">
-            <span className="text-2xl mt-1">📍</span>
-            <p className="text-base font-medium text-white/90 leading-relaxed tracking-tight">
+            <MapPin size={22} strokeWidth={2.5} className="mt-1 text-brand shrink-0" />
+            <p className="text-base font-medium text-tx-pri leading-relaxed tracking-tight">
               {selectedOrder.deliveryAddress?.trim()
                 ? selectedOrder.deliveryAddress
-                : <span className="text-halo-muted italic opacity-70">Sin dirección registrada</span>}
+                : <span className="text-tx-mut italic opacity-70">Sin dirección registrada</span>}
             </p>
           </div>
-          <button className="w-full mt-8 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-bold tracking-[0.3em] uppercase hover:bg-white/10 transition-all flex items-center justify-center gap-3 shadow-lg">
-            <span>MAPAS</span> 🗺️
+          <button className="w-full mt-8 py-4 bg-surf-1 border border-bd rounded-2xl text-[10px] font-bold tracking-[0.3em] uppercase hover:bg-surf-2 transition-all flex items-center justify-center gap-3 shadow-lg">
+            <MapIcon size={16} strokeWidth={2.5} /> MAPAS
           </button>
         </div>
         
@@ -676,7 +686,7 @@ export default function DeliveryApp() {
                     </ul>
                   )}
                   {item.notes && (
-                    <p className="mt-1 ml-10 text-[11px] italic text-halo-muted/70">📝 {item.notes}</p>
+                    <p className="mt-1 ml-10 text-[11px] italic text-tx-mut/80 inline-flex items-center gap-1.5"><StickyNote size={11} strokeWidth={2.5} /> {item.notes}</p>
                   )}
                 </div>
               );
@@ -713,7 +723,7 @@ export default function DeliveryApp() {
           {history.map(h => (
             <div key={h.id} className="bg-white/5 backdrop-blur-md border border-white/5 rounded-[28px] p-6 flex justify-between items-center group hover:bg-white/10 transition-all shadow-lg">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-halo-success/10 flex items-center justify-center text-halo-success text-lg">✓</div>
+                <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center text-success"><Check size={18} strokeWidth={3} /></div>
                 <div>
                   <p className="font-mono font-bold text-base text-white tracking-tighter">#{h.orderNumber}</p>
                   <p className="text-[10px] text-halo-muted font-mono mt-1.5 uppercase tracking-wider opacity-60">{new Date(h.updatedAt).toLocaleTimeString()}</p>
@@ -727,7 +737,7 @@ export default function DeliveryApp() {
           ))}
           {history.length === 0 && (
             <div className="py-24 text-center bg-white/5 rounded-[40px] border border-white/5 border-dashed">
-              <p className="text-6xl mb-8 grayscale opacity-20">📭</p>
+              <Inbox size={64} className="mx-auto mb-8 text-tx-dis" strokeWidth={1.5} />
               <p className="text-halo-muted text-[11px] font-bold uppercase tracking-[0.3em] opacity-40 italic">No hay entregas registradas hoy</p>
             </div>
           )}

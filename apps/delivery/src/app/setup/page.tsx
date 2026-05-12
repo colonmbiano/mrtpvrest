@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Bike } from "lucide-react";
 
 export default function DeliverySetupPage() {
   const [restaurantId, setRestaurantId] = useState("");
@@ -30,12 +31,14 @@ export default function DeliverySetupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] p-6 font-syne">
-      <div className="max-w-md w-full bg-[#111] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl">
+    <div className="min-h-screen flex items-center justify-center bg-surf-0 p-6 font-sans">
+      <div className="max-w-md w-full bg-surf-1 border border-bd rounded-[2.5rem] p-10 shadow-2xl">
         <div className="text-center mb-10">
-          <div className="text-4xl mb-4">🛵</div>
-          <h1 className="text-2xl font-black text-white uppercase tracking-tighter italic">
-            Delivery <span className="text-orange-500">Setup</span>
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-brand/10 border border-brand/20 flex items-center justify-center text-brand">
+            <Bike size={32} strokeWidth={2.5} />
+          </div>
+          <h1 className="text-2xl font-black text-tx-pri uppercase tracking-tighter italic">
+            Delivery <span className="text-brand">Setup</span>
           </h1>
           <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-2">
             Configuración del Dispositivo

@@ -2,19 +2,100 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --halo-bg: #0C0C0E;
-  --halo-card: #1A1A1A;
-  --halo-primary: #FF8400;
-  --halo-success: #88D66C;
-  --halo-muted: #9ca3af;
-  --halo-border: rgba(255, 255, 255, 0.05);
+/* MIGRACIÓN: tokens unificados con TPV/KDS (sistema surf/tx/iris) para
+ * mantener consistencia visual entre las apps de la suite. Los aliases
+ * --halo-* se conservan para no romper componentes existentes mientras
+ * se migran progresivamente a las clases nativas (bg-surf-1, text-tx-pri,
+ * etc.).
+ *
+ * En Capacitor/APK el primer tap tras cerrar un overlay puede perderse
+ * por el "300ms tap delay" — touch-action:manipulation lo elimina. */
+@layer base {
+  button,
+  a,
+  label,
+  input,
+  select,
+  [role="button"],
+  [role="switch"],
+  [role="checkbox"] {
+    touch-action: manipulation;
+  }
+}
+
+@layer base {
+  :root {
+    /* SURFACES */
+    --bg: #0C0C0E;
+    --surface-1: #131316;
+    --surface-2: #1c1c1f;
+    --surface-3: #22242a;
+    --surface-hover: #2a2c33;
+
+    /* TEXT */
+    --text-primary: #f7f8f8;
+    --text-secondary: #A1A1AA;
+    --text-muted: #8a8f98;
+    --text-disabled: #4c515a;
+
+    /* BORDERS */
+    --border: #27272A;
+    --border-strong: rgba(255, 255, 255, 0.15);
+    --border-focus: var(--brand);
+
+    /* SHADOWS */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 8px 16px -4px rgba(0, 0, 0, 0.6);
+    --shadow-lg: 0 16px 32px -8px rgba(0, 0, 0, 0.8);
+    --shadow-glow: 0 10px 40px -10px var(--brand-glow);
+
+    /* BRAND (mismo orange que TPV default) */
+    --brand: #FF8400;
+    --brand-hover: #ffa33d;
+    --brand-active: #e67700;
+    --brand-soft: rgba(255, 132, 0, 0.15);
+    --brand-glow: rgba(255, 132, 0, 0.35);
+    --brand-fg: #0a0a0c;
+
+    /* SEMANTIC */
+    --success: #10b981;
+    --success-soft: rgba(16, 185, 129, 0.12);
+    --warning: #f59e0b;
+    --warning-soft: rgba(245, 158, 11, 0.12);
+    --danger: #ef4444;
+    --danger-soft: rgba(239, 68, 68, 0.12);
+    --info: #3b82f6;
+    --info-soft: rgba(59, 130, 246, 0.12);
+
+    /* RADIUS */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-2xl: 24px;
+    --radius-full: 9999px;
+
+    /* TYPOGRAPHY (alineado con TPV/KDS — Outfit cargada via <link> en layout) */
+    --font-body: 'Outfit', system-ui, sans-serif;
+    --font-display: 'Outfit', system-ui, sans-serif;
+    --font-mono: 'DM Mono', 'JetBrains Mono', monospace;
+
+    /* LEGACY ALIASES — halo-X apuntan al sistema unificado.
+     * Se mantienen para que los componentes existentes sigan funcionando
+     * sin reescribir. Migrar progresivamente a bg-surf-N / text-tx-pri. */
+    --halo-bg: var(--bg);
+    --halo-card: var(--surface-1);
+    --halo-primary: var(--brand);
+    --halo-success: var(--success);
+    --halo-muted: var(--text-muted);
+    --halo-border: var(--border);
+  }
 }
 
 body {
-  background-color: var(--halo-bg);
-  color: #FFFFFF;
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
   overflow-x: hidden;
 }
 
@@ -23,13 +104,13 @@ body {
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-/* Efectos de Glow Radial para el fondo */
+/* Efectos de Glow Radial — usan tokens para responder a cambios de paleta */
 .halo-glow-primary {
-  background: radial-gradient(circle at center, rgba(255, 132, 0, 0.15) 0%, rgba(255, 132, 0, 0) 70%);
+  background: radial-gradient(circle at center, var(--brand-soft) 0%, transparent 70%);
   filter: blur(60px);
 }
 
 .halo-glow-success {
-  background: radial-gradient(circle at center, rgba(136, 214, 108, 0.1) 0%, rgba(136, 214, 108, 0) 70%);
+  background: radial-gradient(circle at center, var(--success-soft) 0%, transparent 70%);
   filter: blur(80px);
 }

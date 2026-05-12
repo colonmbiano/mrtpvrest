@@ -2,6 +2,8 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import api from "@/lib/api";
+// MIGRACIÓN: iconos lucide alineados con TPV/KDS.
+import { AlertTriangle, MapPin, Square } from "lucide-react";
 
 const ORIGIN_THRESHOLD = 50; // metros para activar tracking automático
 const TRACK_INTERVAL   = 60000; // 1 minuto
@@ -110,7 +112,7 @@ export default function GPSTracker({ driverId, activeOrderId, onRouteStart, onRo
     <div className="mx-5 mb-3 px-4 py-3 rounded-xl text-xs space-y-3"
       style={{background:"rgba(239,68,68,0.1)",color:"#ef4444",border:"1px solid rgba(239,68,68,0.2)"}}>
       <div className="flex items-start gap-2">
-        <span className="text-base leading-none mt-0.5">⚠️</span>
+        <AlertTriangle size={16} strokeWidth={2.5} className="shrink-0 mt-0.5" />
         <div className="flex-1 leading-snug">
           <p className="font-bold mb-1">Sin permiso de ubicación</p>
           <p className="opacity-90">Actívalo en <span className="font-bold">Ajustes de Android → Apps → MRTPV Delivery → Permisos → Ubicación</span>.</p>
@@ -138,16 +140,16 @@ export default function GPSTracker({ driverId, activeOrderId, onRouteStart, onRo
             )}
           </div>
           <button onClick={handleStopTracking}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold flex-shrink-0"
+            className="px-3 py-1.5 rounded-lg text-xs font-bold flex-shrink-0 inline-flex items-center gap-1.5"
             style={{background:"rgba(239,68,68,0.15)",color:"#ef4444"}}>
-            ⏹ Detener
+            <Square size={12} strokeWidth={2.5} fill="currentColor" /> Detener
           </button>
         </div>
       ) : (
         <button onClick={handleStartTracking}
           className="w-full px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2"
           style={{background:"rgba(59,130,246,0.1)",color:"#3b82f6",border:"1px solid rgba(59,130,246,0.2)"}}>
-          📍 Iniciar seguimiento GPS
+          <MapPin size={14} strokeWidth={2.5} /> Iniciar seguimiento GPS
         </button>
       )}
     </div>
