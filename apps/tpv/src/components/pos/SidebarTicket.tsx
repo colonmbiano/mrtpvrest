@@ -301,6 +301,13 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         tipAmount,
       };
       clearActiveItems();
+      // BUG-29: tras cobro DELIVERY exitoso, limpiar datos del cliente
+      // (nombre, dirección, teléfono). Antes quedaban llenos del pedido
+      // anterior y el siguiente ticket arrancaba con la dirección equivocada.
+      // Cada pedido domicilio es un cliente distinto en la práctica.
+      if (ticket.type === "DELIVERY") {
+        useTicketStore.getState().updateTicket({ name: "", address: "", phone: "" });
+      }
       setShowPayment(false);
 
       // Fire-and-forget: comanda en KITCHEN/BAR + recibo en CASHIER.
@@ -469,9 +476,13 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                 value={ticket.address || ""}
                 onChange={(e) => useTicketStore.getState().updateTicket({ address: e.target.value })}
               />
-              <span className="text-[9px] font-black tracking-[0.2em] uppercase text-amber-500/70">
-                Req
-              </span>
+              {/* BUG-26: ocultar badge cuando el campo ya tiene valor (trim).
+                  Antes el badge REQ permanecía aunque el cajero llenara el dato. */}
+              {!ticket.address?.trim() && (
+                <span className="text-[9px] font-black tracking-[0.2em] uppercase text-amber-500/70">
+                  Req
+                </span>
+              )}
             </div>
             <div className="flex-1 bg-[#121316] border border-white/5 rounded-2xl h-14 flex items-center px-5 gap-4 focus-within:border-amber-500/50 transition-all">
               <Phone size={18} className="text-zinc-600" />
@@ -482,9 +493,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                 value={ticket.phone || ""}
                 onChange={(e) => useTicketStore.getState().updateTicket({ phone: e.target.value })}
               />
-              <span className="text-[9px] font-black tracking-[0.2em] uppercase text-amber-500/70">
-                Req
-              </span>
+              {!ticket.phone?.trim() && (
+                <span className="text-[9px] font-black tracking-[0.2em] uppercase text-amber-500/70">
+                  Req
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -541,7 +554,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                 ticket.items.length === 0 ||
                 (ticket.type === "DELIVERY" &&
                   isShiftOpen &&
-                  (!ticket.address?.trim() || !ticket.phone?.trim()))
+                  (!ticket.address?.trim() || !ticket.phone?.trim())) ||
+                // BUG-25: simétrico al fix de Domicilio. EN MESA no debe poder
+                // cobrar sin mesa asignada (antes el botón quedaba enabled y
+                // el ticket mostraba "SIN MESA ASIGNADA").
+                (ticket.type === "DINE_IN" && isShiftOpen && !ticket.tableId)
               }
               title={
                 ticket.type === "DELIVERY" && isShiftOpen
@@ -552,7 +569,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                       : !ticket.phone?.trim()
                         ? "Falta teléfono del cliente"
                         : undefined
-                  : undefined
+                  : ticket.type === "DINE_IN" && isShiftOpen && !ticket.tableId
+                    ? "Asigna una mesa antes de cobrar"
+                    : undefined
               }
               className={`w-full h-16 rounded-2xl text-sm font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale ${
                 isShiftOpen

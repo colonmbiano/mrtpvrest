@@ -102,10 +102,26 @@ export default function GPSTracker({ driverId, activeOrderId, onRouteStart, onRo
     if (watchRef.current !== null) navigator.geolocation?.clearWatch(watchRef.current);
   }, []);
 
+  // BUG-32: copy claro para usuario no técnico — antes decía
+  // "configuración del navegador" pero la app corre como APK nativa
+  // (Capacitor) y el repartidor no entiende el término. Añadimos botón
+  // "Reintentar" que dispara de nuevo el prompt nativo de permisos.
   if (permDenied) return (
-    <div className="mx-5 mb-3 px-4 py-3 rounded-xl text-xs"
+    <div className="mx-5 mb-3 px-4 py-3 rounded-xl text-xs space-y-3"
       style={{background:"rgba(239,68,68,0.1)",color:"#ef4444",border:"1px solid rgba(239,68,68,0.2)"}}>
-      ⚠️ Sin permiso de ubicación — actívalo en la configuración del navegador
+      <div className="flex items-start gap-2">
+        <span className="text-base leading-none mt-0.5">⚠️</span>
+        <div className="flex-1 leading-snug">
+          <p className="font-bold mb-1">Sin permiso de ubicación</p>
+          <p className="opacity-90">Actívalo en <span className="font-bold">Ajustes de Android → Apps → MRTPV Delivery → Permisos → Ubicación</span>.</p>
+        </div>
+      </div>
+      <button
+        onClick={() => { setPermDenied(false); handleStartTracking(); }}
+        className="w-full px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider"
+        style={{background:"rgba(239,68,68,0.18)",color:"#ef4444",border:"1px solid rgba(239,68,68,0.3)"}}>
+        Reintentar permiso
+      </button>
     </div>
   );
 

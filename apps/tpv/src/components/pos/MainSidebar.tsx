@@ -65,28 +65,37 @@ export default function MainSidebar({
 
   return (
     <aside className="hidden md:flex w-20 flex-col items-center py-8 gap-10 shrink-0 relative z-30 bg-[#0a0a0c] border-r border-white/5">
-      {/* LOGO WARM TECH */}
+      {/* LOGO WARM TECH — BUG-23: convertido a button para que sea
+          accesible (rol button, focusable, y feedback visual claro al
+          tocar). Antes era un div con onClick: el cajero no entendía que
+          era tappable y reportaba que "el sidebar no responde". */}
       <div className="flex flex-col items-center gap-3">
-        <div
+        <button
+          type="button"
           onClick={() => router.push("/pos/menu")}
-          className="w-14 h-14 rounded-2xl flex items-center justify-center transition-all active:scale-90 cursor-pointer bg-amber-500 text-[#0a0a0c] shadow-[0_0_20px_rgba(255,184,77,0.3)]"
+          aria-label="Ir al panel de ventas"
+          className="w-14 h-14 rounded-2xl flex items-center justify-center transition-all active:scale-90 hover:scale-105 bg-amber-500 text-[#0a0a0c] shadow-[0_0_20px_rgba(255,184,77,0.3)]"
         >
           <UtensilsCrossed size={28} />
-        </div>
+        </button>
         <div className="w-10 h-[1px] bg-white/5" />
       </div>
 
-      {/* TOP NAV - TOUCH OPTIMIZED */}
+      {/* TOP NAV - TOUCH OPTIMIZED
+          BUG-23: subir contraste de iconos inactivos (zinc-600 → zinc-400)
+          y añadir hover visible. Antes los iconos quedaban casi invisibles
+          y el cajero pensaba que estaban disabled. */}
       <nav className="flex flex-col items-center gap-3">
         {navItems.map((item) => (
           <button
             key={item.id}
             onClick={item.onClick}
             title={item.label}
+            aria-label={item.label}
             className={`w-14 h-14 flex items-center justify-center rounded-2xl transition-all active:scale-90 ${
-              item.active 
-                ? "bg-amber-500 text-[#0a0a0c] shadow-[0_10px_20px_-5px_rgba(255,184,77,0.4)]" 
-                : "text-zinc-600 active:bg-white/5 active:text-white"
+              item.active
+                ? "bg-amber-500 text-[#0a0a0c] shadow-[0_10px_20px_-5px_rgba(255,184,77,0.4)]"
+                : "text-zinc-400 hover:text-white hover:bg-white/5 active:bg-white/10"
             }`}
           >
             <item.icon size={24} />
@@ -101,7 +110,8 @@ export default function MainSidebar({
         {/* Notificaciones */}
         <button
           onClick={onOpenNotifs}
-          className="w-14 h-14 flex items-center justify-center rounded-2xl transition-all relative active:scale-90 text-zinc-600 active:text-white active:bg-white/5"
+          aria-label="Notificaciones"
+          className="w-14 h-14 flex items-center justify-center rounded-2xl transition-all relative active:scale-90 text-zinc-400 hover:text-white hover:bg-white/5 active:bg-white/10"
         >
           <Bell size={24} />
           {hasOpenOrders && unreadNotifs === 0 && (

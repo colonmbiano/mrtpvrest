@@ -140,6 +140,23 @@
   background-color: var(--surface-2) !important;
 }
 
+/* BUG-19: extender los overrides a las clases Tailwind oscuras puras
+ * (bg-zinc-900 / bg-black) que el equipo confesó como deuda. Estaban
+ * sueltas en sidebar de Configuración + varios modales y dejaban zonas
+ * oscuras al cambiar a modo claro. Mantener la inversión consistente
+ * sin tener que reemplazar 20+ archivos de golpe. */
+[data-mode="light"] .bg-black,
+[data-mode="light"] .bg-zinc-900,
+[data-mode="light"] .bg-zinc-950 {
+  background-color: var(--bg) !important;
+}
+[data-mode="light"] .bg-zinc-800 {
+  background-color: var(--surface-1) !important;
+}
+[data-mode="light"] .bg-zinc-700 {
+  background-color: var(--surface-2) !important;
+}
+
 [data-mode="light"] .text-white,
 [data-mode="light"] .text-zinc-100,
 [data-mode="light"] .text-zinc-200 {

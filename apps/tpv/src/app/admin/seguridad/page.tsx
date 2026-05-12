@@ -137,26 +137,46 @@ export default function SeguridadAdmin() {
               <p className="text-sm font-black text-white">Acciones que requieren PIN del supervisor</p>
             </div>
             <div className="divide-y divide-white/5">
-              {policies.map((p) => (
-                <label
-                  key={String(p.key)}
-                  className="flex items-center gap-3 px-6 py-4 cursor-pointer hover:bg-white/5 transition-colors"
-                >
-                  <div className="w-11 h-11 rounded-2xl flex items-center justify-center bg-[#ffb84d]/15 text-[#ffb84d] border border-[#ffb84d]/30 flex-shrink-0">
-                    <Lock size={16} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-black text-white">{p.label}</p>
-                    <p className="text-[11px] font-medium text-white/55">{p.sub}</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    className="scale-125 accent-[#ffb84d]"
-                    checked={Boolean((config as any)[p.key])}
-                    onChange={(e) => setConfig({ ...config, [p.key]: e.target.checked })}
-                  />
-                </label>
-              ))}
+              {/* BUG-21: el checkbox nativo era poco visible en dark + el
+                  toque en tablet caía a veces fuera del área real del input.
+                  Sustituido por un toggle pill grande con el row entero
+                  como botón y feedback de color claro al alternar. */}
+              {policies.map((p) => {
+                const value = Boolean((config as any)[p.key]);
+                const toggle = () => setConfig({ ...config, [p.key]: !value });
+                return (
+                  <button
+                    key={String(p.key)}
+                    type="button"
+                    onClick={toggle}
+                    aria-pressed={value}
+                    className="w-full flex items-center gap-3 px-6 py-4 hover:bg-white/5 transition-colors text-left"
+                  >
+                    <div className="w-11 h-11 rounded-2xl flex items-center justify-center bg-[#ffb84d]/15 text-[#ffb84d] border border-[#ffb84d]/30 flex-shrink-0">
+                      <Lock size={16} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-black text-white">{p.label}</p>
+                      <p className="text-[11px] font-medium text-white/55">{p.sub}</p>
+                    </div>
+                    {/* BUG-18: usar var(--brand) en vez de hex hardcoded
+                        para que el toggle respete la paleta seleccionada
+                        (Miel/Cian/Lima) en lugar de quedarse siempre ámbar. */}
+                    <span
+                      role="switch"
+                      aria-checked={value}
+                      className="relative inline-flex h-7 w-12 shrink-0 rounded-full transition-colors duration-150"
+                      style={{ background: value ? "var(--brand)" : "rgba(255,255,255,0.15)" }}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-150 ${
+                          value ? "translate-x-5" : "translate-x-0.5"
+                        }`}
+                      />
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

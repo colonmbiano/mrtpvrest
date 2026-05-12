@@ -313,9 +313,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
+      {/* BUG-28: backdrop NO cierra el modal. El cobro suele tener varios
+          ajustes (método, propina, repartidor, efectivo recibido) y un tap
+          accidental fuera perdía todo el progreso. La salida explícita es
+          por la X o por Confirmar. */}
       <div
         className="absolute inset-0 bg-black/80 backdrop-blur-md"
-        onClick={onClose}
+        aria-hidden
       />
 
       <div className="relative w-full max-w-5xl h-[88vh] max-h-[760px] bg-[#0C0C0E] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
@@ -472,13 +476,19 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
                   Resumen del pedido
                 </span>
+                {/* BUG-22: nombres largos quedaban truncados en el resumen
+                    (ARRACHERA HOUSE HAMBURG...). Usamos break-words + tooltip
+                    nativo con el nombre completo para no perder información. */}
                 <div className="mt-3 space-y-2">
                   {items.map((it, i) => (
                     <div
                       key={i}
                       className="flex justify-between items-baseline gap-3"
                     >
-                      <span className="text-[13px] font-bold text-white/80 truncate flex-1 min-w-0">
+                      <span
+                        className="text-[13px] font-bold text-white/80 flex-1 min-w-0 break-words leading-snug"
+                        title={it.name}
+                      >
                         <span className="text-[#ffb84d] mr-2 tabular-nums">
                           {it.quantity}×
                         </span>

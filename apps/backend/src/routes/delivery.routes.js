@@ -3,6 +3,35 @@ const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const router = express.Router();
 
+// BUG-31: garantizar que la entrega se refleje SIEMPRE en MI CAJA del
+// repartidor cuando el pago es en efectivo y aún no se acreditó. Idempotente
+// por (driverId, orderId, category=DELIVERY) para soportar reintentos del
+// frontend sin duplicar movimientos.
+async function ensureCashOnDeliveryMovement(order) {
+  if (!order || !order.deliveryDriverId) return null;
+  if (order.paymentMethod !== 'CASH') return null;
+  if (order.paymentStatus === 'PAID') return null;
+  const existing = await prisma.driverCashMovement.findFirst({
+    where: {
+      driverId: order.deliveryDriverId,
+      orderId: order.id,
+      category: 'DELIVERY',
+      type: 'INCOME',
+    },
+  });
+  if (existing) return existing;
+  return prisma.driverCashMovement.create({
+    data: {
+      driverId: order.deliveryDriverId,
+      type: 'INCOME',
+      category: 'DELIVERY',
+      amount: Number(order.total) || 0,
+      description: 'Cobro entrega ' + (order.orderNumber || order.id),
+      orderId: order.id,
+    },
+  });
+}
+
 // ── LOGIN repartidor (usa Employee con rol DELIVERY) ──────────────────────
 router.post('/login', async (req, res) => {
   try {
@@ -25,7 +54,12 @@ router.get('/:driverId/orders', async (req, res) => {
         deliveryDriverId: req.params.driverId,
         status: { notIn: ['DELIVERED', 'CANCELLED'] }
       },
-      include: { items: { include: { menuItem: true } }, user: true },
+      // BUG-30: incluir modifiers para que el detalle muestre nombre completo
+      // del producto + variantes/modificadores antes de salir a la entrega.
+      include: {
+        items: { include: { menuItem: true, modifiers: true } },
+        user: true
+      },
       orderBy: { createdAt: 'desc' }
     });
     res.json(orders);
@@ -33,12 +67,16 @@ router.get('/:driverId/orders', async (req, res) => {
 });
 
 // ── GET historial del día ─────────────────────────────────────────────────
+// BUG-31: filtrar exclusivamente por status='DELIVERED'. Antes devolvía toda
+// la actividad del día (incluyendo ON_THE_WAY) y la app la pintaba como
+// "ENTREGADO", inconsistente con RUTA ACTIVA y MI CAJA.
 router.get('/:driverId/history', async (req, res) => {
   try {
     const today = new Date(); today.setHours(0,0,0,0);
     const orders = await prisma.order.findMany({
       where: {
         deliveryDriverId: req.params.driverId,
+        status: 'DELIVERED',
         createdAt: { gte: today }
       },
       include: { items: true },
@@ -81,6 +119,10 @@ router.put('/:driverId/orders/:orderId/status', async (req, res) => {
       data,
       include: { items: { include: { menuItem: true } }, user: true }
     });
+
+    if (order.status === 'DELIVERED') {
+      await ensureCashOnDeliveryMovement(order);
+    }
 
     const io = req.app.get('io');
     if (io) {
@@ -147,6 +189,7 @@ router.put('/:driverId/orders/:orderId/deliver', async (req, res) => {
       },
       include: { items: { include: { menuItem: true } } }
     });
+    await ensureCashOnDeliveryMovement(order);
     res.json(order);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
