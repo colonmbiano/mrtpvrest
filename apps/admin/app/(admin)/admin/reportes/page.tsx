@@ -22,10 +22,10 @@ const PRESETS: { id: PresetId; label: string; days?: number }[] = [
   { id: "CUSTOM", label: "Personalizado" },
 ];
 
-function todayStr() { return new Date().toISOString().split("T")[0]; }
-function daysAgoStr(n: number) {
+function todayStr(): string { return new Date().toISOString().split("T")[0] as string; }
+function daysAgoStr(n: number): string {
   const d = new Date(); d.setDate(d.getDate() - n + 1);
-  return d.toISOString().split("T")[0];
+  return d.toISOString().split("T")[0] as string;
 }
 
 interface DayData { date: string; revenue: number; orders: number; bucket?: string }
@@ -45,7 +45,7 @@ export default function ReportesPage() {
   // Carga el primer pedido al montar para habilitar "Todo el histórico".
   useEffect(() => {
     api.get("/api/reports/range-bounds").then((r) => {
-      const f = r?.data?.from ? new Date(r.data.from).toISOString().split("T")[0] : null;
+      const f = r?.data?.from ? (new Date(r.data.from).toISOString().split("T")[0] as string) : null;
       setHistoricalFrom(f);
     }).catch(() => setHistoricalFrom(null));
   }, []);
@@ -102,7 +102,8 @@ export default function ReportesPage() {
     const parts = d.date.split("-");
     if (bucketLabel === "month") {
       // YYYY-MM → "may '24"
-      const [yy, mm] = parts;
+      const yy = parts[0] || "0000";
+      const mm = parts[1] || "01";
       const monthName = new Date(parseInt(yy), parseInt(mm) - 1).toLocaleDateString("es-MX", { month: "short" });
       return `${monthName} '${yy.slice(2)}`;
     }
