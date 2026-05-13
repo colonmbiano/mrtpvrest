@@ -60,24 +60,54 @@ router.get('/ingredients', authenticate, requireTenantAccess, requireAdmin, asyn
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
     const ingredients = await prisma.ingredient.findMany({
       where: { locationId },
-      include: { supplier: true },
+      include: {
+        supplier: true,
+        type: { select: { id: true, name: true } },
+        category: { select: { id: true, name: true, color: true } },
+      },
       orderBy: { name: 'asc' }
     });
     res.json(ingredients);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+const VALID_BASE_UNITS = ['GRAM', 'ML', 'PIECE'];
+
 router.post('/ingredients', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    const locationId   = req.headers['x-location-id'] || req.query.locationId;
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
-    const { name, unit, stock, minStock, supplierId, purchaseUnit, purchaseCost, conversionFactor } = req.body;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const {
+      name, unit, stock, minStock, supplierId,
+      purchaseUnit, purchaseCost, conversionFactor,
+      // Nuevos (taxonomía + factor corrección + packaging)
+      typeId, categoryId, baseUnit, pesoBruto, pesoNeto, isPackaging, purchaseQty,
+    } = req.body;
     const factor = parseFloat(conversionFactor) || 1;
     const cost = purchaseCost ? parseFloat(purchaseCost) / factor : parseFloat(req.body.cost) || 0;
     const ingredient = await prisma.ingredient.create({
-      data: { name, unit, stock: parseFloat(stock) || 0, minStock: parseFloat(minStock) || 0,
-        cost, purchaseUnit: purchaseUnit || null, purchaseCost: purchaseCost ? parseFloat(purchaseCost) : null,
-        conversionFactor: factor, supplierId: supplierId || null, locationId }
+      data: {
+        restaurantId,
+        locationId,
+        name,
+        unit,
+        stock: parseFloat(stock) || 0,
+        minStock: parseFloat(minStock) || 0,
+        cost,
+        purchaseUnit: purchaseUnit || null,
+        purchaseQty: purchaseQty != null ? parseFloat(purchaseQty) : 1,
+        purchaseCost: purchaseCost ? parseFloat(purchaseCost) : null,
+        conversionFactor: factor,
+        supplierId: supplierId || null,
+        typeId: typeId || null,
+        categoryId: categoryId || null,
+        baseUnit: VALID_BASE_UNITS.includes(baseUnit) ? baseUnit : 'PIECE',
+        pesoBruto: pesoBruto != null ? parseFloat(pesoBruto) : null,
+        pesoNeto:  pesoNeto  != null ? parseFloat(pesoNeto)  : null,
+        isPackaging: Boolean(isPackaging),
+      }
     });
     res.json(ingredient);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -86,7 +116,10 @@ router.post('/ingredients', authenticate, requireTenantAccess, requireAdmin, asy
 router.put('/ingredients/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const locationId = req.headers['x-location-id'] || req.query.locationId;
-    const { name, unit, stock, minStock, supplierId, purchaseUnit, purchaseCost, conversionFactor } = req.body;
+    const {
+      name, unit, stock, minStock, supplierId, purchaseUnit, purchaseCost, conversionFactor,
+      typeId, categoryId, baseUnit, pesoBruto, pesoNeto, isPackaging, purchaseQty,
+    } = req.body;
     const factor = parseFloat(conversionFactor) || 1;
     const cost = purchaseCost ? parseFloat(purchaseCost) / factor : parseFloat(req.body.cost) || 0;
     const data = {
@@ -96,8 +129,16 @@ router.put('/ingredients/:id', authenticate, requireTenantAccess, requireAdmin, 
       ...(minStock !== undefined && { minStock: parseFloat(minStock) }),
       ...(supplierId !== undefined && { supplierId: supplierId || null }),
       ...(purchaseUnit !== undefined && { purchaseUnit: purchaseUnit || null }),
+      ...(purchaseQty !== undefined && { purchaseQty: parseFloat(purchaseQty) }),
       ...(purchaseCost !== undefined && { purchaseCost: parseFloat(purchaseCost), conversionFactor: factor, cost }),
       ...(purchaseCost === undefined && req.body.cost !== undefined && { cost: parseFloat(req.body.cost) }),
+      // Nuevos
+      ...(typeId !== undefined && { typeId: typeId || null }),
+      ...(categoryId !== undefined && { categoryId: categoryId || null }),
+      ...(baseUnit !== undefined && VALID_BASE_UNITS.includes(baseUnit) && { baseUnit }),
+      ...(pesoBruto !== undefined && { pesoBruto: pesoBruto === null ? null : parseFloat(pesoBruto) }),
+      ...(pesoNeto !== undefined && { pesoNeto: pesoNeto === null ? null : parseFloat(pesoNeto) }),
+      ...(isPackaging !== undefined && { isPackaging: Boolean(isPackaging) }),
     };
     const ingredient = await prisma.ingredient.update({
       where: { id: req.params.id, locationId },
