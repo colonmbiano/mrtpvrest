@@ -220,6 +220,24 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
         }
       })
 
+      // 3.6. Categorías de gastos operativos default. Permite al cajero
+      // empezar a registrar gastos desde el TPV sin pasar por admin. El
+      // user puede agregar/quitar las suyas después en /admin.
+      const DEFAULT_EXPENSE_CATEGORIES = [
+        { name: 'LUZ',              icon: '💡', color: '#fbbf24' },
+        { name: 'AGUA',             icon: '💧', color: '#3b82f6' },
+        { name: 'INTERNET',         icon: '📡', color: '#06b6d4' },
+        { name: 'GAS',              icon: '🔥', color: '#f97316' },
+        { name: 'MANTENIMIENTO',    icon: '🔧', color: '#6b7280' },
+        { name: 'SUELDOS',          icon: '💼', color: '#a16207' },
+        { name: 'PROPINAS_PAGADAS', icon: '🪙', color: '#84cc16' },
+        { name: 'OTROS',            icon: '📝', color: '#9ca3af' },
+      ];
+      await tx.operatingExpenseCategory.createMany({
+        data: DEFAULT_EXPENSE_CATEGORIES.map(c => ({ ...c, restaurantId: r.id })),
+        skipDuplicates: true,
+      });
+
       // 4. User ADMIN ligado a Tenant + Restaurant
       const u = await tx.user.create({
         data: {

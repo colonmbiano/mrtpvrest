@@ -30,6 +30,7 @@ import { useNotifications, useNotifStore } from "@/hooks/useNotifications";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
 import MergeTableModal from "@/components/pos/MergeTableModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
+import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
   DINE_IN: "MESA",
@@ -62,6 +63,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [askingAdminPin, setAskingAdminPin] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [showExpenses, setShowExpenses] = useState(false);
   const [mobileView, setMobileView] = useState<"menu" | "ticket">("menu");
   const bellRef = useRef<HTMLButtonElement>(null);
 
@@ -538,12 +540,18 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   return (
     <div className="flex h-[100dvh] w-full bg-surf-0 overflow-hidden font-sans text-tx-pri">
       {/* SIDE RAIL */}
-      <MainSidebar 
-        onOpenMenu={() => setShowMenu(true)} 
+      <MainSidebar
+        onOpenMenu={() => setShowMenu(true)}
         onOpenOrders={() => setShowOrders(true)}
         onOpenNotifs={() => setShowNotifs((v) => !v)}
+        onOpenExpenses={isLoanMode ? undefined : () => setShowExpenses(true)}
         hasOpenOrders={openOrders.length > 0}
         unreadNotifs={unreadCount}
+      />
+
+      <PurchasesExpensesModal
+        isOpen={showExpenses}
+        onClose={() => setShowExpenses(false)}
       />
 
       <ConfigMenu

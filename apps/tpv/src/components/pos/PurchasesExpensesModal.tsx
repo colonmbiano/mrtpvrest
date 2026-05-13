@@ -1,0 +1,560 @@
+"use client";
+import React, { useEffect, useMemo, useState } from "react";
+import { X, Wallet, ShoppingBag, Plus, Trash2, Camera, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import api from "@/lib/api";
+import { toast } from "sonner";
+
+// PurchasesExpensesModal · captura desde el TPV de gastos operativos y
+// compras de inventario. 2 tabs:
+//   · "Gasto"  → /api/expenses     (luz, agua, sueldos, propinas pagadas)
+//   · "Compra" → /api/purchases    (compra de ingredientes, afecta stock)
+//
+// Pago en efectivo (CASH_DRAWER) requiere CashShift abierto — el backend
+// valida y devuelve 409 NO_OPEN_SHIFT. El UI muestra el mensaje.
+
+type Tab = "expense" | "purchase";
+type PaymentMethod = "CASH_DRAWER" | "CORPORATE_CARD" | "TRANSFER";
+
+const PAYMENT_LABELS: Record<PaymentMethod, string> = {
+  CASH_DRAWER: "Efectivo de caja",
+  CORPORATE_CARD: "Tarjeta corporativa",
+  TRANSFER: "Transferencia",
+};
+
+interface ExpenseCategory {
+  id: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+}
+
+interface Supplier {
+  id: string;
+  name: string;
+}
+
+interface Ingredient {
+  id: string;
+  name: string;
+  baseUnit: "GRAM" | "ML" | "PIECE";
+  unit: string | null;
+  category?: { name: string } | null;
+}
+
+interface PurchaseLine {
+  ingredientId: string;
+  ingredientName: string;
+  baseUnit: string;
+  qty: string;       // string para evitar problemas de decimal en input
+  unitPrice: string;
+}
+
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
+  const [tab, setTab] = useState<Tab>("expense");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH_DRAWER");
+
+  // GASTO
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  const [categoryId, setCategoryId] = useState<string>("");
+  const [concept, setConcept] = useState("");
+  const [amount, setAmount] = useState("");
+
+  // COMPRA
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierId, setSupplierId] = useState<string>("");
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [lines, setLines] = useState<PurchaseLine[]>([]);
+
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  // Cargar catálogos cuando abre
+  useEffect(() => {
+    if (!isOpen) return;
+    api.get<ExpenseCategory[]>("/api/expenses/categories").then((r) => setCategories(r.data || [])).catch(() => setCategories([]));
+    api.get<Supplier[]>("/api/purchases/lookup/suppliers").then((r) => setSuppliers(r.data || [])).catch(() => setSuppliers([]));
+    api.get<Ingredient[]>("/api/purchases/lookup/ingredients").then((r) => setIngredients(r.data || [])).catch(() => setIngredients([]));
+  }, [isOpen]);
+
+  // Reset al cerrar
+  useEffect(() => {
+    if (isOpen) return;
+    setTab("expense");
+    setPaymentMethod("CASH_DRAWER");
+    setCategoryId("");
+    setConcept("");
+    setAmount("");
+    setSupplierId("");
+    setLines([]);
+    setNotes("");
+  }, [isOpen]);
+
+  const purchaseTotal = useMemo(() => {
+    return lines.reduce((s, l) => {
+      const q = parseFloat(l.qty) || 0;
+      const p = parseFloat(l.unitPrice) || 0;
+      return s + q * p;
+    }, 0);
+  }, [lines]);
+
+  function addLine() {
+    setLines((prev) => [...prev, { ingredientId: "", ingredientName: "", baseUnit: "PIECE", qty: "", unitPrice: "" }]);
+  }
+
+  function updateLine(idx: number, patch: Partial<PurchaseLine>) {
+    setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+  }
+
+  function removeLine(idx: number) {
+    setLines((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function pickIngredient(idx: number, ingredientId: string) {
+    const ing = ingredients.find((i) => i.id === ingredientId);
+    if (!ing) return;
+    updateLine(idx, {
+      ingredientId: ing.id,
+      ingredientName: ing.name,
+      baseUnit: ing.baseUnit,
+    });
+  }
+
+  async function submitExpense() {
+    if (!concept.trim()) return toast.error("Concepto requerido");
+    const amt = parseFloat(amount);
+    if (!Number.isFinite(amt) || amt <= 0) return toast.error("Monto inválido");
+
+    setSubmitting(true);
+    try {
+      await api.post("/api/expenses", {
+        categoryId: categoryId || null,
+        concept: concept.trim(),
+        amount: amt,
+        paymentMethod,
+        notes: notes || null,
+      });
+      toast.success("Gasto registrado");
+      onClose();
+    } catch (err: any) {
+      const code = err?.response?.data?.code;
+      if (code === "NO_OPEN_SHIFT") {
+        toast.error("No hay turno de caja abierto. Abre uno antes de pagar en efectivo.");
+      } else if (code === "ADMIN_AUTH_REQUIRED") {
+        toast.error("Gasto excede tu límite. Pide PIN de admin.");
+      } else {
+        toast.error("Error: " + (err?.response?.data?.error || err?.message));
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitPurchase() {
+    if (!supplierId) return toast.error("Selecciona un proveedor");
+    if (lines.length === 0) return toast.error("Agrega al menos un ingrediente");
+    for (const l of lines) {
+      if (!l.ingredientId) return toast.error("Una línea no tiene ingrediente");
+      const q = parseFloat(l.qty);
+      const p = parseFloat(l.unitPrice);
+      if (!Number.isFinite(q) || q <= 0) return toast.error(`Cantidad inválida en ${l.ingredientName}`);
+      if (!Number.isFinite(p) || p < 0) return toast.error(`Precio inválido en ${l.ingredientName}`);
+    }
+
+    setSubmitting(true);
+    try {
+      await api.post("/api/purchases", {
+        supplierId,
+        paymentMethod,
+        items: lines.map((l) => ({
+          ingredientId: l.ingredientId,
+          qty: parseFloat(l.qty),
+          unitPrice: parseFloat(l.unitPrice),
+        })),
+        notes: notes || null,
+      });
+      toast.success(`Compra registrada · $${purchaseTotal.toFixed(2)}`);
+      onClose();
+    } catch (err: any) {
+      const code = err?.response?.data?.code;
+      if (code === "NO_OPEN_SHIFT") {
+        toast.error("No hay turno de caja abierto.");
+      } else if (code === "ADMIN_AUTH_REQUIRED") {
+        toast.error("Compra excede tu límite. Pide PIN de admin.");
+      } else {
+        toast.error("Error: " + (err?.response?.data?.error || err?.message));
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col rounded-3xl bg-[#0F0F12] border border-white/10 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+              <Wallet size={18} className="text-amber-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-white tracking-tight">Compras y gastos</h2>
+              <p className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em]">Captura desde caja</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-10 h-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/60 active:scale-95"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex items-center gap-2 px-6 pt-4">
+          {(
+            [
+              { id: "expense", label: "Gasto", icon: Wallet },
+              { id: "purchase", label: "Compra de inventario", icon: ShoppingBag },
+            ] as const
+          ).map((t) => {
+            const Icon = t.icon;
+            const isActive = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={`flex items-center gap-2 px-4 h-11 rounded-2xl text-[12px] font-black uppercase tracking-[0.15em] transition-all ${
+                  isActive
+                    ? "bg-amber-500 text-[#0a0a0c] shadow-[0_4px_16px_rgba(255,184,77,0.3)]"
+                    : "bg-white/5 border border-white/10 text-white/60"
+                }`}
+              >
+                <Icon size={14} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 scrollbar-hide">
+          {tab === "expense" ? (
+            <ExpenseTab
+              categories={categories}
+              categoryId={categoryId}
+              setCategoryId={setCategoryId}
+              concept={concept}
+              setConcept={setConcept}
+              amount={amount}
+              setAmount={setAmount}
+              notes={notes}
+              setNotes={setNotes}
+            />
+          ) : (
+            <PurchaseTab
+              suppliers={suppliers}
+              supplierId={supplierId}
+              setSupplierId={setSupplierId}
+              ingredients={ingredients}
+              lines={lines}
+              addLine={addLine}
+              updateLine={updateLine}
+              removeLine={removeLine}
+              pickIngredient={pickIngredient}
+              purchaseTotal={purchaseTotal}
+              notes={notes}
+              setNotes={setNotes}
+            />
+          )}
+
+          {/* Payment method */}
+          <div className="mt-6">
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40 mb-2">Método de pago</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {(Object.keys(PAYMENT_LABELS) as PaymentMethod[]).map((pm) => {
+                const isActive = paymentMethod === pm;
+                return (
+                  <button
+                    key={pm}
+                    type="button"
+                    onClick={() => setPaymentMethod(pm)}
+                    className={`h-12 rounded-2xl border text-[11px] font-black uppercase tracking-[0.1em] transition-all ${
+                      isActive
+                        ? "bg-amber-500/15 border-amber-500/50 text-amber-400"
+                        : "bg-white/5 border-white/10 text-white/60"
+                    }`}
+                  >
+                    {PAYMENT_LABELS[pm]}
+                  </button>
+                );
+              })}
+            </div>
+            {paymentMethod === "CASH_DRAWER" && (
+              <p className="mt-2 text-[10px] text-amber-400/80 flex items-center gap-1.5">
+                <AlertTriangle size={12} />
+                Se descontará del turno de caja abierto. Requiere turno activo.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-white/5 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-11 px-5 rounded-2xl bg-white/5 border border-white/10 text-white/60 text-[11px] font-black uppercase tracking-[0.15em] active:scale-95"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={tab === "expense" ? submitExpense : submitPurchase}
+            disabled={submitting}
+            className="flex-1 sm:flex-none h-11 px-6 rounded-2xl bg-amber-500 text-[#0a0a0c] text-[12px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(255,184,77,0.3)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {submitting ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                Guardando…
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={14} />
+                {tab === "expense" ? "Registrar gasto" : `Registrar compra · $${purchaseTotal.toFixed(2)}`}
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-componentes ──
+
+function ExpenseTab(props: {
+  categories: ExpenseCategory[];
+  categoryId: string;
+  setCategoryId: (v: string) => void;
+  concept: string;
+  setConcept: (v: string) => void;
+  amount: string;
+  setAmount: (v: string) => void;
+  notes: string;
+  setNotes: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <label className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40 block mb-2">
+          Categoría
+        </label>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {props.categories.map((c) => {
+            const isActive = props.categoryId === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => props.setCategoryId(isActive ? "" : c.id)}
+                className={`h-16 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all ${
+                  isActive
+                    ? "bg-amber-500/15 border-amber-500/50"
+                    : "bg-white/5 border-white/10"
+                }`}
+              >
+                <span className="text-xl">{c.icon || "📝"}</span>
+                <span
+                  className={`text-[9px] font-black uppercase tracking-wider ${
+                    isActive ? "text-amber-400" : "text-white/60"
+                  }`}
+                >
+                  {c.name.replace(/_/g, " ")}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <Field label="Concepto">
+        <input
+          type="text"
+          value={props.concept}
+          onChange={(e) => props.setConcept(e.target.value)}
+          placeholder="Ej. Pago CFE bimestre de mayo"
+          className="w-full h-12 bg-white/5 border border-white/10 rounded-xl px-4 text-sm text-white outline-none focus:border-amber-500/50"
+        />
+      </Field>
+
+      <Field label="Monto">
+        <div className="relative">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-400 font-black">$</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={props.amount}
+            onChange={(e) => props.setAmount(e.target.value)}
+            placeholder="0.00"
+            step="0.01"
+            min="0"
+            className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 text-sm text-white outline-none focus:border-amber-500/50 tabular-nums"
+          />
+        </div>
+      </Field>
+
+      <Field label="Notas (opcional)">
+        <textarea
+          value={props.notes}
+          onChange={(e) => props.setNotes(e.target.value)}
+          placeholder="Folio del recibo, nombre del proveedor, etc."
+          rows={2}
+          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-500/50 resize-none"
+        />
+      </Field>
+    </div>
+  );
+}
+
+function PurchaseTab(props: {
+  suppliers: Supplier[];
+  supplierId: string;
+  setSupplierId: (v: string) => void;
+  ingredients: Ingredient[];
+  lines: PurchaseLine[];
+  addLine: () => void;
+  updateLine: (idx: number, patch: Partial<PurchaseLine>) => void;
+  removeLine: (idx: number) => void;
+  pickIngredient: (idx: number, id: string) => void;
+  purchaseTotal: number;
+  notes: string;
+  setNotes: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <Field label="Proveedor">
+        <select
+          value={props.supplierId}
+          onChange={(e) => props.setSupplierId(e.target.value)}
+          className="w-full h-12 bg-white/5 border border-white/10 rounded-xl px-4 text-sm text-white outline-none focus:border-amber-500/50"
+        >
+          <option value="">Selecciona proveedor…</option>
+          {props.suppliers.map((s) => (
+            <option key={s.id} value={s.id} className="bg-[#0F0F12]">
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40">
+            Productos comprados
+          </label>
+          <button
+            type="button"
+            onClick={props.addLine}
+            className="h-8 px-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-black uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95"
+          >
+            <Plus size={12} /> Agregar
+          </button>
+        </div>
+
+        {props.lines.length === 0 ? (
+          <div className="rounded-2xl bg-white/5 border border-dashed border-white/10 p-6 text-center">
+            <p className="text-[12px] text-white/40">Toca "Agregar" para empezar a meter productos del ticket.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {props.lines.map((line, idx) => (
+              <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-white/5 border border-white/10 rounded-xl p-2">
+                <select
+                  value={line.ingredientId}
+                  onChange={(e) => props.pickIngredient(idx, e.target.value)}
+                  className="col-span-12 sm:col-span-5 h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-xs text-white outline-none"
+                >
+                  <option value="">Ingrediente…</option>
+                  {props.ingredients.map((i) => (
+                    <option key={i.id} value={i.id} className="bg-[#0F0F12]">
+                      {i.name} ({i.baseUnit.toLowerCase()})
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Qty"
+                  value={line.qty}
+                  onChange={(e) => props.updateLine(idx, { qty: e.target.value })}
+                  className="col-span-4 sm:col-span-2 h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-xs text-white outline-none tabular-nums"
+                />
+                <span className="col-span-2 sm:col-span-1 text-[10px] text-white/40 text-center">
+                  {line.baseUnit.toLowerCase()}
+                </span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Precio/u"
+                  value={line.unitPrice}
+                  onChange={(e) => props.updateLine(idx, { unitPrice: e.target.value })}
+                  className="col-span-4 sm:col-span-3 h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-xs text-white outline-none tabular-nums"
+                />
+                <button
+                  type="button"
+                  onClick={() => props.removeLine(idx)}
+                  className="col-span-2 sm:col-span-1 h-10 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 flex items-center justify-center active:scale-95"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between pt-3 border-t border-white/5">
+        <span className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40">Total</span>
+        <span className="text-2xl font-black tabular-nums text-amber-400">${props.purchaseTotal.toFixed(2)}</span>
+      </div>
+
+      <Field label="Notas (opcional)">
+        <textarea
+          value={props.notes}
+          onChange={(e) => props.setNotes(e.target.value)}
+          placeholder="Folio de la factura, observaciones de calidad, etc."
+          rows={2}
+          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-500/50 resize-none"
+        />
+      </Field>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40 block mb-2">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
