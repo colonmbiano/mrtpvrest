@@ -15,6 +15,7 @@ import CategoryRail from "@/components/pos/CategoryRail";
 import ProductCard from "@/components/pos/ProductCard";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { apiOrQueue } from "@/lib/offline";
 import { toast } from "sonner";
 import { printKitchenTickets, type PrinterRecord, type TicketItem } from "@/lib/printer-tcp";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
@@ -202,55 +203,87 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
     if (cart.length === 0) return;
     setSubmitting(true);
     try {
+      const itemsPayload = cart.map((l) => ({
+        menuItemId: l.menuItemId,
+        quantity: l.quantity,
+        notes: "",
+        seatNumber: l.seatNumber ?? null,
+        course: l.course ?? null,
+      }));
+
+      // Items para impresión LAN (no depende de internet — la cocina
+      // tiene impresoras en la red local del restaurante, así que vale
+      // imprimir aunque estemos sin internet).
+      const printItems: TicketItem[] = cart.map((l) => ({
+        name: l.name,
+        quantity: l.quantity,
+        price: l.price,
+      }));
+
       if (isAppendMode && activeOrderId) {
         // Modo RONDA: agrega items a la orden existente. El backend tagea
         // los items con un nuevo roundNumber y manda a cocina solo lo nuevo.
-        await api.post(`/api/orders/${activeOrderId}/items`, {
-          items: cart.map((l) => ({
-            menuItemId: l.menuItemId,
-            quantity: l.quantity,
-            notes: "",
-            seatNumber: l.seatNumber ?? null,
-            course: l.course ?? null,
-          })),
-        });
-        toast.success(
-          `Ronda agregada a #${activeOrderNumber || activeOrderId.slice(-6).toUpperCase()}`
+        const res = await apiOrQueue<{ id: string }>(
+          "order",
+          "POST",
+          `/api/orders/${activeOrderId}/items`,
+          { items: itemsPayload }
         );
+
+        if (!res.ok) {
+          toast.error("Error al enviar: " + (res.error || ""));
+          return;
+        }
+
+        if (res.queued) {
+          toast.success(
+            `Ronda en cola · se enviará al volver la red (#${activeOrderNumber || activeOrderId.slice(-6).toUpperCase()})`
+          );
+        } else {
+          toast.success(
+            `Ronda agregada a #${activeOrderNumber || activeOrderId.slice(-6).toUpperCase()}`
+          );
+        }
         clearActiveOrder();
       } else {
         // Modo ORDEN NUEVA: crea la cuenta de la mesa.
-        const { data: order } = await api.post("/api/orders/tpv", {
-          type: "DINE_IN",
-          tableId,
-          items: cart.map((l) => ({
-            menuItemId: l.menuItemId,
-            quantity: l.quantity,
-            notes: "",
-            seatNumber: l.seatNumber ?? null,
-            course: l.course ?? null,
-          })),
-          customerName: `Mesa ${tableId}`,
-          total,
-        });
-        toast.success("Comanda enviada a cocina");
+        const res = await apiOrQueue<{ id: string; orderNumber?: string }>(
+          "order",
+          "POST",
+          "/api/orders/tpv",
+          {
+            type: "DINE_IN",
+            tableId,
+            items: itemsPayload,
+            customerName: `Mesa ${tableId}`,
+            total,
+          }
+        );
 
-        // Fire-and-forget: imprimir comanda LAN desde la tablet (sólo en
-        // creación). En modo ronda el backend ya imprime server-side.
-        const printItems: TicketItem[] = cart.map((l) => ({
-          name: l.name,
-          quantity: l.quantity,
-          price: l.price,
-        }));
+        if (!res.ok) {
+          toast.error("Error al enviar: " + (res.error || ""));
+          return;
+        }
+
+        if (res.queued) {
+          toast.success("Comanda en cola · se sincronizará al volver la red");
+        } else {
+          toast.success("Comanda enviada a cocina");
+        }
+
+        // Imprimir comanda LAN — la cocina recibe igual aunque estemos
+        // offline. En modo queued no tenemos orderNumber real todavía,
+        // así que mandamos null y la impresora pondrá un placeholder
+        // visible para que cocina sepa que es prepedido.
         printKitchenTickets(printers, {
-          orderNumber: order?.orderNumber ?? null,
+          orderNumber: res.data?.orderNumber ?? null,
           orderType: "DINE_IN",
           tableNumber: tableId,
           items: printItems,
         })
-          .then((res) => {
-            if (res.failed.length > 0) {
-              toast.warning(`Comanda: ${res.ok} ok / ${res.failed.length} fallaron`);
+          .then((p) => {
+            if (p.failed.length > 0) {
+              toast.warning(`Comanda: ${p.ok} ok / ${p.failed.length} fallaron`);
             }
           })
           .catch(() => {

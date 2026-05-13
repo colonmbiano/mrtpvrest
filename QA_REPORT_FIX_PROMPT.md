@@ -16,6 +16,21 @@ Encontré **13 bugs y 4 duplicados aclarados**. Tu tarea: arreglarlos en orden d
 ## P0 — BLOQUEANTE ABSOLUTO (cobro roto, hacer ANTES que nada)
 
 ### BUG-14: COBRAR TICKET crashea WebView con "page couldn't load"
+
+> **ACTUALIZACIÓN 2026-05-11 02:14 UTC** — el fix mínimo `prefetch={false}` NO resolvió el crash. El root cause real (descubierto en Logcat de emulator-5554) es **Rules of Hooks violation**, no RSC routing:
+>
+> ```
+> E Capacitor: JavaScript Error: Uncaught Error: Minified React error #310;
+>   visit https://react.dev/errors/310
+> ```
+>
+> Significado: "Rendered more hooks than during the previous render". El componente que se monta al hacer COBRAR TICKET llama a más hooks (`useState`/`useEffect`/`useMemo`/`useCallback`) en el segundo render que en el primero — eso pasa si hay un hook dentro de un `if`, early return, `map` con condicional, o se llama solo cuando el ticket tiene productos.
+>
+> **Fix correcto:** localizar el componente del modal/page del checkout y mover todos los hooks al top-level, ANTES de cualquier `return` o branch condicional. Los chunks que aparecen en el error: `Obntwkjunlw92.js` y `Odwuzqy7q-Ore.js` — el dev server con sourcemaps los mapeará al componente real.
+>
+> Las soluciones del bullet original (prefetch=false, generateStaticParams, output:'export', refactor a modal) **NO** resuelven este bug. Este apartado se mantiene como referencia histórica del primer diagnóstico, pero el fix real es Rules of Hooks.
+
+
 - **Síntoma reproducido al 100%:** añadir 1 producto a un ticket Para Llevar o Domicilio → click en COBRAR TICKET → WebView muestra "This page couldn't load — Reload/Back". Imposible cobrar nada desde la tablet.
 - **Diagnóstico exacto (de Logcat 15:35:42):**
   ```

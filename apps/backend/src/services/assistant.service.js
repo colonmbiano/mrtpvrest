@@ -34,8 +34,8 @@ const tools = [
         properties: {
           period: {
             type: 'string',
-            enum: ['HOY', '7D', '30D', 'AÑO'],
-            description: 'HOY = hoy, 7D = últimos 7 días, 30D = últimos 30 días, AÑO = año en curso.',
+            enum: ['HOY', '7D', '30D', '90D', 'AÑO', 'HIST'],
+            description: 'HOY = hoy, 7D = últimos 7 días, 30D = últimos 30 días, 90D = últimos 90 días, AÑO = año en curso, HIST = todo el historial.',
           },
         },
         required: ['period'],
@@ -53,8 +53,8 @@ const tools = [
         properties: {
           period: {
             type: 'string',
-            enum: ['HOY', '7D', '30D', 'AÑO'],
-            description: 'Período a consultar.',
+            enum: ['HOY', '7D', '30D', '90D', 'AÑO', 'HIST'],
+            description: 'HOY = hoy, 7D = últimos 7 días, 30D = últimos 30 días, 90D = últimos 90 días, AÑO = año en curso, HIST = todo el historial.',
           },
           limit: {
             type: 'integer',
@@ -100,7 +100,9 @@ function periodRange(period) {
   const p = String(period || 'HOY').toUpperCase();
   if (p === '7D') from.setDate(from.getDate() - 6);
   else if (p === '30D') from.setDate(from.getDate() - 29);
+  else if (p === '90D') from.setDate(from.getDate() - 89);
   else if (p === 'AÑO' || p === 'ANIO' || p === 'ANO') from.setMonth(0, 1);
+  else if (p === 'HIST') return new Date(0); // Desde el principio de los tiempos
   return from;
 }
 
