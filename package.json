@@ -27,6 +27,7 @@
   },
   "packageManager": "pnpm@9.15.0",
   "dependencies": {
-    "next": "^16.2.5"
+    "next": "^16.2.5",
+    "xlsx": "^0.18.5"
   }
 }
