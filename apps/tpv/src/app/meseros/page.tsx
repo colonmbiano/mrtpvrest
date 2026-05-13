@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
-import { LayoutGrid, Sparkles, Clock, Banknote, Brush } from "lucide-react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { LayoutGrid, Sparkles, Clock, Banknote, Brush, RefreshCw, AlertTriangle, Utensils } from "lucide-react";
 import Link from "next/link";
 import api from "@/lib/api";
 
@@ -112,9 +112,9 @@ const PHASE_TONE: Record<TablePhase, PhaseTone> = {
   },
 };
 
-function elapsedMin(iso?: string | null) {
+function elapsedMin(iso: string | null | undefined, now: number) {
   if (!iso) return null;
-  const ms = Date.now() - new Date(iso).getTime();
+  const ms = now - new Date(iso).getTime();
   return Math.max(0, Math.floor(ms / 60000));
 }
 
@@ -123,36 +123,52 @@ export default function WaiterFloorPlanPage() {
   const [zones, setZones] = useState<Zone[]>([]);
   const [activeZone, setActiveZone] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  // Cargador centralizado: silent=true para auto-refresh (no toca el
+  // spinner full-screen ni borra lo que ya hay si la red flaquea).
+  const loadTables = useCallback(async (silent = false) => {
+    if (!silent) setIsRefreshing(true);
+    try {
+      const [t, z] = await Promise.all([
+        api.get<TableRow[]>("/api/tables"),
+        api.get<Zone[]>("/api/zones").catch(() => ({ data: [] as Zone[] })),
+      ]);
+      setTables(t.data);
+      setZones(z.data || []);
+      setErrorMsg(null);
+    } catch (error: any) {
+      // Solo mostramos error si NO tenemos datos previos. Si ya había
+      // mesas en pantalla, preferimos quedarnos con las viejas antes
+      // que vaciar la sala por un blip de red.
+      if (!silent) {
+        setErrorMsg(error?.response?.data?.error || "No se pudieron cargar las mesas");
+      }
+      console.error("Error loading tables:", error);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const [t, z] = await Promise.all([
-          api.get<TableRow[]>("/api/tables"),
-          api.get<Zone[]>("/api/zones").catch(() => ({ data: [] as Zone[] })),
-        ]);
-        setTables(t.data);
-        setZones(z.data || []);
-      } catch (error) {
-        console.error("Error loading tables:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, []);
+    loadTables(false);
+  }, [loadTables]);
 
   // Refresh ligero cada 45s — la sala no cambia de estado tan rápido
   // como para necesitar polling agresivo, pero queremos que "cobrando"
   // aparezca sin reload manual.
   useEffect(() => {
-    const id = setInterval(() => {
-      api
-        .get<TableRow[]>("/api/tables")
-        .then(({ data }) => setTables(data))
-        .catch(() => {
-          /* ignorar */
-        });
-    }, 45_000);
+    const id = setInterval(() => loadTables(true), 45_000);
+    return () => clearInterval(id);
+  }, [loadTables]);
+
+  // Tick local cada 30s para que el "X min" suba en pantalla sin
+  // depender del fetch. No pega al backend.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
   }, []);
 
@@ -205,10 +221,19 @@ export default function WaiterFloorPlanPage() {
               {activeZone === "all"
                 ? "Planta completa"
                 : activeZone === NO_ZONE
-                ? "Sin zona"
-                : zones.find((z) => z.id === activeZone)?.name || "Salón"}
+                  ? "Sin zona"
+                  : zones.find((z) => z.id === activeZone)?.name || "Salón"}
             </h1>
           </div>
+          <button
+            type="button"
+            onClick={() => loadTables(false)}
+            disabled={isRefreshing}
+            aria-label="Refrescar mesas"
+            className="shrink-0 w-12 h-12 min-h-[48px] rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md flex items-center justify-center text-white/70 active:scale-95 transition-all disabled:opacity-50"
+          >
+            <RefreshCw size={18} className={isRefreshing ? "animate-spin" : ""} />
+          </button>
         </div>
 
         {/* LEGEND COLOR-CODED — fase 9 */}
@@ -223,9 +248,8 @@ export default function WaiterFloorPlanPage() {
                   className={`shrink-0 inline-flex items-center gap-2 h-10 px-4 rounded-full border ${tone.ring} ${tone.bg}`}
                 >
                   <span
-                    className={`w-2 h-2 rounded-full ${tone.dot} ${
-                      tone.pulse ? "animate-pulse" : ""
-                    }`}
+                    className={`w-2 h-2 rounded-full ${tone.dot} ${tone.pulse ? "animate-pulse" : ""
+                      }`}
                   />
                   <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${tone.fg}`}>
                     {PHASE_COPY[p]}
@@ -244,11 +268,10 @@ export default function WaiterFloorPlanPage() {
           <div className="relative z-10 flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
             <button
               onClick={() => setActiveZone("all")}
-              className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all ${
-                activeZone === "all"
+              className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all ${activeZone === "all"
                   ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
                   : "bg-white/5 border-white/10 text-white/60"
-              }`}
+                }`}
             >
               General · {tables.length}
             </button>
@@ -259,11 +282,10 @@ export default function WaiterFloorPlanPage() {
                 <button
                   key={z.id}
                   onClick={() => setActiveZone(z.id)}
-                  className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all flex items-center gap-2 ${
-                    isActive
+                  className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all flex items-center gap-2 ${isActive
                       ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
                       : "bg-white/5 border-white/10 text-white/60"
-                  }`}
+                    }`}
                 >
                   {z.icon && <span className="text-sm">{z.icon}</span>}
                   <span>{z.name}</span>
@@ -274,11 +296,10 @@ export default function WaiterFloorPlanPage() {
             {hasOrphans && (
               <button
                 onClick={() => setActiveZone(NO_ZONE)}
-                className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all ${
-                  activeZone === NO_ZONE
+                className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all ${activeZone === NO_ZONE
                     ? "bg-white/15 border-white/30 text-white"
                     : "bg-white/5 border-white/10 text-white/60"
-                }`}
+                  }`}
               >
                 Sin zona · {tables.filter((t) => !t.zoneId).length}
               </button>
@@ -289,7 +310,30 @@ export default function WaiterFloorPlanPage() {
 
       {/* GIANT TILES GRID */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 scrollbar-hide bg-[#0C0C0E]">
-        {isLoading ? (
+        {errorMsg && !isLoading && tables.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center gap-5 py-20 text-center">
+            <div className="w-20 h-20 rounded-3xl bg-red-500/10 border-2 border-red-500/40 flex items-center justify-center">
+              <AlertTriangle size={36} className="text-red-400" />
+            </div>
+            <div className="space-y-1.5 max-w-xs">
+              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-red-400">
+                Sin conexión
+              </p>
+              <p className="text-[13px] font-bold text-white/60">
+                {errorMsg}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => loadTables(false)}
+              disabled={isRefreshing}
+              className="h-12 min-h-[48px] px-6 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.15em] flex items-center gap-2 active:scale-95 transition-transform disabled:opacity-50"
+            >
+              <RefreshCw size={16} strokeWidth={2.5} className={isRefreshing ? "animate-spin" : ""} />
+              Reintentar
+            </button>
+          </div>
+        ) : isLoading ? (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4 sm:gap-5">
             {[...Array(10)].map((_, i) => (
               <div
@@ -312,7 +356,8 @@ export default function WaiterFloorPlanPage() {
               const tone = PHASE_TONE[phase];
               const PhaseIcon = tone.Icon;
               const order = table.activeOrder;
-              const elapsed = order?.createdAt ? elapsedMin(order.createdAt) : null;
+              const elapsed = order?.createdAt ? elapsedMin(order.createdAt, now) : null;
+              const itemsCount = order?._count?.items ?? 0;
 
               return (
                 <Link
@@ -338,9 +383,8 @@ export default function WaiterFloorPlanPage() {
                       {table.name.replace(/^Mesa\s+/i, "M")}
                     </span>
                     <span
-                      className={`shrink-0 w-3 h-3 rounded-full ${tone.dot} shadow-lg ${
-                        tone.pulse ? "animate-pulse" : ""
-                      }`}
+                      className={`shrink-0 w-3 h-3 rounded-full ${tone.dot} shadow-lg ${tone.pulse ? "animate-pulse" : ""
+                        }`}
                     />
                   </div>
 
@@ -352,11 +396,18 @@ export default function WaiterFloorPlanPage() {
                       >
                         ${Number(order.total).toFixed(0)}
                       </div>
-                      {elapsed != null && (
-                        <div className="text-[10px] font-bold text-white/50 tabular-nums uppercase tracking-wider mt-1">
-                          {elapsed} min
-                        </div>
-                      )}
+                      <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-white/50 tabular-nums uppercase tracking-wider">
+                        {itemsCount > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <Utensils size={10} strokeWidth={2.5} />
+                            {itemsCount}
+                          </span>
+                        )}
+                        {itemsCount > 0 && elapsed != null && (
+                          <span className="text-white/25">·</span>
+                        )}
+                        {elapsed != null && <span>{elapsed} min</span>}
+                      </div>
                     </div>
                   )}
 

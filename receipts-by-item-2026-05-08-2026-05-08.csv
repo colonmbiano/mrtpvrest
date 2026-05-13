@@ -1,0 +1,102 @@
+Fecha,Número de recibo,Tipo de recibo,Categoria,REF,Artículo,Variante,Modificadores aplicados,Cantidad,Ventas brutas,Descuentos,Ventas netas,Costo de los bienes,Beneficio bruto,Impuestos,Tipo de pedido,TPV,Tienda,Nombre del cajero,Nombre del cliente,Contactos del cliente,Comentario,Estado
+8/5/2026 11:56 p. m.,18-9625,Venta,Especiales,10075,Papas gajo con arrachera,CHICA,,2.000,180.00,0.00,180.00,190.00,-10.00,0.00,Comer dentro,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:41 p. m.,18-9624,Venta,HAMBURGUESAS,10001,Burger res,$ 10 / $ 20,,3.000,210.00,0.00,210.00,135.00,75.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:41 p. m.,18-9624,Venta,Alitas y Boneless,10147,ALITAS,bbq,,3.000,315.00,0.00,315.00,144.00,171.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:41 p. m.,18-9624,Venta,Alitas y Boneless,10146,Papas a la francesa,,,1.000,60.00,0.00,60.00,0.00,60.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:41 p. m.,18-9624,Venta,Envios,10065,"Envío rincon, sifón,",,,1.000,25.00,0.00,25.00,0.00,25.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:41 p. m.,18-9623,Venta,Alitas y Boneless,10307,Alitas kg,,,1.000,220.00,0.00,220.00,72.00,148.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,"Bbq Hot y teriyaki ",Cerrado
+8/5/2026 11:41 p. m.,18-9623,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:40 p. m.,18-9622,Venta,Alitas y Boneless,10307,Alitas kg,,,1.000,220.00,0.00,220.00,72.00,148.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,"Bbq y mango ",Cerrado
+8/5/2026 11:40 p. m.,18-9622,Venta,HAMBURGUESAS,10005,LAS ANGUS,ANGUS 150GR,,3.000,315.00,0.00,315.00,0.00,315.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:40 p. m.,18-9622,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:40 p. m.,18-9621,Venta,HAMBURGUESAS,10009,@SUPER HAMBURGUESAS,ARRACHERA HOUSE,,1.000,135.00,0.00,135.00,0.00,135.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:40 p. m.,18-9620,Venta,Especiales,10074,Papas gajo con arrachera,GDE,,1.000,160.00,0.00,160.00,95.00,65.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:40 p. m.,18-9620,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:39 p. m.,18-9619,Venta,Alitas y Boneless,10170,ALITAS,combinadas,,1.000,110.00,0.00,110.00,48.00,62.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,Bbq y bbq Hot BIEN DORADAS,Cerrado
+8/5/2026 11:39 p. m.,18-9619,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:39 p. m.,18-9619,Venta,HAMBURGUESAS,10001,Burger res,$ 10 / $ 20,,1.000,70.00,0.00,70.00,45.00,25.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,"Sin pepinillos, sin cebolla y sin lechuga ",Cerrado
+8/5/2026 11:38 p. m.,18-9618,Venta,Especiales,10037,Orden. Arrachera,,,1.000,140.00,0.00,140.00,65.00,75.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,"Con tostadas ",Cerrado
+8/5/2026 11:38 p. m.,18-9618,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:38 p. m.,18-9617,Venta,Especiales,10037,Orden. Arrachera,,,1.000,140.00,0.00,140.00,65.00,75.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:38 p. m.,18-9617,Venta,Refrescos,10089,COCA,600ML,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:38 p. m.,18-9617,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:37 p. m.,18-9616,Venta,HAMBURGUESAS,10007,@SUPER HAMBURGUESAS,HAWAIANA,,1.000,115.00,0.00,115.00,0.00,115.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:37 p. m.,18-9616,Venta,Tacos,10269,Tacos,ARRACHERA,,1.000,35.00,0.00,35.00,18.00,17.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:37 p. m.,18-9616,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:37 p. m.,18-9616,Venta,Refrescos,10089,COCA,600ML,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:36 p. m.,18-9615,Venta,Alitas y Boneless,10106,BONELESS,COMBINADOS,,1.000,110.00,0.00,110.00,48.00,62.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,"BBQ y mango ",Cerrado
+8/5/2026 11:36 p. m.,18-9615,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:36 p. m.,18-9614,Venta,HAMBURGUESAS,10012,@SUPER HAMBURGUESAS,LA FRESA,,1.000,145.00,0.00,145.00,0.00,145.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:36 p. m.,18-9614,Venta,Burritos y Gringas,10015,Burritos,bisteck res,,1.000,145.00,0.00,145.00,60.00,85.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:36 p. m.,18-9614,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:36 p. m.,18-9614,Venta,Bebidas,10173,Agua sabor,horchata / 1L,,1.000,40.00,0.00,40.00,0.00,40.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:35 p. m.,18-9613,Venta,HAMBURGUESAS,10001,Burger res,$ 10 / $ 20,Tocino 65gr,2.000,180.00,0.00,180.00,90.00,90.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,"Sin jitomate y sin cebolla ",Cerrado
+8/5/2026 11:35 p. m.,18-9613,Venta,Tacos,10036,Tacos,Bisteck,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,"Picadito sin verdura ",Cerrado
+8/5/2026 11:35 p. m.,18-9613,Venta,Alitas y Boneless,10147,ALITAS,bbq,,1.000,105.00,0.00,105.00,48.00,57.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:35 p. m.,18-9613,Venta,Refrescos,10459,Refresco sabor,SQUIRT / 600ML,,1.000,35.00,0.00,35.00,10.00,25.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:35 p. m.,18-9613,Venta,Refrescos,10089,COCA,600ML,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:35 p. m.,18-9613,Venta,Refrescos,10188,BOING CAJA,MANZANA,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,Fresa,Cerrado
+8/5/2026 11:35 p. m.,18-9613,Venta,Refrescos,10456,Refresco sabor,MANZANA / 600ML,,2.000,70.00,0.00,70.00,20.00,50.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:35 p. m.,18-9613,Venta,Tacos,10308,Tacos,LONGANIZA,Extra queso taco,4.000,160.00,0.00,160.00,72.00,88.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:35 p. m.,18-9613,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:35 p. m.,18-9612,Venta,Alitas y Boneless,10307,Alitas kg,,,1.000,220.00,0.00,220.00,72.00,148.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"BBQ ",Cerrado
+8/5/2026 11:35 p. m.,18-9612,Venta,Alitas y Boneless,10146,Papas a la francesa,,,1.000,60.00,0.00,60.00,0.00,60.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:34 p. m.,18-9611,Venta,Tacos,10036,Tacos,Bisteck,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:34 p. m.,18-9611,Venta,Tacos,10289,Tacos,CHULETA,,1.000,35.00,0.00,35.00,18.00,17.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:34 p. m.,18-9611,Venta,Alitas y Boneless,10147,ALITAS,bbq,papas gajo,1.000,140.00,0.00,140.00,48.00,92.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:34 p. m.,18-9611,Venta,Drinks,10299,Sky,,,1.000,45.00,0.00,45.00,0.00,45.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:34 p. m.,18-9611,Venta,Refrescos,10136,BOING VIDRIO,MANGO,,1.000,35.00,0.00,35.00,13.00,22.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:33 p. m.,18-9610,Venta,HAMBURGUESAS,10007,@SUPER HAMBURGUESAS,HAWAIANA,,1.000,115.00,0.00,115.00,0.00,115.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:33 p. m.,18-9610,Venta,Alitas y Boneless,10008,BONELESS,BBQ,,1.000,105.00,0.00,105.00,48.00,57.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:33 p. m.,18-9610,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,A domicilio,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:32 p. m.,18-9609,Venta,Burritos y Gringas,10032,Burritos,campechano,,1.000,135.00,0.00,135.00,60.00,75.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,"Sin cebolla ",Cerrado
+8/5/2026 11:32 p. m.,18-9609,Venta,Especiales,10577,Alambres,mixto res y cerdo,,1.000,140.00,0.00,140.00,0.00,140.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,"Con Cilantro ",Cerrado
+8/5/2026 11:32 p. m.,18-9609,Venta,HAMBURGUESAS,10004,Burger kfc,10 / 20 / 0,Papas 120gr,1.000,115.00,0.00,115.00,50.00,65.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:32 p. m.,18-9609,Venta,Tacos,10036,Tacos,Bisteck,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:32 p. m.,18-9609,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 11:06 p. m.,18-9608,Venta,Tacos,10316,Tacos,CAMPECHANO,,2.000,70.00,0.00,70.00,36.00,34.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:06 p. m.,18-9608,Venta,Refrescos,10182,Agua mineral,,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:06 p. m.,18-9608,Venta,Refrescos,10136,BOING VIDRIO,MANGO,,1.000,35.00,0.00,35.00,13.00,22.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 11:06 p. m.,18-9608,Venta,HAMBURGUESAS,10007,@SUPER HAMBURGUESAS,HAWAIANA,,1.000,115.00,0.00,115.00,0.00,115.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"Solo con lechuga ",Cerrado
+8/5/2026 10:47 p. m.,18-9607,Venta,Alitas y Boneless,10147,ALITAS,bbq,papas gajo,1.000,140.00,0.00,140.00,48.00,92.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 10:47 p. m.,18-9607,Venta,Tacos,10269,Tacos,ARRACHERA,,2.000,70.00,0.00,70.00,36.00,34.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 10:47 p. m.,18-9607,Venta,Alitas y Boneless,10120,Papas gajo,,Papas 125gr,1.000,105.00,0.00,105.00,20.00,85.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 10:47 p. m.,18-9607,Venta,Refrescos,10182,Agua mineral,,,2.000,70.00,0.00,70.00,0.00,70.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"Preparada ",Cerrado
+8/5/2026 10:47 p. m.,18-9607,Venta,Tacos,10318,Tacos,AHUJAS,,2.000,70.00,0.00,70.00,36.00,34.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 10:23 p. m.,18-9606,Venta,Alitas y Boneless,10232,BONELESS KG,,"vegetales, aderez",1.000,350.00,0.00,350.00,157.00,193.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,Mango habanero doble de verdura aparte en un desechable,Cerrado
+8/5/2026 10:07 p. m.,18-9605,Venta,HAMBURGUESAS,10001,Burger res,$ 10 / $ 20,Papas 120gr,2.000,200.00,0.00,200.00,90.00,110.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 10:07 p. m.,18-9605,Venta,Alitas y Boneless,10008,BONELESS,BBQ,,2.000,210.00,0.00,210.00,96.00,114.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"Bbq y mango abanero ",Cerrado
+8/5/2026 10:07 p. m.,18-9605,Venta,Refrescos,10136,BOING VIDRIO,MANGO,,3.000,105.00,0.00,105.00,39.00,66.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"Dos fríos 1 tibio ",Cerrado
+8/5/2026 10:07 p. m.,18-9605,Venta,Refrescos,10149,BOING VIDRIO,GUAYABA,,1.000,35.00,0.00,35.00,13.00,22.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,Frio,Cerrado
+8/5/2026 10:07 p. m.,18-9605,Venta,Refrescos,10136,BOING VIDRIO,MANGO,,1.000,35.00,0.00,35.00,13.00,22.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 9:50 p. m.,18-9604,Venta,Alitas y Boneless,10147,ALITAS,bbq,,1.000,105.00,0.00,105.00,48.00,57.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"BBQ y mango habanero ",Cerrado
+8/5/2026 9:50 p. m.,18-9604,Venta,Alitas y Boneless,10147,ALITAS,bbq,,1.000,105.00,0.00,105.00,48.00,57.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"BBQ deriyaqui ",Cerrado
+8/5/2026 9:50 p. m.,18-9604,Venta,Tacos,10036,Tacos,Bisteck,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"Sin verdura ",Cerrado
+8/5/2026 9:50 p. m.,18-9604,Venta,Refrescos,10479,Peñafiel naranja,,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 9:50 p. m.,18-9604,Venta,Refrescos,10182,Agua mineral,,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,Preparada,Cerrado
+8/5/2026 9:50 p. m.,18-9604,Venta,Drinks,10048,Piña colada c/alcohol,,,1.000,60.00,0.00,60.00,40.00,20.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 9:50 p. m.,18-9604,Venta,Refrescos,10079,Agua Embotellada,,,1.000,30.00,0.00,30.00,10.00,20.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 9:50 p. m.,18-9604,Venta,Extras,10160,Aros cebolla,,,1.000,95.00,0.00,95.00,0.00,95.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 9:44 p. m.,18-9603,Venta,Sodas,10043,Naranjada o Limonada,,,1.000,40.00,0.00,40.00,0.00,40.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"Limon ",Cerrado
+8/5/2026 9:44 p. m.,18-9603,Venta,Refrescos,10090,COCA,VIDRIO,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 9:44 p. m.,18-9603,Venta,Refrescos,10453,Refresco sabor,UVA / 600ML,,1.000,35.00,0.00,35.00,10.00,25.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 9:44 p. m.,18-9603,Venta,Alitas y Boneless,10170,ALITAS,combinadas,papas,1.000,140.00,0.00,140.00,48.00,92.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"Mh y bbq ",Cerrado
+8/5/2026 9:44 p. m.,18-9603,Venta,HAMBURGUESAS,10001,Burger res,$ 10 / $ 20,Papas 120gr,1.000,100.00,0.00,100.00,45.00,55.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"Sin verdura para llevar ",Cerrado
+8/5/2026 9:24 p. m.,18-9602,Venta,Alitas y Boneless,10147,ALITAS,bbq,,1.000,105.00,0.00,105.00,48.00,57.00,0.00,Comer dentro,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 9:24 p. m.,18-9602,Venta,HAMBURGUESAS,10001,Burger res,$ 10 / $ 20,,1.000,70.00,0.00,70.00,45.00,25.00,0.00,Comer dentro,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 9:24 p. m.,18-9602,Venta,Tacos,10289,Tacos,CHULETA,Extra queso taco,2.000,80.00,0.00,80.00,36.00,44.00,0.00,Comer dentro,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 9:24 p. m.,18-9602,Venta,Alitas y Boneless,10073,Nugguets,,,1.000,40.00,0.00,40.00,20.00,20.00,0.00,Comer dentro,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 9:24 p. m.,18-9602,Venta,Tacos,10289,Tacos,CHULETA,,2.000,70.00,0.00,70.00,36.00,34.00,0.00,Comer dentro,TPV 5,Master burger,Propietario,,,"Extra queso ",Cerrado
+8/5/2026 9:13 p. m.,18-9601,Venta,Especiales,10576,Alambres,pollo,,1.000,135.00,135.00,0.00,0.00,0.00,0.00,Comer dentro,TPV 5,Master burger,Propietario,,,"Con queso mozarella y 3 tortillas nada más ",Cerrado
+8/5/2026 9:13 p. m.,18-9601,Venta,Postres,10130,Uvas philadelphia,,,1.000,45.00,45.00,0.00,0.00,0.00,0.00,Comer dentro,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 9:12 p. m.,18-9600,Venta,Drinks,10022,Pitufo o pink lady 1lt,,,1.000,95.00,0.00,95.00,65.00,30.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 9:12 p. m.,18-9600,Venta,Refrescos,10079,Agua Embotellada,,,1.000,30.00,0.00,30.00,10.00,20.00,0.00,A domicilio,TPV 5,Master burger,Propietario,,,,Cerrado
+8/5/2026 7:51 p. m.,18-9599,Venta,Tacos,10316,Tacos,CAMPECHANO,,2.000,70.00,0.00,70.00,36.00,34.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 7:51 p. m.,18-9599,Venta,Tacos,10269,Tacos,ARRACHERA,,2.000,70.00,0.00,70.00,36.00,34.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 7:51 p. m.,18-9599,Venta,Bebidas,10300,Agua sabor,jamaica / 1L,,1.000,40.00,0.00,40.00,0.00,40.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 7:51 p. m.,18-9599,Venta,Refrescos,10182,Agua mineral,,,1.000,35.00,0.00,35.00,0.00,35.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 7:51 p. m.,18-9599,Venta,HAMBURGUESAS,10004,Burger kfc,10 / 20 / 0,"Papas 120gr, Aderezo extra 2oz",1.000,130.00,0.00,130.00,50.00,80.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"BBQ ",Cerrado
+8/5/2026 7:51 p. m.,18-9599,Venta,Tacos,10269,Tacos,ARRACHERA,,1.000,35.00,0.00,35.00,18.00,17.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado
+8/5/2026 7:51 p. m.,18-9599,Venta,Refrescos,10079,Agua Embotellada,,,1.000,30.00,0.00,30.00,10.00,20.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"Baso de hielos ",Cerrado
+8/5/2026 5:52 p. m.,18-9598,Venta,Tacos,10316,Tacos,CAMPECHANO,,4.000,140.00,0.00,140.00,72.00,68.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,"Sin cebolla ",Cerrado
+8/5/2026 5:52 p. m.,18-9598,Venta,Envios,10040,Envío local,,,1.000,20.00,0.00,20.00,0.00,20.00,0.00,Comer dentro,TPV 5,Master burger,Meseros,,,,Cerrado

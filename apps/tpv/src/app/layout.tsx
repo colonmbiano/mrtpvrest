@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import ModalRoot from "@/components/tpv/ModalRoot";
 import SyncInitializer from "@/components/SyncInitializer";
+import OfflineIndicator from "@/components/OfflineIndicator";
 import OtaUpdater from "@/components/OtaUpdater";
 import AutoLock from "@/components/AutoLock";
 import ConsolePatch from "@/components/ConsolePatch";
@@ -44,6 +45,7 @@ export default function RootLayout({
       >
         <ConsolePatch />
         <SyncInitializer />
+        <OfflineIndicator />
         <OtaUpdater />
         <AutoLock />
         <ModalRoot>{children}</ModalRoot>
