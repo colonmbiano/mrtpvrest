@@ -157,6 +157,7 @@ app.use('/api/tasks',        require('./routes/tasks.routes'));
 app.use('/api/admin/logs',   require('./routes/logs.routes'));
 app.use('/api/expenses',     require('./routes/expenses.routes'));
 app.use('/api/purchases',    require('./routes/purchases.routes'));
+app.use('/api/recipes',      require('./routes/recipes.routes'));
 
 app.get('/health', (req, res) => {
   res.json({
