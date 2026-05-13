@@ -4,11 +4,19 @@ import api from "@/lib/api";
 import Link from "next/link";
 
 interface Supplier { id: string; name: string; phone?: string; }
+interface IngredientType { id: string; name: string; }
+interface IngredientCategory { id: string; name: string; color?: string | null; }
 interface Ingredient {
   id: string; name: string; unit: string; stock: number;
   minStock: number; cost: number; lowStock?: boolean;
   supplierId?: string; supplier?: Supplier;
   purchaseUnit?: string; purchaseCost?: number; conversionFactor?: number;
+  // Nuevos campos del módulo costeo
+  typeId?: string | null; type?: IngredientType | null;
+  categoryId?: string | null; category?: IngredientCategory | null;
+  baseUnit?: "GRAM" | "ML" | "PIECE";
+  pesoBruto?: number | null; pesoNeto?: number | null;
+  isPackaging?: boolean;
 }
 interface Movement {
   id: string; createdAt: string; type: string; quantity: number;
@@ -20,7 +28,16 @@ interface ShoppingItem {
   suggestedOrder: number; estimatedCost: number;
 }
 interface ShoppingList { list: ShoppingItem[]; }
-type FormState = { name: string; unit: string; stock: number | string; minStock: number | string; cost: number | string; supplierId: string; purchaseUnit: string; purchaseCost: number | string; conversionFactor: number | string; };
+type FormState = {
+  name: string; unit: string; stock: number | string; minStock: number | string;
+  cost: number | string; supplierId: string;
+  purchaseUnit: string; purchaseCost: number | string; conversionFactor: number | string;
+  // Nuevos
+  typeId: string; categoryId: string;
+  baseUnit: "GRAM" | "ML" | "PIECE";
+  pesoBruto: number | string; pesoNeto: number | string;
+  isPackaging: boolean;
+};
 
 export default function InventarioPage() {
   const [activeLocationId, setActiveLocationId] = useState<string>(() =>
@@ -34,6 +51,8 @@ export default function InventarioPage() {
   const [showForm, setShowForm]       = useState(false);
   const [editItem, setEditItem]       = useState<Ingredient | null>(null);
   const [suppliers, setSuppliers]     = useState<Supplier[]>([]);
+  const [types, setTypes]             = useState<IngredientType[]>([]);
+  const [categories, setCategories]   = useState<IngredientCategory[]>([]);
   const [saving, setSaving]           = useState(false);
   const [adjustModal, setAdjustModal] = useState<Ingredient | null>(null);
   const [adjustQty, setAdjustQty]     = useState("");
@@ -50,23 +69,32 @@ export default function InventarioPage() {
   const [scannedItems, setScannedItems] = useState<{ name: string; totalCost: number | string; quantityFound: number | string; unit: string; }[]>([]);
   const [isSavingBulk, setIsSavingBulk] = useState(false);
 
-  const emptyForm: FormState = { name:"", unit:"pz", stock:0, minStock:0, cost:0, supplierId:"", purchaseUnit:"", purchaseCost:"", conversionFactor:1 };
+  const emptyForm: FormState = {
+    name:"", unit:"pz", stock:0, minStock:0, cost:0, supplierId:"",
+    purchaseUnit:"", purchaseCost:"", conversionFactor:1,
+    typeId:"", categoryId:"", baseUnit:"PIECE",
+    pesoBruto:"", pesoNeto:"", isPackaging:false,
+  };
   const [form, setForm] = useState<FormState>(emptyForm);
 
   const UNITS = ["pz","kg","g","l","ml","bolsa","lata","caja","sobre","rollo"];
 
   const fetchAll = useCallback(async (locationId: string) => {
     try {
-      const [ing, al, mov, sup] = await Promise.all([
+      const [ing, al, mov, sup, typ, cat] = await Promise.all([
         api.get("/api/inventory/ingredients"),
         api.get("/api/inventory/alerts"),
         api.get("/api/inventory/movements?limit=50"),
         api.get("/api/inventory/suppliers"),
+        api.get("/api/recipes/types").catch(() => ({ data: [] })),
+        api.get("/api/recipes/categories").catch(() => ({ data: [] })),
       ]);
       setIngredients(ing.data);
       setAlerts(al.data);
       setMovements(mov.data);
       setSuppliers(sup.data);
+      setTypes(typ.data || []);
+      setCategories(cat.data || []);
     } catch {}
     finally { setLoading(false); }
   }, []);
@@ -137,6 +165,12 @@ export default function InventarioPage() {
       minStock: item.minStock, cost: item.cost, supplierId: item.supplierId || "",
       purchaseUnit: item.purchaseUnit || "", purchaseCost: item.purchaseCost ?? "",
       conversionFactor: item.conversionFactor ?? 1,
+      typeId: item.typeId || "",
+      categoryId: item.categoryId || "",
+      baseUnit: item.baseUnit || "PIECE",
+      pesoBruto: item.pesoBruto ?? "",
+      pesoNeto: item.pesoNeto ?? "",
+      isPackaging: Boolean(item.isPackaging),
     } : { ...emptyForm });
     setShowForm(true);
   }
@@ -156,6 +190,13 @@ export default function InventarioPage() {
         conversionFactor: Number(form.conversionFactor) || 1,
         // cost se calcula en backend; solo enviamos si no hay purchaseCost
         ...(form.purchaseCost === "" && { cost: Number(form.cost) }),
+        // Campos del módulo de costeo
+        typeId: form.typeId || null,
+        categoryId: form.categoryId || null,
+        baseUnit: form.baseUnit,
+        pesoBruto: form.pesoBruto !== "" ? Number(form.pesoBruto) : null,
+        pesoNeto:  form.pesoNeto  !== "" ? Number(form.pesoNeto)  : null,
+        isPackaging: Boolean(form.isPackaging),
       };
       if (editItem) await api.put("/api/inventory/ingredients/" + editItem.id, payload);
       else await api.post("/api/inventory/ingredients", payload);
@@ -511,6 +552,86 @@ export default function InventarioPage() {
                   {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
+
+              {/* Taxonomía: Tipo + Categoría + Unidad base */}
+              <div className="bg-black/40 border border-white/5 rounded-2xl p-4 space-y-3">
+                <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Clasificación para costeo</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1 block">Tipo / Estación</label>
+                    <select value={form.typeId} onChange={e => setForm(p=>({...p,typeId:e.target.value}))}
+                      className="w-full bg-black border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm outline-none focus:border-orange-500">
+                      <option value="">— sin tipo —</option>
+                      {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1 block">Categoría</label>
+                    <select value={form.categoryId} onChange={e => setForm(p=>({...p,categoryId:e.target.value}))}
+                      className="w-full bg-black border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm outline-none focus:border-orange-500">
+                      <option value="">— sin categoría —</option>
+                      {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1 block">Unidad base (normalizada)</label>
+                  <select value={form.baseUnit} onChange={e => setForm(p=>({...p,baseUnit:e.target.value as any}))}
+                    className="w-full bg-black border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm outline-none focus:border-orange-500">
+                    <option value="GRAM">Gramos (peso)</option>
+                    <option value="ML">Mililitros (volumen)</option>
+                    <option value="PIECE">Piezas (conteo)</option>
+                  </select>
+                  <p className="text-[10px] text-gray-600 mt-1.5 ml-1">
+                    Las recetas y stock se normalizan a esta unidad internamente (Kg → 1000g, L → 1000ml).
+                  </p>
+                </div>
+              </div>
+
+              {/* Factor de corrección (peso bruto vs neto) */}
+              <div className="bg-black/40 border border-white/5 rounded-2xl p-4 space-y-3">
+                <div className="flex items-baseline justify-between">
+                  <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Factor de corrección</p>
+                  {form.pesoBruto !== "" && form.pesoNeto !== "" && Number(form.pesoNeto) > 0 && (
+                    <p className="text-[10px] text-orange-400 font-bold tabular-nums">
+                      = {(Number(form.pesoBruto) / Number(form.pesoNeto)).toFixed(3)}x
+                    </p>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-600 -mt-1">
+                  Merma al limpiar / pelar / desemilar antes de usar en receta.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1 block">Peso bruto</label>
+                    <input type="number" step="0.01" min="0" value={form.pesoBruto}
+                      onChange={e => setForm(p=>({...p,pesoBruto:e.target.value}))}
+                      placeholder="Ej. 1000"
+                      className="w-full bg-black border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm outline-none focus:border-orange-500" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1 block">Peso neto utilizable</label>
+                    <input type="number" step="0.01" min="0" value={form.pesoNeto}
+                      onChange={e => setForm(p=>({...p,pesoNeto:e.target.value}))}
+                      placeholder="Ej. 950"
+                      className="w-full bg-black border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm outline-none focus:border-orange-500" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Packaging flag */}
+              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl bg-black/40 border border-white/5">
+                <input
+                  type="checkbox"
+                  checked={form.isPackaging}
+                  onChange={e => setForm(p=>({...p,isPackaging:e.target.checked}))}
+                  className="w-5 h-5 accent-orange-500 cursor-pointer"
+                />
+                <div>
+                  <p className="text-sm font-bold text-white">Es empaque / desechable</p>
+                  <p className="text-[10px] text-gray-500">Charolas, vasos térmicos, bolsas — costea delivery por orden.</p>
+                </div>
+              </label>
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-3 text-gray-500 font-bold uppercase tracking-widest text-xs">Cancelar</button>

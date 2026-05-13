@@ -167,19 +167,28 @@ async function toolUpdateStock({ tenantId, locationId, args }) {
   const updated = await prisma.ingredient.update({
     where: { id: ingredient.id },
     data: { stock: newStock },
+    select: { id: true, stock: true, name: true, unit: true, baseUnit: true, locationId: true },
   });
 
-  // Registrar movimiento (auditoría). No bloquea si falla.
-  await prisma.inventoryMovement
-    .create({
-      data: {
-        ingredientId: ingredient.id,
-        quantity: delta,
-        type: delta > 0 ? 'IN' : 'OUT',
-        reason: 'VOICE_AGENT',
-      },
-    })
-    .catch(() => null);
+  // Registrar movimiento en StockMovement (auditoría). No bloquea si falla.
+  // Voice-agent puede generar inputs Y outputs según interpretación del LLM,
+  // así que distinguimos PURCHASE vs ADJUSTMENT por el signo del delta.
+  if (updated.locationId) {
+    await prisma.stockMovement
+      .create({
+        data: {
+          ingredientId: ingredient.id,
+          locationId: updated.locationId,
+          delta,
+          unit: updated.baseUnit,
+          reason: delta > 0 ? 'PURCHASE' : 'ADJUSTMENT',
+          refType: 'voice-agent',
+          balanceAfter: Number(updated.stock),
+          notes: 'voice-agent',
+        },
+      })
+      .catch(() => null);
+  }
 
   const verb = delta > 0 ? 'sumadas' : 'restadas';
   return {

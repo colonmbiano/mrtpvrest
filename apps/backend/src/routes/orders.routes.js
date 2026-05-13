@@ -1,6 +1,59 @@
 require('dotenv').config();
 
 // ─────────────────────────────────────────────────────────────────────────
+// expandSubRecipeToIngredients · devuelve los ingredientes finales (hojas)
+// que se consumen al usar `qtyRequested` unidades de una SubRecipe.
+//
+// Ejemplo: SubRecipe "Salsa Verde" rinde 800g, con marginError 5%, e items:
+//   - tomate    400g
+//   - cebolla   100g
+// Si una Recipe pide 100g de Salsa Verde:
+//   factor = 100 / 800 = 0.125
+//   adjMargen = 0.125 / (1 - 0.05) = 0.131578... (necesitas preparar 5% extra
+//   de bruto para obtener 100g netos tras la pérdida)
+//   tomate consumido  = 0.131578 × 400 = 52.63g
+//   cebolla consumida = 0.131578 × 100 = 13.16g
+//
+// Recursivo: si un SubRecipeItem apunta a otra SubRecipe (nested), aplica
+// el mismo cálculo en cadena. `visited` previene loops; `depth` cap defensivo.
+async function expandSubRecipeToIngredients(prisma, subRecipeId, qtyRequested, visited = new Set(), depth = 0) {
+  if (depth > 5) {
+    console.warn(`[expandSubRecipe] profundidad ${depth} excedida en ${subRecipeId}`);
+    return [];
+  }
+  if (visited.has(subRecipeId)) {
+    console.warn(`[expandSubRecipe] loop detectado en ${subRecipeId}, saltando`);
+    return [];
+  }
+  visited.add(subRecipeId);
+
+  const sub = await prisma.subRecipe.findUnique({
+    where: { id: subRecipeId },
+    include: { items: { include: { ingredient: true } } },
+  });
+  if (!sub || !sub.items || sub.items.length === 0) return [];
+
+  const yieldQty = Number(sub.yieldQty || 0);
+  if (yieldQty <= 0) return [];
+  const marginPct = Number(sub.marginErrorPct || 0);
+  const adjustedFactor = qtyRequested / yieldQty / Math.max(0.001, 1 - marginPct / 100);
+
+  const out = [];
+  for (const item of sub.items) {
+    const itemQty = Number(item.qty || 0) * adjustedFactor;
+    if (item.ingredientId && item.ingredient) {
+      out.push({ ingredient: item.ingredient, qtyToConsume: itemQty });
+    } else if (item.nestedSubRecipeId) {
+      const nested = await expandSubRecipeToIngredients(
+        prisma, item.nestedSubRecipeId, itemQty, new Set(visited), depth + 1,
+      );
+      out.push(...nested);
+    }
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // discountInventory · descuenta ingredientes consumidos por una orden y
 // persiste el snapshot de costo (CMV) en cada OrderItem.
 //
@@ -8,16 +61,14 @@ require('dotenv').config();
 //   1. Lee `Recipe` (escandallo final) cuando existe, con fallback a la
 //      vieja `RecipeItem.menuItemId` directa para items sin Recipe formal.
 //   2. Crea `StockMovement` con balanceAfter cacheado + refType='order'.
-//   3. Sigue creando `InventoryMovement` legacy en paralelo para no romper
-//      reports / endpoints que aún lo lean. Se removerá cuando se migre.
+//   3. Solo escribe en `StockMovement`. El antiguo `InventoryMovement` ya
+//      fue retirado tras migrar todos los consumidores (voice-agent +
+//      /api/inventory/movements ahora también usan StockMovement).
 //   4. Actualiza `OrderItem.costSnapshot` con el CMV unitario al cobrar
 //      (snapshot inmutable — reportes históricos no recalculan).
-//
-// Recibe orderItems (no items raw) — necesitamos el OrderItem.id para
-// poder hacer UPDATE del snapshot.
-//
-// TODO: expansión recursiva de SubRecipe (hoy solo descuenta ingredientes
-// directos; si un RecipeItem apunta a una SubRecipe, se ignora y se loguea).
+//   5. Expansión recursiva de SubRecipe: si un RecipeItem apunta a una
+//      SubRecipe, se calcula el consumo proporcional de cada ingrediente
+//      hoja (incluyendo nested SubRecipes hasta profundidad 5).
 async function discountInventory(prisma, orderItems, orderId, restaurantId, locationId) {
   if (!Array.isArray(orderItems) || orderItems.length === 0) return;
   if (!locationId) {
@@ -41,47 +92,62 @@ async function discountInventory(prisma, orderItems, orderId, restaurantId, loca
 
       if (recipeItems.length === 0) continue;
 
-      let cmvUnitario = 0;
+      // Lista plana de ingredientes a consumir POR UNIDAD del MenuItem.
+      // [{ ingredient, qtyToConsumePerUnit }]
+      const flatItems = [];
       let recipeIdSnap = null;
 
       for (const r of recipeItems) {
-        // Si el RecipeItem apunta a una SubRecipe en lugar de Ingredient,
-        // por ahora lo saltamos. Cuando agreguemos expansión recursiva,
-        // este `continue` se convierte en `await consumeSubRecipe(...)`.
-        if (!r.ingredientId || !r.ingredient) {
-          console.warn(`[discountInventory] RecipeItem ${r.id} sin ingredient — sub-receta aún no soportada en descuento`);
-          continue;
-        }
-
         if (r.recipeId && !recipeIdSnap) recipeIdSnap = r.recipeId;
 
-        // Cantidad consumida = qty_receta × factor_merma × qty_vendida.
-        // wastagePercent en receta + factor merma adicional del Ingredient
-        // (peso bruto/neto) ya está bakeado en Ingredient.cost.
         const wastageFactor = 1 + (Number(r.wastagePercent || 0) / 100);
-        const neededUnit = Number(r.quantity) * wastageFactor;
-        const needed = neededUnit * Number(oi.quantity || 1);
+        const qtyPerUnit = Number(r.quantity) * wastageFactor;
 
-        // Costo unitario al momento (snapshot del costo del ingrediente).
-        // Ingredient.cost se mantiene como cache del costPerBase calculado.
-        const unitCost = Number(r.ingredient.cost || 0);
-        cmvUnitario += neededUnit * unitCost; // por 1 unidad del MenuItem
+        if (r.ingredientId && r.ingredient) {
+          // Ingrediente directo
+          flatItems.push({ ingredient: r.ingredient, qtyToConsumePerUnit: qtyPerUnit });
+        } else if (r.subRecipeId) {
+          // Expansión recursiva de SubRecipe
+          const expanded = await expandSubRecipeToIngredients(prisma, r.subRecipeId, qtyPerUnit);
+          for (const exp of expanded) {
+            flatItems.push({ ingredient: exp.ingredient, qtyToConsumePerUnit: exp.qtyToConsume });
+          }
+        }
+      }
 
-        // 1. Decremento de stock + lectura del nuevo balance (en misma tx
-        //    para cache exacto en StockMovement.balanceAfter).
+      // Si dos paths (ingrediente directo + sub-receta) consumen el mismo
+      // ingrediente, agregamos las cantidades en una sola operación de
+      // descuento — evita race / multiple StockMovements del mismo ingrediente.
+      const aggregated = new Map(); // ingredientId → { ingredient, qtyPerUnit }
+      for (const fi of flatItems) {
+        const id = fi.ingredient.id;
+        const existing = aggregated.get(id);
+        if (existing) {
+          existing.qtyPerUnit += fi.qtyToConsumePerUnit;
+        } else {
+          aggregated.set(id, { ingredient: fi.ingredient, qtyPerUnit: fi.qtyToConsumePerUnit });
+        }
+      }
+
+      let cmvUnitario = 0;
+
+      for (const [, { ingredient, qtyPerUnit }] of aggregated) {
+        const needed = qtyPerUnit * Number(oi.quantity || 1);
+        const unitCost = Number(ingredient.cost || 0);
+        cmvUnitario += qtyPerUnit * unitCost; // CMV por 1 unidad del MenuItem
+
+        // 1. Decremento de stock + lectura del nuevo balance.
         const updated = await prisma.ingredient.update({
-          where: { id: r.ingredientId },
+          where: { id: ingredient.id },
           data: { stock: { decrement: needed } },
           select: { id: true, stock: true, baseUnit: true, locationId: true },
         });
 
-        // 2. StockMovement (nuevo libro mayor). locationId del Ingredient,
-        //    no del request — el ingrediente puede vivir en otra sucursal
-        //    si el seed/admin lo configuró así.
+        // 2. StockMovement.
         const ingLocationId = updated.locationId || locationId;
         await prisma.stockMovement.create({
           data: {
-            ingredientId: r.ingredientId,
+            ingredientId: ingredient.id,
             locationId: ingLocationId,
             delta: -needed,
             unit: updated.baseUnit,
@@ -94,21 +160,9 @@ async function discountInventory(prisma, orderItems, orderId, restaurantId, loca
           },
         });
 
-        // 3. InventoryMovement legacy (mantener mientras reports lo usen).
-        await prisma.inventoryMovement.create({
-          data: {
-            ingredientId: r.ingredientId,
-            type: 'OUT',
-            quantity: needed,
-            reason: 'Venta',
-            orderId: orderId,
-          },
-        });
       }
 
-      // 4. Snapshot de costo en el OrderItem. Inmutable — reportes
-      //    históricos calculan margen contra ESTE costo, no contra el
-      //    Ingredient.cost actual que puede cambiar mañana.
+      // 4. Snapshot de costo en el OrderItem. Inmutable.
       if (cmvUnitario > 0 || recipeIdSnap) {
         await prisma.orderItem.update({
           where: { id: oi.id },
