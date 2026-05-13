@@ -1131,7 +1131,6 @@ model Ingredient {
   // ── Relaciones ──
   recipeItems        RecipeItem[]
   subRecipeItems     SubRecipeItem[]
-  movements          InventoryMovement[] // LEGACY (mantener mientras orders.routes lo use)
   stockMovements     StockMovement[]
   batches            InventoryBatch[]
   purchaseOrderItems PurchaseOrderItem[]
@@ -1198,16 +1197,12 @@ model RecipeItem {
   @@index([subRecipeId])
 }
 
-model InventoryMovement {
-  id           String     @id @default(cuid())
-  ingredientId String
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
-  type         String
-  quantity     Float
-  reason       String     @default("")
-  orderId      String?
-  createdAt    DateTime   @default(now())
-}
+// InventoryMovement · ELIMINADO 2026-05-13. Reemplazado por StockMovement
+// (libro mayor unificado con balanceAfter cacheado, refType polimórfico,
+// y reason tipado como enum). Todos los consumidores (orders.routes,
+// inventory.routes, voice-agent.service) migrados. Si necesitas la data
+// histórica antes de este reset, recuperarla del backup de Supabase del
+// día anterior.
 
 model Waiter {
   id         String    @id @default(cuid())

@@ -5,7 +5,7 @@ jest.mock('@mrtpvrest/database', () => ({
   prisma: {
     expense: { create: jest.fn() },
     ingredient: { findFirst: jest.fn(), update: jest.fn() },
-    inventoryMovement: { create: jest.fn() },
+    stockMovement: { create: jest.fn() },
     tenant: { findUnique: jest.fn() },
   },
 }));
@@ -169,8 +169,10 @@ describe('POST /api/ai/agent (FASE 5)', () => {
       name: 'Tomate',
       stock: 25,
       unit: 'kg',
+      baseUnit: 'GRAM',
+      locationId: 'loc1',
     });
-    prisma.inventoryMovement.create.mockResolvedValueOnce({ id: 'mov1' });
+    prisma.stockMovement.create.mockResolvedValueOnce({ id: 'mov1' });
 
     const res = await request(buildApp())
       .post('/api/ai/agent')
@@ -184,12 +186,11 @@ describe('POST /api/ai/agent (FASE 5)', () => {
       delta: 20,
       newStock: 25,
     });
-    expect(prisma.ingredient.update).toHaveBeenCalledWith({
-      where: { id: 'ing1' },
-      data: { stock: 25 },
-    });
-    expect(prisma.inventoryMovement.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ type: 'IN', reason: 'VOICE_AGENT' }),
+    expect(prisma.ingredient.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'ing1' }, data: { stock: 25 } }),
+    );
+    expect(prisma.stockMovement.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ reason: 'PURCHASE', delta: 20 }),
     });
   });
 
