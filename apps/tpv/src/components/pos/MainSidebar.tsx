@@ -1,12 +1,13 @@
 "use client";
 import React from "react";
-import { 
-  UtensilsCrossed, 
-  ShoppingCart, 
-  Receipt, 
-  LayoutGrid, 
+import {
+  UtensilsCrossed,
+  ShoppingCart,
+  Receipt,
+  LayoutGrid,
   BarChart3,
-  Bell
+  Bell,
+  Wallet
 } from "lucide-react";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useRouter, usePathname } from "next/navigation";
@@ -15,14 +16,16 @@ interface MainSidebarProps {
   onOpenMenu: () => void;
   onOpenOrders: () => void;
   onOpenNotifs: () => void;
+  onOpenExpenses?: () => void;
   hasOpenOrders: boolean;
   unreadNotifs?: number;
 }
 
-export default function MainSidebar({ 
-  onOpenMenu, 
+export default function MainSidebar({
+  onOpenMenu,
   onOpenOrders,
   onOpenNotifs,
+  onOpenExpenses,
   hasOpenOrders,
   unreadNotifs = 0,
 }: MainSidebarProps) {
@@ -56,12 +59,20 @@ export default function MainSidebar({
     },
     {
       id: "cierre",
-      icon: BarChart3, 
+      icon: BarChart3,
       label: "Cierre",
       active: getActive("/cierre"),
       onClick: () => router.push("/cierre"),
     },
-  ];
+    {
+      id: "expenses",
+      icon: Wallet,
+      label: "Gastos",
+      active: false,
+      onClick: () => onOpenExpenses?.(),
+      hidden: !onOpenExpenses,
+    },
+  ].filter((i: any) => !i.hidden);
 
   return (
     <aside className="hidden md:flex w-20 flex-col items-center py-8 gap-10 shrink-0 relative z-30 bg-[#0a0a0c] border-r border-white/5">
