@@ -35,19 +35,21 @@ export default function OnboardingChecklist() {
       api.get(`/api/employees`).then(r => r.data).catch(() => []),
       api.get(`/api/orders/admin`).then(r => r.data).catch(() => []),
     ]).then(([tenant, menuItems, employees, orders]) => {
-      // hasLogo: el upload del wizard guarda en Restaurant.logoUrl
-      // (vía PUT /api/admin/brand). Antes evaluábamos Tenant.logoUrl,
-      // que jamás se llena por el wizard → la tarea quedaba 4/5 para
-      // siempre. Ahora miramos primero el primer restaurante del tenant;
-      // el fallback al tenant cubre integraciones futuras que sí
-      // escriban ahí.
-      const firstRestaurant = tenant?.restaurants?.[0];
-      const logoUrl = firstRestaurant?.logoUrl || tenant?.logoUrl || null;
+      // hasLogo: el upload guarda en Restaurant.logoUrl (PUT /api/admin/brand).
+      // tenant.restaurants viene sin orderBy desde Prisma → el orden NO es
+      // determinístico. Antes leíamos restaurants[0].logoUrl, pero si el
+      // restaurant del user no era el primero retornado, hasLogo se quedaba
+      // false aunque hubiera logo. Corrección: marcamos completo si CUALQUIER
+      // restaurant del tenant tiene logo (intención natural: "¿ya subiste
+      // un logo?"). Fallback al tenant.logoUrl por compat con flows futuros.
+      const restaurants = Array.isArray(tenant?.restaurants) ? tenant.restaurants : [];
+      const hasAnyRestaurantLogo = restaurants.some((r: any) => Boolean(r?.logoUrl));
+      const hasLogo = hasAnyRestaurantLogo || Boolean(tenant?.logoUrl);
       setState({
-        hasLogo:       !!logoUrl,
+        hasLogo,
         hasMenu:       Array.isArray(menuItems) && menuItems.length > 0,
         hasEmployees:  Array.isArray(employees) && employees.length > 0,
-        hasLocation:   !!firstRestaurant,
+        hasLocation:   restaurants.length > 0,
         hasFirstOrder: Array.isArray(orders) && orders.length > 0,
       });
     }).catch(() => {});

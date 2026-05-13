@@ -193,10 +193,10 @@ export default function InventarioPage() {
           <p className="text-xs text-gray-500 uppercase font-bold tracking-widest mt-1">Control de Stock por Sucursal</p>
         </div>
         <div className="flex gap-2">
-          {/* BOTÓN IA INVENTARIO */}
+          {/* BOTÓN IA INVENTARIO / IMPORTACIÓN */}
           <label className={`px-4 py-2 rounded-xl text-sm font-black flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-lg ${isScanning ? 'bg-orange-200 text-black animate-pulse' : 'bg-orange-500 text-white shadow-orange-500/20'}`}>
-            {isScanning ? "🤖 Escaneando..." : "🤖 Carga de Stock (IA)"}
-            {!isScanning && <input type="file" accept="image/*" multiple onChange={handleAIScan} className="hidden" />}
+            {isScanning ? "🤖 Procesando..." : "🤖 Carga Inteligente (IA/Excel)"}
+            {!isScanning && <input type="file" accept="image/*,application/pdf,.xlsx,.xls,.csv" multiple onChange={handleAIScan} className="hidden" />}
           </label>
 
           <Link href="/admin/inventario/recetas" className="px-4 py-2 rounded-xl text-sm font-bold border border-white/10 text-gray-400">📋 Recetas</Link>
