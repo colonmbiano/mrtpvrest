@@ -1,5 +1,5 @@
 const express = require('express');
-const { scanMenuFromImages, scanInventoryFromImages } = require('../services/ai.service');
+const { scanMenuFromImages, scanInventoryFromImages, parseInventoryFile, isSpreadsheet } = require('../services/ai.service');
 const { runAssistant } = require('../services/assistant.service');
 const { runVoiceAgent } = require('../services/voice-agent.service');
 const { resolveGeminiKey } = require('../services/ai-key.service');
@@ -41,8 +41,11 @@ router.post('/scan-menu', authenticate, requireTenantAccess, requireAdmin, uploa
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No se recibieron imágenes.' });
     const { apiKey } = resolveGeminiKey();
     console.log(`🤖 Iniciando escaneo de ${req.files.length} imágenes de MENÚ con IA (Gemini Vision)...`);
-    const base64Images = req.files.map(file => file.buffer.toString('base64'));
-    const menuData = await scanMenuFromImages(base64Images, apiKey);
+    const imageParts = req.files.map(file => ({
+      data: file.buffer.toString('base64'),
+      mimeType: file.mimetype
+    }));
+    const menuData = await scanMenuFromImages(imageParts, apiKey);
     res.json({ message: 'Menú analizado con éxito', data: menuData });
   } catch (error) {
     if (error?.code) return sendAiError(res, error);
@@ -51,19 +54,50 @@ router.post('/scan-menu', authenticate, requireTenantAccess, requireAdmin, uploa
   }
 });
 
-// Escanear INVENTARIO (Facturas y Listas de Stock) — visión, usa Gemini.
+// Escanear INVENTARIO (Facturas y Listas de Stock) — híbrido: parseo directo
+// para Excel/CSV (0 tokens), Gemini Vision para imágenes y PDFs.
+//
+// Reglas de decisión:
+//   · TODOS los archivos son spreadsheet → parseInventoryFile por cada uno,
+//     resultados concatenados. Si subes 2 hojas, las dos se procesan.
+//   · CUALQUIER otro caso (imágenes/PDFs/mix) → Gemini Vision con mimeType
+//     correcto por archivo. PDFs van con application/pdf (Gemini lo soporta
+//     nativamente desde 1.5). Imágenes van con su mimeType original (no
+//     hardcodear image/jpeg porque rompe PNGs en algunas regiones).
 router.post('/scan-inventory', authenticate, requireTenantAccess, requireAdmin, upload.array('images', 10), async (req, res) => {
   try {
-    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No se recibieron imágenes.' });
+    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No se recibieron archivos.' });
+
+    // Decisión #3: mirar TODOS los archivos, no solo el primero.
+    const allSpreadsheet = req.files.every(isSpreadsheet);
+
+    if (allSpreadsheet) {
+      console.log(`📊 Importación DIRECTA de ${req.files.length} archivo(s) de inventario...`);
+      const ingredients = [];
+      for (const file of req.files) {
+        const parsed = await parseInventoryFile(file);
+        if (Array.isArray(parsed?.ingredients)) ingredients.push(...parsed.ingredients);
+      }
+      return res.json({ message: 'Archivo(s) procesado(s) con éxito', data: { ingredients }, source: 'direct' });
+    }
+
+    // Mix o todos imágenes/PDF → Gemini Vision. Mantener mimeType real
+    // por archivo (PNG/JPEG/PDF). Gemini 1.5+ acepta application/pdf
+    // como inlineData sin pre-conversión.
     const { apiKey } = resolveGeminiKey();
-    console.log(`🤖 Iniciando escaneo de ${req.files.length} imágenes de INVENTARIO con IA (Gemini Vision)...`);
-    const base64Images = req.files.map(file => file.buffer.toString('base64'));
-    const inventoryData = await scanInventoryFromImages(base64Images, apiKey);
-    res.json({ message: 'Inventario analizado con éxito', data: inventoryData });
+    console.log(`🤖 Escaneo IA de ${req.files.length} archivo(s) de INVENTARIO (Gemini Vision)...`);
+
+    const imageParts = req.files.map((file) => ({
+      data: file.buffer.toString('base64'),
+      mimeType: file.mimetype || (file.originalname?.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
+    }));
+
+    const inventoryData = await scanInventoryFromImages(imageParts, apiKey);
+    res.json({ message: 'Inventario analizado con éxito', data: inventoryData, source: 'ai' });
   } catch (error) {
     if (error?.code) return sendAiError(res, error);
     console.error('Error en AI Inventory Route:', error);
-    res.status(500).json({ error: error?.message || 'Hubo un problema al procesar el inventario con IA.' });
+    res.status(500).json({ error: error?.message || 'Hubo un problema al procesar el inventario.' });
   }
 });
 
