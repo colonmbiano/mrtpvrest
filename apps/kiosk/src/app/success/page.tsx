@@ -3,10 +3,21 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SetupGuard } from "@/components/SetupGuard";
 import { IconCheck } from "@/components/Icon";
+import api from "@/lib/api";
 
 export default function SuccessPage() {
   return <SetupGuard><Inner /></SetupGuard>;
 }
+
+// Mapeo de status del backend → display amigable + color
+const STATUS_DISPLAY: Record<string, { label: string; color: string; icon: string }> = {
+  PENDING:    { label: "Recibida",   color: "#a78bfa", icon: "📥" },
+  CONFIRMED:  { label: "Confirmada", color: "#22d3ee", icon: "✓" },
+  PREPARING:  { label: "Preparando", color: "#fbbf24", icon: "🍳" },
+  READY:      { label: "¡Lista!",    color: "#10b981", icon: "🔔" },
+  DELIVERED:  { label: "Entregada",  color: "#10b981", icon: "✓" },
+  CANCELLED:  { label: "Cancelada",  color: "#ef4444", icon: "✗" },
+};
 
 function Inner() {
   const router = useRouter();
@@ -16,22 +27,45 @@ function Inner() {
   const meta        = params.get("m") || "";
   const payment     = params.get("p") || "cash";
 
-  const [remaining, setRemaining] = useState(10);
+  // Auto-reset solo cuando la orden esté READY o tras 60s (lo que pase primero).
+  const [remaining, setRemaining] = useState(60);
+  const [status, setStatus] = useState<string>("PENDING");
+  const [estimatedMin, setEstimatedMin] = useState<number | null>(null);
 
   useEffect(() => {
     sessionStorage.removeItem("kiosk-cart");
+
+    // Polling cada 4s del status. Cuando llega READY, deja de pollear.
+    const poll = async () => {
+      if (!orderNumber) return;
+      try {
+        const { data } = await api.get<{ status?: string; estimatedMinutes?: number | null }>(
+          `/api/store/orders/by-number/${encodeURIComponent(orderNumber)}`,
+        );
+        if (data?.status) setStatus(data.status);
+        if (typeof data?.estimatedMinutes === "number") setEstimatedMin(data.estimatedMinutes);
+      } catch {
+        /* silent — el endpoint puede no existir o estar caído; el contador igual avanza */
+      }
+    };
+    poll();
+    const pollIv = setInterval(poll, 4000);
+
     const tick = setInterval(() => {
       setRemaining((r) => {
         if (r <= 1) {
           clearInterval(tick);
+          clearInterval(pollIv);
           router.replace("/");
           return 0;
         }
         return r - 1;
       });
     }, 1000);
-    return () => clearInterval(tick);
-  }, [router]);
+    return () => { clearInterval(tick); clearInterval(pollIv); };
+  }, [router, orderNumber]);
+
+  const statusInfo = STATUS_DISPLAY[status] || STATUS_DISPLAY.PENDING;
 
   const message = orderType === "dine_in"
     ? (payment === "card"
@@ -55,6 +89,30 @@ function Inner() {
       <div style={{ fontSize: 22, color: "var(--text)", textAlign: "center", maxWidth: 720, lineHeight: 1.4 }}>
         {message}
       </div>
+
+      {/* Status badge en vivo */}
+      <div
+        style={{
+          display: "flex", alignItems: "center", gap: 12,
+          padding: "12px 24px", borderRadius: 999,
+          background: `color-mix(in srgb, ${statusInfo.color} 12%, transparent)`,
+          border: `2px solid ${statusInfo.color}`,
+          color: statusInfo.color,
+          fontFamily: "var(--font-mono)", fontWeight: 800,
+          fontSize: 18, textTransform: "uppercase", letterSpacing: ".08em",
+          transition: "all .3s ease",
+        }}
+      >
+        <span style={{ fontSize: 28 }}>{statusInfo.icon}</span>
+        <span>{statusInfo.label}</span>
+        {status === "PREPARING" && (
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: statusInfo.color, animation: "pulse 1.4s ease-in-out infinite" }} />
+        )}
+        {estimatedMin != null && (status === "CONFIRMED" || status === "PREPARING") && (
+          <span style={{ fontSize: 14, opacity: 0.8 }}>· ~{estimatedMin} min</span>
+        )}
+      </div>
+
       <div style={{ marginTop: 20, fontSize: 14, color: "var(--brand-primary)", fontFamily: "var(--font-mono)" }}>
         Volviendo al inicio en {remaining}s…
       </div>

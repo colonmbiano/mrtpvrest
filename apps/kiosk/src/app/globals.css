@@ -115,3 +115,26 @@ button { font-family: inherit; }
 
 @keyframes kiosk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 .kiosk-pulse { animation: kiosk-pulse 2s ease-in-out infinite; }
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.25); opacity: 0.6; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ACCESIBILIDAD — Alto contraste activado vía data-contrast="high"
+   en <html> (controlado por useA11y hook).
+   ─────────────────────────────────────────────────────────────── */
+html[data-contrast="high"] {
+  --bg: #000;
+  --surf: #111;
+  --surf2: #1a1a1a;
+  --text: #fff;
+  --muted: #ddd;
+  --border: #555;
+  --border2: #777;
+}
+html[data-contrast="high"] button:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}

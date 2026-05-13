@@ -10,6 +10,7 @@ type Location = { id: string; name: string; address: string | null };
 type Restaurant = {
   id: string; name: string; slug: string;
   accentColor: string | null;
+  logoUrl: string | null;
   kioskStyle: "oled" | "pop" | "boutique" | null;
   locations: Location[];
 };
@@ -72,6 +73,7 @@ export default function SetupPage() {
           });
           r.kioskStyle = conf.data?.kioskStyle || "oled";
           r.accentColor = conf.data?.accentColor || null;
+          r.logoUrl = conf.data?.logoUrl || null;
         } catch (e) {
           console.error(`Error fetching data for restaurant ${r.id}:`, e);
           r.locations = [];
@@ -108,6 +110,16 @@ export default function SetupPage() {
     }
     if (restaurant.accentColor) localStorage.setItem("mb-accent", restaurant.accentColor);
     localStorage.setItem("kiosk-style", restaurant.kioskStyle || "oled");
+    if (restaurant.accentColor) {
+      localStorage.setItem("kiosk-accent-color", restaurant.accentColor);
+    } else {
+      localStorage.removeItem("kiosk-accent-color");
+    }
+    if (restaurant.logoUrl) {
+      localStorage.setItem("kiosk-logo-url", restaurant.logoUrl);
+    } else {
+      localStorage.removeItem("kiosk-logo-url");
+    }
 
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");

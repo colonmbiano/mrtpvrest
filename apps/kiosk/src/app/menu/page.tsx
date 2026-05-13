@@ -11,11 +11,19 @@ import api from "@/lib/api";
 
 type Variant = { id: string; name: string; price: number };
 type Complement = { id: string; name: string; price: number; isRequired: boolean };
+type Modifier = { id: string; name: string; priceAdd: number };
+type ModifierGroup = {
+  id: string; name: string;
+  required: boolean; multiSelect: boolean;
+  minSelection: number; maxSelection: number;
+  modifiers: Modifier[];
+};
 type MenuItem = {
   id: string; name: string; description?: string | null;
   price: number; promoPrice?: number | null; isPromo?: boolean;
   image?: string | null; categoryId: string;
   variants: Variant[]; complements: Complement[];
+  modifierGroups?: ModifierGroup[];
 };
 type Category = { id: string; name: string; items: MenuItem[] };
 
@@ -40,24 +48,34 @@ function Inner() {
     }).catch((e) => console.error("menu fetch:", e));
   }, []);
 
-  function addItem(mi: MenuItem, variant: Variant | null) {
-    const price = variant ? variant.price : (mi.isPromo && mi.promoPrice ? mi.promoPrice : mi.price);
-    const name  = variant ? `${mi.name} (${variant.name})` : mi.name;
+  function addItem(mi: MenuItem, variant: Variant | null, modifiers: Modifier[] = []) {
+    const basePrice = variant ? variant.price : (mi.isPromo && mi.promoPrice ? mi.promoPrice : mi.price);
+    const modsExtra = modifiers.reduce((s, m) => s + Number(m.priceAdd || 0), 0);
+    const price = basePrice + modsExtra;
+    const modSuffix = modifiers.length > 0 ? ` + ${modifiers.map(m => m.name).join(", ")}` : "";
+    const name = (variant ? `${mi.name} (${variant.name})` : mi.name) + modSuffix;
+    // Key incluye los modifierIds para que items idénticos con distintos
+    // modificadores cuenten como líneas separadas en el carrito.
+    const modKey = modifiers.map(m => m.id).sort().join(",");
     dispatch({
       type: "add",
       item: {
-        key: `${mi.id}:${variant?.id ?? "_"}`,
+        key: `${mi.id}:${variant?.id ?? "_"}:${modKey || "_"}`,
         menuItemId: mi.id,
         variantId: variant?.id ?? null,
         name,
         price,
+        modifiers: modifiers.length > 0 ? modifiers.map(m => ({ id: m.id, name: m.name, priceAdd: Number(m.priceAdd || 0) })) : undefined,
       },
     });
     setPicking(null);
   }
 
   function tap(mi: MenuItem) {
-    const needsPicker = mi.variants.length > 0 || mi.complements.some((c) => c.isRequired);
+    const needsPicker =
+      mi.variants.length > 0 ||
+      mi.complements.some((c) => c.isRequired) ||
+      (mi.modifierGroups || []).length > 0;
     if (needsPicker) setPicking(mi);
     else addItem(mi, null);
   }
@@ -141,7 +159,7 @@ function Inner() {
         <VariantPicker
           item={picking}
           onClose={() => setPicking(null)}
-          onAdd={(v) => addItem(picking, v)}
+          onAdd={(sel) => addItem(picking, sel.variant, sel.modifiers)}
         />
       )}
     </div>
