@@ -1,8 +1,52 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
-import { X, Wallet, ShoppingBag, Plus, Trash2, Camera, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { X, Wallet, ShoppingBag, Plus, Trash2, Camera, Loader2, AlertTriangle, CheckCircle2, Sparkles, FileWarning } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "sonner";
+
+// Normaliza un string para fuzzy match: lowercase, sin acentos, sin caracteres
+// no alfanuméricos. "Pan Brioche" → "pan brioche", "Habañero" → "habanero".
+function normalize(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Match básico: busca el Ingredient cuyo nombre normalizado contiene
+// el nombre escaneado normalizado, o viceversa. Si hay múltiples,
+// devuelve el de mayor coincidencia por longitud relativa.
+function findBestIngredient(
+  scannedName: string,
+  ingredients: Array<{ id: string; name: string }>,
+): { id: string; name: string } | null {
+  const norm = normalize(scannedName);
+  if (!norm) return null;
+  let best: { id: string; name: string; score: number } | null = null;
+  for (const ing of ingredients) {
+    const ingNorm = normalize(ing.name);
+    if (!ingNorm) continue;
+    let score = 0;
+    if (ingNorm === norm) score = 100;
+    else if (ingNorm.includes(norm) || norm.includes(ingNorm)) {
+      // Coincidencia parcial — premia coincidencias largas relativas a la
+      // longitud del candidato (evita que "pan" matchee "pantalón" si
+      // existiera y prefiere "pan brioche" como match más específico).
+      const overlap = Math.min(norm.length, ingNorm.length);
+      const maxLen = Math.max(norm.length, ingNorm.length);
+      score = Math.round((overlap / maxLen) * 80);
+    }
+    if (score > 0 && (!best || score > best.score)) {
+      best = { id: ing.id, name: ing.name, score };
+    }
+  }
+  // Umbral mínimo: por debajo de 40% de coincidencia preferimos NO sugerir
+  // (mejor que el cajero elija que un mal match silencioso).
+  return best && best.score >= 40 ? { id: best.id, name: best.name } : null;
+}
 
 // PurchasesExpensesModal · captura desde el TPV de gastos operativos y
 // compras de inventario. 2 tabs:
@@ -47,6 +91,10 @@ interface PurchaseLine {
   baseUnit: string;
   qty: string;       // string para evitar problemas de decimal en input
   unitPrice: string;
+  // Si la línea vino de un escaneo IA y no se pudo matchear contra un
+  // Ingredient existente, guardamos el nombre original para que el
+  // cajero sepa qué item del ticket era.
+  scannedName?: string;
 }
 
 interface Props {
@@ -72,6 +120,8 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
 
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Cargar catálogos cuando abre
   useEffect(() => {
@@ -121,7 +171,89 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
       ingredientId: ing.id,
       ingredientName: ing.name,
       baseUnit: ing.baseUnit,
+      // Limpiar scannedName cuando el cajero elige manualmente — ya no
+      // necesita el hint del nombre original del ticket.
+      scannedName: undefined,
     });
+  }
+
+  // ── Foto/archivo del ticket → IA → pre-llena líneas ──
+  // Reusa el endpoint /api/ai/scan-inventory que ya hace detección de
+  // mime-type (foto, PDF, Excel, CSV). Devuelve un array de ingredientes
+  // genéricos { name, totalCost, quantityFound } y aquí los mapeamos a
+  // Ingredients existentes con fuzzy match básico.
+  async function scanReceipt(file: File) {
+    if (ingredients.length === 0) {
+      toast.error("Aún cargando catálogo de ingredientes, espera un momento.");
+      return;
+    }
+    setScanning(true);
+    const toastId = toast.loading("Escaneando ticket con IA…");
+    try {
+      const fd = new FormData();
+      // El endpoint usa upload.array('images', 10) — el field name es 'images'
+      // aunque acepta también PDFs/Excel/CSV.
+      fd.append("images", file);
+      const res = await api.post<{ data: { ingredients: Array<{ name: string; totalCost: number; quantityFound: number }> }; source: string }>(
+        "/api/ai/scan-inventory",
+        fd,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      const scanned = res.data?.data?.ingredients || [];
+      if (scanned.length === 0) {
+        toast.warning("No se detectaron items en el ticket.", { id: toastId });
+        return;
+      }
+
+      // Mapear cada item escaneado a un Ingredient existente (o dejarlo
+      // sin match para que el cajero lo elija manualmente).
+      let matched = 0;
+      const newLines: PurchaseLine[] = scanned.map((s) => {
+        const match = findBestIngredient(s.name, ingredients);
+        const qty = Number(s.quantityFound || 1);
+        // totalCost es el TOTAL de la línea; pasamos a precio unitario.
+        const unitPrice = qty > 0 ? Number(s.totalCost || 0) / qty : Number(s.totalCost || 0);
+        if (match) matched++;
+        const matchedIng = match ? ingredients.find((i) => i.id === match.id) : null;
+        return {
+          ingredientId: match?.id || "",
+          ingredientName: match?.name || s.name,
+          baseUnit: matchedIng?.baseUnit || "PIECE",
+          qty: String(qty || ""),
+          unitPrice: String(unitPrice.toFixed(2)),
+          scannedName: match ? undefined : s.name,
+        };
+      });
+
+      // Reemplaza las líneas existentes (no agrega) — la idea es que el
+      // cajero escanea UN ticket por vez y revisa.
+      setLines(newLines);
+
+      const unmatched = newLines.length - matched;
+      if (unmatched === 0) {
+        toast.success(`${matched} items reconocidos · revisa precios`, { id: toastId });
+      } else {
+        toast.warning(
+          `${matched} matched · ${unmatched} requieren elegir ingrediente`,
+          { id: toastId },
+        );
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || "fallo al escanear";
+      toast.error("Error al escanear: " + msg, { id: toastId });
+    } finally {
+      setScanning(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function triggerScan() {
+    fileInputRef.current?.click();
+  }
+
+  function onScanFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) scanReceipt(file);
   }
 
   async function submitExpense() {
@@ -280,8 +412,19 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
               purchaseTotal={purchaseTotal}
               notes={notes}
               setNotes={setNotes}
+              onScanReceipt={triggerScan}
+              scanning={scanning}
             />
           )}
+          {/* Input oculto para foto/archivo del ticket. Soporta imágenes,
+              PDF y Excel/CSV — el endpoint scan-inventory detecta el tipo. */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,application/pdf,.xlsx,.xls,.csv"
+            onChange={onScanFileChange}
+            className="hidden"
+          />
 
           {/* Payment method */}
           <div className="mt-6">
@@ -446,6 +589,8 @@ function PurchaseTab(props: {
   purchaseTotal: number;
   notes: string;
   setNotes: (v: string) => void;
+  onScanReceipt: () => void;
+  scanning: boolean;
 }) {
   return (
     <div className="space-y-5">
@@ -469,27 +614,59 @@ function PurchaseTab(props: {
           <label className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40">
             Productos comprados
           </label>
-          <button
-            type="button"
-            onClick={props.addLine}
-            className="h-8 px-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-black uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95"
-          >
-            <Plus size={12} /> Agregar
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={props.onScanReceipt}
+              disabled={props.scanning}
+              className="h-8 px-3 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300 text-[10px] font-black uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95 disabled:opacity-50"
+            >
+              {props.scanning ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {props.scanning ? "Escaneando…" : "Escanear ticket"}
+            </button>
+            <button
+              type="button"
+              onClick={props.addLine}
+              className="h-8 px-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-black uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95"
+            >
+              <Plus size={12} /> Agregar
+            </button>
+          </div>
         </div>
 
         {props.lines.length === 0 ? (
-          <div className="rounded-2xl bg-white/5 border border-dashed border-white/10 p-6 text-center">
-            <p className="text-[12px] text-white/40">Toca "Agregar" para empezar a meter productos del ticket.</p>
+          <div className="rounded-2xl bg-white/5 border border-dashed border-white/10 p-6 text-center space-y-2">
+            <Camera size={28} className="text-white/30 mx-auto" />
+            <p className="text-[12px] text-white/40">
+              Toca <strong className="text-violet-300">"Escanear ticket"</strong> para llenar la lista con IA,
+              o <strong className="text-amber-400">"Agregar"</strong> para meterlos a mano.
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
-            {props.lines.map((line, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-white/5 border border-white/10 rounded-xl p-2">
+            {props.lines.map((line, idx) => {
+              const needsMatch = !line.ingredientId && line.scannedName;
+              return (
+              <div
+                key={idx}
+                className={`grid grid-cols-12 gap-2 items-center rounded-xl p-2 border ${
+                  needsMatch
+                    ? "bg-amber-500/10 border-amber-500/30"
+                    : "bg-white/5 border-white/10"
+                }`}
+              >
+                {needsMatch && (
+                  <div className="col-span-12 flex items-center gap-2 text-[10px] font-bold text-amber-400 pb-1 pl-1">
+                    <FileWarning size={12} />
+                    <span>IA detectó "{line.scannedName}" — elige el ingrediente correcto:</span>
+                  </div>
+                )}
                 <select
                   value={line.ingredientId}
                   onChange={(e) => props.pickIngredient(idx, e.target.value)}
-                  className="col-span-12 sm:col-span-5 h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-xs text-white outline-none"
+                  className={`col-span-12 sm:col-span-5 h-10 bg-white/5 border rounded-lg px-3 text-xs text-white outline-none ${
+                    needsMatch ? "border-amber-500/40" : "border-white/10"
+                  }`}
                 >
                   <option value="">Ingrediente…</option>
                   {props.ingredients.map((i) => (
@@ -525,7 +702,8 @@ function PurchaseTab(props: {
                   <Trash2 size={14} />
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
