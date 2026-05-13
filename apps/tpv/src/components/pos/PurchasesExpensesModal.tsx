@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { X, Wallet, ShoppingBag, Plus, Trash2, Camera, Loader2, AlertTriangle, CheckCircle2, Sparkles, FileWarning } from "lucide-react";
+import { X, Wallet, ShoppingBag, Plus, Trash2, Camera, Loader2, AlertTriangle, CheckCircle2, Sparkles, FileWarning, History, RefreshCw } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
@@ -56,8 +56,21 @@ function findBestIngredient(
 // Pago en efectivo (CASH_DRAWER) requiere CashShift abierto — el backend
 // valida y devuelve 409 NO_OPEN_SHIFT. El UI muestra el mensaje.
 
-type Tab = "expense" | "purchase";
+type Tab = "expense" | "purchase" | "history";
 type PaymentMethod = "CASH_DRAWER" | "CORPORATE_CARD" | "TRANSFER";
+
+// Item del historial — unifica gasto y compra para mostrar en una lista.
+interface HistoryItem {
+  id: string;
+  kind: "expense" | "purchase";
+  occurredAt: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  title: string;       // concept (gasto) o "Compra: <supplier>" (compra)
+  subtitle: string;    // categoría (gasto) o "N items" (compra)
+  icon: string;        // emoji para diferenciar visualmente
+  createdBy?: string | null;
+}
 
 const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   CASH_DRAWER: "Efectivo de caja",
@@ -123,6 +136,10 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
   const [scanning, setScanning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Historial del día ──
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
   // Cargar catálogos cuando abre
   useEffect(() => {
     if (!isOpen) return;
@@ -130,6 +147,63 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
     api.get<Supplier[]>("/api/purchases/lookup/suppliers").then((r) => setSuppliers(r.data || [])).catch(() => setSuppliers([]));
     api.get<Ingredient[]>("/api/purchases/lookup/ingredients").then((r) => setIngredients(r.data || [])).catch(() => setIngredients([]));
   }, [isOpen]);
+
+  // Cargar historial cuando entras al tab "history".
+  useEffect(() => {
+    if (!isOpen || tab !== "history") return;
+    loadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, tab]);
+
+  async function loadHistory() {
+    setLoadingHistory(true);
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const fromIso = today.toISOString();
+
+      const [expRes, purRes] = await Promise.all([
+        api.get<any[]>(`/api/expenses?from=${encodeURIComponent(fromIso)}`).catch(() => ({ data: [] })),
+        api.get<any[]>(`/api/purchases?from=${encodeURIComponent(fromIso)}`).catch(() => ({ data: [] })),
+      ]);
+
+      const expenses: HistoryItem[] = (expRes.data || []).map((e: any) => ({
+        id: `e_${e.id}`,
+        kind: "expense",
+        occurredAt: e.occurredAt || e.createdAt,
+        amount: Number(e.amount || 0),
+        paymentMethod: e.paymentMethod,
+        title: e.concept || "Gasto",
+        subtitle: e.category?.name?.replace(/_/g, " ") || "OTROS",
+        icon: e.category?.icon || "📝",
+        createdBy: e.createdBy?.name || null,
+      }));
+
+      const purchases: HistoryItem[] = (purRes.data || []).map((p: any) => {
+        const itemsCount = Array.isArray(p.items) ? p.items.length : 0;
+        return {
+          id: `p_${p.id}`,
+          kind: "purchase",
+          occurredAt: p.receivedAt || p.createdAt,
+          amount: Number(p.totalAmount || 0),
+          paymentMethod: p.paymentMethod,
+          title: `Compra · ${p.supplier?.name || "Sin proveedor"}`,
+          subtitle: `${itemsCount} item${itemsCount === 1 ? "" : "s"} · ${p.poNumber || ""}`,
+          icon: "🛒",
+          createdBy: p.createdBy?.name || null,
+        };
+      });
+
+      const merged = [...expenses, ...purchases].sort(
+        (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+      );
+      setHistory(merged);
+    } catch (err: any) {
+      toast.error("Error al cargar historial: " + (err?.message || "fallo"));
+    } finally {
+      setLoadingHistory(false);
+    }
+  }
 
   // Reset al cerrar
   useEffect(() => {
@@ -357,11 +431,12 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-2 px-6 pt-4">
+        <div className="flex items-center gap-2 px-6 pt-4 overflow-x-auto scrollbar-hide">
           {(
             [
               { id: "expense", label: "Gasto", icon: Wallet },
-              { id: "purchase", label: "Compra de inventario", icon: ShoppingBag },
+              { id: "purchase", label: "Compra", icon: ShoppingBag },
+              { id: "history", label: "Hoy", icon: History },
             ] as const
           ).map((t) => {
             const Icon = t.icon;
@@ -386,7 +461,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 scrollbar-hide">
-          {tab === "expense" ? (
+          {tab === "expense" && (
             <ExpenseTab
               categories={categories}
               categoryId={categoryId}
@@ -398,7 +473,8 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
               notes={notes}
               setNotes={setNotes}
             />
-          ) : (
+          )}
+          {tab === "purchase" && (
             <PurchaseTab
               suppliers={suppliers}
               supplierId={supplierId}
@@ -416,6 +492,13 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
               scanning={scanning}
             />
           )}
+          {tab === "history" && (
+            <HistoryTab
+              items={history}
+              loading={loadingHistory}
+              onRefresh={loadHistory}
+            />
+          )}
           {/* Input oculto para foto/archivo del ticket. Soporta imágenes,
               PDF y Excel/CSV — el endpoint scan-inventory detecta el tipo. */}
           <input
@@ -426,7 +509,8 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
             className="hidden"
           />
 
-          {/* Payment method */}
+          {/* Payment method — solo en tabs de captura, no en historial */}
+          {tab !== "history" && (
           <div className="mt-6">
             <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40 mb-2">Método de pago</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -455,6 +539,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
               </p>
             )}
           </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -464,26 +549,28 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
             onClick={onClose}
             className="h-11 px-5 rounded-2xl bg-white/5 border border-white/10 text-white/60 text-[11px] font-black uppercase tracking-[0.15em] active:scale-95"
           >
-            Cancelar
+            Cerrar
           </button>
-          <button
-            type="button"
-            onClick={tab === "expense" ? submitExpense : submitPurchase}
-            disabled={submitting}
-            className="flex-1 sm:flex-none h-11 px-6 rounded-2xl bg-amber-500 text-[#0a0a0c] text-[12px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(255,184,77,0.3)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitting ? (
-              <>
-                <Loader2 size={14} className="animate-spin" />
-                Guardando…
-              </>
-            ) : (
-              <>
-                <CheckCircle2 size={14} />
-                {tab === "expense" ? "Registrar gasto" : `Registrar compra · $${purchaseTotal.toFixed(2)}`}
-              </>
-            )}
-          </button>
+          {tab !== "history" && (
+            <button
+              type="button"
+              onClick={tab === "expense" ? submitExpense : submitPurchase}
+              disabled={submitting}
+              className="flex-1 sm:flex-none h-11 px-6 rounded-2xl bg-amber-500 text-[#0a0a0c] text-[12px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(255,184,77,0.3)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Guardando…
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={14} />
+                  {tab === "expense" ? "Registrar gasto" : `Registrar compra · $${purchaseTotal.toFixed(2)}`}
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -733,6 +820,150 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
         {label}
       </label>
       {children}
+    </div>
+  );
+}
+
+// ── HistoryTab · gastos y compras de hoy ─────────────────────────────────
+function HistoryTab({
+  items,
+  loading,
+  onRefresh,
+}: {
+  items: HistoryItem[];
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  // Totales: agrupados por método de pago para que el cajero vea el
+  // impacto del día en caja (CASH_DRAWER es lo que sale de su gaveta).
+  const totals = useMemo(() => {
+    const byMethod: Record<PaymentMethod, number> = {
+      CASH_DRAWER: 0, CORPORATE_CARD: 0, TRANSFER: 0,
+    };
+    let totalAll = 0;
+    for (const i of items) {
+      byMethod[i.paymentMethod] += i.amount;
+      totalAll += i.amount;
+    }
+    return { byMethod, totalAll };
+  }, [items]);
+
+  const fmtTime = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return "";
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Resumen */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <SummaryCard label="Total" amount={totals.totalAll} color="white" />
+        <SummaryCard label="Efectivo" amount={totals.byMethod.CASH_DRAWER} color="amber" />
+        <SummaryCard label="Tarjeta" amount={totals.byMethod.CORPORATE_CARD} color="violet" />
+        <SummaryCard label="Transfer" amount={totals.byMethod.TRANSFER} color="cyan" />
+      </div>
+
+      {/* Lista */}
+      <div className="flex items-center justify-between pt-2">
+        <span className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40">
+          Movimientos de hoy ({items.length})
+        </span>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="h-8 px-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-[10px] font-black uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95 disabled:opacity-50"
+        >
+          <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+          Refrescar
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-16 rounded-xl bg-white/5 border border-white/10 animate-pulse" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="rounded-2xl bg-white/5 border border-dashed border-white/10 p-8 text-center space-y-2">
+          <History size={28} className="text-white/30 mx-auto" />
+          <p className="text-[12px] text-white/40">Sin movimientos registrados hoy.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10"
+            >
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${
+                  item.kind === "purchase"
+                    ? "bg-violet-500/10 border border-violet-500/20"
+                    : "bg-amber-500/10 border border-amber-500/20"
+                }`}
+              >
+                {item.icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white truncate">{item.title}</p>
+                <p className="text-[10px] text-white/40 truncate">
+                  {item.subtitle}
+                  {item.createdBy && <> · por {item.createdBy}</>}
+                  <> · {fmtTime(item.occurredAt)}</>
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-base font-black tabular-nums text-white">
+                  ${item.amount.toFixed(2)}
+                </p>
+                <p
+                  className={`text-[9px] font-black uppercase tracking-wider ${
+                    item.paymentMethod === "CASH_DRAWER"
+                      ? "text-amber-400"
+                      : item.paymentMethod === "CORPORATE_CARD"
+                      ? "text-violet-400"
+                      : "text-cyan-400"
+                  }`}
+                >
+                  {item.paymentMethod === "CASH_DRAWER"
+                    ? "Efectivo"
+                    : item.paymentMethod === "CORPORATE_CARD"
+                    ? "Tarjeta"
+                    : "Transfer"}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SummaryCard({
+  label,
+  amount,
+  color,
+}: {
+  label: string;
+  amount: number;
+  color: "white" | "amber" | "violet" | "cyan";
+}) {
+  const tone = {
+    white: "border-white/10 text-white",
+    amber: "border-amber-500/30 text-amber-400 bg-amber-500/5",
+    violet: "border-violet-500/30 text-violet-400 bg-violet-500/5",
+    cyan: "border-cyan-500/30 text-cyan-400 bg-cyan-500/5",
+  }[color];
+  return (
+    <div className={`p-3 rounded-xl border ${tone}`}>
+      <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">{label}</p>
+      <p className="text-lg font-black tabular-nums mt-0.5">${amount.toFixed(2)}</p>
     </div>
   );
 }
