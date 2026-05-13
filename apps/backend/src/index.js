@@ -11,6 +11,7 @@ const rateLimit   = require('express-rate-limit')
 const sentry      = require('./lib/sentry');
 const shiftsRoutes = require('./routes/shifts.routes');
 const tenantMiddleware = require('./middleware/tenant.middleware');
+const idempotencyMiddleware = require('./middleware/idempotency.middleware');
 
 sentry.init();
 
@@ -36,7 +37,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-restaurant-id', 'x-location-id', 'x-restaurant-slug', 'x-location-slug']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-restaurant-id', 'x-location-id', 'x-restaurant-slug', 'x-location-slug', 'Idempotency-Key']
 };
 
 // Socket.io
@@ -95,6 +96,11 @@ app.use('/api/ota',               require('./routes/ota.routes'))
 
 // --- MIDDLEWARE DE SAAS (TENANT) ---
 app.use(tenantMiddleware);
+
+// Idempotencia para replays de la cola offline del TPV. Va DESPUÉS del
+// tenant middleware para que tengamos req.restaurantId al scopear la
+// key. Solo aplica si el cliente manda el header Idempotency-Key.
+app.use(idempotencyMiddleware);
 
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,

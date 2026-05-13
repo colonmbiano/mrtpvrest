@@ -375,8 +375,22 @@ export default function ReportesIAPage() {
                   <h4 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi, marginBottom: 6, lineHeight: 1.25 }}>{ins.title}</h4>
                   <p style={{ fontSize: 12, color: V.txMid, lineHeight: 1.5, marginBottom: 12 }}>{ins.body}</p>
                   <div style={{ display: "flex", gap: 6 }}>
-                    <button style={{ ...btn(true), padding: "6px 10px", fontSize: 11 }}>{ins.cta}</button>
-                    <button style={{ ...btn(false), padding: "6px 10px", fontSize: 11 }}>Ignorar</button>
+                    <button 
+                      onClick={() => {
+                        const prompt = `Sobre este insight: "${ins.title}" (${ins.body}). Quiero ${ins.cta}. ¿Qué me sugieres hacer específicamente?`;
+                        sendChat(prompt);
+                        window.scrollTo({ top: 0, behavior: 'smooth' }); // Subir para ver el chat
+                      }}
+                      style={{ ...btn(true), padding: "6px 10px", fontSize: 11 }}
+                    >
+                      {ins.cta}
+                    </button>
+                    <button 
+                      onClick={() => setInsights(prev => prev.filter(i => i.title !== ins.title))}
+                      style={{ ...btn(false), padding: "6px 10px", fontSize: 11 }}
+                    >
+                      Ignorar
+                    </button>
                   </div>
                 </div>
               );
