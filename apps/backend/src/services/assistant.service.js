@@ -182,7 +182,7 @@ async function execTool(name, args, { restaurantId, locationId }) {
   return { error: `Herramienta desconocida: ${name}` };
 }
 
-async function buildContextBlock({ restaurantId, locationId }) {
+async function buildContextBlock({ restaurantId, locationId, period }) {
   const [restaurant, location] = await Promise.all([
     restaurantId
       ? prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { name: true } })
@@ -199,6 +199,7 @@ async function buildContextBlock({ restaurantId, locationId }) {
     `- Restaurante: ${restaurant?.name || '(sin nombre)'}`,
     `- Sucursal activa: ${location?.name || '(ninguna — herramientas por sucursal no disponibles)'}`,
     `- Fecha actual: ${today}`,
+    `- Período seleccionado en la interfaz: ${period || 'HOY'} (¡IMPORTANTE! Debes usar este periodo por defecto al llamar a tus herramientas si el usuario no especifica uno distinto en su mensaje).`,
   ].join('\n');
 }
 
@@ -213,7 +214,7 @@ function toText(content) {
   return '';
 }
 
-async function runAssistant({ messages, restaurantId, locationId }) {
+async function runAssistant({ messages, restaurantId, locationId, period }) {
   if (!Array.isArray(messages) || messages.length === 0) {
     const err = new Error('Se requiere un arreglo `messages` no vacío.');
     err.code = 'BAD_REQUEST';
@@ -229,7 +230,7 @@ async function runAssistant({ messages, restaurantId, locationId }) {
   // BYOK Groq: key del cliente, fallback a la de plataforma durante trial, o 402.
   const { apiKey } = await resolveGroqKey({ restaurantId });
 
-  const contextBlock = await buildContextBlock({ restaurantId, locationId });
+  const contextBlock = await buildContextBlock({ restaurantId, locationId, period });
 
   const groq = new OpenAI({ apiKey, baseURL: GROQ_BASE_URL });
 
