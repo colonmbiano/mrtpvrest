@@ -1,25 +1,100 @@
 require('dotenv').config();
 
-// Funcion para descontar inventario al vender (Adaptada a Sucursal)
-async function discountInventory(prisma, items, orderId, restaurantId, locationId) {
+// ─────────────────────────────────────────────────────────────────────────
+// discountInventory · descuenta ingredientes consumidos por una orden y
+// persiste el snapshot de costo (CMV) en cada OrderItem.
+//
+// Cambios vs versión legacy:
+//   1. Lee `Recipe` (escandallo final) cuando existe, con fallback a la
+//      vieja `RecipeItem.menuItemId` directa para items sin Recipe formal.
+//   2. Crea `StockMovement` con balanceAfter cacheado + refType='order'.
+//   3. Sigue creando `InventoryMovement` legacy en paralelo para no romper
+//      reports / endpoints que aún lo lean. Se removerá cuando se migre.
+//   4. Actualiza `OrderItem.costSnapshot` con el CMV unitario al cobrar
+//      (snapshot inmutable — reportes históricos no recalculan).
+//
+// Recibe orderItems (no items raw) — necesitamos el OrderItem.id para
+// poder hacer UPDATE del snapshot.
+//
+// TODO: expansión recursiva de SubRecipe (hoy solo descuenta ingredientes
+// directos; si un RecipeItem apunta a una SubRecipe, se ignora y se loguea).
+async function discountInventory(prisma, orderItems, orderId, restaurantId, locationId) {
+  if (!Array.isArray(orderItems) || orderItems.length === 0) return;
+  if (!locationId) {
+    console.warn('[discountInventory] locationId requerido; abortando descuento');
+    return;
+  }
+
   try {
-    for (const item of items) {
-      const recipe = await prisma.recipeItem.findMany({
+    for (const oi of orderItems) {
+      // Buscar RecipeItems vinculados a este MenuItem. Aceptamos ambas
+      // formas: vía Recipe (nuevo) o vía menuItemId directo (legacy).
+      const recipeItems = await prisma.recipeItem.findMany({
         where: {
-          menuItemId: item.menuItemId,
-          menuItem: { restaurantId }
+          OR: [
+            { recipe: { menuItemId: oi.menuItemId, restaurantId } },
+            { menuItemId: oi.menuItemId, menuItem: { restaurantId } },
+          ],
         },
+        include: { ingredient: true, recipe: true },
       });
-      for (const r of recipe) {
-        // Master Schema: Aplicar wastagePercent
-        // Cantidad = (Qty Receta) * (Factor Merma) * (Qty Item Vendido)
-        const wastageFactor = 1 + (r.wastagePercent / 100);
-        const needed = r.quantity * wastageFactor * item.quantity;
-        
-        await prisma.ingredient.update({
-          where: { id: r.ingredientId, locationId },
+
+      if (recipeItems.length === 0) continue;
+
+      let cmvUnitario = 0;
+      let recipeIdSnap = null;
+
+      for (const r of recipeItems) {
+        // Si el RecipeItem apunta a una SubRecipe en lugar de Ingredient,
+        // por ahora lo saltamos. Cuando agreguemos expansión recursiva,
+        // este `continue` se convierte en `await consumeSubRecipe(...)`.
+        if (!r.ingredientId || !r.ingredient) {
+          console.warn(`[discountInventory] RecipeItem ${r.id} sin ingredient — sub-receta aún no soportada en descuento`);
+          continue;
+        }
+
+        if (r.recipeId && !recipeIdSnap) recipeIdSnap = r.recipeId;
+
+        // Cantidad consumida = qty_receta × factor_merma × qty_vendida.
+        // wastagePercent en receta + factor merma adicional del Ingredient
+        // (peso bruto/neto) ya está bakeado en Ingredient.cost.
+        const wastageFactor = 1 + (Number(r.wastagePercent || 0) / 100);
+        const neededUnit = Number(r.quantity) * wastageFactor;
+        const needed = neededUnit * Number(oi.quantity || 1);
+
+        // Costo unitario al momento (snapshot del costo del ingrediente).
+        // Ingredient.cost se mantiene como cache del costPerBase calculado.
+        const unitCost = Number(r.ingredient.cost || 0);
+        cmvUnitario += neededUnit * unitCost; // por 1 unidad del MenuItem
+
+        // 1. Decremento de stock + lectura del nuevo balance (en misma tx
+        //    para cache exacto en StockMovement.balanceAfter).
+        const updated = await prisma.ingredient.update({
+          where: { id: r.ingredientId },
           data: { stock: { decrement: needed } },
+          select: { id: true, stock: true, baseUnit: true, locationId: true },
         });
+
+        // 2. StockMovement (nuevo libro mayor). locationId del Ingredient,
+        //    no del request — el ingrediente puede vivir en otra sucursal
+        //    si el seed/admin lo configuró así.
+        const ingLocationId = updated.locationId || locationId;
+        await prisma.stockMovement.create({
+          data: {
+            ingredientId: r.ingredientId,
+            locationId: ingLocationId,
+            delta: -needed,
+            unit: updated.baseUnit,
+            reason: 'SALE',
+            refType: 'order',
+            refId: orderId,
+            balanceAfter: Number(updated.stock),
+            unitCostAtMove: unitCost,
+            notes: `Venta orderItem ${oi.id}`,
+          },
+        });
+
+        // 3. InventoryMovement legacy (mantener mientras reports lo usen).
         await prisma.inventoryMovement.create({
           data: {
             ingredientId: r.ingredientId,
@@ -27,12 +102,25 @@ async function discountInventory(prisma, items, orderId, restaurantId, locationI
             quantity: needed,
             reason: 'Venta',
             orderId: orderId,
-          }
+          },
+        });
+      }
+
+      // 4. Snapshot de costo en el OrderItem. Inmutable — reportes
+      //    históricos calculan margen contra ESTE costo, no contra el
+      //    Ingredient.cost actual que puede cambiar mañana.
+      if (cmvUnitario > 0 || recipeIdSnap) {
+        await prisma.orderItem.update({
+          where: { id: oi.id },
+          data: {
+            costSnapshot: Number(cmvUnitario.toFixed(4)),
+            recipeIdSnap,
+          },
         });
       }
     }
   } catch (e) {
-    console.error('Error descontando inventario:', e.message);
+    console.error('Error descontando inventario:', e.message, e.stack);
   }
 }
 
@@ -271,7 +359,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       });
     });
 
-    await discountInventory(prisma, items, order.id, restaurantId, req.locationId);
+    // Pasamos order.items (con id) para que discountInventory pueda
+    // persistir costSnapshot en cada OrderItem.
+    await discountInventory(prisma, order.items, order.id, restaurantId, req.locationId);
 
     const io = req.app.get('io');
     if (io) {
@@ -377,8 +467,11 @@ async function addRoundHandler(req, res) {
       return { updated: finalOrder, round: newRound };
     });
 
-    // Descontar inventario con el request original (usa menuItemId + quantity).
-    await discountInventory(prisma, items, id, restaurantId, req.locationId);
+    // Descontar inventario SOLO de los items de la nueva ronda. Filtramos
+    // por roundId para no re-descontar items de rondas anteriores que ya
+    // habían sido procesados al crearse.
+    const newRoundItems = (updated.items || []).filter((it) => it.roundId === round.id);
+    await discountInventory(prisma, newRoundItems, id, restaurantId, req.locationId);
 
     // Imprimir SOLO los items de esta ronda en cocina. Fire-and-forget.
     try {
@@ -843,3 +936,5 @@ router.post('/:id/messages', authenticate, requireTenantAccess, validateBody(mes
 });
 
 module.exports = router;
+// Exportar discountInventory para tests E2E sin levantar el servidor HTTP.
+module.exports.discountInventory = discountInventory;
