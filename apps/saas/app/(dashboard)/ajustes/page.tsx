@@ -6,6 +6,7 @@ interface Plan {
   id: string; name: string; displayName: string; price: number; trialDays: number;
   maxLocations: number; maxEmployees: number;
   hasKDS: boolean; hasLoyalty: boolean; hasInventory: boolean; hasReports: boolean; hasAPIAccess: boolean;
+  allowedModules: string[];
   isActive: boolean;
 }
 
@@ -15,6 +16,22 @@ const FEATURES: { key: keyof Plan; label: string }[] = [
   { key: "hasInventory", label: "Control de Inventario" },
   { key: "hasReports",   label: "Reportes Avanzados" },
   { key: "hasAPIAccess", label: "Acceso a API" },
+];
+
+// Mantener sincronizado con apps/backend/src/lib/modules.js (MODULES)
+const MODULES: { key: string; label: string }[] = [
+  { key: "pos_standard",        label: "POS Estándar (cajero)" },
+  { key: "kiosk",               label: "Kiosko de autoservicio" },
+  { key: "delivery",            label: "Delivery / repartidores" },
+  { key: "client_menu",         label: "Menú web del cliente" },
+  { key: "waiters",             label: "TPV de meseros" },
+  { key: "kds",                 label: "Pantalla de cocina (KDS)" },
+  { key: "cash_shift",          label: "Turnos de caja" },
+  { key: "employee_management", label: "Gestión de empleados" },
+  { key: "inventory",           label: "Inventario" },
+  { key: "reports",             label: "Reportes" },
+  { key: "loyalty_advanced",    label: "Loyalty avanzado" },
+  { key: "multi_currency",      label: "Multi-divisa" },
 ];
 
 export default function AjustesPage() {
@@ -65,13 +82,26 @@ export default function AjustesPage() {
     setPlans(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
   }
 
+  function toggleModule(id: string, moduleKey: string) {
+    setPlans(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      const current = Array.isArray(p.allowedModules) ? p.allowedModules : [];
+      const next = current.includes(moduleKey)
+        ? current.filter(m => m !== moduleKey)
+        : [...current, moduleKey];
+      return { ...p, allowedModules: next };
+    }));
+  }
+
   async function savePlan(plan: Plan) {
     setSaving(plan.id);
     await api.patch(`/api/saas/plans/${plan.id}`, {
       displayName: plan.displayName, price: plan.price, trialDays: plan.trialDays,
       maxLocations: plan.maxLocations, maxEmployees: plan.maxEmployees,
       hasKDS: plan.hasKDS, hasLoyalty: plan.hasLoyalty, hasInventory: plan.hasInventory,
-      hasReports: plan.hasReports, hasAPIAccess: plan.hasAPIAccess, isActive: plan.isActive,
+      hasReports: plan.hasReports, hasAPIAccess: plan.hasAPIAccess,
+      allowedModules: plan.allowedModules ?? [],
+      isActive: plan.isActive,
     }).catch(() => null);
     setSaving(null); showToast(`Plan ${plan.displayName} guardado`);
   }
@@ -168,6 +198,25 @@ export default function AjustesPage() {
                           onClick={() => update(plan.id, f.key, !plan[f.key])} />
                       </div>
                     ))}
+                  </div>
+
+                  <div style={{ fontSize:11, color:"var(--text3)", letterSpacing:1, textTransform:"uppercase", margin:"20px 0 10px" }}>
+                    Módulos habilitados ({(plan.allowedModules ?? []).length}/{MODULES.length})
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:2 }}>
+                    {MODULES.map(m => {
+                      const enabled = (plan.allowedModules ?? []).includes(m.key);
+                      return (
+                        <div key={m.key} className="db-toggle-row" style={{ paddingLeft:4 }}>
+                          <div className="db-toggle-label">
+                            {m.label}
+                            <div style={{ fontSize:10, color:"var(--text3)", fontFamily:"DM Mono,monospace", marginTop:2 }}>{m.key}</div>
+                          </div>
+                          <div className={`db-toggle ${enabled ? "on" : ""}`}
+                            onClick={() => toggleModule(plan.id, m.key)} />
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <button className="db-btn db-btn-orange" style={{ marginTop:16, minWidth:140 }}
