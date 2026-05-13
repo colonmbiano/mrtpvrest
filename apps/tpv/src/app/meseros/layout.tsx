@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect } from "react";
-import { Map, List, ShoppingBag } from "lucide-react";
+import { Map, List, ShoppingBag, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
@@ -9,7 +9,12 @@ import { useTicketStore } from "@/store/ticketStore";
 export default function WaiterLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentEmployee, isLocked } = useTPVAuth();
+  const { currentEmployee, isLocked, logout } = useTPVAuth();
+
+  const handleLogout = () => {
+    logout();
+    router.replace("/locked");
+  };
 
   const handleTakeout = () => {
     useTicketStore.getState().updateTicket({ type: "TAKEOUT" });
@@ -52,7 +57,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
           <span className="text-[15px] font-black text-white tracking-tight">Salón · Centro</span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-md px-3 py-1.5 rounded-full">
             <div className="w-6 h-6 rounded-full bg-[#ffb84d] text-[#0a0a0c] text-[10px] flex items-center justify-center font-black">
               {currentEmployee?.name?.substring(0, 2).toUpperCase() || "SR"}
@@ -61,6 +66,14 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
               {currentEmployee?.name?.toUpperCase() || "MESERO"}
             </span>
           </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            aria-label="Salir"
+            className="w-10 h-10 min-h-[40px] rounded-full bg-white/5 border border-white/10 backdrop-blur-md flex items-center justify-center text-white/60 active:scale-95 transition-all hover:text-red-400 hover:border-red-400/30"
+          >
+            <LogOut size={16} strokeWidth={2.5} />
+          </button>
         </div>
       </header>
 

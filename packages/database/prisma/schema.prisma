@@ -265,6 +265,14 @@ model Restaurant {
   orders           Order[]
   suppliers        Supplier[]
 
+  // FASE INVENTARIO/COSTEO · taxonomía + recetario (multi-tenant scope)
+  ingredientTypes      IngredientType[]
+  ingredientCategories IngredientCategory[]
+  ingredients          Ingredient[]
+  recipes              Recipe[]
+  subRecipes           SubRecipe[]
+  pricingPolicies      PricingPolicy[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -333,9 +341,14 @@ model Location {
   zones             Zone[]
   taxConfigs        TaxConfig[]
 
-  devices           Device[]
-  tasks             Task[]
-  printerGroups     PrinterGroup[]
+  devices       Device[]
+  tasks         Task[]
+  printerGroups PrinterGroup[]
+
+  // FASE INVENTARIO/COSTEO · stock e inventario por sucursal
+  stockMovements StockMovement[]
+  purchaseOrders PurchaseOrder[]
+  physicalCounts PhysicalCount[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -375,6 +388,12 @@ model User {
   loyalty       LoyaltyAccount[]
   refreshTokens RefreshToken[]
   landingEdits  LandingContent[] @relation("LandingContentUpdater")
+
+  // FASE INVENTARIO/COSTEO · auditoría de quién movió stock / aprobó mermas
+  stockMovements     StockMovement[]
+  wastesApproved     WasteLog[]      @relation("WasteApprovedBy")
+  purchaseOrdersMade PurchaseOrder[]
+  physicalCountsLed  PhysicalCount[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -434,6 +453,9 @@ model Category {
 
   printerGroups CategoryPrinterGroup[]
 
+  // FASE INVENTARIO/COSTEO · política de margen por categoría
+  pricingPolicies PricingPolicy[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -471,6 +493,9 @@ model MenuItem {
   complements    MenuItemComplement[]
   recipeItems    RecipeItem[]
 
+  // FASE INVENTARIO/COSTEO · escandallo final (1:1 opcional con Recipe)
+  recipe Recipe?
+
   printerGroups MenuItemPrinterGroup[]
 
   createdAt DateTime @default(now())
@@ -481,20 +506,20 @@ model MenuItem {
 }
 
 model ModifierGroup {
-  id          String     @id @default(cuid())
-  menuItemId  String
-  menuItem    MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
-  name        String
-  required    Boolean    @default(false)
-  multiSelect Boolean    @default(false)
+  id                 String     @id @default(cuid())
+  menuItemId         String
+  menuItem           MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  name               String
+  required           Boolean    @default(false)
+  multiSelect        Boolean    @default(false)
   // Rango de selección. 0 = sin restricción por ese lado.
   // Ejemplo: "Elige 2 a 5 ingredientes" -> minSelection=2, maxSelection=5
-  minSelection Int @default(0)
-  maxSelection Int @default(0)
+  minSelection       Int        @default(0)
+  maxSelection       Int        @default(0)
   // "Los primeros N modificadores no cobran extra" (ej. 2 toppings gratis,
   // los siguientes con priceAdd). 0 = todos cobran.
-  freeModifiersLimit Int @default(0)
-  modifiers   Modifier[]
+  freeModifiersLimit Int        @default(0)
+  modifiers          Modifier[]
 
   @@map("modifier_groups")
 }
@@ -604,13 +629,13 @@ model Order {
   cashCollectedAt DateTime?
   cashCollectedBy String?
 
-  conektaOrderId   String?
-  conektaChargeId  String?
-  paymentProvider        String?  // MERCADOPAGO | STRIPE | CONEKTA | ...
-  paymentProviderRef     String?  // ID de checkout/preferencia
-  paymentProviderId      String?  // ID del pago después de cobrar
-  paymentProviderStatus  String?  // status crudo de la pasarela
-  estimatedMinutes Int?
+  conektaOrderId        String?
+  conektaChargeId       String?
+  paymentProvider       String? // MERCADOPAGO | STRIPE | CONEKTA | ...
+  paymentProviderRef    String? // ID de checkout/preferencia
+  paymentProviderId     String? // ID del pago después de cobrar
+  paymentProviderStatus String? // status crudo de la pasarela
+  estimatedMinutes      Int?
 
   shiftId String?
   shift   CashShift? @relation(fields: [shiftId], references: [id])
@@ -692,6 +717,13 @@ model OrderItem {
   // emitir comandas separadas por tiempo y evitar que el plato fuerte
   // salga antes que la entrada.
   course String?
+
+  // FASE INVENTARIO/COSTEO · SNAPSHOT INMUTABLE al cobrar.
+  // Si el costo de un ingrediente sube/baja después de esta venta, los
+  // reportes históricos NO se recalculan. Esta es la única forma de
+  // tener números contables defendibles ante el cliente y Hacienda.
+  costSnapshot Float? // CMV (costo de materia prima) al momento de venta
+  recipeIdSnap String? // id de Recipe usada (auditoría — referencia débil, no FK)
 
   @@index([roundId])
   @@index([seatNumber])
@@ -818,7 +850,7 @@ model RestaurantConfig {
   pointsPerTen     Int   @default(1)
   pointsValuePesos Float @default(0.10)
 
-  storefrontTheme  String @default("KAWAII") // KAWAII | HALO | BRUTALIST
+  storefrontTheme String @default("KAWAII") // KAWAII | HALO | BRUTALIST
 
   updatedAt DateTime @updatedAt
 
@@ -830,29 +862,29 @@ model TicketConfig {
   locationId String?   @unique
   location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  businessName        String
-  header              String  @default("")
-  subheader           String  @default("")
-  footer              String  @default("Gracias por su preferencia")
-  showLogo            Boolean @default(true)
-  showAddress         Boolean @default(true)
-  showPhone           Boolean @default(true)
-  address             String  @default("")
-  phone               String  @default("")
-  
-  // Nuevas opciones de personalización
-  paperWidth          String  @default("80mm")   // "58mm" | "80mm"
-  fontFamily          String  @default("monospace") // "monospace" | "sans-serif" | "serif"
-  fontSize            String  @default("medium")    // "small" | "medium" | "large"
-  compactMode         Boolean @default(false)
-  
-  showOrderNumber     Boolean @default(true)
-  showCustomerData    Boolean @default(true)
-  showItemsPrice      Boolean @default(true)
+  businessName String
+  header       String  @default("")
+  subheader    String  @default("")
+  footer       String  @default("Gracias por su preferencia")
+  showLogo     Boolean @default(true)
+  showAddress  Boolean @default(true)
+  showPhone    Boolean @default(true)
+  address      String  @default("")
+  phone        String  @default("")
 
-  showWifi            Boolean @default(false)
-  wifiSsid            String?
-  wifiPassword        String?
+  // Nuevas opciones de personalización
+  paperWidth  String  @default("80mm") // "58mm" | "80mm"
+  fontFamily  String  @default("monospace") // "monospace" | "sans-serif" | "serif"
+  fontSize    String  @default("medium") // "small" | "medium" | "large"
+  compactMode Boolean @default(false)
+
+  showOrderNumber  Boolean @default(true)
+  showCustomerData Boolean @default(true)
+  showItemsPrice   Boolean @default(true)
+
+  showWifi     Boolean @default(false)
+  wifiSsid     String?
+  wifiPassword String?
 
   showPoints          Boolean @default(true)
   showTip             Boolean @default(true)
@@ -912,8 +944,8 @@ model Printer {
   // categoría / item, y todas las impresoras del group reciben copia.
   printerGroups PrinterGroupMember[]
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -946,11 +978,11 @@ model PrinterGroup {
 }
 
 model PrinterGroupMember {
-  id              String       @id @default(cuid())
-  printerGroupId  String
-  printerGroup    PrinterGroup @relation(fields: [printerGroupId], references: [id], onDelete: Cascade)
-  printerId       String
-  printer         Printer      @relation(fields: [printerId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  printerGroupId String
+  printerGroup   PrinterGroup @relation(fields: [printerGroupId], references: [id], onDelete: Cascade)
+  printerId      String
+  printer        Printer      @relation(fields: [printerId], references: [id], onDelete: Cascade)
 
   @@unique([printerGroupId, printerId])
   @@index([printerId])
@@ -958,11 +990,11 @@ model PrinterGroupMember {
 }
 
 model CategoryPrinterGroup {
-  id              String       @id @default(cuid())
-  categoryId      String
-  category        Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  printerGroupId  String
-  printerGroup    PrinterGroup @relation(fields: [printerGroupId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  categoryId     String
+  category       Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  printerGroupId String
+  printerGroup   PrinterGroup @relation(fields: [printerGroupId], references: [id], onDelete: Cascade)
 
   @@unique([categoryId, printerGroupId])
   @@index([printerGroupId])
@@ -970,11 +1002,11 @@ model CategoryPrinterGroup {
 }
 
 model MenuItemPrinterGroup {
-  id              String       @id @default(cuid())
-  menuItemId      String
-  menuItem        MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
-  printerGroupId  String
-  printerGroup    PrinterGroup @relation(fields: [printerGroupId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  menuItemId     String
+  menuItem       MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  printerGroupId String
+  printerGroup   PrinterGroup @relation(fields: [printerGroupId], references: [id], onDelete: Cascade)
 
   @@unique([menuItemId, printerGroupId])
   @@index([printerGroupId])
@@ -1015,32 +1047,91 @@ model Supplier {
   notes       String       @default("")
   isActive    Boolean      @default(true)
   ingredients Ingredient[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+
+  // FASE INVENTARIO/COSTEO · multi-supplier + órdenes de compra
+  ingredientSuppliers IngredientSupplier[]
+  purchaseOrders      PurchaseOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId])
 }
 
+// FASE INVENTARIO/COSTEO · Ingrediente normalizado a baseUnit (g/ml/pz).
+// Mantiene campos legacy (unit, cost, conversionFactor) para no romper
+// código existente en orders.routes/inventory.routes que aún los usa.
+// Migración gradual: nuevas features (Recipe, StockMovement) usan
+// baseUnit + costPerBase calculado.
 model Ingredient {
-  id         String    @id @default(cuid())
-  locationId String?
-  location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  // restaurantId redundante con location.restaurantId pero indispensable
+  // para queries cross-location y para FKs polimórficas en StockMovement.
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  locationId   String?
+  location     Location?  @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  name             String
-  unit             String              @default("pz")
-  stock            Float               @default(0)
-  minStock         Float               @default(0)
-  cost             Float               @default(0)
-  barcode          String?
-  purchaseUnit     String?
-  purchaseCost     Float?
-  conversionFactor Float               @default(1)
-  supplierId       String?
-  supplier         Supplier?           @relation(fields: [supplierId], references: [id])
-  isActive         Boolean             @default(true)
-  recipeItems      RecipeItem[]
-  movements        InventoryMovement[]
-  batches          InventoryBatch[]
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  name        String
+  description String?
+
+  // ── Taxonomía referenciable (TIPO + CATEGORIA) ──
+  typeId     String?
+  type       IngredientType?     @relation(fields: [typeId], references: [id])
+  categoryId String?
+  category   IngredientCategory? @relation(fields: [categoryId], references: [id])
+
+  // ── Unidad base normalizada (lo que dicta el Excel real) ──
+  // Toda receta, stock y movimiento se mide en esta unidad.
+  baseUnit IngredientBaseUnit @default(PIECE)
+
+  // ── Compras ──
+  unit             String  @default("pz") // LEGACY: unidad libre
+  purchaseUnit     String? // "Caja de 24", "Bulto 25kg"
+  purchaseQty      Float   @default(1) // cantidad por unidad de compra (24, 25000g, etc.)
+  purchaseCost     Float? // precio de la unidad de compra
+  conversionFactor Float   @default(1) // LEGACY: purchase → base (mantener por compat)
+
+  // ── Factor de corrección (peso bruto → neto, merma de prep) ──
+  // Distinto del conversionFactor. Ej: longaniza 1000g bruto → 950g neto.
+  pesoBruto Float? // cantidad comprada (mismas unidades que purchaseQty)
+  pesoNeto  Float? // cantidad utilizable después de pelar/limpiar/desemilar
+
+  // ── Stock ──
+  stock    Float @default(0) // en baseUnit
+  minStock Float @default(0) // umbral de alerta
+
+  // costPerBase (computed en código): purchaseCost / purchaseQty / (pesoNeto/pesoBruto)
+  cost Float @default(0) // LEGACY cache de costPerBase para reportes rápidos
+
+  barcode String?
+
+  // ── Flags ──
+  isPackaging Boolean @default(false) // empaque para delivery (charolas, vasos)
+  isActive    Boolean @default(true)
+
+  // ── Multi-supplier ──
+  supplierId String?
+  supplier   Supplier?            @relation(fields: [supplierId], references: [id])
+  suppliers  IngredientSupplier[]
+
+  // ── Relaciones ──
+  recipeItems        RecipeItem[]
+  subRecipeItems     SubRecipeItem[]
+  movements          InventoryMovement[] // LEGACY (mantener mientras orders.routes lo use)
+  stockMovements     StockMovement[]
+  batches            InventoryBatch[]
+  purchaseOrderItems PurchaseOrderItem[]
+  physicalCountItems PhysicalCountItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId])
+  @@index([restaurantId, isPackaging])
+  @@index([restaurantId, typeId])
+  @@index([restaurantId, categoryId])
+  @@index([locationId])
 }
 
 model InventoryBatch {
@@ -1061,15 +1152,37 @@ model InventoryBatch {
   @@map("inventory_batches")
 }
 
+// RecipeItem · ítem dentro de una receta (Recipe) o de la receta directa
+// del MenuItem (legacy). Permite también apuntar a una SubRecipe.
+// Reglas (validar en código, no en DB):
+//   - exactamente UNO de {recipeId, menuItemId} debe estar presente
+//   - exactamente UNO de {ingredientId, subRecipeId} debe estar presente
 model RecipeItem {
-  id           String     @id @default(cuid())
-  menuItemId   String
-  menuItem     MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
-  ingredientId String
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
-  quantity       Float
-  wastagePercent Float      @default(0)
-  createdAt      DateTime   @default(now())
+  id String @id @default(cuid())
+
+  // Pertenece a una Recipe (nuevo) o directamente a un MenuItem (legacy).
+  recipeId   String?
+  recipe     Recipe?   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  menuItemId String?
+  menuItem   MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  // Lo que se consume: un Ingredient directo o una SubRecipe.
+  ingredientId String?
+  ingredient   Ingredient? @relation(fields: [ingredientId], references: [id])
+  subRecipeId  String?
+  subRecipe    SubRecipe?  @relation(fields: [subRecipeId], references: [id])
+
+  quantity       Float // cantidad en `unit`
+  unit           IngredientBaseUnit @default(GRAM)
+  wastagePercent Float              @default(0) // % de merma adicional al usar
+  notes          String?
+
+  createdAt DateTime @default(now())
+
+  @@index([recipeId])
+  @@index([menuItemId])
+  @@index([ingredientId])
+  @@index([subRecipeId])
 }
 
 model InventoryMovement {
@@ -1138,18 +1251,18 @@ model Employee {
   // se necesita autorizar una operación sensible a empleados puntuales
   // sin promoverlos a un rol superior. Default false para principio de
   // mínimo privilegio: el admin tiene que activarlos explícitamente.
-  canCancelItems     Boolean @default(false)  // Anular productos ya enviados a cocina
-  canApplyDiscounts  Boolean @default(false)  // Aplicar cortesías o descuentos al ticket
-  canReopenTables    Boolean @default(false)  // Reabrir una cuenta cerrada
-  canManageUsers     Boolean @default(false)  // Crear/editar otros empleados
+  canCancelItems    Boolean @default(false) // Anular productos ya enviados a cocina
+  canApplyDiscounts Boolean @default(false) // Aplicar cortesías o descuentos al ticket
+  canReopenTables   Boolean @default(false) // Reabrir una cuenta cerrada
+  canManageUsers    Boolean @default(false) // Crear/editar otros empleados
 
   shifts       EmployeeShift[]
   shiftsOpened CashShift[]     @relation("ShiftOpenedBy")
   shiftsClosed CashShift[]     @relation("ShiftClosedBy")
   taskLogs     TaskLog[]
 
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model EmployeeShift {
@@ -1210,7 +1323,7 @@ model CashShift {
   // Cierre Ciego: cuando es true el cajero NO ve el efectivo esperado al
   // momento de cerrar. Solo declara su conteo y el sistema calcula la
   // diferencia (sobrante/faltante) en el reporte para el supervisor.
-  blindClose Boolean @default(false)
+  blindClose   Boolean @default(false)
   // Snapshot del efectivo esperado calculado al cierre (sales en efectivo +
   // openingFloat - expenses). Null mientras el turno está abierto.
   expectedCash Float?
@@ -1544,8 +1657,8 @@ model Table {
   // "Patio", etc. Cada negocio define las suyas desde el panel de
   // configuración del TPV. Nullable para mesas "sin zona" (mesas extra que se
   // sacan en días no contemplados, mesas heredadas, etc.).
-  zoneId     String?
-  zone       Zone?    @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  zoneId String?
+  zone   Zone?   @relation(fields: [zoneId], references: [id], onDelete: SetNull)
 
   name     String // "Mesa 1", "Barra 3", "Terraza A"
   // Coordenadas del mapa editable del TPV. En la misma unidad que la UI del
@@ -1582,7 +1695,7 @@ model Zone {
   locationId String
   location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  name     String  // visible al usuario, único dentro del local
+  name     String // visible al usuario, único dentro del local
   icon     String? // emoji u id de icono para el chip ("🌴", "🛋️"...)
   order    Int     @default(0) // orden de presentación en filtros/lista
   isActive Boolean @default(true)
@@ -1689,20 +1802,20 @@ model AccessLog {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Device {
-  id           String    @id @default(cuid())
-  tenantId     String
-  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  locationId   String
-  location     Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  
-  name         String
-  type         String    // "POS", "KDS", "WAITER"
-  deviceToken  String    @unique
-  isActive     Boolean   @default(true)
-  lastPingAt   DateTime?
-  
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  name        String
+  type        String // "POS", "KDS", "WAITER"
+  deviceToken String    @unique
+  isActive    Boolean   @default(true)
+  lastPingAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([locationId])
   @@index([tenantId])
@@ -1714,35 +1827,35 @@ model Device {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Task {
-  id           String     @id @default(cuid())
-  locationId   String
-  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
   title        String
   description  String?
   type         String
-  pointsReward Int        @default(10)
+  pointsReward Int     @default(10)
   frequency    String?
-  isActive     Boolean    @default(true)
+  isActive     Boolean @default(true)
 
-  logs         TaskLog[]
+  logs TaskLog[]
 
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([locationId])
   @@map("tasks")
 }
 
 model TaskLog {
-  id           String    @id @default(cuid())
-  taskId       String
-  task         Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  employeeId   String
-  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  
+  id         String   @id @default(cuid())
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
   pointsEarned Int
-  completedAt  DateTime  @default(now())
+  completedAt  DateTime @default(now())
   notes        String?
 
   @@index([employeeId])
@@ -1756,7 +1869,7 @@ model TaskLog {
 
 model SystemLog {
   id        String   @id @default(cuid())
-  level     String   // INFO | WARN | ERROR | CRITICAL
+  level     String // INFO | WARN | ERROR | CRITICAL
   message   String
   stack     String?
   path      String?
@@ -1796,4 +1909,366 @@ model OtaBundle {
   @@unique([appId, channel, version])
   @@index([appId, channel, isActive, createdAt])
   @@map("ota_bundles")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FASE INVENTARIO / COSTEO / RECETAS
+// Diseñado a partir del Excel real de Eduardo (Costeo de recetas — USD).
+// Convenciones:
+//   - Recetas → restaurantId (compartidas entre sucursales)
+//   - Stock / Movimientos / Compras → locationId (cada sucursal su libro)
+//   - Snapshot de costo al cobrar en OrderItem.costSnapshot (NO recalcular
+//     reportes históricos cuando suban precios de ingredientes)
+//   - Unidad base normalizada (g/ml/pieza) — Kg y L se convierten a g/ml
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum IngredientBaseUnit {
+  GRAM
+  ML
+  PIECE
+}
+
+// ── Taxonomía referenciable ──────────────────────────────────────────────
+// 4 TIPOS (estación operativa) × 10 CATEGORIAS (familia merchandise).
+// Tabla en lugar de enum: cada restaurante puede agregar las suyas.
+
+model IngredientType {
+  id           String       @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String // "BARRA", "COCINA", "DOMICILIOS", "INSUMOS"
+  isActive     Boolean      @default(true)
+  ingredients  Ingredient[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
+  @@map("ingredient_types")
+}
+
+model IngredientCategory {
+  id           String       @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String // "PROTEINAS", "LACTEOS Y DERIVADOS", ...
+  color        String? // hex para agrupar en reportes de gasto
+  isActive     Boolean      @default(true)
+  ingredients  Ingredient[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
+  @@map("ingredient_categories")
+}
+
+// ── Multi-supplier con historial de precios ──────────────────────────────
+// La relación 1:1 Ingredient.supplierId se conserva como "default supplier".
+// Esta tabla permite múltiples proveedores con vigencia de precio.
+
+model IngredientSupplier {
+  id           String     @id @default(cuid())
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  supplierId   String
+  supplier     Supplier   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  purchaseUnit String // "Caja de 24", "Bulto 25kg"
+  purchaseQty  Float // cantidad por unidad de compra
+  price        Float // precio en esa unidad
+  validFrom    DateTime  @default(now())
+  validTo      DateTime? // null = vigente
+  isPreferred  Boolean   @default(false)
+  notes        String?
+  createdAt    DateTime  @default(now())
+
+  @@index([ingredientId, validFrom])
+  @@index([supplierId])
+  @@map("ingredient_suppliers")
+}
+
+// ── SubRecipe (Preparaciones base) ───────────────────────────────────────
+// Salsa verde, mezcla de quesos, sal preparada para pollo, etc.
+// Se preparan en lote y se usan en múltiples platos.
+
+model SubRecipe {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+
+  // Rendimiento esperado: de Xg de insumos crudos sale Yg de subreceta
+  // (cocción, evaporación, descarte de huesos, etc.).
+  yieldQty       Float // 800 (gramos resultantes)
+  yieldUnit      IngredientBaseUnit // GRAM / ML / PIECE
+  marginErrorPct Float              @default(0) // % de pérdida adicional durante prep
+
+  // computed (en código): costPerYieldUnit = sum(items.cost) / yieldQty / (1 - marginErrorPct/100)
+
+  items         SubRecipeItem[] @relation("SubRecipeItems")
+  // Esta SubRecipe usada como item dentro de otra SubRecipe (anidación)
+  usedAsNested  SubRecipeItem[] @relation("NestedSubRecipe")
+  usedInRecipes RecipeItem[]
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
+  @@map("subrecipes")
+}
+
+// SubRecipeItem · ítem dentro de una SubRecipe.
+// Validación en código: exactamente UNO de {ingredientId, nestedSubRecipeId}.
+model SubRecipeItem {
+  id          String    @id @default(cuid())
+  subRecipeId String
+  subRecipe   SubRecipe @relation("SubRecipeItems", fields: [subRecipeId], references: [id], onDelete: Cascade)
+
+  ingredientId      String?
+  ingredient        Ingredient? @relation(fields: [ingredientId], references: [id])
+  nestedSubRecipeId String?
+  nestedSubRecipe   SubRecipe?  @relation("NestedSubRecipe", fields: [nestedSubRecipeId], references: [id])
+
+  qty   Float
+  unit  IngredientBaseUnit
+  notes String?
+
+  @@index([subRecipeId])
+  @@index([ingredientId])
+  @@index([nestedSubRecipeId])
+  @@map("subrecipe_items")
+}
+
+// ── Recipe (Escandallo final) ────────────────────────────────────────────
+// 1:1 opcional con MenuItem. Guarda metadatos de costeo + pricing canal.
+// El precio que cobra el TPV sigue siendo MenuItem.price; aquí guardamos
+// el precio "con domicilio" y la comisión de plataforma para reportes.
+
+model Recipe {
+  id           String     @id @default(cuid())
+  menuItemId   String     @unique
+  menuItem     MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  // Costeo
+  marginErrorPct  Float  @default(0) // pérdida durante prep adicional al wastage por ingrediente
+  targetMarginPct Float? // override del PricingPolicy si existe
+
+  // Pricing canal (no reemplaza MenuItem.price)
+  priceDelivery         Float? // precio para apps de delivery (Rappi/Didi)
+  platformCommissionPct Float? // ej. 27 (Rappi)
+
+  // computed:
+  //   totalCost     = sum(items.computedCost)        // CMV
+  //   priceDineIn   = MenuItem.price
+  //   marginDineIn  = (priceDineIn - totalCost) / priceDineIn
+  //   marginDeliv   = (priceDelivery - totalCost - priceDelivery*platformCommissionPct/100) / priceDelivery
+
+  items     RecipeItem[]
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([restaurantId])
+  @@map("recipes")
+}
+
+// ── PricingPolicy ────────────────────────────────────────────────────────
+// Margen meta por categoría (o default del restaurante con categoryId=null).
+// Recipe.targetMarginPct sobreescribe esto si está seteado.
+
+model PricingPolicy {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  categoryId   String?
+  category     Category?  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  targetMarginPct Float // ej. 70 cocteles, 75 entradas, 65 fuertes
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, categoryId])
+  @@index([restaurantId])
+  @@map("pricing_policies")
+}
+
+// ── StockMovement (libro mayor unificado) ────────────────────────────────
+// Reemplaza el viejo InventoryMovement (que se deja vivo por backward compat
+// mientras se migra orders.routes.js). Toda operación que altera stock
+// produce 1+ filas aquí. Reportes de inventario = SUM(delta) por ingredientId.
+
+enum StockMovementReason {
+  PURCHASE // entrada por compra recibida
+  SALE // salida por venta (auto-rebajado al cobrar)
+  WASTE // merma registrada (relacionada con WasteLog)
+  ADJUSTMENT // ajuste manual del manager
+  TRANSFER_IN // recibido de otra sucursal
+  TRANSFER_OUT // enviado a otra sucursal
+  PREP_CONSUME // consumido al preparar una SubRecipe
+  PREP_YIELD // generado al terminar una SubRecipe
+  PHYSICAL_COUNT // ajuste por conteo físico
+  RETURN // devolución a proveedor
+}
+
+model StockMovement {
+  id           String     @id @default(cuid())
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  locationId   String
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  delta  Float // + entrada / - salida en baseUnit del ingrediente
+  unit   IngredientBaseUnit
+  reason StockMovementReason
+
+  // FK polimórfica: refType ∈ 'order'|'purchaseOrder'|'wasteLog'|'physicalCount'|'subRecipe'|null
+  refType String?
+  refId   String?
+
+  // Balance después de este movimiento — cache para no recalcular toda
+  // la historia en cada consulta. Se llena en la misma tx que el insert.
+  balanceAfter Float
+
+  unitCostAtMove Float? // para valuación (FIFO o promedio móvil)
+  userId         String?
+  user           User?   @relation(fields: [userId], references: [id])
+  notes          String?
+
+  // Relación 1:1 opcional con WasteLog (cuando reason=WASTE)
+  wasteLog WasteLog?
+
+  createdAt DateTime @default(now())
+
+  @@index([ingredientId, createdAt])
+  @@index([locationId, createdAt])
+  @@index([refType, refId])
+  @@map("stock_movements")
+}
+
+// ── WasteLog (detalle de mermas) ─────────────────────────────────────────
+// Cada WasteLog tiene 1 StockMovement con reason=WASTE.
+
+enum WasteReason {
+  EXPIRED
+  DAMAGED
+  COURTESY
+  OVERPREP
+  CONTAMINATION
+  STAFF_MEAL
+  TEST_KITCHEN
+  OTHER
+}
+
+model WasteLog {
+  id              String        @id @default(cuid())
+  stockMovementId String        @unique
+  stockMovement   StockMovement @relation(fields: [stockMovementId], references: [id], onDelete: Cascade)
+
+  reason       WasteReason
+  reasonDetail String?
+  photoUrl     String?
+
+  approvedByUserId String?
+  approvedByUser   User?   @relation("WasteApprovedBy", fields: [approvedByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("waste_logs")
+}
+
+// ── PurchaseOrder + recepción ────────────────────────────────────────────
+
+enum PurchaseOrderStatus {
+  DRAFT
+  ORDERED
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  poNumber    String // PO-2026-0001
+  status      PurchaseOrderStatus @default(DRAFT)
+  expectedAt  DateTime?
+  receivedAt  DateTime?
+  totalAmount Float               @default(0)
+  notes       String?
+
+  items       PurchaseOrderItem[]
+  createdById String?
+  createdBy   User?               @relation(fields: [createdById], references: [id])
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([locationId, poNumber])
+  @@index([locationId, status])
+  @@index([supplierId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  ingredientId    String
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+
+  qtyOrdered  Float // en purchaseUnit
+  qtyReceived Float @default(0)
+  unitPrice   Float
+  lineTotal   Float @default(0)
+
+  @@index([purchaseOrderId])
+  @@index([ingredientId])
+  @@map("purchase_order_items")
+}
+
+// ── PhysicalCount (conteo físico) ────────────────────────────────────────
+
+model PhysicalCount {
+  id          String              @id @default(cuid())
+  locationId  String
+  location    Location            @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  startedAt   DateTime            @default(now())
+  closedAt    DateTime?
+  status      String              @default("OPEN") // OPEN | CLOSED
+  createdById String?
+  createdBy   User?               @relation(fields: [createdById], references: [id])
+  items       PhysicalCountItem[]
+  notes       String?
+
+  @@index([locationId, startedAt])
+  @@map("physical_counts")
+}
+
+model PhysicalCountItem {
+  id              String        @id @default(cuid())
+  physicalCountId String
+  physicalCount   PhysicalCount @relation(fields: [physicalCountId], references: [id], onDelete: Cascade)
+  ingredientId    String
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+
+  expectedQty Float // lo que el sistema decía antes del conteo
+  countedQty  Float // lo que el staff contó físicamente
+  // delta = countedQty - expectedQty → se persiste como StockMovement
+  // con reason=PHYSICAL_COUNT al cerrar el conteo.
+
+  notes String?
+
+  @@index([physicalCountId])
+  @@index([ingredientId])
+  @@map("physical_count_items")
 }

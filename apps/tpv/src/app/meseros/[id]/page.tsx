@@ -1,9 +1,15 @@
 import MeserosDetailClient from "./MeserosDetailClient";
 
-// Ruta dinámica para cualquier ID de mesa (M1, M2, M100, etc.). No
-// pre-renderizamos por adelantado: las mesas se crean por restaurante y
-// no las conocemos en build time. Next.js sirve la página dinámicamente.
-export const dynamic = "force-dynamic";
+// Static export para Capacitor: pre-renderizamos UNA página placeholder
+// con id="_" y dynamicParams=false. El cliente lee el id real con
+// useParams() en runtime — la navegación client-side de Next no toca
+// el filesystem, así que el mismo HTML sirve para cualquier mesa.
+// Mismo truco que ya usa /meseros/[id]/orden.
+export function generateStaticParams() {
+  return [{ id: "_" }];
+}
+
+export const dynamicParams = false;
 
 export default function Page({ params }: { params: { id: string } }) {
   return <MeserosDetailClient params={params} />;

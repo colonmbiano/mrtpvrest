@@ -334,7 +334,7 @@ export default function WaiterFloorPlanPage() {
             </button>
           </div>
         ) : isLoading ? (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4 sm:gap-5">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(170px,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4 sm:gap-5">
             {[...Array(10)].map((_, i) => (
               <div
                 key={i}
@@ -350,7 +350,7 @@ export default function WaiterFloorPlanPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4 sm:gap-5 pb-32">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(170px,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4 sm:gap-5 pb-32">
             {filteredTables.map((table) => {
               const phase = derivePhase(table);
               const tone = PHASE_TONE[phase];
