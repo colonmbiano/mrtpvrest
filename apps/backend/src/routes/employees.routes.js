@@ -4,7 +4,13 @@ const crypto  = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { requireModule, MODULES } = require('../lib/modules');
 const router = express.Router();
+
+// Gate del módulo "employee_management". Aplica solo a CRUD admin
+// (POST/PUT/DELETE/GET de listado). NO aplica a /login (PIN del TPV),
+// /me (perfil del user logueado), ni /sync (catálogo offline).
+const gateEmployees = requireModule(MODULES.MODULE_EMPLOYEES);
 
 // Rate-limit para login con PIN: max 10 intentos / 15 min por IP+location.
 // (PIN es 4 dígitos = 10000 combinaciones; sin esto, fuerza bruta tarda < 1min)
@@ -137,7 +143,7 @@ router.get('/sync', authenticate, requireTenantAccess, async (req, res) => {
 });
 
 // GET todos los empleados (Filtrado por Sucursal)
-router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/', authenticate, requireTenantAccess, requireAdmin, gateEmployees, async (req, res) => {
   try {
     // locationId es OPCIONAL: si se envía, filtramos por sucursal; si no,
     // retornamos todos los empleados del restaurante. Antes 400 cuando
@@ -180,7 +186,7 @@ router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res
 });
 
 // GET un empleado
-router.get('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/:id', authenticate, requireTenantAccess, requireAdmin, gateEmployees, async (req, res) => {
   try {
     const emp = await prisma.employee.findFirst({
       where: { id: req.params.id, locationId: req.locationId },
@@ -193,7 +199,7 @@ router.get('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, 
 });
 
 // POST crear empleado
-router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/', authenticate, requireTenantAccess, requireAdmin, gateEmployees, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
@@ -250,7 +256,7 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // PUT actualizar empleado
-router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.put('/:id', authenticate, requireTenantAccess, requireAdmin, gateEmployees, async (req, res) => {
   try {
     const { name, phone, pin, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays, isActive,
       canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout, canManageShifts,
@@ -319,7 +325,7 @@ router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // DELETE eliminar empleado
-router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, gateEmployees, async (req, res) => {
   try {
     const emp = await prisma.employee.findFirst({
       where: { id: req.params.id, locationId: req.locationId }

@@ -1,9 +1,13 @@
 ﻿const express = require('express')
 const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
+const { requireFeatureFlag } = require('../lib/modules')
 const router  = express.Router()
 
-router.get('/points', authenticate, requireTenantAccess, async (req, res) => {
+// Gate: hasLoyalty del plan. Warn-only por default (ENFORCE_PLAN_FLAGS).
+router.use(authenticate, requireTenantAccess, requireFeatureFlag('hasLoyalty', 'Loyalty / Puntos'))
+
+router.get('/points', async (req, res) => {
   try {
     const restaurantId = req.user.restaurantId
     if (!restaurantId) return res.status(400).json({ error: 'Usuario sin restaurante' })
@@ -16,7 +20,7 @@ router.get('/points', authenticate, requireTenantAccess, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al obtener puntos' }) }
 })
 
-router.post('/coupon/validate', authenticate, requireTenantAccess, async (req, res) => {
+router.post('/coupon/validate', async (req, res) => {
   try {
     const { code, orderAmount } = req.body
     const coupon = await prisma.coupon.findUnique({ where: { code: code.toUpperCase() } })
@@ -29,7 +33,7 @@ router.post('/coupon/validate', authenticate, requireTenantAccess, async (req, r
   } catch (e) { res.status(500).json({ error: 'Error al validar cupon' }) }
 })
 
-router.get('/customers', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/customers', requireAdmin, async (req, res) => {
   try {
     const accounts = await prisma.loyaltyAccount.findMany({
       where: { restaurantId: req.user.restaurantId },
@@ -41,7 +45,7 @@ router.get('/customers', authenticate, requireTenantAccess, requireAdmin, async 
   } catch (e) { res.status(500).json({ error: 'Error al obtener clientes' }) }
 })
 
-router.post('/coupons', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/coupons', requireAdmin, async (req, res) => {
   try {
     const { code, description, discountType, discountValue, minOrderAmount, maxUses, expiresAt } = req.body
     const coupon = await prisma.coupon.create({

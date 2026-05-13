@@ -1,9 +1,11 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
+const { requireFeatureFlag } = require('../lib/modules');
 const router = express.Router();
 
-router.use(authenticate, requireTenantAccess);
+// Gate: hasKDS en el plan del tenant. En modo warn-only por default.
+router.use(authenticate, requireTenantAccess, requireFeatureFlag('hasKDS', 'KDS Cocina'));
 
 // Roles autorizados para acciones KDS de cocina (escrituras).
 // Lectura es libre para cualquier empleado autenticado del tenant
