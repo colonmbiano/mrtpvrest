@@ -7,7 +7,11 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { requireFeatureFlag } = require('../lib/modules');
 const router = express.Router();
+
+// Reportes son feature premium del plan.
+router.use(authenticate, requireTenantAccess, requireFeatureFlag('hasReports', 'Reportes IA'));
 
 // Util · rango ISO seguro (default: mes actual).
 function resolveRange(query) {
@@ -24,7 +28,7 @@ function resolveRange(query) {
 // ── GET /api/reports/expenses-summary ────────────────────────────────────
 // Resumen del rango: total OperatingExpense, total PurchaseOrder, breakdown
 // por método de pago, comparativa con el rango ANTERIOR de igual duración.
-router.get('/expenses-summary', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/expenses-summary', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -124,7 +128,7 @@ router.get('/expenses-summary', authenticate, requireTenantAccess, requireAdmin,
 // ── GET /api/reports/expenses-daily ──────────────────────────────────────
 // Serie temporal diaria (para sparkline / chart).
 // Devuelve [{ date, opExpenses, purchases, total }, ...] día a día.
-router.get('/expenses-daily', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/expenses-daily', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });

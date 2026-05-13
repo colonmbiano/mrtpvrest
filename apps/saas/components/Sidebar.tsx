@@ -77,7 +77,7 @@ const navItems = [
 ];
 const negoItems = [
   { href: "/marcas",      label: "Marcas",      icon: <IconStar /> },
-  { href: "/ajustes",     label: "Planes",      icon: <IconSettings /> },
+  { href: "/planes",      label: "Planes",      icon: <IconSettings /> },
   { href: "/facturacion", label: "Facturación", icon: <IconReceipt /> },
 ];
 const sysItems = [

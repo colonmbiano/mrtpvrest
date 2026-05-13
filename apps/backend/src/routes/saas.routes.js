@@ -52,7 +52,8 @@ router.post('/plans', async (req, res) => {
   const {
     name, displayName, price, trialDays,
     maxLocations, maxEmployees,
-    hasKDS, hasLoyalty, hasInventory, hasReports, hasAPIAccess
+    hasKDS, hasLoyalty, hasInventory, hasReports, hasAPIAccess,
+    allowedModules, stripePriceId,
   } = req.body;
 
   if (!name || !displayName || price == null) {
@@ -73,6 +74,8 @@ router.post('/plans', async (req, res) => {
         hasInventory: hasInventory ?? false,
         hasReports:   hasReports   ?? false,
         hasAPIAccess: hasAPIAccess ?? false,
+        allowedModules: Array.isArray(allowedModules) ? allowedModules : [],
+        stripePriceId: stripePriceId || null,
       }
     });
     res.status(201).json(plan);
@@ -86,16 +89,56 @@ router.post('/plans', async (req, res) => {
 router.patch('/plans/:id', async (req, res) => {
   const allowed = [
     'displayName', 'price', 'trialDays', 'maxLocations', 'maxEmployees',
-    'hasKDS', 'hasLoyalty', 'hasInventory', 'hasReports', 'hasAPIAccess', 'isActive'
+    'hasKDS', 'hasLoyalty', 'hasInventory', 'hasReports', 'hasAPIAccess',
+    'allowedModules', 'stripePriceId', 'isActive'
   ];
   const data = {};
-  allowed.forEach(f => { if (req.body[f] !== undefined) data[f] = req.body[f]; });
+  allowed.forEach(f => {
+    if (req.body[f] !== undefined) {
+      // Sanitizar allowedModules: array de strings únicos
+      if (f === 'allowedModules') {
+        data[f] = Array.isArray(req.body[f])
+          ? Array.from(new Set(req.body[f].filter((x) => typeof x === 'string' && x.length > 0)))
+          : [];
+      } else {
+        data[f] = req.body[f];
+      }
+    }
+  });
 
   try {
     const plan = await prisma.plan.update({ where: { id: req.params.id }, data });
     res.json(plan);
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Plan no encontrado' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/saas/plans/:id — soft delete (isActive=false). Mantenemos la
+// fila para que subscriptions históricas sigan referenciando un plan válido.
+router.delete('/plans/:id', async (req, res) => {
+  try {
+    const inUse = await prisma.subscription.count({ where: { planId: req.params.id } });
+    const updated = await prisma.plan.update({
+      where: { id: req.params.id },
+      data: { isActive: false },
+    });
+    res.json({ ok: true, plan: updated, subscriptionsInUse: inUse });
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Plan no encontrado' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/saas/plans/all — incluye inactivos para el panel SUPER_ADMIN
+router.get('/plans/all', async (req, res) => {
+  try {
+    const plans = await prisma.plan.findMany({
+      orderBy: [{ isActive: 'desc' }, { price: 'asc' }],
+    });
+    res.json(plans);
+  } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });

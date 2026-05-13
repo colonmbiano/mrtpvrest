@@ -11,7 +11,11 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { requireFeatureFlag } = require('../lib/modules');
 const router = express.Router();
+
+// Todas las rutas de recetas requieren el plan tener hasInventory.
+router.use(authenticate, requireTenantAccess, requireFeatureFlag('hasInventory', 'Inventario y costeo'));
 
 const VALID_BASE_UNITS = ['GRAM', 'ML', 'PIECE'];
 
@@ -20,7 +24,7 @@ const VALID_BASE_UNITS = ['GRAM', 'ML', 'PIECE'];
 // ═══════════════════════════════════════════════════════════════════════
 
 // GET /api/recipes — lista todas las recetas con totalCost calculado.
-router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -59,7 +63,7 @@ router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res
 });
 
 // GET /api/recipes/by-menu-item/:menuItemId — lee o devuelve null.
-router.get('/by-menu-item/:menuItemId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/by-menu-item/:menuItemId', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const recipe = await prisma.recipe.findFirst({
@@ -85,7 +89,7 @@ router.get('/by-menu-item/:menuItemId', authenticate, requireTenantAccess, requi
 //   menuItemId, marginErrorPct?, targetMarginPct?, priceDelivery?,
 //   platformCommissionPct?, items: [{ ingredientId? | subRecipeId?, quantity, unit, wastagePercent? }]
 // }
-router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -140,7 +144,7 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
   }
 });
 
-router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const r = await prisma.recipe.findFirst({ where: { id: req.params.id, restaurantId } });
@@ -156,7 +160,7 @@ router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, async (re
 // SUBRECIPE · preparaciones base reusables
 // ═══════════════════════════════════════════════════════════════════════
 
-router.get('/subrecipes', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/subrecipes', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const list = await prisma.subRecipe.findMany({
@@ -177,7 +181,7 @@ router.get('/subrecipes', authenticate, requireTenantAccess, requireAdmin, async
   }
 });
 
-router.get('/subrecipes/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/subrecipes/:id', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const sub = await prisma.subRecipe.findFirst({
@@ -198,7 +202,7 @@ router.get('/subrecipes/:id', authenticate, requireTenantAccess, requireAdmin, a
   }
 });
 
-router.post('/subrecipes', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/subrecipes', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const { name, description, yieldQty, yieldUnit, marginErrorPct = 0, items = [] } = req.body || {};
@@ -237,7 +241,7 @@ router.post('/subrecipes', authenticate, requireTenantAccess, requireAdmin, asyn
   }
 });
 
-router.put('/subrecipes/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.put('/subrecipes/:id', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const existing = await prisma.subRecipe.findFirst({ where: { id: req.params.id, restaurantId } });
@@ -279,7 +283,7 @@ router.put('/subrecipes/:id', authenticate, requireTenantAccess, requireAdmin, a
   }
 });
 
-router.delete('/subrecipes/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.delete('/subrecipes/:id', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const sub = await prisma.subRecipe.findFirst({ where: { id: req.params.id, restaurantId } });
@@ -305,7 +309,7 @@ router.delete('/subrecipes/:id', authenticate, requireTenantAccess, requireAdmin
 // TAXONOMÍA · IngredientType + IngredientCategory (por restaurant)
 // ═══════════════════════════════════════════════════════════════════════
 
-router.get('/types', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/types', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const list = await prisma.ingredientType.findMany({
@@ -316,7 +320,7 @@ router.get('/types', authenticate, requireTenantAccess, requireAdmin, async (req
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/types', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/types', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const { name } = req.body || {};
@@ -331,7 +335,7 @@ router.post('/types', authenticate, requireTenantAccess, requireAdmin, async (re
   }
 });
 
-router.put('/types/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.put('/types/:id', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const existing = await prisma.ingredientType.findFirst({ where: { id: req.params.id, restaurantId } });
@@ -349,7 +353,7 @@ router.put('/types/:id', authenticate, requireTenantAccess, requireAdmin, async 
 });
 
 // Soft delete — preserva referencias históricas de Ingredient.typeId.
-router.delete('/types/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.delete('/types/:id', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const existing = await prisma.ingredientType.findFirst({ where: { id: req.params.id, restaurantId } });
@@ -359,7 +363,7 @@ router.delete('/types/:id', authenticate, requireTenantAccess, requireAdmin, asy
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/categories', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/categories', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const list = await prisma.ingredientCategory.findMany({
@@ -370,7 +374,7 @@ router.get('/categories', authenticate, requireTenantAccess, requireAdmin, async
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/categories', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/categories', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const { name, color } = req.body || {};
@@ -385,7 +389,7 @@ router.post('/categories', authenticate, requireTenantAccess, requireAdmin, asyn
   }
 });
 
-router.put('/categories/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.put('/categories/:id', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const existing = await prisma.ingredientCategory.findFirst({ where: { id: req.params.id, restaurantId } });
@@ -403,7 +407,7 @@ router.put('/categories/:id', authenticate, requireTenantAccess, requireAdmin, a
   }
 });
 
-router.delete('/categories/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.delete('/categories/:id', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const existing = await prisma.ingredientCategory.findFirst({ where: { id: req.params.id, restaurantId } });
