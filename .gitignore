@@ -45,6 +45,7 @@ public/assets/
 .worktrees/
 .claude/worktrees/
 .claude/settings.local.json
+scratch/
 
 # Logs y dumps locales
 build_log.txt
