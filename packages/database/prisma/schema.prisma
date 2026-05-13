@@ -273,6 +273,13 @@ model Restaurant {
   subRecipes           SubRecipe[]
   pricingPolicies      PricingPolicy[]
 
+  // FASE COMPRAS/GASTOS · taxonomía de gastos operativos (luz/agua/sueldos/etc).
+  // NOTA: el modelo Expense legacy (de Logística) lleva gastos de viaje por
+  // Ride/Vehicle. OperatingExpense es para gastos del local registrados
+  // desde el TPV — son conceptos distintos, dejados explícitamente separados.
+  operatingExpenseCategories OperatingExpenseCategory[]
+  operatingExpenses          OperatingExpense[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -350,6 +357,9 @@ model Location {
   purchaseOrders PurchaseOrder[]
   physicalCounts PhysicalCount[]
 
+  // FASE COMPRAS/GASTOS · gastos operativos registrados desde el TPV
+  operatingExpenses OperatingExpense[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -394,6 +404,9 @@ model User {
   wastesApproved     WasteLog[]      @relation("WasteApprovedBy")
   purchaseOrdersMade PurchaseOrder[]
   physicalCountsLed  PhysicalCount[]
+
+  // FASE COMPRAS/GASTOS · quién registró el gasto operativo
+  operatingExpensesCreated OperatingExpense[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1337,12 +1350,20 @@ model CashShift {
   totalSales    Float @default(0)
   ordersCount   Int   @default(0)
 
-  expenses ShiftExpense[]
-  orders   Order[]
+  expenses                     ShiftExpense[]
+  orders                       Order[]
+  operatingExpensePayments     OperatingExpense[] @relation("OperatingExpenseCashShift")
+  purchaseOrderPayments        PurchaseOrder[]    @relation("PurchaseOrderCashShift")
 
   @@map("cash_shifts")
 }
 
+// ShiftExpense · cache/snapshot del gasto desde el punto de vista del
+// CIERRE DE CAJA del turno. Es lo que el cajero ve en su corte. Cuando
+// se paga con efectivo de caja (paymentMethod=CASH_DRAWER), creamos
+// SIEMPRE una fila aquí Y una fila en Expense/PurchaseOrder.
+// expenseId y purchaseOrderId permiten rastrear el documento contable
+// que originó este movimiento de caja.
 model ShiftExpense {
   id          String    @id @default(cuid())
   shiftId     String
@@ -1350,8 +1371,18 @@ model ShiftExpense {
   description String
   amount      Float
   category    String    @default("OTHER")
+
+  // Vínculo opcional al documento contable que originó este out de caja.
+  // Exactamente uno de los dos (o ninguno para gastos legacy/manuales).
+  operatingExpenseId String?
+  operatingExpense   OperatingExpense? @relation(fields: [operatingExpenseId], references: [id])
+  purchaseOrderId    String?
+  purchaseOrder      PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id])
+
   createdAt   DateTime  @default(now())
 
+  @@index([operatingExpenseId])
+  @@index([purchaseOrderId])
   @@map("shift_expenses")
 }
 
@@ -2207,7 +2238,14 @@ model PurchaseOrder {
   totalAmount Float               @default(0)
   notes       String?
 
+  // Método de pago. Si CASH_DRAWER, también se crea un ShiftExpense
+  // vinculado al cashShiftId para que el cierre de caja cuadre.
+  paymentMethod ExpensePaymentMethod @default(TRANSFER)
+  cashShiftId   String?  // turno donde se pagó (solo cuando CASH_DRAWER)
+  cashShift     CashShift? @relation("PurchaseOrderCashShift", fields: [cashShiftId], references: [id])
+
   items       PurchaseOrderItem[]
+  shiftExpenses ShiftExpense[]   // 1:N (en teoría siempre 1 cuando es CASH_DRAWER)
   createdById String?
   createdBy   User?               @relation(fields: [createdById], references: [id])
   createdAt   DateTime            @default(now())
@@ -2216,6 +2254,7 @@ model PurchaseOrder {
   @@unique([locationId, poNumber])
   @@index([locationId, status])
   @@index([supplierId])
+  @@index([cashShiftId])
   @@map("purchase_orders")
 }
 
@@ -2271,4 +2310,92 @@ model PhysicalCountItem {
   @@index([physicalCountId])
   @@index([ingredientId])
   @@map("physical_count_items")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FASE COMPRAS / GASTOS · captura desde TPV (foto del ticket o manual)
+//
+// Reglas operativas:
+//   · paymentMethod=CASH_DRAWER → AUTOMÁTICAMENTE se crea un ShiftExpense
+//     vinculado al cashShiftId activo para que el corte de caja del cajero
+//     cuadre perfecto. Se valida que exista turno abierto antes de aceptar.
+//   · paymentMethod=CORPORATE_CARD | TRANSFER → solo registro contable;
+//     no afecta caja del turno.
+//   · Compras de inventario van en PurchaseOrder + StockMovement(PURCHASE).
+//     Gastos generales (luz, agua, sueldos, propinas pagadas) van en Expense.
+//   · Para compras pagadas con efectivo de caja, PurchaseOrder.cashShiftId
+//     se setea y también se crea un ShiftExpense (category=PURCHASE,
+//     description="Compra: <supplier>").
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum ExpensePaymentMethod {
+  CASH_DRAWER       // efectivo de caja (rebaja CashShift via ShiftExpense)
+  CORPORATE_CARD    // tarjeta corporativa (solo contable)
+  TRANSFER          // transferencia bancaria (solo contable)
+}
+
+// ── OperatingExpenseCategory · taxonomía referenciable de gastos del local
+// Sembradas al crear restaurant. Cada restaurant puede agregar las suyas.
+// Default: LUZ, AGUA, INTERNET, GAS, MANTENIMIENTO, SUELDOS,
+// PROPINAS_PAGADAS, OTROS.
+//
+// Nota: el enum ExpenseCategory de Logística (GASOLINA/REFACCION/...) es
+// otro concepto — no confundir. Aquí es taxonomía libre por tenant.
+model OperatingExpenseCategory {
+  id           String       @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name         String       // "LUZ", "AGUA", "SUELDOS", etc.
+  icon         String?      // emoji / icon name (UI hint)
+  color        String?      // hex para reportes
+  isActive     Boolean      @default(true)
+  expenses     OperatingExpense[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
+  @@map("operating_expense_categories")
+}
+
+// ── OperatingExpense · gasto operativo del local (NO inventario) ─────────
+// Para compras de inventario usar PurchaseOrder. Este modelo es para
+// gastos como luz/agua/sueldos/propinas pagadas en efectivo/etc., capturados
+// desde el TPV con foto del ticket o manual.
+model OperatingExpense {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  locationId   String
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  categoryId String?
+  category   OperatingExpenseCategory? @relation(fields: [categoryId], references: [id])
+
+  concept       String                // descripción libre ("Pago CFE bimestre Mayo")
+  amount        Float                 // monto en moneda local
+  paymentMethod ExpensePaymentMethod
+  occurredAt    DateTime              @default(now())
+
+  // Si paymentMethod=CASH_DRAWER, el turno activo donde se descontó.
+  cashShiftId String?
+  cashShift   CashShift? @relation("OperatingExpenseCashShift", fields: [cashShiftId], references: [id])
+  shiftExpenses ShiftExpense[]   // 1:N (siempre 1 cuando es CASH_DRAWER)
+
+  // Adjuntos / metadata
+  photoUrl    String?               // foto del ticket/recibo
+  notes       String?
+
+  // Auditoría
+  createdById String?
+  createdBy   User?      @relation(fields: [createdById], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([restaurantId])
+  @@index([locationId, occurredAt])
+  @@index([categoryId])
+  @@index([cashShiftId])
+  @@map("operating_expenses")
 }
