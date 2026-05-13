@@ -1,7 +1,11 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { requireModule, MODULES } = require('../lib/modules');
 const router = express.Router();
+
+// Gate: módulo "waiters" en plan.allowedModules. Warn-only por default.
+router.use(authenticate, requireTenantAccess, requireModule(MODULES.MODULE_WAITERS));
 
 const bcrypt = require('bcryptjs');
 
@@ -118,7 +122,7 @@ router.get('/:id/orders', async (req, res) => {
 });
 
 // GET todos los meseros (admin)
-router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/', requireAdmin, async (req, res) => {
   try {
     const waiters = await prisma.waiter.findMany({
       include: { shifts: { where: { endAt: null }, take: 1 } },
@@ -129,7 +133,7 @@ router.get('/', authenticate, requireTenantAccess, requireAdmin, async (req, res
 });
 
 // POST crear mesero (admin)
-router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const { name, pin, tables } = req.body;
     if (!name || !pin) return res.status(400).json({ error: 'Nombre y PIN requeridos' });
@@ -166,7 +170,7 @@ router.post('/verify-admin-pin', async (req, res) => {
 });
 
 // PUT actualizar mesero (admin)
-router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const { name, pin, tables, isActive } = req.body;
     const data = {};
@@ -180,7 +184,7 @@ router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, 
 });
 
 // DELETE mesero (admin)
-router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     await prisma.waiter.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
