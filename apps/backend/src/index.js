@@ -159,6 +159,7 @@ app.use('/api/expenses',     require('./routes/expenses.routes'));
 app.use('/api/purchases',    require('./routes/purchases.routes'));
 app.use('/api/recipes',      require('./routes/recipes.routes'));
 app.use('/api/reports',      require('./routes/expenses-reports.routes'));
+app.use('/api/sales',        require('./routes/sales-import.routes'));
 
 app.get('/health', (req, res) => {
   res.json({
