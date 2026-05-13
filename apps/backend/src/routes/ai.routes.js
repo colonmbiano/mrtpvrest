@@ -76,8 +76,8 @@ router.post('/assistant', authenticate, requireTenantAccess, requireAdmin, async
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
     const locationId = req.headers['x-location-id'] || req.query.locationId || null;
 
-    const { messages } = req.body || {};
-    const result = await runAssistant({ messages, restaurantId, locationId });
+    const { messages, period } = req.body || {};
+    const result = await runAssistant({ messages, restaurantId, locationId, period });
     res.json(result);
   } catch (error) {
     if (error?.code) return sendAiError(res, error);

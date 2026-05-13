@@ -182,7 +182,7 @@ export default function ReportesIAPage() {
 
     try {
       apiHistoryRef.current.push({ role: "user", content: clean });
-      const { data } = await api.post("/api/ai/assistant", { messages: apiHistoryRef.current });
+      const { data } = await api.post("/api/ai/assistant", { messages: apiHistoryRef.current, period });
       const history = Array.isArray(data?.messages) ? data.messages : [];
       apiHistoryRef.current = history;
 
