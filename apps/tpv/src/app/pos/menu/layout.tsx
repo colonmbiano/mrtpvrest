@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
 import api from "@/lib/api";
+import { apiOrQueue } from "@/lib/offline";
 import {
   printCustomerReceipt,
   printSplitReceipts,
@@ -184,14 +185,19 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   const handleConfirmDrawerPayment = async (method: string) => {
     if (!payOrder) return;
-    try {
-      await api.put(`/api/orders/${payOrder.id}/payment`, { paymentMethod: method });
-      toast.success("Cobro procesado");
-      setPayOrder(null);
-      fetchOpenOrders();
-    } catch (err: any) {
-      toast.error("Error al cobrar: " + (err?.response?.data?.error || err?.message || ""));
+    const res = await apiOrQueue(
+      "payment",
+      "PUT",
+      `/api/orders/${payOrder.id}/payment`,
+      { paymentMethod: method }
+    );
+    if (!res.ok) {
+      toast.error("Error al cobrar: " + (res.error || ""));
+      return;
     }
+    toast.success(res.queued ? "Cobro en cola · se registrará al volver la red" : "Cobro procesado");
+    setPayOrder(null);
+    fetchOpenOrders();
   };
 
   // FASE 12 · COBRO + IMPRESIÓN DE CUENTA DIVIDIDA (E2E)
@@ -269,25 +275,36 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       // Cerrar orden en el backend (single PUT — la arquitectura actual
       // no acepta múltiples PaymentTransactions; se documenta para
       // follow-up cuando exista POST /:id/payment-transactions).
+      // Si estamos offline, el cobro se encola; los tickets físicos ya
+      // se imprimieron arriba, así que el cajero tiene papel para
+      // conciliar al volver la red.
       toast.loading("Registrando cobro...", { id: toastId });
-      await api.put(`/api/orders/${payOrder.id}/payment`, {
-        paymentMethod: method,
-      });
+      const payRes = await apiOrQueue(
+        "payment",
+        "PUT",
+        `/api/orders/${payOrder.id}/payment`,
+        { paymentMethod: method }
+      );
+      if (!payRes.ok) {
+        toast.error(`Error en el cobro: ${payRes.error || "fallo"}`, { id: toastId });
+        return;
+      }
 
       // Mensaje final compuesto según el outcome de impresión.
       const ticketsOk = printRes.tickets || 0;
       const ticketsFailed = printRes.failed.length;
+      const cobroLabel = payRes.queued ? "Cobro en cola" : "Cobro registrado";
 
       if (ticketsOk === plan.parts && ticketsFailed === 0) {
         toast.success(
-          `Cobro registrado · ${ticketsOk} ticket${
+          `${cobroLabel} · ${ticketsOk} ticket${
             ticketsOk === 1 ? "" : "s"
           } impresos en caja`,
           { id: toastId }
         );
       } else if (ticketsOk > 0) {
         toast.warning(
-          `Cobro OK · ${ticketsOk}/${plan.parts} ticket${
+          `${cobroLabel} · ${ticketsOk}/${plan.parts} ticket${
             plan.parts === 1 ? "" : "s"
           } impresos${
             ticketsFailed > 0 ? ` · ${ticketsFailed} fallaron` : ""
@@ -296,7 +313,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         );
       } else {
         toast.warning(
-          `Cobro registrado · sin impresoras CASHIER activas (${
+          `${cobroLabel} · sin impresoras CASHIER activas (${
             printRes.failed[0]?.error || "sin destinos"
           })`,
           { id: toastId }
