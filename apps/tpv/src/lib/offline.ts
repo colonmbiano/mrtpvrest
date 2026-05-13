@@ -148,11 +148,14 @@ export async function syncOfflineQueue() {
           | undefined;
 
         if (replay && replay.method && replay.path) {
-          // Shape nuevo (apiOrQueue) — replay directo.
+          // Shape nuevo (apiOrQueue) — replay directo con Idempotency-Key
+          // para que el backend deduplique si por alguna razón este tx
+          // se replay-eara dos veces (sync corre 2x antes de markSynced).
+          const cfg = { headers: { 'Idempotency-Key': transaction.id } };
           if (replay.method.toUpperCase() === 'POST') {
-            await api.post(replay.path, replay.body || {});
+            await api.post(replay.path, replay.body || {}, cfg);
           } else if (replay.method.toUpperCase() === 'PUT') {
-            await api.put(replay.path, replay.body || {});
+            await api.put(replay.path, replay.body || {}, cfg);
           } else {
             console.warn(
               `Skipping tx ${transaction.id} — método ${replay.method} no soportado`
