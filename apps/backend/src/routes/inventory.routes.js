@@ -220,7 +220,38 @@ router.post('/bulk-confirm', authenticate, requireTenantAccess, requireAdmin, as
 // resuelve via ingredient.locationId. Actualizamos el stock del ingrediente
 // atómicamente en la misma transacción.
 
+// Movimientos · ahora leen y escriben StockMovement (libro mayor unificado).
+// Mantener la API pública {type, quantity} para no romper el admin UI
+// existente — internamente mapeamos:
+//   IN     → reason=PURCHASE,    delta=+qty
+//   OUT    → reason=ADJUSTMENT,  delta=-qty  (usar /api/waste para mermas)
+//   ADJUST → reason=PHYSICAL_COUNT, delta=newStock-oldStock
 const MOVEMENT_TYPES = new Set(['IN', 'OUT', 'ADJUST']);
+
+const TYPE_TO_REASON = {
+  IN:     'PURCHASE',
+  OUT:    'ADJUSTMENT',
+  ADJUST: 'PHYSICAL_COUNT',
+};
+
+// Vista legacy del shape que la UI vieja esperaba.
+function toLegacyMovement(sm) {
+  // Inferir el tipo legacy desde el reason.
+  let type = 'OUT';
+  if (sm.reason === 'PURCHASE') type = 'IN';
+  else if (sm.reason === 'PHYSICAL_COUNT') type = 'ADJUST';
+  else if (sm.delta > 0) type = 'IN';
+  return {
+    id: sm.id,
+    ingredientId: sm.ingredientId,
+    type,
+    quantity: Math.abs(Number(sm.delta || 0)),
+    reason: sm.notes || sm.reason,
+    orderId: sm.refType === 'order' ? sm.refId : null,
+    createdAt: sm.createdAt,
+    ingredient: sm.ingredient,
+  };
+}
 
 router.get('/movements', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
@@ -228,13 +259,18 @@ router.get('/movements', authenticate, requireTenantAccess, requireAdmin, async 
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
     const take = Math.min(parseInt(req.query.limit, 10) || 100, 500);
-    const where = { ingredient: { locationId } };
+    const where = { locationId };
     if (req.query.ingredientId) where.ingredientId = String(req.query.ingredientId);
-    if (req.query.type && MOVEMENT_TYPES.has(String(req.query.type).toUpperCase())) {
-      where.type = String(req.query.type).toUpperCase();
+    if (req.query.type) {
+      const t = String(req.query.type).toUpperCase();
+      if (MOVEMENT_TYPES.has(t)) {
+        if (t === 'IN') where.delta = { gt: 0 };
+        else if (t === 'OUT') where.delta = { lt: 0 };
+        else if (t === 'ADJUST') where.reason = 'PHYSICAL_COUNT';
+      }
     }
 
-    const movements = await prisma.inventoryMovement.findMany({
+    const movements = await prisma.stockMovement.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       take,
@@ -242,7 +278,7 @@ router.get('/movements', authenticate, requireTenantAccess, requireAdmin, async 
         ingredient: { select: { id: true, name: true, unit: true, stock: true, minStock: true } },
       },
     });
-    res.json(movements);
+    res.json(movements.map(toLegacyMovement));
   } catch (e) {
     console.error('GET /inventory/movements:', e);
     res.status(500).json({ error: e.message });
@@ -252,6 +288,7 @@ router.get('/movements', authenticate, requireTenantAccess, requireAdmin, async 
 router.post('/movements', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const locationId = req.headers['x-location-id'] || req.query.locationId;
+    const userId = req.user?.id || null;
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
     const { ingredientId, type, quantity, reason, orderId } = req.body || {};
@@ -268,50 +305,53 @@ router.post('/movements', authenticate, requireTenantAccess, requireAdmin, async
 
     const ingredient = await prisma.ingredient.findUnique({
       where: { id: ingredientId },
-      select: { id: true, locationId: true, stock: true, minStock: true, name: true, unit: true },
+      select: { id: true, locationId: true, stock: true, minStock: true, name: true, unit: true, baseUnit: true },
     });
     if (!ingredient || ingredient.locationId !== locationId) {
       return res.status(404).json({ error: 'Ingrediente no encontrado en esta sucursal' });
     }
 
-    // Delta final aplicado al stock según el tipo.
-    // ADJUST interpreta quantity como stock absoluto nuevo; IN suma; OUT resta.
-    let stockUpdate;
-    let movementQty = qty;
+    // Mapear type legacy → delta y nuevo stock.
+    let delta;
     if (typeU === 'IN') {
-      stockUpdate = { stock: { increment: qty } };
+      delta = qty;
     } else if (typeU === 'OUT') {
       if (ingredient.stock - qty < 0) {
         return res.status(409).json({ error: 'Stock insuficiente', current: ingredient.stock });
       }
-      stockUpdate = { stock: { decrement: qty } };
-    } else { // ADJUST
-      stockUpdate = { stock: qty };
-      movementQty = qty - ingredient.stock; // delta registrado
+      delta = -qty;
+    } else { // ADJUST: quantity es el stock absoluto nuevo
+      delta = qty - Number(ingredient.stock);
     }
 
-    const [movement, updated] = await prisma.$transaction([
-      prisma.inventoryMovement.create({
-        data: {
-          ingredientId,
-          type: typeU,
-          quantity: movementQty,
-          reason: reason || '',
-          orderId: orderId || null,
-        },
-      }),
+    const newStock = Number(ingredient.stock) + delta;
+
+    const [updated, movement] = await prisma.$transaction([
       prisma.ingredient.update({
         where: { id: ingredientId },
-        data: stockUpdate,
+        data: { stock: newStock },
         select: { id: true, name: true, unit: true, stock: true, minStock: true },
+      }),
+      prisma.stockMovement.create({
+        data: {
+          ingredientId,
+          locationId,
+          delta,
+          unit: ingredient.baseUnit,
+          reason: TYPE_TO_REASON[typeU],
+          refType: orderId ? 'order' : null,
+          refId: orderId || null,
+          balanceAfter: newStock,
+          userId,
+          notes: reason || null,
+        },
       }),
     ]);
 
     const lowStock = updated.minStock > 0 && updated.stock <= updated.minStock;
-
     if (lowStock) notifyLowStock(updated, locationId).catch(() => {});
 
-    res.status(201).json({ movement, ingredient: updated, lowStock });
+    res.status(201).json({ movement: toLegacyMovement({ ...movement, ingredient: updated }), ingredient: updated, lowStock });
   } catch (e) {
     console.error('POST /inventory/movements:', e);
     res.status(500).json({ error: e.message });

@@ -164,22 +164,11 @@ async function main() {
     fail(`OrderItem.recipeIdSnap = ${refreshedItem.recipeIdSnap} (esperado ${recipe.id})`);
   }
 
-  // Verificar legacy InventoryMovement también escribió
-  const legacy = await prisma.inventoryMovement.findMany({
-    where: { orderId: order.id, ingredientId: ingredient.id },
-  });
-  if (legacy.length === 1) {
-    pass(`InventoryMovement (legacy) también creado: 1 fila`);
-  } else {
-    fail(`InventoryMovement (legacy) count = ${legacy.length}`);
-  }
-
   // 9. Cleanup
   console.log(`\n  Cleanup...`);
   await prisma.orderItem.deleteMany({ where: { orderId: order.id } });
   await prisma.order.delete({ where: { id: order.id } });
   await prisma.stockMovement.deleteMany({ where: { refId: order.id } });
-  await prisma.inventoryMovement.deleteMany({ where: { orderId: order.id } });
   await prisma.recipeItem.deleteMany({ where: { recipeId: recipe.id } });
   await prisma.recipe.delete({ where: { id: recipe.id } });
   await prisma.menuItem.delete({ where: { id: menuItem.id } });
@@ -188,10 +177,137 @@ async function main() {
   info('Cleanup ok');
 
   console.log('\n' + SEP);
+  console.log('E2E · Descuento via SubRecipe (recursivo)');
+  console.log(SEP);
+
+  // Tomar 2 ingredientes para construir una sub-receta
+  const ings = await prisma.ingredient.findMany({
+    where: { restaurantId: restaurant.id, locationId: location.id, isPackaging: false },
+    take: 2,
+    orderBy: { name: 'asc' },
+  });
+  if (ings.length < 2) {
+    fail('Faltan ingredientes para test de sub-receta');
+  } else {
+    const [ingA, ingB] = ings;
+    info(`Ingrediente A: ${ingA.name} · cost=${ingA.cost} ${ingA.baseUnit}`);
+    info(`Ingrediente B: ${ingB.name} · cost=${ingB.cost} ${ingB.baseUnit}`);
+
+    await prisma.ingredient.update({ where: { id: ingA.id }, data: { stock: 2000 } });
+    await prisma.ingredient.update({ where: { id: ingB.id }, data: { stock: 2000 } });
+    info('Stock inicial A=2000, B=2000');
+
+    // SubRecipe: rinde 1000g de salsa con 5% margen error, contiene 400g A + 200g B
+    const SUB_YIELD = 1000;
+    const SUB_MARGIN = 5;
+    const sub = await prisma.subRecipe.create({
+      data: {
+        restaurantId: restaurant.id,
+        name: `_E2E SubReceta ${Date.now()}`,
+        yieldQty: SUB_YIELD,
+        yieldUnit: 'GRAM',
+        marginErrorPct: SUB_MARGIN,
+        items: {
+          create: [
+            { ingredientId: ingA.id, qty: 400, unit: 'GRAM' },
+            { ingredientId: ingB.id, qty: 200, unit: 'GRAM' },
+          ],
+        },
+      },
+    });
+    info(`SubRecipe creada · rinde ${SUB_YIELD}g (margen ${SUB_MARGIN}%)`);
+
+    // Recipe que consume 100g de la sub-receta
+    const cat2 = await prisma.category.create({
+      data: { restaurantId: restaurant.id, name: `_e2e_sub_${Date.now()}`, sortOrder: 998 },
+    });
+    const mi2 = await prisma.menuItem.create({
+      data: { restaurantId: restaurant.id, categoryId: cat2.id, name: '_E2E Plato con salsa', price: 100 },
+    });
+    const recipe2 = await prisma.recipe.create({ data: { menuItemId: mi2.id, restaurantId: restaurant.id } });
+    const RECIPE_QTY = 100;
+    await prisma.recipeItem.create({
+      data: {
+        recipeId: recipe2.id,
+        subRecipeId: sub.id,
+        quantity: RECIPE_QTY,
+        unit: 'GRAM',
+        wastagePercent: 0,
+      },
+    });
+    info(`Recipe creada: consume ${RECIPE_QTY}g de la SubRecipe`);
+
+    const ORDER_QTY2 = 3;
+    const order2 = await prisma.order.create({
+      data: {
+        restaurantId: restaurant.id,
+        locationId: location.id,
+        orderNumber: `E2E-SUB-${Date.now()}`,
+        orderType: 'DINE_IN',
+        status: 'CONFIRMED',
+        paymentMethod: 'CASH',
+        subtotal: 300,
+        total: 300,
+        items: { create: [{ menuItemId: mi2.id, name: mi2.name, price: 100, quantity: ORDER_QTY2, subtotal: 300 }] },
+      },
+      include: { items: true },
+    });
+
+    console.log(`\n  ⚡ Ejecutando discountInventory (sub-receta) ...`);
+    await discountInventory(prisma, order2.items, order2.id, restaurant.id, location.id);
+
+    // Cálculo esperado:
+    // factor = 100 / 1000 = 0.1
+    // adj = 0.1 / 0.95 = 0.105263...
+    // tomate (A) per unit = 0.105263 × 400 = 42.105g
+    // cebolla (B) per unit = 0.105263 × 200 = 21.053g
+    // × 3 unidades del plato = A:126.315g  B:63.158g
+    const factor = RECIPE_QTY / SUB_YIELD;
+    const adj = factor / (1 - SUB_MARGIN / 100);
+    const expectedA = adj * 400 * ORDER_QTY2;
+    const expectedB = adj * 200 * ORDER_QTY2;
+    const stockA = (await prisma.ingredient.findUnique({ where: { id: ingA.id } })).stock;
+    const stockB = (await prisma.ingredient.findUnique({ where: { id: ingB.id } })).stock;
+
+    console.log(`\n  Verificaciones sub-receta:`);
+    if (Math.abs(stockA - (2000 - expectedA)) < 0.01) {
+      pass(`Stock A final = ${stockA.toFixed(3)} (consumio ~${expectedA.toFixed(3)})`);
+    } else {
+      fail(`Stock A final = ${stockA} (esperado ${(2000 - expectedA).toFixed(3)})`);
+    }
+    if (Math.abs(stockB - (2000 - expectedB)) < 0.01) {
+      pass(`Stock B final = ${stockB.toFixed(3)} (consumio ~${expectedB.toFixed(3)})`);
+    } else {
+      fail(`Stock B final = ${stockB} (esperado ${(2000 - expectedB).toFixed(3)})`);
+    }
+
+    const movs = await prisma.stockMovement.findMany({ where: { refType: 'order', refId: order2.id } });
+    if (movs.length === 2) {
+      pass(`StockMovements creados: 2 (uno por cada ingrediente hoja)`);
+    } else {
+      fail(`StockMovements count = ${movs.length} (esperado 2)`);
+    }
+
+    // Cleanup sub-receta test
+    await prisma.orderItem.deleteMany({ where: { orderId: order2.id } });
+    await prisma.order.delete({ where: { id: order2.id } });
+    await prisma.stockMovement.deleteMany({ where: { refId: order2.id } });
+    await prisma.recipeItem.deleteMany({ where: { recipeId: recipe2.id } });
+    await prisma.recipe.delete({ where: { id: recipe2.id } });
+    await prisma.menuItem.delete({ where: { id: mi2.id } });
+    await prisma.category.delete({ where: { id: cat2.id } });
+    await prisma.subRecipeItem.deleteMany({ where: { subRecipeId: sub.id } });
+    await prisma.subRecipe.delete({ where: { id: sub.id } });
+    await prisma.ingredient.update({ where: { id: ingA.id }, data: { stock: 0 } });
+    await prisma.ingredient.update({ where: { id: ingB.id }, data: { stock: 0 } });
+    info('Cleanup sub-receta ok');
+  }
+
+  console.log('\n' + SEP);
   if (process.exitCode === 1) {
     console.log('  ❌ TEST FALLÓ');
   } else {
-    console.log('  ✅ TEST OK · módulo de inventario funcionando E2E');
+    console.log('  ✅ TEST OK · módulo de inventario funcionando E2E (con SubRecipe)');
   }
   console.log(SEP + '\n');
 }

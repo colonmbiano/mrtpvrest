@@ -5,7 +5,7 @@ jest.mock('@mrtpvrest/database', () => ({
   prisma: {
     supplier: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), findUnique: jest.fn() },
     ingredient: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), findUnique: jest.fn() },
-    inventoryMovement: { findMany: jest.fn(), create: jest.fn() },
+    stockMovement: { findMany: jest.fn(), create: jest.fn() },
     $transaction: jest.fn(),
     location: { findUnique: jest.fn() },
     pushSubscription: { findMany: jest.fn() },
