@@ -537,7 +537,71 @@ router.get('/insights', authenticate, requireTenantAccess, requireAdmin, async (
   try {
     const restaurantId = requireRestaurant(req, res);
     if (!restaurantId) return;
-    res.json([]);
+    const { from, to, prevFrom, prevTo } = getPeriodRange(req.query.period || '30D');
+
+    const [currSales, prevSales, topItems] = await Promise.all([
+      prisma.order.aggregate({
+        where: { restaurantId, status: { not: 'CANCELLED' }, createdAt: { gte: from, lte: to } },
+        _sum: { total: true },
+        _count: { id: true },
+        _avg: { total: true }
+      }),
+      prisma.order.aggregate({
+        where: { restaurantId, status: { not: 'CANCELLED' }, createdAt: { gte: prevFrom, lte: prevTo } },
+        _sum: { total: true }
+      }),
+      prisma.orderItem.groupBy({
+        by: ['name'],
+        where: { order: { restaurantId, status: { not: 'CANCELLED' }, createdAt: { gte: from } } },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: 'desc' } },
+        take: 3
+      })
+    ]);
+
+    const insights = [];
+    const salesDelta = pctDelta(currSales._sum.total || 0, prevSales._sum.total || 0);
+
+    // Insight 1: Ventas Generales
+    if (salesDelta > 5) {
+      insights.push({
+        kind: 'CRECIMIENTO',
+        variant: 'ok',
+        title: `Ventas arriba ${salesDelta}%`,
+        body: `Tus ingresos han subido comparado con el periodo anterior. Se han procesado ${currSales._count.id} pedidos con un ticket promedio de $${Math.round(currSales._avg.total || 0)}.`,
+        cta: 'Ver detalle'
+      });
+    } else if (salesDelta < -5) {
+      insights.push({
+        kind: 'ALERTA',
+        variant: 'warn',
+        title: `Caída de ingresos (${Math.abs(salesDelta)}%)`,
+        body: `Las ventas están por debajo del periodo anterior. Considera lanzar una promoción relámpago para reactivar el flujo.`,
+        cta: 'Crear Promo'
+      });
+    }
+
+    // Insight 2: Producto Estrella
+    if (topItems.length > 0) {
+      insights.push({
+        kind: 'TENDENCIA',
+        variant: 'info',
+        title: `"${topItems[0].name}" es tu estrella`,
+        body: `Es el producto más vendido con ${topItems[0]._sum.quantity} unidades en este periodo. ¿Has pensado en subirle un poco el precio o armar un combo?`,
+        cta: 'Ajustar Menú'
+      });
+    }
+
+    // Insight 3: Eficiencia
+    insights.push({
+      kind: 'LOGÍSTICA',
+      variant: 'info',
+      title: 'Ticket promedio estable',
+      body: `Tu ticket promedio se mantiene en $${Math.round(currSales._avg.total || 0)}. Un pequeño incremento en complementos podría subirlo un 10%.`,
+      cta: 'Ver Sugerencias'
+    });
+
+    res.json(insights);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type TransactionType = 'order' | 'payment' | 'adjustment' | 'override';
 
@@ -47,7 +47,7 @@ const useOfflineStore = create<OfflineState>()(
     }),
     {
       name: 'tpv-offline-store',
-      storage: typeof window !== 'undefined' ? localStorage : undefined,
+      storage: createJSONStorage(() => localStorage),
     }
   )
 );
