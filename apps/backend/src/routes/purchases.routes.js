@@ -16,7 +16,11 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware');
+const { requireFeatureFlag } = require('../lib/modules');
 const router = express.Router();
+
+// Gate del módulo de inventario (donde viven las compras).
+router.use(authenticate, requireTenantAccess, requireFeatureFlag('hasInventory', 'Inventario y costeo'));
 
 const CASHIER_LIMIT_PER_PURCHASE = 1000; // MXN
 const ALLOWED_ROLES = ['CASHIER', 'WAITER', 'KITCHEN', 'ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'];
@@ -43,7 +47,7 @@ async function nextPoNumber(tx, locationId) {
 //   items: [{ ingredientId, qty, unitPrice, unit? }],
 //   photoUrl?, notes?, occurredAt?
 // }
-router.post('/', authenticate, requireTenantAccess, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const restaurantId   = req.restaurantId || req.user?.restaurantId;
     const userId         = req.user?.id || null;
@@ -223,7 +227,7 @@ router.post('/', authenticate, requireTenantAccess, async (req, res) => {
 });
 
 // ── GET /api/purchases ───────────────────────────────────────────────────
-router.get('/', authenticate, requireTenantAccess, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -259,7 +263,7 @@ router.get('/', authenticate, requireTenantAccess, async (req, res) => {
 // ── GET /api/purchases/lookup/suppliers ──────────────────────────────────
 // Listado simple de proveedores para el modal del TPV. Sin requireAdmin
 // (el TPV es operado por CASHIER+ que necesitan ver el catálogo).
-router.get('/lookup/suppliers', authenticate, requireTenantAccess, async (req, res) => {
+router.get('/lookup/suppliers', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -277,7 +281,7 @@ router.get('/lookup/suppliers', authenticate, requireTenantAccess, async (req, r
 // ── GET /api/purchases/lookup/ingredients ────────────────────────────────
 // Listado de ingredientes con info mínima para autocomplete. Filtra por
 // location del cajero si se pasa, sino todos del restaurant.
-router.get('/lookup/ingredients', authenticate, requireTenantAccess, async (req, res) => {
+router.get('/lookup/ingredients', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const locationId = req.query.locationId || req.locationId || req.user?.locationId;

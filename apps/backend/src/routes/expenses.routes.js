@@ -13,7 +13,11 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware');
+const { requireFeatureFlag } = require('../lib/modules');
 const router = express.Router();
+
+// Gate del módulo de inventario (donde viven gastos operativos).
+router.use(authenticate, requireTenantAccess, requireFeatureFlag('hasInventory', 'Inventario y costeo'));
 
 // Threshold por encima del cual un CASHIER necesita PIN admin para
 // autorizar el gasto. Pensado para que el cajero pueda meter compras
@@ -28,7 +32,7 @@ const VALID_PAYMENT_METHODS = ['CASH_DRAWER', 'CORPORATE_CARD', 'TRANSFER'];
 
 // ── GET /api/expenses ────────────────────────────────────────────────────
 // Lista los gastos del restaurant (filtros opcionales: from, to, categoryId).
-router.get('/', authenticate, requireTenantAccess, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -68,7 +72,7 @@ router.get('/', authenticate, requireTenantAccess, async (req, res) => {
 //   1. Busca CashShift abierto en la location (rechaza si no hay)
 //   2. Crea OperatingExpense + ShiftExpense vinculado en una transacción
 //   3. Incrementa CashShift.totalExpenses cache
-router.post('/', authenticate, requireTenantAccess, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const userId       = req.user?.id || null;
@@ -189,7 +193,7 @@ router.post('/', authenticate, requireTenantAccess, async (req, res) => {
 });
 
 // ── GET /api/expenses/categories ─────────────────────────────────────────
-router.get('/categories', authenticate, requireTenantAccess, async (req, res) => {
+router.get('/categories', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
