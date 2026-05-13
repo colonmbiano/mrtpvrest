@@ -15,10 +15,12 @@ function IdleInner() {
   const router = useRouter();
   const [restaurantName, setRestaurantName] = useState("");
   const [locationName, setLocationName] = useState("");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setRestaurantName(localStorage.getItem("kiosk-restaurant-name") || "");
     setLocationName(localStorage.getItem("kiosk-location-name") || "");
+    setLogoUrl(localStorage.getItem("kiosk-logo-url"));
     sessionStorage.removeItem("kiosk-cart");
   }, []);
 
@@ -38,14 +40,20 @@ function IdleInner() {
       <div
         style={{
           width: 140, height: 140, borderRadius: 40,
-          background: "var(--brand-primary)",
+          background: logoUrl ? "transparent" : "var(--brand-primary)",
           display: "flex", alignItems: "center", justifyContent: "center",
           color: "var(--bg)", fontSize: 64, fontWeight: 900,
           fontFamily: "var(--font-display)",
           boxShadow: "var(--shadow-md)",
+          overflow: "hidden",
         }}
       >
-        {(restaurantName[0] || "K").toUpperCase()}
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+        ) : (
+          (restaurantName[0] || "K").toUpperCase()
+        )}
       </div>
       <div style={{ textAlign: "center", maxWidth: "80%" }}>
         <div style={{ fontSize: 48, fontWeight: 900, letterSpacing: "-0.02em", fontFamily: "var(--font-display)" }}>

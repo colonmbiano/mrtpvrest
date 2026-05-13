@@ -609,6 +609,7 @@ model Order {
   subtotal    Float
   deliveryFee Float @default(0)
   discount    Float @default(0)
+  tip         Float @default(0)   // propina (kiosko / dine-in)
   total       Float
 
   pointsEarned Int @default(0)

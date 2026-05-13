@@ -1,18 +1,23 @@
 "use client";
 import { useEffect, useReducer } from "react";
 
+export type CartModifier = { id: string; name: string; priceAdd: number };
+
 export type CartItem = {
   key: string;
   menuItemId: string;
   variantId: string | null;
-  name: string;
-  price: number;
+  name: string;          // ya incluye "(variante)" y "+ modifier" para mostrar
+  price: number;         // unitario, incluyendo priceAdd de modifiers
   quantity: number;
+  modifiers?: CartModifier[];
+  notes?: string;
 };
 
 type Action =
   | { type: "add"; item: Omit<CartItem, "quantity">; quantity?: number }
   | { type: "set-qty"; key: string; qty: number }
+  | { type: "set-notes"; key: string; notes: string }
   | { type: "remove"; key: string }
   | { type: "clear" }
   | { type: "hydrate"; items: CartItem[] };
@@ -31,6 +36,8 @@ function reducer(state: CartItem[], action: Action): CartItem[] {
       return state
         .map((i) => i.key === action.key ? { ...i, quantity: Math.max(0, action.qty) } : i)
         .filter((i) => i.quantity > 0);
+    case "set-notes":
+      return state.map((i) => i.key === action.key ? { ...i, notes: action.notes || undefined } : i);
     case "remove":
       return state.filter((i) => i.key !== action.key);
     case "clear":

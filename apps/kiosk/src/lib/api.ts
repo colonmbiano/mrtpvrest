@@ -7,8 +7,10 @@ function headers() {
   const h: Record<string, string> = {};
   const rid = localStorage.getItem("kiosk-restaurant-id");
   const lid = localStorage.getItem("kiosk-location-id");
+  const tid = localStorage.getItem("kiosk-terminal-id");
   if (rid) h["x-restaurant-id"] = rid;
   if (lid) h["x-location-id"]   = lid;
+  if (tid) h["x-kiosk-terminal-id"] = tid;
   return h;
 }
 
