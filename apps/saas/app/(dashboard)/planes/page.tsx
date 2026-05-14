@@ -197,7 +197,7 @@ export default function PlanesPage() {
 function PlanCard({ plan, onEdit, onRemove }: { plan: Plan; onEdit: () => void; onRemove: () => void }) {
   const activeFlags = FEATURE_FLAGS.filter((f) => plan[f.key]);
   return (
-    <div className="rounded-2xl p-5 relative" style={{ background: "var(--surf, #111)", border: "1px solid var(--border, #333)", opacity: plan.isActive ? 1 : 0.5 }}>
+    <div className="rounded-2xl p-5 relative" style={{ background: "var(--surface, #111)", border: "1px solid var(--border, #333)", opacity: plan.isActive ? 1 : 0.5 }}>
       {!plan.isActive && (
         <span className="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
           Inactivo
@@ -214,19 +214,19 @@ function PlanCard({ plan, onEdit, onRemove }: { plan: Plan; onEdit: () => void; 
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-        <div className="rounded-lg px-2 py-1.5" style={{ background: "var(--surf2, #1a1a1a)" }}>
+        <div className="rounded-lg px-2 py-1.5" style={{ background: "var(--surface2, #1a1a1a)" }}>
           <p className="text-[10px] uppercase text-gray-500">Trial</p>
           <p className="font-bold tabular-nums">{plan.trialDays} días</p>
         </div>
-        <div className="rounded-lg px-2 py-1.5" style={{ background: "var(--surf2, #1a1a1a)" }}>
+        <div className="rounded-lg px-2 py-1.5" style={{ background: "var(--surface2, #1a1a1a)" }}>
           <p className="text-[10px] uppercase text-gray-500">Sucursales</p>
           <p className="font-bold tabular-nums">{plan.maxLocations >= 99 ? "∞" : plan.maxLocations}</p>
         </div>
-        <div className="rounded-lg px-2 py-1.5" style={{ background: "var(--surf2, #1a1a1a)" }}>
+        <div className="rounded-lg px-2 py-1.5" style={{ background: "var(--surface2, #1a1a1a)" }}>
           <p className="text-[10px] uppercase text-gray-500">Empleados</p>
           <p className="font-bold tabular-nums">{plan.maxEmployees >= 99 ? "∞" : plan.maxEmployees}</p>
         </div>
-        <div className="rounded-lg px-2 py-1.5" style={{ background: "var(--surf2, #1a1a1a)" }}>
+        <div className="rounded-lg px-2 py-1.5" style={{ background: "var(--surface2, #1a1a1a)" }}>
           <p className="text-[10px] uppercase text-gray-500">Módulos</p>
           <p className="font-bold tabular-nums">{plan.allowedModules.length}</p>
         </div>
@@ -243,7 +243,7 @@ function PlanCard({ plan, onEdit, onRemove }: { plan: Plan; onEdit: () => void; 
         )}
       </div>
       <div className="flex gap-2">
-        <button onClick={onEdit} className="flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider" style={{ background: "var(--surf2, #1a1a1a)", border: "1px solid var(--border, #333)" }}>
+        <button onClick={onEdit} className="flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider" style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }}>
           Editar
         </button>
         {plan.isActive && (
@@ -266,7 +266,7 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
-      <div className="w-full max-w-2xl my-4 rounded-2xl p-6 max-h-[90vh] overflow-y-auto" style={{ background: "var(--surf, #111)", border: "1px solid var(--border, #333)" }}>
+      <div className="w-full max-w-2xl my-4 rounded-2xl p-6 max-h-[90vh] overflow-y-auto" style={{ background: "var(--surface, #111)", border: "1px solid var(--border, #333)" }}>
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-syne text-2xl font-black">
             {plan.id ? "Editar plan" : "Nuevo plan"}
@@ -283,7 +283,7 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
               disabled={!!plan.id}
               placeholder="BASIC, PRO, UNLIMITED"
               className="w-full px-3 py-2 rounded-lg outline-none uppercase font-mono text-sm"
-              style={{ background: "var(--surf2, #1a1a1a)", border: "1px solid var(--border, #333)" }}
+              style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }}
             />
           </Field>
           <Field label="Nombre visible">
@@ -292,7 +292,7 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
               onChange={(e) => onChange({ ...plan, displayName: e.target.value })}
               placeholder="Básico, Pro, Premium"
               className="w-full px-3 py-2 rounded-lg outline-none text-sm"
-              style={{ background: "var(--surf2, #1a1a1a)", border: "1px solid var(--border, #333)" }}
+              style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }}
             />
           </Field>
         </div>
@@ -302,18 +302,18 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
           <Field label="Precio/mes ($)">
             <input type="number" value={plan.price} onChange={(e) => onChange({ ...plan, price: Number(e.target.value) })}
               className="w-full px-3 py-2 rounded-lg outline-none tabular-nums text-sm"
-              style={{ background: "var(--surf2, #1a1a1a)", border: "1px solid var(--border, #333)" }} />
+              style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }} />
           </Field>
           <Field label="Días de trial">
             <input type="number" value={plan.trialDays} onChange={(e) => onChange({ ...plan, trialDays: Number(e.target.value) })}
               className="w-full px-3 py-2 rounded-lg outline-none tabular-nums text-sm"
-              style={{ background: "var(--surf2, #1a1a1a)", border: "1px solid var(--border, #333)" }} />
+              style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }} />
           </Field>
           <Field label="Stripe Price ID">
             <input value={plan.stripePriceId || ""} onChange={(e) => onChange({ ...plan, stripePriceId: e.target.value || null })}
               placeholder="price_..."
               className="w-full px-3 py-2 rounded-lg outline-none text-xs font-mono"
-              style={{ background: "var(--surf2, #1a1a1a)", border: "1px solid var(--border, #333)" }} />
+              style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }} />
           </Field>
         </div>
 
@@ -322,12 +322,12 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
           <Field label="Sucursales máx (999 = ∞)">
             <input type="number" value={plan.maxLocations} onChange={(e) => onChange({ ...plan, maxLocations: Number(e.target.value) })}
               className="w-full px-3 py-2 rounded-lg outline-none tabular-nums text-sm"
-              style={{ background: "var(--surf2, #1a1a1a)", border: "1px solid var(--border, #333)" }} />
+              style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }} />
           </Field>
           <Field label="Empleados máx (999 = ∞)">
             <input type="number" value={plan.maxEmployees} onChange={(e) => onChange({ ...plan, maxEmployees: Number(e.target.value) })}
               className="w-full px-3 py-2 rounded-lg outline-none tabular-nums text-sm"
-              style={{ background: "var(--surf2, #1a1a1a)", border: "1px solid var(--border, #333)" }} />
+              style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }} />
           </Field>
         </div>
 
@@ -340,7 +340,7 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
             {FEATURE_FLAGS.map((f) => (
               <label key={String(f.key)} className="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all"
                 style={{
-                  background: plan[f.key] ? "rgba(249,115,22,0.08)" : "var(--surf2, #1a1a1a)",
+                  background: plan[f.key] ? "rgba(249,115,22,0.08)" : "var(--surface2, #1a1a1a)",
                   border: `1px solid ${plan[f.key] ? "rgba(249,115,22,0.4)" : "var(--border, #333)"}`,
                 }}>
                 <input
@@ -374,7 +374,7 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
                   onClick={() => toggleModule(m.id)}
                   className="p-3 rounded-xl text-left transition-all flex items-center gap-2"
                   style={{
-                    background: active ? "rgba(249,115,22,0.08)" : "var(--surf2, #1a1a1a)",
+                    background: active ? "rgba(249,115,22,0.08)" : "var(--surface2, #1a1a1a)",
                     border: `1px solid ${active ? "rgba(249,115,22,0.4)" : "var(--border, #333)"}`,
                   }}
                 >
@@ -389,7 +389,7 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
 
         {/* Estado */}
         <label className="flex items-center gap-3 mb-5 p-3 rounded-xl cursor-pointer"
-          style={{ background: "var(--surf2, #1a1a1a)", border: "1px solid var(--border, #333)" }}>
+          style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }}>
           <input
             type="checkbox"
             checked={plan.isActive}
@@ -405,7 +405,7 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
         {/* Acciones */}
         <div className="flex gap-3 pt-3 border-t" style={{ borderColor: "var(--border, #333)" }}>
           <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold uppercase tracking-wider"
-            style={{ background: "var(--surf2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--muted, #888)" }}>
+            style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }}>
             Cancelar
           </button>
           <button
