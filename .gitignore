@@ -76,3 +76,4 @@ open-design/
 # Pen design exports (no commit en repo)
 apps/*.pen
 *.pen
+.vercel
