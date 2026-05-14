@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import api from "@/lib/api";
+import { getApiUrl } from "@/lib/config";
 import ModifierGroupsEditor from "@/components/admin/ModifierGroupsEditor";
 import { uploadMenuImage } from "@/lib/supabaseUpload";
 
@@ -142,7 +143,8 @@ export default function MenuPage() {
         if (f) fd.append("images", f);
       }
 
-      const { data } = await api.post("/api/ai/scan-menu", fd, {
+      // Bypass Vercel 4.5MB rewrite limit by hitting the backend directly
+      const { data } = await api.post(`${getApiUrl()}/api/ai/scan-menu`, fd, {
         headers: { "Content-Type": "multipart/form-data" }
       });
 
@@ -181,7 +183,9 @@ export default function MenuPage() {
       setScanState({ active: false, currentFile: '', current: 0, total: 0, error: null });
     } catch (error: any) {
       clearInterval(cycleInterval);
-      setScanState(p => ({ ...p, error: error.response?.data?.error || error.message || "Error al procesar con IA" }));
+      const errMsg = error.response?.data?.error;
+      const errText = typeof errMsg === 'string' ? errMsg : (errMsg?.message || error.message || "Error al procesar con IA");
+      setScanState(p => ({ ...p, error: errText }));
     } finally {
       e.target.value = "";
     }
