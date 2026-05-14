@@ -370,7 +370,7 @@ export default function SaasDashboardPage() {
               {PLANS.length === 0 ? (
                 <div className="ovw-plan" style={{ opacity: 0.5 }}>
                   <div className="ovw-plan-name">Sin planes</div>
-                  <div className="ovw-plan-info">Crea un plan en Ajustes</div>
+                  <div className="ovw-plan-info">Crea un plan en Planes</div>
                 </div>
               ) : PLANS.map((plan) => (
                 <div key={plan.id} className={`ovw-plan ${plan.featured ? "ovw-plan-featured" : ""}`}>
