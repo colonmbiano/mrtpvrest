@@ -15,6 +15,45 @@ const CSS = `
 .ia-scroll::-webkit-scrollbar { width:4px; }
 .ia-scroll::-webkit-scrollbar-track { background:transparent; }
 .ia-scroll::-webkit-scrollbar-thumb { background:var(--border2); border-radius:4px; }
+
+.ia-main-panel {
+  flex: 1; padding: 24px 28px 64px; overflow-y: auto; height: 100vh; overflow-x: hidden;
+}
+.ia-chat-panel {
+  width: 380px; height: 100vh; position: sticky; top: 0;
+  display: flex; flex-direction: column;
+  border-left: 1px solid var(--border); background: var(--surf3); flex-shrink: 0;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
+  z-index: 40;
+}
+.ia-chat-panel.closed { display: none; }
+.ia-fab {
+  position: fixed; bottom: 24px; right: 24px; z-index: 30;
+  width: 56px; height: 56px; border-radius: 28px;
+  background: linear-gradient(135deg, #9472ff, #7c3aed); 
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 14px rgba(124,58,237,.35);
+  cursor: pointer; border: none; outline: none;
+  transition: transform 0.2s;
+}
+.ia-fab:hover { transform: scale(1.05); }
+.ia-fab:active { transform: scale(0.95); }
+.ia-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 35;
+  backdrop-filter: blur(2px);
+}
+
+@media (max-width: 900px) {
+  .ia-main-panel { padding: 16px !important; }
+  .ia-chat-panel {
+    position: fixed !important; right: 0; top: 0; bottom: 0;
+    width: 100% !important; max-width: 380px;
+    transform: translateX(100%); display: flex !important;
+  }
+  .ia-chat-panel.open { transform: translateX(0); }
+  .ia-overlay.open { display: block; }
+}
 `;
 
 /* ── Tokens ────────────────────────────────────────────────── */
@@ -116,6 +155,7 @@ export default function ReportesIAPage() {
   const [prompt, setPrompt] = useState("");
   const [chatMsg, setChatMsg] = useState("");
   const [msgs, setMsgs] = useState<Msg[]>(INIT_MSGS);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   // Períodos alineados con backend (getPeriodRange):
   // - 90D reemplaza al antiguo "TRIM" (trimestre ~ 90 días)
   // - AÑO ahora es rolling 365d (no año en curso)
@@ -235,7 +275,7 @@ export default function ReportesIAPage() {
       <div style={{ display: "flex", margin: -32, overflow: "hidden" }}>
 
         {/* ═══ MAIN ═══════════════════════════════════════════ */}
-        <div className="ia-scroll" style={{
+        <div className="ia-scroll ia-main-panel" style={{
           flex: 1, padding: "24px 28px 64px", overflowY: "auto",
           height: "100vh", overflowX: "hidden",
         }}>
@@ -696,8 +736,11 @@ export default function ReportesIAPage() {
 
         </div>
 
+        {/* ═══ OVERLAY (Mobile only) ═════════════════════════ */}
+        <div className={`ia-overlay ${isChatOpen ? "open" : ""}`} onClick={() => setIsChatOpen(false)} />
+
         {/* ═══ CHAT PANEL ════════════════════════════════════ */}
-        <div style={{
+        <div className={`ia-chat-panel ${isChatOpen ? "open" : "closed"}`} style={{
           width: 380, height: "100vh", position: "sticky", top: 0,
           display: "flex", flexDirection: "column",
           borderLeft: `1px solid ${V.bd1}`, background: V.surf3, flexShrink: 0,
@@ -713,9 +756,14 @@ export default function ReportesIAPage() {
               <div style={{ fontSize: 10, color: V.ok, fontFamily: "'DM Mono',monospace", letterSpacing: ".08em", textTransform: "uppercase", fontWeight: 600 }}>● En línea · listo</div>
             </div>
             <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
-              <button onClick={() => setMsgs(INIT_MSGS)} style={{ width: 30, height: 30, borderRadius: 8, background: "transparent", border: "none", color: V.txMut, cursor: "pointer", display: "grid", placeItems: "center" }}>
+              <button onClick={() => setMsgs(INIT_MSGS)} style={{ width: 30, height: 30, borderRadius: 8, background: "transparent", border: "none", color: V.txMut, cursor: "pointer", display: "grid", placeItems: "center" }} title="Limpiar chat">
                 <div className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </div>
+              </button>
+              <button onClick={() => setIsChatOpen(false)} style={{ width: 30, height: 30, borderRadius: 8, background: "transparent", border: "none", color: V.txHi, cursor: "pointer", display: "grid", placeItems: "center" }} title="Ocultar chat">
+                <div className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                 </div>
               </button>
             </div>
@@ -832,6 +880,15 @@ export default function ReportesIAPage() {
         </div>
 
       </div>
+
+      {/* ═══ FAB BUTTON ════════════════════════════════════ */}
+      {!isChatOpen && (
+        <button className="ia-fab" onClick={() => setIsChatOpen(true)} title="Abrir asistente IA">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+        </button>
+      )}
     </>
   );
 }
