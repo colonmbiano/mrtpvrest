@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import {
   UtensilsCrossed, ChevronDown, MapPin,
   ShoppingBag, Clock, TrendingUp, ArrowRight, LogOut,
+  Loader2,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
@@ -28,17 +30,17 @@ const TYPE_LABEL: Record<string, string> = {
   RETAIL: 'RETAIL',
   GROCERY: 'TIENDA',
   RECREATION: 'RECREACIÓN',
-};
+  };
 
 const fmtMoney = (n: number) =>
   n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 });
 
 export default function HubPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const force = searchParams.get('force') === 'true';
+
   // mounted se queda en false mientras decidimos si el selector debe pintarse.
-  // Si hay activeWorkspaceId persistido, redirigimos sin renderizar UI para
-  // que el botón "Atrás" del WebView nunca recale en este selector después
-  // del primer setup.
   const [mounted, setMounted] = useState(false);
   const employee = useAuthStore((s) => s.employee);
   const logout = useAuthStore((s) => s.logout);
@@ -62,15 +64,13 @@ export default function HubPage() {
   useEffect(() => {
     let cancelled = false;
 
-    // Atajo silencioso: si ya hay workspace activo en localStorage, brincar
-    // directo a /pos/order-type (o /pos/shift/open) sin esperar el fetch
-    // ni mostrar la pantalla de "Cargando espacios". Esto evita que el
-    // selector reaparezca al hacer "Atrás" desde el POS.
+    // Atajo silencioso: si ya hay workspace activo en localStorage Y no estamos
+    // forzando la vista, brincar directo a /pos/order-type (o /pos/shift/open).
     const persistedId = typeof window !== 'undefined'
       ? localStorage.getItem('activeWorkspaceId')
       : null;
 
-    if (persistedId) {
+    if (persistedId && !force) {
       (async () => {
         try {
           const { data } = await api.get('/api/shifts/active');
@@ -84,8 +84,7 @@ export default function HubPage() {
       return () => { cancelled = true; };
     }
 
-    // Sin workspace persistido — flujo de primera vez (o tras logout):
-    // pinta el selector con el catálogo de espacios.
+    // Sin workspace persistido o 'force' activo — flujo de selección:
     setMounted(true);
     (async () => {
       try {
@@ -95,7 +94,8 @@ export default function HubPage() {
         setWorkspaces(list);
 
         if (list.length === 0) return;
-        if (list.length === 1) {
+        // Si solo hay uno y no estamos forzando, auto-seleccionar.
+        if (list.length === 1 && !force) {
           selectWorkspace(list[0]);
         }
       } catch (err: any) {
@@ -103,13 +103,19 @@ export default function HubPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [force]);
 
   const selectWorkspace = async (w: Workspace) => {
+    // Sincronización UNIFICADA de llaves (TPV + API)
     localStorage.setItem('activeWorkspaceId', w.id);
     localStorage.setItem('activeRestaurantId', w.restaurantId);
     localStorage.setItem('activeLocationId', w.id);
     localStorage.setItem('activeWorkspaceName', `${w.restaurantName} · ${w.name}`);
+    
+    // Llaves primarias que espera el interceptor de api.ts
+    localStorage.setItem('restaurantId', w.restaurantId);
+    localStorage.setItem('locationId', w.id);
+    localStorage.setItem('locationName', w.name);
 
     try {
       const { data } = await api.get('/api/shifts/active');
@@ -134,7 +140,16 @@ export default function HubPage() {
   const firstName = employee?.name?.split(' ')[0] || 'usuario';
   const userInitial = firstName.charAt(0).toUpperCase();
 
-  if (!mounted) return <div className="min-h-screen w-full bg-[#0a0a0c]" />;
+  if (!mounted) {
+    return (
+      <div className="min-h-screen w-full bg-[#0a0a0c] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
+        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">
+          Iniciando sesión segura…
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div

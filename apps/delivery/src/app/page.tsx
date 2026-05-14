@@ -191,8 +191,19 @@ export default function DeliveryApp() {
       localStorage.setItem("accessToken", data.token);
       setScreen("home");
       fetchOrders(data.employee);
-    } catch { setLoginError("PIN incorrecto"); setPin(""); }
-    finally { setLoggingIn(false); }
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const serverMsg = err?.response?.data?.error || err?.response?.data?.message;
+      const isNetwork = !err?.response;
+      let msg = "PIN incorrecto";
+      if (isNetwork) msg = "Sin conexión con el servidor. Revisa tu red.";
+      else if (status === 401 || status === 403) msg = serverMsg || "PIN incorrecto";
+      else if (status === 404) msg = "Repartidor no encontrado en esta sucursal";
+      else if (status && status >= 500) msg = "Servidor caído. Intenta de nuevo en unos segundos.";
+      else if (serverMsg) msg = serverMsg;
+      setLoginError(msg);
+      setPin("");
+    } finally { setLoggingIn(false); }
   }
 
   async function changeStatus(order: any, status: string, method?: string) {
@@ -321,7 +332,9 @@ export default function DeliveryApp() {
         </div>
         
         <h1 className="text-3xl font-bold text-white uppercase tracking-tight mb-1 font-mono">MRTPV Delivery</h1>
-        <p className="text-halo-muted text-[10px] font-bold uppercase tracking-[0.4em] mb-10 opacity-70 italic">{localStorage.getItem("locationName")}</p>
+        <p className="text-halo-muted text-[10px] font-bold uppercase tracking-[0.4em] mb-10 opacity-70 italic">
+          {mounted ? localStorage.getItem("locationName") : "Cargando..."}
+        </p>
         
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[32px] space-y-8 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-halo-primary/30"></div>
