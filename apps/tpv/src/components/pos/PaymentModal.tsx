@@ -395,13 +395,28 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                   )}
                 </div>
                 {driversLoading ? (
-                  <p className="text-xs font-medium text-white/40 py-2">
+                  <p className="text-xs font-medium text-white/40 py-2 animate-pulse">
                     Cargando repartidores…
                   </p>
                 ) : drivers.length === 0 ? (
-                  <p className="text-xs font-medium text-amber-400/90 py-2">
-                    No hay repartidores activos. Crea uno en Configuración → Personal.
-                  </p>
+                  <div className="py-2 flex flex-col gap-2">
+                    <p className="text-xs font-medium text-amber-400/90">
+                      No hay repartidores activos.
+                    </p>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setDriversLoading(true);
+                        api.get<DriverLite[]>("/api/delivery")
+                          .then(({ data }) => setDrivers((Array.isArray(data) ? data : []).filter(d => d.isActive !== false)))
+                          .catch(() => setDrivers([]))
+                          .finally(() => setDriversLoading(false));
+                      }}
+                      className="text-[10px] font-black uppercase tracking-widest text-[#ffb84d] hover:underline w-fit"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {drivers.map((d) => {

@@ -15,14 +15,34 @@ api.interceptors.request.use((config) => {
   config.baseURL = getApiUrl();
 
   if (typeof window !== "undefined") {
-    const restaurantId = localStorage.getItem("restaurantId");
-    const locationId   = localStorage.getItem("locationId");
+    // BUG FIX: Sincronización robusta de headers.
+    // Intentamos leer primero las llaves estándar (restaurantId).
+    // Si no existen (ej: el usuario acaba de cambiar de sucursal en el Hub),
+    // caemos a las llaves 'active...' para no perder el contexto.
+    const restaurantId = localStorage.getItem("restaurantId") || localStorage.getItem("activeRestaurantId");
+    const locationId   = localStorage.getItem("locationId")   || localStorage.getItem("activeLocationId");
 
     // Priorizar sessionStorage (más seguro), fallback a localStorage
     const token =
       sessionStorage.getItem("tpv-access-token") ||
       localStorage.getItem("accessToken") ||
       localStorage.getItem("tpv-employee-token");
+
+    // Tenant identification: si falta tenant en una llamada autenticada
+    // (no /setup, no login público), avisar en consola para diagnosticar
+    // rápido el origen del 400/403 sin romper la request.
+    const url = String(config.url ?? "");
+    const isTenantOptional =
+      url.includes("/api/auth/login") ||
+      url.includes("/api/employees/login") ||
+      url.includes("/api/locations/") ||
+      url.includes("/api/tpv/config") ||
+      url.includes("/api/workspaces/me") ||
+      (typeof window !== "undefined" && window.location.pathname.startsWith("/setup"));
+
+    if (!restaurantId && !isTenantOptional) {
+      console.warn("[api] Petición sin restaurantId →", url, "(revisa Hub / activeRestaurantId)");
+    }
 
     if (restaurantId) config.headers["x-restaurant-id"] = restaurantId;
     if (locationId)   config.headers["x-location-id"]   = locationId;
