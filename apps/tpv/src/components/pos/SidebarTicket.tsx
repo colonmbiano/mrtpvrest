@@ -7,6 +7,7 @@ import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerMo
 import DiscountModal from "@/components/pos/DiscountModal";
 import { useAuthStore } from "@/store/authStore";
 import { useTicketStore } from "@/store/ticketStore";
+import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { hapticMedium, hapticSuccess, hapticError } from "@/lib/haptics";
 import api from "@/lib/api";
@@ -51,6 +52,8 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const employee = useAuthStore((s) => s.employee);
   const canApplyDiscount =
     !!employee?.permissions?.includes("apply_discount");
+
+  const { activeOrderId, setActiveOrder, clear: clearActiveOrder } = useActiveOrderStore();
 
   // Sugerencias de propina vienen de la config remota (tpvConfig.extra) si
   // están presentes; caso contrario default [10,15,20] por consistencia
@@ -182,27 +185,41 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     hapticMedium();
 
     try {
-      const orderData = {
-        orderType: ticket.type,
-        items: ticket.items.map(item => ({
-          menuItemId: item.menuItemId,
-          quantity: item.quantity,
-          notes: item.notes || "",
-          seatNumber: item.seatNumber ?? null,
-          modifiers: (item.modifiers || []).map(m => ({ modifierId: m.id })),
-        })),
-        tableId: ticket.tableId || null,
-        numberOfGuests: ticket.numberOfGuests ?? null,
-        customerName: ticket.name || "Publico General",
-        customerPhone: ticket.phone || null,
-        subtotal: subtotal,
-        discount: ticket.discount,
-        total: total,
-      };
+      const itemsPayload = ticket.items.map(item => ({
+        menuItemId: item.menuItemId,
+        quantity: item.quantity,
+        notes: item.notes || "",
+        seatNumber: item.seatNumber ?? null,
+        modifiers: (item.modifiers || []).map(m => ({ modifierId: m.id })),
+      }));
 
-      const { data: order } = await api.post("/api/orders/tpv", orderData);
+      let order;
+      if (activeOrderId) {
+        // Mesa ya tiene orden abierta — agregar ronda.
+        const { data } = await api.post(`/api/orders/${activeOrderId}/items`, { items: itemsPayload });
+        order = data;
+      } else {
+        // Orden nueva (o el backend redirigirá si la mesa está OCCUPIED).
+        const orderData = {
+          orderType: ticket.type,
+          items: itemsPayload,
+          tableId: ticket.tableId || null,
+          numberOfGuests: ticket.numberOfGuests ?? null,
+          customerName: ticket.name || "Publico General",
+          customerPhone: ticket.phone || null,
+          subtotal: subtotal,
+          discount: ticket.discount,
+          total: total,
+        };
+        const { data } = await api.post("/api/orders/tpv", orderData);
+        order = data;
+        // Guardar el id para que la siguiente ronda ya conozca la orden.
+        if (order?.id && ticket.tableId) {
+          setActiveOrder(order.id, ticket.tableId, order.orderNumber ?? null);
+        }
+      }
+
       toast.success("Pedido enviado a cocina");
-      // Capturar items ANTES de limpiar el ticket activo.
       const printItems = buildTicketItems();
       const ticketContext = {
         orderNumber: order?.orderNumber ?? null,
@@ -211,8 +228,6 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         customerName: ticket.name ?? null,
       };
       clearActiveItems();
-      // Fire-and-forget: imprimir comanda en KITCHEN/BAR. La impresión
-      // NO debe bloquear ni revertir la orden si la impresora falla.
       printKitchenTickets(printers, { ...ticketContext, items: printItems })
         .then((res) => {
           if (res.failed.length > 0) {
@@ -301,6 +316,8 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         tipAmount,
       };
       clearActiveItems();
+      // Al cerrar la cuenta, limpiar el activeOrder del store.
+      clearActiveOrder();
       // BUG-29: tras cobro DELIVERY exitoso, limpiar datos del cliente
       // (nombre, dirección, teléfono). Antes quedaban llenos del pedido
       // anterior y el siguiente ticket arrancaba con la dirección equivocada.
@@ -636,10 +653,30 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         <TablePickerModal
           isOpen={showTables}
           onClose={() => setShowTables(false)}
-          onPick={(t: TableLite) => {
+          onPick={async (t: TableLite) => {
             updateTicket({ tableId: t.id, tableName: t.name, table: t.name });
             setShowTables(false);
-            toast.success(`Mesa ${t.name} asignada`);
+
+            if (t.status === "OCCUPIED") {
+              // Buscar la orden abierta de esta mesa para agregar rondas.
+              try {
+                const { data: orders } = await api.get<{ id: string; orderNumber: string; status: string }[]>(
+                  `/api/orders/table/${t.id}/open`
+                );
+                const openOrder = Array.isArray(orders) ? orders[0] : null;
+                if (openOrder?.id) {
+                  setActiveOrder(openOrder.id, t.id, openOrder.orderNumber ?? null);
+                  toast.success(`Mesa ${t.name} — añadiendo ronda al Ticket ${openOrder.orderNumber ?? openOrder.id.slice(-4)}`);
+                  return;
+                }
+              } catch {
+                // Si falla el lookup, el backend igual lo maneja.
+              }
+              toast.success(`Mesa ${t.name} asignada (orden en curso)`);
+            } else {
+              clearActiveOrder();
+              toast.success(`Mesa ${t.name} asignada`);
+            }
           }}
         />
 

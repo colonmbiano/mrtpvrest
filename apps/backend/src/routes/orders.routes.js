@@ -220,6 +220,30 @@ router.get('/admin', authenticate, requireTenantAccess, requireAdmin, async (req
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── GET /table/:tableId/open — Orden(es) abiertas de una mesa ────────────
+// Permite al TPV saber si una mesa ya tiene cuenta activa para setear el
+// activeOrderId y agregar rondas directamente (POST /:id/items) en lugar
+// de intentar crear una orden nueva sobre la mesa OCCUPIED.
+router.get('/table/:tableId/open', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const orders = await prisma.order.findMany({
+      where: {
+        tableId: req.params.tableId,
+        status: 'OPEN',
+        restaurantId,
+      },
+      select: { id: true, orderNumber: true, status: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+    });
+
+    res.json(orders);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── GET /:id — Detalle completo (requiere auth + tenant scope) ───────────
 router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
   try {
@@ -271,10 +295,14 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       });
       if (!table) return res.status(400).json({ error: 'Mesa no válida para esta sucursal' });
       if (table.status === 'OCCUPIED') {
-        return res.status(409).json({
-          error: 'La mesa ya tiene una cuenta abierta',
-          code: 'TABLE_OCCUPIED',
+        const existingOrder = await prisma.order.findFirst({
+          where: { tableId, status: 'OPEN', locationId: req.locationId }
         });
+
+        if (existingOrder) {
+          req.params = { id: existingOrder.id };
+          return addRoundHandler(req, res);
+        }
       }
     }
 
