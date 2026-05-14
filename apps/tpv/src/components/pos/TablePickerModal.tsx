@@ -3,16 +3,18 @@
 /**
  * TablePickerModal — selector de mesa para iniciar una orden DINE_IN.
  *
- * Por defecto solo muestra las mesas AVAILABLE / DIRTY (las que
- * razonablemente puede asignarse). Con el toggle "Mostrar todas" se
- * incluyen también las OCCUPIED, que aparecen con un botón inline
- * "Liberar" para reasignarlas en sitio sin tener que ir al panel admin
- * — el caso de uso típico es una mesa cuya orden quedó colgada por un
- * cierre de caja anterior y la cuenta nunca se cerró formalmente.
+ * Mesas AVAILABLE / DIRTY → crean una orden nueva.
+ * Mesas OCCUPIED → se unen a la orden abierta existente: el backend
+ *   detecta el tableId ocupado en POST /api/orders/tpv y redirige
+ *   automáticamente a POST /:id/items (addRoundHandler), agregando
+ *   la ronda al ticket ya abierto sin duplicar la cuenta.
+ *
+ * El toggle "Mostrar todas" muestra/oculta las OCUPADAS. Por defecto
+ * se muestran todas para que el mesero pueda unirse fácilmente.
  */
 
 import { useEffect, useState } from "react";
-import { X, MapPin, Users, Eye, EyeOff, RotateCcw } from "lucide-react";
+import { X, MapPin, Users, Eye, EyeOff } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
@@ -28,7 +30,7 @@ interface TablePickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onPick: (table: TableLite) => void;
-  /** Empieza mostrando todas (incluye OCUPADAS). Por defecto false. */
+  /** Empieza mostrando todas (incluye OCUPADAS). Por defecto true. */
   initialShowOccupied?: boolean;
 }
 
@@ -36,13 +38,12 @@ export default function TablePickerModal({
   isOpen,
   onClose,
   onPick,
-  initialShowOccupied = false,
+  initialShowOccupied = true,
 }: TablePickerModalProps) {
   const [tables, setTables]   = useState<TableLite[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
   const [showOccupied, setShowOccupied] = useState(initialShowOccupied);
-  const [busyId, setBusyId]   = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -66,21 +67,10 @@ export default function TablePickerModal({
     return () => { cancelled = true; };
   }
 
-  async function handleRelease(t: TableLite) {
-    if (busyId) return;
-    setBusyId(t.id);
-    try {
-      await api.patch(`/api/tables/${t.id}`, { status: "AVAILABLE" }, { timeout: 15000 });
-      toast.success(`"${t.name}" liberada`);
-      // Optimismo local antes de refetch para feedback instantáneo.
-      setTables((curr) => curr.map((x) => x.id === t.id ? { ...x, status: "AVAILABLE" } : x));
-    } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
-      toast.error(e.response?.data?.error || "No se pudo liberar");
-    } finally {
-      setBusyId(null);
-    }
-  }
+  // handleRelease eliminado: las mesas OCUPADAS ahora se unen al ticket
+  // existente via onPick → el backend detecta la mesa ocupada y agrega
+  // la ronda automáticamente. Si el admin necesita liberar manualmente
+  // puede hacerlo desde el panel de admin → Mesas.
 
   if (!isOpen) return null;
 
@@ -95,6 +85,8 @@ export default function TablePickerModal({
     ? tables.filter((t) => t.status === "OCCUPIED").length
     : 0;
 
+  const occupiedCount = tables.filter((t) => t.status === "OCCUPIED").length;
+
   return (
     <div
       className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm"
@@ -108,8 +100,8 @@ export default function TablePickerModal({
             <h3 className="text-2xl font-black text-white tracking-tight mt-1">Mesa para los comensales</h3>
             <p className="text-xs font-medium text-white/55 mt-1">
               {showOccupied
-                ? "Todas las mesas. Las ocupadas se pueden liberar manualmente."
-                : "Solo se muestran mesas disponibles. Toca una para asignarla."}
+                ? `Mesas libres y ocupadas. Las ocupadas (${occupiedCount}) añaden ronda al ticket abierto.`
+                : "Solo mesas disponibles. Toca una para asignarla."}
             </p>
           </div>
           <button
@@ -195,9 +187,8 @@ export default function TablePickerModal({
                         >
                           <button
                             type="button"
-                            onClick={() => !occupied && onPick(t)}
-                            disabled={occupied}
-                            className="flex flex-col items-center justify-center gap-1 flex-1 active:scale-95 transition-transform disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => onPick(t)}
+                            className="flex flex-col items-center justify-center gap-1 flex-1 active:scale-95 transition-transform"
                           >
                             <MapPin size={20} style={{ color: accent }} />
                             <span className="text-base font-black text-white tracking-tight">{t.name}</span>
@@ -206,18 +197,14 @@ export default function TablePickerModal({
                                 <Users size={10} /> {t.capacity}
                               </span>
                             ) : null}
+                            {occupied && (
+                              <span className="text-[9px] font-black tracking-widest mt-0.5 px-2 py-0.5 rounded-full"
+                                style={{ background: "rgba(255,139,110,0.15)", color: "#FF8B6E" }}
+                              >
+                                + RONDA
+                              </span>
+                            )}
                           </button>
-
-                          {occupied && (
-                            <button
-                              type="button"
-                              onClick={() => handleRelease(t)}
-                              disabled={busyId === t.id}
-                              className="inline-flex items-center justify-center gap-1.5 h-8 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-widest active:scale-95 disabled:opacity-40"
-                            >
-                              <RotateCcw size={11} /> {busyId === t.id ? "…" : "Liberar"}
-                            </button>
-                          )}
 
                           {(occupied || dirty) && (
                             <span
