@@ -480,6 +480,21 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     if (showOrders) fetchOpenOrders();
   }, [showOrders, fetchOpenOrders]);
 
+  // Auto-abrir el drawer cuando llegamos desde el atajo "Tickets Abiertos"
+  // del Panel de Operación (/pos/order-type → /pos/menu?orders=1). Se lee
+  // de window.location para evitar la dependencia de useSearchParams
+  // (requiere Suspense en static export).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("orders") === "1") {
+      setShowOrders(true);
+      // Limpia el query param para que un refresh manual no lo reabra.
+      const url = window.location.pathname;
+      window.history.replaceState({}, "", url);
+    }
+  }, []);
+
   const drawerOrders = openOrders.map((o: any) => ({
     id: o.id,
     orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
