@@ -75,7 +75,7 @@ router.get('/orders/:station', async (req, res) => {
     const hasFilter = catIdSet.size > 0 || itemIdSet.size > 0;
 
     const orderWhere = {
-      status: { in: ['CONFIRMED', 'PREPARING'] },
+      status: { in: ['OPEN', 'CONFIRMED', 'PREPARING'] },
       createdAt: { gte: new Date(Date.now() - 4 * 60 * 60 * 1000) },
     };
     if (locationId) orderWhere.locationId = locationId;

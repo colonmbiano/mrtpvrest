@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MRTPVREST · Admin Mobile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script src="saas-admin/data.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      #08080f;
+  --surf-1:  #0c0c17;
+  --surf-2:  #11111e;
+  --surf-3:  #161627;
+  --border:  #1e1e33;
+  --border2: #2a2a44;
+  --text:    #e8e8f2;
+  --muted:   #8585a3;
+  --dim:     #5a5a7a;
+  --brand:   #7c3aed;
+  --brand-s: rgba(124,58,237,0.14);
+  --brand-g: rgba(124,58,237,0.32);
+  --brand-h: #9472ff;
+  --ok:      #10b981;
+  --ok-s:    rgba(16,185,129,0.14);
+  --warn:    #f59e0b;
+  --warn-s:  rgba(245,158,11,0.14);
+  --err:     #ef4444;
+  --err-s:   rgba(239,68,68,0.14);
+  --info:    #3b82f6;
+  --info-s:  rgba(59,130,246,0.14);
+  --f-d: 'Syne', system-ui, sans-serif;
+  --f-b: 'DM Sans', system-ui, sans-serif;
+  --f-m: 'DM Mono', ui-monospace, monospace;
+}
+html, body { height: 100%; background: #03020a; }
+body { font-family: var(--f-b); -webkit-font-smoothing: antialiased; }
+#root { height: 100%; display: flex; align-items: center; justify-content: center; }
+
+/* ── Phone screen ── */
+.screen {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Top bar ── */
+.top-bar {
+  flex-shrink: 0;
+  padding: 12px 20px 10px;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.top-bar-logo {
+  font-family: var(--f-d); font-weight: 800; font-size: 16px;
+  color: var(--text); letter-spacing: -0.02em;
+}
+.top-bar-logo span { color: var(--brand-h); }
+.top-bar-right { display: flex; align-items: center; gap: 10px; }
+.icon-btn {
+  width: 34px; height: 34px; border-radius: 10px;
+  background: var(--surf-2); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; position: relative;
+  color: var(--muted);
+}
+.icon-btn:active { opacity: 0.7; transform: scale(0.94); }
+.icon-btn .badge {
+  position: absolute; top: -4px; right: -4px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--err); color: #fff;
+  font-family: var(--f-m); font-size: 8px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--bg);
+}
+.icon-btn .badge.brand {
+  background: var(--brand);
+  width: 8px; height: 8px;
+  top: -2px; right: -2px;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* ── Scroll area ── */
+.scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.scroll::-webkit-scrollbar { display: none; }
+.content { padding: 16px 16px 120px; display: flex; flex-direction: column; gap: 14px; }
+
+/* ── Section header ── */
+.sec-h {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.sec-h h2 {
+  font-family: var(--f-d); font-weight: 700; font-size: 22px;
+  color: var(--text); letter-spacing: -0.025em;
+}
+.sec-h p { font-size: 12px; color: var(--dim); margin-top: 2px; }
+
+/* ── KPI grid ── */
+.kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.kpi-card {
+  background: var(--surf-1); border: 1px solid var(--border);
+  border-radius: 16px; padding: 14px 14px 12px;
+  position: relative; overflow: hidden;
+}
+.kpi-card::before {
+  content:''; position:absolute; left:0; top:0; bottom:0;
+  width:3px; background:var(--accent,var(--brand));
+  border-radius:16px 0 0 16px;
+}
+.kpi-label {
+  font-family: var(--f-m); font-size: 9px; font-weight: 500;
+  letter-spacing: 0.14em; color: var(--dim);
+  text-transform: uppercase; margin-bottom: 7px;
+}
+.kpi-val {
+  font-family: var(--f-d); font-weight: 700; font-size: 24px;
+  color: var(--text); letter-spacing: -0.03em; line-height: 1;
+}
+.kpi-val small { font-size: 12px; color: var(--dim); font-weight: 500; }
+.kpi-delta {
+  font-family: var(--f-m); font-size: 10px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 6px; border-radius: 5px; margin-top: 6px;
+}
+.kpi-delta.up { color: var(--ok); background: var(--ok-s); }
+.kpi-delta.dn { color: var(--err); background: var(--err-s); }
+
+/* ── Card ── */
+.card {
+  background: var(--surf-1); border: 1px solid var(--border);
+  border-radius: 16px; overflow: hidden;
+}
+.card-h {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.card-h h3 {
+  font-family: var(--f-d); font-weight: 600; font-size: 13.5px;
+  color: var(--text);
+}
+.card-h p { font-size: 11px; color: var(--dim); margin-top: 1px; }
+
+/* ── Pill ── */
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px;
+  font-family: var(--f-m); font-size: 9.5px; font-weight: 600;
+  white-space: nowrap;
+}
+.pill .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.pill.ok   { background: var(--ok-s);   color: var(--ok);   border: 1px solid rgba(16,185,129,0.2); }
+.pill.warn { background: var(--warn-s); color: var(--warn); border: 1px solid rgba(245,158,11,0.2); }
+.pill.err  { background: var(--err-s);  color: var(--err);  border: 1px solid rgba(239,68,68,0.2); }
+.pill.info { background: var(--info-s); color: var(--info); border: 1px solid rgba(59,130,246,0.2); }
+.pill.br   { background: var(--brand-s);color: var(--brand-h); border: 1px solid rgba(124,58,237,0.2); }
+.pill.muted{ background: var(--surf-3); color: var(--muted); border: 1px solid var(--border); }
+
+/* ── Activity item ── */
+.act-item {
+  display: flex; align-items: flex-start; gap: 11px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.act-item:active { background: var(--surf-2); }
+.act-item:last-child { border-bottom: none; }
+.act-icon {
+  width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 1px;
+}
+.act-body { flex: 1; min-width: 0; }
+.act-name { font-size: 13.5px; font-weight: 600; color: var(--text); line-height: 1.2; }
+.act-sub { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.act-time { font-family: var(--f-m); font-size: 10px; color: var(--dim); flex-shrink: 0; padding-top: 2px; }
+
+/* ── Alert item ── */
+.alert-item {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background 0.1s;
+}
+.alert-item:active { background: var(--surf-2); }
+.alert-item:last-child { border-bottom: none; }
+.alert-item.acked { opacity: 0.5; }
+.alert-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+.alert-icon {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+.alert-title { font-size: 13.5px; font-weight: 600; color: var(--text); line-height: 1.25; flex: 1; }
+.alert-desc { font-size: 12px; color: var(--muted); line-height: 1.45; padding: 0 0 0 0; }
+.alert-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+
+/* ── Error item ── */
+.err-item {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid var(--lvl-color, var(--err));
+}
+.err-item:last-child { border-bottom: none; }
+.err-top { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.err-msg { font-family: var(--f-m); font-size: 11px; color: var(--text); line-height: 1.4; }
+.err-meta { font-family: var(--f-m); font-size: 10px; color: var(--dim); margin-top: 4px; }
+.err-expand {
+  margin-top: 8px; padding: 8px; background: var(--surf-2);
+  border-radius: 7px; font-family: var(--f-m); font-size: 9.5px;
+  color: var(--dim); line-height: 1.5;
+}
+
+/* ── Btn ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 10px;
+  font-family: var(--f-b); font-size: 12.5px; font-weight: 600;
+  background: var(--surf-2); border: 1px solid var(--border);
+  color: var(--text); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active { opacity: 0.75; }
+.btn.primary { background: var(--brand); color: #fff; border-color: var(--brand); box-shadow: 0 4px 14px var(--brand-g); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.btn.sm { padding: 5px 10px; font-size: 11.5px; }
+.btn.danger { background: var(--err-s); color: var(--err); border-color: rgba(239,68,68,0.2); }
+
+/* ── Bottom tab bar ── */
+.tabbar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 82px;
+  background: rgba(12,12,23,0.9);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: flex-start; justify-content: space-around;
+  padding: 10px 0 0;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 20;
+}
+.tab-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 0 18px; cursor: pointer; position: relative;
+  min-width: 60px;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.12s;
+}
+.tab-item:active { opacity: 0.6; }
+.tab-icon {
+  width: 44px; height: 32px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+  position: relative;
+}
+.tab-item.active .tab-icon { background: var(--brand-s); }
+.tab-label {
+  font-family: var(--f-b); font-size: 10px; font-weight: 500;
+  color: var(--dim); transition: color 0.15s;
+}
+.tab-item.active .tab-label { color: var(--brand-h); font-weight: 600; }
+.tab-badge {
+  position: absolute; top: 0; right: 4px;
+  min-width: 16px; height: 16px; border-radius: 999px;
+  background: var(--err); color: #fff;
+  font-family: var(--f-m); font-size: 8px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 4px; border: 1.5px solid var(--bg);
+}
+
+/* ── FAB ── */
+.fab {
+  position: absolute; bottom: 96px; right: 18px; z-index: 25;
+  width: 52px; height: 52px; border-radius: 16px;
+  background: linear-gradient(135deg, var(--brand-h), var(--brand));
+  box-shadow: 0 8px 24px var(--brand-g), 0 0 0 1px rgba(255,255,255,0.1) inset;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: #fff;
+  transition: transform 0.15s, box-shadow 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  border: none;
+}
+.fab:active { transform: scale(0.92); box-shadow: 0 4px 14px var(--brand-g); }
+.fab .fab-badge {
+  position: absolute; top: -4px; right: -4px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--ok); border: 2px solid var(--bg);
+  animation: pulse 2.4s infinite;
+}
+
+/* ── Bottom sheet ── */
+.sheet-bg {
+  position: absolute; inset: 0; background: rgba(5,5,12,0.6); z-index: 30;
+  animation: fadeIn 0.2s ease-out;
+  backdrop-filter: blur(4px);
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: var(--surf-1); border-radius: 22px 22px 0 0;
+  border: 1px solid var(--border); border-bottom: none;
+  box-shadow: 0 -20px 60px rgba(0,0,0,0.5);
+  z-index: 31;
+  display: flex; flex-direction: column;
+  animation: slideUp 0.28s cubic-bezier(0.32,0.72,0,1);
+  max-height: 88%;
+}
+@keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.sheet-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: var(--border2); margin: 10px auto 0;
+  flex-shrink: 0;
+}
+.sheet-h {
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px;
+  flex-shrink: 0;
+}
+.sheet-logo {
+  width: 34px; height: 34px; border-radius: 10px;
+  background: conic-gradient(from 200deg, var(--brand-h), var(--brand), var(--brand-h));
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; flex-shrink: 0;
+  box-shadow: 0 4px 12px var(--brand-g);
+}
+.sheet-title { flex: 1; }
+.sheet-title h4 { font-family: var(--f-d); font-weight: 600; font-size: 14px; color: var(--text); }
+.sheet-title p { font-family: var(--f-m); font-size: 9px; color: var(--brand-h); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 2px; }
+
+/* chat */
+.chat-body { flex: 1; overflow-y: auto; padding: 14px 14px 8px; display: flex; flex-direction: column; gap: 12px; }
+.chat-body::-webkit-scrollbar { display: none; }
+.bubble {
+  max-width: 84%; padding: 10px 13px;
+  font-size: 13px; line-height: 1.5;
+}
+.bubble.user {
+  align-self: flex-end;
+  background: var(--brand); color: #fff;
+  border-radius: 16px 16px 4px 16px;
+}
+.bubble.ai {
+  align-self: flex-start;
+  background: var(--surf-2); color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 16px 16px 16px 4px;
+}
+.bubble.ai strong { color: var(--brand-h); font-weight: 600; }
+.bubble.ai code {
+  font-family: var(--f-m); font-size: 10.5px;
+  background: var(--surf-3); padding: 1px 5px; border-radius: 4px;
+  color: var(--brand-h);
+}
+.typing-dots {
+  align-self: flex-start;
+  background: var(--surf-2); border: 1px solid var(--border);
+  border-radius: 16px 16px 16px 4px;
+  padding: 10px 14px;
+  display: inline-flex; gap: 4px;
+}
+.typing-dots span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--brand-h); display: block;
+  animation: dot 1.2s infinite ease-in-out;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes dot { 0%,60%,100%{transform:scale(0.7);opacity:0.5} 30%{transform:scale(1);opacity:1} }
+
+.quick-chips {
+  display: flex; gap: 6px; overflow-x: auto; padding: 8px 14px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.quick-chips::-webkit-scrollbar { display: none; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 10px; border-radius: 999px;
+  background: var(--surf-2); border: 1px solid var(--border);
+  font-size: 11.5px; font-weight: 500; color: var(--muted);
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.chip:active { background: var(--brand-s); color: var(--brand-h); border-color: rgba(124,58,237,0.3); }
+
+.chat-input-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px 14px; flex-shrink: 0;
+  border-top: 1px solid var(--border);
+}
+.chat-input {
+  flex: 1; background: var(--surf-2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 10px 14px;
+  font-family: var(--f-b); font-size: 13.5px; color: var(--text);
+  outline: none; resize: none; overflow: hidden;
+  line-height: 1.4; max-height: 80px;
+}
+.chat-input:focus { border-color: var(--brand); }
+.chat-send {
+  width: 40px; height: 40px; border-radius: 12px;
+  background: var(--brand); color: #fff;
+  border: none; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 12px var(--brand-g);
+  transition: transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.chat-send:active { transform: scale(0.9); }
+.chat-send:disabled { opacity: 0.4; }
+
+/* ── Pull-to-refresh indicator ── */
+.ptr {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; padding: 10px 0;
+  font-family: var(--f-m); font-size: 10.5px; color: var(--dim);
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+.ptr-spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Divider ── */
+.divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+/* ── Empty state ── */
+.empty {
+  padding: 40px 20px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.empty-icon { font-size: 36px; }
+.empty h3 { font-family: var(--f-d); font-weight: 600; font-size: 16px; color: var(--text); }
+.empty p { font-size: 12.5px; color: var(--muted); max-width: 220px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+// ── Icons (inline SVG, minimal set) ──────────────────────────
+const Ic = ({ n, s = 20 }) => {
+  const p = { width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  switch(n) {
+    case 'home':    return <svg {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
+    case 'bell':    return <svg {...p}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>;
+    case 'alert':   return <svg {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r=".5" fill="currentColor"/></svg>;
+    case 'error':   return <svg {...p}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>;
+    case 'spark':   return <svg {...p}><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3"/></svg>;
+    case 'send':    return <svg {...p}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
+    case 'check':   return <svg {...p}><polyline points="20 6 9 17 4 12"/></svg>;
+    case 'x':       return <svg {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+    case 'up':      return <svg {...p}><polyline points="18 15 12 9 6 15"/></svg>;
+    case 'dn':      return <svg {...p}><polyline points="6 9 12 15 18 9"/></svg>;
+    case 'ref':     return <svg {...p}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>;
+    case 'dots':    return <svg {...p}><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/><circle cx="5" cy="12" r="1" fill="currentColor"/></svg>;
+    case 'eye':     return <svg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
+    case 'trend':   return <svg {...p}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>;
+    case 'building':return <svg {...p}><rect x="4" y="2" width="16" height="20" rx="1"/><path d="M9 6h2M13 6h2M9 10h2M13 10h2M9 14h2M13 14h2M10 22v-4h4v4"/></svg>;
+    default:        return <svg {...p}><circle cx="12" cy="12" r="9"/></svg>;
+  }
+};
+
+// ── Helpers ──────────────────────────────────────────────────
+const D = window.MRTPV_DATA;
+const fmtM = n => '$' + Math.round(n).toLocaleString('en-US');
+const ago = ts => {
+  const d = Date.now() - (typeof ts === 'number' ? ts : new Date(ts).getTime());
+  const m = Math.floor(d/60000), h = Math.floor(d/3600000), dd = Math.floor(d/86400000);
+  if (m < 1) return 'ahora';
+  if (m < 60) return `${m}m`;
+  if (h < 24) return `${h}h`;
+  return `${dd}d`;
+};
+
+// ── HOME tab ─────────────────────────────────────────────────
+const Home = ({ onTap }) => {
+  const [tick, setTick] = React.useState(0);
+  const [flash, setFlash] = React.useState(false);
+  React.useEffect(() => {
+    const t = setInterval(() => { setTick(x=>x+1); setFlash(true); setTimeout(()=>setFlash(false),800); }, 5000);
+    return ()=>clearInterval(t);
+  }, []);
+
+  const actColors = { register:'var(--info)', activated:'var(--ok)', payment:'var(--ok)',
+                      trial_end:'var(--warn)', failed:'var(--err)', upgrade:'var(--ok)',
+                      churn:'var(--err)', ai:'var(--brand-h)' };
+  const actEmojis = { register:'📥', activated:'✅', payment:'💰', trial_end:'⏰', failed:'❌', upgrade:'⬆️', churn:'🔥', ai:'✨' };
+
+  return (
+    <div className="content">
+      <div>
+        <div className="sec-h">
+          <div>
+            <h2>Resumen</h2>
+            <p>{new Date().toLocaleDateString('es-MX',{weekday:'short',day:'numeric',month:'short'})}</p>
+          </div>
+          <span className="pill ok" style={{ fontSize: 10 }}>
+            <span className="dot" style={{ animation:'pulse 2s infinite' }}/>Sistema OK
+          </span>
+        </div>
+
+        {/* KPI grid */}
+        <div className="kpi-grid">
+          <div className="kpi-card" style={{ '--accent':'var(--brand)' }}>
+            <div className="kpi-label">MRR Total</div>
+            <div className="kpi-val" style={{ transition: 'color 0.3s', color: flash ? 'var(--brand-h)' : 'var(--text)' }}>
+              {fmtM(D.STATS.mrr)}<small>/mo</small>
+            </div>
+            <div className="kpi-delta up"><Ic n="up" s={9}/>+{D.STATS.mrrGrowth}%</div>
+          </div>
+          <div className="kpi-card" style={{ '--accent':'var(--ok)' }}>
+            <div className="kpi-label">Activas</div>
+            <div className="kpi-val">{D.STATS.active}<small>/{D.STATS.total}</small></div>
+            <div className="kpi-delta up"><Ic n="up" s={9}/>+6.4%</div>
+          </div>
+          <div className="kpi-card" style={{ '--accent':'var(--info)' }}>
+            <div className="kpi-label">Conversión</div>
+            <div className="kpi-val">{D.STATS.conversion}<small>%</small></div>
+            <div className="kpi-delta up"><Ic n="up" s={9}/>+3.1%</div>
+          </div>
+          <div className="kpi-card" style={{ '--accent':'var(--warn)' }}>
+            <div className="kpi-label">En trial</div>
+            <div className="kpi-val">{D.STATS.trial}</div>
+            <div className="kpi-delta dn" style={{ marginTop:6 }}>
+              <Ic n="dn" s={9}/>{D.STATS.churn}% churn
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Critical alerts preview */}
+      {D.ALERTS.filter(a=>a.sev==='critical'&&!a.ack).length > 0 && (
+        <div onClick={() => onTap('alerts')} style={{
+          padding: '12px 14px',
+          background: 'linear-gradient(90deg, rgba(239,68,68,.12), rgba(239,68,68,.04))',
+          border: '1px solid rgba(239,68,68,.3)',
+          borderRadius: 14,
+          display: 'flex', alignItems: 'center', gap: 12,
+          cursor: 'pointer',
+        }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background:'var(--err-s)', color:'var(--err)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <Ic n="alert" s={18}/>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color:'var(--text)' }}>
+              {D.ALERTS.filter(a=>a.sev==='critical'&&!a.ack).length} alertas críticas
+            </div>
+            <div style={{ fontSize: 11.5, color:'var(--muted)', marginTop: 2 }}>Requieren atención inmediata</div>
+          </div>
+          <Ic n="dn" s={14} style={{ transform:'rotate(-90deg)', color:'var(--err)' }}/>
+        </div>
+      )}
+
+      {/* Recent activity */}
+      <div className="card">
+        <div className="card-h">
+          <div>
+            <h3>Actividad reciente</h3>
+            <p>Últimos eventos en la plataforma</p>
+          </div>
+          <span className="pill ok"><span className="dot"/>LIVE</span>
+        </div>
+        {D.ACTIVITY.slice(0,6).map((ev, i) => (
+          <div key={ev.id} className="act-item">
+            <div className="act-icon" style={{ background:`color-mix(in oklch, ${actColors[ev.type]||'var(--dim)'} 14%, transparent)`, color: actColors[ev.type]||'var(--dim)' }}>
+              <span style={{ fontSize: 16 }}>{actEmojis[ev.type]||'•'}</span>
+            </div>
+            <div className="act-body">
+              <div className="act-name">{ev.tenant}</div>
+              <div className="act-sub">{ev.text} · {ev.sub}</div>
+            </div>
+            <div className="act-time">{ago(ev.ts)}</div>
+          </div>
+        ))}
+        <div style={{ padding:'12px 16px', textAlign:'center' }}>
+          <button className="btn ghost sm" onClick={() => onTap('errors')}>Ver todos los logs →</button>
+        </div>
+      </div>
+
+      {/* Plan breakdown */}
+      <div className="card">
+        <div className="card-h">
+          <div><h3>Revenue por plan</h3><p>MRR activo</p></div>
+        </div>
+        <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:12 }}>
+          {[
+            { label:'Basic',    color:'#3b82f6', mrr: D.STATS.planTotals.basic },
+            { label:'Pro',      color:'#7c3aed', mrr: D.STATS.planTotals.pro },
+            { label:'Unlimited',color:'#f59e0b', mrr: D.STATS.planTotals.unl },
+          ].map(p => {
+            const total = D.STATS.mrr || 1;
+            const pct = Math.round((p.mrr / total) * 100);
+            return (
+              <div key={p.label}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5, alignItems:'baseline' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                    <div style={{ width:8, height:8, borderRadius:2, background:p.color }}/>
+                    <span style={{ fontSize:12.5, fontWeight:500, color:'var(--text)' }}>{p.label}</span>
+                  </div>
+                  <span style={{ fontFamily:'DM Mono,monospace', fontSize:12, fontWeight:600, color:'var(--text)' }}>{fmtM(p.mrr)}</span>
+                </div>
+                <div style={{ height:5, background:'var(--surf-2)', borderRadius:3 }}>
+                  <div style={{ width:`${pct}%`, height:'100%', background:p.color, borderRadius:3 }}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── ALERTS tab ───────────────────────────────────────────────
+const Alerts = () => {
+  const [alerts, setAlerts] = React.useState(D.ALERTS);
+  const [filter, setFilter] = React.useState('all');
+
+  const filtered = alerts.filter(a => filter === 'all' || a.sev === filter);
+  const unacked = alerts.filter(a => !a.ack && a.sev === 'critical').length;
+
+  function ack(id) {
+    setAlerts(arr => arr.map(a => a.id === id ? { ...a, ack: true } : a));
+  }
+
+  const SEV_STYLE = {
+    critical: { bg:'var(--err-s)', color:'var(--err)', icon:'🚨' },
+    warn:     { bg:'var(--warn-s)', color:'var(--warn)', icon:'⚠️' },
+  };
+
+  return (
+    <div className="content">
+      <div className="sec-h">
+        <div>
+          <h2>Alertas SLA</h2>
+          <p>{unacked > 0 ? `${unacked} crítica${unacked>1?'s':''} sin ACK` : 'Todo en orden'}</p>
+        </div>
+        {unacked > 0 && <span className="pill err"><span className="dot"/>{unacked}</span>}
+      </div>
+
+      {/* Filter chips */}
+      <div style={{ display:'flex', gap:8, marginBottom:4 }}>
+        {[['all','Todas'], ['critical','Críticas'], ['warn','Warnings']].map(([k,l]) => (
+          <button key={k} onClick={()=>setFilter(k)} style={{
+            padding:'6px 12px', borderRadius:999, border:'1px solid',
+            fontSize:11.5, fontWeight:600, cursor:'pointer',
+            background: filter===k ? 'var(--brand-s)' : 'var(--surf-2)',
+            borderColor: filter===k ? 'rgba(124,58,237,.3)' : 'var(--border)',
+            color: filter===k ? 'var(--brand-h)' : 'var(--muted)',
+          }}>{l}</button>
+        ))}
+      </div>
+
+      <div className="card">
+        {filtered.length === 0 && (
+          <div className="empty">
+            <div className="empty-icon">✅</div>
+            <h3>Todo tranquilo</h3>
+            <p>No hay alertas en esta categoría por ahora.</p>
+          </div>
+        )}
+        {filtered.map((a, i) => {
+          const s = SEV_STYLE[a.sev];
+          return (
+            <div key={a.id} className={`alert-item ${a.ack?'acked':''}`}>
+              <div className="alert-top">
+                <div className="alert-icon" style={{ background:s.bg, fontSize:18 }}>{s.icon}</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
+                    <div className="alert-title">{a.title}</div>
+                    <span style={{ fontFamily:'DM Mono,monospace', fontSize:10, color:'var(--dim)', flexShrink:0 }}>{a.age}</span>
+                  </div>
+                  <div style={{ display:'flex', gap:6, marginTop:5 }}>
+                    <span className={`pill ${a.sev==='critical'?'err':'warn'}`} style={{ fontSize:8.5 }}>{a.sev}</span>
+                    {a.ack && <span className="pill muted" style={{ fontSize:8.5 }}>ACK</span>}
+                  </div>
+                </div>
+              </div>
+              <div className="alert-desc">{a.desc}</div>
+              {!a.ack && (
+                <div className="alert-foot">
+                  <button className="btn sm" onClick={()=>ack(a.id)}>
+                    <Ic n="check" s={12}/>Marcar ACK
+                  </button>
+                  <button className="btn sm ghost">Investigar</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ── ERRORS tab ───────────────────────────────────────────────
+const Errors = () => {
+  const [expanded, setExpanded] = React.useState({});
+  const [levelFilter, setLevelFilter] = React.useState('all');
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  const LEVELS = ['all','CRITICAL','ERROR','WARN','INFO'];
+  const filtered = D.ERRORS.filter(e => levelFilter === 'all' || e.level === levelFilter);
+
+  const LCOL = { CRITICAL:'var(--err)', ERROR:'var(--err)', WARN:'var(--warn)', INFO:'var(--info)' };
+  const LPILL = { CRITICAL:'err', ERROR:'err', WARN:'warn', INFO:'info' };
+
+  function refresh() {
+    setRefreshing(true);
+    setTimeout(()=>setRefreshing(false), 1200);
+  }
+
+  return (
+    <div className="content">
+      <div className="sec-h">
+        <div>
+          <h2>Errores</h2>
+          <p>{D.ERRORS.length} registros · polling 4s</p>
+        </div>
+        <button className="btn sm" onClick={refresh}>
+          <span style={{ display:'inline-block' }} className={refreshing?'ptr-spin':''}><Ic n="ref" s={13}/></span>
+        </button>
+      </div>
+
+      {refreshing && (
+        <div className="ptr"><span className="ptr-spin"><Ic n="ref" s={14}/></span>Actualizando…</div>
+      )}
+
+      {/* Level filter */}
+      <div style={{ display:'flex', gap:7, overflowX:'auto', marginBottom:4, paddingBottom:4 }}>
+        {LEVELS.map(l => (
+          <button key={l} onClick={()=>setLevelFilter(l)} style={{
+            padding:'5px 11px', borderRadius:999, border:'1px solid', flexShrink:0,
+            fontSize:11, fontWeight:600, cursor:'pointer',
+            background: levelFilter===l ? `color-mix(in oklch, ${LCOL[l]||'var(--brand)'} 14%, transparent)` : 'var(--surf-2)',
+            borderColor: levelFilter===l ? `color-mix(in oklch, ${LCOL[l]||'var(--brand)'} 40%, transparent)` : 'var(--border)',
+            color: levelFilter===l ? (LCOL[l]||'var(--brand-h)') : 'var(--muted)',
+          }}>
+            {l === 'all' ? 'Todos' : l}
+          </button>
+        ))}
+      </div>
+
+      <div className="card">
+        {filtered.length === 0 && (
+          <div className="empty">
+            <div className="empty-icon">🟢</div>
+            <h3>Sin errores</h3>
+            <p>No hay registros de este nivel.</p>
+          </div>
+        )}
+        {filtered.slice(0,20).map((e, i) => {
+          const isOpen = expanded[e.id];
+          return (
+            <div key={e.id} className="err-item" style={{ '--lvl-color': LCOL[e.level]||'var(--dim)' }}
+                 onClick={()=>setExpanded(s=>({...s,[e.id]:!s[e.id]}))}>
+              <div className="err-top">
+                <span className={`pill ${LPILL[e.level]||'muted'}`} style={{ fontSize:8.5 }}>{e.level}</span>
+                {e.method && <span style={{ fontFamily:'DM Mono,monospace', fontSize:10, color:'var(--muted)', fontWeight:600 }}>{e.method}</span>}
+                {e.path && <span style={{ fontFamily:'DM Mono,monospace', fontSize:10, color:'var(--dim)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{e.path}</span>}
+                <span style={{ fontFamily:'DM Mono,monospace', fontSize:10, color:'var(--dim)', flexShrink:0 }}>{ago(e.createdAt)}</span>
+              </div>
+              <div className="err-msg">{e.message}</div>
+              {e.tenant && (
+                <div className="err-meta">tenant: {e.tenant}</div>
+              )}
+              {isOpen && e.stack && (
+                <div className="err-expand">{e.stack}</div>
+              )}
+              {(e.level==='CRITICAL'||e.level==='ERROR') && (
+                <div style={{ display:'flex', gap:6, marginTop:8 }}>
+                  <button className="btn sm ghost" onClick={ev=>{ev.stopPropagation();}}>Copiar</button>
+                  <button className="btn sm ghost" onClick={ev=>{ev.stopPropagation();}}>
+                    <Ic n="spark" s={11}/> Analizar IA
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ── AI CHAT bottom sheet ─────────────────────────────────────
+const RESPONSES = {
+  errors: {
+    preface: 'Resumen de errores · últimas 24h:',
+    card: [
+      ['Total registrados', D.ERRORS.length],
+      ['Críticos', D.ERRORS.filter(e=>e.level==='CRITICAL').length, 'err'],
+      ['Errores',  D.ERRORS.filter(e=>e.level==='ERROR').length, 'err'],
+      ['Warnings', D.ERRORS.filter(e=>e.level==='WARN').length, 'warn'],
+    ],
+    tail: '**Acción recomendada:** los errores críticos están en `/api/auth/register` y `/api/onboarding/agent`. Pausa el flujo de registro 60s y rota la API key de Gemini.',
+  },
+  billing: {
+    preface: 'Estado de facturación hoy:',
+    card: [
+      ['MRR', `$${D.STATS.mrr.toLocaleString()}`, 'ok'],
+      ['ARR proyectado', `$${D.STATS.arr.toLocaleString()}`, 'ok'],
+      ['ARPU', `$${D.STATS.arpu}`, null],
+      ['Crecimiento', `+${D.STATS.mrrGrowth}%`, 'ok'],
+    ],
+    tail: 'El plan **Pro** genera el mayor volumen de MRR. Hay 2 facturas fallidas por tarjeta vencida — sugiero retry automático.',
+  },
+  churn: {
+    preface: 'Marcas con mayor riesgo de churn:',
+    card: D.TENANTS.filter(t=>t.health<55||t.subscription.status==='PAST_DUE').slice(0,4)
+          .map(t=>[`${t.emoji} ${t.name}`, `Health ${t.health}`, t.health<40?'err':'warn']),
+    tail: 'Recomiendo: WhatsApp personalizado + descuento 20% por 2 meses a las primeras 4.',
+  },
+  alerts: {
+    preface: `${D.ALERTS.filter(a=>a.sev==='critical'&&!a.ack).length} alertas críticas activas:`,
+    card: D.ALERTS.filter(a=>a.sev==='critical').map(a=>[a.title, a.age, 'err']),
+    tail: 'La más urgente: **Stripe webhook failing** — impacta cobros en producción. Sugiero revisar logs de Stripe Dashboard ahora.',
+  },
+  default: {
+    preface: null,
+    card: null,
+    tail: 'Puedo resumirte **errores**, **facturación**, **churn risk**, **alertas** y más. Usa los accesos rápidos de abajo o escríbeme directamente.',
+  },
+};
+
+function detectIntent(q) {
+  const s = q.toLowerCase();
+  if (/error|critic|fallo/.test(s)) return 'errors';
+  if (/factura|mrr|pago|cobro/.test(s)) return 'billing';
+  if (/churn|cancel|riesgo/.test(s)) return 'churn';
+  if (/alerta|sla|critica/.test(s)) return 'alerts';
+  return 'default';
+}
+
+const BubbleAi = ({ r }) => (
+  <div className="bubble ai">
+    {r.preface && <p style={{ marginBottom: r.card?8:0 }}>{r.preface}</p>}
+    {r.card && (
+      <div style={{ background:'var(--surf-3)', borderRadius:10, overflow:'hidden', margin:'8px 0', border:'1px solid var(--border)' }}>
+        {r.card.map(([k, v, kind], i) => (
+          <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 12px', borderBottom:i<r.card.length-1?'1px dashed var(--border)':'none' }}>
+            <span style={{ fontSize:11.5, color:'var(--muted)' }}>{k}</span>
+            <span style={{ fontFamily:'DM Mono,monospace', fontSize:12, fontWeight:700, color:kind==='err'?'var(--err)':kind==='warn'?'var(--warn)':kind==='ok'?'var(--ok)':'var(--text)' }}>{v}</span>
+          </div>
+        ))}
+      </div>
+    )}
+    {r.tail && <AiText text={r.tail}/>}
+  </div>
+);
+
+const AiText = ({ text }) => {
+  const parts = [];
+  let rest = text, m;
+  while ((m = rest.match(/\*\*(.+?)\*\*/))) {
+    if (m.index > 0) parts.push(rest.slice(0, m.index));
+    parts.push(<strong key={parts.length}>{m[1]}</strong>);
+    rest = rest.slice(m.index + m[0].length);
+  }
+  if (rest) parts.push(rest);
+  return <p style={{ marginTop:4 }}>{parts}</p>;
+};
+
+const AiChat = ({ open, onClose }) => {
+  const [msgs, setMsgs] = React.useState([
+    { role:'ai', ts:Date.now()-120000, intent:'default', text:'' },
+  ]);
+  const [input, setInput] = React.useState('');
+  const [typing, setTyping] = React.useState(false);
+  const bodyRef = React.useRef();
+
+  React.useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+  }, [msgs, typing]);
+
+  function trigger(intent, label) {
+    setMsgs(m => [...m, { role:'user', ts:Date.now(), text:label }]);
+    setTyping(true);
+    setTimeout(() => {
+      setMsgs(m => [...m, { role:'ai', ts:Date.now(), intent, text:'' }]);
+      setTyping(false);
+    }, 800 + Math.random()*500);
+  }
+  function send() {
+    if (!input.trim()) return;
+    const q = input.trim();
+    setInput('');
+    trigger(detectIntent(q), q);
+  }
+
+  if (!open) return null;
+  return (
+    <>
+      <div className="sheet-bg" onClick={onClose}/>
+      <div className="sheet" style={{ height:'88%' }}>
+        <div className="sheet-handle"/>
+        <div className="sheet-h">
+          <div className="sheet-logo"><Ic n="spark" s={16}/></div>
+          <div className="sheet-title">
+            <h4>MRTPV Intelligence</h4>
+            <p>Super Admin · Gemini</p>
+          </div>
+          <button className="btn ghost icon" onClick={onClose} style={{ padding:6 }}><Ic n="x" s={18}/></button>
+        </div>
+
+        <div className="chat-body" ref={bodyRef}>
+          {msgs.map((m, i) => {
+            if (m.role === 'user') return <div key={i} className="bubble user">{m.text}</div>;
+            const r = RESPONSES[m.intent] || RESPONSES.default;
+            return <BubbleAi key={i} r={r}/>;
+          })}
+          {typing && <div className="typing-dots"><span/><span/><span/></div>}
+        </div>
+
+        <div className="quick-chips">
+          {[
+            { id:'errors',  l:'🔴 Errores' },
+            { id:'billing', l:'💰 Facturación' },
+            { id:'churn',   l:'🔥 Churn risk' },
+            { id:'alerts',  l:'🚨 Alertas SLA' },
+          ].map(c => (
+            <button key={c.id} className="chip" onClick={()=>trigger(c.id, c.l)}>{c.l}</button>
+          ))}
+        </div>
+
+        <div className="chat-input-row">
+          <textarea
+            className="chat-input"
+            placeholder="¿Cuántos pagos fallaron hoy?…"
+            value={input}
+            rows={1}
+            onChange={e=>setInput(e.target.value)}
+            onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}
+          />
+          <button className="chat-send" onClick={send} disabled={!input.trim()}>
+            <Ic n="send" s={16}/>
+          </button>
+        </div>
+      </div>
+    </>
+  );
+};
+
+// ── App root ─────────────────────────────────────────────────
+const TABS = [
+  { id:'home',   icon:'home',    label:'Inicio' },
+  { id:'alerts', icon:'bell',    label:'Alertas' },
+  { id:'errors', icon:'error',   label:'Errores' },
+];
+
+const MobileApp = () => {
+  const [tab, setTab] = React.useState('home');
+  const [aiOpen, setAiOpen] = React.useState(false);
+  const [toastMsg, setToastMsg] = React.useState('');
+  const [toastShow, setToastShow] = React.useState(false);
+
+  const critCount = D.ALERTS.filter(a=>a.sev==='critical'&&!a.ack).length;
+  const errCount  = D.ERRORS.filter(e=>e.level==='CRITICAL'||e.level==='ERROR').length;
+
+  // Live notification
+  React.useEffect(() => {
+    const t = setTimeout(() => {
+      setToastMsg('💰 Tacos El Güero · Pago recibido $59/mo');
+      setToastShow(true);
+      setTimeout(()=>setToastShow(false), 3000);
+    }, 6000);
+    return ()=>clearTimeout(t);
+  }, []);
+
+  const BADGES = { home: 0, alerts: critCount, errors: errCount };
+
+  return (
+    <div className="screen">
+      {/* Top bar */}
+      <div className="top-bar">
+        <div className="top-bar-logo">MRTPV<span>REST</span></div>
+        <div className="top-bar-right">
+          <div className="icon-btn" onClick={()=>setAiOpen(true)}>
+            <Ic n="spark" s={18}/>
+            <span className="badge brand"/>
+          </div>
+          <div className="icon-btn">
+            <Ic n="building" s={18}/>
+          </div>
+        </div>
+      </div>
+
+      {/* Screen content */}
+      <div className="scroll">
+        {tab === 'home'   && <Home onTap={setTab}/>}
+        {tab === 'alerts' && <Alerts/>}
+        {tab === 'errors' && <Errors/>}
+      </div>
+
+      {/* FAB */}
+      <button className="fab" onClick={()=>setAiOpen(true)} aria-label="Abrir IA">
+        <Ic n="spark" s={22}/>
+        <span className="fab-badge"/>
+      </button>
+
+      {/* Bottom tab bar */}
+      <div className="tabbar">
+        {TABS.map(t => (
+          <div key={t.id} className={`tab-item ${tab===t.id?'active':''}`} onClick={()=>setTab(t.id)}>
+            <div className="tab-icon">
+              <Ic n={t.icon} s={22} style={{ color: tab===t.id ? 'var(--brand-h)' : 'var(--dim)' }}/>
+              {BADGES[t.id] > 0 && <span className="tab-badge">{BADGES[t.id]}</span>}
+            </div>
+            <span className="tab-label">{t.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* AI sheet */}
+      <AiChat open={aiOpen} onClose={()=>setAiOpen(false)}/>
+
+      {/* Live toast */}
+      <div style={{
+        position:'absolute', bottom:96, left:'50%',
+        transform:`translateX(-50%) translateY(${toastShow?0:16}px)`,
+        opacity: toastShow ? 1 : 0, transition:'all .25s',
+        background:'var(--surf-1)', border:'1px solid var(--border)',
+        borderRadius:12, padding:'9px 14px',
+        fontFamily:'DM Sans,sans-serif', fontSize:12.5, fontWeight:500, color:'var(--text)',
+        boxShadow:'0 16px 40px rgba(0,0,0,.5)',
+        whiteSpace:'nowrap', zIndex:40,
+        display:'flex', alignItems:'center', gap:8,
+      }}>
+        {toastMsg}
+      </div>
+    </div>
+  );
+};
+
+// ── Wrap in iOS frame ─────────────────────────────────────────
+const Root = () => (
+  <IOSDevice dark={true} width={390} height={844}>
+    <MobileApp/>
+  </IOSDevice>
+);
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Root/>);
+</script>
+</body>
+</html>
