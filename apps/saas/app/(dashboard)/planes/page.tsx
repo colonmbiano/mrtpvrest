@@ -1,5 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
+import {
+  Flame, Package, Coins, BarChart3, Plug, CreditCard, Bike, Users as UsersIcon,
+  Wallet, ShoppingBag, ShoppingCart, Utensils, Trophy, Globe2, X, Check,
+} from "lucide-react";
 import api from "@/lib/api";
 
 // /planes — CRUD de planes del SaaS (SUPER_ADMIN).
@@ -25,29 +29,30 @@ interface Plan {
   createdAt: string;
 }
 
+type IconCmp = ComponentType<{ size?: number; className?: string }>;
+
 // Features booleanas que se traducen 1:1 a flags hasX del schema.
-const FEATURE_FLAGS: Array<{ key: keyof Plan; label: string; icon: string; description: string }> = [
-  { key: "hasKDS",        label: "Cocina KDS",        icon: "🍳", description: "Pantalla de cocina en tiempo real" },
-  { key: "hasInventory",  label: "Inventario",        icon: "📦", description: "Recetas, costeo, compras, gastos, factor corrección" },
-  { key: "hasLoyalty",    label: "Loyalty / Puntos",  icon: "🪙", description: "Programa de fidelidad + cupones" },
-  { key: "hasReports",    label: "Reportes IA",       icon: "📊", description: "Dashboard analítico + asistente conversacional" },
-  { key: "hasAPIAccess",  label: "API Access",        icon: "🔌", description: "Endpoints para integraciones del cliente" },
+const FEATURE_FLAGS: Array<{ key: keyof Plan; label: string; Icon: IconCmp; description: string }> = [
+  { key: "hasKDS",        label: "Cocina KDS",       Icon: Flame,    description: "Pantalla de cocina en tiempo real" },
+  { key: "hasInventory",  label: "Inventario",       Icon: Package,  description: "Recetas, costeo, compras, gastos, factor corrección" },
+  { key: "hasLoyalty",    label: "Loyalty / Puntos", Icon: Coins,    description: "Programa de fidelidad + cupones" },
+  { key: "hasReports",    label: "Reportes IA",      Icon: BarChart3,description: "Dashboard analítico + asistente conversacional" },
+  { key: "hasAPIAccess",  label: "API Access",       Icon: Plug,     description: "Endpoints para integraciones del cliente" },
 ];
 
-// Módulos flexibles (allowedModules). Estos son strings libres que el frontend
-// usa para gateo granular más allá de los booleanos.
-const AVAILABLE_MODULES = [
-  { id: "pos_standard",        label: "POS Estándar",      icon: "💳" },
-  { id: "kds",                 label: "Cocina (KDS)",      icon: "🍳" },
-  { id: "delivery",            label: "Delivery",          icon: "🛵" },
-  { id: "inventory",           label: "Inventario",        icon: "📦" },
-  { id: "employee_management", label: "Empleados",         icon: "👥" },
-  { id: "cash_shift",          label: "Turnos de Caja",    icon: "💼" },
-  { id: "client_menu",         label: "Tienda Online",     icon: "🛍" },
-  { id: "kiosk",               label: "Kiosko Autoservicio", icon: "🛒" },
-  { id: "waiters",             label: "Meseros / Salón",   icon: "🍽" },
-  { id: "loyalty_advanced",    label: "Loyalty Avanzado",  icon: "🏆" },
-  { id: "multi_currency",      label: "Multi-moneda",      icon: "🌍" },
+// Módulos flexibles (allowedModules). Strings libres para gateo granular más allá de los booleanos.
+const AVAILABLE_MODULES: Array<{ id: string; label: string; Icon: IconCmp }> = [
+  { id: "pos_standard",        label: "POS Estándar",        Icon: CreditCard },
+  { id: "kds",                 label: "Cocina (KDS)",        Icon: Flame },
+  { id: "delivery",            label: "Delivery",            Icon: Bike },
+  { id: "inventory",           label: "Inventario",          Icon: Package },
+  { id: "employee_management", label: "Empleados",           Icon: UsersIcon },
+  { id: "cash_shift",          label: "Turnos de Caja",      Icon: Wallet },
+  { id: "client_menu",         label: "Tienda Online",       Icon: ShoppingBag },
+  { id: "kiosk",               label: "Kiosko Autoservicio", Icon: ShoppingCart },
+  { id: "waiters",             label: "Meseros / Salón",     Icon: Utensils },
+  { id: "loyalty_advanced",    label: "Loyalty Avanzado",    Icon: Trophy },
+  { id: "multi_currency",      label: "Multi-moneda",        Icon: Globe2 },
 ];
 
 const EMPTY_PLAN: Omit<Plan, "id" | "createdAt"> = {
@@ -235,11 +240,14 @@ function PlanCard({ plan, onEdit, onRemove }: { plan: Plan; onEdit: () => void; 
         {activeFlags.length === 0 ? (
           <span className="text-[10px] text-gray-500">Sin features premium</span>
         ) : (
-          activeFlags.map((f) => (
-            <span key={String(f.key)} className="text-[10px] px-2 py-0.5 rounded-full font-bold" style={{ background: "rgba(249,115,22,0.1)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)" }}>
-              {f.icon} {f.label}
-            </span>
-          ))
+          activeFlags.map((f) => {
+            const I = f.Icon;
+            return (
+              <span key={String(f.key)} className="text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1" style={{ background: "rgba(249,115,22,0.1)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)" }}>
+                <I size={11} /> {f.label}
+              </span>
+            );
+          })
         )}
       </div>
       <div className="flex gap-2">
@@ -247,8 +255,8 @@ function PlanCard({ plan, onEdit, onRemove }: { plan: Plan; onEdit: () => void; 
           Editar
         </button>
         {plan.isActive && (
-          <button onClick={onRemove} className="px-3 py-2 rounded-lg text-xs font-bold" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
-            ✕
+          <button onClick={onRemove} className="px-3 py-2 rounded-lg text-xs font-bold inline-flex items-center justify-center" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+            <X size={14} />
           </button>
         )}
       </div>
@@ -271,7 +279,7 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
           <h2 className="font-syne text-2xl font-black">
             {plan.id ? "Editar plan" : "Nuevo plan"}
           </h2>
-          <button onClick={onClose} className="text-gray-500 text-xl">✕</button>
+          <button onClick={onClose} className="text-gray-500 inline-flex items-center justify-center"><X size={20} /></button>
         </div>
 
         {/* Identidad */}
@@ -337,25 +345,28 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
             Features premium (booleanas)
           </div>
           <div className="grid grid-cols-1 gap-2">
-            {FEATURE_FLAGS.map((f) => (
-              <label key={String(f.key)} className="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all"
-                style={{
-                  background: plan[f.key] ? "rgba(249,115,22,0.08)" : "var(--surface2, #1a1a1a)",
-                  border: `1px solid ${plan[f.key] ? "rgba(249,115,22,0.4)" : "var(--border, #333)"}`,
-                }}>
-                <input
-                  type="checkbox"
-                  checked={plan[f.key]}
-                  onChange={(e) => onChange({ ...plan, [f.key]: e.target.checked })}
-                  className="w-5 h-5 cursor-pointer accent-orange-500"
-                />
-                <span className="text-xl">{f.icon}</span>
-                <div className="flex-1">
-                  <p className="text-sm font-bold">{f.label}</p>
-                  <p className="text-[11px] text-gray-500">{f.description}</p>
-                </div>
-              </label>
-            ))}
+            {FEATURE_FLAGS.map((f) => {
+              const I = f.Icon;
+              return (
+                <label key={String(f.key)} className="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all"
+                  style={{
+                    background: plan[f.key] ? "rgba(249,115,22,0.08)" : "var(--surface2, #1a1a1a)",
+                    border: `1px solid ${plan[f.key] ? "rgba(249,115,22,0.4)" : "var(--border, #333)"}`,
+                  }}>
+                  <input
+                    type="checkbox"
+                    checked={plan[f.key]}
+                    onChange={(e) => onChange({ ...plan, [f.key]: e.target.checked })}
+                    className="w-5 h-5 cursor-pointer accent-orange-500"
+                  />
+                  <I size={18} className={plan[f.key] ? "text-orange-500" : "text-gray-500"} />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold">{f.label}</p>
+                    <p className="text-[11px] text-gray-500">{f.description}</p>
+                  </div>
+                </label>
+              );
+            })}
           </div>
         </div>
 
@@ -367,6 +378,7 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {AVAILABLE_MODULES.map((m) => {
               const active = plan.allowedModules.includes(m.id);
+              const I = m.Icon;
               return (
                 <button
                   key={m.id}
@@ -378,9 +390,9 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
                     border: `1px solid ${active ? "rgba(249,115,22,0.4)" : "var(--border, #333)"}`,
                   }}
                 >
-                  <span className="text-lg">{m.icon}</span>
+                  <I size={16} className={active ? "text-orange-500" : "text-gray-500"} />
                   <span className="text-xs font-bold flex-1">{m.label}</span>
-                  {active && <span className="text-orange-500">✓</span>}
+                  {active && <Check size={14} className="text-orange-500" />}
                 </button>
               );
             })}
