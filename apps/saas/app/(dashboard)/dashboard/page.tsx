@@ -1,8 +1,10 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useTheme } from "@/components/ThemeProvider";
 import MrrChart from "@/components/MrrChart";
+import MobileRevenueBars from "@/components/MobileRevenueBars";
 import api from "@/lib/api";
+import { AlertCircle } from "lucide-react";
 
 // ── Icons ─────────────────────────────────────────────────────
 const IArrowUp = () => (
@@ -319,6 +321,20 @@ export default function SaasDashboardPage() {
         </div>
       </header>
 
+      {/* ── Alerta Crítica (Mobile Design) ── */}
+      {activity.some(a => a.type === "error") && (
+        <div className="mx-6 md:mx-7 mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 animate-pulse">
+          <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center text-red-500">
+            <AlertCircle size={18} />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-bold text-red-500">Hay alertas críticas que requieren atención</p>
+            <p className="text-[10px] text-red-500/70">Revisa la pestaña de Errores para más detalles</p>
+          </div>
+          <a href="/errors" className="text-[10px] font-black uppercase tracking-widest bg-red-500 text-white px-3 py-1.5 rounded-lg shadow-lg shadow-red-500/20">Ver</a>
+        </div>
+      )}
+
       {/* ── KPI Row ── */}
       <div className="ovw-kpi-grid">
         {METRICS.map((m) => (
@@ -423,6 +439,9 @@ export default function SaasDashboardPage() {
 
           {/* MRR Chart */}
           <MrrChart />
+          
+          {/* Revenue por plan (Mobile Design) */}
+          <MobileRevenueBars />
         </div>
 
         {/* ── Col derecha: toggles + activity ── */}
