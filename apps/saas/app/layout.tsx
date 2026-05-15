@@ -4,12 +4,22 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "SaaS Central — MRTPVREST",
   description: "Panel de control global",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "MRTPV Admin",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
       <head>
+        <meta name="theme-color" content="#7c3aed" />
         <script dangerouslySetInnerHTML={{__html:
           "(function(){try{var t=localStorage.getItem('saas-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})()"
         }} />

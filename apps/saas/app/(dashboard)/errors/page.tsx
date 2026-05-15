@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
-  Filter,
   RefreshCcw,
   Download,
   Copy,
   Check,
+  Search,
+  ChevronRight,
+  Brain,
 } from "lucide-react";
 import api from "@/lib/api";
 
@@ -38,11 +40,11 @@ interface DbLogsResponse {
 const POLL_INTERVAL_MS = 4_000;
 const ALL_LEVELS: SystemLogLevel[] = ["CRITICAL", "ERROR", "WARN", "INFO"];
 
-const LEVEL_STYLE: Record<SystemLogLevel, { bg: string; fg: string; halo: string }> = {
-  CRITICAL: { bg: "rgba(255,92,51,0.20)",  fg: "#FF8B6E", halo: "rgba(255,92,51,0.30)"  },
-  ERROR:    { bg: "rgba(255,92,51,0.12)",  fg: "#FF8B6E", halo: "rgba(255,92,51,0.20)"  },
-  WARN:     { bg: "rgba(255,184,77,0.15)", fg: "#ffb84d", halo: "rgba(255,184,77,0.25)" },
-  INFO:     { bg: "rgba(136,214,108,0.10)",fg: "#88D66C", halo: "rgba(136,214,108,0.20)"},
+const LEVEL_STYLE: Record<SystemLogLevel, { bg: string; fg: string; border: string; active: string }> = {
+  CRITICAL: { bg: "rgba(239,68,68,0.1)", fg: "#ef4444", border: "#ef4444", active: "bg-red-500 text-white" },
+  ERROR:    { bg: "rgba(239,68,68,0.08)", fg: "#f87171", border: "#f87171", active: "bg-red-400 text-white" },
+  WARN:     { bg: "rgba(245,158,11,0.1)", fg: "#f59e0b", border: "#f59e0b", active: "bg-amber-500 text-white" },
+  INFO:     { bg: "rgba(59,130,246,0.1)", fg: "#3b82f6", border: "#3b82f6", active: "bg-blue-500 text-white" },
 };
 
 // ── Página ────────────────────────────────────────────────────────────────
@@ -52,9 +54,7 @@ export default function SaasErrorsPage() {
   const [loading, setLoading] = useState(true);
   const [paused, setPaused]   = useState(false);
   const [error, setError]     = useState("");
-  const [activeLevels, setActiveLevels] = useState<Set<SystemLogLevel>>(
-    new Set(["CRITICAL", "ERROR"])
-  );
+  const [filterLevel, setFilterLevel] = useState<SystemLogLevel | "ALL">("ALL");
   const [search, setSearch]   = useState("");
   const [exporting, setExporting] = useState(false);
   const [copied, setCopied]   = useState(false);
@@ -68,8 +68,8 @@ export default function SaasErrorsPage() {
       if (paused || cancelled) return;
       try {
         const params: Record<string, string> = { limit: "200" };
-        if (activeLevels.size > 0 && activeLevels.size < ALL_LEVELS.length) {
-          params.level = Array.from(activeLevels).join(",");
+        if (filterLevel !== "ALL") {
+          params.level = filterLevel;
         }
         const { data } = await api.get<DbLogsResponse>("/api/admin/logs/db", { params });
         if (cancelled) return;
@@ -78,8 +78,8 @@ export default function SaasErrorsPage() {
       } catch (err) {
         const e = err as { response?: { status?: number; data?: { error?: string } } };
         if (e.response?.status === 403) setError("Solo SUPER_ADMIN.");
-        else if (e.response?.status === 401) setError("Sesión expirada. Vuelve a iniciar sesión.");
-        else setError(e.response?.data?.error || "No pudimos contactar el backend.");
+        else if (e.response?.status === 401) setError("Sesión expirada.");
+        else setError("Error al conectar con backend.");
       } finally {
         setLoading(false);
         if (!cancelled) timer = setTimeout(tick, POLL_INTERVAL_MS);
@@ -91,7 +91,7 @@ export default function SaasErrorsPage() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [paused, activeLevels]);
+  }, [paused, filterLevel]);
 
   const filtered = useMemo<SystemLogRecord[]>(() => {
     const q = search.trim().toLowerCase();
@@ -105,21 +105,6 @@ export default function SaasErrorsPage() {
       );
     });
   }, [records, search]);
-
-  const counts = useMemo(() => {
-    const c: Record<SystemLogLevel, number> = { CRITICAL: 0, ERROR: 0, WARN: 0, INFO: 0 };
-    for (const r of records) if (r.level in c) c[r.level] += 1;
-    return c;
-  }, [records]);
-
-  const toggleLevel = (lvl: SystemLogLevel) => {
-    setActiveLevels((prev) => {
-      const next = new Set(prev);
-      if (next.has(lvl)) next.delete(lvl);
-      else next.add(lvl);
-      return next;
-    });
-  };
 
   const downloadExport = async () => {
     setExporting(true);
@@ -136,234 +121,199 @@ export default function SaasErrorsPage() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    } catch {
-      /* ignored */
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const copyExport = async () => {
-    try {
-      const { data } = await api.get("/api/admin/logs/export", {
-        params: { minLevel: "ERROR", limit: 200 },
-      });
-      await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch {
-      /* ignored */
-    }
+    } catch { /* ignored */ } finally { setExporting(false); }
   };
 
   return (
-    <div
-      className="relative min-h-screen w-full overflow-hidden"
-      style={{ background: "#0a0a0c", color: "white", fontFamily: "'Outfit', system-ui, sans-serif" }}
-    >
-      {/* Halo glows */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-60 -left-40 w-[700px] h-[700px] rounded-full blur-[140px] opacity-50"
-        style={{ background: "radial-gradient(circle, rgba(255,92,51,0.20) 0%, transparent 70%)" }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute top-[400px] -right-40 w-[700px] h-[700px] rounded-full blur-[140px] opacity-40"
-        style={{ background: "radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)" }}
-      />
-
-      <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-10 py-10">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-6 flex-wrap mb-8">
+    <div className="min-h-screen bg-[#080810] text-white">
+      {/* Header (Mobile Design) */}
+      <div className="px-4 py-6 md:px-10">
+        <div className="flex items-center justify-between mb-2">
           <div>
-            <p className="text-[10px] font-black tracking-[0.3em] text-white/40 mb-2">
-              SUPER · OBSERVABILIDAD
-            </p>
-            <h1 className="text-4xl font-black text-white tracking-tight flex items-center gap-3">
-              <AlertTriangle size={32} className="text-[#FF8B6E]" />
-              Errores del backend
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              Errores <span className="bg-red-500/20 text-red-500 px-2 py-0.5 rounded-lg text-xs tabular-nums">{records.length}</span>
             </h1>
-            <p className="text-base font-medium text-white/55 mt-2 max-w-2xl">
-              Eventos persistidos en <code className="text-[#ffb84d]">SystemLog</code> por el
-              middleware global de <code className="text-[#ffb84d]">api.mrtpvrest.com</code>.
-              Los <strong>CRITICAL</strong> también disparan <code>notifyAdmin()</code>.
-            </p>
+            <p className="text-xs text-white/40 font-medium">Observabilidad global del SaaS</p>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setPaused((p) => !p)}
-              className={`inline-flex items-center gap-2 px-4 py-3 min-h-[48px] rounded-2xl text-xs font-black tracking-wider active:scale-95 transition-transform ${
-                paused
-                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40"
-                  : "bg-white/5 border border-white/10 text-white/85"
-              }`}
-            >
-              <RefreshCcw size={14} className={paused ? "" : "animate-spin"} style={{ animationDuration: "3s" }} />
-              {paused ? "Pausado" : "Live"}
-            </button>
-            <button
-              type="button"
-              onClick={copyExport}
-              className="inline-flex items-center gap-2 px-4 py-3 min-h-[48px] rounded-2xl text-xs font-black tracking-wider bg-white/5 border border-white/10 text-white/85 active:scale-95 transition-transform"
-            >
-              {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-              {copied ? "Copiado" : "Copy MCP"}
-            </button>
-            <button
-              type="button"
-              onClick={downloadExport}
-              disabled={exporting}
-              className="inline-flex items-center gap-2 px-5 py-3 min-h-[48px] rounded-2xl text-xs font-black tracking-wider text-[#0a0a0c] bg-[#ffb84d] active:scale-95 transition-transform shadow-[0_15px_40px_rgba(255,184,77,0.30)] disabled:opacity-40"
-            >
-              <Download size={14} strokeWidth={3} />
-              {exporting ? "Exportando…" : "Export MCP"}
-            </button>
-          </div>
+          <button
+            onClick={() => setPaused(!paused)}
+            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${paused ? "bg-amber-500/20 text-amber-500" : "bg-white/5 text-white/40"}`}
+          >
+            <RefreshCcw size={18} className={paused ? "" : "animate-spin-slow"} />
+          </button>
         </div>
 
-        {/* Counters Halo */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          {ALL_LEVELS.map((lvl) => {
-            const s = LEVEL_STYLE[lvl];
-            const active = activeLevels.has(lvl);
-            return (
-              <button
-                key={lvl}
-                type="button"
-                onClick={() => toggleLevel(lvl)}
-                className="relative p-5 rounded-3xl bg-white/5 backdrop-blur-md border overflow-hidden text-left active:scale-95 transition-transform"
-                style={{
-                  borderColor: active ? s.fg + "40" : "rgba(255,255,255,0.10)",
-                  boxShadow: active
-                    ? `0 30px 60px ${s.halo}, inset 0 0 0 1px ${s.fg}30`
-                    : "0 12px 30px rgba(0,0,0,0.30)",
-                }}
-              >
-                <div
-                  aria-hidden
-                  className="absolute -top-10 -right-10 w-32 h-32 rounded-full blur-[80px]"
-                  style={{ background: s.halo, opacity: active ? 0.8 : 0.3 }}
-                />
-                <span
-                  className="relative text-[10px] font-black tracking-[0.25em]"
-                  style={{ color: active ? s.fg : "rgba(255,255,255,0.40)" }}
-                >
-                  {lvl}
-                </span>
-                <div className="relative text-3xl font-black tabular-nums tracking-tight mt-1 text-white">
-                  {counts[lvl]}
-                </div>
-                <span className="relative text-[11px] font-bold text-white/40">
-                  {active ? "filtrando" : "click para activar"}
-                </span>
-              </button>
-            );
-          })}
+        {/* Filter Chips (Horizontal Scroll) */}
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide py-4 -mx-4 px-4 no-scrollbar">
+          <button
+            onClick={() => setFilterLevel("ALL")}
+            className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filterLevel === "ALL" ? "bg-white text-black" : "bg-white/5 text-white/40 border border-white/10"}`}
+          >
+            Todos
+          </button>
+          {ALL_LEVELS.map(lvl => (
+            <button
+              key={lvl}
+              onClick={() => setFilterLevel(lvl)}
+              className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filterLevel === lvl ? LEVEL_STYLE[lvl].active : "bg-white/5 text-white/40 border border-white/10"}`}
+            >
+              {lvl}
+            </button>
+          ))}
         </div>
 
-        {/* Search */}
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
-          <Filter size={16} className="text-white/40" />
+        {/* Search Bar */}
+        <div className="relative mb-6">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por mensaje, path, método, tenantId…"
-            className="flex-1 min-w-[260px] px-4 py-3 rounded-2xl text-sm font-medium bg-white/5 backdrop-blur-md border border-white/10 outline-none focus:border-[#ffb84d]/40 transition-colors text-white"
+            placeholder="Buscar por mensaje, path, tenant..."
+            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-11 pr-4 text-sm outline-none focus:border-white/20 transition-all"
           />
-          <span className="text-xs font-bold text-white/40 tabular-nums">
-            {filtered.length} / {records.length} eventos
-          </span>
         </div>
 
         {error && (
-          <div className="mb-4 rounded-2xl p-3 text-sm font-semibold bg-[rgba(255,92,51,0.10)] border border-[rgba(255,92,51,0.30)] text-[#FF8B6E]">
+          <div className="mb-6 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs font-bold">
             {error}
           </div>
         )}
 
-        <div className="rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.40)]">
+        {/* Error List */}
+        <div className="space-y-3 pb-32">
           {loading && records.length === 0 ? (
-            <p className="text-white/40 text-sm font-bold py-16 text-center">
-              <Activity size={20} className="inline-block mr-2 animate-pulse" />
-              Conectando con SystemLog…
-            </p>
+            <div className="flex flex-col items-center justify-center py-20 text-white/20">
+              <Loader2 className="animate-spin mb-4" size={32} />
+              <p className="text-sm font-bold">Conectando con SystemLog...</p>
+            </div>
           ) : filtered.length === 0 ? (
-            <p className="text-white/40 text-sm font-bold py-16 text-center">
-              Sin errores que coincidan con el filtro. ¡Buen estado!
-            </p>
+            <div className="flex flex-col items-center justify-center py-20 text-white/20">
+              <Activity className="mb-4" size={32} />
+              <p className="text-sm font-bold">Sin errores detectados</p>
+            </div>
           ) : (
-            <ul className="divide-y divide-white/5 max-h-[68vh] overflow-y-auto">
-              {filtered.map((r) => (
-                <ErrorRow key={r.id} record={r} />
-              ))}
-            </ul>
+            filtered.map((r) => <ErrorRow key={r.id} record={r} />)
           )}
         </div>
       </div>
+
+      {/* Desktop Actions Footer */}
+      <div className="hidden md:flex fixed bottom-6 left-1/2 -translate-x-1/2 bg-surface-1 border border-border px-6 py-3 rounded-2xl items-center gap-4 shadow-2xl z-[100]">
+        <button onClick={downloadExport} disabled={exporting} className="flex items-center gap-2 text-xs font-bold hover:text-brand transition-colors disabled:opacity-50">
+          <Download size={14} /> Exportar JSON
+        </button>
+      </div>
+
+      <style jsx>{`
+        .animate-spin-slow { animation: spin 4s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </div>
   );
 }
 
 function ErrorRow({ record }: { record: SystemLogRecord }) {
   const [expanded, setExpanded] = useState(false);
-  const s = LEVEL_STYLE[record.level] || LEVEL_STYLE.ERROR;
-  const time = new Date(record.createdAt).toLocaleString("es-MX", {
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-    day: "2-digit", month: "2-digit", hour12: false,
+  const s = LEVEL_STYLE[record.level] || LEVEL_STYLE.INFO;
+  const time = new Date(record.createdAt).toLocaleTimeString("es-MX", {
+    hour: "2-digit", minute: "2-digit", hour12: false
   });
 
+  const copyStack = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (record.stack) navigator.clipboard.writeText(record.stack);
+  };
+
   return (
-    <li>
-      <button
-        type="button"
-        onClick={() => setExpanded((e) => !e)}
-        className="w-full px-5 py-4 flex items-start gap-4 hover:bg-white/5 transition-colors text-left"
-      >
-        <span
-          className="text-[10px] font-black tracking-widest px-2.5 py-1 rounded-full flex-shrink-0 mt-0.5"
-          style={{ background: s.bg, color: s.fg }}
-        >
-          {record.level}
-        </span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono text-white/40 mb-1">
-            <span>{time}</span>
-            {record.method && record.path && (
-              <span className="text-[#ffb84d]/80">
-                {record.method} {record.path}
-              </span>
-            )}
-            {record.tenantId && (
-              <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10">
-                tenant: {record.tenantId.slice(-8)}
-              </span>
-            )}
+    <div 
+      onClick={() => setExpanded(!expanded)}
+      className="bg-surface-1 border border-white/5 rounded-2xl overflow-hidden transition-all active:scale-[0.98]"
+      style={{ borderLeft: `4px solid ${s.border}` }}
+    >
+      <div className="p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md" style={{ background: s.bg, color: s.fg }}>
+              {record.level}
+            </span>
+            <span className="text-[10px] font-mono text-white/30">{time}</span>
           </div>
-          <p className="text-sm font-semibold text-white tracking-tight break-words">
-            {record.message}
-          </p>
-          {expanded && (
-            <div className="mt-3 space-y-2">
-              {record.stack && (
-                <pre className="text-[10px] font-mono text-white/60 bg-black/30 p-3 rounded-xl overflow-x-auto whitespace-pre-wrap break-words border border-white/5">
+          <ChevronRight size={14} className={`text-white/20 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        </div>
+        
+        <p className="text-sm font-bold text-white/90 line-clamp-2 leading-relaxed">
+          {record.message}
+        </p>
+
+        {record.path && (
+          <div className="mt-2 text-[10px] font-mono text-white/30 flex items-center gap-2">
+            <span className="bg-white/5 px-1.5 py-0.5 rounded">{record.method}</span>
+            <span className="truncate">{record.path}</span>
+          </div>
+        )}
+
+        {expanded && (
+          <div className="mt-4 pt-4 border-t border-white/5 space-y-4 animate-in slide-in-from-top-2 duration-200">
+            {record.stack && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-white/30">Stack Trace</span>
+                  <button onClick={copyStack} className="p-1.5 bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors">
+                    <Copy size={12} />
+                  </button>
+                </div>
+                <pre className="text-[9.5px] font-mono text-white/50 bg-black/40 p-3 rounded-xl overflow-x-auto whitespace-pre-wrap break-all border border-white/5">
                   {record.stack}
                 </pre>
-              )}
-              {record.metadata && Object.keys(record.metadata).length > 0 && (
-                <pre className="text-[10px] font-mono text-white/60 bg-black/30 p-3 rounded-xl overflow-x-auto whitespace-pre-wrap break-words border border-white/5">
-                  {JSON.stringify(record.metadata, null, 2)}
-                </pre>
-              )}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button 
+                className="flex-1 bg-white/5 py-2 rounded-xl text-[10px] font-bold text-white/60 flex items-center justify-center gap-2 hover:bg-white/10"
+                onClick={(e) => { e.stopPropagation(); /* AI Logic here */ }}
+              >
+                <Brain size={12} /> Analizar IA
+              </button>
+              <button 
+                className="flex-1 bg-white/5 py-2 rounded-xl text-[10px] font-bold text-white/60 flex items-center justify-center gap-2 hover:bg-white/10"
+                onClick={copyStack}
+              >
+                <Copy size={12} /> Copiar
+              </button>
             </div>
-          )}
-        </div>
-        <span className="text-[10px] font-bold text-white/30 flex-shrink-0 mt-1">
-          {expanded ? "−" : "+"}
-        </span>
-      </button>
-    </li>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Loader2(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 2v4" />
+      <path d="m16.2 7.8 2.9-2.9" />
+      <path d="M18 12h4" />
+      <path d="m16.2 16.2 2.9 2.9" />
+      <path d="M12 18v4" />
+      <path d="m4.9 19.1 2.9-2.9" />
+      <path d="M2 12h4" />
+      <path d="m4.9 4.9 2.9 2.9" />
+    </svg>
   );
 }
