@@ -81,8 +81,8 @@ export default function OrderTypePage() {
     router.replace("/locked");
   };
 
-  const goTables     = () => router.push("/meseros/mis-mesas");
-  const goShiftClose = () => router.push("/cierre");
+  const goOpenTickets = () => router.push("/pos/menu?orders=1");
+  const goShiftClose  = () => router.push("/cierre");
   const goConfig     = () => {
     // Solo ADMIN/OWNER entran sin segundo factor. Cualquier otro rol
     // (MANAGER, CASHIER, WAITER…) debe ingresar un PIN admin para
@@ -100,7 +100,7 @@ export default function OrderTypePage() {
       <OrderTypeSelector
         onSelect={handlePickType}
         onClose={handleLogout}
-        onTables={goTables}
+        onOpenTickets={goOpenTickets}
         onShiftClose={goShiftClose}
         onConfig={goConfig}
       />
