@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import api from "@/lib/api";
-import type { PrinterRecord } from "@/lib/printer-tcp";
+import type { PrinterRecord, KitchenTicketConfig } from "@/lib/printer-tcp";
 
 /**
  * Carga + normaliza las impresoras de la sucursal y se mantiene viva en
@@ -69,4 +69,73 @@ export function useReceiptIdentity() {
   }, []);
 
   return { businessName, businessFooter };
+}
+
+/**
+ * Carga la configuración de impresión de comanda desde el backend
+ * (/api/printers/ticket-config — campos kitchen*). Se mantiene en memoria
+ * del componente y se refresca con el evento global `ticket-config-changed`
+ * que dispara la UI admin al guardar.
+ *
+ * Si el fetch falla o el usuario aún no tiene auth, retorna null y el
+ * builder cae a sus defaults históricos.
+ */
+type TicketConfigDTO = {
+  kitchenHeader?: string;
+  kitchenFooter?: string;
+  kitchenShowOrderNumber?: boolean;
+  kitchenShowTime?: boolean;
+  kitchenShowType?: boolean;
+  kitchenShowTable?: boolean;
+  kitchenShowCustomer?: boolean;
+  kitchenShowModifiers?: boolean;
+  kitchenShowNotes?: boolean;
+  kitchenGroupBySeat?: boolean;
+  kitchenFontSize?: string;
+};
+
+function mapToKitchenConfig(dto: TicketConfigDTO | null): KitchenTicketConfig | null {
+  if (!dto) return null;
+  const fs = dto.kitchenFontSize === "normal" || dto.kitchenFontSize === "xlarge"
+    ? (dto.kitchenFontSize as "normal" | "xlarge")
+    : "large";
+  return {
+    header:           dto.kitchenHeader ?? undefined,
+    footer:           dto.kitchenFooter ?? undefined,
+    showOrderNumber:  dto.kitchenShowOrderNumber,
+    showTime:         dto.kitchenShowTime,
+    showOrderType:    dto.kitchenShowType,
+    showTableNumber:  dto.kitchenShowTable,
+    showCustomerName: dto.kitchenShowCustomer,
+    showModifiers:    dto.kitchenShowModifiers,
+    showNotes:        dto.kitchenShowNotes,
+    groupBySeat:      dto.kitchenGroupBySeat,
+    fontSize:         fs,
+  };
+}
+
+export function useKitchenConfig() {
+  const [config, setConfig] = useState<KitchenTicketConfig | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await api.get<TicketConfigDTO>("/api/printers/ticket-config");
+      setConfig(mapToKitchenConfig(data));
+    } catch {
+      setConfig(null);
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    if (typeof window === "undefined") return;
+    const onRefresh = () => load();
+    window.addEventListener("ticket-config-changed", onRefresh);
+    return () => window.removeEventListener("ticket-config-changed", onRefresh);
+  }, [load]);
+
+  return { kitchenConfig: config, loaded };
 }

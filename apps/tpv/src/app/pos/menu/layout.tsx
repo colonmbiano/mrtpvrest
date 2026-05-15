@@ -7,7 +7,7 @@ import OrderDetailModal from "@/components/pos/OrderDetailModal";
 import ReprintKitchenModal from "@/components/pos/ReprintKitchenModal";
 import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
-import { usePrinters, useReceiptIdentity } from "@/hooks/usePrinters";
+import { usePrinters, useReceiptIdentity, useKitchenConfig } from "@/hooks/usePrinters";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
@@ -105,6 +105,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // al montar el layout y se refresca con el evento `printers-changed`.
   const { printers } = usePrinters();
   const { businessName, businessFooter } = useReceiptIdentity();
+  const { kitchenConfig } = useKitchenConfig();
 
   const fetchOpenOrders = useCallback(async () => {
     try {
@@ -692,6 +693,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           isOpen={!!reprintKitchenOrder}
           onClose={() => setReprintKitchenOrder(null)}
           printers={printers}
+          config={kitchenConfig}
           orderNumber={
             reprintKitchenOrder.orderNumber ||
             String(reprintKitchenOrder.id).slice(-6).toUpperCase()
