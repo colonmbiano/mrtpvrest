@@ -9,6 +9,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
+import { useKitchenConfig } from "@/hooks/usePrinters";
 import { hapticMedium, hapticSuccess, hapticError } from "@/lib/haptics";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -106,6 +107,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
   const subtotal = ticket.items.reduce((acc, item) => acc + item.subtotal, 0);
   const total = subtotal - ticket.discount;
+
+  // Config de comanda — header/footer/toggles cargados desde admin.
+  // Se pasa al builder en cada printKitchenTickets; si aún no terminó
+  // de cargar, el builder usa los defaults históricos.
+  const { kitchenConfig } = useKitchenConfig();
 
   // Cache de impresoras de la sucursal. Se carga una vez al montar y se
   // refresca cuando llega evento `printers-changed` (ej. tras agregar
@@ -228,7 +234,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         customerName: ticket.name ?? null,
       };
       clearActiveItems();
-      printKitchenTickets(printers, { ...ticketContext, items: printItems })
+      printKitchenTickets(printers, { ...ticketContext, items: printItems, config: kitchenConfig ?? undefined })
         .then((res) => {
           if (res.failed.length > 0) {
             toast.warning(`Comanda: ${res.ok} ok / ${res.failed.length} fallaron`);
@@ -329,7 +335,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
       // Fire-and-forget: comanda en KITCHEN/BAR + recibo en CASHIER.
       // No bloquea cobro si las impresoras fallan.
-      printKitchenTickets(printers, { ...ticketContext, items: printItems })
+      printKitchenTickets(printers, { ...ticketContext, items: printItems, config: kitchenConfig ?? undefined })
         .catch(() => { /* silencio */ });
 
       const guests = ticket.numberOfGuests ?? 0;

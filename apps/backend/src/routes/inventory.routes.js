@@ -167,6 +167,9 @@ router.post('/bulk-confirm', authenticate, requireTenantAccess, requireAdmin, as
     const locationId = req.headers['x-location-id'] || req.query.locationId;
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
     const { items } = req.body;
     if (!Array.isArray(items) || items.length === 0)
       return res.status(400).json({ error: 'No hay ingredientes para confirmar' });
@@ -196,7 +199,7 @@ router.post('/bulk-confirm', authenticate, requireTenantAccess, requireAdmin, as
 
       return prisma.ingredient.create({
         data: {
-          locationId, name,
+          restaurantId, locationId, name,
           unit: unit || 'pz',
           stock: addedStock,
           minStock: 0,
