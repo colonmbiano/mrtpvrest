@@ -15,6 +15,7 @@ export interface ReprintCandidateItem {
   notes?: string | null;
   printerGroupIds?: string[];
   modifiers?: { name: string; priceAdd?: number }[];
+  seatNumber?: number | null;
 }
 
 interface ReprintKitchenModalProps {
@@ -88,6 +89,7 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
         notes: it.notes || null,
         modifiers: it.modifiers || [],
         printerGroupIds: it.printerGroupIds || [],
+        seatNumber: it.seatNumber ?? null,
       }));
 
       const isPartial = selected.size < items.length;
