@@ -218,6 +218,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         name: l.name,
         quantity: l.quantity,
         price: l.price,
+        seatNumber: l.seatNumber ?? null,
       }));
 
       if (isAppendMode && activeOrderId) {

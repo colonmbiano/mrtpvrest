@@ -301,23 +301,65 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
   if (input.customerName) d += input.customerName + "\n";
 
   d += CMD.LINE;
-  d += CMD.ALIGN_LEFT + CMD.DOUBLE_ON + CMD.BOLD_ON;
+  d += CMD.ALIGN_LEFT;
 
-  for (const item of input.items) {
-    d += `${item.quantity}x ${item.name}\n`;
+  // Para DINE_IN agrupamos por comensal cuando hay items repartidos entre
+  // 2+ buckets (seat numerado o compartido). Cocina necesita saber a quién
+  // preparar cada plato cuando una mesa tiene varios comensales con
+  // pedidos distintos. Para TAKEOUT/DELIVERY o cuando todos los items
+  // están en el mismo bucket, se mantiene la salida plana de siempre.
+  const isDineIn = input.orderType === "DINE_IN";
+  const seatBuckets = new Map<number | "shared", TicketItem[]>();
+  if (isDineIn) {
+    for (const it of input.items) {
+      const key: number | "shared" =
+        typeof it.seatNumber === "number" ? it.seatNumber : "shared";
+      const arr = seatBuckets.get(key) ?? [];
+      arr.push(it);
+      seatBuckets.set(key, arr);
+    }
+  }
+  const shouldGroupBySeat = isDineIn && seatBuckets.size >= 2;
+
+  const renderItem = (item: TicketItem) => {
+    let s = CMD.DOUBLE_ON + CMD.BOLD_ON;
+    s += `${item.quantity}x ${item.name}\n`;
     if (item.modifiers && item.modifiers.length > 0) {
-      d += CMD.DOUBLE_OFF;
-      for (const m of item.modifiers) d += `  + ${m.name}\n`;
-      d += CMD.DOUBLE_ON;
+      s += CMD.DOUBLE_OFF;
+      for (const m of item.modifiers) s += `  + ${m.name}\n`;
+      s += CMD.DOUBLE_ON;
     }
     if (item.notes && item.notes.trim()) {
-      d += CMD.DOUBLE_OFF;
-      d += `  > ${item.notes}\n`;
-      d += CMD.DOUBLE_ON;
+      s += CMD.DOUBLE_OFF;
+      s += `  > ${item.notes}\n`;
+      s += CMD.DOUBLE_ON;
+    }
+    s += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
+    return s;
+  };
+
+  if (shouldGroupBySeat) {
+    // Comensales numerados ordenados ascendente; "shared" siempre al final.
+    const seatedKeys = Array.from(seatBuckets.keys())
+      .filter((k): k is number => typeof k === "number")
+      .sort((a, b) => a - b);
+    const orderedKeys: (number | "shared")[] = [...seatedKeys];
+    if (seatBuckets.has("shared")) orderedKeys.push("shared");
+
+    orderedKeys.forEach((key, idx) => {
+      if (idx > 0) d += "\n"; // separación visual entre comensales
+      const header = key === "shared" ? "COMPARTIDO" : `COMENSAL ${key}`;
+      d += CMD.BOLD_ON + header + "\n" + CMD.BOLD_OFF;
+      for (const item of seatBuckets.get(key) ?? []) {
+        d += renderItem(item);
+      }
+    });
+  } else {
+    for (const item of input.items) {
+      d += renderItem(item);
     }
   }
 
-  d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
   d += CMD.LINE + CMD.LF + CMD.LF + CMD.CUT;
   return d;
 }
