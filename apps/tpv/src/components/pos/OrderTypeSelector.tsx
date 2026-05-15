@@ -4,7 +4,7 @@ import {
   Utensils,
   ShoppingBag,
   Bike,
-  LayoutGrid,
+  Receipt,
   Wallet,
   Settings,
   ArrowRight,
@@ -17,7 +17,7 @@ export type ExtendedOrderType = OrderType;
 interface OrderTypeSelectorProps {
   onSelect: (type: ExtendedOrderType) => void;
   onClose?: () => void;
-  onTables?: () => void;
+  onOpenTickets?: () => void;
   onShiftClose?: () => void;
   onConfig?: () => void;
 }
@@ -53,7 +53,7 @@ const ORDER_TYPES: OrderTypeCard[] = [
 const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onSelect,
   onClose,
-  onTables,
+  onOpenTickets,
   onShiftClose,
   onConfig,
 }) => {
@@ -171,20 +171,20 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
           {/* Atajos: solo 3 — Mapa, Corte, Configuración */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {onTables && (
+            {onOpenTickets && (
               <button
-                onClick={onTables}
+                onClick={onOpenTickets}
                 className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-white/5 border border-white/10 active:scale-95 transition-transform duration-150"
               >
                 <div className="w-12 h-12 rounded-xl bg-[#ffb84d]/10 text-[#ffb84d] border border-[#ffb84d]/20 flex items-center justify-center flex-shrink-0">
-                  <LayoutGrid size={22} strokeWidth={2.5} />
+                  <Receipt size={22} strokeWidth={2.5} />
                 </div>
                 <div className="flex flex-col items-start min-w-0">
                   <span className="text-sm font-black text-white tracking-tight">
-                    Mapa de Mesas
+                    Tickets Abiertos
                   </span>
                   <span className="text-[11px] font-semibold text-white/50 truncate">
-                    Estado del salón en tiempo real
+                    Ver pedidos en curso
                   </span>
                 </div>
               </button>
