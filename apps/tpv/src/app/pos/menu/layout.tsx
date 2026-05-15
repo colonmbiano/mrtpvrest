@@ -725,6 +725,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                 name: m.name || m.modifier?.name || "",
                 priceAdd: Number(m.priceAdd ?? m.price ?? 0),
               })),
+              seatNumber:
+                typeof it.seatNumber === "number" ? it.seatNumber : null,
             };
           })}
         />
