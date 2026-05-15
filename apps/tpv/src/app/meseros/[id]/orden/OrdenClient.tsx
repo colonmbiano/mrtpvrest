@@ -18,6 +18,7 @@ import api from "@/lib/api";
 import { apiOrQueue } from "@/lib/offline";
 import { toast } from "sonner";
 import { printKitchenTickets, type PrinterRecord, type TicketItem } from "@/lib/printer-tcp";
+import { useKitchenConfig } from "@/hooks/usePrinters";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import SeatCoursePicker from "@/components/pos/SeatCoursePicker";
 
@@ -85,6 +86,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   // imprimimos desde cliente cuando creamos orden nueva. En modo ronda,
   // el backend imprime los items en cocina (ver orders.routes.js:369).
   const [printers, setPrinters] = useState<PrinterRecord[]>([]);
+  const { kitchenConfig } = useKitchenConfig();
 
   useEffect(() => {
     (async () => {
@@ -218,6 +220,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         name: l.name,
         quantity: l.quantity,
         price: l.price,
+        seatNumber: l.seatNumber ?? null,
       }));
 
       if (isAppendMode && activeOrderId) {
@@ -280,6 +283,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
           orderType: "DINE_IN",
           tableNumber: tableId,
           items: printItems,
+          config: kitchenConfig ?? undefined,
         })
           .then((p) => {
             if (p.failed.length > 0) {

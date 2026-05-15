@@ -7,7 +7,7 @@ import OrderDetailModal from "@/components/pos/OrderDetailModal";
 import ReprintKitchenModal from "@/components/pos/ReprintKitchenModal";
 import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
-import { usePrinters, useReceiptIdentity } from "@/hooks/usePrinters";
+import { usePrinters, useReceiptIdentity, useKitchenConfig } from "@/hooks/usePrinters";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
@@ -105,6 +105,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // al montar el layout y se refresca con el evento `printers-changed`.
   const { printers } = usePrinters();
   const { businessName, businessFooter } = useReceiptIdentity();
+  const { kitchenConfig } = useKitchenConfig();
 
   const fetchOpenOrders = useCallback(async () => {
     try {
@@ -480,6 +481,21 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     if (showOrders) fetchOpenOrders();
   }, [showOrders, fetchOpenOrders]);
 
+  // Auto-abrir el drawer cuando llegamos desde el atajo "Tickets Abiertos"
+  // del Panel de Operación (/pos/order-type → /pos/menu?orders=1). Se lee
+  // de window.location para evitar la dependencia de useSearchParams
+  // (requiere Suspense en static export).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("orders") === "1") {
+      setShowOrders(true);
+      // Limpia el query param para que un refresh manual no lo reabra.
+      const url = window.location.pathname;
+      window.history.replaceState({}, "", url);
+    }
+  }, []);
+
   const drawerOrders = openOrders.map((o: any) => ({
     id: o.id,
     orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
@@ -677,6 +693,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           isOpen={!!reprintKitchenOrder}
           onClose={() => setReprintKitchenOrder(null)}
           printers={printers}
+          config={kitchenConfig}
           orderNumber={
             reprintKitchenOrder.orderNumber ||
             String(reprintKitchenOrder.id).slice(-6).toUpperCase()
@@ -710,6 +727,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                 name: m.name || m.modifier?.name || "",
                 priceAdd: Number(m.priceAdd ?? m.price ?? 0),
               })),
+              seatNumber:
+                typeof it.seatNumber === "number" ? it.seatNumber : null,
             };
           })}
         />
