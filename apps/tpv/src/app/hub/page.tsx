@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -35,7 +35,30 @@ const TYPE_LABEL: Record<string, string> = {
 const fmtMoney = (n: number) =>
   n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 });
 
+// Loader compartido: se usa tanto como fallback de Suspense (prerender)
+// como en el estado pre-mounted del cliente.
+function HubLoader() {
+  return (
+    <div className="min-h-screen w-full bg-[#0a0a0c] flex flex-col items-center justify-center gap-4">
+      <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
+      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">
+        Iniciando sesión segura…
+      </span>
+    </div>
+  );
+}
+
+// Wrapper que envuelve en Suspense — requerido por Next 14 cuando se usa
+// useSearchParams() en una página estática (output: 'export').
 export default function HubPage() {
+  return (
+    <Suspense fallback={<HubLoader />}>
+      <HubPageInner />
+    </Suspense>
+  );
+}
+
+function HubPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const force = searchParams.get('force') === 'true';
@@ -141,14 +164,7 @@ export default function HubPage() {
   const userInitial = firstName.charAt(0).toUpperCase();
 
   if (!mounted) {
-    return (
-      <div className="min-h-screen w-full bg-[#0a0a0c] flex flex-col items-center justify-center gap-4">
-        <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
-        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">
-          Iniciando sesión segura…
-        </span>
-      </div>
-    );
+    return <HubLoader />;
   }
 
   return (
