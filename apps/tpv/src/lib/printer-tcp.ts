@@ -38,6 +38,9 @@ export const CMD = {
   BOLD_OFF:     ESC + "E" + "\x00",
   DOUBLE_ON:    GS  + "!" + "\x11",
   DOUBLE_OFF:   GS  + "!" + "\x00",
+  // Tamaño triple (3x ancho, 3x alto). Algunas impresoras no soportan
+  // más allá de DOUBLE — si no responde, el firmware lo ignora y queda igual.
+  TRIPLE_ON:    GS  + "!" + "\x22",
   LF:           "\n",
   LINE:         "------------------------------\n",
   CUT:          GS  + "V" + "\x42" + "\x00",
@@ -228,6 +231,26 @@ export interface TicketItem {
   printerGroupIds?: string[];
 }
 
+/**
+ * Config aplicable al render de la comanda. Se carga desde
+ * TicketConfig (locationId) y se pasa al builder. Cualquier campo
+ * undefined cae al default — el builder funciona sin config en
+ * absoluto, manteniendo compatibilidad con call-sites legacy.
+ */
+export interface KitchenTicketConfig {
+  header?: string;
+  footer?: string;
+  showOrderNumber?: boolean;
+  showTime?: boolean;
+  showOrderType?: boolean;
+  showTableNumber?: boolean;
+  showCustomerName?: boolean;
+  showModifiers?: boolean;
+  showNotes?: boolean;
+  groupBySeat?: boolean;
+  fontSize?: "normal" | "large" | "xlarge";
+}
+
 export interface KitchenTicketInput {
   orderNumber?: string | null;
   orderType?: "DINE_IN" | "TAKEOUT" | "DELIVERY" | string | null;
@@ -240,6 +263,8 @@ export interface KitchenTicketInput {
   /** Si true, marca el ticket como "PARCIAL" — se está reimprimiendo
    *  solo un subset de los items originales. */
   isPartial?: boolean;
+  /** Configuración admin para mostrar/ocultar campos y ajustar tamaño. */
+  config?: KitchenTicketConfig;
 }
 
 export interface ReceiptInput {
@@ -272,6 +297,30 @@ const ORDER_TYPE_LABEL: Record<string, string> = {
 
 export function buildKitchenTicket(input: KitchenTicketInput): string {
   const time = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  // Defaults — equivalentes al comportamiento previo a la introducción del
+  // config admin, para que call-sites sin config sigan funcionando igual.
+  const cfg: Required<KitchenTicketConfig> = {
+    header:           input.config?.header           ?? "COMANDA",
+    footer:           input.config?.footer           ?? "",
+    showOrderNumber:  input.config?.showOrderNumber  ?? true,
+    showTime:         input.config?.showTime         ?? true,
+    showOrderType:    input.config?.showOrderType    ?? true,
+    showTableNumber:  input.config?.showTableNumber  ?? true,
+    showCustomerName: input.config?.showCustomerName ?? true,
+    showModifiers:    input.config?.showModifiers    ?? true,
+    showNotes:        input.config?.showNotes        ?? true,
+    groupBySeat:      input.config?.groupBySeat      ?? true,
+    fontSize:         input.config?.fontSize         ?? "large",
+  };
+
+  // Resolución del tamaño de fuente para items. "normal" = ancho normal,
+  // "large" = doble (default histórico), "xlarge" = triple. Si el firmware
+  // de la impresora no soporta el comando, queda en el tamaño anterior.
+  const itemSizeOn =
+    cfg.fontSize === "normal" ? "" :
+    cfg.fontSize === "xlarge" ? CMD.TRIPLE_ON : CMD.DOUBLE_ON;
+  const itemSizeOff = cfg.fontSize === "normal" ? "" : CMD.DOUBLE_OFF;
+
   let d = CMD.INIT + CMD.ALIGN_CENTER;
 
   // Banner de reimpresión — bien visible para que el cocinero NO prepare
@@ -287,30 +336,31 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     d += CMD.LINE;
   }
 
-  d += CMD.BOLD_ON + CMD.DOUBLE_ON;
-  d += "COMANDA\n";
-  d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
+  if (cfg.header.trim()) {
+    d += CMD.BOLD_ON + CMD.DOUBLE_ON;
+    d += cfg.header.trim() + "\n";
+    d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
+  }
 
-  if (input.orderNumber) d += "#" + input.orderNumber + "\n";
-  d += time + "\n";
+  if (cfg.showOrderNumber && input.orderNumber) d += "#" + input.orderNumber + "\n";
+  if (cfg.showTime) d += time + "\n";
 
-  if (input.orderType) {
+  if (cfg.showOrderType && input.orderType) {
     d += (ORDER_TYPE_LABEL[input.orderType] || input.orderType) + "\n";
   }
-  if (input.tableNumber) d += "Mesa " + input.tableNumber + "\n";
-  if (input.customerName) d += input.customerName + "\n";
+  if (cfg.showTableNumber && input.tableNumber) d += "Mesa " + input.tableNumber + "\n";
+  if (cfg.showCustomerName && input.customerName) d += input.customerName + "\n";
 
   d += CMD.LINE;
   d += CMD.ALIGN_LEFT;
 
   // Para DINE_IN agrupamos por comensal cuando hay items repartidos entre
-  // 2+ buckets (seat numerado o compartido). Cocina necesita saber a quién
-  // preparar cada plato cuando una mesa tiene varios comensales con
-  // pedidos distintos. Para TAKEOUT/DELIVERY o cuando todos los items
-  // están en el mismo bucket, se mantiene la salida plana de siempre.
+  // 2+ buckets (seat numerado o compartido) Y el toggle groupBySeat está
+  // activo. Para TAKEOUT/DELIVERY o cuando todo cae en un solo bucket,
+  // se mantiene la salida plana.
   const isDineIn = input.orderType === "DINE_IN";
   const seatBuckets = new Map<number | "shared", TicketItem[]>();
-  if (isDineIn) {
+  if (isDineIn && cfg.groupBySeat) {
     for (const it of input.items) {
       const key: number | "shared" =
         typeof it.seatNumber === "number" ? it.seatNumber : "shared";
@@ -319,22 +369,22 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
       seatBuckets.set(key, arr);
     }
   }
-  const shouldGroupBySeat = isDineIn && seatBuckets.size >= 2;
+  const shouldGroupBySeat = isDineIn && cfg.groupBySeat && seatBuckets.size >= 2;
 
   const renderItem = (item: TicketItem) => {
-    let s = CMD.DOUBLE_ON + CMD.BOLD_ON;
+    let s = itemSizeOn + CMD.BOLD_ON;
     s += `${item.quantity}x ${item.name}\n`;
-    if (item.modifiers && item.modifiers.length > 0) {
-      s += CMD.DOUBLE_OFF;
+    if (cfg.showModifiers && item.modifiers && item.modifiers.length > 0) {
+      s += itemSizeOff;
       for (const m of item.modifiers) s += `  + ${m.name}\n`;
-      s += CMD.DOUBLE_ON;
+      s += itemSizeOn;
     }
-    if (item.notes && item.notes.trim()) {
-      s += CMD.DOUBLE_OFF;
+    if (cfg.showNotes && item.notes && item.notes.trim()) {
+      s += itemSizeOff;
       s += `  > ${item.notes}\n`;
-      s += CMD.DOUBLE_ON;
+      s += itemSizeOn;
     }
-    s += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
+    s += itemSizeOff + CMD.BOLD_OFF;
     return s;
   };
 
@@ -360,7 +410,11 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     }
   }
 
-  d += CMD.LINE + CMD.LF + CMD.LF + CMD.CUT;
+  d += CMD.LINE;
+  if (cfg.footer.trim()) {
+    d += CMD.ALIGN_CENTER + cfg.footer.trim() + "\n" + CMD.ALIGN_LEFT;
+  }
+  d += CMD.LF + CMD.LF + CMD.CUT;
   return d;
 }
 

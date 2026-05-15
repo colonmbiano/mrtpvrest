@@ -5,6 +5,7 @@ import {
   printKitchenTickets,
   type PrinterRecord,
   type TicketItem,
+  type KitchenTicketConfig,
 } from "@/lib/printer-tcp";
 import { toast } from "sonner";
 
@@ -27,6 +28,7 @@ interface ReprintKitchenModalProps {
   tableNumber?: string | null;
   customerName?: string | null;
   items: ReprintCandidateItem[];
+  config?: KitchenTicketConfig | null;
 }
 
 const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
@@ -38,6 +40,7 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
   tableNumber,
   customerName,
   items,
+  config,
 }) => {
   // Por defecto todos los items vienen seleccionados — el caso común es
   // "perdí la comanda, vuélvanla a sacar entera". Si el usuario quiere
@@ -101,6 +104,7 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
         items: ticketItems,
         isReprint: true,
         isPartial,
+        config: config ?? undefined,
       });
 
       if (res.ok > 0 && res.failed.length === 0) {
