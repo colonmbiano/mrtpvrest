@@ -198,7 +198,7 @@ const router = express.Router();
 // si no, retorna todas las órdenes del restaurante. Antes devolvíamos 400
 // si faltaba, lo que tumbaba el panel para restaurantes con una sola
 // sucursal o admin sin selector activo.
-router.get('/admin', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER'), async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -572,14 +572,14 @@ async function addRoundHandler(req, res) {
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
 
-router.post('/:id/items',  authenticate, requireTenantAccess, requireAdmin, validateBody(addItemsSchema), addRoundHandler);
-router.post('/:id/rounds', authenticate, requireTenantAccess, requireAdmin, validateBody(addItemsSchema), addRoundHandler);
+router.post('/:id/items',  authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'), validateBody(addItemsSchema), addRoundHandler);
+router.post('/:id/rounds', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'), validateBody(addItemsSchema), addRoundHandler);
 
 // ── PUT /items/:itemId — Editar cantidad/notas de un item de orden abierta
 // Sólo admin/manager. Bloquea ediciones si la orden está cerrada o pagada.
 // Recalcula subtotal del item y totales de la orden, y emite order:updated
 // por socket para refresco en vivo de admin/cocina.
-router.put('/items/:itemId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.put('/items/:itemId', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER'), async (req, res) => {
   try {
     const { quantity, notes } = req.body || {};
     const restaurantId = req.user?.restaurantId || req.restaurantId;
@@ -652,7 +652,7 @@ router.put('/items/:itemId', authenticate, requireTenantAccess, requireAdmin, as
 
 // ── DELETE /items/:itemId — Eliminar item de orden abierta
 // Misma protección que PUT. Recalcula totales tras la eliminación.
-router.delete('/items/:itemId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.delete('/items/:itemId', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER'), async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
 
@@ -724,7 +724,7 @@ async function releaseTableIfDineIn(orderId) {
   }).catch(() => {});
 }
 
-router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER'), async (req, res) => {
   try {
     const order = await prisma.order.update({
       where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
@@ -736,7 +736,7 @@ router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireAd
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/:id/print-bill', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/:id/print-bill', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'), async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
       where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
