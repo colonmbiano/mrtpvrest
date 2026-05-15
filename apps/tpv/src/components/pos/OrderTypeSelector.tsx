@@ -25,7 +25,6 @@ interface OrderTypeSelectorProps {
 type OrderTypeCard = {
   id: OrderType;
   title: string;
-  desc: string;
   icon: typeof Utensils;
   accent: string;
 };
@@ -34,21 +33,18 @@ const ORDER_TYPES: OrderTypeCard[] = [
   {
     id: "DINE_IN",
     title: "Comer Aquí",
-    desc: "Asignar mesa o atender en sala",
     icon: Utensils,
     accent: "#ffb84d",
   },
   {
     id: "TAKEOUT",
     title: "Para Llevar",
-    desc: "Cliente recoge en mostrador",
     icon: ShoppingBag,
     accent: "#3b82f6",
   },
   {
     id: "DELIVERY",
     title: "Delivery",
-    desc: "Preparación y entrega al cliente",
     icon: Bike,
     accent: "#10b981",
   },
@@ -104,8 +100,8 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
             <div className="flex-1 h-px bg-white/10" />
           </div>
 
-          {/* Grid principal: 3 tarjetas amplias */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
+          {/* Grid principal: 3 tarjetas compactas cuadradas */}
+          <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-10">
             {ORDER_TYPES.map((t) => {
               const Icon = t.icon;
               const isPrimary = t.id === "DINE_IN";
@@ -114,8 +110,8 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   key={t.id}
                   onClick={() => onSelect(t.id)}
                   className={`
-                    group relative flex flex-col items-start text-left
-                    p-7 rounded-2xl min-h-[64px]
+                    group relative flex flex-col items-center justify-center text-center
+                    aspect-square p-3 sm:p-4 rounded-2xl
                     bg-white/5 border ${isPrimary ? "border-[#ffb84d]/40" : "border-white/10"}
                     active:scale-95 transition-transform duration-150
                     overflow-hidden
@@ -124,42 +120,39 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   {/* Halo ambiente del color de acento */}
                   <div
                     aria-hidden
-                    className="absolute -top-20 -right-20 w-56 h-56 rounded-full blur-[80px] opacity-20"
+                    className="absolute -top-10 -right-10 w-32 h-32 rounded-full blur-[60px] opacity-20"
                     style={{ background: t.accent }}
                   />
 
-                  {/* Icono grande */}
+                  {/* Icono compacto */}
                   <div
-                    className="relative w-16 h-16 rounded-2xl flex items-center justify-center mb-7 shadow-2xl"
+                    className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center mb-2 shadow-xl"
                     style={{
                       background: isPrimary ? "#ffb84d" : "rgba(255,255,255,0.06)",
                       color: isPrimary ? "#0a0a0c" : t.accent,
                       border: isPrimary ? "none" : `1px solid ${t.accent}40`,
                     }}
                   >
-                    <Icon size={32} strokeWidth={2.5} />
+                    <Icon size={24} strokeWidth={2.5} />
                   </div>
 
-                  {/* Texto */}
-                  <h3 className="text-2xl font-black text-white mb-1.5 tracking-tight leading-tight">
+                  {/* Título — una sola línea */}
+                  <h3 className="text-xs sm:text-sm font-black text-white tracking-tight leading-tight whitespace-nowrap">
                     {t.title}
                   </h3>
-                  <p className="text-sm font-medium text-white/55 leading-relaxed mb-3 max-w-[90%]">
-                    {t.desc}
-                  </p>
 
                   {/* Flecha */}
                   <div
-                    className="absolute bottom-6 right-6"
+                    className="absolute bottom-2 right-2"
                     style={{ color: isPrimary ? "#ffb84d" : "rgba(255,255,255,0.35)" }}
                   >
-                    <ArrowRight size={24} strokeWidth={3} />
+                    <ArrowRight size={16} strokeWidth={3} />
                   </div>
 
                   {/* Pulse del primario */}
                   {isPrimary && (
                     <span
-                      className="absolute top-3 right-3 w-2 h-2 rounded-full bg-[#ffb84d] animate-pulse"
+                      className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[#ffb84d] animate-pulse"
                       aria-hidden
                     />
                   )}
