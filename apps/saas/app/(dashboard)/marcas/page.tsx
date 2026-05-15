@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import TenantModulesToggle from "@/components/TenantModulesToggle";
 
@@ -28,6 +29,7 @@ function timeAgo(iso: string) {
 }
 
 export default function MarcasPage() {
+  const router = useRouter();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [plans,   setPlans]   = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,7 +169,7 @@ export default function MarcasPage() {
                   const sub = t.subscription;
                   const bg = COLORS[t.name.charCodeAt(0) % COLORS.length];
                   return (
-                    <tr key={t.id}>
+                    <tr key={t.id} onClick={() => router.push(`/marcas/${t.id}`)} style={{ cursor: "pointer" }}>
                       <td>
                         <div className="db-brand-name">
                           {t.logoUrl
@@ -195,7 +197,7 @@ export default function MarcasPage() {
                           : sub?.trialEndsAt ? timeAgo(sub.trialEndsAt) : "—"}
                       </td>
                       <td style={{ fontSize:12, fontFamily:"DM Mono,monospace" }}>{t._count.users}</td>
-                      <td>
+                      <td onClick={e => e.stopPropagation()}>
                         <TenantModulesToggle
                           tenant={{
                             id: t.id,
@@ -210,7 +212,7 @@ export default function MarcasPage() {
                           onError={showToast}
                         />
                       </td>
-                      <td>
+                      <td onClick={e => e.stopPropagation()}>
                         <div style={{ display:"flex", gap:6 }}>
                           {sub?.status === "TRIAL" && (
                             <button className="db-btn db-btn-orange" style={{ padding:"3px 8px", fontSize:10 }}
