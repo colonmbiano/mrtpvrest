@@ -237,7 +237,7 @@ export default function InventarioPage() {
           {/* BOTÓN IA INVENTARIO / IMPORTACIÓN */}
           <label className={`px-4 py-2 rounded-xl text-sm font-black flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-lg ${isScanning ? 'bg-orange-200 text-black animate-pulse' : 'bg-orange-500 text-white shadow-orange-500/20'}`}>
             {isScanning ? "🤖 Procesando..." : "🤖 Carga Inteligente (IA/Excel)"}
-            {!isScanning && <input type="file" accept="image/*,application/pdf,.xlsx,.xls,.csv" multiple onChange={handleAIScan} className="hidden" />}
+            {!isScanning && <input type="file" accept="image/*,application/pdf,.xlsx,.csv" multiple onChange={handleAIScan} className="hidden" />}
           </label>
 
           <Link href="/admin/inventario/recetas" className="px-4 py-2 rounded-xl text-sm font-bold border border-white/10 text-gray-400">📋 Recetas</Link>

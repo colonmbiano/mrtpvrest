@@ -22,13 +22,22 @@
 
 const express = require('express');
 const multer = require('multer');
-const xlsx = require('xlsx');
+const ExcelJS = require('exceljs');
 const csv = require('csv-parser');
 const { Readable } = require('stream');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
-const upload = multer({ limits: { fileSize: 25 * 1024 * 1024 } }); // 25MB
+const upload = multer({
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const name = (file.originalname || '').toLowerCase();
+    const allowed = file.mimetype.includes('spreadsheetml') || file.mimetype.includes('csv') ||
+      name.endsWith('.xlsx') || name.endsWith('.csv');
+    if (allowed) cb(null, true);
+    else cb(new Error('Tipo de archivo no permitido. Use .xlsx o .csv.'));
+  },
+});
 
 const COL_PATTERNS = {
   date:        /^(fecha|date|fecha[_\s]?venta|created_?at)$/i,
@@ -61,20 +70,53 @@ function findColumn(keys, pattern) {
   return keys.find((k) => pattern.test(String(k).trim()));
 }
 
+function normalizeCellValue(value) {
+  if (value == null) return '';
+  if (value instanceof Date) return value;
+  if (typeof value === 'object') {
+    if (value.text) return value.text;
+    if (value.result != null) return value.result;
+    if (Array.isArray(value.richText)) return value.richText.map((part) => part.text || '').join('');
+  }
+  return value;
+}
+
+function worksheetToMatrix(worksheet) {
+  const matrix = [];
+  worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+    const values = [];
+    for (let i = 1; i <= row.cellCount; i++) {
+      values.push(normalizeCellValue(row.getCell(i).value));
+    }
+    matrix[rowNumber - 1] = values;
+  });
+  return matrix;
+}
+
+function matrixToObjects(matrix, headerRow = 0) {
+  const headers = (matrix[headerRow] || []).map((value, index) => {
+    const header = String(value || '').trim();
+    return header || `Column${index + 1}`;
+  });
+
+  return matrix.slice(headerRow + 1)
+    .map((row = []) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])))
+    .filter((row) => Object.values(row).some((value) => value !== '' && value != null));
+}
+
 // Parsea el archivo y devuelve filas crudas. Reusa logica del scan-inventory.
 async function parseFile(file) {
   let rawData = [];
-  const isXlsx = file.mimetype.includes('spreadsheetml') || file.mimetype.includes('excel') ||
-                 file.originalname.endsWith('.xlsx') || file.originalname.endsWith('.xls');
+  const isXlsx = file.mimetype.includes('spreadsheetml') || file.originalname.endsWith('.xlsx');
   const isCsv = file.mimetype.includes('csv') || file.originalname.endsWith('.csv');
 
   if (isXlsx) {
-    const wb = xlsx.read(file.buffer, { type: 'buffer', cellDates: true });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(file.buffer);
     // Buscar primera hoja con headers detectables
-    let pickedWS = null;
-    for (const name of wb.SheetNames) {
-      const ws = wb.Sheets[name];
-      const matrix = xlsx.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    let pickedMatrix = null;
+    for (const ws of wb.worksheets) {
+      const matrix = worksheetToMatrix(ws);
       // Buscar fila con header de fecha + producto
       let headerRow = -1;
       for (let r = 0; r < Math.min(matrix.length, 30); r++) {
@@ -84,13 +126,13 @@ async function parseFile(file) {
         if (hasDate && hasItem) { headerRow = r; break; }
       }
       if (headerRow >= 0) {
-        rawData = xlsx.utils.sheet_to_json(ws, { defval: '', range: headerRow });
-        pickedWS = ws;
+        rawData = matrixToObjects(matrix, headerRow);
+        pickedMatrix = matrix;
         break;
       }
     }
-    if (!pickedWS) {
-      rawData = xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+    if (!pickedMatrix) {
+      rawData = matrixToObjects(worksheetToMatrix(wb.worksheets[0]), 0);
     }
   } else if (isCsv) {
     rawData = await new Promise((resolve, reject) => {
@@ -102,7 +144,7 @@ async function parseFile(file) {
         .on('error', reject);
     });
   } else {
-    throw new Error('Formato no soportado (acepto .xlsx/.xls/.csv)');
+    throw new Error('Formato no soportado (acepto .xlsx/.csv)');
   }
 
   return rawData;

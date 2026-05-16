@@ -2,7 +2,6 @@
 node_modules/
 **/node_modules/
 package-lock.json
-pnpm-lock.yaml
 yarn.lock
 
 # Directorios de compilación y temporales
@@ -39,6 +38,9 @@ public/assets/
 # Configuración de entorno (Seguridad)
 .env
 .env.*
+env_copy.txt
+**/env_copy.txt
+**/*env*.txt
 
 # Scratch local de Claude / herramientas
 .superpowers/

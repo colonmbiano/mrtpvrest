@@ -504,7 +504,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,application/pdf,.xlsx,.xls,.csv"
+            accept="image/*,application/pdf,.xlsx,.csv"
             onChange={onScanFileChange}
             className="hidden"
           />

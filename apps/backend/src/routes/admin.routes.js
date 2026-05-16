@@ -391,11 +391,10 @@ router.delete('/tenants/:id', authenticate, requireSuperAdmin, async (req, res) 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BYOK — API key de Google AI Studio del cliente
+// BYOK — API key de Groq Cloud del cliente
 // ─────────────────────────────────────────────────────────────────────────────
 
 const { encryptSecret, decryptSecret, maskSecret } = require('../lib/secret-crypto');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // GET /api/admin/ai-key — estado: si hay key, muestra máscara + validación
 router.get('/ai-key', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
@@ -439,7 +438,7 @@ router.get('/ai-key', authenticate, requireTenantAccess, requireAdmin, async (re
   }
 });
 
-// POST /api/admin/ai-key — guarda nueva key (previa validación contra Gemini)
+// POST /api/admin/ai-key — guarda nueva key (previa validación contra Groq)
 router.post('/ai-key', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
@@ -449,6 +448,18 @@ router.post('/ai-key', authenticate, requireTenantAccess, requireAdmin, async (r
       return res.status(400).json({ error: 'API key inválida.' });
     }
     const trimmed = apiKey.trim();
+    if (/^AIza/i.test(trimmed)) {
+      return res.status(400).json({
+        error: 'Esta integracion usa Groq Cloud. Pega una API key que empiece con gsk_, no una key de Google AI Studio.',
+        code: 'WRONG_PROVIDER',
+      });
+    }
+    if (!/^gsk_/i.test(trimmed)) {
+      return res.status(400).json({
+        error: 'API key invalida. Debe ser una key de Groq Cloud que empiece con gsk_.',
+        code: 'WRONG_PROVIDER',
+      });
+    }
 
     // Validar contra Groq con una llamada trivial
     try {
