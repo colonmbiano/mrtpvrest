@@ -1,15 +1,15 @@
 import MeserosDetailClient from "./MeserosDetailClient";
 
-// Static export para Capacitor: pre-renderizamos UNA página placeholder
-// con id="_" y dynamicParams=false. El cliente lee el id real con
-// useParams() en runtime — la navegación client-side de Next no toca
-// el filesystem, así que el mismo HTML sirve para cualquier mesa.
-// Mismo truco que ya usa /meseros/[id]/orden.
+// Pre-renderizamos UNA página placeholder con id="_". NO exportamos
+// `dynamicParams`: Next 16 exige que sea un booleano literal (no admite
+// un valor por env) y aborta el build estático de Capacitor
+// (output 'export') si es `true` explícito. Sin la export, el default
+// vale `true` en web (server) → sirve /meseros/<idReal> bajo demanda — y
+// el build 'export' del APK solo emite el placeholder "_" sin error.
+// Mismo planteamiento que /meseros/[id]/orden.
 export function generateStaticParams() {
   return [{ id: "_" }];
 }
-
-export const dynamicParams = true;
 
 export default function Page({ params }: { params: { id: string } }) {
   return <MeserosDetailClient params={params} />;
