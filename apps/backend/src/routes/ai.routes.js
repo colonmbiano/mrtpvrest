@@ -32,7 +32,20 @@ function sendAiError(res, error, fallback = 500) {
 
 // Configuramos Multer para aceptar múltiples archivos (hasta 10)
 const upload = multer({
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB por imagen
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const name = (file.originalname || '').toLowerCase();
+    const allowed = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'application/pdf',
+      'text/csv',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ];
+    if (allowed.includes(file.mimetype) || name.endsWith('.xlsx') || name.endsWith('.csv')) cb(null, true);
+    else cb(new Error('Tipo de archivo no permitido'));
+  },
 });
 
 // Escanear MENÚ (Platos y Precios) — visión, usa Gemini con key de plataforma.

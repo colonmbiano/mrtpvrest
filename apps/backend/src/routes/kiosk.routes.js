@@ -68,6 +68,16 @@ router.post('/orders', async (req, res) => {
 
     if (!items?.length) return res.status(400).json({ error: 'El carrito está vacío' })
 
+    let resolvedLocationId = req.locationId || null
+    if (locationId) {
+      const location = await prisma.location.findFirst({
+        where: { id: locationId, restaurantId, isActive: true },
+        select: { id: true },
+      })
+      if (!location) return res.status(400).json({ error: 'Sucursal no valida para este restaurante' })
+      resolvedLocationId = location.id
+    }
+
     // Resolver pasarela ANTES de crear la orden (si no hay pasarela, no sirve)
     const resolved = await resolveProviderForRestaurant(restaurantId, paymentProvider)
     if (!resolved) {
@@ -81,8 +91,8 @@ router.post('/orders', async (req, res) => {
     const orderItems = []
 
     for (const item of items) {
-      const menuItem = await prisma.menuItem.findUnique({
-        where:   { id: item.menuItemId },
+      const menuItem = await prisma.menuItem.findFirst({
+        where:   { id: item.menuItemId, restaurantId },
         include: { modifierGroups: { include: { modifiers: true } } },
       })
       if (!menuItem || !menuItem.isActive) {
@@ -91,13 +101,19 @@ router.post('/orders', async (req, res) => {
 
       let itemTotal = menuItem.price * (item.quantity || 1)
       const modItems = []
+      const validModifiers = new Map(
+        (menuItem.modifierGroups || [])
+          .flatMap((g) => g.modifiers || [])
+          .filter((m) => m.isActive)
+          .map((m) => [m.id, m])
+      )
 
       for (const mod of item.modifiers ?? []) {
-        const modifier = await prisma.modifier.findUnique({ where: { id: mod.modifierId } })
-        if (modifier) {
-          itemTotal += modifier.price * (item.quantity || 1)
-          modItems.push({ modifierId: modifier.id, name: modifier.name, price: modifier.price })
-        }
+        const modifier = validModifiers.get(mod.modifierId)
+        if (!modifier) return res.status(400).json({ error: `Modificador no valido: ${mod.modifierId}` })
+        const priceAdd = Number(modifier.priceAdd || modifier.price || 0)
+        itemTotal += priceAdd * (item.quantity || 1)
+        modItems.push({ modifierId: modifier.id, name: modifier.name, priceAdd })
       }
 
       subtotal += itemTotal
@@ -117,7 +133,7 @@ router.post('/orders', async (req, res) => {
     const order = await prisma.order.create({
       data: {
         restaurantId,
-        locationId:    locationId || null,
+        locationId:    resolvedLocationId,
         orderNumber,
         status:          'PENDING',
         paymentMethod:   'QR_CODE',

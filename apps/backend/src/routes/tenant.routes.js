@@ -7,6 +7,8 @@ const router  = require('express').Router()
 const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware')
 const multer  = require('multer')
+const bcrypt = require('bcryptjs')
+const crypto = require('crypto')
 const { scanMenuFromImages } = require('../services/ai.service')
 const { uploadImage } = require('../services/cloudinary.service')
 const { extractAccentColor } = require('../services/extractColor.service')
@@ -212,21 +214,45 @@ router.post('/onboarding/employees', async (req, res) => {
 
   try {
     // Verificar que ningún PIN esté en uso en el restaurante
-    const pins = employees.map(e => e.pin)
-    const existing = await prisma.employee.findFirst({
-      where: { pin: { in: pins } }
+    const location = await prisma.location.findFirst({
+      where: { restaurantId, isActive: true },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
     })
-    if (existing) {
-      return res.status(400).json({ error: `El PIN ${existing.pin} ya está en uso` })
-    }
+    if (!location) return res.status(400).json({ error: 'No hay sucursal activa para asignar empleados' })
 
+    const pins = employees.map(e => String(e.pin || '').trim())
+    if (pins.some(pin => !/^\d{4,6}$/.test(pin))) {
+      return res.status(400).json({ error: 'Todos los PIN deben ser numericos de 4 a 6 digitos' })
+    }
+    if (new Set(pins).size !== pins.length) {
+      return res.status(400).json({ error: 'Hay PIN duplicados en la solicitud' })
+    }
+    const existingEmployees = await prisma.employee.findMany({
+      where: { location: { restaurantId } },
+      select: { pin: true, offlinePin: true },
+    })
+    for (const pin of pins) {
+      const sha = crypto.createHash('sha256').update(pin).digest('hex')
+      for (const candidate of existingEmployees) {
+        const matches = candidate.pin?.startsWith('$2')
+          ? await bcrypt.compare(pin, candidate.pin)
+          : candidate.pin === pin
+        if (matches || candidate.offlinePin === sha) {
+          return res.status(400).json({ error: 'Un PIN solicitado ya esta en uso' })
+        }
+      }
+    }
     const created = await prisma.$transaction(
-      employees.map(e => {
+      employees.map((e, index) => {
         const defaults = ROLE_DEFAULTS[e.role] || ROLE_DEFAULTS.CASHIER
+        const pin = pins[index]
         return prisma.employee.create({
           data: {
+            locationId:        location.id,
             name:             e.name,
-            pin:              e.pin,
+            pin:              bcrypt.hashSync(pin, 10),
+            offlinePin:       crypto.createHash('sha256').update(pin).digest('hex'),
             role:             e.role || 'CASHIER',
             isActive:         true,
             tables:           [],

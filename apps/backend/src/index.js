@@ -12,6 +12,7 @@ const sentry      = require('./lib/sentry');
 const shiftsRoutes = require('./routes/shifts.routes');
 const tenantMiddleware = require('./middleware/tenant.middleware');
 const idempotencyMiddleware = require('./middleware/idempotency.middleware');
+const jwt = require('jsonwebtoken');
 
 sentry.init();
 
@@ -24,9 +25,16 @@ const corsOptions = {
     // Permitir peticiones sin origen (como apps móviles o curl)
     if (!origin) return callback(null, true);
     
-    const isMrtpv = origin.endsWith('mrtpvrest.com');
-    const isVercel = origin.endsWith('vercel.app');
-    const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1') || origin.startsWith('capacitor://');
+    let host = '';
+    try {
+      host = new URL(origin).hostname;
+    } catch {
+      host = '';
+    }
+
+    const isMrtpv = host === 'mrtpvrest.com' || host.endsWith('.mrtpvrest.com');
+    const isVercel = process.env.ALLOW_VERCEL_PREVIEWS === 'true' && host.endsWith('.vercel.app');
+    const isLocal = host === 'localhost' || host === '127.0.0.1' || origin.startsWith('capacitor://');
 
     if (isMrtpv || isVercel || isLocal) {
       callback(null, true);
@@ -43,7 +51,7 @@ const corsOptions = {
 // Socket.io
 const io = new Server(server, {
   cors: {
-    origin: true,
+    origin: corsOptions.origin,
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -51,17 +59,43 @@ const io = new Server(server, {
 
 app.set('io', io)
 
+io.use((socket, next) => {
+  const authHeader = String(socket.handshake.headers?.authorization || '');
+  const token =
+    socket.handshake.auth?.token ||
+    socket.handshake.query?.token ||
+    authHeader.replace(/^Bearer\s+/i, '');
+
+  if (token) {
+    try {
+      socket.data.user = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      socket.data.user = null;
+    }
+  }
+
+  next();
+})
+
 io.on('connection', (socket) => {
   const restaurantId = socket.handshake.query.restaurantId;
   console.log(`Cliente conectado: ${socket.id} (Restaurant: ${restaurantId || 'none'})`)
 
-  if (restaurantId) {
+  const userRestaurantId = socket.data.user?.restaurantId;
+  const canJoinRestaurant = restaurantId && (
+    socket.data.user?.role === 'SUPER_ADMIN' ||
+    (userRestaurantId && userRestaurantId === restaurantId)
+  );
+
+  if (canJoinRestaurant) {
     socket.join(`restaurant:${restaurantId}`);
     socket.on('join:admin',   () => socket.join(`restaurant:${restaurantId}:admins`))
     socket.on('join:kitchen', () => socket.join(`restaurant:${restaurantId}:kitchen`))
   }
 
-  socket.on('join:order',   (orderId) => socket.join('order:' + orderId))
+  socket.on('join:order',   (orderId) => {
+    if (canJoinRestaurant) socket.join('order:' + orderId)
+  })
   socket.on('disconnect',   () => console.log('Cliente desconectado: ' + socket.id))
 })
 

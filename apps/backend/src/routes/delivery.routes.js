@@ -1,12 +1,63 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
+const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const router = express.Router();
 
-// BUG-31: garantizar que la entrega se refleje SIEMPRE en MI CAJA del
-// repartidor cuando el pago es en efectivo y aún no se acreditó. Idempotente
-// por (driverId, orderId, category=DELIVERY) para soportar reintentos del
-// frontend sin duplicar movimientos.
+const STAFF_ROLES = ['CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'];
+
+function isStaff(user) {
+  return Boolean(user && STAFF_ROLES.includes(user.role));
+}
+
+function canAccessDriver(req, driverId) {
+  return req.user?.id === driverId || isStaff(req.user);
+}
+
+function driverWhereForRequest(req, driverId) {
+  const where = { id: driverId, role: 'DELIVERY', isActive: true };
+  if (req.user?.role !== 'SUPER_ADMIN') {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (restaurantId) where.location = { restaurantId };
+  }
+  return where;
+}
+
+async function assertDriverAccess(req, res) {
+  const driverId = req.params.driverId || req.body?.driverId;
+  if (!driverId) {
+    res.status(400).json({ error: 'driverId requerido' });
+    return null;
+  }
+  if (!canAccessDriver(req, driverId)) {
+    res.status(403).json({ error: 'No autorizado para este repartidor' });
+    return null;
+  }
+  const driver = await prisma.employee.findFirst({
+    where: driverWhereForRequest(req, driverId),
+    select: { id: true, name: true, photo: true, phone: true, locationId: true },
+  });
+  if (!driver) {
+    res.status(404).json({ error: 'Repartidor no encontrado' });
+    return null;
+  }
+  return driver;
+}
+
+async function findDriverOrder(req, orderId, driverId) {
+  const where = { id: orderId };
+  if (driverId && !isStaff(req.user)) where.deliveryDriverId = driverId;
+  if (req.user?.role !== 'SUPER_ADMIN') {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (restaurantId) where.restaurantId = restaurantId;
+  }
+  return prisma.order.findFirst({
+    where,
+    include: { items: { include: { menuItem: true, modifiers: true } }, user: true },
+  });
+}
+
 async function ensureCashOnDeliveryMovement(order) {
   if (!order || !order.deliveryDriverId) return null;
   if (order.paymentMethod !== 'CASH') return null;
@@ -32,77 +83,114 @@ async function ensureCashOnDeliveryMovement(order) {
   });
 }
 
-// ── LOGIN repartidor (usa Employee con rol DELIVERY) ──────────────────────
+// Legacy login by phone + PIN. New clients should prefer /api/employees/login.
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    // Buscar en Employee por nombre como email y pin como password
+    const { email, password } = req.body || {};
+    const restaurantId = req.restaurantId || req.headers['x-restaurant-id'] || null;
     const driver = await prisma.employee.findFirst({
-      where: { role: 'DELIVERY', isActive: true, phone: email }
+      where: {
+        role: 'DELIVERY',
+        isActive: true,
+        phone: email,
+        ...(restaurantId ? { location: { restaurantId } } : {}),
+      },
+      include: {
+        location: {
+          select: {
+            id: true,
+            restaurantId: true,
+            restaurant: { select: { tenantId: true } },
+          },
+        },
+      },
     });
-    if (!driver || driver.pin !== password)
-      return res.status(401).json({ error: 'Credenciales incorrectas' });
-    res.json({ driver: { id: driver.id, name: driver.name, photo: driver.photo, phone: driver.phone } });
+    const valid = driver?.pin?.startsWith('$2')
+      ? await bcrypt.compare(String(password || ''), driver.pin)
+      : driver?.pin === password;
+    if (!driver || !valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
+
+    const token = jwt.sign(
+      {
+        id: driver.id,
+        role: driver.role,
+        tenantId: driver.location?.restaurant?.tenantId,
+        restaurantId: driver.location?.restaurantId,
+        locationId: driver.locationId,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '12h' }
+    );
+
+    res.json({
+      token,
+      driver: { id: driver.id, name: driver.name, photo: driver.photo, phone: driver.phone },
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── GET pedidos asignados al repartidor ───────────────────────────────────
-router.get('/:driverId/orders', async (req, res) => {
+router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, res) => {
   try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
     const orders = await prisma.order.findMany({
       where: {
-        deliveryDriverId: req.params.driverId,
-        status: { notIn: ['DELIVERED', 'CANCELLED'] }
+        deliveryDriverId: driver.id,
+        status: { notIn: ['DELIVERED', 'CANCELLED'] },
+        ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId: req.restaurantId || req.user?.restaurantId } : {}),
       },
-      // BUG-30: incluir modifiers para que el detalle muestre nombre completo
-      // del producto + variantes/modificadores antes de salir a la entrega.
       include: {
         items: { include: { menuItem: true, modifiers: true } },
-        user: true
+        user: true,
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     res.json(orders);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── GET historial del día ─────────────────────────────────────────────────
-// BUG-31: filtrar exclusivamente por status='DELIVERED'. Antes devolvía toda
-// la actividad del día (incluyendo ON_THE_WAY) y la app la pintaba como
-// "ENTREGADO", inconsistente con RUTA ACTIVA y MI CAJA.
-router.get('/:driverId/history', async (req, res) => {
+router.get('/:driverId/history', authenticate, requireTenantAccess, async (req, res) => {
   try {
-    const today = new Date(); today.setHours(0,0,0,0);
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
     const orders = await prisma.order.findMany({
       where: {
-        deliveryDriverId: req.params.driverId,
+        deliveryDriverId: driver.id,
         status: 'DELIVERED',
-        createdAt: { gte: today }
+        createdAt: { gte: today },
+        ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId: req.restaurantId || req.user?.restaurantId } : {}),
       },
       include: { items: true },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     res.json(orders);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── PUT asignar repartidor a pedido ───────────────────────────────────────
-// BUG-24: el cajero (CASHIER) asigna el repartidor en el flujo de COBRAR
-// DELIVERY. Antes requería ADMIN y la asignación quedaba bloqueada en POS.
-router.put('/assign', authenticate, requireTenantAccess, requireRole('CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_ROLES), async (req, res) => {
   try {
     const { orderId, driverId } = req.body;
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const driver = await prisma.employee.findFirst({
+      where: { id: driverId, role: 'DELIVERY', isActive: true, ...(restaurantId ? { location: { restaurantId } } : {}) },
+    });
+    if (!driver) return res.status(404).json({ error: 'Repartidor no encontrado' });
     const order = await prisma.order.update({
-      where: { id: orderId },
-      data: { deliveryDriverId: driverId, status: 'ON_THE_WAY' }
+      where: { id: orderId, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
+      data: { deliveryDriverId: driverId, status: 'ON_THE_WAY' },
     });
     res.json(order);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── PUT cambiar estado del pedido ─────────────────────────────────────────
-router.put('/:driverId/orders/:orderId/status', async (req, res) => {
+router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAccess, async (req, res) => {
   try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+    const existing = await findDriverOrder(req, req.params.orderId, driver.id);
+    if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
+
     const { status, paymentMethod } = req.body;
     const data = { status };
     if (paymentMethod) data.paymentMethod = paymentMethod;
@@ -115,14 +203,12 @@ router.put('/:driverId/orders/:orderId/status', async (req, res) => {
       }
     }
     const order = await prisma.order.update({
-      where: { id: req.params.orderId },
+      where: { id: existing.id },
       data,
-      include: { items: { include: { menuItem: true } }, user: true }
+      include: { items: { include: { menuItem: true } }, user: true },
     });
 
-    if (order.status === 'DELIVERED') {
-      await ensureCashOnDeliveryMovement(order);
-    }
+    if (order.status === 'DELIVERED') await ensureCashOnDeliveryMovement(order);
 
     const io = req.app.get('io');
     if (io) {
@@ -134,24 +220,27 @@ router.put('/:driverId/orders/:orderId/status', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── GET mensajes de un pedido ─────────────────────────────────────────────
-router.get('/orders/:orderId/messages', async (req, res) => {
+router.get('/orders/:orderId/messages', authenticate, requireTenantAccess, async (req, res) => {
   try {
+    const order = await findDriverOrder(req, req.params.orderId, req.user?.role === 'DELIVERY' ? req.user.id : null);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
     const msgs = await prisma.deliveryMessage.findMany({
-      where: { orderId: req.params.orderId },
-      orderBy: { createdAt: 'asc' }
+      where: { orderId: order.id },
+      orderBy: { createdAt: 'asc' },
     });
     res.json(msgs);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── POST enviar mensaje ───────────────────────────────────────────────────
-router.post('/orders/:orderId/messages', async (req, res) => {
+router.post('/orders/:orderId/messages', authenticate, requireTenantAccess, async (req, res) => {
   try {
-    const { message, fromDriver } = req.body;
+    const order = await findDriverOrder(req, req.params.orderId, req.user?.role === 'DELIVERY' ? req.user.id : null);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const { message, fromDriver } = req.body || {};
+    if (!message || typeof message !== 'string') return res.status(400).json({ error: 'message requerido' });
     const msg = await prisma.deliveryMessage.create({
-      data: { orderId: req.params.orderId, message, fromDriver: fromDriver || false },
-      include: { order: true }
+      data: { orderId: order.id, message: message.slice(0, 1000), fromDriver: Boolean(fromDriver) },
+      include: { order: true },
     });
 
     const io = req.app.get('io');
@@ -163,34 +252,40 @@ router.post('/orders/:orderId/messages', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── GET todos los repartidores ────────────────────────────────────────────
-// BUG-24: el cajero necesita la lista para asignar repartidor al cobrar
-// DELIVERY. La lista se restringe a empleados rol=DELIVERY activos del
-// mismo tenant via requireTenantAccess.
-router.get('/', authenticate, requireTenantAccess, requireRole('CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+router.get('/', authenticate, requireTenantAccess, requireRole(...STAFF_ROLES), async (req, res) => {
   try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
     const drivers = await prisma.employee.findMany({
-      where: { role: 'DELIVERY', isActive: true },
-      orderBy: { name: 'asc' }
+      where: {
+        role: 'DELIVERY',
+        isActive: true,
+        ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { location: { restaurantId } } : {}),
+      },
+      orderBy: { name: 'asc' },
     });
     res.json(drivers);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-// ── Confirmar entrega sin cobro (efectivo pendiente) ──────────────────────
-router.put('/:driverId/orders/:orderId/deliver', async (req, res) => {
+
+router.put('/:driverId/orders/:orderId/deliver', authenticate, requireTenantAccess, async (req, res) => {
   try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+    const existing = await findDriverOrder(req, req.params.orderId, driver.id);
+    if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
     const order = await prisma.order.update({
-      where: { id: req.params.orderId },
+      where: { id: existing.id },
       data: {
         status: 'DELIVERED',
-        paidAt: null, // se pagará después
+        paidAt: null,
         paymentStatus: 'PENDING',
         cashCollected: false,
       },
-      include: { items: { include: { menuItem: true } } }
+      include: { items: { include: { menuItem: true } } },
     });
     await ensureCashOnDeliveryMovement(order);
     res.json(order);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
 module.exports = router;

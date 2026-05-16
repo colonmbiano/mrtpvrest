@@ -12,18 +12,17 @@ function getGeminiModel(apiKey, json = false) {
   });
 }
 
-const xlsx = require('xlsx');
+const ExcelJS = require('exceljs');
 const csv = require('csv-parser');
 const { Readable } = require('stream');
 
 // Helpers para detectar archivos estructurados (no IA).
-const SPREADSHEET_EXTS = ['.xlsx', '.xls', '.csv'];
+const SPREADSHEET_EXTS = ['.xlsx', '.csv'];
 function isSpreadsheet(file) {
   const name = (file?.originalname || '').toLowerCase();
   const mime = file?.mimetype || '';
   return (
     mime.includes('spreadsheetml') ||
-    mime.includes('excel') ||
     mime.includes('csv') ||
     SPREADSHEET_EXTS.some((ext) => name.endsWith(ext))
   );
@@ -59,6 +58,46 @@ function findHeaderRow(matrix) {
   return null;
 }
 
+function normalizeCellValue(value) {
+  if (value == null) return '';
+  if (value instanceof Date) return value;
+  if (typeof value === 'object') {
+    if (value.text) return value.text;
+    if (value.result != null) return value.result;
+    if (Array.isArray(value.richText)) return value.richText.map((part) => part.text || '').join('');
+  }
+  return value;
+}
+
+function worksheetToMatrix(worksheet) {
+  const matrix = [];
+  worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+    const values = [];
+    for (let i = 1; i <= row.cellCount; i++) {
+      values.push(normalizeCellValue(row.getCell(i).value));
+    }
+    matrix[rowNumber - 1] = values;
+  });
+  return matrix;
+}
+
+function matrixToObjects(matrix, headerRow = 0) {
+  const headers = (matrix[headerRow] || []).map((value, index) => {
+    const header = String(value || '').trim();
+    return header || `Column${index + 1}`;
+  });
+
+  return matrix.slice(headerRow + 1)
+    .map((row = []) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])))
+    .filter((row) => Object.values(row).some((value) => value !== '' && value != null));
+}
+
+async function loadWorkbook(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  return workbook;
+}
+
 /**
  * Procesa archivos de Excel o CSV para extraer ingredientes de inventario.
  * Busca columnas comunes como "nombre", "producto", "costo", "precio", "cantidad", "stock".
@@ -70,34 +109,30 @@ async function parseInventoryFile(file) {
   try {
     let rawData = [];
 
-    if (file.mimetype.includes('spreadsheetml') || file.mimetype.includes('excel') || file.originalname.endsWith('.xlsx') || file.originalname.endsWith('.xls')) {
+    if (file.mimetype.includes('spreadsheetml') || file.originalname.endsWith('.xlsx')) {
       // PROCESAR EXCEL
       // Iteramos TODAS las hojas en orden y nos quedamos con la primera que
       // tenga headers detectables. Archivos reales suelen empezar con una
       // hoja "GUIA"/"INSTRUCCIONES" vacía y la tabla real va en la segunda.
-      const workbook = xlsx.read(file.buffer, { type: 'buffer' });
+      const workbook = await loadWorkbook(file.buffer);
       let pickedRange = null;
-      let pickedWorksheet = null;
-      for (const sheetName of workbook.SheetNames) {
-        const ws = workbook.Sheets[sheetName];
-        const matrix = xlsx.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      let pickedMatrix = null;
+      for (const ws of workbook.worksheets) {
+        const matrix = worksheetToMatrix(ws);
         const found = findHeaderRow(matrix);
         if (found) {
           pickedRange = found.headerRow;
-          pickedWorksheet = ws;
+          pickedMatrix = matrix;
           break;
         }
       }
-      if (pickedWorksheet == null) {
+      if (pickedMatrix == null) {
         // Fallback: no se detectaron headers en ninguna hoja → leer la
         // primera asumiendo R1 (comportamiento legacy).
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        rawData = xlsx.utils.sheet_to_json(firstSheet, { defval: '' });
+        const firstSheet = workbook.worksheets[0];
+        rawData = matrixToObjects(worksheetToMatrix(firstSheet), 0);
       } else {
-        rawData = xlsx.utils.sheet_to_json(pickedWorksheet, {
-          defval: '',
-          range: pickedRange,
-        });
+        rawData = matrixToObjects(pickedMatrix, pickedRange);
       }
     } else if (file.mimetype.includes('csv') || file.originalname.endsWith('.csv')) {
       // PROCESAR CSV

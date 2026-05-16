@@ -272,6 +272,9 @@ router.post('/orders', async (req, res) => {
   // header (kiosko lo manda al hacer setup).
   if (source === 'KIOSK') {
     const terminalId = req.headers['x-kiosk-terminal-id'] || req.body?.terminalId || null;
+    if (!terminalId) {
+      return res.status(400).json({ error: 'terminalId requerido para pedidos de kiosko', code: 'KIOSK_TERMINAL_REQUIRED' });
+    }
     const rate = checkKioskRate(terminalId);
     if (!rate.ok) {
       return res.status(429).json({
@@ -477,6 +480,7 @@ router.post('/orders', async (req, res) => {
 // ── GET /api/store/orders/:id ────────────────────────────────────────────────
 router.get('/orders/:id', async (req, res) => {
   try {
+    const phoneProof = String(req.query.phone || '').replace(/\D/g, '');
     const order = await prisma.order.findUnique({
       where: { id: req.params.id },
       select: {
@@ -492,6 +496,16 @@ router.get('/orders/:id', async (req, res) => {
     });
 
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+
+    const customerPhone = String(order.customerPhone || '').replace(/\D/g, '');
+    const canSeePrivate = phoneProof && customerPhone && customerPhone.endsWith(phoneProof.slice(-4));
+    if (!canSeePrivate) {
+      const { customerName, customerPhone: _phone, deliveryAddress, notes, items, ...publicOrder } = order;
+      return res.json({
+        ...publicOrder,
+        items: items.map(({ notes: _notes, ...item }) => item),
+      });
+    }
 
     res.json(order);
   } catch (e) {

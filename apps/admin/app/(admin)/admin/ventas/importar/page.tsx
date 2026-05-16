@@ -113,12 +113,12 @@ export default function ImportarVentasPage() {
               {file ? file.name : "Arrastra tu archivo aquí o haz clic"}
             </p>
             <p className="text-xs" style={{ color: "var(--muted)" }}>
-              Excel (.xlsx, .xls) o CSV · max 25MB
+              Excel (.xlsx) o CSV · max 25MB
             </p>
             <input
               ref={inputRef}
               type="file"
-              accept=".xlsx,.xls,.csv"
+              accept=".xlsx,.csv"
               onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
               className="hidden"
             />
