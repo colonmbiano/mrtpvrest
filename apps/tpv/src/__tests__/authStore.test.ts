@@ -61,6 +61,7 @@ describe("useAuthStore (offline-first)", () => {
     });
     Object.keys(mockSessionStorage).forEach(k => delete mockSessionStorage[k]);
     Object.keys(mockLocalStorage).forEach(k => delete mockLocalStorage[k]);
+    Object.defineProperty(window.navigator, "onLine", { value: true, configurable: true });
     jest.clearAllMocks();
   });
 
@@ -143,7 +144,8 @@ describe("useAuthStore (offline-first)", () => {
   });
 
   describe("loginWithPin (offline-first)", () => {
-    it("debe autenticar offline si el PIN match en cache local (sin tocar API)", async () => {
+    it("debe autenticar offline si no hay red y el PIN match en cache local (sin tocar API)", async () => {
+      Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
       const localEmployee: TPVEmployee = {
         id: "emp-local-1",
         name: "Local Cashier",
