@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Bell, RefreshCcw, Search, CheckCircle, AlertTriangle, AlertCircle, Info } from "lucide-react";
 import api from "@/lib/api";
 
@@ -84,6 +85,7 @@ function buildLogs(tenants: Tenant[]): LogEntry[] {
 }
 
 export default function AlertasPage() {
+  const router = useRouter();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter,  setFilter]  = useState<"ALL" | "CRITICAL" | "WARNING">("ALL");
@@ -116,6 +118,10 @@ export default function AlertasPage() {
       else next.add(id);
       return next;
     });
+  };
+
+  const handleInvestigate = (tenant: string) => {
+    router.push(`/marcas?q=${encodeURIComponent(tenant)}`);
   };
 
   const criticalCount = allLogs.filter(l => l.severity === "CRITICAL" && !acked.has(l.id)).length;
@@ -197,6 +203,7 @@ export default function AlertasPage() {
                 log={log} 
                 isAcked={acked.has(log.id)}
                 onToggleAck={() => toggleAck(log.id)}
+                onInvestigate={() => handleInvestigate(log.tenant)}
               />
             ))
           )}
@@ -211,7 +218,7 @@ export default function AlertasPage() {
   );
 }
 
-function AlertCard({ log, isAcked, onToggleAck }: { log: LogEntry, isAcked: boolean, onToggleAck: () => void }) {
+function AlertCard({ log, isAcked, onToggleAck, onInvestigate }: { log: LogEntry, isAcked: boolean, onToggleAck: () => void, onInvestigate: () => void }) {
   return (
     <div className={`bg-surface-1 border border-white/5 rounded-2xl p-4 transition-all ${isAcked ? "opacity-40" : ""}`}>
       <div className="flex items-start gap-4">
@@ -244,8 +251,11 @@ function AlertCard({ log, isAcked, onToggleAck }: { log: LogEntry, isAcked: bool
             >
               {isAcked ? <CheckCircle size={12} /> : "Marcar ACK"}
             </button>
-            <button className="flex-1 py-2.5 rounded-xl text-[10px] font-bold bg-brand/10 text-brand flex items-center justify-center gap-2 hover:bg-brand/20 transition-all"
-              style={{ background: "var(--orange-dim)", color: "var(--orange)" }}>
+            <button 
+              onClick={onInvestigate}
+              className="flex-1 py-2.5 rounded-xl text-[10px] font-bold bg-brand/10 text-brand flex items-center justify-center gap-2 hover:bg-brand/20 transition-all"
+              style={{ background: "var(--orange-dim)", color: "var(--orange)" }}
+            >
               Investigar
             </button>
           </div>

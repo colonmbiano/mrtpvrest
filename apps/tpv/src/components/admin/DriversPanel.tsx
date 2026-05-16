@@ -57,12 +57,12 @@ function formatDistance(m: number) {
 }
 
 type Props = {
-  open: boolean;
+  isOpen: boolean;
   onClose: () => void;
   accent: string;
 };
 
-export default function DriversPanel({ open, onClose, accent }: Props) {
+export default function DriversPanel({ isOpen, onClose, accent }: Props) {
   const [data, setData] = useState<LiveResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -102,7 +102,7 @@ export default function DriversPanel({ open, onClose, accent }: Props) {
   }
 
   useEffect(() => {
-    if (!open) return;
+    if (!isOpen) return;
     fetchLive(false);
     // Polling cada 10s mientras el panel esté abierto.
     intervalRef.current = setInterval(() => fetchLive(true), 10000);
@@ -110,9 +110,9 @@ export default function DriversPanel({ open, onClose, accent }: Props) {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [isOpen]);
 
-  if (!open) return null;
+  if (!isOpen) return null;
 
   const drivers = data?.drivers || [];
   const origin = data?.origin || null;

@@ -9,7 +9,7 @@ const { prisma } = require('@mrtpvrest/database');
 const { sendEmail } = require('../utils/mailer');
 
 const MAX_ITERATIONS = 6;
-const GROQ_MODEL = 'llama-3.1-70b-versatile'; 
+const GROQ_MODEL = 'llama-3.3-70b-versatile'; 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 
 const SYSTEM_PROMPT = `Eres el Agente de Inteligencia Superior de MRTPVREST (SaaS).
