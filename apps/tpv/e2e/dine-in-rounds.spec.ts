@@ -78,7 +78,6 @@ test.describe('TPV Operational Flows', () => {
     await expect(page).toHaveURL(/\/order-type/);
     
     // 2. Pick a Free Table
-    // Robust locator: ignores tables marked as occupied (+ RONDA)
     const freeTable = page
       .getByRole('button', { name: /Mesa/i })
       .filter({ hasNotText: '+ RONDA' })
@@ -97,37 +96,30 @@ test.describe('TPV Operational Flows', () => {
     // 4. Verify we are in the Menu/Catalog
     await expect(page).toHaveURL(/\/menu/);
 
-    // Si estamos en la vista de categorías (grid de categorías), seleccionamos la primera
-    const categories = page.getByRole('button', { name: /Ver productos de/i });
-    if (await categories.first().isVisible()) {
-      console.log(`Found ${await categories.count()} categories. Clicking the first one...`);
+    // 5. Handle Catalog Navigation (Categories vs Products)
+    // If we are in drilldown mode, we see categories first.
+    const favoritesTile = page.getByRole('button', { name: /Favoritos/i });
+    const categories = page.locator('button').filter({ hasText: /items?|productos/i });
+
+    if (await favoritesTile.isVisible({ timeout: 10000 })) {
+      await favoritesTile.click();
+    } else if (await categories.count() > 0) {
       await categories.first().click();
-    } else {
-      console.log('Categories grid not visible. Checking if products are already shown...');
     }
-    
-    // 5. Add Round 1 (2 products)
-    // Clicking the first two available product cards
+
+    // 6. Add Round 1 (2 products)
     const productCards = page.locator('.product-card');
-    try {
-      await expect(productCards.first()).toBeVisible({ timeout: 10000 });
-      console.log(`Found ${await productCards.count()} product cards.`);
-    } catch (e) {
-      console.error('Product cards not found. Current URL:', page.url());
-      const bodyText = await page.innerText('body');
-      console.log('Body text:', bodyText.substring(0, 500) + '...');
-      throw e;
-    }
-    
+    await expect(productCards.first()).toBeVisible({ timeout: 10000 });
+
     await productCards.nth(0).click();
     await productCards.nth(1).click();
     
-    // 6. Verify Ticket State
+    // 7. Verify Ticket State
     const sidebar = page.locator('aside');
     await expect(sidebar).toContainText('Ticket 1');
     await expect(sidebar).not.toContainText('Ticket vacío');
     
-    // 7. Send Round 1 to Kitchen
+    // 8. Send Round 1 to Kitchen
     await page.getByRole('button', { name: /Cocina/i }).click();
     
     // Verify success toast and UI state change
@@ -137,26 +129,26 @@ test.describe('TPV Operational Flows', () => {
     await expect(page.getByText(/Rondas anteriores/i)).toBeVisible();
     await expect(page.getByText(/Ticket vacío/i)).toBeVisible();
     
-    // 8. Add Round 2 (1 product)
+    // 9. Add Round 2 (1 product)
     await productCards.nth(2).click();
     
     // Verify "Nueva ronda" separator appears in Sidebar
     await expect(page.getByText(/Nueva ronda/i)).toBeVisible();
     
-    // 9. Open Payment Modal
+    // 10. Open Payment Modal
     await page.getByRole('button', { name: /Cobrar Ticket/i }).click();
     
     // Verify Payment Modal structure
     const paymentModal = page.locator('.fixed.inset-0.z-\\[170\\]'); // PaymentModal z-index
     await expect(paymentModal).toBeVisible();
     
-    // 10. Process Payment with Cash
+    // 11. Process Payment with Cash
     await page.getByRole('button', { name: /Efectivo/i }).click();
     
-    // Confirm payment (the button often has dynamic text like "Pagar $X")
+    // Confirm payment
     await page.getByRole('button', { name: /Confirmar Pago|Pagar/i }).click();
     
-    // 11. Final Validation: Success and Reset
+    // 12. Final Validation: Success and Reset
     await expect(page.getByText(/Cobro procesado/i)).toBeVisible();
     
     // Sidebar should return to initial empty state for a new order
