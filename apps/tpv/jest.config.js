@@ -6,7 +6,7 @@ const createJestConfig = nextJest({ dir: "./" });
 module.exports = createJestConfig({
   displayName: "@mrtpvrest/tpv",
   testEnvironment: "jsdom",
-  setupFilesAfterFramework: ["<rootDir>/jest.setup.js"],
+  setupFilesAfterEnv: ["<rootDir>/jest.setup.js"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
   },

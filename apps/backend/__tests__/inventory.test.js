@@ -67,7 +67,7 @@ describe('POST /api/inventory/movements', () => {
     const movement = { id: 'm1', ingredientId: 'i1', type: 'IN', quantity: 3 };
 
     prisma.ingredient.findUnique.mockResolvedValue(ingredient);
-    prisma.$transaction.mockResolvedValue([movement, updated]);
+    prisma.$transaction.mockResolvedValue([updated, movement]);
     prisma.pushSubscription.findMany.mockResolvedValue([]);
 
     const app = buildApp();
@@ -87,7 +87,7 @@ describe('POST /api/inventory/movements', () => {
     const movement = { id: 'm1', ingredientId: 'i1', type: 'OUT', quantity: 1 };
 
     prisma.ingredient.findUnique.mockResolvedValue(ingredient);
-    prisma.$transaction.mockResolvedValue([movement, updated]);
+    prisma.$transaction.mockResolvedValue([updated, movement]);
     prisma.pushSubscription.findMany.mockResolvedValue([]);
     prisma.location.findUnique.mockResolvedValue(null);
 
