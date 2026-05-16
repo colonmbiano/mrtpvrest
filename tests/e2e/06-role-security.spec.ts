@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test';
 import { injectTPVDevice, enterPIN } from './helpers';
 
 const TPV_URL = process.env.TPV_URL ?? 'http://localhost:3005';
-const WAITER_PIN = process.env.WAITER_PIN ?? '2222';      // Rol: WAITER
-const CASHIER_PIN = process.env.CASHIER_PIN ?? '1111';    // Rol: CASHIER/ADMIN
-const KITCHEN_PIN = process.env.KITCHEN_PIN ?? '3333';    // Rol: KITCHEN
+const WAITER_PIN = process.env.WAITER_PIN ?? '1111';      // Rol: WAITER
+const CASHIER_PIN = process.env.CASHIER_PIN ?? '1112';    // Rol: CASHIER/ADMIN
+const KITCHEN_PIN = process.env.KITCHEN_PIN ?? '1113';    // Rol: KITCHEN
 
 test.describe('Validación de Roles (Seguridad)', () => {
   test.describe('WAITER - Restricciones de acceso', () => {

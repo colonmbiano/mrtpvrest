@@ -6,7 +6,6 @@ const TPV_URL   = process.env.TPV_URL   ?? 'http://localhost:3005';
 
 const TEST_DRIVER_NAME = 'Repartidor Test';
 const TEST_DRIVER_PIN  = '8888';
-
 test.describe('Gestión de Repartidores', () => {
   test('Admin puede crear un repartidor', async ({ page, context }) => {
     await injectAdminAuth(page, context);

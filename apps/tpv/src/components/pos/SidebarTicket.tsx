@@ -56,6 +56,32 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
   const { activeOrderId, setActiveOrder, clear: clearActiveOrder } = useActiveOrderStore();
 
+  const [previousItems, setPreviousItems] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Cargar historial de la orden si estamos en modo "extender"
+  useEffect(() => {
+    if (!activeOrderId) {
+      setPreviousItems([]);
+      return;
+    }
+
+    const fetchHistory = async () => {
+      try {
+        setLoadingHistory(true);
+        const { data } = await api.get(`/api/orders/${activeOrderId}`);
+        // Combinamos todos los items de todas las rondas para mostrarlos como historial
+        setPreviousItems(data.items || []);
+      } catch (err) {
+        console.error("Error al cargar historial de orden:", err);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+
+    fetchHistory();
+  }, [activeOrderId]);
+
   // Sugerencias de propina vienen de la config remota (tpvConfig.extra) si
   // están presentes; caso contrario default [10,15,20] por consistencia
   // con el printer service y el schema de Restaurant.
@@ -105,7 +131,12 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   
   const ticket = getActiveTicket();
 
-  const subtotal = ticket.items.reduce((acc, item) => acc + item.subtotal, 0);
+  const historySubtotal = useMemo(() => 
+    previousItems.reduce((acc, item) => acc + (item.price * item.quantity), 0),
+  [previousItems]);
+
+  const currentSubtotal = ticket.items.reduce((acc, item) => acc + item.subtotal, 0);
+  const subtotal = currentSubtotal + historySubtotal;
   const total = subtotal - ticket.discount;
 
   // Config de comanda — header/footer/toggles cargados desde admin.
@@ -204,6 +235,8 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         // Mesa ya tiene orden abierta — agregar ronda.
         const { data } = await api.post(`/api/orders/${activeOrderId}/items`, { items: itemsPayload });
         order = data;
+        // Sincronizar historial local
+        setPreviousItems(data.items || []);
       } else {
         // Orden nueva (o el backend redirigirá si la mesa está OCCUPIED).
         const orderData = {
@@ -213,9 +246,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           numberOfGuests: ticket.numberOfGuests ?? null,
           customerName: ticket.name || "Publico General",
           customerPhone: ticket.phone || null,
-          subtotal: subtotal,
+          subtotal: currentSubtotal,
           discount: ticket.discount,
-          total: total,
+          total: currentSubtotal - ticket.discount,
         };
         const { data } = await api.post("/api/orders/tpv", orderData);
         order = data;
@@ -223,6 +256,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         if (order?.id && ticket.tableId) {
           setActiveOrder(order.id, ticket.tableId, order.orderNumber ?? null);
         }
+        setPreviousItems(data.items || []);
       }
 
       toast.success("Pedido enviado a cocina");
@@ -251,46 +285,55 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     tip?: PaymentTip,
     driverId?: string | null,
   ) => {
-    if (ticket.items.length === 0) return;
+    if (ticket.items.length === 0 && previousItems.length === 0) return;
     setProcessing(true);
     try {
       const tipAmount = tip?.amount ?? 0;
-      const orderData = {
-        orderType: ticket.type,
-        items: ticket.items.map(item => ({
-          menuItemId: item.menuItemId,
-          quantity: item.quantity,
-          notes: item.notes || "",
-          seatNumber: item.seatNumber ?? null,
-          modifiers: (item.modifiers || []).map(m => ({ modifierId: m.id })),
-        })),
-        tableId: ticket.tableId || null,
-        numberOfGuests: ticket.numberOfGuests ?? null,
-        customerName: ticket.name || "Publico General",
-        customerPhone: ticket.phone || null,
-        // BUG-24: dirección de entrega para DELIVERY. El backend ya tiene
-        // el campo deliveryAddress en Order.
-        deliveryAddress: ticket.type === "DELIVERY" ? (ticket.address || null) : null,
-        subtotal,
-        discount: ticket.discount,
-        total: total + tipAmount,
-        paymentMethod: method,
-        status: "DELIVERED",
-        // Persiste la propina como nota auditable. El backend no tiene un
-        // campo `tip` en Order todavía, pero conservamos el dato en notas
-        // para reportes y auditoría sin migración de schema.
-        notes: tip && tip.percent > 0
-          ? `Propina ${tip.percent}% ($${tipAmount.toFixed(2)})`
-          : undefined,
-      };
+      const itemsPayload = ticket.items.map(item => ({
+        menuItemId: item.menuItemId,
+        quantity: item.quantity,
+        notes: item.notes || "",
+        seatNumber: item.seatNumber ?? null,
+        modifiers: (item.modifiers || []).map(m => ({ modifierId: m.id })),
+      }));
 
-      const { data: order } = await api.post("/api/orders/tpv", orderData);
+      let order;
+      if (activeOrderId) {
+        // 1. Si hay items en la "Nueva ronda", primero los enviamos al backend
+        if (itemsPayload.length > 0) {
+          const { data } = await api.post(`/api/orders/${activeOrderId}/items`, { items: itemsPayload });
+          order = data;
+        } else {
+          const { data } = await api.get(`/api/orders/${activeOrderId}`);
+          order = data;
+        }
+      } else {
+        // 2. Si no hay activeOrderId, creamos la orden completa normalmente
+        const orderData = {
+          orderType: ticket.type,
+          items: itemsPayload,
+          tableId: ticket.tableId || null,
+          numberOfGuests: ticket.numberOfGuests ?? null,
+          customerName: ticket.name || "Publico General",
+          customerPhone: ticket.phone || null,
+          deliveryAddress: ticket.type === "DELIVERY" ? (ticket.address || null) : null,
+          subtotal,
+          discount: ticket.discount,
+          total: total + tipAmount,
+          paymentMethod: method,
+          status: "DELIVERED",
+          notes: tip && tip.percent > 0
+            ? `Propina ${tip.percent}% ($${tipAmount.toFixed(2)})`
+            : undefined,
+        };
+        const { data } = await api.post("/api/orders/tpv", orderData);
+        order = data;
+      }
+
+      // 3. Procesar el pago de la orden (sea nueva o recuperada)
       await api.put(`/api/orders/${order.id}/payment`, { paymentMethod: method });
 
       // BUG-24: asignar repartidor inmediatamente después del cobro DELIVERY.
-      // El gate en PaymentModal garantiza que driverId esté presente aquí
-      // (sin él, el botón Confirmar está disabled). Si la asignación falla
-      // mostramos un warning pero NO revertimos el cobro — la orden ya pagó.
       if (ticket.type === "DELIVERY" && driverId) {
         try {
           await api.put("/api/delivery/assign", { orderId: order.id, driverId });
@@ -304,6 +347,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
       toast.success("Cobro procesado");
       hapticSuccess();
+      
       // Capturar contexto antes de limpiar el ticket activo.
       const printItems = buildTicketItems();
       const ticketContext = {
@@ -321,52 +365,38 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         tipPercent: tip?.percent ?? 0,
         tipAmount,
       };
+
+      // Limpieza post-pago
       clearActiveItems();
-      // Al cerrar la cuenta, limpiar el activeOrder del store.
       clearActiveOrder();
-      // BUG-29: tras cobro DELIVERY exitoso, limpiar datos del cliente
-      // (nombre, dirección, teléfono). Antes quedaban llenos del pedido
-      // anterior y el siguiente ticket arrancaba con la dirección equivocada.
-      // Cada pedido domicilio es un cliente distinto en la práctica.
+      setPreviousItems([]);
+      
       if (ticket.type === "DELIVERY") {
         useTicketStore.getState().updateTicket({ name: "", address: "", phone: "" });
       }
       setShowPayment(false);
 
-      // Fire-and-forget: comanda en KITCHEN/BAR + recibo en CASHIER.
-      // No bloquea cobro si las impresoras fallan.
-      printKitchenTickets(printers, { ...ticketContext, items: printItems, config: kitchenConfig ?? undefined })
-        .catch(() => { /* silencio */ });
+      // Impresión de comanda (solo si había items nuevos)
+      if (printItems.length > 0) {
+        printKitchenTickets(printers, { ...ticketContext, items: printItems, config: kitchenConfig ?? undefined })
+          .catch(() => { /* silencio */ });
+      }
 
+      // Impresión de recibo de cliente (el total completo)
       const guests = ticket.numberOfGuests ?? 0;
       const isDineInSplit = ticket.type === "DINE_IN" && guests >= 2;
       if (isDineInSplit) {
-        // N tickets separados, uno por comensal.
         printSplitReceipts(
           printers,
-          { ...ticketContext, ...totals, items: printItems },
+          { ...ticketContext, ...totals, items: orderItemsToTicketItems(order.items) },
           guests,
-        )
-          .then((res) => {
-            if (res.tickets === 0) {
-              toast.warning("Recibos divididos: ninguna impresora respondió");
-            } else {
-              toast.success(`Tickets divididos impresos: ${res.tickets}/${guests}`);
-            }
-          })
-          .catch(() => { /* silencio */ });
+        ).catch(() => {});
       } else {
         printCustomerReceipt(printers, {
           ...ticketContext,
           ...totals,
-          items: printItems,
-        })
-          .then((res) => {
-            if (res.ok === 0 && res.failed.length > 0) {
-              toast.warning("Recibo: ninguna impresora respondió");
-            }
-          })
-          .catch(() => { /* silencio */ });
+          items: orderItemsToTicketItems(order.items),
+        }).catch(() => {});
       }
     } catch (error: any) {
       toast.error("Error al cobrar: " + (error.response?.data?.error || error.message));
@@ -375,8 +405,20 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     }
   };
 
+  // Helper para convertir items de la orden del backend al formato de ticket
+  const orderItemsToTicketItems = (items: any[]): TicketItem[] => {
+    return items.map(it => ({
+      name: it.menuItem?.name || it.name,
+      quantity: it.quantity,
+      price: it.price,
+      notes: it.notes,
+      seatNumber: it.seatNumber ?? null,
+      modifiers: (it.modifiers || []).map((m: any) => ({ name: m.name || m.modifier?.name, priceAdd: m.priceAdd || m.modifier?.priceAdd })),
+    }));
+  };
+
   const handleOpenPayment = () => {
-    if (ticket.items.length === 0) {
+    if (ticket.items.length === 0 && previousItems.length === 0) {
       toast.error("El ticket está vacío");
       return;
     }
@@ -528,7 +570,44 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
       {/* LISTA DE ITEMS */}
       <div className="flex-1 min-h-0 scroll-y px-8 space-y-5 py-4 bg-[#0a0a0c] scrollbar-hide">
-        {ticket.items.length === 0 ? (
+        {/* Historial de rondas anteriores si existe activeOrderId */}
+        {previousItems.length > 0 && (
+          <div className="space-y-4 mb-8">
+            <div className="flex items-center gap-3">
+              <div className="h-[1px] flex-1 bg-white/5" />
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">
+                Rondas anteriores
+              </span>
+              <div className="h-[1px] flex-1 bg-white/5" />
+            </div>
+            <div className="opacity-50 pointer-events-none space-y-4">
+              {previousItems.map((item, idx) => (
+                <TicketLine
+                  key={`prev-${item.id}-${idx}`}
+                  name={item.menuItem?.name || item.name}
+                  quantity={item.quantity}
+                  price={item.price}
+                  notes={item.notes}
+                  modifiers={item.modifiers?.map((m: any) => ({ 
+                    name: m.modifier?.name || m.name, 
+                    priceAdd: m.modifier?.priceAdd || m.priceAdd 
+                  }))}
+                  onIncrease={() => {}}
+                  onDecrease={() => {}}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="h-[1px] flex-1 bg-amber-500/20" />
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-500/50">
+                Nueva ronda
+              </span>
+              <div className="h-[1px] flex-1 bg-amber-500/20" />
+            </div>
+          </div>
+        )}
+
+        {ticket.items.length === 0 && previousItems.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-20 gap-6">
             <ShoppingCart size={64} className="text-zinc-500" />
             <p className="text-[11px] font-black uppercase tracking-[0.3em] text-center text-zinc-500">
@@ -574,7 +653,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               onClick={isShiftOpen ? handleOpenPayment : onOpenShift}
               disabled={
                 processing ||
-                ticket.items.length === 0 ||
+                (ticket.items.length === 0 && previousItems.length === 0) ||
                 (ticket.type === "DELIVERY" &&
                   isShiftOpen &&
                   (!ticket.address?.trim() || !ticket.phone?.trim())) ||
@@ -647,12 +726,20 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           total={total}
           discount={ticket.discount}
           tipSuggestions={tipSuggestions}
-          items={ticket.items.map((i) => ({
-            name: i.name,
-            quantity: i.quantity,
-            subtotal: i.subtotal,
-            seatNumber: i.seatNumber ?? null,
-          }))}
+          items={[
+            ...previousItems.map((i) => ({
+              name: i.menuItem?.name || i.name,
+              quantity: i.quantity,
+              subtotal: i.price * i.quantity,
+              seatNumber: i.seatNumber ?? null,
+            })),
+            ...ticket.items.map((i) => ({
+              name: i.name,
+              quantity: i.quantity,
+              subtotal: i.subtotal,
+              seatNumber: i.seatNumber ?? null,
+            })),
+          ]}
           onConfirm={handleProcessPayment}
         />
 

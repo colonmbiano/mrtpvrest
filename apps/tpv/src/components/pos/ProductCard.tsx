@@ -86,7 +86,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
       onPointerCancel={cancel}
       onClick={handleClick}
       disabled={!isAvailable}
-      className="group relative flex flex-col text-left rounded-2xl overflow-hidden p-3 min-h-[120px] transition-all active:scale-[0.98] border border-white/5 shadow-xl disabled:active:scale-100"
+      className="product-card group relative flex flex-col text-left rounded-2xl overflow-hidden p-3 min-h-[120px] transition-all active:scale-[0.98] border border-white/5 shadow-xl disabled:active:scale-100"
       style={{
         background: imageUrl ? "#0a0a0c" : tileColor,
         opacity: isAvailable ? 1 : 0.55,
