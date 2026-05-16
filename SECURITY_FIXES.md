@@ -271,4 +271,4 @@ pnpm --filter tpv dev
 ### Pendientes derivados (no críticos pero recomendados)
 
 - [ ] Agregar campo `Order.waiterEmployeeId` (Prisma migration) para que "Mis mesas" filtre realmente por mesero asignado
-- [ ] El password `SuperAdmin1234!` estuvo en el código (commits previos a 2026-05-03). Ya está parametrizado vía env, pero **rotar el password en producción** y purgar del historial git si es viable
+- [ ] El password `REDACTED_PASSWORD` estuvo en el código (commits previos a 2026-05-03). Ya está parametrizado vía env, pero **rotar el password en producción** y purgar del historial git si es viable

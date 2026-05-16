@@ -1,6 +1,6 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import TenantModulesToggle from "@/components/TenantModulesToggle";
 
@@ -28,8 +28,9 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString("es-MX", { month: "short", day: "numeric" });
 }
 
-export default function MarcasPage() {
+function MarcasContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [plans,   setPlans]   = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +43,11 @@ export default function MarcasPage() {
   const [trialModal,  setTrialModal]  = useState<Tenant | null>(null);
   const [extendDays,  setExtendDays]  = useState(7);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q) setSearch(q);
+  }, [searchParams]);
 
   function showToast(msg: string) {
     if (timer.current) clearTimeout(timer.current);
@@ -317,5 +323,13 @@ export default function MarcasPage() {
 
       <div className={`db-toast ${toast?"show":""}`}>{toast}</div>
     </>
+  );
+}
+
+export default function MarcasPage() {
+  return (
+    <Suspense fallback={<div style={{ padding:40, textAlign:"center", color:"var(--text3)", fontSize:13 }}>Cargando página…</div>}>
+      <MarcasContent />
+    </Suspense>
   );
 }
