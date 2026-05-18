@@ -10,6 +10,7 @@ import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { useKitchenConfig } from "@/hooks/usePrinters";
+import { useClientValue, subscribeToEvents } from "@/hooks/useClientValue";
 import { hapticMedium, hapticSuccess, hapticError } from "@/lib/haptics";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -45,7 +46,14 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const [showTables, setShowTables] = useState(false);
   const [showDiscount, setShowDiscount] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [sidebarWidthPx, setSidebarWidthPx] = useState<number>(380);
+  // Ancho del panel: localStorage como fuente de verdad, SSR-safe vía
+  // useSyncExternalStore. Se reajusta con el evento `sidebar-width-changed`
+  // que dispara ConfigMenu/apariencia tras escribir.
+  const sidebarWidthPx = useClientValue(
+    readSidebarWidth,
+    380,
+    subscribeToEvents("sidebar-width-changed", "storage"),
+  );
 
   // Permiso para aplicar descuento sin PIN. WAITER/CASHIER no tienen
   // `apply_discount` por default; admin/manager sí. Si el rol actual no
@@ -108,14 +116,6 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     return [10, 15, 20];
   }, [tpvConfig]);
 
-  // Aplica preset del localStorage al montar y escucha cambios desde
-  // ConfigMenu (que dispara `sidebar-width-changed` después de write).
-  useEffect(() => {
-    setSidebarWidthPx(readSidebarWidth());
-    const onChange = () => setSidebarWidthPx(readSidebarWidth());
-    window.addEventListener("sidebar-width-changed", onChange);
-    return () => window.removeEventListener("sidebar-width-changed", onChange);
-  }, []);
   const {
     tickets,
     activeIndex,

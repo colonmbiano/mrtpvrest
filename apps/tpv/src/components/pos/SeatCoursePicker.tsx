@@ -51,13 +51,16 @@ export default function SeatCoursePicker({
   const [seat, setSeat] = React.useState<number | null>(seatNumber);
   const [crs, setCrs] = React.useState<string | null>(course);
 
-  // Re-sync cuando se abre con item distinto.
-  React.useEffect(() => {
+  // Re-sync cuando se abre con item distinto. Render-phase (ver
+  // CategoryModal): equivalente al efecto pero sin set-state-in-effect.
+  const [prevSync, setPrevSync] = React.useState({ open, seatNumber, course });
+  if (prevSync.open !== open || prevSync.seatNumber !== seatNumber || prevSync.course !== course) {
+    setPrevSync({ open, seatNumber, course });
     if (open) {
       setSeat(seatNumber);
       setCrs(course);
     }
-  }, [open, seatNumber, course]);
+  }
 
   if (!open) return null;
 

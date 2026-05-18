@@ -8,6 +8,7 @@ import ReprintKitchenModal from "@/components/pos/ReprintKitchenModal";
 import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { usePrinters, useReceiptIdentity, useKitchenConfig } from "@/hooks/usePrinters";
+import { useHydrated } from "@/hooks/useClientValue";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
@@ -58,7 +59,7 @@ function timeAgo(iso: string): string {
 
 export default function CashierLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
   const [showMenu, setShowMenu] = useState(false);
   const [askingAdminPin, setAskingAdminPin] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
@@ -87,10 +88,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [showShift, setShowShift] = useState(false);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [mergeSource, setMergeSource] = useState<any | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const {
     isLocked,

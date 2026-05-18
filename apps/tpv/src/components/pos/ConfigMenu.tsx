@@ -1,7 +1,8 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { X, Palette, LogOut, Type, PanelRightClose } from "lucide-react";
 import { useAuthStore, type EmployeeRole } from "@/store/authStore";
+import { useClientValue, subscribeToEvents } from "@/hooks/useClientValue";
 
 type UiScale = "small" | "medium" | "large";
 
@@ -196,17 +197,20 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
 export default ConfigMenu;
 
 function UiScalePicker() {
-  const [scale, setScale] = useState<UiScale>("small");
+  // localStorage como fuente de verdad (SSR-safe vía useSyncExternalStore).
+  const scale = useClientValue(readScale, "small", subscribeToEvents("ui-scale-changed", "storage"));
 
+  // Sincronización con el DOM (sistema externo) — sin setState, así que
+  // no dispara set-state-in-effect.
   useEffect(() => {
-    const s = readScale();
-    setScale(s);
-    applyScale(s);
-  }, []);
+    applyScale(scale);
+  }, [scale]);
 
   const choose = (s: UiScale) => {
-    setScale(s);
-    if (typeof window !== "undefined") localStorage.setItem("uiScale", s);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("uiScale", s);
+      window.dispatchEvent(new Event("ui-scale-changed"));
+    }
     applyScale(s);
   };
 
@@ -266,14 +270,13 @@ function readSidebarPreset(): SidebarWidthPreset {
 }
 
 function SidebarWidthPicker() {
-  const [preset, setPreset] = useState<SidebarWidthPreset>("M");
-
-  useEffect(() => {
-    setPreset(readSidebarPreset());
-  }, []);
+  const preset = useClientValue(
+    readSidebarPreset,
+    "M",
+    subscribeToEvents("sidebar-width-changed", "storage"),
+  );
 
   const choose = (p: SidebarWidthPreset) => {
-    setPreset(p);
     if (typeof window !== "undefined") {
       localStorage.setItem("sidebarWidth", p);
       window.dispatchEvent(new Event("sidebar-width-changed"));

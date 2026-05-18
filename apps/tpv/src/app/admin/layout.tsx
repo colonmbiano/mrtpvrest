@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
+import { useHydrated } from "@/hooks/useClientValue";
 import Link from "next/link";
 import { Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, Grid3x3, Palette, Layers, BookOpen, LogOut } from "lucide-react";
 
@@ -13,7 +14,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
   const hydrateFromStorage = useAuthStore(s => s.hydrateFromStorage);
   const logout = useAuthStore(s => s.logout);
-  const [hydrated, setHydrated] = useState(false);
+  const hydrated = useHydrated();
   const [avatarOpen, setAvatarOpen] = useState(false);
 
   // Esperar a que Zustand hidrate desde storage antes de validar el rol.
@@ -21,7 +22,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // dispara router.replace('/') y se forma un loop con / → /hub → /pos/order-type.
   useEffect(() => {
     if (!isAuthenticated) hydrateFromStorage();
-    setHydrated(true);
   }, [isAuthenticated, hydrateFromStorage]);
 
   useEffect(() => {

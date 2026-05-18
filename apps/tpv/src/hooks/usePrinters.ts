@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import { useClientValue } from "@/hooks/useClientValue";
 import api from "@/lib/api";
 import type { PrinterRecord, KitchenTicketConfig } from "@/lib/printer-tcp";
 
@@ -59,14 +60,14 @@ export function usePrinters() {
  * la impresión si no está disponible.
  */
 export function useReceiptIdentity() {
-  const [businessName, setBusinessName] = useState<string | null>(null);
-  const [businessFooter, setBusinessFooter] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setBusinessName(localStorage.getItem("restaurantName"));
-    setBusinessFooter(localStorage.getItem("receiptFooter"));
-  }, []);
+  const businessName = useClientValue(
+    () => (typeof window === "undefined" ? null : localStorage.getItem("restaurantName")),
+    null,
+  );
+  const businessFooter = useClientValue(
+    () => (typeof window === "undefined" ? null : localStorage.getItem("receiptFooter")),
+    null,
+  );
 
   return { businessName, businessFooter };
 }
