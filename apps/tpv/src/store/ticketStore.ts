@@ -41,6 +41,15 @@ export type MenuItemVariant = {
   sortOrder?: number;
 };
 
+export type MenuItemComplement = {
+  id: string;
+  menuItemId?: string;
+  name: string;
+  price: number;
+  isAvailable?: boolean;
+  sortOrder?: number;
+};
+
 export type Product = {
   id: string;
   name: string;
@@ -49,11 +58,14 @@ export type Product = {
   categoryId?: string;
   imageUrl?: string | null;
   isPromo?: boolean;
+  isPopular?: boolean;
   isFavorite?: boolean;
   isAvailable?: boolean;
+  activeDays?: string[];
   promoPrice?: number | null;
   hasVariants?: boolean;
   variants?: MenuItemVariant[];
+  complements?: MenuItemComplement[];
   modifierGroups?: ModifierGroup[];
 };
 

@@ -9,6 +9,9 @@ import type {
   Product,
 } from "@/store/ticketStore";
 
+const COMPLEMENTS_GROUP_ID = "__complements";
+export const COMPLEMENT_MODIFIER_PREFIX = "complement:";
+
 interface ModifierPickerModalProps {
   product: Product;
   onClose: () => void;
@@ -36,7 +39,29 @@ export default function ModifierPickerModal({
   onClose,
   onConfirm,
 }: ModifierPickerModalProps) {
-  const groups = useMemo(() => product.modifierGroups || [], [product]);
+  const groups = useMemo(() => {
+    const baseGroups = product.modifierGroups || [];
+    const complements = (product.complements || []).filter((c) => c.isAvailable !== false);
+    if (complements.length === 0) return baseGroups;
+
+    const complementGroup: ModifierGroup = {
+      id: COMPLEMENTS_GROUP_ID,
+      name: "Complementos",
+      required: false,
+      multiSelect: true,
+      minSelection: 0,
+      maxSelection: 0,
+      freeModifiersLimit: 0,
+      modifiers: complements.map((c) => ({
+        id: `${COMPLEMENT_MODIFIER_PREFIX}${c.id}`,
+        groupId: COMPLEMENTS_GROUP_ID,
+        name: c.name,
+        priceAdd: Number(c.price || 0),
+      })),
+    };
+
+    return [...baseGroups, complementGroup];
+  }, [product]);
 
   // Inicializa con los modificadores marcados como isDefault, respetando
   // single-select (toma el primer default) y multi-select (todos los defaults).

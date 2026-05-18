@@ -19,6 +19,18 @@ function resolveRestaurantId(req, res) {
   return id;
 }
 
+function getTodayDay() {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Mexico_City', weekday: 'long'
+  }).format(new Date()).toUpperCase()
+}
+
+function isMenuItemActiveToday(item, todayDay) {
+  const activeDays = Array.isArray(item.activeDays) ? item.activeDays : []
+  if (activeDays.length === 0) return !item.isPromo
+  return activeDays.includes(todayDay)
+}
+
 // ── Categorías ────────────────────────────────────────────────────────────
 
 router.get('/categories', async (req, res) => {
@@ -156,6 +168,7 @@ router.get('/items', async (req, res) => {
         },
         modifierGroups: { include: { modifiers: true } },
         variants: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
+        complements: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
         printerGroups: {
           include: { printerGroup: { select: { id: true, name: true } } },
         },
@@ -163,15 +176,11 @@ router.get('/items', async (req, res) => {
       orderBy: [{ isFavorite: 'desc' }, { isPromo: 'desc' }, { isPopular: 'desc' }, { name: 'asc' }],
     })
 
-    // Filtrar promos por día actual en timezone México
-    const todayDay = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Mexico_City', weekday: 'long'
-    }).format(new Date()).toUpperCase() // → "MONDAY", "TUESDAY", etc.
-
-    const filtered = items.filter(item => {
-      if (!item.isPromo) return true
-      return item.activeDays.includes(todayDay)
-    })
+    // Filtrar por día actual en timezone México. Si activeDays está vacío,
+    // los platillos regulares quedan siempre visibles; las promos sin día
+    // configurado siguen ocultas como antes.
+    const todayDay = getTodayDay()
+    const filtered = items.filter(item => isMenuItemActiveToday(item, todayDay))
 
     res.json(filtered)
   } catch (e) { res.status(500).json({ error: 'Error al obtener menu' }) }
@@ -591,6 +600,11 @@ router.get('/public/:slug/menu', async (req, res) => {
             id: true, name: true, description: true,
             price: true, imageUrl: true,
             isPopular: true, isPromo: true, activeDays: true,
+            complements: {
+              where: { isAvailable: true },
+              select: { id: true, name: true, price: true, sortOrder: true },
+              orderBy: { sortOrder: 'asc' },
+            },
           }
         }
       }
@@ -600,9 +614,7 @@ router.get('/public/:slug/menu', async (req, res) => {
     const filtered = categories
       .map(cat => ({
         ...cat,
-        items: cat.items.filter(item =>
-          !item.isPromo || item.activeDays.includes(todayDay)
-        )
+        items: cat.items.filter(item => isMenuItemActiveToday(item, todayDay))
       }))
       .filter(cat => cat.items.length > 0)
 

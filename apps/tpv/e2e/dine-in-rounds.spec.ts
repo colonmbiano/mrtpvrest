@@ -97,19 +97,25 @@ test.describe('TPV Operational Flows', () => {
     await expect(page).toHaveURL(/\/menu/);
 
     // 5. Handle Catalog Navigation (Categories vs Products)
-    // If we are in drilldown mode, we see categories first.
-    const favoritesTile = page.getByRole('button', { name: /Favoritos/i });
-    const categories = page.locator('button').filter({ hasText: /items?|productos/i });
+    // If no products are visible, we must click a category or favorites
+    const productCards = page.locator('.product-card');
+    
+    if (await productCards.count() === 0) {
+      console.log('No products visible, looking for categories or favorites...');
+      const favoritesTile = page.getByRole('button', { name: /Favoritos/i });
+      const categoryTiles = page.locator('button').filter({ hasText: /items?/i });
 
-    if (await favoritesTile.isVisible({ timeout: 10000 })) {
-      await favoritesTile.click();
-    } else if (await categories.count() > 0) {
-      await categories.first().click();
+      if (await favoritesTile.isVisible()) {
+        await favoritesTile.click();
+      } else {
+        await categoryTiles.first().waitFor({ state: 'visible', timeout: 10000 });
+        await categoryTiles.first().click();
+      }
     }
 
     // 6. Add Round 1 (2 products)
-    const productCards = page.locator('.product-card');
-    await expect(productCards.first()).toBeVisible({ timeout: 10000 });
+    await expect(productCards.first()).toBeVisible({ timeout: 15000 });
+    console.log(`Selecting products. Count: ${await productCards.count()}`);
 
     await productCards.nth(0).click();
     await productCards.nth(1).click();

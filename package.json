@@ -9,6 +9,8 @@
     "type-check": "turbo type-check",
     "db:generate": "turbo db:generate",
     "db:push": "turbo db:push",
+    "agent": "node scripts/agent-collab.js",
+    "tpv:adb:happy-path": "powershell -ExecutionPolicy Bypass -File ./scripts/tpv-adb-happy-path.ps1",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "test:e2e": "playwright test --config=tests/e2e/playwright.config.ts",
     "test:e2e:report": "playwright show-report tests/e2e/results/html-report",

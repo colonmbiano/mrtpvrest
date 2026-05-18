@@ -5,6 +5,7 @@ import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import DiscountModal from "@/components/pos/DiscountModal";
+import { COMPLEMENT_MODIFIER_PREFIX } from "@/components/pos/ModifierPickerModal";
 import { useAuthStore } from "@/store/authStore";
 import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
@@ -217,6 +218,28 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       };
     });
 
+  const buildItemsPayload = () =>
+    ticket.items.map((item) => {
+      const modifiers = item.modifiers || [];
+      const complementIds = modifiers
+        .map((m) =>
+          m.id.startsWith(COMPLEMENT_MODIFIER_PREFIX)
+            ? m.id.slice(COMPLEMENT_MODIFIER_PREFIX.length)
+            : null
+        )
+        .filter((id): id is string => Boolean(id));
+      return {
+        menuItemId: item.menuItemId,
+        quantity: item.quantity,
+        notes: item.notes || "",
+        seatNumber: item.seatNumber ?? null,
+        modifiers: modifiers
+          .filter((m) => !m.id.startsWith(COMPLEMENT_MODIFIER_PREFIX))
+          .map((m) => ({ modifierId: m.id })),
+        complements: complementIds.map((complementId) => ({ complementId })),
+      };
+    });
+
   const handleSendToKitchen = async () => {
     if (ticket.items.length === 0) {
       toast.error("El ticket está vacío");
@@ -226,13 +249,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     hapticMedium();
 
     try {
-      const itemsPayload = ticket.items.map(item => ({
-        menuItemId: item.menuItemId,
-        quantity: item.quantity,
-        notes: item.notes || "",
-        seatNumber: item.seatNumber ?? null,
-        modifiers: (item.modifiers || []).map(m => ({ modifierId: m.id })),
-      }));
+      const itemsPayload = buildItemsPayload();
 
       let order;
       if (activeOrderId) {
@@ -293,13 +310,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     setProcessing(true);
     try {
       const tipAmount = tip?.amount ?? 0;
-      const itemsPayload = ticket.items.map(item => ({
-        menuItemId: item.menuItemId,
-        quantity: item.quantity,
-        notes: item.notes || "",
-        seatNumber: item.seatNumber ?? null,
-        modifiers: (item.modifiers || []).map(m => ({ modifierId: m.id })),
-      }));
+      const itemsPayload = buildItemsPayload();
 
       let order;
       if (activeOrderId) {

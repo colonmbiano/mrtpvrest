@@ -192,6 +192,20 @@ const {
 } = require('../schemas/orders.schema');
 const router = express.Router();
 
+function extractIds(value, key) {
+  return Array.isArray(value)
+    ? value.map((entry) => entry?.[key]).filter(Boolean)
+    : [];
+}
+
+function appendComplementNotes(notes, complements) {
+  const base = typeof notes === 'string' ? notes.trim() : '';
+  if (!Array.isArray(complements) || complements.length === 0) return base || null;
+  const names = complements.map((c) => c.name).filter(Boolean).join(', ');
+  if (!names) return base || null;
+  return [base, `Complementos: ${names}`].filter(Boolean).join('\n');
+}
+
 
 // ── GET /admin — Pedidos del restaurante (filtra por sucursal si llega) ──
 // locationId es OPCIONAL: si se envía via x-location-id/header se filtra,
@@ -315,13 +329,15 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     const resolvedItems = await Promise.all(items.map(async (item) => {
       const menuItem = await prisma.menuItem.findUnique({
         where: { id: item.menuItemId, restaurantId },
-        include: { modifierGroups: { include: { modifiers: true } } },
+        include: {
+          modifierGroups: { include: { modifiers: true } },
+          complements: true,
+        },
       });
 
       const basePrice = menuItem?.price || 0;
-      const modifierIds = Array.isArray(item.modifiers)
-        ? item.modifiers.map((m) => m?.modifierId).filter(Boolean)
-        : [];
+      const modifierIds = extractIds(item.modifiers, 'modifierId');
+      const complementIds = extractIds(item.complements, 'complementId');
 
       // Indexar todos los modificadores válidos del item por id, agrupados.
       const validModsById = new Map();
@@ -354,6 +370,19 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         });
       }
 
+      const validComplementsById = new Map(
+        (menuItem?.complements || [])
+          .filter((c) => c.isAvailable !== false)
+          .map((c) => [c.id, c])
+      );
+      const selectedComplements = [];
+      for (const id of complementIds) {
+        const complement = validComplementsById.get(id);
+        if (!complement) continue;
+        unitExtra += Number(complement.price || 0);
+        selectedComplements.push(complement);
+      }
+
       const unitPrice = basePrice + unitExtra;
       const seatRaw = Number(item.seatNumber);
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
@@ -370,7 +399,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         price: unitPrice,
         quantity: item.quantity,
         subtotal: unitPrice * item.quantity,
-        notes: item.notes || null,
+        notes: appendComplementNotes(item.notes, selectedComplements),
         seatNumber,
         course,
         _modifiers: flatMods,
@@ -489,9 +518,57 @@ async function addRoundHandler(req, res) {
     // Re-leer precios desde DB (misma lógica de defensa que POST /tpv).
     const newItemsData = await Promise.all(items.map(async (item) => {
       const menuItem = await prisma.menuItem.findUnique({
-        where: { id: item.menuItemId, restaurantId }
+        where: { id: item.menuItemId, restaurantId },
+        include: {
+          modifierGroups: { include: { modifiers: true } },
+          complements: true,
+        },
       });
-      const price = menuItem?.price || 0;
+      const modifierIds = extractIds(item.modifiers, 'modifierId');
+      const complementIds = extractIds(item.complements, 'complementId');
+
+      const validModsById = new Map();
+      const groupsById = new Map();
+      for (const g of menuItem?.modifierGroups || []) {
+        groupsById.set(g.id, g);
+        for (const m of g.modifiers) validModsById.set(m.id, m);
+      }
+
+      const selectedByGroup = new Map();
+      for (const modId of modifierIds) {
+        const mod = validModsById.get(modId);
+        if (!mod) continue;
+        const arr = selectedByGroup.get(mod.groupId) || [];
+        arr.push(mod);
+        selectedByGroup.set(mod.groupId, arr);
+      }
+
+      let unitExtra = 0;
+      const flatMods = [];
+      for (const [groupId, mods] of selectedByGroup.entries()) {
+        const free = groupsById.get(groupId)?.freeModifiersLimit || 0;
+        const sorted = [...mods].sort((a, b) => a.priceAdd - b.priceAdd);
+        sorted.forEach((m, idx) => {
+          const charge = idx >= free ? m.priceAdd : 0;
+          unitExtra += charge;
+          flatMods.push({ modifierId: m.id, name: m.name, priceAdd: charge });
+        });
+      }
+
+      const validComplementsById = new Map(
+        (menuItem?.complements || [])
+          .filter((c) => c.isAvailable !== false)
+          .map((c) => [c.id, c])
+      );
+      const selectedComplements = [];
+      for (const complementId of complementIds) {
+        const complement = validComplementsById.get(complementId);
+        if (!complement) continue;
+        unitExtra += Number(complement.price || 0);
+        selectedComplements.push(complement);
+      }
+
+      const price = (menuItem?.price || 0) + unitExtra;
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
       const seatRaw = Number(item.seatNumber);
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
@@ -505,9 +582,10 @@ async function addRoundHandler(req, res) {
         price,
         quantity: qty,
         subtotal: price * qty,
-        notes: item.notes || null,
+        notes: appendComplementNotes(item.notes, selectedComplements),
         seatNumber,
         course,
+        _modifiers: flatMods,
       };
     }));
 
@@ -524,9 +602,19 @@ async function addRoundHandler(req, res) {
         data: { orderId: id, roundNumber: nextNumber },
       });
 
-      await tx.orderItem.createMany({
-        data: newItemsData.map(d => ({ ...d, orderId: id, roundId: newRound.id })),
-      });
+      for (const itemData of newItemsData) {
+        const { _modifiers, ...data } = itemData;
+        await tx.orderItem.create({
+          data: {
+            ...data,
+            orderId: id,
+            roundId: newRound.id,
+            modifiers: _modifiers.length
+              ? { create: _modifiers.map(m => ({ modifierId: m.modifierId, name: m.name, priceAdd: m.priceAdd })) }
+              : undefined,
+          },
+        });
+      }
 
       const all = await tx.orderItem.findMany({ where: { orderId: id } });
       const subtotal = all.reduce((s, i) => s + (i.subtotal || 0), 0);
@@ -539,7 +627,7 @@ async function addRoundHandler(req, res) {
         data: { subtotal, total },
         include: {
           user: { select: { name: true, phone: true } },
-          items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
+          items: { include: { menuItem: { select: { name: true, categoryId: true } }, modifiers: true } },
           rounds: { orderBy: { roundNumber: 'asc' } },
           address: true,
           table: true,
