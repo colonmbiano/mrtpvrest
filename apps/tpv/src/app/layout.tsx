@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ModalRoot from "@/components/tpv/ModalRoot";
 import SyncInitializer from "@/components/SyncInitializer";
@@ -15,6 +15,19 @@ import ConsolePatch from "@/components/ConsolePatch";
 export const metadata: Metadata = {
   title: "MRTPVREST · TPV",
   description: "Terminal punto de venta MRTPVREST",
+};
+
+// Sin este viewport, el WebView de Android (Capacitor) y las tablets usan
+// un viewport de escritorio (~980px) y renderizan el TPV "agarrando toda
+// la pantalla" sin autoajustarse (PIN, corte de caja, etc.). En un kiosko
+// POS bloqueamos el pinch-zoom para que el layout no se rompa al tocar.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#0C0C0E",
 };
 
 export default function RootLayout({
