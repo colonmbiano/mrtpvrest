@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import BaseModal from "@/components/ui/BaseModal";
 import Button from "@/components/ui/Button";
 import { Monitor, Info } from "lucide-react";
@@ -50,30 +50,35 @@ export default function KDSConfigModal({
   const [loading, setLoading] = useState(false);
 
   // Pre-llena modo + estaciones desde initialData (modo edición).
-  useEffect(() => {
-    if (!initialData) return;
-    const incoming: string[] = Array.isArray(initialData.stations) ? initialData.stations : [];
-    if (incoming.length === 0) {
-      // Sin stations: derivamos de `type`. Si type=KITCHEN tratamos como
-      // central (toda la cocina). Caso contrario, single específica.
-      const t = String(initialData.type || "KITCHEN").toUpperCase();
-      if (STATIONS.some((s) => s.code === t)) {
-        if (t === "KITCHEN") {
-          setMode("central");
-          setStations(STATIONS.map((s) => s.code));
-        } else {
-          setMode("specific");
-          setStations([t]);
+  // Render-phase (ver CategoryModal): equivalente al efecto de sync
+  // pero sin set-state-in-effect.
+  const [prevInitialData, setPrevInitialData] = useState(initialData);
+  if (prevInitialData !== initialData) {
+    setPrevInitialData(initialData);
+    if (initialData) {
+      const incoming: string[] = Array.isArray(initialData.stations) ? initialData.stations : [];
+      if (incoming.length === 0) {
+        // Sin stations: derivamos de `type`. Si type=KITCHEN tratamos como
+        // central (toda la cocina). Caso contrario, single específica.
+        const t = String(initialData.type || "KITCHEN").toUpperCase();
+        if (STATIONS.some((s) => s.code === t)) {
+          if (t === "KITCHEN") {
+            setMode("central");
+            setStations(STATIONS.map((s) => s.code));
+          } else {
+            setMode("specific");
+            setStations([t]);
+          }
         }
+      } else if (incoming.length === STATIONS.length) {
+        setMode("central");
+        setStations([...incoming]);
+      } else {
+        setMode("specific");
+        setStations([...incoming]);
       }
-    } else if (incoming.length === STATIONS.length) {
-      setMode("central");
-      setStations([...incoming]);
-    } else {
-      setMode("specific");
-      setStations([...incoming]);
     }
-  }, [initialData]);
+  }
 
   const toggleStation = (code: string) => {
     setStations((curr) => {

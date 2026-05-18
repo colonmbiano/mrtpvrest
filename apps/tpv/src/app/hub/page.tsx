@@ -113,45 +113,51 @@ function HubPageInner() {
 
   useEffect(() => {
     let cancelled = false;
+    // Cuerpo diferido a microtask (ver impresoras): el setMounted(true)
+    // síncrono ya no corre dentro del effect (set-state-in-effect).
+    // Comportamiento idéntico — el microtask corre antes del paint.
+    queueMicrotask(() => {
+      if (cancelled) return;
 
-    // Atajo silencioso: si ya hay workspace activo en localStorage Y no estamos
-    // forzando la vista, brincar directo a /pos/order-type (o /pos/shift/open).
-    const persistedId = typeof window !== 'undefined'
-      ? localStorage.getItem('activeWorkspaceId')
-      : null;
+      // Atajo silencioso: si ya hay workspace activo en localStorage Y no
+      // estamos forzando, brincar directo a /pos/order-type (o shift/open).
+      const persistedId = typeof window !== 'undefined'
+        ? localStorage.getItem('activeWorkspaceId')
+        : null;
 
-    if (persistedId && !force) {
+      if (persistedId && !force) {
+        (async () => {
+          try {
+            const { data } = await api.get('/api/shifts/active');
+            if (cancelled) return;
+            const isShiftOpen = Boolean(data?.isOpen ?? data?.id);
+            router.replace(isShiftOpen ? '/pos/order-type' : '/pos/shift/open');
+          } catch {
+            if (!cancelled) router.replace('/pos/shift/open');
+          }
+        })();
+        return;
+      }
+
+      // Sin workspace persistido o 'force' activo — flujo de selección:
+      setMounted(true);
       (async () => {
         try {
-          const { data } = await api.get('/api/shifts/active');
+          const { data } = await api.get('/api/workspaces/me');
           if (cancelled) return;
-          const isShiftOpen = Boolean(data?.isOpen ?? data?.id);
-          router.replace(isShiftOpen ? '/pos/order-type' : '/pos/shift/open');
-        } catch {
-          if (!cancelled) router.replace('/pos/shift/open');
+          const list: Workspace[] = data.workspaces || [];
+          setWorkspaces(list);
+
+          if (list.length === 0) return;
+          // Si solo hay uno y no estamos forzando, auto-seleccionar.
+          if (list.length === 1 && !force) {
+            selectWorkspace(list[0]);
+          }
+        } catch (err: any) {
+          if (!cancelled) setError(err?.response?.data?.error || 'No pudimos cargar tus espacios');
         }
       })();
-      return () => { cancelled = true; };
-    }
-
-    // Sin workspace persistido o 'force' activo — flujo de selección:
-    setMounted(true);
-    (async () => {
-      try {
-        const { data } = await api.get('/api/workspaces/me');
-        if (cancelled) return;
-        const list: Workspace[] = data.workspaces || [];
-        setWorkspaces(list);
-
-        if (list.length === 0) return;
-        // Si solo hay uno y no estamos forzando, auto-seleccionar.
-        if (list.length === 1 && !force) {
-          selectWorkspace(list[0]);
-        }
-      } catch (err: any) {
-        if (!cancelled) setError(err?.response?.data?.error || 'No pudimos cargar tus espacios');
-      }
-    })();
+    });
     return () => { cancelled = true; };
   }, [force]);
 

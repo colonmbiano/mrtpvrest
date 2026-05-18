@@ -64,13 +64,20 @@ export default function KioskPage() {
   const [orderId, setOrderId]       = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState<string>("");
 
-  // Lee el resultado de pago de MP desde la URL (back_urls)
+  // Lee el resultado de pago de MP desde la URL (back_urls). Diferido a
+  // microtask (ver impresoras): el setState ya no corre sincrónicamente
+  // en el effect (set-state-in-effect).
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const status = params.get("status");
-    const oid    = params.get("orderId");
-    if (status === "success") { setOrderId(oid); setScreen("success"); }
-    if (status === "failure") { setScreen("error"); }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const params = new URLSearchParams(window.location.search);
+      const status = params.get("status");
+      const oid    = params.get("orderId");
+      if (status === "success") { setOrderId(oid); setScreen("success"); }
+      if (status === "failure") { setScreen("error"); }
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const loadMenu = useCallback(async () => {
@@ -95,7 +102,11 @@ export default function KioskPage() {
   }, []);
 
   useEffect(() => {
-    if (screen === "menu") loadMenu();
+    if (screen !== "menu") return;
+    let cancelled = false;
+    // Arranque diferido (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) loadMenu(); });
+    return () => { cancelled = true; };
   }, [screen, loadMenu]);
 
   function addToCart(item: MenuItem, mods: CartItem["modifiers"]) {

@@ -49,37 +49,45 @@ export default function LockedPage() {
   // Si admin renombra el device, próximo unlock toma el nombre nuevo.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    let cancelled = false;
+    // Cuerpo diferido a microtask (ver impresoras): el setState síncrono
+    // de identidad ya no corre dentro del effect (set-state-in-effect).
+    queueMicrotask(() => {
+      if (cancelled) return;
 
-    const cached = localStorage.getItem('deviceName');
-    const deviceRole = localStorage.getItem('deviceRole') || 'POS';
-    const fallback = ROLE_LABEL[deviceRole] || 'Terminal';
+      const cached = localStorage.getItem('deviceName');
+      const deviceRole = localStorage.getItem('deviceRole') || 'POS';
+      const fallback = ROLE_LABEL[deviceRole] || 'Terminal';
 
-    setTerminalKind(deviceRole === 'WAITER' ? 'COMANDERA' : 'CAJA');
-    setTerminalName(cached || fallback);
-    setLocationName(
-      localStorage.getItem('locationName') ||
-        localStorage.getItem('activeWorkspaceName') ||
-        'Sucursal'
-    );
+      setTerminalKind(deviceRole === 'WAITER' ? 'COMANDERA' : 'CAJA');
+      setTerminalName(cached || fallback);
+      setLocationName(
+        localStorage.getItem('locationName') ||
+          localStorage.getItem('activeWorkspaceName') ||
+          'Sucursal'
+      );
 
-    const token = localStorage.getItem('deviceToken');
-    if (!token) return;
+      const token = localStorage.getItem('deviceToken');
+      if (!token) return;
 
-    // Refresh sin bloquear UI — si la red falla, nos quedamos con el cache.
-    api
-      .post('/api/devices/identity', { deviceToken: token })
-      .then(({ data }) => {
-        if (data?.name) {
-          localStorage.setItem('deviceName', data.name);
-          setTerminalName(data.name);
-        }
-        if (data?.type) {
-          setTerminalKind(data.type === 'WAITER' ? 'COMANDERA' : data.type);
-        }
-      })
-      .catch(() => {
-        /* sin red — mantener cache */
-      });
+      // Refresh sin bloquear UI — si la red falla, mantenemos el cache.
+      api
+        .post('/api/devices/identity', { deviceToken: token })
+        .then(({ data }) => {
+          if (cancelled) return;
+          if (data?.name) {
+            localStorage.setItem('deviceName', data.name);
+            setTerminalName(data.name);
+          }
+          if (data?.type) {
+            setTerminalKind(data.type === 'WAITER' ? 'COMANDERA' : data.type);
+          }
+        })
+        .catch(() => {
+          /* sin red — mantener cache */
+        });
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const handlePINSubmit = async (pin: string) => {
