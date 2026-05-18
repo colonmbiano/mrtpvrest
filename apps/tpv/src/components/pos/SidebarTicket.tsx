@@ -57,7 +57,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const { activeOrderId, setActiveOrder, clear: clearActiveOrder } = useActiveOrderStore();
 
   const [previousItems, setPreviousItems] = useState<any[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [_loadingHistory, setLoadingHistory] = useState(false);
 
   // Cargar historial de la orden si estamos en modo "extender"
   useEffect(() => {

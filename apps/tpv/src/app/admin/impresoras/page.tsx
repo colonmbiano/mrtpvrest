@@ -40,10 +40,6 @@ export default function ImpresorasPage() {
 
   const [form, setForm] = useState<Partial<Printer>>(DEFAULT_FORM);
 
-  useEffect(() => {
-    fetchPrinters();
-  }, []);
-
   const fetchPrinters = async () => {
     setLoading(true);
     try {
@@ -56,6 +52,10 @@ export default function ImpresorasPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchPrinters();
+  }, []);
 
   const handleSave = async (data: Partial<Printer>) => {
     if (saving) return;

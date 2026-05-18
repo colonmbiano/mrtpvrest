@@ -27,10 +27,6 @@ export default function MenuEditorPage() {
   
   const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -46,6 +42,10 @@ export default function MenuEditorPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

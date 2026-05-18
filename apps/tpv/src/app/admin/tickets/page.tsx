@@ -48,10 +48,6 @@ export default function TicketConfigPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    fetchConfig();
-  }, []);
-
   const fetchConfig = async () => {
     setLoading(true);
     try {
@@ -112,6 +108,10 @@ export default function TicketConfigPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchConfig();
+  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

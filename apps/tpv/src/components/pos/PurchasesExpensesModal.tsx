@@ -725,8 +725,8 @@ function PurchaseTab(props: {
           <div className="rounded-2xl bg-white/5 border border-dashed border-white/10 p-6 text-center space-y-2">
             <Camera size={28} className="text-white/30 mx-auto" />
             <p className="text-[12px] text-white/40">
-              Toca <strong className="text-violet-300">"Escanear ticket"</strong> para llenar la lista con IA,
-              o <strong className="text-amber-400">"Agregar"</strong> para meterlos a mano.
+              Toca <strong className="text-violet-300">&quot;Escanear ticket&quot;</strong> para llenar la lista con IA,
+              o <strong className="text-amber-400">&quot;Agregar&quot;</strong> para meterlos a mano.
             </p>
           </div>
         ) : (
@@ -745,7 +745,7 @@ function PurchaseTab(props: {
                 {needsMatch && (
                   <div className="col-span-12 flex items-center gap-2 text-[10px] font-bold text-amber-400 pb-1 pl-1">
                     <FileWarning size={12} />
-                    <span>IA detectó "{line.scannedName}" — elige el ingrediente correcto:</span>
+                    <span>IA detectó &quot;{line.scannedName}&quot; — elige el ingrediente correcto:</span>
                   </div>
                 )}
                 <select

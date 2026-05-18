@@ -84,6 +84,33 @@ function HubPageInner() {
     return () => document.removeEventListener('mousedown', onDoc);
   }, [menuOpen]);
 
+  const selectWorkspace = async (w: Workspace) => {
+    // Sincronización UNIFICADA de llaves (TPV + API)
+    localStorage.setItem('activeWorkspaceId', w.id);
+    localStorage.setItem('activeRestaurantId', w.restaurantId);
+    localStorage.setItem('activeLocationId', w.id);
+    localStorage.setItem('activeWorkspaceName', `${w.restaurantName} · ${w.name}`);
+
+    // Llaves primarias que espera el interceptor de api.ts
+    localStorage.setItem('restaurantId', w.restaurantId);
+    localStorage.setItem('locationId', w.id);
+    localStorage.setItem('locationName', w.name);
+
+    try {
+      const { data } = await api.get('/api/shifts/active');
+      const isShiftOpen = Boolean(data?.isOpen ?? data?.id);
+
+      if (isShiftOpen) {
+        router.replace('/pos/order-type');
+      } else {
+        router.replace('/pos/shift/open');
+      }
+    } catch (err) {
+      console.error('Error verificando turno:', err);
+      router.replace('/pos/shift/open');
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -127,33 +154,6 @@ function HubPageInner() {
     })();
     return () => { cancelled = true; };
   }, [force]);
-
-  const selectWorkspace = async (w: Workspace) => {
-    // Sincronización UNIFICADA de llaves (TPV + API)
-    localStorage.setItem('activeWorkspaceId', w.id);
-    localStorage.setItem('activeRestaurantId', w.restaurantId);
-    localStorage.setItem('activeLocationId', w.id);
-    localStorage.setItem('activeWorkspaceName', `${w.restaurantName} · ${w.name}`);
-    
-    // Llaves primarias que espera el interceptor de api.ts
-    localStorage.setItem('restaurantId', w.restaurantId);
-    localStorage.setItem('locationId', w.id);
-    localStorage.setItem('locationName', w.name);
-
-    try {
-      const { data } = await api.get('/api/shifts/active');
-      const isShiftOpen = Boolean(data?.isOpen ?? data?.id);
-
-      if (isShiftOpen) {
-        router.replace('/pos/order-type');
-      } else {
-        router.replace('/pos/shift/open');
-      }
-    } catch (err) {
-      console.error('Error verificando turno:', err);
-      router.replace('/pos/shift/open');
-    }
-  };
 
   const handleLogout = () => {
     logout();

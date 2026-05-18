@@ -10,7 +10,6 @@ import {
   PlusCircle,
   Lock,
 } from "lucide-react";
-import Button from "@/components/ui/Button";
 import CategoryRail from "@/components/pos/CategoryRail";
 import ProductCard from "@/components/pos/ProductCard";
 import { useRouter } from "next/navigation";

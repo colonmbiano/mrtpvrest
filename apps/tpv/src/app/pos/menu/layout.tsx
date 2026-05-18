@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Search, Menu, Receipt, ShoppingCart, UtensilsCrossed } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Search, ShoppingCart, UtensilsCrossed } from "lucide-react";
 import ConfigMenu from "@/components/pos/ConfigMenu";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
 import OrderDetailModal from "@/components/pos/OrderDetailModal";
@@ -65,7 +65,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [showNotifs, setShowNotifs] = useState(false);
   const [showExpenses, setShowExpenses] = useState(false);
   const [mobileView, setMobileView] = useState<"menu" | "ticket">("menu");
-  const bellRef = useRef<HTMLButtonElement>(null);
 
   // Sistema de notificaciones en tiempo real vía Socket.io
   useNotifications();

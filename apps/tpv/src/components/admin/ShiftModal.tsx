@@ -32,10 +32,6 @@ export default function ShiftModal({ employee, onClose }: Props) {
   const [opening, setOpening]   = useState(false);
   const [closing, setClosing]   = useState(false);
 
-  useEffect(() => {
-    fetchShift();
-  }, []);
-
   async function fetchShift() {
     setLoading(true);
     try {
@@ -44,6 +40,10 @@ export default function ShiftModal({ employee, onClose }: Props) {
     } catch {}
     finally { setLoading(false); }
   }
+
+  useEffect(() => {
+    fetchShift();
+  }, []);
 
   async function openShift() {
     if (!openingFloat) { alert("Ingresa el fondo de caja"); return; }

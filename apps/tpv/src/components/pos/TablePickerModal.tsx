@@ -16,7 +16,6 @@
 import { useEffect, useState } from "react";
 import { X, MapPin, Users, Eye, EyeOff } from "lucide-react";
 import api from "@/lib/api";
-import { toast } from "sonner";
 
 export interface TableLite {
   id: string;
@@ -45,11 +44,6 @@ export default function TablePickerModal({
   const [error, setError]     = useState("");
   const [showOccupied, setShowOccupied] = useState(initialShowOccupied);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    fetchTables();
-  }, [isOpen]);
-
   async function fetchTables() {
     let cancelled = false;
     setLoading(true);
@@ -66,6 +60,11 @@ export default function TablePickerModal({
     }
     return () => { cancelled = true; };
   }
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetchTables();
+  }, [isOpen]);
 
   // handleRelease eliminado: las mesas OCUPADAS ahora se unen al ticket
   // existente via onPick → el backend detecta la mesa ocupada y agrega
