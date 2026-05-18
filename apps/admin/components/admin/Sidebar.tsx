@@ -70,7 +70,8 @@ const SECTIONS = [
       { href: "/admin/menu/categorias", icon: <IFolder />,   label: "Categorías" },
       { href: "/admin/menu/variantes",  icon: <ISliders />,  label: "Variantes" },
       { href: "/admin/banners",         icon: <IImage />,    label: "Banners" },
-      { href: "/admin/inventario",      icon: <IBox />,      label: "Inventario" },
+      { href: "/admin/inventario",          icon: <IBox />,      label: "Inventario" },
+      { href: "/admin/inventario/compras",   icon: <IBox />,      label: "Compras & Bodega" },
     ],
   },
   {
