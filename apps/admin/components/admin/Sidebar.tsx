@@ -54,6 +54,7 @@ const SECTIONS = [
       // del sidebar — ambas rutas redirigen server-side a /admin/reportes/ia.
       // Mantenemos un solo punto de entrada bajo "Reportes" con la versión IA.
       { href: "/admin/reportes/ia",          icon: <ITrending />,  label: "Reportes" },
+      { href: "/admin/finanzas/gastos",      icon: <IWallet />,    label: "Gastos & Compras" },
       { href: "/admin/mi-marca",             icon: <IBuilding />,  label: "Mi Marca" },
       { href: "/admin/integraciones",        icon: <IPlug />,      label: "Integraciones" },
       { href: "/admin/modulos",             icon: <IPuzzle />,    label: "Módulos" },
