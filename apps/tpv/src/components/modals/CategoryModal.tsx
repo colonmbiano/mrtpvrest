@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import BaseModal from "@/components/ui/BaseModal";
 import type { CategoryDraft } from "@/contexts/ModalContext";
@@ -21,9 +21,14 @@ export default function CategoryModal({
   const [draft, setDraft] = useState<CategoryDraft>(EMPTY);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  // Sincroniza el borrador con la categoría al abrir/cambiar. Render-phase
+  // (patrón "ajustar estado al cambiar prop") en vez de useEffect: corre
+  // antes del paint y evita el doble render de set-state-in-effect.
+  const [prevSync, setPrevSync] = useState({ open, category });
+  if (prevSync.open !== open || prevSync.category !== category) {
+    setPrevSync({ open, category });
     if (open) setDraft(category && category !== "new" ? { ...category } : EMPTY);
-  }, [open, category]);
+  }
 
   const isNew = category === "new" || (category && !category.id);
 

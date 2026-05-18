@@ -1,6 +1,7 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { Delete, LogOut } from "lucide-react";
+import { useClientValue } from "@/hooks/useClientValue";
 
 interface LockScreenProps {
   restaurantName: string;
@@ -30,13 +31,16 @@ const LockScreen: React.FC<LockScreenProps> = ({
   const pinLength = 4;
   const digits = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-  const [terminalId, setTerminalId] = useState<string>("");
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setTerminalId(localStorage.getItem("terminalId") || localStorage.getItem("deviceName") || localStorage.getItem("mb-device-role") || "Caja Principal");
-    }
-  }, []);
+  const terminalId = useClientValue(
+    () =>
+      typeof window === "undefined"
+        ? ""
+        : localStorage.getItem("terminalId") ||
+          localStorage.getItem("deviceName") ||
+          localStorage.getItem("mb-device-role") ||
+          "Caja Principal",
+    "",
+  );
 
   const terminalLabel = terminalId ? terminalId : "Caja Principal";
 

@@ -3,7 +3,13 @@ import { useEffect, useState } from "react";
 
 export default function PWAInstallBanner() {
   const [prompt, setPrompt] = useState<any>(null);
-  const [installed, setInstalled] = useState(false);
+  // Estado inicial: ¿ya corre como app instalada (standalone)? Se evalúa
+  // en el inicializador perezoso (cliente) en vez de un setState en effect.
+  const [installed, setInstalled] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(display-mode: standalone)").matches,
+  );
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
@@ -21,11 +27,6 @@ export default function PWAInstallBanner() {
       setShowBanner(true);
     };
     window.addEventListener('beforeinstallprompt', handler);
-
-    // Detectar si ya está instalada
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      setInstalled(true);
-    }
 
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);

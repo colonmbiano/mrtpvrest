@@ -8,6 +8,7 @@ import LoginStep from './steps/LoginStep';
 import LocationStep from './steps/LocationStep';
 import DeviceStep from './steps/DeviceStep';
 import { useAuthStore } from '@/store/authStore';
+import { useHydrated } from '@/hooks/useClientValue';
 import { useThemeStore } from '@/store/themeStore';
 
 type SetupStep = 'login' | 'location' | 'device' | 'saving';
@@ -22,7 +23,7 @@ interface SetupState {
 
 export default function SetupPage() {
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
   const [step, setStep] = useState<SetupStep>('login');
   const [state, setState] = useState<SetupState>({
     email: '',
@@ -36,10 +37,6 @@ export default function SetupPage() {
   const [, setRestaurants] = useState<any[]>([]);
   const [authToken, setAuthToken] = useState('');
   const { mode, toggleMode } = useThemeStore();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Check if already linked
   useEffect(() => {
