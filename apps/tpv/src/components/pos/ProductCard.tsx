@@ -1,6 +1,6 @@
 "use client";
 import React, { useRef } from "react";
-import { Plus, Star } from "lucide-react";
+import { Flame, Plus, Star } from "lucide-react";
 
 export interface ProductCardProps {
   id: string;
@@ -11,6 +11,7 @@ export interface ProductCardProps {
   promoPrice?: number | null;
   isAvailable?: boolean;
   isFavorite?: boolean;
+  isPopular?: boolean;
   onClick?: () => void;
   onLongPress?: () => void;
   currency?: string;
@@ -38,6 +39,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
   promoPrice,
   isAvailable = true,
   isFavorite = false,
+  isPopular = false,
   onClick,
   onLongPress,
   currency = "$",
@@ -120,6 +122,16 @@ const ProductCard: React.FC<ProductCardProps> = ({
           className="absolute z-10 left-2 top-2 w-6 h-6 rounded-full bg-amber-500/90 text-black flex items-center justify-center shadow-lg"
         >
           <Star size={12} strokeWidth={2.5} fill="currentColor" />
+        </span>
+      )}
+
+      {isPopular && (
+        <span
+          aria-label="Popular"
+          className="absolute z-10 right-2 top-2 inline-flex h-6 items-center gap-1 rounded-full bg-rose-500/90 px-2 text-[9px] font-black tracking-widest text-white shadow-lg"
+        >
+          <Flame size={12} strokeWidth={2.5} fill="currentColor" />
+          TOP
         </span>
       )}
 

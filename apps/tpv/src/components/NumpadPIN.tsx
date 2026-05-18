@@ -77,7 +77,7 @@ export default function NumpadPIN({
 
   return (
     <div
-      className="w-full max-w-[420px] mx-auto flex flex-col"
+      className="w-full max-w-[550px] mx-auto flex flex-col"
       style={{ gap: 'min(3vmin, 18px)' }}
     >
       {/* PIN DOTS — escalan con el ancho del contenedor */}
@@ -118,7 +118,7 @@ export default function NumpadPIN({
             disabled={disabled || pin.length >= maxDigits}
             className={digitClass}
             style={{
-              fontSize: 'clamp(1.5rem, 5vmin, 2.25rem)',
+              fontSize: 'clamp(2rem, 8vmin, 4rem)',
               minHeight: 64,
             }}
           >
@@ -136,7 +136,7 @@ export default function NumpadPIN({
           disabled={disabled || pin.length >= maxDigits}
           className={digitClass}
           style={{
-            fontSize: 'clamp(1.5rem, 5vmin, 2.25rem)',
+            fontSize: 'clamp(2rem, 8vmin, 4rem)',
             minHeight: 64,
           }}
         >

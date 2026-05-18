@@ -157,9 +157,11 @@ export default function CatalogPage() {
   // Filtra grupos con al menos 1 modificador. El importer CSV crea grupos
   // sin opciones cuando la columna "modificador - X" = Y pero las opciones
   // aún no se cargaron — no queremos abrir un modal vacío.
-  const hasUsableModifiers = (p: Product) =>
-    Array.isArray(p.modifierGroups) &&
-    p.modifierGroups.some((g) => Array.isArray(g.modifiers) && g.modifiers.length > 0);
+  const hasUsableOptions = (p: Product) =>
+    (Array.isArray(p.modifierGroups) &&
+      p.modifierGroups.some((g) => Array.isArray(g.modifiers) && g.modifiers.length > 0)) ||
+    (Array.isArray(p.complements) &&
+      p.complements.some((c) => c.isAvailable !== false));
 
   const handleProductClick = (p: Product) => {
     hapticLight();
@@ -170,7 +172,7 @@ export default function CatalogPage() {
       setVariantPickerProduct(p);
       return;
     }
-    if (hasUsableModifiers(p)) {
+    if (hasUsableOptions(p)) {
       setPickerProduct(p);
       return;
     }
@@ -185,7 +187,7 @@ export default function CatalogPage() {
     // cerramos el variant picker y abrimos el modifier picker usando la
     // variante seleccionada como precio base (clonamos product con el
     // price ya ajustado para que ModifierPickerModal calcule bien).
-    if (hasUsableModifiers(p)) {
+    if (hasUsableOptions(p)) {
       setVariantPickerProduct(null);
       setPickerProduct({
         ...p,

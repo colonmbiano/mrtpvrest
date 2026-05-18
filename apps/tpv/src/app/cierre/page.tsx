@@ -123,7 +123,7 @@ export default function CierreTurno() {
 
   return (
     <div
-      className="relative min-h-screen flex flex-col bg-[#0a0a0c] text-white overflow-hidden"
+      className="relative h-[100dvh] flex flex-col bg-[#0a0a0c] text-white overflow-hidden"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* Ambient Warm Tech glows */}
@@ -182,7 +182,7 @@ export default function CierreTurno() {
       </header>
 
       {/* CONTENT */}
-      <div className="relative z-10 flex-1 grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-6 p-6 md:p-8 overflow-auto">
+      <div className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-6 p-6 md:p-8 overflow-auto">
         {/* LEFT: form */}
         <div className="flex flex-col gap-5">
           <div className="rounded-3xl p-6 md:p-8 flex flex-col gap-5 bg-white/5 backdrop-blur-md border border-white/10">

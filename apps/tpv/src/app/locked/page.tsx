@@ -149,7 +149,7 @@ export default function LockedPage() {
       {/* Glass card central — el contenido se reorganiza en landscape via
           el flex-row breakpoint @lg para no encajonar al usuario en
           tablets de orientación variable. */}
-      <div className="relative z-10 w-full max-w-[420px] lg:max-w-[860px] rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.4)] flex flex-col lg:flex-row overflow-hidden">
+      <div className="relative z-10 w-full max-w-[420px] lg:max-w-[900px] rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.4)] flex flex-col lg:flex-row overflow-hidden">
         {/* PROMPT */}
         <div className="flex-1 p-7 sm:p-9 flex flex-col justify-center text-center lg:text-left lg:border-r lg:border-white/10">
           <div className="inline-block self-center lg:self-start px-4 py-1.5 mb-4 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-[#ffb84d] bg-[#ffb84d]/10 border border-[#ffb84d]/20">
