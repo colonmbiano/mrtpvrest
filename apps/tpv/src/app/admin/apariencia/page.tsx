@@ -21,7 +21,7 @@
  * migren los hardcoded a tokens (--bg, --surf-1, etc.).
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Type, PanelRightClose, Palette as PaletteIcon, Sun, Moon, Info } from "lucide-react";
 import BackButton from "@/components/BackButton";
 import { useThemeStore, type Palette as PaletteType } from "@/store/themeStore";
@@ -78,13 +78,11 @@ export default function AparienciaPage() {
   const mode = useThemeStore((s) => s.mode);
   const toggleMode = useThemeStore((s) => s.toggleMode);
 
-  const [uiScale, setUiScale] = useState<UiScale>("small");
-  const [sidebarPreset, setSidebarPreset] = useState<SidebarPreset>("M");
-
-  useEffect(() => {
-    setUiScale(readUiScale());
-    setSidebarPreset(readSidebarPreset());
-  }, []);
+  // Inicializadores perezosos (SSR-safe: readX devuelve default sin
+  // window). Esta página solo se monta en cliente — AdminLayout muestra
+  // loader en servidor —, así que no hay mismatch de hidratación.
+  const [uiScale, setUiScale] = useState<UiScale>(readUiScale);
+  const [sidebarPreset, setSidebarPreset] = useState<SidebarPreset>(readSidebarPreset);
 
   const chooseUiScale = (s: UiScale) => {
     setUiScale(s);

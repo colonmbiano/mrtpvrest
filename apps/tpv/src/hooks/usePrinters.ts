@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import { useClientValue } from "@/hooks/useClientValue";
 import api from "@/lib/api";
 import type { PrinterRecord, KitchenTicketConfig } from "@/lib/printer-tcp";
 
@@ -41,13 +42,15 @@ export function usePrinters() {
   }, []);
 
   useEffect(() => {
-    load();
+    let cancelled = false;
+    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) load(); });
     const onRefresh = () => load();
     if (typeof window !== "undefined") {
       window.addEventListener("printers-changed", onRefresh);
-      return () => window.removeEventListener("printers-changed", onRefresh);
+      return () => { cancelled = true; window.removeEventListener("printers-changed", onRefresh); };
     }
-    return undefined;
+    return () => { cancelled = true; };
   }, [load]);
 
   return { printers, loaded, reload: load };
@@ -59,14 +62,14 @@ export function usePrinters() {
  * la impresión si no está disponible.
  */
 export function useReceiptIdentity() {
-  const [businessName, setBusinessName] = useState<string | null>(null);
-  const [businessFooter, setBusinessFooter] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setBusinessName(localStorage.getItem("restaurantName"));
-    setBusinessFooter(localStorage.getItem("receiptFooter"));
-  }, []);
+  const businessName = useClientValue(
+    () => (typeof window === "undefined" ? null : localStorage.getItem("restaurantName")),
+    null,
+  );
+  const businessFooter = useClientValue(
+    () => (typeof window === "undefined" ? null : localStorage.getItem("receiptFooter")),
+    null,
+  );
 
   return { businessName, businessFooter };
 }
@@ -130,11 +133,13 @@ export function useKitchenConfig() {
   }, []);
 
   useEffect(() => {
-    load();
-    if (typeof window === "undefined") return;
+    let cancelled = false;
+    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) load(); });
+    if (typeof window === "undefined") return () => { cancelled = true; };
     const onRefresh = () => load();
     window.addEventListener("ticket-config-changed", onRefresh);
-    return () => window.removeEventListener("ticket-config-changed", onRefresh);
+    return () => { cancelled = true; window.removeEventListener("ticket-config-changed", onRefresh); };
   }, [load]);
 
   return { kitchenConfig: config, loaded };

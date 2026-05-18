@@ -21,9 +21,11 @@ export default function KDSMessages() {
   }
 
   useEffect(() => {
-    fetchMessages();
+    let cancelled = false;
+    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) fetchMessages(); });
     const t = setInterval(fetchMessages, 10000);
-    return () => clearInterval(t);
+    return () => { cancelled = true; clearInterval(t); };
   }, []);
 
   const STATION_LABELS: Record<string,string> = {

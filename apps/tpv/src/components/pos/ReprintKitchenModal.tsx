@@ -51,9 +51,13 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
 
   // Re-sync cuando cambian los items (cambio de orden o nuevo open).
-  React.useEffect(() => {
+  // Render-phase (ver CategoryModal): equivalente al efecto pero sin
+  // set-state-in-effect.
+  const [prevItems, setPrevItems] = useState(items);
+  if (prevItems !== items) {
+    setPrevItems(items);
     setSelected(new Set(items.map((it) => it.id)));
-  }, [items]);
+  }
 
   const allSelected = useMemo(
     () => items.length > 0 && selected.size === items.length,

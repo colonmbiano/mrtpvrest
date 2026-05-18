@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { ImagePlus } from "lucide-react";
 import BaseModal from "@/components/ui/BaseModal";
@@ -23,9 +23,13 @@ export default function ProductModal({
   const [draft, setDraft] = useState<ProductDraft>(EMPTY);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  // Render-phase sync (ver CategoryModal): equivalente al efecto de reset
+  // pero sin set-state-in-effect.
+  const [prevSync, setPrevSync] = useState({ open, product });
+  if (prevSync.open !== open || prevSync.product !== product) {
+    setPrevSync({ open, product });
     if (open) setDraft(product && product !== "new" ? { ...product } : EMPTY);
-  }, [open, product]);
+  }
 
   const isNew = product === "new" || (product && !product.id);
 

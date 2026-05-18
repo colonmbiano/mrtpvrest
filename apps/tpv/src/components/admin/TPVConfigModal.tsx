@@ -119,26 +119,38 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
   const [fontSize, setFontSize] = useState<"xs"|"sm"|"md"|"lg"|"xl">("md");
 
   useEffect(() => {
-    const saved = localStorage.getItem("tpv-display-config");
-    if (saved) {
-      try {
-        const cfg = JSON.parse(saved);
-        setGridSize(cfg.gridSize || 4);
-        setSound(cfg.sound || "ding");
-        setShowImages(cfg.showImages !== false);
-        setFontSize(cfg.fontSize || "md");
-      } catch {}
-    }
-    fetchAll();
+    let cancelled = false;
+    // Diferido a microtask (ver impresoras): el setState de hidratación
+    // y fetchAll ya no corren sincrónicamente en el effect.
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const saved = localStorage.getItem("tpv-display-config");
+      if (saved) {
+        try {
+          const cfg = JSON.parse(saved);
+          setGridSize(cfg.gridSize || 4);
+          setSound(cfg.sound || "ding");
+          setShowImages(cfg.showImages !== false);
+          setFontSize(cfg.fontSize || "md");
+        } catch {}
+      }
+      fetchAll();
+    });
+    return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
-    if (!settings) return;
-    const nextGrid = settings.gridSize || settings.gridCols;
-    if (nextGrid) setGridSize(nextGrid);
-    if (settings.fontSize) setFontSize(settings.fontSize);
-    if (settings.showImages !== undefined) setShowImages(settings.showImages);
-  }, [settings]);
+  // Deriva del prop `settings` cuando cambia. Render-phase (ver
+  // CategoryModal): equivalente al efecto pero sin set-state-in-effect.
+  const [prevSettings, setPrevSettings] = useState(settings);
+  if (prevSettings !== settings) {
+    setPrevSettings(settings);
+    if (settings) {
+      const nextGrid = settings.gridSize || settings.gridCols;
+      if (nextGrid) setGridSize(nextGrid);
+      if (settings.fontSize) setFontSize(settings.fontSize);
+      if (settings.showImages !== undefined) setShowImages(settings.showImages);
+    }
+  }
 
   async function fetchAll() {
     try {

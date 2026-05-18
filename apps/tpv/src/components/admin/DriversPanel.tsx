@@ -103,10 +103,13 @@ export default function DriversPanel({ isOpen, onClose, accent }: Props) {
 
   useEffect(() => {
     if (!isOpen) return;
-    fetchLive(false);
+    let cancelled = false;
+    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) fetchLive(false); });
     // Polling cada 10s mientras el panel esté abierto.
     intervalRef.current = setInterval(() => fetchLive(true), 10000);
     return () => {
+      cancelled = true;
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

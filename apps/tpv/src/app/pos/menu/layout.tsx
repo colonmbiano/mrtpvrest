@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Search, Menu, Receipt, ShoppingCart, UtensilsCrossed } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Search, ShoppingCart, UtensilsCrossed } from "lucide-react";
 import ConfigMenu from "@/components/pos/ConfigMenu";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
 import OrderDetailModal from "@/components/pos/OrderDetailModal";
@@ -8,6 +8,7 @@ import ReprintKitchenModal from "@/components/pos/ReprintKitchenModal";
 import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { usePrinters, useReceiptIdentity, useKitchenConfig } from "@/hooks/usePrinters";
+import { useHydrated } from "@/hooks/useClientValue";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
@@ -58,14 +59,13 @@ function timeAgo(iso: string): string {
 
 export default function CashierLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
   const [showMenu, setShowMenu] = useState(false);
   const [askingAdminPin, setAskingAdminPin] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [showExpenses, setShowExpenses] = useState(false);
   const [mobileView, setMobileView] = useState<"menu" | "ticket">("menu");
-  const bellRef = useRef<HTMLButtonElement>(null);
 
   // Sistema de notificaciones en tiempo real vía Socket.io
   useNotifications();
@@ -88,10 +88,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [showShift, setShowShift] = useState(false);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [mergeSource, setMergeSource] = useState<any | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const {
     isLocked,
@@ -165,9 +161,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     if (!mounted || isLocked) return;
-    fetchOpenOrders();
+    let cancelled = false;
+    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) fetchOpenOrders(); });
     const id = setInterval(fetchOpenOrders, 30000);
-    return () => clearInterval(id);
+    return () => { cancelled = true; clearInterval(id); };
   }, [mounted, isLocked, fetchOpenOrders]);
 
   const fetchShift = useCallback(async () => {
@@ -181,9 +179,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     if (!mounted || isLocked) return;
-    fetchShift();
+    let cancelled = false;
+    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) fetchShift(); });
     const id = setInterval(fetchShift, 60000);
-    return () => clearInterval(id);
+    return () => { cancelled = true; clearInterval(id); };
   }, [mounted, isLocked, fetchShift]);
 
   const handleConfirmDrawerPayment = async (method: string) => {
@@ -478,7 +478,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // Zustand (B3). Mantenemos solo el botón "Tickets abiertos" del drawer.
 
   useEffect(() => {
-    if (showOrders) fetchOpenOrders();
+    if (!showOrders) return;
+    let cancelled = false;
+    // Arranque diferido (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) fetchOpenOrders(); });
+    return () => { cancelled = true; };
   }, [showOrders, fetchOpenOrders]);
 
   // Auto-abrir el drawer cuando llegamos desde el atajo "Tickets Abiertos"
@@ -488,12 +492,17 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("orders") === "1") {
+    if (params.get("orders") !== "1") return;
+    let cancelled = false;
+    // Diferido a microtask (ver impresoras): setShowOrders ya no corre
+    // sincrónicamente en el effect (set-state-in-effect).
+    queueMicrotask(() => {
+      if (cancelled) return;
       setShowOrders(true);
       // Limpia el query param para que un refresh manual no lo reabra.
-      const url = window.location.pathname;
-      window.history.replaceState({}, "", url);
-    }
+      window.history.replaceState({}, "", window.location.pathname);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const drawerOrders = openOrders.map((o: any) => ({

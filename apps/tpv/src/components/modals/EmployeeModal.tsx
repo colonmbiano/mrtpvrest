@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import BaseModal from "@/components/ui/BaseModal";
 import type { EmployeeDraft } from "@/contexts/ModalContext";
@@ -28,9 +28,13 @@ export default function EmployeeModal({
   const [draft, setDraft] = useState<EmployeeDraft>(EMPTY);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  // Render-phase sync (ver CategoryModal): equivalente al efecto de reset
+  // pero sin set-state-in-effect.
+  const [prevSync, setPrevSync] = useState({ open, employee });
+  if (prevSync.open !== open || prevSync.employee !== employee) {
+    setPrevSync({ open, employee });
     if (open) setDraft(employee && employee !== "new" ? { ...employee } : EMPTY);
-  }, [open, employee]);
+  }
 
   const isNew = employee === "new" || (employee && !employee.id);
 
