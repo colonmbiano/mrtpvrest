@@ -240,6 +240,7 @@ export default function InventarioPage() {
             {!isScanning && <input type="file" accept="image/*,application/pdf,.xlsx,.csv" multiple onChange={handleAIScan} className="hidden" />}
           </label>
 
+          <Link href="/admin/inventario/compras" className="px-4 py-2 rounded-xl text-sm font-bold border border-white/10 text-gray-400">🛒 Compras & Bodega</Link>
           <Link href="/admin/inventario/recetas" className="px-4 py-2 rounded-xl text-sm font-bold border border-white/10 text-gray-400">📋 Recetas</Link>
           <Link href="/admin/inventario/proveedores" className="px-4 py-2 rounded-xl text-sm font-bold border border-white/10 text-gray-400">🏭 Proveedores</Link>
 

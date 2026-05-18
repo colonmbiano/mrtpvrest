@@ -3,7 +3,12 @@ const { scanMenuFromImages, scanInventoryFromImages, parseInventoryFile, isSprea
 const { runAssistant } = require('../services/assistant.service');
 const { runVoiceAgent } = require('../services/voice-agent.service');
 const { resolveGeminiKey } = require('../services/ai-key.service');
-const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireRole, requireTenantAccess } = require('../middleware/auth.middleware');
+
+// Roles que pueden escanear tickets de compra (mismos que registran compras
+// desde el TPV). El escaneo de inventario alimenta el flujo de Compras, así
+// que no debe quedar restringido sólo a ADMIN.
+const PURCHASE_SCAN_ROLES = ['CASHIER', 'WAITER', 'KITCHEN', 'ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'];
 const { aiLimiter } = require('../lib/rate-limiters');
 const router = express.Router();
 const multer = require('multer');
@@ -77,7 +82,7 @@ router.post('/scan-menu', authenticate, requireTenantAccess, requireAdmin, uploa
 //     correcto por archivo. PDFs van con application/pdf (Gemini lo soporta
 //     nativamente desde 1.5). Imágenes van con su mimeType original (no
 //     hardcodear image/jpeg porque rompe PNGs en algunas regiones).
-router.post('/scan-inventory', authenticate, requireTenantAccess, requireAdmin, upload.array('images', 10), async (req, res) => {
+router.post('/scan-inventory', authenticate, requireTenantAccess, requireRole(...PURCHASE_SCAN_ROLES), upload.array('images', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No se recibieron archivos.' });
 

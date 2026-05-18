@@ -95,7 +95,8 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
     const VALID_FIELDS = [
       'phone','whatsappNumber','address','deliveryFee','freeDeliveryFrom',
       'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
-      'pointsPerTen','pointsValuePesos','storefrontTheme'
+      'pointsPerTen','pointsValuePesos','storefrontTheme',
+      'centralWarehouseEnabled'
     ];
     const data = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => VALID_FIELDS.includes(k))
@@ -198,21 +199,29 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
 
 router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { name, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount } = req.body;
+    const { name, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount, isCentralWarehouse } = req.body;
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const location = await prisma.location.findUnique({ where: { id: req.params.id } });
     if (!location || location.restaurantId !== restaurantId)
       return res.status(404).json({ error: 'Sucursal no encontrada' });
-    const updated = await prisma.location.update({
-      where: { id: req.params.id },
-      data: { 
-        ...(name && { name }), 
-        ...(address !== undefined && { address }), 
-        ...(phone !== undefined && { phone }),
-        ...(autoPromoEnabled !== undefined && { autoPromoEnabled }),
-        ...(autoPromoThreshold !== undefined && { autoPromoThreshold }),
-        ...(autoPromoDiscount !== undefined && { autoPromoDiscount })
+    const data = {
+      ...(name && { name }),
+      ...(address !== undefined && { address }),
+      ...(phone !== undefined && { phone }),
+      ...(autoPromoEnabled !== undefined && { autoPromoEnabled }),
+      ...(autoPromoThreshold !== undefined && { autoPromoThreshold }),
+      ...(autoPromoDiscount !== undefined && { autoPromoDiscount }),
+      ...(isCentralWarehouse !== undefined && { isCentralWarehouse: Boolean(isCentralWarehouse) }),
+    };
+    // Sólo una Bodega Central por restaurant: si se marca esta, se desmarca el resto.
+    const updated = await prisma.$transaction(async (tx) => {
+      if (isCentralWarehouse === true) {
+        await tx.location.updateMany({
+          where: { restaurantId, isCentralWarehouse: true, NOT: { id: req.params.id } },
+          data: { isCentralWarehouse: false },
+        });
       }
+      return tx.location.update({ where: { id: req.params.id }, data });
     });
     res.json(updated);
   } catch (e) { res.status(500).json({ error: e.message }); }
