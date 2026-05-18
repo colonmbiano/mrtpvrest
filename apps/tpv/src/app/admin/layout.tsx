@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import Link from "next/link";
-import { Settings, Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, ChevronRight, Grid3x3, Palette, Layers, BookOpen, LogOut } from "lucide-react";
+import { Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, Grid3x3, Palette, Layers, BookOpen, LogOut } from "lucide-react";
 
 const ADMIN_ROLES = ["OWNER", "ADMIN", "MANAGER"] as const;
 
