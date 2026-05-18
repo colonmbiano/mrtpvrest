@@ -143,11 +143,17 @@ export default function TablesFloorPlan({
   }
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    let cancelled = false;
+    // Arranque diferido (ver impresoras): evita set-state-in-effect
+    // tanto del fetchAll() como de los resets de editing/dirty.
+    queueMicrotask(() => {
+      if (cancelled) return;
       fetchAll();
       setEditing(false);
       setDirty(false);
-    }
+    });
+    return () => { cancelled = true; };
   }, [open]);
 
   // Refresca los colores de tiempo cada 60s mientras el modal está abierto.

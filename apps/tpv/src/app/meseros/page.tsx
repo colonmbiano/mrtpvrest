@@ -154,7 +154,10 @@ export default function WaiterFloorPlanPage() {
   }, []);
 
   useEffect(() => {
-    loadTables(false);
+    let cancelled = false;
+    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) loadTables(false); });
+    return () => { cancelled = true; };
   }, [loadTables]);
 
   // Refresh ligero cada 45s — la sala no cambia de estado tan rápido

@@ -51,7 +51,11 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   }
 
   useEffect(() => {
-    if (driver) fetchMovements();
+    if (!driver) return;
+    let cancelled = false;
+    // Arranque diferido (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) fetchMovements(); });
+    return () => { cancelled = true; };
   }, [driver]);
 
   async function handleAddMovement(e: React.FormEvent) {

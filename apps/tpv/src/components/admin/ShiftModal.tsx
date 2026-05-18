@@ -42,7 +42,10 @@ export default function ShiftModal({ employee, onClose }: Props) {
   }
 
   useEffect(() => {
-    fetchShift();
+    let cancelled = false;
+    // Arranque diferido (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) fetchShift(); });
+    return () => { cancelled = true; };
   }, []);
 
   async function openShift() {

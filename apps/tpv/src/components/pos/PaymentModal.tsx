@@ -131,19 +131,24 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   useEffect(() => {
     if (!isOpen || !isDelivery) return;
     let cancelled = false;
-    setDriversLoading(true);
-    api.get<DriverLite[]>("/api/delivery")
-      .then(({ data }) => {
-        if (cancelled) return;
-        const active = (Array.isArray(data) ? data : []).filter(
-          (d) => d.isActive !== false,
-        );
-        setDrivers(active);
-        // Auto-seleccionar único disponible para ahorrar un tap.
-        if (active.length === 1) setDriverId(active[0]!.id);
-      })
-      .catch(() => { if (!cancelled) setDrivers([]); })
-      .finally(() => { if (!cancelled) setDriversLoading(false); });
+    // Arranque diferido (ver impresoras): el setDriversLoading(true) ya no
+    // corre sincrónicamente en el effect (set-state-in-effect).
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setDriversLoading(true);
+      api.get<DriverLite[]>("/api/delivery")
+        .then(({ data }) => {
+          if (cancelled) return;
+          const active = (Array.isArray(data) ? data : []).filter(
+            (d) => d.isActive !== false,
+          );
+          setDrivers(active);
+          // Auto-seleccionar único disponible para ahorrar un tap.
+          if (active.length === 1) setDriverId(active[0]!.id);
+        })
+        .catch(() => { if (!cancelled) setDrivers([]); })
+        .finally(() => { if (!cancelled) setDriversLoading(false); });
+    });
     return () => { cancelled = true; };
   }, [isOpen, isDelivery]);
 

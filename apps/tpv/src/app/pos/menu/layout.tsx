@@ -161,9 +161,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     if (!mounted || isLocked) return;
-    fetchOpenOrders();
+    let cancelled = false;
+    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) fetchOpenOrders(); });
     const id = setInterval(fetchOpenOrders, 30000);
-    return () => clearInterval(id);
+    return () => { cancelled = true; clearInterval(id); };
   }, [mounted, isLocked, fetchOpenOrders]);
 
   const fetchShift = useCallback(async () => {
@@ -177,9 +179,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     if (!mounted || isLocked) return;
-    fetchShift();
+    let cancelled = false;
+    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) fetchShift(); });
     const id = setInterval(fetchShift, 60000);
-    return () => clearInterval(id);
+    return () => { cancelled = true; clearInterval(id); };
   }, [mounted, isLocked, fetchShift]);
 
   const handleConfirmDrawerPayment = async (method: string) => {
@@ -474,7 +478,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // Zustand (B3). Mantenemos solo el botón "Tickets abiertos" del drawer.
 
   useEffect(() => {
-    if (showOrders) fetchOpenOrders();
+    if (!showOrders) return;
+    let cancelled = false;
+    // Arranque diferido (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) fetchOpenOrders(); });
+    return () => { cancelled = true; };
   }, [showOrders, fetchOpenOrders]);
 
   // Auto-abrir el drawer cuando llegamos desde el atajo "Tickets Abiertos"
@@ -484,12 +492,17 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("orders") === "1") {
+    if (params.get("orders") !== "1") return;
+    let cancelled = false;
+    // Diferido a microtask (ver impresoras): setShowOrders ya no corre
+    // sincrónicamente en el effect (set-state-in-effect).
+    queueMicrotask(() => {
+      if (cancelled) return;
       setShowOrders(true);
       // Limpia el query param para que un refresh manual no lo reabra.
-      const url = window.location.pathname;
-      window.history.replaceState({}, "", url);
-    }
+      window.history.replaceState({}, "", window.location.pathname);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const drawerOrders = openOrders.map((o: any) => ({

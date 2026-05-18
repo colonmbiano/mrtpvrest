@@ -44,7 +44,11 @@ export default function MenuEditorPage() {
   };
 
   useEffect(() => {
-    fetchData();
+    let cancelled = false;
+    // Arranque diferido (ver impresoras): evita set-state-in-effect del
+    // setLoading(true) síncrono de fetchData, mismo comportamiento.
+    queueMicrotask(() => { if (!cancelled) fetchData(); });
+    return () => { cancelled = true; };
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {

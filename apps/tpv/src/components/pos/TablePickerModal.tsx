@@ -63,7 +63,11 @@ export default function TablePickerModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    fetchTables();
+    let cancelled = false;
+    // Arranque diferido (ver impresoras): evita set-state-in-effect del
+    // setLoading(true) síncrono de fetchTables.
+    queueMicrotask(() => { if (!cancelled) fetchTables(); });
+    return () => { cancelled = true; };
   }, [isOpen]);
 
   // handleRelease eliminado: las mesas OCUPADAS ahora se unen al ticket
