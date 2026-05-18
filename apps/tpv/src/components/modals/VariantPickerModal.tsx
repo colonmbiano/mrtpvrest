@@ -25,7 +25,7 @@ export default function VariantPickerModal({
       <div className="relative w-full sm:max-w-lg bg-surf-1 border border-bd rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
         <div className="px-5 py-4 border-b border-bd flex items-center justify-between shrink-0">
           <div className="flex flex-col min-w-0">
-            <span className="eyebrow">ELIGE TAMAÑO</span>
+            <span className="eyebrow">ELIGE OPCIÓN</span>
             <h2 className="text-[18px] font-black truncate">{product.name}</h2>
           </div>
           <button
