@@ -82,6 +82,50 @@ router.delete('/categories/:id', authenticate, requireTenantAccess, requireAdmin
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Helper: sincroniza las variantes (MenuItemVariant) de un item a partir
+// de los Grupos de Variantes (VariantTemplate) marcados en el admin.
+// El TPV solo abre el selector de sabores cuando el item tiene
+// hasVariants=true Y al menos una variante, así que mantenemos ese flag
+// alineado con la selección. Es idempotente: reemplaza el set completo,
+// de modo que marcar/desmarcar grupos agrega o quita variantes.
+async function syncItemVariantsFromTemplates(menuItemId, restaurantId, variantTemplateIds) {
+  const ids = Array.isArray(variantTemplateIds)
+    ? [...new Set(variantTemplateIds.filter(Boolean))]
+    : [];
+
+  const templates = ids.length
+    ? await prisma.variantTemplate.findMany({
+        where: { id: { in: ids }, restaurantId },
+        include: { options: { orderBy: { sortOrder: 'asc' } } },
+      })
+    : [];
+
+  // Respeta el orden en que se seleccionaron los grupos y deduplica
+  // opciones repetidas por nombre (dos grupos con "BBQ" → una sola).
+  const byId = new Map(templates.map((t) => [t.id, t]));
+  const seen = new Set();
+  const data = [];
+  for (const id of ids) {
+    const tpl = byId.get(id);
+    if (!tpl) continue;
+    for (const opt of tpl.options) {
+      const key = opt.name.trim().toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      data.push({ menuItemId, name: opt.name, price: opt.price, sortOrder: data.length });
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.menuItemVariant.deleteMany({ where: { menuItemId } }),
+    ...(data.length ? [prisma.menuItemVariant.createMany({ data })] : []),
+    prisma.menuItem.update({
+      where: { id: menuItemId },
+      data: { hasVariants: data.length > 0 },
+    }),
+  ]);
+}
+
 // ── Items ─────────────────────────────────────────────────────────────────
 
 router.get('/items', async (req, res) => {
@@ -149,13 +193,30 @@ router.get('/items/:id', async (req, res) => {
       },
     })
     if (!item) return res.status(404).json({ error: 'Platillo no encontrado' })
-    res.json(item)
+
+    // Reconstruye qué Grupos de Variantes están aplicados para que el form
+    // del admin re-marque los checkboxes. Sin esto el form mandaría
+    // variantTemplateIds=[] al re-editar y el sync borraría las variantes.
+    // Un grupo se considera aplicado si todos los nombres de sus opciones
+    // existen entre las variantes del item (las creamos a partir de ellos).
+    const templates = await prisma.variantTemplate.findMany({
+      where: { restaurantId },
+      include: { options: { select: { name: true } } },
+    })
+    const variantNames = new Set(item.variants.map((v) => v.name.trim().toLowerCase()))
+    const variantTemplates = templates
+      .filter((t) =>
+        t.options.length > 0 &&
+        t.options.every((o) => variantNames.has(o.name.trim().toLowerCase())))
+      .map((t) => ({ id: t.id, name: t.name }))
+
+    res.json({ ...item, variantTemplates })
   } catch (e) { res.status(500).json({ error: 'Error al obtener platillo' }) }
 })
 
 router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { categoryId, name, description, imageUrl, price, preparationTime, isPopular, isPromo, activeDays } = req.body
+    const { categoryId, name, description, imageUrl, price, preparationTime, isPopular, isPromo, activeDays, variantTemplateIds } = req.body
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
 
     const category = await prisma.category.findUnique({ where: { id: categoryId, restaurantId: req.user?.restaurantId || req.restaurantId } });
@@ -175,13 +236,16 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
         restaurantId: req.user?.restaurantId || req.restaurantId
       },
     })
+    if (variantTemplateIds !== undefined) {
+      await syncItemVariantsFromTemplates(item.id, item.restaurantId, variantTemplateIds)
+    }
     res.status(201).json(item)
   } catch (e) { res.status(500).json({ error: 'Error al crear platillo' }) }
 })
 
 router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, categoryId, isPromo, activeDays } = req.body
+    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, categoryId, isPromo, activeDays, variantTemplateIds } = req.body
     const item = await prisma.menuItem.update({
       where: {
         id: req.params.id,
@@ -200,6 +264,13 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
         ...(activeDays !== undefined && { activeDays }),
       },
     })
+    if (variantTemplateIds !== undefined) {
+      await syncItemVariantsFromTemplates(
+        item.id,
+        req.user?.restaurantId || req.restaurantId,
+        variantTemplateIds,
+      )
+    }
     res.json(item)
   } catch (e) { res.status(500).json({ error: 'Error al actualizar platillo' }) }
 })
