@@ -67,27 +67,31 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const [previousItems, setPreviousItems] = useState<any[]>([]);
   const [_loadingHistory, setLoadingHistory] = useState(false);
 
-  // Cargar historial de la orden si estamos en modo "extender"
+  // Cargar historial de la orden si estamos en modo "extender". Diferido
+  // a microtask (ver impresoras): el setState ya no corre sincrónicamente
+  // en el effect (set-state-in-effect).
   useEffect(() => {
-    if (!activeOrderId) {
-      setPreviousItems([]);
-      return;
-    }
-
-    const fetchHistory = async () => {
-      try {
-        setLoadingHistory(true);
-        const { data } = await api.get(`/api/orders/${activeOrderId}`);
-        // Combinamos todos los items de todas las rondas para mostrarlos como historial
-        setPreviousItems(data.items || []);
-      } catch (err) {
-        console.error("Error al cargar historial de orden:", err);
-      } finally {
-        setLoadingHistory(false);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (!activeOrderId) {
+        setPreviousItems([]);
+        return;
       }
-    };
-
-    fetchHistory();
+      (async () => {
+        try {
+          setLoadingHistory(true);
+          const { data } = await api.get(`/api/orders/${activeOrderId}`);
+          // Combinamos todos los items de todas las rondas como historial
+          if (!cancelled) setPreviousItems(data.items || []);
+        } catch (err) {
+          console.error("Error al cargar historial de orden:", err);
+        } finally {
+          if (!cancelled) setLoadingHistory(false);
+        }
+      })();
+    });
+    return () => { cancelled = true; };
   }, [activeOrderId]);
 
   // Sugerencias de propina vienen de la config remota (tpvConfig.extra) si

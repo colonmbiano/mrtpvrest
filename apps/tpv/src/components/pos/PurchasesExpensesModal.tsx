@@ -205,18 +205,22 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
     }
   }
 
-  // Reset al cerrar
-  useEffect(() => {
-    if (isOpen) return;
-    setTab("expense");
-    setPaymentMethod("CASH_DRAWER");
-    setCategoryId("");
-    setConcept("");
-    setAmount("");
-    setSupplierId("");
-    setLines([]);
-    setNotes("");
-  }, [isOpen]);
+  // Reset al cerrar. Render-phase (ver CategoryModal): equivalente al
+  // efecto pero sin set-state-in-effect.
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (prevIsOpen !== isOpen) {
+    setPrevIsOpen(isOpen);
+    if (!isOpen) {
+      setTab("expense");
+      setPaymentMethod("CASH_DRAWER");
+      setCategoryId("");
+      setConcept("");
+      setAmount("");
+      setSupplierId("");
+      setLines([]);
+      setNotes("");
+    }
+  }
 
   const purchaseTotal = useMemo(() => {
     return lines.reduce((s, l) => {
