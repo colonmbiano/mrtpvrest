@@ -280,6 +280,9 @@ model Restaurant {
   operatingExpenseCategories OperatingExpenseCategory[]
   operatingExpenses          OperatingExpense[]
 
+  // FASE COMPRAS · repartos de Bodega Central a sucursales
+  stockTransfers StockTransfer[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -311,6 +314,11 @@ model Location {
 
   // Cerebro Adaptativo: tipo de negocio por sucursal
   businessType BusinessType @default(RESTAURANT)
+
+  // FASE COMPRAS · marca esta sucursal como la Bodega Central del restaurant.
+  // Sólo una sucursal por restaurant debería tenerlo en true. Sólo tiene
+  // efecto cuando RestaurantConfig.centralWarehouseEnabled = true.
+  isCentralWarehouse Boolean @default(false)
 
   // FASE 13 · CAPACIDADES POR SUCURSAL
   // Flags que activan/desactivan secciones del TPV según el modelo
@@ -356,6 +364,10 @@ model Location {
   stockMovements StockMovement[]
   purchaseOrders PurchaseOrder[]
   physicalCounts PhysicalCount[]
+
+  // FASE COMPRAS · repartos desde la Bodega Central
+  stockTransfersFrom   StockTransfer[]     @relation("TransferFromLocation")
+  stockTransferItemsTo StockTransferItem[] @relation("TransferToLocation")
 
   // FASE COMPRAS/GASTOS · gastos operativos registrados desde el TPV
   operatingExpenses OperatingExpense[]
@@ -407,6 +419,9 @@ model User {
 
   // FASE COMPRAS/GASTOS · quién registró el gasto operativo
   operatingExpensesCreated OperatingExpense[]
+
+  // FASE COMPRAS · quién ejecutó un reparto desde Bodega Central
+  stockTransfersCreated StockTransfer[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -866,6 +881,13 @@ model RestaurantConfig {
 
   storefrontTheme String @default("KAWAII") // KAWAII | HALO | BRUTALIST
 
+  // FASE COMPRAS · interruptor maestro del modelo "Bodega Central".
+  // false (default) → cada compra entra directo a la bodega de la sucursal
+  // (flujo simple, sin cambios para clientes de una sola sucursal).
+  // true → las compras entran a la sucursal marcada isCentralWarehouse y
+  // luego se reparten a las demás vía StockTransfer.
+  centralWarehouseEnabled Boolean @default(false)
+
   updatedAt DateTime @updatedAt
 
   @@map("restaurant_config")
@@ -1147,6 +1169,7 @@ model Ingredient {
   batches            InventoryBatch[]
   purchaseOrderItems PurchaseOrderItem[]
   physicalCountItems PhysicalCountItem[]
+  stockTransferItems StockTransferItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2317,6 +2340,67 @@ model PhysicalCountItem {
   @@index([physicalCountId])
   @@index([ingredientId])
   @@map("physical_count_items")
+}
+
+// ── StockTransfer · reparto de Bodega Central → sucursales ───────────────
+//
+// Sólo se usa cuando RestaurantConfig.centralWarehouseEnabled = true.
+// Un reparto crea, en una sola transacción, por cada línea:
+//   1. StockMovement TRANSFER_OUT en la Bodega Central (delta negativo)
+//   2. StockMovement TRANSFER_IN  en la sucursal destino (delta positivo)
+//   3. Ingredient.stock -= qty (central)  /  += qty (sucursal destino)
+//   4. StockTransferItem (detalle auditable)
+// El stock total del restaurant se conserva: lo que sale de central entra
+// en las sucursales. Las recetas siguen descontando del stock por sucursal.
+enum StockTransferStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
+}
+
+model StockTransfer {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  fromLocationId String
+  fromLocation   Location @relation("TransferFromLocation", fields: [fromLocationId], references: [id], onDelete: Cascade)
+
+  status    StockTransferStatus @default(COMPLETED)
+  notes     String?
+  totalCost Float               @default(0)
+
+  items StockTransferItem[]
+
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([restaurantId, createdAt])
+  @@index([fromLocationId])
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id              String        @id @default(cuid())
+  stockTransferId String
+  stockTransfer   StockTransfer @relation(fields: [stockTransferId], references: [id], onDelete: Cascade)
+
+  // Ingrediente origen (la fila del catálogo de la Bodega Central).
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+
+  toLocationId String
+  toLocation   Location @relation("TransferToLocation", fields: [toLocationId], references: [id], onDelete: Cascade)
+
+  qty            Float
+  unitCostAtMove Float?
+
+  @@index([stockTransferId])
+  @@index([ingredientId])
+  @@index([toLocationId])
+  @@map("stock_transfer_items")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
