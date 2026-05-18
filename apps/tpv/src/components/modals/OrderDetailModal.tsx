@@ -58,11 +58,16 @@ export default function OrderDetailModal({
   useEffect(() => {
     if (!open || !orderId || !fetchOrder) return;
     let cancelled = false;
-    setLoading(true);
-    fetchOrder(orderId)
-      .then((o) => { if (!cancelled) setOrder(o); })
-      .catch((e) => toast.error(e?.message ?? "No se pudo cargar la orden"))
-      .finally(() => { if (!cancelled) setLoading(false); });
+    // Arranque diferido (ver impresoras): el setLoading(true) ya no corre
+    // sincrónicamente en el effect (set-state-in-effect).
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+      fetchOrder(orderId)
+        .then((o) => { if (!cancelled) setOrder(o); })
+        .catch((e) => toast.error(e?.message ?? "No se pudo cargar la orden"))
+        .finally(() => { if (!cancelled) setLoading(false); });
+    });
     return () => { cancelled = true; };
   }, [open, orderId, fetchOrder]);
 

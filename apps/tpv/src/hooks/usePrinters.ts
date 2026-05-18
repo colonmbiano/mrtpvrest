@@ -42,13 +42,15 @@ export function usePrinters() {
   }, []);
 
   useEffect(() => {
-    load();
+    let cancelled = false;
+    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) load(); });
     const onRefresh = () => load();
     if (typeof window !== "undefined") {
       window.addEventListener("printers-changed", onRefresh);
-      return () => window.removeEventListener("printers-changed", onRefresh);
+      return () => { cancelled = true; window.removeEventListener("printers-changed", onRefresh); };
     }
-    return undefined;
+    return () => { cancelled = true; };
   }, [load]);
 
   return { printers, loaded, reload: load };
@@ -131,11 +133,13 @@ export function useKitchenConfig() {
   }, []);
 
   useEffect(() => {
-    load();
-    if (typeof window === "undefined") return;
+    let cancelled = false;
+    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) load(); });
+    if (typeof window === "undefined") return () => { cancelled = true; };
     const onRefresh = () => load();
     window.addEventListener("ticket-config-changed", onRefresh);
-    return () => window.removeEventListener("ticket-config-changed", onRefresh);
+    return () => { cancelled = true; window.removeEventListener("ticket-config-changed", onRefresh); };
   }, [load]);
 
   return { kitchenConfig: config, loaded };

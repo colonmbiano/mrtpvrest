@@ -110,7 +110,10 @@ export default function TicketConfigPage() {
   };
 
   useEffect(() => {
-    fetchConfig();
+    let cancelled = false;
+    // Arranque diferido (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) fetchConfig(); });
+    return () => { cancelled = true; };
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {

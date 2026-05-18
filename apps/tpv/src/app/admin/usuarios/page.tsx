@@ -130,7 +130,11 @@ export default function UsuariosAdmin() {
   };
 
   useEffect(() => {
-    refresh();
+    let cancelled = false;
+    // Arranque diferido (ver impresoras): evita set-state-in-effect del
+    // setLoading(true) síncrono de refresh; refresh() manual no se toca.
+    queueMicrotask(() => { if (!cancelled) refresh(); });
+    return () => { cancelled = true; };
   }, []);
 
   const filtered = employees.filter(
