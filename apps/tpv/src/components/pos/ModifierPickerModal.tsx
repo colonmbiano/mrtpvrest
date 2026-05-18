@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { X, Check } from "lucide-react";
 import Button from "@/components/ui/Button";
 import type {
@@ -56,8 +56,11 @@ export default function ModifierPickerModal({
   // el item ya creado y la imprime el printer service junto al modificador.
   const [notes, setNotes] = useState("");
 
-  // Reset cuando cambia el producto
-  useEffect(() => {
+  // Reset cuando cambia el producto. Render-phase (ver CategoryModal):
+  // equivalente al efecto pero sin set-state-in-effect.
+  const [prevGroups, setPrevGroups] = useState(groups);
+  if (prevGroups !== groups) {
+    setPrevGroups(groups);
     const init: Record<string, Modifier[]> = {};
     for (const g of groups) {
       const defaults = g.modifiers.filter((m) => m.isDefault);
@@ -65,7 +68,7 @@ export default function ModifierPickerModal({
     }
     setSelections(init);
     setNotes("");
-  }, [groups]);
+  }
 
   function toggle(group: ModifierGroup, mod: Modifier) {
     setSelections((prev) => {

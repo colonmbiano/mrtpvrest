@@ -10,7 +10,6 @@ import {
   PlusCircle,
   Lock,
 } from "lucide-react";
-import Button from "@/components/ui/Button";
 import CategoryRail from "@/components/pos/CategoryRail";
 import ProductCard from "@/components/pos/ProductCard";
 import { useRouter } from "next/navigation";
@@ -120,36 +119,41 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   // anularlos se requiere un flujo separado con PIN de gerente — esa pantalla
   // vive fuera del catálogo de mesero.
   useEffect(() => {
-    if (!isAppendMode || !activeOrderId) {
-      setLockedItems([]);
-      setLockedTotal(0);
-      return;
-    }
     let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await api.get(`/api/orders/${activeOrderId}`);
-        if (cancelled) return;
-        const items: LockedItem[] = (data?.items || []).map((it: any) => {
-          const qty = Number(it.quantity ?? 1);
-          const unit = Number(it.unitPrice ?? it.price ?? 0);
-          return {
-            id: String(it.id),
-            name: it.name || it.menuItem?.name || "Producto",
-            price: unit,
-            quantity: qty,
-            subtotal: Number(it.subtotal ?? unit * qty),
-          };
-        });
-        setLockedItems(items);
-        setLockedTotal(Number(data?.total ?? 0));
-      } catch {
-        if (!cancelled) {
-          setLockedItems([]);
-          setLockedTotal(0);
-        }
+    // Diferido a microtask (ver impresoras): el reset síncrono de
+    // lockedItems/lockedTotal ya no corre dentro del effect.
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (!isAppendMode || !activeOrderId) {
+        setLockedItems([]);
+        setLockedTotal(0);
+        return;
       }
-    })();
+      (async () => {
+        try {
+          const { data } = await api.get(`/api/orders/${activeOrderId}`);
+          if (cancelled) return;
+          const items: LockedItem[] = (data?.items || []).map((it: any) => {
+            const qty = Number(it.quantity ?? 1);
+            const unit = Number(it.unitPrice ?? it.price ?? 0);
+            return {
+              id: String(it.id),
+              name: it.name || it.menuItem?.name || "Producto",
+              price: unit,
+              quantity: qty,
+              subtotal: Number(it.subtotal ?? unit * qty),
+            };
+          });
+          setLockedItems(items);
+          setLockedTotal(Number(data?.total ?? 0));
+        } catch {
+          if (!cancelled) {
+            setLockedItems([]);
+            setLockedTotal(0);
+          }
+        }
+      })();
+    });
     return () => {
       cancelled = true;
     };

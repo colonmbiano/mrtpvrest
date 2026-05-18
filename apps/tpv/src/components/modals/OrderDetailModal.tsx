@@ -47,18 +47,27 @@ export default function OrderDetailModal({
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Reset al cerrar / sin orden. Render-phase (ver CategoryModal):
+  // equivalente al efecto pero sin set-state-in-effect.
+  const [prevSync, setPrevSync] = useState({ open, orderId });
+  if (prevSync.open !== open || prevSync.orderId !== orderId) {
+    setPrevSync({ open, orderId });
+    if (!open || !orderId) setOrder(null);
+  }
+
   useEffect(() => {
-    if (!open || !orderId) {
-      setOrder(null);
-      return;
-    }
-    if (!fetchOrder) return;
+    if (!open || !orderId || !fetchOrder) return;
     let cancelled = false;
-    setLoading(true);
-    fetchOrder(orderId)
-      .then((o) => { if (!cancelled) setOrder(o); })
-      .catch((e) => toast.error(e?.message ?? "No se pudo cargar la orden"))
-      .finally(() => { if (!cancelled) setLoading(false); });
+    // Arranque diferido (ver impresoras): el setLoading(true) ya no corre
+    // sincrónicamente en el effect (set-state-in-effect).
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+      fetchOrder(orderId)
+        .then((o) => { if (!cancelled) setOrder(o); })
+        .catch((e) => toast.error(e?.message ?? "No se pudo cargar la orden"))
+        .finally(() => { if (!cancelled) setLoading(false); });
+    });
     return () => { cancelled = true; };
   }, [open, orderId, fetchOrder]);
 

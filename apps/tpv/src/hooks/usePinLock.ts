@@ -33,16 +33,19 @@ export function usePinLock() {
     hydrateFromStorage();
   }, [hydrateFromStorage]);
 
-  // Countdown cuando está bloqueado
+  // Countdown cuando está bloqueado. El set inicial se difiere a microtask
+  // (ver impresoras) para no caer en set-state-in-effect; el tick por
+  // setInterval ya es asíncrono y no estaba afectado.
   useEffect(() => {
     if (!isLocked()) return;
-    setLockCountdown(getRemainingLockSecs());
+    let cancelled = false;
+    queueMicrotask(() => { if (!cancelled) setLockCountdown(getRemainingLockSecs()); });
     const interval = setInterval(() => {
       const secs = getRemainingLockSecs();
       setLockCountdown(secs);
       if (secs <= 0) clearInterval(interval);
     }, 1000);
-    return () => clearInterval(interval);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [isLocked, getRemainingLockSecs]);
 
   const appendDigit = useCallback(

@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { useHydrated } from "@/hooks/useClientValue";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -38,9 +39,11 @@ const SECTIONS = [
 
 export default function Sidebar() {
   const path = usePathname();
-  const [user, setUser] = useState<any>(null);
+  // getUser() lee localStorage (objeto): se computa tras hidratar con
+  // useMemo en vez de setState en effect. SSR/primer render → null.
+  const hydrated = useHydrated();
+  const user = useMemo<any>(() => (hydrated ? getUser() : null), [hydrated]);
   const [imgError, setImgError] = useState(false);
-  useEffect(() => { setUser(getUser()); }, []);
 
   return (
     <aside className="fixed left-0 top-0 h-full w-56 flex flex-col border-r z-40"

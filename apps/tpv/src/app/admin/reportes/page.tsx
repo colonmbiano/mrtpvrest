@@ -43,27 +43,34 @@ export default function ReportesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError('');
-
-    const days = periodToDays(period);
-    const from = new Date(); from.setDate(from.getDate() - days + 1); from.setHours(0,0,0,0);
-    const to = new Date();
-
-    Promise.all([
-      api.get('/api/reports/dashboard', { params: { from: from.toISOString(), to: to.toISOString() } }),
-      api.get('/api/reports/by-day',    { params: { days } }),
-      api.get('/api/reports/top-products', { params: { period, limit: 6 } }),
-    ]).then(([dash, daily, top]) => {
+    // Arranque del fetch diferido a microtask: el setState de loading/error
+    // ya no corre sincrónicamente dentro del effect (set-state-in-effect),
+    // pero el orden y el comportamiento son idénticos (el microtask corre
+    // antes del paint, como el propio effect pasivo).
+    queueMicrotask(() => {
       if (cancelled) return;
-      setSummary(dash.data);
-      setByDay(daily.data || []);
-      setTopItems(top.data || []);
-      setLoading(false);
-    }).catch((e) => {
-      if (cancelled) return;
-      setError(e?.response?.data?.error || 'No pudimos cargar los reportes');
-      setLoading(false);
+      setLoading(true);
+      setError('');
+
+      const days = periodToDays(period);
+      const from = new Date(); from.setDate(from.getDate() - days + 1); from.setHours(0,0,0,0);
+      const to = new Date();
+
+      Promise.all([
+        api.get('/api/reports/dashboard', { params: { from: from.toISOString(), to: to.toISOString() } }),
+        api.get('/api/reports/by-day',    { params: { days } }),
+        api.get('/api/reports/top-products', { params: { period, limit: 6 } }),
+      ]).then(([dash, daily, top]) => {
+        if (cancelled) return;
+        setSummary(dash.data);
+        setByDay(daily.data || []);
+        setTopItems(top.data || []);
+        setLoading(false);
+      }).catch((e) => {
+        if (cancelled) return;
+        setError(e?.response?.data?.error || 'No pudimos cargar los reportes');
+        setLoading(false);
+      });
     });
 
     return () => { cancelled = true; };

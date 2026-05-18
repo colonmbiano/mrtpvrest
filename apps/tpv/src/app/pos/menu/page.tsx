@@ -100,11 +100,14 @@ export default function CatalogPage() {
   }, []);
 
   // Reset al cambiar ticket activo — evita que el cajero salte a otro
-  // ticket y siga "atrapado" viendo la categoría del anterior.
-  useEffect(() => {
+  // ticket y siga "atrapado" viendo la categoría del anterior. Render-phase
+  // (ver CategoryModal): equivalente al efecto pero sin set-state-in-effect.
+  const [prevTicketId, setPrevTicketId] = useState(ticket.id);
+  if (prevTicketId !== ticket.id) {
+    setPrevTicketId(ticket.id);
     setView("categories");
     setActiveCat(null);
-  }, [ticket.id]);
+  }
 
   const categoryCounts = useMemo(() => {
     const map: Record<string, number> = {};

@@ -205,18 +205,22 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
     }
   }
 
-  // Reset al cerrar
-  useEffect(() => {
-    if (isOpen) return;
-    setTab("expense");
-    setPaymentMethod("CASH_DRAWER");
-    setCategoryId("");
-    setConcept("");
-    setAmount("");
-    setSupplierId("");
-    setLines([]);
-    setNotes("");
-  }, [isOpen]);
+  // Reset al cerrar. Render-phase (ver CategoryModal): equivalente al
+  // efecto pero sin set-state-in-effect.
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (prevIsOpen !== isOpen) {
+    setPrevIsOpen(isOpen);
+    if (!isOpen) {
+      setTab("expense");
+      setPaymentMethod("CASH_DRAWER");
+      setCategoryId("");
+      setConcept("");
+      setAmount("");
+      setSupplierId("");
+      setLines([]);
+      setNotes("");
+    }
+  }
 
   const purchaseTotal = useMemo(() => {
     return lines.reduce((s, l) => {
@@ -725,8 +729,8 @@ function PurchaseTab(props: {
           <div className="rounded-2xl bg-white/5 border border-dashed border-white/10 p-6 text-center space-y-2">
             <Camera size={28} className="text-white/30 mx-auto" />
             <p className="text-[12px] text-white/40">
-              Toca <strong className="text-violet-300">"Escanear ticket"</strong> para llenar la lista con IA,
-              o <strong className="text-amber-400">"Agregar"</strong> para meterlos a mano.
+              Toca <strong className="text-violet-300">&quot;Escanear ticket&quot;</strong> para llenar la lista con IA,
+              o <strong className="text-amber-400">&quot;Agregar&quot;</strong> para meterlos a mano.
             </p>
           </div>
         ) : (
@@ -745,7 +749,7 @@ function PurchaseTab(props: {
                 {needsMatch && (
                   <div className="col-span-12 flex items-center gap-2 text-[10px] font-bold text-amber-400 pb-1 pl-1">
                     <FileWarning size={12} />
-                    <span>IA detectó "{line.scannedName}" — elige el ingrediente correcto:</span>
+                    <span>IA detectó &quot;{line.scannedName}&quot; — elige el ingrediente correcto:</span>
                   </div>
                 )}
                 <select

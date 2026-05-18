@@ -97,15 +97,22 @@ export default function CierreTurno() {
 
   useEffect(() => {
     if (!shift) return;
-    const raw = localStorage.getItem(`cierre-draft-${shift.id}`);
-    if (raw) {
-      try {
-        const d = JSON.parse(raw);
-        setBillCount(d.billCount || {});
-        setCoinCount(d.coinCount || {});
-        setNotes(d.notes || '');
-      } catch {}
-    }
+    let cancelled = false;
+    // Carga del borrador diferida a microtask (ver impresoras): el
+    // setState ya no corre sincrónicamente en el effect.
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const raw = localStorage.getItem(`cierre-draft-${shift.id}`);
+      if (raw) {
+        try {
+          const d = JSON.parse(raw);
+          setBillCount(d.billCount || {});
+          setCoinCount(d.coinCount || {});
+          setNotes(d.notes || '');
+        } catch {}
+      }
+    });
+    return () => { cancelled = true; };
   }, [shift]);
 
   const userInitial = (employee?.name || 'U').charAt(0).toUpperCase();

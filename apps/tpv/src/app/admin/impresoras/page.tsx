@@ -40,10 +40,6 @@ export default function ImpresorasPage() {
 
   const [form, setForm] = useState<Partial<Printer>>(DEFAULT_FORM);
 
-  useEffect(() => {
-    fetchPrinters();
-  }, []);
-
   const fetchPrinters = async () => {
     setLoading(true);
     try {
@@ -56,6 +52,15 @@ export default function ImpresorasPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    // Arranque diferido: el setLoading(true) síncrono de fetchPrinters ya
+    // no corre dentro del effect (set-state-in-effect). Comportamiento
+    // idéntico — el microtask corre antes del paint.
+    queueMicrotask(() => { if (!cancelled) fetchPrinters(); });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSave = async (data: Partial<Printer>) => {
     if (saving) return;

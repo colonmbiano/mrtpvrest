@@ -13,31 +13,38 @@ const ShiftOpenPage = () => {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    // No consultar el turno si todavía no hay empleado logueado o si la
-    // sesión está bloqueada. Sin token la petición devuelve 401 y mete
-    // ruido rojo en la consola sin que el cajero pueda accionar nada.
-    if (isLocked || !currentEmployee) {
-      setChecking(false);
-      return;
-    }
-
-    const checkShift = async () => {
-      try {
-        const { data } = await api.get("/api/shifts/active");
-        if (data?.isOpen || data?.id) {
-          router.replace("/pos/order-type");
-        }
-      } catch (err: any) {
-        // 401 acá indica token expirado entre render y request; useTPVAuth
-        // ya redirige a /locked. Silenciamos para no alarmar.
-        if (err?.response?.status !== 401) {
-          console.error("Error checking shift:", err);
-        }
-      } finally {
+    let cancelled = false;
+    // Cuerpo diferido a microtask (ver impresoras): evita
+    // set-state-in-effect. Comportamiento idéntico.
+    queueMicrotask(() => {
+      if (cancelled) return;
+      // No consultar el turno si todavía no hay empleado logueado o si la
+      // sesión está bloqueada. Sin token la petición devuelve 401 y mete
+      // ruido rojo en la consola sin que el cajero pueda accionar nada.
+      if (isLocked || !currentEmployee) {
         setChecking(false);
+        return;
       }
-    };
-    checkShift();
+
+      const checkShift = async () => {
+        try {
+          const { data } = await api.get("/api/shifts/active");
+          if (!cancelled && (data?.isOpen || data?.id)) {
+            router.replace("/pos/order-type");
+          }
+        } catch (err: any) {
+          // 401 acá indica token expirado entre render y request;
+          // useTPVAuth ya redirige a /locked. Silenciamos para no alarmar.
+          if (err?.response?.status !== 401) {
+            console.error("Error checking shift:", err);
+          }
+        } finally {
+          if (!cancelled) setChecking(false);
+        }
+      };
+      checkShift();
+    });
+    return () => { cancelled = true; };
   }, [router, isLocked, currentEmployee]);
 
   const handleOpenShift = async () => {

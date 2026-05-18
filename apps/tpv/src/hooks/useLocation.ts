@@ -44,36 +44,43 @@ export function useLocation(): UseLocationResult {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const locationId = localStorage.getItem(STORAGE_KEY);
-    if (!locationId) {
-      setLoading(false);
-      setError("Sucursal no configurada");
-      setLocation(null);
-      return;
-    }
-
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    // Cuerpo diferido a microtask (ver impresoras): el setState síncrono
+    // ya no corre dentro del effect (set-state-in-effect). Comportamiento
+    // idéntico — el microtask corre antes del paint.
+    queueMicrotask(() => {
+      if (cancelled) return;
 
-    api
-      .get<Location>(`/api/locations/${locationId}`)
-      .then((res) => {
-        if (cancelled) return;
-        setLocation(res.data);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const msg =
-          err?.response?.data?.error ||
-          err?.message ||
-          "Error al cargar la sucursal";
-        setError(msg);
+      const locationId = localStorage.getItem(STORAGE_KEY);
+      if (!locationId) {
+        setLoading(false);
+        setError("Sucursal no configurada");
         setLocation(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      api
+        .get<Location>(`/api/locations/${locationId}`)
+        .then((res) => {
+          if (cancelled) return;
+          setLocation(res.data);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          const msg =
+            err?.response?.data?.error ||
+            err?.message ||
+            "Error al cargar la sucursal";
+          setError(msg);
+          setLocation(null);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    });
 
     return () => {
       cancelled = true;

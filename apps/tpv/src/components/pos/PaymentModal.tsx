@@ -131,26 +131,34 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   useEffect(() => {
     if (!isOpen || !isDelivery) return;
     let cancelled = false;
-    setDriversLoading(true);
-    api.get<DriverLite[]>("/api/delivery")
-      .then(({ data }) => {
-        if (cancelled) return;
-        const active = (Array.isArray(data) ? data : []).filter(
-          (d) => d.isActive !== false,
-        );
-        setDrivers(active);
-        // Auto-seleccionar único disponible para ahorrar un tap.
-        if (active.length === 1) setDriverId(active[0]!.id);
-      })
-      .catch(() => { if (!cancelled) setDrivers([]); })
-      .finally(() => { if (!cancelled) setDriversLoading(false); });
+    // Arranque diferido (ver impresoras): el setDriversLoading(true) ya no
+    // corre sincrónicamente en el effect (set-state-in-effect).
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setDriversLoading(true);
+      api.get<DriverLite[]>("/api/delivery")
+        .then(({ data }) => {
+          if (cancelled) return;
+          const active = (Array.isArray(data) ? data : []).filter(
+            (d) => d.isActive !== false,
+          );
+          setDrivers(active);
+          // Auto-seleccionar único disponible para ahorrar un tap.
+          if (active.length === 1) setDriverId(active[0]!.id);
+        })
+        .catch(() => { if (!cancelled) setDrivers([]); })
+        .finally(() => { if (!cancelled) setDriversLoading(false); });
+    });
     return () => { cancelled = true; };
   }, [isOpen, isDelivery]);
 
-  // Reset driver al cerrar para que la próxima orden empiece limpia.
-  useEffect(() => {
+  // Reset driver al cerrar. Render-phase (ver CategoryModal): equivalente
+  // al efecto pero sin set-state-in-effect.
+  const [prevOpenDriver, setPrevOpenDriver] = useState(isOpen);
+  if (prevOpenDriver !== isOpen) {
+    setPrevOpenDriver(isOpen);
     if (!isOpen) setDriverId(null);
-  }, [isOpen]);
+  }
 
   const subtotal = useMemo(
     () => items.reduce((acc, it) => acc + it.subtotal, 0),
@@ -172,14 +180,20 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const grandTotal = total + tipAmount;
 
   // Re-sync cashReceived al total (incluyendo propina) cuando cambia.
-  React.useEffect(() => {
+  // Render-phase (ver CategoryModal): equivalente al efecto pero sin
+  // set-state-in-effect.
+  const [prevCashKey, setPrevCashKey] = useState({ isOpen, grandTotal });
+  if (prevCashKey.isOpen !== isOpen || prevCashKey.grandTotal !== grandTotal) {
+    setPrevCashKey({ isOpen, grandTotal });
     if (isOpen) setCashReceived(grandTotal);
-  }, [isOpen, grandTotal]);
+  }
 
-  // Reset propina al abrir.
-  React.useEffect(() => {
+  // Reset propina al abrir. Render-phase (ver CategoryModal).
+  const [prevOpenTip, setPrevOpenTip] = useState(isOpen);
+  if (prevOpenTip !== isOpen) {
+    setPrevOpenTip(isOpen);
     if (isOpen) setTipPercent(0);
-  }, [isOpen]);
+  }
 
   // FASE 12 · grouping por asiento. Items sin seat → "Compartidos" que
   // se prorratean entre los asientos detectados. Si no hay ningún seat

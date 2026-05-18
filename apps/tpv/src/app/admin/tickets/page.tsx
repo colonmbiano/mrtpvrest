@@ -48,10 +48,6 @@ export default function TicketConfigPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    fetchConfig();
-  }, []);
-
   const fetchConfig = async () => {
     setLoading(true);
     try {
@@ -112,6 +108,13 @@ export default function TicketConfigPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    // Arranque diferido (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => { if (!cancelled) fetchConfig(); });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Armchair, ShoppingBag, Bike, MapPin, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import BaseModal from "@/components/ui/BaseModal";
@@ -40,13 +40,17 @@ export default function ChangeOrderTypeModal({
   const [assignNow, setAssignNow] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  // Render-phase sync (ver CategoryModal): equivalente al efecto de reset
+  // pero sin set-state-in-effect.
+  const [prevSync, setPrevSync] = useState({ open, payload });
+  if (prevSync.open !== open || prevSync.payload !== payload) {
+    setPrevSync({ open, payload });
     if (open && payload) {
       setTarget(payload.currentType === "DINE_IN" ? "TAKEOUT" : payload.currentType);
       setAddress(payload.address ?? "");
       setAssignNow(true);
     }
-  }, [open, payload]);
+  }
 
   if (!payload) return null;
   const isSame = target === payload.currentType;

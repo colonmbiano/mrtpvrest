@@ -1,7 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Clock, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import Chip from "@/components/ui/Chip";
 import api from "@/lib/api";
 
@@ -37,7 +36,6 @@ function fmtTime(iso: string) {
 }
 
 export default function WaiterMyTablesPage() {
-  const router = useRouter();
   const [tables, setTables] = useState<TableRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
