@@ -67,7 +67,7 @@ export default function MenuPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[] as string[], variantTemplateIds:[] as string[] });
+  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -194,7 +194,7 @@ export default function MenuPage() {
   function openForm(item?: any) {
     if (item) {
       setEditItem(item);
-      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", isPromo:item.isPromo||false, activeDays:item.activeDays||[], variantTemplateIds:[] });
+      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", isPromo:item.isPromo||false, activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0 });
       setImagePreview(item.imageUrl||"");
       api.get(`/api/menu/items/${item.id}`).then(r => {
         setComplements(r.data.complements || []);
@@ -204,7 +204,7 @@ export default function MenuPage() {
       }).catch(() => { setComplements([]); setVariants([]); });
     } else {
       setEditItem(null);
-      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[], variantTemplateIds:[] });
+      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
       setImagePreview("");
       setComplements([]);
       setVariants([]);
@@ -786,6 +786,43 @@ export default function MenuPage() {
                       >
                         {creatingCat ? "..." : "Crear"}
                       </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Seleccion multiple de variantes */}
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold mb-2 uppercase tracking-wider" style={{color:"var(--muted)"}}>
+                    Seleccion de Variantes
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setForm(p => ({ ...p, variantMultiSelect: !p.variantMultiSelect }))}
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm text-left transition-all"
+                    style={{
+                      background: form.variantMultiSelect ? "rgba(245,166,35,0.12)" : "var(--surf2)",
+                      border: `1.5px solid ${form.variantMultiSelect ? "var(--gold)" : "var(--border)"}`,
+                    }}
+                  >
+                    <div>
+                      <span className="font-bold">Permitir elegir varias</span>
+                      <p className="text-xs mt-0.5" style={{color:"var(--muted)"}}>Para sabores que se combinan (ej. 1kg de boneless con 3 sabores).</p>
+                    </div>
+                    <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
+                      style={{background: form.variantMultiSelect ? "var(--gold)" : "var(--surf)", border:`1px solid ${form.variantMultiSelect ? "var(--gold)" : "var(--border)"}`}}>
+                      {form.variantMultiSelect && <span className="text-black text-[10px] font-black leading-none">✓</span>}
+                    </div>
+                  </button>
+                  {form.variantMultiSelect && (
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <div>
+                        <label className="block text-[10px] font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>Minimo (0 = opcional)</label>
+                        <input type="number" min={0} value={form.variantMinSelection} onChange={e => setForm(p => ({ ...p, variantMinSelection: Math.max(0, parseInt(e.target.value,10) || 0) }))} className="w-full px-4 py-2.5 rounded-xl text-sm" style={{background:"var(--surf2)",border:"1.5px solid var(--border)",color:"var(--text)"}} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>Maximo (0 = sin tope)</label>
+                        <input type="number" min={0} value={form.variantMaxSelection} onChange={e => setForm(p => ({ ...p, variantMaxSelection: Math.max(0, parseInt(e.target.value,10) || 0) }))} className="w-full px-4 py-2.5 rounded-xl text-sm" style={{background:"var(--surf2)",border:"1.5px solid var(--border)",color:"var(--text)"}} />
+                      </div>
                     </div>
                   )}
                 </div>

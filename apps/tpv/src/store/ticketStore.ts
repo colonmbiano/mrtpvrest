@@ -64,6 +64,9 @@ export type Product = {
   activeDays?: string[];
   promoPrice?: number | null;
   hasVariants?: boolean;
+  variantMultiSelect?: boolean;
+  variantMinSelection?: number;
+  variantMaxSelection?: number;
   variants?: MenuItemVariant[];
   complements?: MenuItemComplement[];
   modifierGroups?: ModifierGroup[];
