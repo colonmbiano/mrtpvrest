@@ -83,8 +83,12 @@ router.get('/orders/:station', async (req, res) => {
     const orders = await prisma.order.findMany({
       where: orderWhere,
       include: {
+        table: true,
         items: {
-          include: { menuItem: { include: { category: true } } }
+          include: {
+            menuItem: { include: { category: true } },
+            modifiers: true,
+          }
         }
       },
       orderBy: { createdAt: 'asc' }
@@ -111,9 +115,27 @@ router.get('/orders/:station', async (req, res) => {
     });
 
     const result = filtered.map(order => ({
-      ...order,
+      id: order.id,
+      orderNumber: order.orderNumber,
+      orderType: order.orderType,
+      tableNumber: order.table?.name ?? order.tableNumber ?? null,
+      customerName: order.customerName,
+      createdAt: order.createdAt,
+      notes: order.notes,
       items: order.items.map(item => ({
-        ...item,
+        id: item.id,
+        menuItemId: item.menuItemId,
+        menuItemName: item.name || item.menuItem?.name || 'Producto sin nombre',
+        quantity: item.quantity,
+        notes: item.notes,
+        station,
+        seatNumber: item.seatNumber,
+        course: item.course,
+        modifiers: (item.modifiers || []).map(mod => ({
+          id: mod.id,
+          name: mod.name || mod.modifier?.name || 'Modificador',
+          priceAdd: mod.priceAdd,
+        })),
         done: itemStatuses.some(s => s.orderItemId === item.id && s.done)
       })),
       allDone: order.items.every(item =>

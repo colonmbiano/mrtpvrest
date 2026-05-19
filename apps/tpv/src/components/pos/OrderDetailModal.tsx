@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { X, Receipt, Printer, Banknote, ChefHat, Pencil, Plus, Minus, Trash2, Check } from "lucide-react";
+import { X, Receipt, Printer, Banknote, ChefHat, Pencil, Plus, Minus, Trash2, Check, Bike } from "lucide-react";
 
 export interface OrderDetailItem {
   /** itemId del backend (OrderItem.id). Requerido para editar/eliminar. */
@@ -29,6 +29,10 @@ interface OrderDetailModalProps {
   /** Reimprime comanda completa a impresoras KITCHEN/BAR. */
   onReprintKitchen?: () => void;
   onCharge?: () => void;
+  /** Cancela la orden completa (status=CANCELLED). Solo admin/manager. */
+  onCancelOrder?: () => void;
+  /** Abre el flujo de asignación de repartidor. Solo para DELIVERY. */
+  onAssignDriver?: () => void;
   /** Si se provee, habilita el modo edición — admin puede cambiar
    *  cantidad/notas o eliminar items de la orden abierta. */
   onUpdateItem?: (itemId: string, patch: { quantity?: number; notes?: string }) => Promise<void> | void;
@@ -68,6 +72,8 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   onReprint,
   onReprintKitchen,
   onCharge,
+  onCancelOrder,
+  onAssignDriver,
   onUpdateItem,
   onDeleteItem,
   updatingItemId,
@@ -78,6 +84,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   if (!isOpen) return null;
   const canEditItems = !!(onUpdateItem || onDeleteItem);
+  const isDelivery = orderType?.toUpperCase() === "DELIVERY" || orderType?.toUpperCase() === "DOMICILIO";
 
   const showSubtotalLine =
     typeof subtotal === "number" && Math.abs(subtotal - total) > 0.001;
@@ -88,6 +95,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
+      {/* ... rest of the component up to actions ... */}
       {/* OVERLAY */}
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-md animate-in fade-in duration-200"
@@ -334,7 +342,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         </div>
 
         {/* ACTIONS */}
-        {(onReprint || onReprintKitchen || onCharge || onMergeOrTransfer) && (
+        {(onReprint || onReprintKitchen || onCharge || onMergeOrTransfer || onCancelOrder || (onAssignDriver && isDelivery)) && (
           <div className="relative z-10 p-4 border-t border-white/5 bg-[#0C0C0E] flex flex-col gap-3 shrink-0">
             {/* DUAL REPRINT (Fase 4) */}
             {(onReprint || onReprintKitchen) && (
@@ -366,13 +374,37 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               </div>
             )}
 
-            {onMergeOrTransfer && (
+            <div className="grid grid-cols-2 gap-3">
+              {onMergeOrTransfer && (
+                <button
+                  type="button"
+                  onClick={onMergeOrTransfer}
+                  className="min-h-[56px] h-14 rounded-2xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                >
+                  ⇄ Mover mesa
+                </button>
+              )}
+
+              {onAssignDriver && isDelivery && (
+                <button
+                  type="button"
+                  onClick={onAssignDriver}
+                  className="min-h-[56px] h-14 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 font-black uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                >
+                  <Bike size={16} />
+                  Asignar Rep.
+                </button>
+              )}
+            </div>
+
+            {onCancelOrder && (
               <button
                 type="button"
-                onClick={onMergeOrTransfer}
-                className="min-h-[56px] h-14 rounded-2xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                onClick={onCancelOrder}
+                className="w-full min-h-[56px] h-14 rounded-2xl bg-[#ef4444]/10 border border-[#ef4444]/30 text-[#ef4444] font-black uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
               >
-                ⇄ Mover / fusionar mesa
+                <Trash2 size={16} />
+                Eliminar ticket
               </button>
             )}
 

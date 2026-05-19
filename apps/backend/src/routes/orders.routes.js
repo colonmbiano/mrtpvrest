@@ -273,8 +273,27 @@ router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
       where: { id: req.params.id, restaurantId },
       include: {
         user: { select: { name: true, phone: true, email: true } },
-        items: { include: { menuItem: true } },
+        items: {
+          include: {
+            modifiers: true,
+            menuItem: {
+              include: {
+                category: {
+                  include: {
+                    printerGroups: {
+                      include: { printerGroup: true }
+                    }
+                  }
+                },
+                printerGroups: {
+                  include: { printerGroup: true }
+                }
+              }
+            }
+          }
+        },
         address: true,
+        table: true,
       }
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });

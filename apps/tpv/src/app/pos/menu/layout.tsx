@@ -32,6 +32,7 @@ import { useKeepAwake } from "@/hooks/useKeepAwake";
 import MergeTableModal from "@/components/pos/MergeTableModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
+import DeliveryAssignModal from "@/components/admin/DeliveryAssignModal";
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
   DINE_IN: "MESA",
@@ -88,6 +89,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [showShift, setShowShift] = useState(false);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [mergeSource, setMergeSource] = useState<any | null>(null);
+  const [assigningOrder, setAssigningOrder] = useState<any | null>(null);
 
   const {
     isLocked,
@@ -101,6 +103,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // al montar el layout y se refresca con el evento `printers-changed`.
   const { printers } = usePrinters();
   const { businessName, businessFooter } = useReceiptIdentity();
+  const { config: ticketConfig } = useFullTicketConfig();
   const { kitchenConfig } = useKitchenConfig();
 
   const fetchOpenOrders = useCallback(async () => {
@@ -265,8 +268,14 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         tip: Number(payOrder.tip ?? 0),
         total: Number(payOrder.total ?? subtotalCalc),
         paymentMethod: method,
-        businessName: businessName || restaurantName || null,
-        businessFooter: businessFooter || null,
+        businessName: ticketConfig?.businessName || businessName || restaurantName || null,
+        businessFooter: ticketConfig?.footer || businessFooter || null,
+        showLogo: ticketConfig?.showLogo,
+        logoUrl: ticketConfig?.logoUrl,
+        showAddress: ticketConfig?.showAddress,
+        address: ticketConfig?.address,
+        showPhone: ticketConfig?.showPhone,
+        phone: ticketConfig?.phone,
       };
 
       // Dispatch a CASHIER printers según el plan.
@@ -360,7 +369,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // las comandas de cocina se enruten igual que en el flow de cobro.
   const orderItemsToTicketItems = (rawItems: any[]): TicketItem[] => {
     return (rawItems || []).map((it: any) => {
-      const itemOverride = (it.printerGroups ?? [])
+      const itemOverride = (it.menuItem?.printerGroups ?? [])
         .map((m: any) => m.printerGroup?.id)
         .filter((id: unknown): id is string => Boolean(id));
       const categoryDefault = (it.menuItem?.category?.printerGroups ?? [])
@@ -415,8 +424,14 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         tip: Number(full.tip ?? 0),
         total: Number(full.total ?? subtotalCalc),
         paymentMethod: full.paymentMethod || null,
-        businessName: businessName || restaurantName || null,
-        businessFooter: businessFooter || null,
+        businessName: ticketConfig?.businessName || businessName || restaurantName || null,
+        businessFooter: ticketConfig?.footer || businessFooter || null,
+        showLogo: ticketConfig?.showLogo,
+        logoUrl: ticketConfig?.logoUrl,
+        showAddress: ticketConfig?.showAddress,
+        address: ticketConfig?.address,
+        showPhone: ticketConfig?.showPhone,
+        phone: ticketConfig?.phone,
       });
 
       if (res.ok > 0 && res.failed.length === 0) {
@@ -472,6 +487,25 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     if (!detailOrder) return;
     await handleReprintKitchen(detailOrder);
   };
+
+  const handleCancelOrderFromDetail = useCallback(async () => {
+    if (!detailOrder) return;
+    if (!confirm(`¿Estás seguro de ELIMINAR el ticket #${detailOrder.orderNumber || detailOrder.id}? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api.put(`/api/orders/${detailOrder.id}/status`, { status: "CANCELLED" });
+      toast.success("Ticket eliminado");
+      setDetailOrder(null);
+      fetchOpenOrders();
+    } catch (err: any) {
+      toast.error("Error al eliminar: " + (err?.response?.data?.error || err?.message));
+    }
+  }, [detailOrder, fetchOpenOrders]);
+
+  const handleAssignDriverFromDetail = useCallback(() => {
+    if (!detailOrder) return;
+    setAssigningOrder(detailOrder);
+    setDetailOrder(null);
+  }, [detailOrder]);
 
   // Tras desbloquear, /pos/order-type ya es la pantalla canónica de elección
   // de tipo. Reabrir el modal aquí causaba un loop infinito al hidratarse
@@ -644,6 +678,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           onReprint={handleReprintFromDetail}
           onReprintKitchen={handleReprintKitchenFromDetail}
           onCharge={isLoanMode ? undefined : handleChargeFromDetailGuarded}
+          onCancelOrder={canEditOpenOrderItems ? handleCancelOrderFromDetail : undefined}
+          onAssignDriver={handleAssignDriverFromDetail}
           onUpdateItem={
             canEditOpenOrderItems &&
             !["DELIVERED", "CANCELLED"].includes(detailOrder.status) &&
@@ -719,7 +755,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
             null
           }
           items={(reprintKitchenOrder.items || []).map((it: any) => {
-            const itemOverride = (it.printerGroups ?? [])
+            const itemOverride = (it.menuItem?.printerGroups ?? [])
               .map((m: any) => m.printerGroup?.id)
               .filter((id: unknown): id is string => Boolean(id));
             const categoryDefault = (it.menuItem?.category?.printerGroups ?? [])
@@ -740,6 +776,18 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                 typeof it.seatNumber === "number" ? it.seatNumber : null,
             };
           })}
+        />
+      )}
+
+      {assigningOrder && (
+        <DeliveryAssignModal
+          order={assigningOrder}
+          onClose={() => setAssigningOrder(null)}
+          onAssigned={() => {
+            setAssigningOrder(null);
+            fetchOpenOrders();
+            toast.success("Repartidor asignado");
+          }}
         />
       )}
 

@@ -15,6 +15,7 @@ type TicketConfig = {
   showPhone: boolean;
   address: string;
   phone: string;
+  logoUrl?: string | null;
 
   // Nuevas opciones
   paperWidth: string;
@@ -47,6 +48,7 @@ export default function TicketConfigPage() {
   const [config, setConfig] = useState<TicketConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const fetchConfig = async () => {
     setLoading(true);
@@ -135,6 +137,24 @@ export default function TicketConfigPage() {
     }
   };
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !config) return;
+
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("image", file);
+
+    try {
+      const { data } = await api.post("/api/upload/image", fd);
+      setConfig({ ...config, logoUrl: data.url });
+    } catch (err) {
+      alert("Error al subir el logo");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-8 text-gray-400">Cargando configuración...</div>;
   }
@@ -204,6 +224,45 @@ export default function TicketConfigPage() {
                 className="w-full bg-[#0a0a0c] border border-[#2d2d30] rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#ffb84d]"
                 placeholder="Ej. ¡Vuelve pronto!"
               />
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-[#2d2d30]">
+            <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+              Logo del Ticket
+            </h3>
+            <div className="flex items-center gap-6 bg-[#0a0a0c] p-4 rounded-2xl border border-[#2d2d30]">
+              <div className="relative w-20 h-20 bg-[#141417] rounded-xl border-2 border-dashed border-[#2d2d30] flex items-center justify-center overflow-hidden shrink-0">
+                {config?.logoUrl ? (
+                  <img src={config.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                ) : (
+                  <span className="text-[10px] text-gray-500 font-bold uppercase text-center px-1">Sin Logo</span>
+                )}
+                {uploading && (
+                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="bg-[#2d2d30] text-white px-4 py-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-[#3d3d40] transition-colors inline-block">
+                  {uploading ? "Subiendo..." : "Subir Nuevo Logo"}
+                  <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} disabled={uploading} />
+                </label>
+                {config?.logoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setConfig({ ...config!, logoUrl: null })}
+                    className="text-[#ef4444] text-[10px] font-bold uppercase tracking-wider text-left hover:underline"
+                  >
+                    Eliminar Logo
+                  </button>
+                )}
+                <p className="text-[10px] text-gray-500 max-w-[200px]">
+                  Sugerencia: Usa un logo en blanco y negro (silueta) para mejor contraste en impresión térmica.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -437,8 +496,14 @@ export default function TicketConfigPage() {
             }}
           >
             {config?.showLogo && (
-              <div className="w-16 h-16 border-2 border-black border-dashed flex items-center justify-center mb-4">
-                <span className="text-xs font-bold">LOGO</span>
+              <div className="mb-4">
+                {config.logoUrl ? (
+                  <img src={config.logoUrl} alt="Logo preview" className="w-20 h-20 object-contain mx-auto" />
+                ) : (
+                  <div className="w-16 h-16 border-2 border-black border-dashed flex items-center justify-center mx-auto">
+                    <span className="text-xs font-bold">LOGO</span>
+                  </div>
+                )}
               </div>
             )}
 
