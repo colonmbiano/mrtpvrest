@@ -7,7 +7,7 @@ import OrderDetailModal from "@/components/pos/OrderDetailModal";
 import ReprintKitchenModal from "@/components/pos/ReprintKitchenModal";
 import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
-import { usePrinters, useReceiptIdentity, useKitchenConfig } from "@/hooks/usePrinters";
+import { usePrinters, useReceiptIdentity, useKitchenConfig, useFullTicketConfig } from "@/hooks/usePrinters";
 import { useHydrated } from "@/hooks/useClientValue";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
