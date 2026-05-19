@@ -215,6 +215,43 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
     });
   }, []);
 
+  // El botón "atrás" del dispositivo (y la tecla Escape) deben cerrar el
+  // modal abierto en vez de no hacer nada o salir de la app. Como los
+  // modales son estado de React y no rutas, empujamos una entrada al
+  // historial al abrir y la consumimos con popstate.
+  const anyOverlayOpen = showConfig || showInfo || showLogout || !!taskPinFor;
+  useEffect(() => {
+    if (!anyOverlayOpen) return;
+
+    const closeOverlays = () => {
+      setShowConfig(false);
+      setShowInfo(false);
+      setShowLogout(false);
+      setTaskPinFor(null);
+      setTaskPinError("");
+    };
+
+    window.history.pushState({ kdsOverlay: true }, "");
+
+    let poppedByBack = false;
+    const onPop = () => { poppedByBack = true; closeOverlays(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeOverlays(); };
+
+    window.addEventListener("popstate", onPop);
+    window.addEventListener("keydown", onKey);
+
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("keydown", onKey);
+      // Si se cerró con la X / Escape (no con el botón atrás) seguimos
+      // teniendo la entrada extra en el historial: la consumimos para no
+      // dejar basura que requiera un segundo "atrás".
+      if (!poppedByBack && window.history.state?.kdsOverlay) {
+        window.history.back();
+      }
+    };
+  }, [anyOverlayOpen]);
+
   // Arranca el TCP listener en port 9100 al montar; al desmontar (o
   // logout) lo detiene. listenForData mantiene una sola subscripción
   // viva — `parseEscPos` traduce el binario a líneas legibles y
@@ -1057,9 +1094,9 @@ function ConfigModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-3xl bg-[#16171a] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.5)] overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-6 py-5 border-b border-white/10">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-2xl rounded-3xl bg-[#16171a] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[92vh]">
+        <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-5 border-b border-white/10">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-[#ffb84d]/15 border border-[#ffb84d]/30 text-[#ffb84d] flex items-center justify-center">
               <Settings2 size={20} />
@@ -1079,7 +1116,7 @@ function ConfigModal({
           </button>
         </div>
 
-        <div className="p-6 flex flex-col gap-6">
+        <div className="p-6 flex flex-col gap-6 overflow-y-auto">
           <section className="flex flex-col gap-3">
             <div>
               <h4 className="text-[11px] font-black uppercase tracking-[0.24em] text-white/45">Tamano del ticket</h4>
