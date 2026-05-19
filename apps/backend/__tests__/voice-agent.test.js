@@ -24,6 +24,7 @@ jest.mock('../src/middleware/auth.middleware', () => ({
     next();
   },
   requireAdmin: (_req, _res, next) => next(),
+  requireRole: () => (_req, _res, next) => next(),
   requireTenantAccess: (_req, _res, next) => next(),
 }));
 

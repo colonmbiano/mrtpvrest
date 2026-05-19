@@ -174,7 +174,9 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
       const idx = prev.findIndex((l) => l.menuItemId === p.id);
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
+        const current = next[idx];
+        if (!current) return prev;
+        next[idx] = { ...current, quantity: current.quantity + 1 };
         return next;
       }
       return [...prev, { menuItemId: p.id, name: p.name, price, quantity: 1 }];

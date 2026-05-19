@@ -104,7 +104,7 @@ export default function WaiterMyTablesPage() {
                   <span className="text-[14px] font-black">
                     {table.zone?.name || "Sin zona"} · {table.capacity}p
                   </span>
-                  {isLong && <Chip variant="brand" size="sm" className="h-5">+1H</Chip>}
+                  {isLong && <Chip variant="brand" className="h-5">+1H</Chip>}
                 </div>
 
                 <div className="flex items-center justify-between">

@@ -38,8 +38,12 @@ router.get('/categories', async (req, res) => {
     const restaurantId = resolveRestaurantId(req, res);
     if (!restaurantId) return;
 
+    const adminMode = req.query.admin === 'true' || req.query.admin === '1';
     const categories = await prisma.category.findMany({
-      where: { isActive: true, restaurantId },
+      where: {
+        restaurantId,
+        ...(adminMode ? {} : { isActive: true }),
+      },
       include: {
         // Default route por categoría (Printer Groups). El TPV lo
         // consume al cobrar para enrutar items sin override propio.
@@ -145,8 +149,10 @@ router.get('/items', async (req, res) => {
     const restaurantId = resolveRestaurantId(req, res);
     if (!restaurantId) return;
 
-    const { categoryId, favorites } = req.query
-    const where = { isAvailable: true, restaurantId }
+    const { categoryId, favorites, admin } = req.query
+    const adminMode = admin === 'true' || admin === '1'
+    const where = { restaurantId }
+    if (!adminMode) where.isAvailable = true
     if (categoryId) where.categoryId = categoryId
     // ?favorites=true filtra solo los pinned por el admin. El TPV lo
     // usa para el tile "★ Favoritos" del catálogo drill-down.
@@ -180,7 +186,7 @@ router.get('/items', async (req, res) => {
     // los platillos regulares quedan siempre visibles; las promos sin día
     // configurado siguen ocultas como antes.
     const todayDay = getTodayDay()
-    const filtered = items.filter(item => isMenuItemActiveToday(item, todayDay))
+    const filtered = adminMode ? items : items.filter(item => isMenuItemActiveToday(item, todayDay))
 
     res.json(filtered)
   } catch (e) { res.status(500).json({ error: 'Error al obtener menu' }) }
@@ -199,6 +205,7 @@ router.get('/items/:id', async (req, res) => {
         category: true,
         variants: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
         complements: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
+        modifierGroups: { include: { modifiers: true }, orderBy: { position: 'asc' } },
       },
     })
     if (!item) return res.status(404).json({ error: 'Platillo no encontrado' })
@@ -339,7 +346,82 @@ router.get('/:id/variants', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ... El resto de sub-entidades (variantes, complementos) se filtran por su relación con MenuItem ...
+router.post('/:id/variants', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertItemBelongsToTenant(req.params.id, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+    const { name, price } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nombre requerido' });
+    const variant = await prisma.menuItemVariant.create({
+      data: { menuItemId: req.params.id, name, price: parseFloat(price) || 0 },
+    });
+    await prisma.menuItem.update({ where: { id: req.params.id }, data: { hasVariants: true } });
+    res.status(201).json(variant);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/variants/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const { name, price, isAvailable } = req.body;
+    const variant = await prisma.menuItemVariant.update({
+      where: { id: req.params.id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(price !== undefined && { price: parseFloat(price) || 0 }),
+        ...(isAvailable !== undefined && { isAvailable: !!isAvailable }),
+      },
+    });
+    res.json(variant);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/variants/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const variant = await prisma.menuItemVariant.delete({ where: { id: req.params.id } });
+    const remaining = await prisma.menuItemVariant.count({ where: { menuItemId: variant.menuItemId, isAvailable: true } });
+    await prisma.menuItem.update({ where: { id: variant.menuItemId }, data: { hasVariants: remaining > 0 } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/items/:id/complements', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertItemBelongsToTenant(req.params.id, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+    const { name, price } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nombre requerido' });
+    const complement = await prisma.menuItemComplement.create({
+      data: { menuItemId: req.params.id, name, price: parseFloat(price) || 0 },
+    });
+    res.status(201).json(complement);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/items/complements/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const { name, price, isAvailable } = req.body;
+    const complement = await prisma.menuItemComplement.update({
+      where: { id: req.params.id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(price !== undefined && { price: parseFloat(price) || 0 }),
+        ...(isAvailable !== undefined && { isAvailable: !!isAvailable }),
+      },
+    });
+    res.json(complement);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/items/complements/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    await prisma.menuItemComplement.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ... El resto de sub-entidades se filtran por su relación con MenuItem ...
 
 // ── Variant Templates (grupos reutilizables) ──────────────────────────────
 
@@ -367,6 +449,34 @@ router.post('/variant-templates', authenticate, requireTenantAccess, requireAdmi
       include: { options: true }
     });
     res.json(template);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/variant-templates/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nombre requerido' });
+    const template = await prisma.variantTemplate.update({
+      where: {
+        id: req.params.id,
+        restaurantId: req.user?.restaurantId || req.restaurantId,
+      },
+      data: { name },
+      include: { options: { orderBy: { sortOrder: 'asc' } } },
+    });
+    res.json(template);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/variant-templates/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    await prisma.variantTemplate.delete({
+      where: {
+        id: req.params.id,
+        restaurantId: req.user?.restaurantId || req.restaurantId,
+      },
+    });
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -418,6 +528,30 @@ router.put('/variant-templates/:id/options/:optionId', authenticate, requireTena
 });
 
 router.delete('/variant-templates/:id/options/:optionId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    await prisma.variantTemplateOption.delete({
+      where: { id: req.params.optionId }
+    });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/variant-templates/options/:optionId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const { name, price, sortOrder } = req.body;
+    const option = await prisma.variantTemplateOption.update({
+      where: { id: req.params.optionId },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(price !== undefined && { price: parseFloat(price) }),
+        ...(sortOrder !== undefined && { sortOrder })
+      }
+    });
+    res.json(option);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/variant-templates/options/:optionId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     await prisma.variantTemplateOption.delete({
       where: { id: req.params.optionId }
