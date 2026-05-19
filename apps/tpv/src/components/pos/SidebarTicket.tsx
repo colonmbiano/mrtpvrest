@@ -14,6 +14,7 @@ import { useKitchenConfig } from "@/hooks/usePrinters";
 import { useClientValue, subscribeToEvents } from "@/hooks/useClientValue";
 import { hapticMedium, hapticSuccess, hapticError } from "@/lib/haptics";
 import api from "@/lib/api";
+import { apiOrQueue } from "@/lib/offline";
 import { toast } from "sonner";
 import {
   printKitchenTickets,
@@ -63,7 +64,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const canApplyDiscount =
     !!employee?.permissions?.includes("apply_discount");
 
-  const { activeOrderId, setActiveOrder, clear: clearActiveOrder } = useActiveOrderStore();
+  const { activeOrderId, activeOrderNumber, setActiveOrder, clear: clearActiveOrder } = useActiveOrderStore();
 
   const [previousItems, setPreviousItems] = useState<any[]>([]);
   const [_loadingHistory, setLoadingHistory] = useState(false);
@@ -252,12 +253,15 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       const itemsPayload = buildItemsPayload();
 
       let order;
+      let queued = false;
       if (activeOrderId) {
         // Mesa ya tiene orden abierta — agregar ronda.
-        const { data } = await api.post(`/api/orders/${activeOrderId}/items`, { items: itemsPayload });
-        order = data;
+        const res = await apiOrQueue("order", "POST", `/api/orders/${activeOrderId}/items`, { items: itemsPayload });
+        if (!res.ok) throw new Error(res.error || "fallo desconocido");
+        queued = res.queued;
+        order = res.data;
         // Sincronizar historial local
-        setPreviousItems(data.items || []);
+        if (!queued) setPreviousItems(order?.items || []);
       } else {
         // Orden nueva (o el backend redirigirá si la mesa está OCCUPIED).
         const orderData = {
@@ -271,16 +275,18 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           discount: ticket.discount,
           total: currentSubtotal - ticket.discount,
         };
-        const { data } = await api.post("/api/orders/tpv", orderData);
-        order = data;
+        const res = await apiOrQueue("order", "POST", "/api/orders/tpv", orderData);
+        if (!res.ok) throw new Error(res.error || "fallo desconocido");
+        queued = res.queued;
+        order = res.data;
         // Guardar el id para que la siguiente ronda ya conozca la orden.
         if (order?.id && ticket.tableId) {
           setActiveOrder(order.id, ticket.tableId, order.orderNumber ?? null);
         }
-        setPreviousItems(data.items || []);
+        if (!queued) setPreviousItems(order?.items || []);
       }
 
-      toast.success("Pedido enviado a cocina");
+      toast.success(queued ? "Pedido en cola · se enviara al volver la red" : "Pedido enviado a cocina");
       const printItems = buildTicketItems();
       const ticketContext = {
         orderNumber: order?.orderNumber ?? null,
@@ -311,16 +317,32 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     try {
       const tipAmount = tip?.amount ?? 0;
       const itemsPayload = buildItemsPayload();
+      const printItems = buildTicketItems();
 
-      let order;
+      let order: any = null;
+      let queued = false;
       if (activeOrderId) {
         // 1. Si hay items en la "Nueva ronda", primero los enviamos al backend
         if (itemsPayload.length > 0) {
-          const { data } = await api.post(`/api/orders/${activeOrderId}/items`, { items: itemsPayload });
-          order = data;
-        } else {
-          const { data } = await api.get(`/api/orders/${activeOrderId}`);
-          order = data;
+          const addRes = await apiOrQueue<any>(
+            "order",
+            "POST",
+            `/api/orders/${activeOrderId}/items`,
+            { items: itemsPayload },
+          );
+          if (!addRes.ok) {
+            toast.error("Error al enviar ronda: " + (addRes.error || ""));
+            return;
+          }
+          queued = queued || addRes.queued;
+          order = addRes.data;
+        } else if (typeof navigator === "undefined" || navigator.onLine) {
+          try {
+            const { data } = await api.get(`/api/orders/${activeOrderId}`);
+            order = data;
+          } catch {
+            // Si no se pudo hidratar, igual podemos encolar el cobro por id.
+          }
         }
       } else {
         // 2. Si no hay activeOrderId, creamos la orden completa normalmente
@@ -341,15 +363,44 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             ? `Propina ${tip.percent}% ($${tipAmount.toFixed(2)})`
             : undefined,
         };
-        const { data } = await api.post("/api/orders/tpv", orderData);
-        order = data;
+        const createRes = await apiOrQueue<any>("order", "POST", "/api/orders/tpv", orderData);
+        if (!createRes.ok) {
+          toast.error("Error al crear orden: " + (createRes.error || ""));
+          return;
+        }
+        queued = queued || createRes.queued;
+        order = createRes.data;
       }
 
-      // 3. Procesar el pago de la orden (sea nueva o recuperada)
-      await api.put(`/api/orders/${order.id}/payment`, { paymentMethod: method });
+      const payableOrderId = activeOrderId || order?.id;
+      if (payableOrderId && !queued) {
+        const payRes = await apiOrQueue<any>(
+          "payment",
+          "PUT",
+          `/api/orders/${payableOrderId}/payment`,
+          { paymentMethod: method },
+        );
+        if (!payRes.ok) {
+          toast.error("Error al cobrar: " + (payRes.error || ""));
+          return;
+        }
+        queued = queued || payRes.queued;
+        if (payRes.data) order = { ...order, ...payRes.data };
+      } else if (activeOrderId && queued) {
+        const payRes = await apiOrQueue<any>(
+          "payment",
+          "PUT",
+          `/api/orders/${activeOrderId}/payment`,
+          { paymentMethod: method },
+        );
+        if (!payRes.ok) {
+          toast.error("Error al encolar cobro: " + (payRes.error || ""));
+          return;
+        }
+      }
 
       // BUG-24: asignar repartidor inmediatamente después del cobro DELIVERY.
-      if (ticket.type === "DELIVERY" && driverId) {
+      if (ticket.type === "DELIVERY" && driverId && order?.id && !queued) {
         try {
           await api.put("/api/delivery/assign", { orderId: order.id, driverId });
         } catch (assignErr: any) {
@@ -360,13 +411,12 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         }
       }
 
-      toast.success("Cobro procesado");
+      toast.success(queued ? "Cobro en cola · se registrara al volver la red" : "Cobro procesado");
       hapticSuccess();
       
       // Capturar contexto antes de limpiar el ticket activo.
-      const printItems = buildTicketItems();
       const ticketContext = {
-        orderNumber: order?.orderNumber ?? null,
+        orderNumber: order?.orderNumber ?? activeOrderNumber ?? null,
         orderType:   ticket.type ?? null,
         tableNumber: ticket.tableName || ticket.table || null,
         customerName: ticket.name ?? null,
@@ -400,17 +450,20 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       // Impresión de recibo de cliente (el total completo)
       const guests = ticket.numberOfGuests ?? 0;
       const isDineInSplit = ticket.type === "DINE_IN" && guests >= 2;
+      const receiptItems = order?.items
+        ? orderItemsToTicketItems(order.items)
+        : [...orderItemsToTicketItems(previousItems), ...printItems];
       if (isDineInSplit) {
         printSplitReceipts(
           printers,
-          { ...ticketContext, ...totals, items: orderItemsToTicketItems(order.items) },
+          { ...ticketContext, ...totals, items: receiptItems },
           guests,
         ).catch(() => {});
       } else {
         printCustomerReceipt(printers, {
           ...ticketContext,
           ...totals,
-          items: orderItemsToTicketItems(order.items),
+          items: receiptItems,
         }).catch(() => {});
       }
     } catch (error: any) {

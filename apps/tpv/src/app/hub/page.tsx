@@ -37,12 +37,12 @@ const fmtMoney = (n: number) =>
 
 // Loader compartido: se usa tanto como fallback de Suspense (prerender)
 // como en el estado pre-mounted del cliente.
-function HubLoader() {
+function HubLoader({ label = 'Verificando turno...' }: { label?: string }) {
   return (
     <div className="min-h-screen w-full bg-[#0a0a0c] flex flex-col items-center justify-center gap-4">
       <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
       <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">
-        Iniciando sesión segura…
+        {label}
       </span>
     </div>
   );
@@ -99,6 +99,7 @@ function HubPageInner() {
     try {
       const { data } = await api.get('/api/shifts/active');
       const isShiftOpen = Boolean(data?.isOpen ?? data?.id);
+      localStorage.setItem('tpv-shift-open', isShiftOpen ? 'true' : 'false');
 
       if (isShiftOpen) {
         router.replace('/pos/order-type');
@@ -120,20 +121,30 @@ function HubPageInner() {
       if (cancelled) return;
 
       // Atajo silencioso: si ya hay workspace activo en localStorage Y no
-      // estamos forzando, brincar directo a /pos/order-type (o shift/open).
+      // estamos forzando, usamos cache local para no mostrar un loader
+      // parecido a re-login mientras la red decide el turno.
       const persistedId = typeof window !== 'undefined'
         ? localStorage.getItem('activeWorkspaceId')
         : null;
 
       if (persistedId && !force) {
+        const cachedShiftOpen = typeof window !== 'undefined'
+          ? localStorage.getItem('tpv-shift-open')
+          : null;
+        if (cachedShiftOpen === 'true' || cachedShiftOpen === 'false') {
+          router.replace(cachedShiftOpen === 'false' ? '/pos/shift/open' : '/pos/order-type');
+          return;
+        }
+
         (async () => {
           try {
             const { data } = await api.get('/api/shifts/active');
             if (cancelled) return;
             const isShiftOpen = Boolean(data?.isOpen ?? data?.id);
+            localStorage.setItem('tpv-shift-open', isShiftOpen ? 'true' : 'false');
             router.replace(isShiftOpen ? '/pos/order-type' : '/pos/shift/open');
           } catch {
-            if (!cancelled) router.replace('/pos/shift/open');
+            if (!cancelled) router.replace('/pos/order-type');
           }
         })();
         return;

@@ -341,6 +341,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
 
     const orderNumber = 'TPV-' + Date.now().toString().slice(-6);
     const isDineInTab = (orderType === 'DINE_IN') && !!tableId;
+    const paidOnCreate = Boolean(
+      paymentMethod && ['DELIVERED', 'COMPLETED', 'PAID'].includes(String(status || '').toUpperCase())
+    );
 
     // Resolver cada item con su menuItem y modificadores (validados contra DB).
     // El precio del item siempre se re-lee del servidor, igual que los priceAdd
@@ -446,6 +449,10 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           tableId: tableId || null,
           numberOfGuests: safeGuests,
           paymentMethod: paymentMethod || 'CASH',
+          paymentStatus: paidOnCreate ? 'PAID' : 'PENDING',
+          paidAt: paidOnCreate ? new Date() : null,
+          cashCollected: paidOnCreate && paymentMethod === 'CASH',
+          cashCollectedAt: paidOnCreate && paymentMethod === 'CASH' ? new Date() : null,
           subtotal: subtotal || 0,
           discount: discount || 0,
           total: total || 0,
@@ -492,6 +499,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     // Pasamos order.items (con id) para que discountInventory pueda
     // persistir costSnapshot en cada OrderItem.
     await discountInventory(prisma, order.items, order.id, restaurantId, req.locationId);
+    if (paidOnCreate) {
+      await releaseTableIfDineIn(order.id);
+    }
 
     const io = req.app.get('io');
     if (io) {
