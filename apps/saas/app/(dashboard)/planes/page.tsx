@@ -317,7 +317,7 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
               className="w-full px-3 py-2 rounded-lg outline-none tabular-nums text-sm"
               style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }} />
           </Field>
-          <Field label="Stripe Price ID">
+          <Field label="Price ID de pago">
             <input value={plan.stripePriceId || ""} onChange={(e) => onChange({ ...plan, stripePriceId: e.target.value || null })}
               placeholder="price_..."
               className="w-full px-3 py-2 rounded-lg outline-none text-xs font-mono"

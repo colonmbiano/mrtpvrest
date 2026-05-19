@@ -144,11 +144,11 @@ export default function HomePage() {
             Ver demo en vivo
           </Link>
         </div>
-        <p className="cta-note">MASTER BURGER&apos;S · EL PRIMER RESTAURANTE EN LA PLATAFORMA</p>
+        <p className="cta-note">RESTAURANTE DEMO · EL PRIMER RESTAURANTE EN LA PLATAFORMA</p>
       </div>
 
       <footer>
-        <div className="ft-copy">© 2025 MRTPVREST · TODOS LOS DERECHOS RESERVADOS</div>
+        <div className="ft-copy">© 2026 MRTPVREST · TODOS LOS DERECHOS RESERVADOS</div>
         <div className="ft-links">
           <a className="ft-link" href="#">
             DOCS

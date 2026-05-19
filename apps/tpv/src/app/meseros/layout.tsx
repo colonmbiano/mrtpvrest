@@ -43,7 +43,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
       className="relative flex flex-col h-screen w-full bg-[#0a0a0c] text-white overflow-hidden"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
-      {/* Ambient Warm Tech glow */}
+      {/* Ambient diseño operativo glow */}
       <div
         aria-hidden
         className="pointer-events-none absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full blur-[100px] opacity-40"

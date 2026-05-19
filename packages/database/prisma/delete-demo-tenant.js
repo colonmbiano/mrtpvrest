@@ -1,5 +1,5 @@
 // delete-demo-tenant.js
-// Borra el tenant demo "Master Burger's Colo" con todo lo asociado.
+// Borra el tenant demo "Restaurante Demo Colo" con todo lo asociado.
 // Mantiene Platform tenant + super@mrtpvrest.com intactos.
 
 require('dotenv').config();

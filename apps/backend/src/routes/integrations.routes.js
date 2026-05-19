@@ -7,11 +7,11 @@ const crypto = require('crypto');
 const router = express.Router();
 
 const INTEGRATION_TYPES = {
-  MERCADOPAGO: { label: 'MercadoPago', fields: ['accessToken', 'publicKey', 'webhookSecret'], icon: '💳' },
-  STRIPE:      { label: 'Stripe',      fields: ['secretKey', 'publicKey', 'webhookSecret'], icon: '🌍' },
-  WHATSAPP:    { label: 'WhatsApp API', fields: ['token', 'phoneNumberId', 'wabaId'], icon: '💬' },
-  CLOUDINARY:  { label: 'Cloudinary (Fotos)', fields: ['cloudName', 'apiKey', 'apiSecret'], icon: '☁️' },
-  RAPPI:       { label: 'Rappi Webhook', fields: ['apiKey', 'storeId'], icon: '🛵' },
+  MERCADOPAGO: { label: 'Pago digital', fields: ['accessToken', 'publicKey', 'webhookSecret'], icon: '💳' },
+  STRIPE:      { label: 'Tarjeta bancaria',      fields: ['secretKey', 'publicKey', 'webhookSecret'], icon: '🌍' },
+  WHATSAPP:    { label: 'Mensajeria', fields: ['token', 'phoneNumberId', 'wabaId'], icon: '💬' },
+  CLOUDINARY:  { label: 'Fotos', fields: ['cloudName', 'apiKey', 'apiSecret'], icon: '☁️' },
+  RAPPI:       { label: 'Delivery webhook', fields: ['apiKey', 'storeId'], icon: '🛵' },
 };
 
 // GET integraciones del restaurante actual

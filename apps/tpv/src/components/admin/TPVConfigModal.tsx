@@ -491,7 +491,7 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
                 <div className="text-xs font-black uppercase tracking-wider mb-3" style={{color:"var(--gold)"}}>Encabezado</div>
                 <div className="flex flex-col gap-3">
                   {[
-                    {label:"Nombre del negocio", field:"businessName", placeholder:"Master Burger's"},
+                    {label:"Nombre del negocio", field:"businessName", placeholder:"Restaurante Demo"},
                     {label:"Encabezado",          field:"header",       placeholder:"¡Bienvenido!"},
                     {label:"Dirección",           field:"address",      placeholder:"Calle, Ciudad"},
                     {label:"Teléfono",            field:"phone",        placeholder:"722 000 0000"},
@@ -530,7 +530,7 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
               <div className="rounded-2xl border p-4" style={{background:"var(--surf2)",borderColor:"var(--border)"}}>
                 <div className="text-xs font-black uppercase tracking-wider mb-3" style={{color:"var(--muted)"}}>Preview</div>
                 <div className="rounded-xl p-4 font-mono text-xs mx-auto max-w-xs" style={{background:"#1a1a1a",color:"white",border:"1px solid var(--border)"}}>
-                  <div className="text-center font-bold text-sm">{config.businessName||"Master Burger's"}</div>
+                  <div className="text-center font-bold text-sm">{config.businessName||"Restaurante Demo"}</div>
                   {config.showLogo&&config.header&&<div className="text-center">{config.header}</div>}
                   {config.showAddress&&config.address&&<div className="text-center text-xs opacity-70">{config.address}</div>}
                   {config.phone&&<div className="text-center text-xs opacity-70">Tel: {config.phone}</div>}

@@ -17,7 +17,7 @@
 
 
     <!-- Splash screen — fondo Obsidiana (#0C0C0E) para mantener la
-         identidad Warm Tech sin flash blanco al abrir. windowSplashScreen*
+         identidad diseño operativo sin flash blanco al abrir. windowSplashScreen*
          son atributos nativos Android 12+ (Theme.SplashScreen los aplica
          con fallback automático para versiones previas vía
          androidx.core.splashscreen). -->

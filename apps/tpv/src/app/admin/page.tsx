@@ -47,7 +47,7 @@ const SECTIONS = [
   {
     href: "/admin/grupos-impresoras",
     label: "Grupos de Impresoras",
-    desc: "Enrutamiento Loyverse — qué impresoras reciben cada categoría",
+    desc: "Enrutamiento de impresoras — qué impresoras reciben cada categoría",
     icon: Layers,
     accent: "#fbbf24",
   },

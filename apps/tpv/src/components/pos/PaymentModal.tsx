@@ -16,7 +16,7 @@ import {
 import api from "@/lib/api";
 
 /**
- * PaymentModal — Warm Tech rewrite con división de cuenta (Fase 12).
+ * PaymentModal — diseño operativo rewrite con división de cuenta (Fase 12).
  *
  * Pestañas superiores:
  *   [ PAGO TOTAL ] | [ DIVIDIR CUENTA ]

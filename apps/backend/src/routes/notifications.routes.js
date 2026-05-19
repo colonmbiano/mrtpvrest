@@ -60,7 +60,7 @@ router.post('/custom', authenticate, requireTenantAccess, requireAdmin, async (r
     });
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
     const phone = order.customerPhone || order.user?.phone;
-    if (phone) await sendWhatsApp(phone, `*Master Burger's*\n${message}`);
+    if (phone) await sendWhatsApp(phone, `*Restaurante Demo*\n${message}`);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

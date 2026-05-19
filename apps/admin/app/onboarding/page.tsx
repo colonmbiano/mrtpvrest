@@ -479,7 +479,7 @@ export default function OnboardingPage() {
         <div className="p-6" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
           <p className="text-zinc-600 text-[10px] flex items-center gap-1.5">
             <span className="w-1 h-1 rounded-full bg-zinc-700" />
-            Powered by Gemini · Onboarding privado
+            Onboarding privado
           </p>
         </div>
       </aside>

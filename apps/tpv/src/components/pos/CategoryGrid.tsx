@@ -1,15 +1,15 @@
 "use client";
 
 /**
- * CategoryGrid — vista A del catálogo POS (drill-down estilo Loyverse).
+ * CategoryGrid — vista A del catálogo POS.
  *
  * Sustituye la cinta horizontal de categorías. El cajero ve primero un
- * grid de tiles compactos (Loyverse-tight: tipografía 11px, padding
+ * grid de tiles compactos (tipografía 11px, padding
  * reducido), tap → entra a los productos de esa categoría. El primer
  * tile, cuando hay favoritos pinned, es "★ Favoritos" — atajo a los
  * platillos de mayor rotación.
  *
- * Estética Warm Tech: stone-900 reposo / stone-800 hover / stone-700
+ * Estética diseño operativo: stone-900 reposo / stone-800 hover / stone-700
  * active, rounded-2xl, ámbar para acentos. Feedback táctil con
  * `active:scale-[0.98]` para que el cajero sienta cada tap.
  */

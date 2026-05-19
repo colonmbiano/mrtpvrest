@@ -1,43 +1,26 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
-import { ChevronLeft, Star, Search, X as XIcon, Settings2 } from "lucide-react";
-import CategoryGrid from "@/components/pos/CategoryGrid";
-import ProductCard from "@/components/pos/ProductCard";
-import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
-import ModifierPickerModal from "@/components/pos/ModifierPickerModal";
-import VariantPickerModal from "@/components/modals/VariantPickerModal";
-import CatalogSettingsSheet from "@/components/modals/CatalogSettingsSheet";
+import React, { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, Search, Settings2, Star, X as XIcon } from "lucide-react";
 import CategoryChipRail, { FAVORITES_CHIP_ID } from "@/components/pos/CategoryChipRail";
-import SeatTabs from "@/components/pos/SeatTabs";
+import CategoryGrid from "@/components/pos/CategoryGrid";
 import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
+import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
+import ProductCard from "@/components/pos/ProductCard";
+import SeatTabs from "@/components/pos/SeatTabs";
+import CatalogSettingsSheet from "@/components/modals/CatalogSettingsSheet";
+import ProductConfiguratorModal from "@/components/modals/ProductConfiguratorModal";
 import api from "@/lib/api";
 import { hapticLight } from "@/lib/haptics";
 import {
   useTicketStore,
-  type Product,
   type CartItem,
   type ModifierSelection,
-  type MenuItemVariant,
+  type Product,
 } from "@/store/ticketStore";
 import {
-  useCatalogPrefs,
   densityGridClasses,
+  useCatalogPrefs,
 } from "@/store/catalogPrefsStore";
-
-/**
- * Catálogo POS — drill-down estilo Loyverse.
- *
- * Vistas:
- *   A) "categories" — grid de tiles. Si hay favoritos pinned, primer
- *      tile es "★ Favoritos".
- *   B) "products"   — grid de productos de una categoría. BackHeader
- *      con flecha ← para volver.
- *   C) "favorites"  — productos isFavorite=true (atajo). Mismo
- *      BackHeader que B.
- *
- * Reset al desmontar y al cambiar `ticket.id` (el cajero saltó de Ticket 1
- * a Ticket 2 — no debe quedar atrapado en la vista del ticket anterior).
- */
 
 type View = "categories" | "products" | "favorites" | "search";
 
@@ -47,12 +30,7 @@ interface CategoryLite {
 }
 
 export default function CatalogPage() {
-  const {
-    getActiveTicket,
-    updateTicket,
-    addItemToActive,
-  } = useTicketStore();
-
+  const { getActiveTicket, updateTicket, addItemToActive } = useTicketStore();
   const ticket = getActiveTicket();
 
   const [categories, setCategories] = useState<CategoryLite[]>([]);
@@ -60,13 +38,10 @@ export default function CatalogPage() {
   const [view, setView] = useState<View>("categories");
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
-  const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null);
+  const [configProduct, setConfigProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [optionsProduct, setOptionsProduct] = useState<Product | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  // En modo flat: chip activo del rail. null = "Todos", FAVORITES_CHIP_ID =
-  // favoritos+populares, sino es un categoryId.
   const [flatChip, setFlatChip] = useState<string | null>(null);
 
   const viewMode = useCatalogPrefs((s) => s.viewMode);
@@ -91,7 +66,6 @@ export default function CatalogPage() {
     fetchData();
   }, []);
 
-  // Reset al desmontar — al volver al catálogo siempre arranca en vista A.
   useEffect(() => {
     return () => {
       setView("categories");
@@ -99,9 +73,6 @@ export default function CatalogPage() {
     };
   }, []);
 
-  // Reset al cambiar ticket activo — evita que el cajero salte a otro
-  // ticket y siga "atrapado" viendo la categoría del anterior. Render-phase
-  // (ver CategoryModal): equivalente al efecto pero sin set-state-in-effect.
   const [prevTicketId, setPrevTicketId] = useState(ticket.id);
   if (prevTicketId !== ticket.id) {
     setPrevTicketId(ticket.id);
@@ -112,7 +83,7 @@ export default function CatalogPage() {
   const categoryCounts = useMemo(() => {
     const map: Record<string, number> = {};
     for (const p of products) {
-      const cid = (p as unknown as { categoryId?: string }).categoryId;
+      const cid = (p as { categoryId?: string }).categoryId;
       if (!cid) continue;
       map[cid] = (map[cid] ?? 0) + 1;
     }
@@ -132,20 +103,18 @@ export default function CatalogPage() {
     }
     if (view === "favorites") return favoritesItems;
     if (view === "products" && activeCat) {
-      return products.filter((p) => (p as unknown as { categoryId?: string }).categoryId === activeCat);
+      return products.filter((p) => (p as { categoryId?: string }).categoryId === activeCat);
     }
     return [];
   }, [view, activeCat, products, favoritesItems, searchQuery]);
 
-  // Modo flat: lista filtrada por el chip activo del rail.
-  // null = todos, FAVORITES_CHIP_ID = favoritos OR populares, sino categoryId.
   const flatProducts = useMemo(() => {
     if (flatChip === null) return products;
     if (flatChip === FAVORITES_CHIP_ID) {
-      return products.filter((p) => p.isFavorite || (p as unknown as { isPopular?: boolean }).isPopular);
+      return products.filter((p) => p.isFavorite || (p as { isPopular?: boolean }).isPopular);
     }
     return products.filter(
-      (p) => (p as unknown as { categoryId?: string }).categoryId === flatChip,
+      (p) => (p as { categoryId?: string }).categoryId === flatChip,
     );
   }, [flatChip, products]);
 
@@ -154,9 +123,6 @@ export default function CatalogPage() {
     [categories, activeCat],
   );
 
-  // Filtra grupos con al menos 1 modificador. El importer CSV crea grupos
-  // sin opciones cuando la columna "modificador - X" = Y pero las opciones
-  // aún no se cargaron — no queremos abrir un modal vacío.
   const hasUsableOptions = (p: Product) =>
     (Array.isArray(p.modifierGroups) &&
       p.modifierGroups.some((g) => Array.isArray(g.modifiers) && g.modifiers.length > 0)) ||
@@ -165,54 +131,11 @@ export default function CatalogPage() {
 
   const handleProductClick = (p: Product) => {
     hapticLight();
-    // Prioridad: variantes → modificadores → directo.
-    // Si tiene variantes Y modificadores usables, encadenamos: primero
-    // pedimos el tamaño y luego abrimos modificadores con el precio fijado.
-    if (p.hasVariants && p.variants && p.variants.length > 0) {
-      setVariantPickerProduct(p);
-      return;
-    }
-    if (hasUsableOptions(p)) {
-      setPickerProduct(p);
+    if ((p.hasVariants && p.variants && p.variants.length > 0) || hasUsableOptions(p)) {
+      setConfigProduct(p);
       return;
     }
     addPlainProduct(p);
-  };
-
-  const handleVariantConfirm = (variant: MenuItemVariant) => {
-    if (!variantPickerProduct) return;
-    const p = variantPickerProduct;
-
-    // Si el producto también tiene modificadores usables, encadenamos:
-    // cerramos el variant picker y abrimos el modifier picker usando la
-    // variante seleccionada como precio base (clonamos product con el
-    // price ya ajustado para que ModifierPickerModal calcule bien).
-    if (hasUsableOptions(p)) {
-      setVariantPickerProduct(null);
-      setPickerProduct({
-        ...p,
-        price: variant.price,
-        promoPrice: null,
-        // Guardamos la variante elegida en campos auxiliares que
-        // recogemos al confirmar modificadores.
-        ...({ _pendingVariant: variant } as Partial<Product>),
-      });
-      return;
-    }
-
-    const cartItem: CartItem = {
-      ...p,
-      menuItemId: p.id,
-      quantity: 1,
-      subtotal: variant.price,
-      price: variant.price,
-      originalPrice: p.price,
-      variantId: variant.id,
-      variantName: variant.name,
-      name: `${p.name} (${variant.name})`,
-    };
-    addItemToActive(cartItem);
-    setVariantPickerProduct(null);
   };
 
   const handleProductLongPress = (p: Product) => {
@@ -262,35 +185,30 @@ export default function CatalogPage() {
     addItemToActive(cartItem);
   };
 
-  const handlePickerConfirm = (
-    mods: ModifierSelection[],
-    unitExtra: number,
-    notes?: string,
-  ) => {
-    if (!pickerProduct) return;
-    const base = pickerProduct.promoPrice || pickerProduct.price;
-    const unit = base + unitExtra;
-    // Si venimos del flujo encadenado variante→modificadores,
-    // _pendingVariant contiene la variante elegida en el paso previo.
-    const pending = (pickerProduct as Product & { _pendingVariant?: MenuItemVariant })
-      ._pendingVariant;
+  const handleConfiguratorConfirm = (payload: {
+    variant: { id: string; name: string } | null;
+    modifiers: ModifierSelection[];
+    unitPrice: number;
+    notes?: string;
+  }) => {
+    if (!configProduct) return;
     const cartItem: CartItem = {
-      ...pickerProduct,
-      menuItemId: pickerProduct.id,
+      ...configProduct,
+      menuItemId: configProduct.id,
       quantity: 1,
-      subtotal: unit,
-      price: unit,
-      originalPrice: pickerProduct.price,
-      ...(pending && {
-        variantId: pending.id,
-        variantName: pending.name,
-        name: `${pickerProduct.name} (${pending.name})`,
+      subtotal: payload.unitPrice,
+      price: payload.unitPrice,
+      originalPrice: configProduct.price,
+      ...(payload.variant && {
+        variantId: payload.variant.id,
+        variantName: payload.variant.name,
+        name: `${configProduct.name} (${payload.variant.name})`,
       }),
-      modifiers: mods,
-      notes,
+      modifiers: payload.modifiers,
+      notes: payload.notes,
     };
     addItemToActive(cartItem);
-    setPickerProduct(null);
+    setConfigProduct(null);
   };
 
   const goBackToCategories = () => {
@@ -309,8 +227,6 @@ export default function CatalogPage() {
 
       <SeatTabs />
 
-      {/* Barra de búsqueda + ajustes de vista. Tipear conmuta a "search";
-          el icono ⚙️ abre el sheet de preferencias (modo y densidad). */}
       <div className="px-3 sm:px-4 lg:px-6 pb-2 pt-1 shrink-0">
         <div className="flex items-center gap-2">
           <div className="relative flex-1 min-w-0">
@@ -332,7 +248,10 @@ export default function CatalogPage() {
             {searchQuery && (
               <button
                 type="button"
-                onClick={() => { setSearchQuery(""); setView("categories"); }}
+                onClick={() => {
+                  setSearchQuery("");
+                  setView("categories");
+                }}
                 aria-label="Limpiar búsqueda"
                 className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 min-h-[32px] rounded-xl bg-surf-3 active:bg-surf-1 text-tx-sec flex items-center justify-center"
               >
@@ -351,8 +270,6 @@ export default function CatalogPage() {
         </div>
       </div>
 
-      {/* Modo flat: chip-rail horizontal con Favoritos + Todos + categorías.
-          Reemplaza el drill-down de la vista "categories". */}
       {viewMode === "flat" && view !== "search" && (
         <CategoryChipRail
           categories={categories}
@@ -393,7 +310,6 @@ export default function CatalogPage() {
             ))}
           </div>
         ) : viewMode === "flat" && view !== "search" ? (
-          // Modo flat: lista de items filtrada por chip-rail. Sin drill-down.
           flatProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
               <p className="text-stone-500 font-bold uppercase tracking-[0.15em] text-[11px]">
@@ -430,7 +346,10 @@ export default function CatalogPage() {
             <CategoryGrid
               categories={categories}
               counts={categoryCounts}
-              onSelect={(id) => { setActiveCat(id); setView("products"); }}
+              onSelect={(id) => {
+                setActiveCat(id);
+                setView("products");
+              }}
               favoritesCount={favoritesItems.length}
               onPickFavorites={() => setView("favorites")}
             />
@@ -468,19 +387,11 @@ export default function CatalogPage() {
         )}
       </div>
 
-      {pickerProduct && (
-        <ModifierPickerModal
-          product={pickerProduct}
-          onClose={() => setPickerProduct(null)}
-          onConfirm={handlePickerConfirm}
-        />
-      )}
-
-      {variantPickerProduct && (
-        <VariantPickerModal
-          product={variantPickerProduct}
-          onClose={() => setVariantPickerProduct(null)}
-          onConfirm={handleVariantConfirm}
+      {configProduct && (
+        <ProductConfiguratorModal
+          product={configProduct}
+          onClose={() => setConfigProduct(null)}
+          onConfirm={handleConfiguratorConfirm}
         />
       )}
 

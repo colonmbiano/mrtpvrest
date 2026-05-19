@@ -211,7 +211,7 @@ export default function KioskPage() {
         <span className="text-6xl">💳</span>
         <h1 className="text-2xl font-black text-white">Pasarela de pago no configurada</h1>
         <p className="text-gray-400 max-w-sm">
-          El administrador debe activar al menos una pasarela (MercadoPago, Stripe, etc.) en Admin → Integraciones.
+          El administrador debe activar al menos una pasarela (una pasarela de pago) en Admin → Integraciones.
         </p>
         <button
           onClick={() => setScreen("cart")}
@@ -257,8 +257,8 @@ export default function KioskPage() {
   }
 
   if (screen === "payment" && checkoutUrl) {
-    const providerLabel = paymentProvider === "STRIPE" ? "Stripe"
-      : paymentProvider === "MERCADOPAGO" ? "MercadoPago"
+    const providerLabel = paymentProvider === "STRIPE" ? "tarjeta"
+      : paymentProvider === "MERCADOPAGO" ? "pago digital"
       : "pasarela";
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-8 text-center bg-gray-950">

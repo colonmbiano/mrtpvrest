@@ -126,7 +126,7 @@ export default function CierreTurno() {
       className="relative h-[100dvh] flex flex-col bg-[#0a0a0c] text-white overflow-hidden"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
-      {/* Ambient Warm Tech glows */}
+      {/* Ambient diseño operativo glows */}
       <div
         aria-hidden
         className="pointer-events-none absolute -top-60 -left-60 w-[700px] h-[700px] rounded-full blur-[120px] opacity-50"

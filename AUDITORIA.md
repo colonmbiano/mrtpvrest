@@ -8,7 +8,7 @@
 
 ## 1 · Resumen ejecutivo
 
-Monorepo bien estructurado (pnpm workspace + Turbo) con 11 apps y 3 packages compartidos. La parte robusta es el TPV (Capacitor APK ya unificado en estética **Warm Tech**) y el backend Express con Prisma 7 sobre Supabase Postgres (driver-adapter pattern). Los puntos críticos están en **seguridad de endpoints públicos**, manejo de errores uniforme, deuda de tipado en `apps/admin/` y **duplicación de código** entre `apps/waiters`, `apps/tpv/(waiter)` y `apps/kds/(waiter)`.
+Monorepo bien estructurado (pnpm workspace + Turbo) con 11 apps y 3 packages compartidos. La parte robusta es el TPV (Capacitor APK ya unificado en estética **diseño operativo**) y el backend Express con Prisma 7 sobre Supabase Postgres (driver-adapter pattern). Los puntos críticos están en **seguridad de endpoints públicos**, manejo de errores uniforme, deuda de tipado en `apps/admin/` y **duplicación de código** entre `apps/waiters`, `apps/tpv/(waiter)` y `apps/kds/(waiter)`.
 
 ### Hallazgos P0 (3)
 - `GET /api/orders/:id` sin auth.
@@ -28,7 +28,7 @@ Monorepo bien estructurado (pnpm workspace + Turbo) con 11 apps y 3 packages com
 - `apps/tpvcomplete.pen` (924 KB).
 
 ### Resuelto en esta sesión
-- UI Warm Tech unificada en TPV (locked, cierre, admin/pagos, admin/seguridad, (waiter), OrdenClient, OrderTypeSelector).
+- UI diseño operativo unificada en TPV (locked, cierre, admin/pagos, admin/seguridad, (waiter), OrdenClient, OrderTypeSelector).
 - `/admin` 404 → landing creada.
 - RBAC `/(waiter)` permite OWNER/ADMIN/MANAGER + hidratación Zustand antes de validar.
 - `scan-menu` Gemini key (era Groq) + modelo `gemini-2.5-flash` (era 2.0 deprecado).
@@ -46,7 +46,7 @@ Monorepo bien estructurado (pnpm workspace + Turbo) con 11 apps y 3 packages com
 ```
 monorepo (pnpm + Turbo, packageManager: pnpm@9.15.0)
 ├── apps/
-│   ├── tpv          ★ Capacitor APK · Next.js 16 · 18.2K LOC · Tab70WiFiFO009443
+│   ├── tpv          ★ Capacitor APK · Next.js 16 · 18.2K LOC · tablet-principal
 │   ├── admin        ★ Vercel web · 13.2K LOC · Sidebar w-64
 │   ├── backend      ★ Railway · Express + Prisma 7 · 12.1K LOC
 │   ├── saas         Vercel · super-admin de tenants
@@ -114,7 +114,7 @@ monorepo (pnpm + Turbo, packageManager: pnpm@9.15.0)
 | **P1** | 162 `any` + `useState<any>` repetidos (Sidebar, menu, mi-marca) | Tipar gradualmente; empezar por Sidebar. |
 | **P1** | `lib/api.ts` sin retry/backoff ni interceptores de 5xx | Agregar retry exponencial para idempotentes. |
 | **P1** | `integraciones/page.tsx` guarda `config` JSON sin validación de schema | Validar con Zod antes de PUT. |
-| **P2** | Paleta mixta en `mi-marca` y `banners` (#111, #ff5c35) | Migrar a vars CSS Warm Tech. |
+| **P2** | Paleta mixta en `mi-marca` y `banners` (#111, #ff5c35) | Migrar a vars CSS diseño operativo. |
 | **P2** | `console.log` en `mi-marca/page.tsx:246-251` | Eliminar. |
 | **P2** | `confirm()` nativo en `bulkDelete()` y `deleteItem()` | Reemplazar con dialog accesible. |
 | **P2** | `NEXT_PUBLIC_SUPABASE_*` en `.env.local.example` pero no en Vercel | Setear con `vercel env` si se va a usar Storage. |
@@ -139,7 +139,7 @@ monorepo (pnpm + Turbo, packageManager: pnpm@9.15.0)
 ### Sistema de diseño
 
 Tres estilos coexistiendo:
-- **Warm Tech** (TPV, admin, /admin TPV)
+- **diseño operativo** (TPV, admin, /admin TPV)
 - **OLED/POP** (kiosk)
 - **CSS vars genéricos** (waiters, kds parcial)
 
@@ -177,8 +177,8 @@ Recomendado consolidar tokens en `@mrtpvrest/config` y exponerlos a todas las ap
 
 ### P2 · sprint siguiente
 
-1. **Consolidar tokens de diseño:** mover paleta Warm Tech (#0a0a0c, #ffb84d, #88D66C, Outfit) a `packages/config/tokens.css`. Importar desde admin/tpv/saas/delivery.
-2. **Migrar `mi-marca` y `banners` a Warm Tech:** aplicar el patrón ya usado en `tpv/admin/*`.
+1. **Consolidar tokens de diseño:** mover paleta diseño operativo (#0a0a0c, #ffb84d, #88D66C, Outfit) a `packages/config/tokens.css`. Importar desde admin/tpv/saas/delivery.
+2. **Migrar `mi-marca` y `banners` a diseño operativo:** aplicar el patrón ya usado en `tpv/admin/*`.
 3. **CI ampliado:** workflows para admin, saas, backend (lint + type-check + test). Matrix con caching pnpm + Turbo remote.
 4. **Forzar Node 24 en build-android-apk.yml:** evitar el deprecation warning de junio 2026. Set `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`.
 5. **Documentación:** crear `ARCHITECTURE.md` con diagrama por app, deploy target, dependencias entre packages, flow de auth/RBAC.

@@ -530,7 +530,7 @@ async function dispatchToStations(
 /**
  * Imprime comandas en cocina (KITCHEN + BAR).
  *
- * Algoritmo de enrutamiento (Loyverse-like):
+ * Algoritmo de enrutamiento:
  *   1. Si CUALQUIER item del ticket tiene `printerGroupIds`, agrupamos
  *      items por printer destino (resuelto via PrinterGroupMember) y
  *      mandamos un ticket POR PRINTER con SOLO los items que le tocan.

@@ -75,7 +75,7 @@ export default function TicketConfigPage() {
       console.error(e);
       // Fallback con los nuevos campos
       setConfig({
-        businessName: "Master Burger's",
+        businessName: "Restaurante Demo",
         header: "¡Bienvenidos a nuestro restaurante!",
         subheader: "",
         footer: "Gracias por su preferencia",

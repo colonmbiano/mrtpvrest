@@ -13,7 +13,7 @@ const SCALE_LABELS: Record<UiScale, { label: string; size: string }> = {
 };
 
 function readScale(): UiScale {
-  // Default "small" — alineado con la directiva Loyverse-tight: tipografía
+  // Default "small" — tipografía
   // compacta out-of-the-box, el cajero puede subirla si quiere desde acá.
   if (typeof window === "undefined") return "small";
   const v = localStorage.getItem("uiScale");
@@ -71,7 +71,7 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
 
   const roleLabel = employee?.role ? ROLE_LABEL[employee.role] : "Sin sesión";
 
-  // Temas Warm Tech actualizados
+  // Temas diseño operativo actualizados
   const themes = [
     { id: "amber",  label: "Miel",   color: "#ffb84d" },
     { id: "purple", label: "Cian",   color: "#3b82f6" },
@@ -86,7 +86,7 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
         onClick={onClose}
       />
 
-      {/* DRAWER CONTENT - WARM TECH */}
+      {/* DRAWER CONTENT - DISEÑO OPERATIVO */}
       <div className="relative w-full max-w-[400px] h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 ease-out overflow-hidden bg-[#0a0a0c] border-r border-white/5">
         {/* Glows */}
         <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
@@ -186,7 +186,7 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
             <LogOut size={20} /> Bloquear Terminal
           </button>
           <div className="mt-8 text-center">
-            <span className="text-[10px] text-zinc-700 font-black uppercase tracking-[0.3em]">MRTPVREST · WARM TECH ENGINE</span>
+            <span className="text-[10px] text-zinc-700 font-black uppercase tracking-[0.3em]">MRTPVREST · DISEÑO OPERATIVO ENGINE</span>
           </div>
         </div>
       </div>
@@ -249,7 +249,7 @@ function UiScalePicker() {
 // ── Sidebar width picker ──────────────────────────────────────────────────
 //
 // Controla cuán ancho se muestra el panel del ticket en /pos/menu. En
-// tablets pequeñas (Tab70 7") un sidebar de 380px deja muy poco espacio
+// tablets pequeñas (tablet principal 7") un sidebar de 380px deja muy poco espacio
 // para los productos; conviene bajarlo a 320. En tablets grandes 11" se
 // puede subir a 440 para ver más detalle del ticket. Persistimos el
 // preset (S/M/L) en localStorage y disparamos `sidebar-width-changed`

@@ -11,7 +11,7 @@ New-Item -ItemType Directory -Force -Path "src\utils"     | Out-Null
 
 # Mover archivos sueltos a sus carpetas
 if (Test-Path "src\orders.routes.js")      { Move-Item -Force "src\orders.routes.js"      "src\routes\orders.routes.js" }
-if (Test-Path "src\loyverse.service.js")   { Move-Item -Force "src\loyverse.service.js"   "src\services\loyverse.service.js" }
+if (Test-Path "src\external-menu.service.js")   { Move-Item -Force "src\external-menu.service.js"   "src\services\external-menu.service.js" }
 if (Test-Path "src\printer.service.js")    { Move-Item -Force "src\printer.service.js"    "src\services\printer.service.js" }
 if (Test-Path "src\whatsapp.service.js")   { Move-Item -Force "src\whatsapp.service.js"   "src\services\whatsapp.service.js" }
 
@@ -309,32 +309,32 @@ router.put('/items/:id', authenticate, requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al actualizar platillo' }) }
 })
 
-router.post('/sync-loyverse', authenticate, requireAdmin, async (req, res) => {
+router.post('/sync-external-menu', authenticate, requireAdmin, async (req, res) => {
   try {
-    const headers = { Authorization: `Bearer ${process.env.LOYVERSE_API_TOKEN}` }
-    const base = 'https://api.loyverse.com/v1.0'
+    const headers = { Authorization: `Bearer ${process.env.EXTERNAL_MENU_API_TOKEN}` }
+    const base = 'https://api.example.com/v1.0'
     const { data: catData } = await axios.get(`${base}/categories`, { headers })
     let synced = { categories: 0, items: 0 }
     for (const cat of (catData.categories || [])) {
-      await prisma.category.upsert({ where: { loyverseId: cat.id }, create: { name: cat.name, loyverseId: cat.id }, update: { name: cat.name } })
+      await prisma.category.upsert({ where: { externalSourceId: cat.id }, create: { name: cat.name, externalSourceId: cat.id }, update: { name: cat.name } })
       synced.categories++
     }
     const { data: itemData } = await axios.get(`${base}/items`, { headers })
     for (const item of (itemData.items || [])) {
-      const category = item.category_id ? await prisma.category.findUnique({ where: { loyverseId: item.category_id } }) : null
+      const category = item.category_id ? await prisma.category.findUnique({ where: { externalSourceId: item.category_id } }) : null
       if (category) {
         const price = item.variants?.[0]?.default_price || 0
         await prisma.menuItem.upsert({
-          where: { loyverseId: item.id },
-          create: { name: item.item_name, description: item.description, price: parseFloat(price), categoryId: category.id, loyverseId: item.id },
+          where: { externalSourceId: item.id },
+          create: { name: item.item_name, description: item.description, price: parseFloat(price), categoryId: category.id, externalSourceId: item.id },
           update: { name: item.item_name, price: parseFloat(price) },
         })
         synced.items++
       }
     }
-    res.json({ message: 'Sync con Loyverse completado', synced })
+    res.json({ message: 'Sincronización externa completada', synced })
   } catch (e) {
-    res.status(500).json({ error: 'Error al sincronizar con Loyverse', detail: e.message })
+    res.status(500).json({ error: 'Error al sincronizar fuente externa', detail: e.message })
   }
 })
 

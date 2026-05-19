@@ -2,7 +2,7 @@
 
 **Proyecto:** MRTPVREST · Módulo de Repartidores
 **Stack:** Next.js 14 App Router + Capacitor Android + reuso de `apps/backend`
-**Objetivo:** Una herramienta operativa que un repartidor pueda usar 8 horas bajo sol con guante puesto, alineada al Warm Tech del monorepo.
+**Objetivo:** Una herramienta operativa que un repartidor pueda usar 8 horas bajo sol con guante puesto, alineada al diseño operativo del monorepo.
 
 ---
 
@@ -195,7 +195,7 @@ interface QueuedAction {
 - **Reuso de Outfit/Syne** ya cargadas en el monorepo (no agregar JetBrains Mono ni Geist).
 - **Code splitting agresivo:** dashboard inicial < 200KB gzipped; mapa lazy-loaded cuando el usuario navega a `/route`.
 - **Imágenes:** Avatar y logo locales; sin CDN externo para bg.
-- **Mapbox vs Google Maps:** Mapbox es más barato y permite custom styling Warm Tech (mapa oscuro con acentos ámbar).
+- **Mapbox vs Google Maps:** Mapbox es más barato y permite custom styling diseño operativo (mapa oscuro con acentos ámbar).
 
 ---
 
@@ -242,7 +242,7 @@ interface QueuedAction {
 
 | Tema | v1 | v2 |
 |---|----|----|
-| Identidad | Glass + fotos IA + paleta nueva | Warm Tech del monorepo, sin divergencia |
+| Identidad | Glass + fotos IA + paleta nueva | diseño operativo del monorepo, sin divergencia |
 | Mapa | No mencionado | Pantalla crítica con Mapbox |
 | Foto de entrega | No mencionado | Estándar en cada confirmación |
 | Flujos de excepción | No mencionado | 4 flujos definidos |

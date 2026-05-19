@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import PWAInstallBanner from "@/components/delivery/PWAInstallBanner";
 
 export const metadata: Metadata = {
-  title: "Master Burger's - Repartidor",
+  title: "Restaurante Demo - Repartidor",
   description: "App de entregas",
   manifest: "/manifest-delivery.json",
   themeColor: "#f5a623",

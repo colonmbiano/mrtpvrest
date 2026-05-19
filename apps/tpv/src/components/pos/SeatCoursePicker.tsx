@@ -5,7 +5,7 @@ import { X, Users, Clock } from "lucide-react";
 /**
  * Picker rápido para asignar seatNumber + course a un item del carrito.
  *
- * Diseño Warm Tech:
+ * Diseño diseño operativo:
  *  - Fondo `bg-[#0C0C0E]`, glassmorphism `bg-white/5 backdrop-blur-md`.
  *  - Color activo `#ffb84d` (Ámbar Miel).
  *  - Botones táctiles `min-h-[64px]` con `active:scale-95`.

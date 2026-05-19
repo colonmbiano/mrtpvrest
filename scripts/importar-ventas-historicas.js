@@ -1,7 +1,7 @@
 /**
  * importar-ventas-historicas.js
  *
- * Carga el reporte "item-sales-summary" de Loyverse (datos agregados por
+ * Carga el reporte "item-sales-summary" del sistema origen (datos agregados por
  * producto entre 2 fechas) como órdenes sintéticas distribuidas en el
  * tiempo, para que el panel admin se vea poblado con datos reales.
  *
@@ -86,7 +86,7 @@ function levenshtein(a, b) {
 }
 
 // Stop-words irrelevantes: precios en paréntesis (10 / 20), conjunciones,
-// abreviaturas que aparecen como ruido en el CSV de Loyverse.
+// abreviaturas que aparecen como ruido en el CSV del sistema origen.
 const STOPWORDS = new Set(['de', 'la', 'el', 'con', 'y', 'sin', 'kg', 'gr', 'ml', 'pza', 'pzas', 'incl', 'inc']);
 function tokens(s) {
   return normalize(s)

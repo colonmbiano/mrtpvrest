@@ -21,7 +21,7 @@ async function sendWhatsApp(rawPhone, event, order) {
   const phone = formatPhone(rawPhone);
 
   const messages = {
-    confirmacion: `🍔 *Master Burger's*
+    confirmacion: `🍔 *Restaurante Demo*
 \n¡Hola! Tu pedido *${order.orderNumber}* fue recibido.
 \n📋 *Resumen:*
 ${(order.items || []).map(i => `• ${i.quantity}x ${i.name}`).join('\n')}
@@ -29,25 +29,25 @@ ${(order.items || []).map(i => `• ${i.quantity}x ${i.name}`).join('\n')}
 \n⏱️ Tiempo estimado: 40 minutos
 \n¡Gracias por tu pedido! 🎉`,
 
-    en_preparacion: `👨‍🍳 *Master Burger's*
+    en_preparacion: `👨‍🍳 *Restaurante Demo*
 \nTu pedido *${order.orderNumber}* está siendo preparado.
 \n¡Ya casi está listo! 🔥`,
 
-    listo: `✅ *Master Burger's*
+    listo: `✅ *Restaurante Demo*
 \nTu pedido *${order.orderNumber}* está listo.
 \nSaldrá en camino muy pronto 🛵`,
 
-    en_camino: `🛵 *Master Burger's*
+    en_camino: `🛵 *Restaurante Demo*
 \nTu pedido *${order.orderNumber}* va en camino.
 \n📍 Dirección: ${order.address?.street || ''} ${order.address?.extNumber || ''}
 \n¡Llega pronto! 🍔`,
 
-    entregado: `🏠 *Master Burger's*
+    entregado: `🏠 *Restaurante Demo*
 \n¡Tu pedido *${order.orderNumber}* fue entregado!
 \n¡Buen provecho! 😋
 \nGracias por preferirnos ⭐`,
 
-    cancelado: `❌ *Master Burger's*
+    cancelado: `❌ *Restaurante Demo*
 \nTu pedido *${order.orderNumber}* fue cancelado.
 \nContactanos para mas informacion.`,
   };

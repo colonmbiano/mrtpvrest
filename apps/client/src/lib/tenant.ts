@@ -7,7 +7,7 @@
 import { getApiUrl } from './config';
 
 export interface TenantConfig {
-  /** Nombre completo del restaurante (ej. "Master Burger's") */
+  /** Nombre completo del restaurante (ej. "Restaurante Demo") */
   name: string;
   /** Etiqueta corta para la home screen del celular (max 12 chars) */
   shortName: string;

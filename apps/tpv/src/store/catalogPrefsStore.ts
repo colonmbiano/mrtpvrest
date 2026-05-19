@@ -1,7 +1,7 @@
 /**
  * catalogPrefsStore.ts
  * Preferencias de vista del catálogo POS. Persisten en localStorage por
- * dispositivo (Tab8 mesero puede usar densidad distinta a Tab70 cajero).
+ * dispositivo (Tab8 mesero puede usar densidad distinta a tablet principal cajero).
  */
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";

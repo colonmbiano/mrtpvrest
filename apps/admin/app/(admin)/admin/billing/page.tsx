@@ -105,7 +105,7 @@ function BillingInner() {
     } catch (e: any) {
       const msg = e.response?.data?.error || e.message;
       if (msg === "PLAN_HAS_NO_STRIPE_PRICE") {
-        setError("Este plan aún no tiene un precio de Stripe asociado.");
+        setError("Este plan aún no tiene un precio de pago asociado.");
       } else {
         setError(msg || "No se pudo iniciar el checkout");
       }
@@ -146,7 +146,7 @@ function BillingInner() {
           </p>
         </header>
 
-        {/* Return banner from Stripe */}
+        {/* Return banner from checkout */}
         {returnStatus === "success" && (
           <div
             className="mb-6 rounded-xl p-4 text-sm"
@@ -325,7 +325,7 @@ function BillingInner() {
                     }}
                   >
                     {actionLoading === `checkout:${plan.id}`
-                      ? "Redirigiendo a Stripe…"
+                      ? "Redirigiendo al pago…"
                       : isCurrent
                         ? "Plan actual"
                         : plan.stripePriceId
@@ -334,7 +334,7 @@ function BillingInner() {
                   </button>
                   {!plan.stripePriceId && !isCurrent && (
                     <div className="mt-2 text-[10px]" style={{ color: "var(--tx-dim)" }}>
-                      Precio de Stripe pendiente de configurar
+                      Precio de pago pendiente de configurar
                     </div>
                   )}
                 </div>

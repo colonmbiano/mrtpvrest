@@ -11,12 +11,12 @@ function normalizeStatus(raw) {
 
 class MercadoPagoProvider extends PaymentProvider {
   static get key()    { return 'MERCADOPAGO' }
-  static get label()  { return 'MercadoPago' }
+  static get label()  { return 'Pago digital' }
   static get fields() { return ['accessToken', 'publicKey', 'webhookSecret'] }
 
   constructor(opts) {
     super(opts)
-    if (!this.config?.accessToken) throw new Error('MercadoPago: falta accessToken')
+    if (!this.config?.accessToken) throw new Error('Pasarela digital: falta accessToken')
     this.client = new MercadoPagoConfig({ accessToken: this.config.accessToken })
   }
 

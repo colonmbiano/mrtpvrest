@@ -135,7 +135,7 @@ export default function KDSPage() {
         <div className="flex items-center gap-4">
           {/* Logo */}
           <div className="font-black text-lg" style={{color:"var(--gold)"}}>
-            Master Burger's
+            Restaurante Demo
           </div>
           <div className="w-px h-6" style={{background:"#333"}} />
           {/* Selector estación */}

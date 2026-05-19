@@ -567,7 +567,7 @@ export default function MenuPage() {
         </div>
       )}
 
-      {/* Lista estilo Loyverse */}
+      {/* Lista compacta */}
       {loading ? <div className="text-center py-20">Cargando...</div> : showItemsList && (
         <div className="rounded-2xl border overflow-hidden" style={{borderColor:"var(--border)"}}>
           <div className="grid grid-cols-12 gap-3 px-4 py-3 text-xs font-black uppercase tracking-wider border-b"

@@ -119,7 +119,7 @@ export default function LockedPage() {
       className="relative min-h-[100dvh] w-full flex items-center justify-center bg-[#0C0C0E] p-4 overflow-hidden"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
-      {/* Ambient Warm Tech glows */}
+      {/* Ambient diseño operativo glows */}
       <div
         aria-hidden
         className="pointer-events-none absolute -top-60 -left-60 w-[700px] h-[700px] rounded-full blur-[120px] opacity-60"

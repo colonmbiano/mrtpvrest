@@ -13,7 +13,7 @@ function useUiScale(): void {
   useEffect(() => {
     if (typeof document === "undefined") return;
     const v = localStorage.getItem("uiScale");
-    // Default "small" — directiva Loyverse-tight: tipografía compacta
+    // Default "small" — tipografía compacta
     // out-of-the-box. El cajero puede subirla desde ConfigMenu.
     const scale = v === "medium" || v === "large" ? v : "small";
     document.documentElement.dataset.uiScale = scale;

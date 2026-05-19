@@ -4,10 +4,15 @@ param(
   [string]$EmployeePin = "",
   [ValidateSet("TAKEOUT", "DINE_IN", "DELIVERY")]
   [string]$OrderType = "TAKEOUT",
+  [string]$CategoryText = "",
   [string]$ProductText = "",
   [string]$ArtifactsRoot = ".\artifacts\tpv-adb",
   [switch]$SkipLaunch,
-  [switch]$SkipLogcat
+  [switch]$SkipLogcat,
+  [switch]$AutoApprove,
+  [switch]$NonInteractive,
+  [switch]$VerboseErrors,
+  [switch]$ManualCatalog
 )
 
 Set-StrictMode -Version Latest
@@ -25,12 +30,29 @@ function Invoke-Adb {
     [switch]$AllowFailure
   )
 
-  $output = & adb -s $script:DeviceId @Arguments 2>&1
-  $exitCode = $LASTEXITCODE
+  $stdoutPath = Join-Path $env:TEMP ("adb-out-" + [guid]::NewGuid().ToString("N") + ".log")
+  $stderrPath = Join-Path $env:TEMP ("adb-err-" + [guid]::NewGuid().ToString("N") + ".log")
+  try {
+    $allArguments = @("-s", $script:DeviceId) + $Arguments
+    $proc = Start-Process -FilePath "adb" `
+      -ArgumentList $allArguments `
+      -NoNewWindow `
+      -Wait `
+      -PassThru `
+      -RedirectStandardOutput $stdoutPath `
+      -RedirectStandardError $stderrPath
+    $exitCode = $proc.ExitCode
+    $stdout = if (Test-Path $stdoutPath) { Get-Content -LiteralPath $stdoutPath -Raw } else { "" }
+    $stderr = if (Test-Path $stderrPath) { Get-Content -LiteralPath $stderrPath -Raw } else { "" }
+    $output = ($stdout, $stderr | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join [Environment]::NewLine
+  } finally {
+    Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
+  }
+
   if (-not $AllowFailure -and $exitCode -ne 0) {
     throw "adb $($Arguments -join ' ') failed with exit code $exitCode`n$output"
   }
-  return [string]::Join([Environment]::NewLine, $output)
+  return $output
 }
 
 function Test-Tool {
@@ -143,11 +165,36 @@ function Save-Snapshot {
   return [pscustomobject]$meta
 }
 
+function Wait-ForVisiblePattern {
+  param(
+    [string[]]$Patterns,
+    [string]$Label,
+    [int]$TimeoutSec = 12
+  )
+
+  $deadline = (Get-Date).AddSeconds($TimeoutSec)
+  do {
+    $xml = Export-UiDump -Label $Label
+    $match = Get-NodeCenterByPattern -Xml $xml -Patterns $Patterns
+    if ($null -ne $match) {
+      return $true
+    }
+    Start-Sleep -Milliseconds 800
+  } while ((Get-Date) -lt $deadline)
+
+  return $false
+}
+
 function Read-YesNo {
   param(
     [string]$Prompt,
     [bool]$DefaultYes = $false
   )
+
+  if ($AutoApprove -or $NonInteractive) {
+    Write-Host "$Prompt [auto-yes]" -ForegroundColor DarkYellow
+    return $true
+  }
 
   $suffix = if ($DefaultYes) { "[Y/n]" } else { "[y/N]" }
   $answer = Read-Host "$Prompt $suffix"
@@ -157,13 +204,41 @@ function Read-YesNo {
 
 function Wait-ForOperator {
   param([string]$Prompt)
+  if ($NonInteractive -and -not $ManualCatalog) {
+    Write-Host "$Prompt [non-interactive continue]" -ForegroundColor DarkYellow
+    return
+  }
   [void](Read-Host $Prompt)
+}
+
+function Normalize-UiText {
+  param([string]$Value)
+
+  if ([string]::IsNullOrWhiteSpace($Value)) { return "" }
+
+  $normalized = $Value.ToLowerInvariant()
+  $normalized = $normalized `
+    -replace "Ã¡", "a" `
+    -replace "Ã©", "e" `
+    -replace "Ã­", "i" `
+    -replace "Ã³", "o" `
+    -replace "Ãº", "u" `
+    -replace "Ã±", "n" `
+    -replace "Â", ""
+  $normalized = $normalized.Normalize([Text.NormalizationForm]::FormD)
+  $chars = foreach ($ch in $normalized.ToCharArray()) {
+    if ([Globalization.CharUnicodeInfo]::GetUnicodeCategory($ch) -ne [Globalization.UnicodeCategory]::NonSpacingMark) {
+      $ch
+    }
+  }
+  return (-join $chars)
 }
 
 function Get-NodeCenterByPattern {
   param(
     $Xml,
-    [string[]]$Patterns
+    [string[]]$Patterns,
+    [switch]$ExactText
   )
 
   if ($null -eq $Xml) { return $null }
@@ -176,10 +251,16 @@ function Get-NodeCenterByPattern {
     foreach ($value in $candidates) {
       if ([string]::IsNullOrWhiteSpace($value)) { continue }
       foreach ($pattern in $Patterns) {
-        if ($value -match $pattern) {
-          if ($bounds -match "\[(\d+),(\d+)\]\[(\d+),(\d+)\]") {
-            $x = [int](($matches[1] + $matches[3]) / 2)
-            $y = [int](($matches[2] + $matches[4]) / 2)
+        $matched = if ($ExactText) {
+          (Normalize-UiText $value) -eq (Normalize-UiText $pattern)
+        } else {
+          $value -match $pattern
+        }
+        if ($matched) {
+          $boundMatch = [regex]::Match($bounds, "\[(\d+),(\d+)\]\[(\d+),(\d+)\]")
+          if ($boundMatch.Success) {
+            $x = [int](([int]$boundMatch.Groups[1].Value + [int]$boundMatch.Groups[3].Value) / 2)
+            $y = [int](([int]$boundMatch.Groups[2].Value + [int]$boundMatch.Groups[4].Value) / 2)
             return [pscustomobject]@{
               Text = $value
               X = $x
@@ -196,18 +277,20 @@ function Get-NodeCenterByPattern {
 function Invoke-TapByPattern {
   param(
     [string[]]$Patterns,
-    [string]$Description
+    [string]$Description,
+    [switch]$ExactText,
+    [int]$WaitAfterTapMs = 2000
   )
 
   $safe = $Description -replace "[^a-zA-Z0-9\-]", "-"
   Save-Snapshot -Label ("tap-scan-" + $safe) | Out-Null
-  $target = Get-NodeCenterByPattern -Xml (Export-UiDump -Label ("tap-target-" + $safe)) -Patterns $Patterns
+  $target = Get-NodeCenterByPattern -Xml (Export-UiDump -Label ("tap-target-" + $safe)) -Patterns $Patterns -ExactText:$ExactText
   if ($null -eq $target) {
     throw "No encontré un nodo visible para '$Description'. Revisa los artifacts y continúa manualmente."
   }
 
   Invoke-Adb -Arguments @("shell", "input", "tap", "$($target.X)", "$($target.Y)") | Out-Null
-  Start-Sleep -Milliseconds 700
+  Start-Sleep -Milliseconds $WaitAfterTapMs
   Write-Host ("Tap: {0} -> '{1}' ({2},{3})" -f $Description, $target.Text, $target.X, $target.Y) -ForegroundColor DarkGray
 }
 
@@ -299,7 +382,7 @@ $outcome = "incomplete"
 
 try {
   Write-Step "Verificando dispositivo y paquete"
-  $devices = & adb devices
+  $devices = (& adb devices) -join "`n"
   if ($devices -notmatch [regex]::Escape($DeviceId)) {
     throw "El dispositivo $DeviceId no aparece en 'adb devices'."
   }
@@ -366,13 +449,26 @@ try {
   $menuState = Save-Snapshot -Label "02-menu-ready"
   $snapshots.Add($menuState) | Out-Null
 
-  Write-Step "Selección de producto"
-  if ($ProductText) {
-    Invoke-TapByPattern -Patterns @([regex]::Escape($ProductText)) -Description "product-selection"
-  } else {
-    Write-Host "Textos visibles en pantalla:" -ForegroundColor DarkYellow
-    $menuState.visibleTexts | Select-Object -First 40 | ForEach-Object { Write-Host " - $_" }
-    Wait-ForOperator -Prompt "Selecciona manualmente un producto de prueba de bajo impacto y presiona Enter cuando aparezca en el ticket."
+  if ($ManualCatalog) {
+    Write-Step "Selección manual de catálogo"
+    Wait-ForOperator -Prompt "Selecciona manualmente la categoría y el producto en la tablet, y presiona Enter aquí cuando el ticket ya tenga el artículo."
+  } elseif ($CategoryText) {
+    Write-Step "Selección de categoría"
+    $categoryStem = if ($CategoryText.Length -ge 3) { $CategoryText.Substring(0, 3) } else { $CategoryText }
+    [void](Wait-ForVisiblePattern -Patterns @("Ver productos de $categoryStem") -Label "wait-category-list")
+    Invoke-TapByPattern -Patterns @("Ver productos de $categoryStem") -Description "category-selection"
+    $afterCategory = Save-Snapshot -Label "02b-category-ready"
+    $snapshots.Add($afterCategory) | Out-Null
+    Write-Step "Selección de producto"
+    if ($ProductText) {
+      $productStem = ($ProductText -split "\s+")[0]
+      [void](Wait-ForVisiblePattern -Patterns @($productStem) -Label "wait-product-list")
+      Invoke-TapByPattern -Patterns @($productStem) -Description "product-selection"
+    } else {
+      Write-Host "Textos visibles en pantalla:" -ForegroundColor DarkYellow
+      $menuState.visibleTexts | Select-Object -First 40 | ForEach-Object { Write-Host " - $_" }
+      Wait-ForOperator -Prompt "Selecciona manualmente un producto de prueba de bajo impacto y presiona Enter cuando aparezca en el ticket."
+    }
   }
 
   $beforePayment = Save-Snapshot -Label "03-before-payment"
@@ -407,7 +503,10 @@ try {
 } catch {
   $outcome = "failed"
   Write-Host ""
-  Write-Host $_.Exception.Message -ForegroundColor Red
+  Write-Host ("ERROR: " + $_.Exception.Message) -ForegroundColor Red
+  if ($VerboseErrors) {
+    Write-Host ($_ | Format-List * -Force | Out-String) -ForegroundColor DarkRed
+  }
   if (-not (Test-Path (New-ArtifactPath "README.md"))) {
     $fallbackPrecheck = [pscustomobject]@{
       versionName = ""

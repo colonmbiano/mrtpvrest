@@ -71,7 +71,7 @@ async function main() {
 
   console.log('\n🎉 Planes creados/actualizados.')
   console.log('──────────────────────────────────────────────────────')
-  console.log('Siguiente: node prisma/seed-tenant.js  (crea Master Burger\'s)')
+  console.log('Siguiente: node prisma/seed-tenant.js  (crea Platillo Demo\'s)')
 }
 
 main()
