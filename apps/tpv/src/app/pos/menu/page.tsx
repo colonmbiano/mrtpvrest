@@ -51,12 +51,20 @@ export default function CatalogPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [catsRes, itemsRes] = await Promise.all([
-          api.get("/api/menu/categories"),
-          api.get("/api/menu/items"),
+        const [catsRes, itemsRes] = await Promise.allSettled([
+          api.get("/api/menu/categories?admin=true"),
+          api.get("/api/menu/items?admin=true"),
         ]);
-        setCategories(Array.isArray(catsRes.data) ? catsRes.data : []);
-        setProducts(Array.isArray(itemsRes.data) ? itemsRes.data : []);
+        if (catsRes.status === "fulfilled") {
+          setCategories(Array.isArray(catsRes.value.data) ? catsRes.value.data : []);
+        } else {
+          console.error("Error loading categories:", catsRes.reason);
+        }
+        if (itemsRes.status === "fulfilled") {
+          setProducts(Array.isArray(itemsRes.value.data) ? itemsRes.value.data : []);
+        } else {
+          console.error("Error loading items:", itemsRes.reason);
+        }
       } catch (error) {
         console.error("Error loading data:", error);
       } finally {

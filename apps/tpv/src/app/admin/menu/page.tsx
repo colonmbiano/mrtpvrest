@@ -148,14 +148,29 @@ export default function MenuEditorPage() {
   async function fetchData() {
     setLoading(true);
     try {
-      const [itemsRes, catsRes, tplRes] = await Promise.all([
+      const [itemsRes, catsRes, tplRes] = await Promise.allSettled([
         api.get("/api/menu/items?admin=true"),
         api.get("/api/menu/categories?admin=true"),
         api.get("/api/menu/variant-templates"),
       ]);
-      setItems(Array.isArray(itemsRes.data) ? itemsRes.data : []);
-      setCategories(Array.isArray(catsRes.data) ? catsRes.data : []);
-      setTemplates(Array.isArray(tplRes.data) ? tplRes.data : []);
+      if (itemsRes.status === "fulfilled") {
+        setItems(Array.isArray(itemsRes.value.data) ? itemsRes.value.data : []);
+      } else {
+        console.error(itemsRes.reason);
+        toast.error("No se pudieron cargar los productos");
+      }
+      if (catsRes.status === "fulfilled") {
+        setCategories(Array.isArray(catsRes.value.data) ? catsRes.value.data : []);
+      } else {
+        console.error(catsRes.reason);
+        toast.error("No se pudieron cargar las categorias");
+      }
+      if (tplRes.status === "fulfilled") {
+        setTemplates(Array.isArray(tplRes.value.data) ? tplRes.value.data : []);
+      } else {
+        console.error(tplRes.reason);
+        toast.error("No se pudieron cargar las variantes");
+      }
     } catch (error) {
       console.error(error);
       toast.error("No se pudo cargar el menu");
