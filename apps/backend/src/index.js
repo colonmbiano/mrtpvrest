@@ -91,6 +91,12 @@ io.on('connection', (socket) => {
     socket.join(`restaurant:${restaurantId}`);
     socket.on('join:admin',   () => socket.join(`restaurant:${restaurantId}:admins`))
     socket.on('join:kitchen', () => socket.join(`restaurant:${restaurantId}:kitchen`))
+    socket.on('join:location:admin', (locationId) => {
+      if (locationId) socket.join(`restaurant:${restaurantId}:location:${locationId}:admins`)
+    })
+    socket.on('join:location:kitchen', (locationId) => {
+      if (locationId) socket.join(`restaurant:${restaurantId}:location:${locationId}:kitchen`)
+    })
   }
 
   socket.on('join:order',   (orderId) => {

@@ -15,5 +15,22 @@ public/assets/
 android/app/build/
 **/android/app/build/
 
-# Repo standalone clonado dentro (referencia, no parte del proyecto)
+# Diseño y documentación pesada
+designs/
+docs/
+artifacts/
 open-design/
+graphify-out/
+tests/e2e-report/
+
+# Multimedia adicional
+*.mp4
+*.webm
+*.pdf
+*.zip
+*.tar.zst
+
+# Archivos de caché locales
+.eslintcache
+.stylelintcache
+*.tsbuildinfo

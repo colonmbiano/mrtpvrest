@@ -5,8 +5,10 @@ import {
   Info, Wifi, WifiOff, Server, ServerOff,
   X, Check, ListChecks, Bike, Utensils, ShoppingBag,
   Trophy, RefreshCcw, LogOut, Radio, Trash2,
+  Clock3, UserRound, Settings2, PlugZap, Router,
 } from "lucide-react";
-import api from "@/lib/api";
+import { io, type Socket } from "socket.io-client";
+import api, { getApiUrl } from "@/lib/api";
 import NumpadPIN from "@/components/NumpadPIN";
 import { startTcpListener, stopTcpListener, listenForData } from "@/lib/tcpListener";
 import { parseEscPos } from "@/lib/escpos-parser";
@@ -15,6 +17,8 @@ import { parseEscPos } from "@/lib/escpos-parser";
 
 type StationCode = "KITCHEN" | "BAR" | "GRILL" | "FRYER";
 type TabKey = "orders" | "tasks" | "tcp";
+type TicketSize = "compact" | "normal" | "large";
+type ReceiveMode = "socket" | "tcp" | "both";
 
 /**
  * Comanda recibida vía TCP (ESC/POS) desde el TPV actuando como
@@ -36,10 +40,15 @@ interface TcpTicket {
 interface KdsOrderItem {
   id: string;
   menuItemName: string;
+  name?: string | null;
+  menuItem?: { name?: string | null } | null;
   quantity: number;
   done: boolean;
   notes?: string | null;
   station?: string | null;
+  seatNumber?: number | null;
+  course?: string | null;
+  modifiers?: Array<{ id: string; name: string; priceAdd?: number | null }>;
 }
 
 interface KdsOrder {
@@ -49,6 +58,7 @@ interface KdsOrder {
   tableNumber?: string | null;
   customerName?: string | null;
   createdAt: string;
+  notes?: string | null;
   items: KdsOrderItem[];
   allDone?: boolean;
 }
@@ -102,6 +112,12 @@ const ORDER_TYPE_ICONS: Record<KdsOrder["orderType"], React.ReactNode> = {
 };
 
 const PENDING_LOGS_KEY = "kds-pending-task-logs";
+const KDS_CONFIG_KEY = "kds-display-config";
+
+interface KdsDisplayConfig {
+  ticketSize: TicketSize;
+  receiveMode: ReceiveMode;
+}
 
 function minutesElapsed(iso: string, now: number): number {
   return Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));
@@ -124,6 +140,30 @@ function readPendingLogs(): PendingTaskLog[] {
 function writePendingLogs(logs: PendingTaskLog[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(PENDING_LOGS_KEY, JSON.stringify(logs));
+}
+
+function readKdsDisplayConfig(): KdsDisplayConfig {
+  const fallback: KdsDisplayConfig = { ticketSize: "normal", receiveMode: "both" };
+  if (typeof window === "undefined") return fallback;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(KDS_CONFIG_KEY) || "{}") as Partial<KdsDisplayConfig>;
+    const ticketSize: TicketSize =
+      parsed.ticketSize === "compact" || parsed.ticketSize === "normal" || parsed.ticketSize === "large"
+        ? parsed.ticketSize
+        : fallback.ticketSize;
+    const receiveMode: ReceiveMode =
+      parsed.receiveMode === "socket" || parsed.receiveMode === "tcp" || parsed.receiveMode === "both"
+        ? parsed.receiveMode
+        : fallback.receiveMode;
+    return { ticketSize, receiveMode };
+  } catch {
+    return fallback;
+  }
+}
+
+function writeKdsDisplayConfig(config: KdsDisplayConfig): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KDS_CONFIG_KEY, JSON.stringify(config));
 }
 
 interface KdsScreenProps {
@@ -155,17 +195,36 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
   const [online, setOnline]         = useState<boolean>(true);
   const [serverOk, setServerOk]     = useState<boolean>(true);
   const [showInfo, setShowInfo]     = useState<boolean>(false);
+  const [showConfig, setShowConfig] = useState<boolean>(false);
   const [showLogout, setShowLogout] = useState<boolean>(false);
+  const [displayConfig, setDisplayConfig] = useState<KdsDisplayConfig>(() => readKdsDisplayConfig());
+  const [socketConnected, setSocketConnected] = useState<boolean>(false);
+  const socketRef = useRef<Socket | null>(null);
 
   // Tickets recibidos por TCP (KDS-as-printer). Estado efímero.
   const [tcpTickets, setTcpTickets] = useState<TcpTicket[]>([]);
   const [tcpListening, setTcpListening] = useState<boolean>(false);
+  const tcpEnabled = displayConfig.receiveMode === "tcp" || displayConfig.receiveMode === "both";
+  const serverEnabled = displayConfig.receiveMode === "socket" || displayConfig.receiveMode === "both";
+
+  const updateDisplayConfig = useCallback((patch: Partial<KdsDisplayConfig>) => {
+    setDisplayConfig((current) => {
+      const next = { ...current, ...patch };
+      writeKdsDisplayConfig(next);
+      return next;
+    });
+  }, []);
 
   // Arranca el TCP listener en port 9100 al montar; al desmontar (o
   // logout) lo detiene. listenForData mantiene una sola subscripción
   // viva — `parseEscPos` traduce el binario a líneas legibles y
   // pusheamos el ticket al tope de la lista.
   useEffect(() => {
+    if (!tcpEnabled) {
+      setTcpListening(false);
+      stopTcpListener().catch(() => { /* noop */ });
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -196,9 +255,10 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
     })();
     return () => {
       cancelled = true;
+      setTcpListening(false);
       stopTcpListener().catch(() => { /* noop */ });
     };
-  }, []);
+  }, [tcpEnabled]);
 
   // Network listeners
   useEffect(() => {
@@ -225,6 +285,12 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
 
   // Polling órdenes
   const fetchOrders = useCallback(async () => {
+    if (!serverEnabled) {
+      setOrders([]);
+      setLoadingOrders(false);
+      prevIds.current = [];
+      return;
+    }
     try {
       const { data } = await api.get<KdsOrder[]>(`/api/kds/orders/${station}`);
       setServerOk(true);
@@ -239,14 +305,75 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
     } finally {
       setLoadingOrders(false);
     }
-  }, [station]);
+  }, [serverEnabled, station]);
 
   useEffect(() => {
+    if (!serverEnabled) {
+      setLoadingOrders(false);
+      setOrders([]);
+      prevIds.current = [];
+      return;
+    }
     setLoadingOrders(true);
     fetchOrders();
-    const t = setInterval(fetchOrders, 12_000);
+    const t = setInterval(fetchOrders, displayConfig.receiveMode === "socket" ? 30_000 : 12_000);
     return () => clearInterval(t);
-  }, [fetchOrders]);
+  }, [displayConfig.receiveMode, fetchOrders, serverEnabled]);
+
+  useEffect(() => {
+    if (!serverEnabled || typeof window === "undefined") {
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+      setSocketConnected(false);
+      return;
+    }
+
+    const token = localStorage.getItem("accessToken") || "";
+    const restaurantId = localStorage.getItem("restaurantId") || "";
+    const locationId = localStorage.getItem("locationId") || "";
+    if (!token || !restaurantId) return;
+
+    const socket = io(getApiUrl(), {
+      auth: { token },
+      query: { restaurantId },
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 8000,
+    });
+
+    socketRef.current = socket;
+    socket.on("connect", () => {
+      setSocketConnected(true);
+      socket.emit("join:admin");
+      socket.emit("join:kitchen");
+      if (locationId) {
+        socket.emit("join:location:admin", locationId);
+        socket.emit("join:location:kitchen", locationId);
+      }
+      fetchOrders();
+    });
+    socket.on("disconnect", () => setSocketConnected(false));
+    socket.on("connect_error", () => setSocketConnected(false));
+    socket.on("order:new", fetchOrders);
+    socket.on("new:order", fetchOrders);
+    socket.on("order:updated", fetchOrders);
+    socket.on("order:paid", fetchOrders);
+
+    return () => {
+      socket.off("connect");
+      socket.off("disconnect");
+      socket.off("connect_error");
+      socket.off("order:new", fetchOrders);
+      socket.off("new:order", fetchOrders);
+      socket.off("order:updated", fetchOrders);
+      socket.off("order:paid", fetchOrders);
+      socket.disconnect();
+      if (socketRef.current === socket) socketRef.current = null;
+      setSocketConnected(false);
+    };
+  }, [fetchOrders, serverEnabled]);
 
   // Polling tareas
   const fetchTasks = useCallback(async () => {
@@ -380,7 +507,20 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          <SourceIndicator
+            mode={displayConfig.receiveMode}
+            socketConnected={socketConnected}
+            tcpListening={tcpListening}
+          />
           <NetIndicator online={online} serverOk={serverOk} />
+          <button
+            type="button"
+            onClick={() => setShowConfig(true)}
+            aria-label="Configuracion KDS"
+            className="w-11 h-11 min-h-[44px] rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform"
+          >
+            <Settings2 size={18} />
+          </button>
           <button
             type="button"
             onClick={() => setShowInfo(true)}
@@ -447,6 +587,8 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
             loading={loadingOrders}
             orders={orders}
             now={now}
+            ticketSize={displayConfig.ticketSize}
+            receiveMode={displayConfig.receiveMode}
             onToggleItem={toggleItem}
             onFinalize={finalizeOrder}
           />
@@ -463,6 +605,7 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
           <TcpTicketsView
             tickets={tcpTickets}
             listening={tcpListening}
+            enabled={tcpEnabled}
             onDismiss={(id) => setTcpTickets((curr) => curr.filter((t) => t.id !== id))}
             onClear={() => setTcpTickets([])}
           />
@@ -481,6 +624,16 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
 
       {showInfo && (
         <InfoModal onClose={() => setShowInfo(false)} online={online} serverOk={serverOk} pendingLogs={pendingCount} />
+      )}
+
+      {showConfig && (
+        <ConfigModal
+          config={displayConfig}
+          socketConnected={socketConnected}
+          tcpListening={tcpListening}
+          onChange={updateDisplayConfig}
+          onClose={() => setShowConfig(false)}
+        />
       )}
 
       {showLogout && (
@@ -523,6 +676,33 @@ function Counter({ value, tone = "default" }: { value: number; tone?: "default" 
   );
 }
 
+function SourceIndicator({
+  mode, socketConnected, tcpListening,
+}: {
+  mode: ReceiveMode;
+  socketConnected: boolean;
+  tcpListening: boolean;
+}) {
+  const socketOn = mode === "socket" || mode === "both";
+  const tcpOn = mode === "tcp" || mode === "both";
+  const ok = (!socketOn || socketConnected) && (!tcpOn || tcpListening);
+  const label = mode === "both" ? "SOCKET+TCP" : mode === "socket" ? "SOCKET" : "TCP";
+  return (
+    <div
+      className="hidden md:inline-flex items-center gap-2 px-3 py-2 rounded-full text-[10px] font-black tracking-widest uppercase"
+      style={{
+        background: ok ? "rgba(255,184,77,0.12)" : "rgba(255,255,255,0.06)",
+        border: ok ? "1px solid rgba(255,184,77,0.30)" : "1px solid rgba(255,255,255,0.10)",
+        color: ok ? "#ffb84d" : "rgba(255,255,255,0.50)",
+      }}
+      title={`Recepcion: ${label}`}
+    >
+      {mode === "tcp" ? <Router size={12} /> : <PlugZap size={12} />}
+      {label}
+    </div>
+  );
+}
+
 function NetIndicator({ online, serverOk }: { online: boolean; serverOk: boolean }) {
   const ok = online && serverOk;
   return (
@@ -541,15 +721,68 @@ function NetIndicator({ online, serverOk }: { online: boolean; serverOk: boolean
   );
 }
 
+function ticketGridMin(size: TicketSize): number {
+  if (size === "compact") return 320;
+  if (size === "large") return 520;
+  return 400;
+}
+
+function ticketSizeStyles(size: TicketSize): {
+  card: string;
+  item: string;
+  qty: string;
+  orderNumber: string;
+  itemName: string;
+} {
+  if (size === "compact") {
+    return {
+      card: "p-4 gap-3 min-h-[420px]",
+      item: "p-2.5 min-h-[64px]",
+      qty: "w-12 text-xl",
+      orderNumber: "text-xl",
+      itemName: "text-[16px]",
+    };
+  }
+  if (size === "large") {
+    return {
+      card: "p-6 gap-5 min-h-[620px]",
+      item: "p-4 min-h-[96px]",
+      qty: "w-16 text-3xl",
+      orderNumber: "text-3xl",
+      itemName: "text-[24px]",
+    };
+  }
+  return {
+    card: "p-5 gap-4 min-h-[520px]",
+    item: "p-3 min-h-[76px]",
+    qty: "w-14 text-2xl",
+    orderNumber: "text-2xl",
+    itemName: "text-[19px]",
+  };
+}
+
 function OrdersGrid({
-  loading, orders, now, onToggleItem, onFinalize,
+  loading, orders, now, ticketSize, receiveMode, onToggleItem, onFinalize,
 }: {
   loading: boolean;
   orders: KdsOrder[];
   now: number;
+  ticketSize: TicketSize;
+  receiveMode: ReceiveMode;
   onToggleItem: (orderId: string, itemId: string, done: boolean) => void;
   onFinalize: (orderId: string) => void;
 }) {
+  if (receiveMode === "tcp") {
+    return (
+      <div className="max-w-xl mx-auto rounded-3xl bg-white/5 border border-white/10 p-8 text-center">
+        <Router size={28} className="mx-auto text-[#ffb84d] mb-3" />
+        <p className="text-lg font-black text-white mb-1">Modo TCP local activo</p>
+        <p className="text-sm font-medium text-white/45">
+          Las comandas entran por la IP local de esta tablet. Revisalas en la pestana TCP.
+        </p>
+      </div>
+    );
+  }
   if (loading) {
     return <p className="text-white/40 text-center py-12 text-sm font-bold">Cargando pedidos…</p>;
   }
@@ -557,19 +790,30 @@ function OrdersGrid({
     return <p className="text-white/40 text-center py-16 text-sm font-bold">🎉 Sin pedidos pendientes en esta estación</p>;
   }
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div
+      className="grid gap-4"
+      style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${ticketGridMin(ticketSize)}px, 1fr))` }}
+    >
       {orders.map((order) => (
-        <OrderCard key={order.id} order={order} now={now} onToggleItem={onToggleItem} onFinalize={onFinalize} />
+        <OrderCard
+          key={order.id}
+          order={order}
+          now={now}
+          ticketSize={ticketSize}
+          onToggleItem={onToggleItem}
+          onFinalize={onFinalize}
+        />
       ))}
     </div>
   );
 }
 
 function OrderCard({
-  order, now, onToggleItem, onFinalize,
+  order, now, ticketSize, onToggleItem, onFinalize,
 }: {
   order: KdsOrder;
   now: number;
+  ticketSize: TicketSize;
   onToggleItem: (orderId: string, itemId: string, done: boolean) => void;
   onFinalize: (orderId: string) => void;
 }) {
@@ -581,67 +825,100 @@ function OrderCard({
       ? `Mesa ${order.tableNumber} · ${order.customerName}`
       : `Mesa ${order.tableNumber}`
     : (order.customerName || "Cliente");
+  const totalItems = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const size = ticketSizeStyles(ticketSize);
 
   return (
     <article
-      className="rounded-3xl p-5 flex flex-col gap-3 bg-white/5 border"
+      className={`rounded-3xl flex flex-col bg-[#16171a] border ${size.card}`}
       style={{
         borderColor: allDone ? "rgba(136,214,108,0.4)" : "rgba(255,255,255,0.10)",
         boxShadow:   allDone ? "0 0 30px rgba(136,214,108,0.15)" : "0 12px 30px rgba(0,0,0,0.35)",
       }}
     >
-      <header className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl"
-                style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.75)" }}>
+      <header className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="inline-flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0"
+                style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.85)" }}>
             {ORDER_TYPE_ICONS[order.orderType]}
           </span>
-          <span className="text-[15px] font-black tracking-tight text-white">
-            {order.orderNumber || order.id.slice(-6)}
+          <div className="min-w-0">
+            <span className="block text-[11px] font-black uppercase tracking-[0.24em] text-white/35">Pedido</span>
+            <span className={`block font-black tracking-tight text-white truncate ${size.orderNumber}`}>
+              {order.orderNumber || order.id.slice(-6)}
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-2 flex-shrink-0">
+          <span className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-black tracking-widest"
+                style={{ background: u.bg, color: u.color }}>
+            <Clock3 size={13} /> {u.label} · {mins}m
+          </span>
+          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+            {totalItems} pieza{totalItems === 1 ? "" : "s"}
           </span>
         </div>
-        <span className="px-2 py-1 rounded-full text-[10px] font-black tracking-widest"
-              style={{ background: u.bg, color: u.color }}>
-          {u.label} · {mins}m
-        </span>
       </header>
 
-      <div className="text-[11px] font-bold text-white/55">
-        {orderLabel}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.07] border border-white/10 text-[12px] font-black text-white/80">
+          <UserRound size={13} /> {orderLabel}
+        </span>
+        {order.notes && (
+          <span className="px-3 py-1.5 rounded-full bg-amber-400/12 border border-amber-400/20 text-[11px] font-bold text-amber-200">
+            {order.notes}
+          </span>
+        )}
       </div>
 
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-3">
         {order.items.map((item) => (
           <li key={item.id}>
             <button
               type="button"
               onClick={() => onToggleItem(order.id, item.id, item.done)}
-              className="w-full flex items-center gap-3 px-3 py-2 min-h-[48px] rounded-xl text-left active:scale-95 transition-transform"
+              className={`w-full flex items-stretch gap-3 rounded-2xl text-left active:scale-[0.99] transition-transform ${size.item}`}
               style={{
-                background: item.done ? "rgba(136,214,108,0.10)" : "rgba(255,255,255,0.04)",
-                border:     item.done ? "1px solid rgba(136,214,108,0.30)" : "1px solid rgba(255,255,255,0.06)",
+                background: item.done ? "rgba(136,214,108,0.11)" : "rgba(255,255,255,0.065)",
+                border:     item.done ? "1px solid rgba(136,214,108,0.34)" : "1px solid rgba(255,255,255,0.10)",
               }}
             >
               <span
-                className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+                className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 self-center"
                 style={{
                   background: item.done ? "#88D66C" : "transparent",
-                  border:     item.done ? "none" : "1.5px solid rgba(255,255,255,0.30)",
+                  border:     item.done ? "none" : "2px solid rgba(255,255,255,0.36)",
                 }}
               >
-                {item.done && <Check size={14} className="text-[#0c0c0e]" strokeWidth={3} />}
+                {item.done && <Check size={20} className="text-[#0c0c0e]" strokeWidth={3} />}
               </span>
-              <span
-                className="flex-1 text-sm font-bold"
-                style={{
-                  color: item.done ? "rgba(255,255,255,0.45)" : "white",
-                  textDecoration: item.done ? "line-through" : "none",
-                }}
-              >
-                <span className="text-white/55 mr-1">{item.quantity}×</span>{item.menuItemName}
+              <span className={`rounded-xl flex items-center justify-center bg-black/25 border border-white/10 font-black text-[#ffb84d] flex-shrink-0 ${size.qty}`}>
+                {item.quantity}x
+              </span>
+              <span className="flex-1 min-w-0 py-0.5">
+                <span
+                  className={`block leading-tight font-black tracking-tight break-words ${size.itemName}`}
+                  style={{
+                    color: item.done ? "rgba(255,255,255,0.48)" : "white",
+                    textDecoration: item.done ? "line-through" : "none",
+                  }}
+                >
+                  {displayItemName(item)}
+                </span>
+                <span className="mt-2 flex flex-wrap gap-1.5">
+                  {item.course && <ItemMeta>{item.course}</ItemMeta>}
+                  {item.seatNumber && <ItemMeta>Comensal {item.seatNumber}</ItemMeta>}
+                  {(item.modifiers || []).map((mod) => (
+                    <ItemMeta key={mod.id}>+ {mod.name}</ItemMeta>
+                  ))}
+                </span>
+                {item.notes && (
+                  <span className="block mt-2 text-[12px] leading-snug font-bold text-amber-200">
+                    {item.notes}
+                  </span>
+                )}
               </span>
             </button>
-            {item.notes && <p className="text-[11px] font-medium text-amber-300 ml-9 mt-0.5">⚠ {item.notes}</p>}
           </li>
         ))}
       </ul>
@@ -657,9 +934,22 @@ function OrderCard({
           boxShadow:  allDone ? "0 12px 30px rgba(136,214,108,0.30)" : "none",
         }}
       >
-        {allDone ? "Finalizar pedido" : "Marca todos para finalizar"}
+        {allDone ? "Finalizar pedido" : "Marca productos para finalizar"}
       </button>
     </article>
+  );
+}
+
+function displayItemName(item: KdsOrderItem): string {
+  const name = (item.menuItemName || item.name || item.menuItem?.name || "").trim();
+  return name && name !== "undefined" ? name : "Producto sin nombre";
+}
+
+function ItemMeta({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center px-2 py-1 rounded-lg bg-white/[0.07] border border-white/10 text-[10px] font-black uppercase tracking-[0.12em] text-white/[0.58]">
+      {children}
+    </span>
   );
 }
 
@@ -728,6 +1018,158 @@ function TasksList({
         </ul>
       )}
     </div>
+  );
+}
+
+function ConfigModal({
+  config, socketConnected, tcpListening, onChange, onClose,
+}: {
+  config: KdsDisplayConfig;
+  socketConnected: boolean;
+  tcpListening: boolean;
+  onChange: (patch: Partial<KdsDisplayConfig>) => void;
+  onClose: () => void;
+}) {
+  const sizeOptions: Array<{ value: TicketSize; title: string; body: string }> = [
+    { value: "compact", title: "Compacto", body: "Muestra mas pedidos por pantalla." },
+    { value: "normal", title: "Normal", body: "Balance entre lectura y densidad." },
+    { value: "large", title: "Grande", body: "Letras grandes para cocina a distancia." },
+  ];
+  const modeOptions: Array<{ value: ReceiveMode; title: string; body: string; icon: React.ReactNode }> = [
+    {
+      value: "both",
+      title: "Socket + TCP",
+      body: "Recibe del servidor y tambien como impresora local.",
+      icon: <PlugZap size={18} />,
+    },
+    {
+      value: "socket",
+      title: "Socket servidor",
+      body: "Comandas en tiempo real desde la nube, con respaldo de refresco.",
+      icon: <Wifi size={18} />,
+    },
+    {
+      value: "tcp",
+      title: "Solo IP local TCP",
+      body: "La tablet escucha por port 9100 dentro de la red del local.",
+      icon: <Router size={18} />,
+    },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm">
+      <div className="w-full max-w-2xl rounded-3xl bg-[#16171a] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.5)] overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-6 py-5 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-[#ffb84d]/15 border border-[#ffb84d]/30 text-[#ffb84d] flex items-center justify-center">
+              <Settings2 size={20} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-white tracking-tight">Configuracion KDS</h3>
+              <p className="text-xs font-bold text-white/40">Tamano de ticket y modo de recepcion</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-6 flex flex-col gap-6">
+          <section className="flex flex-col gap-3">
+            <div>
+              <h4 className="text-[11px] font-black uppercase tracking-[0.24em] text-white/45">Tamano del ticket</h4>
+              <p className="text-xs font-medium text-white/45 mt-1">
+                Ajusta cuanto espacio ocupa cada pedido y que tan grandes se ven los productos.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {sizeOptions.map((option) => (
+                <ConfigChoice
+                  key={option.value}
+                  active={config.ticketSize === option.value}
+                  title={option.title}
+                  body={option.body}
+                  onClick={() => onChange({ ticketSize: option.value })}
+                />
+              ))}
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h4 className="text-[11px] font-black uppercase tracking-[0.24em] text-white/45">Recepcion de comandas</h4>
+                <p className="text-xs font-medium text-white/45 mt-1">
+                  Define si la cocina escucha al servidor, a la red local, o a ambos.
+                </p>
+              </div>
+              <div className="flex gap-2 text-[10px] font-black uppercase tracking-widest">
+                <StatusDot ok={socketConnected} label="Socket" muted={config.receiveMode === "tcp"} />
+                <StatusDot ok={tcpListening} label="TCP" muted={config.receiveMode === "socket"} />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {modeOptions.map((option) => (
+                <ConfigChoice
+                  key={option.value}
+                  active={config.receiveMode === option.value}
+                  title={option.title}
+                  body={option.body}
+                  icon={option.icon}
+                  onClick={() => onChange({ receiveMode: option.value })}
+                />
+              ))}
+            </div>
+          </section>
+
+          <div className="rounded-2xl bg-black/20 border border-white/10 p-4 text-xs leading-relaxed text-white/55">
+            Socket beneficia cuando quieres actualizacion inmediata desde el servidor y varias pantallas sincronizadas.
+            TCP local beneficia cuando el TPV debe imprimir directo a esta tablet dentro de la misma red, incluso si quieres evitar depender del canal de socket.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfigChoice({
+  active, title, body, icon, onClick,
+}: {
+  active: boolean;
+  title: string;
+  body: string;
+  icon?: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="min-h-[112px] rounded-2xl border p-4 text-left active:scale-[0.98] transition-transform"
+      style={{
+        background: active ? "rgba(255,184,77,0.12)" : "rgba(255,255,255,0.045)",
+        borderColor: active ? "rgba(255,184,77,0.70)" : "rgba(255,255,255,0.10)",
+      }}
+    >
+      <span className="flex items-center gap-2 text-sm font-black text-white">
+        {icon && <span className={active ? "text-[#ffb84d]" : "text-white/45"}>{icon}</span>}
+        {title}
+      </span>
+      <span className="block text-[11px] leading-snug font-medium text-white/45 mt-2">{body}</span>
+    </button>
+  );
+}
+
+function StatusDot({ ok, label, muted }: { ok: boolean; label: string; muted: boolean }) {
+  return (
+    <span className={muted ? "text-white/25" : ok ? "text-[#88D66C]" : "text-[#FF8B6E]"}>
+      {label}: {muted ? "off" : ok ? "on" : "off"}
+    </span>
   );
 }
 
@@ -926,13 +1368,25 @@ function playBeep(): void {
 // ── TCP Tickets view (KDS-as-printer) ─────────────────────────────────────
 
 function TcpTicketsView({
-  tickets, listening, onDismiss, onClear,
+  tickets, listening, enabled, onDismiss, onClear,
 }: {
   tickets: TcpTicket[];
   listening: boolean;
+  enabled: boolean;
   onDismiss: (id: string) => void;
   onClear: () => void;
 }) {
+  if (!enabled) {
+    return (
+      <div className="rounded-3xl bg-white/5 border border-white/10 p-12 text-center">
+        <Router size={28} className="mx-auto text-white/40 mb-4" />
+        <p className="text-sm font-black text-white/85 mb-1">TCP local desactivado</p>
+        <p className="text-xs font-medium text-white/40 max-w-sm mx-auto">
+          Activalo en Configuracion si quieres que el TPV envie comandas a la IP local de esta tablet por el puerto 9100.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3 px-1">

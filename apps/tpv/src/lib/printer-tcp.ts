@@ -296,6 +296,13 @@ export interface ReceiptInput {
   paymentMethod?: string | null;
   businessName?: string | null;
   businessFooter?: string | null;
+  // Nuevos campos de configuración
+  showLogo?: boolean;
+  logoUrl?: string | null;
+  showAddress?: boolean;
+  address?: string | null;
+  showPhone?: boolean;
+  phone?: string | null;
 }
 
 const fmtMoney = (n: number) =>
@@ -436,9 +443,24 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   const now = new Date().toLocaleString("es-MX");
   let d = CMD.INIT + CMD.ALIGN_CENTER;
 
+  // LOGO placeholder — requiere implementación de raster bit image en el
+  // driver TCP para imprimir bitmaps reales desde URL. Por ahora el admin
+  // permite subirlo para la vista previa y sincronización con tablets.
+  if (input.showLogo && input.logoUrl) {
+    // d += ESC + "..." (comando de imagen futuro)
+  }
+
   if (input.businessName) {
     d += CMD.BOLD_ON + CMD.DOUBLE_ON + input.businessName + "\n" + CMD.DOUBLE_OFF + CMD.BOLD_OFF;
   }
+  
+  if (input.showAddress && input.address) {
+    d += input.address + "\n";
+  }
+  if (input.showPhone && input.phone) {
+    d += "Tel: " + input.phone + "\n";
+  }
+
   d += now + "\n";
   if (input.orderNumber) d += "Orden #" + input.orderNumber + "\n";
   if (input.orderType) {

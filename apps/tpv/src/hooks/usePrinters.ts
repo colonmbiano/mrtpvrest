@@ -84,6 +84,15 @@ export function useReceiptIdentity() {
  * builder cae a sus defaults históricos.
  */
 type TicketConfigDTO = {
+  header?: string;
+  footer?: string;
+  businessName?: string;
+  address?: string;
+  phone?: string;
+  logoUrl?: string;
+  showLogo?: boolean;
+  showAddress?: boolean;
+  showPhone?: boolean;
   kitchenHeader?: string;
   kitchenFooter?: string;
   kitchenShowOrderNumber?: boolean;
@@ -143,4 +152,31 @@ export function useKitchenConfig() {
   }, [load]);
 
   return { kitchenConfig: config, loaded };
+}
+
+export function useFullTicketConfig() {
+  const [config, setConfig] = useState<TicketConfigDTO | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await api.get<TicketConfigDTO>("/api/printers/ticket-config");
+      setConfig(data);
+    } catch {
+      setConfig(null);
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => { if (!cancelled) load(); });
+    if (typeof window === "undefined") return () => { cancelled = true; };
+    const onRefresh = () => load();
+    window.addEventListener("ticket-config-changed", onRefresh);
+    return () => { cancelled = true; window.removeEventListener("ticket-config-changed", onRefresh); };
+  }, [load]);
+
+  return { config, loaded };
 }

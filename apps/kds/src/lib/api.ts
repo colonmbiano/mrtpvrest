@@ -4,7 +4,7 @@ import axios from "axios";
 
 const DEFAULT_API_URL = "https://api.mrtpvrest.com";
 
-function getApiUrl(): string {
+export function getApiUrl(): string {
   // Override manual via /setup → localStorage.apiBaseUrl
   if (typeof window !== "undefined") {
     const o = localStorage.getItem("apiBaseUrl");

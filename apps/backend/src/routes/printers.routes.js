@@ -19,13 +19,14 @@ router.get('/ticket-config', requireAdmin, async (req, res) => {
       // Auto-crear con defaults si nunca se configuró esta sucursal.
       const loc = await prisma.location.findUnique({
         where: { id: req.locationId },
-        include: { restaurant: { select: { name: true } } },
+        include: { restaurant: { select: { name: true, logoUrl: true } } },
       });
       cfg = await prisma.ticketConfig.create({
         data: {
           locationId: req.locationId,
           businessName: loc?.restaurant?.name || loc?.name || 'Mi Negocio',
           header: loc?.restaurant?.name || '',
+          logoUrl: loc?.restaurant?.logoUrl || null,
         },
       });
     }
