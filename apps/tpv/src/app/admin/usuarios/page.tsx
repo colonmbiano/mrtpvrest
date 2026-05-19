@@ -234,7 +234,7 @@ export default function UsuariosAdmin() {
         ) : (
           <div className="divide-y divide-white/5">
             {filtered.map((emp) => {
-              const style = ROLE_STYLE[emp.role] || ROLE_STYLE.WAITER;
+              const style = ROLE_STYLE[emp.role] ?? { bg: "bg-emerald-500/10", text: "text-emerald-400" };
               return (
                 <div
                   key={emp.id}

@@ -264,10 +264,10 @@ export default function KDSConfigModal({
           </Button>
           <Button
             type="submit"
-            loading={loading}
+            disabled={loading}
             className="flex-[2] h-14 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-widest text-xs shadow-lg shadow-amber-500/20"
           >
-            Vincular KDS
+            {loading ? "Vinculando..." : "Vincular KDS"}
           </Button>
         </div>
       </form>

@@ -214,7 +214,7 @@ export default function SetupPage() {
 
   return (
     <div
-      className="fixed inset-0 overflow-auto flex items-center justify-center p-6"
+      className="fixed inset-0 overflow-auto flex items-center justify-center px-4 py-[max(1rem,env(safe-area-inset-top))] sm:p-6"
       style={{ background: 'var(--background)' }}
     >
       {/* Glassmorphic Glows */}
@@ -233,7 +233,7 @@ export default function SetupPage() {
           onClick={toggleMode}
           aria-label={mode === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
           title={mode === 'dark' ? 'Tema claro' : 'Tema oscuro'}
-          className="fixed top-5 right-5 z-20 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+          className="fixed top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] z-20 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
           style={{
             background: 'var(--surface-2)',
             color: 'var(--text-primary)',
@@ -244,9 +244,9 @@ export default function SetupPage() {
         </button>
       )}
 
-      <div className="w-full max-w-lg relative z-10">
+      <div className="w-full max-w-lg relative z-10 my-16 sm:my-10 landscape:max-w-4xl">
         <div
-          className="rounded-2xl p-12"
+          className="rounded-2xl p-5 sm:p-8 lg:p-12 landscape:p-7"
           style={{ 
             background: 'var(--card)', 
             border: '1px solid var(--border)',

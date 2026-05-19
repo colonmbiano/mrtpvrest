@@ -43,6 +43,8 @@
     --brand-soft: rgba(255, 132, 0, 0.15);
     --brand-glow: rgba(255, 132, 0, 0.35);
     --brand-fg: #0a0a0c;
+    --gold: var(--brand);
+    --text: var(--text-primary);
     --success: #10b981;
     --success-soft: rgba(16, 185, 129, 0.12);
     --warning: #f59e0b;
@@ -294,6 +296,9 @@ html, body {
   }
   .tnum {
     font-variant-numeric: tabular-nums;
+  }
+  .input-admin {
+    @apply w-full rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 py-3 text-sm text-white outline-none transition-colors focus:border-amber-500/60;
   }
 }
 

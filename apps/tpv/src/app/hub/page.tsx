@@ -151,7 +151,8 @@ function HubPageInner() {
           if (list.length === 0) return;
           // Si solo hay uno y no estamos forzando, auto-seleccionar.
           if (list.length === 1 && !force) {
-            selectWorkspace(list[0]);
+            const onlyWorkspace = list[0];
+            if (onlyWorkspace) selectWorkspace(onlyWorkspace);
           }
         } catch (err: any) {
           if (!cancelled) setError(err?.response?.data?.error || 'No pudimos cargar tus espacios');

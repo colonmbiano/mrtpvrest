@@ -285,7 +285,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       const ticketContext = {
         orderNumber: order?.orderNumber ?? null,
         orderType:   ticket.type ?? null,
-        tableNumber: ticket.tableNumber ?? null,
+        tableNumber: ticket.tableName || ticket.table || null,
         customerName: ticket.name ?? null,
       };
       clearActiveItems();
@@ -368,7 +368,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       const ticketContext = {
         orderNumber: order?.orderNumber ?? null,
         orderType:   ticket.type ?? null,
-        tableNumber: ticket.tableNumber ?? null,
+        tableNumber: ticket.tableName || ticket.table || null,
         customerName: ticket.name ?? null,
         customerPhone: ticket.phone ?? null,
       };

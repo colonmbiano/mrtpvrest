@@ -116,7 +116,7 @@ export default function LockedPage() {
 
   return (
     <div
-      className="relative min-h-[100dvh] w-full flex items-center justify-center bg-[#0C0C0E] p-4 overflow-hidden"
+      className="relative min-h-[100dvh] w-full flex items-center justify-center bg-[#0C0C0E] overflow-y-auto overflow-x-hidden px-4 py-[max(1rem,env(safe-area-inset-top))]"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* Ambient diseño operativo glows */}
@@ -132,7 +132,7 @@ export default function LockedPage() {
       />
 
       {/* TERMINAL IDENTITY PILL — fase 7 */}
-      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 max-w-[80vw]">
+      <div className="fixed top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] z-20 inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 max-w-[calc(100vw-1.5rem-env(safe-area-inset-left)-env(safe-area-inset-right))]">
         <span
           className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"
           style={{ boxShadow: '0 0 8px rgba(136,214,108,0.5)' }}
@@ -149,20 +149,20 @@ export default function LockedPage() {
       {/* Glass card central — el contenido se reorganiza en landscape via
           el flex-row breakpoint @lg para no encajonar al usuario en
           tablets de orientación variable. */}
-      <div className="relative z-10 w-full max-w-[420px] lg:max-w-[900px] rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.4)] flex flex-col lg:flex-row overflow-hidden">
+      <div className="relative z-10 mt-16 mb-4 w-full max-w-[420px] lg:max-w-[900px] landscape:max-w-[900px] rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.4)] flex flex-col landscape:flex-row lg:flex-row overflow-hidden">
         {/* PROMPT */}
-        <div className="flex-1 p-7 sm:p-9 flex flex-col justify-center text-center lg:text-left lg:border-r lg:border-white/10">
-          <div className="inline-block self-center lg:self-start px-4 py-1.5 mb-4 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-[#ffb84d] bg-[#ffb84d]/10 border border-[#ffb84d]/20">
+        <div className="flex-1 p-5 sm:p-7 lg:p-9 landscape:p-6 flex flex-col justify-center text-center landscape:text-left lg:text-left landscape:border-r lg:border-r landscape:border-white/10 lg:border-white/10">
+          <div className="inline-block self-center landscape:self-start lg:self-start px-4 py-1.5 mb-3 sm:mb-4 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-[#ffb84d] bg-[#ffb84d]/10 border border-[#ffb84d]/20">
             Acceso · {locationName}
           </div>
           <h1 className="text-[clamp(1.75rem,4vw,2.5rem)] font-black text-white tracking-tight leading-tight">
             {terminalName}
           </h1>
-          <p className="text-sm font-medium text-white/55 mt-2">
+          <p className="text-sm font-medium text-white/55 mt-2 max-w-[28rem] mx-auto landscape:mx-0 lg:mx-0">
             Ingresa tu PIN de 4 dígitos para iniciar turno
           </p>
 
-          <p className="text-xs font-bold text-white/40 mt-6">
+          <p className="text-xs font-bold text-white/40 mt-4 sm:mt-6 landscape:mt-4">
             {typeof navigator !== 'undefined' && navigator.onLine
               ? '🟢 Conectado'
               : '🔴 Offline'}
@@ -170,7 +170,7 @@ export default function LockedPage() {
         </div>
 
         {/* NUMPAD */}
-        <div className="flex-1 p-5 sm:p-7 flex flex-col justify-center">
+        <div className="flex-1 p-4 sm:p-6 landscape:p-5 flex flex-col justify-center">
           <NumpadPIN onSubmit={handlePINSubmit} disabled={isValidating} />
 
           {error && (

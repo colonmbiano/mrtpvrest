@@ -52,7 +52,7 @@ const LockScreen: React.FC<LockScreenProps> = ({
   }, [pinInput, isVerifying, onSubmit]);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center font-mono overflow-hidden" style={{ background: "#0C0C0E" }}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center font-mono overflow-y-auto overflow-x-hidden px-4 py-[max(1rem,env(safe-area-inset-top))]" style={{ background: "#0C0C0E" }}>
       {/* Halo Glows */}
       <div 
         className="absolute pointer-events-none"
@@ -70,9 +70,9 @@ const LockScreen: React.FC<LockScreenProps> = ({
       />
 
       {/* Top Right Status Pill */}
-      <div className="absolute top-6 right-8 flex items-center gap-3 px-5 py-2.5 rounded-full border border-border" style={{ background: "var(--surface-2)" }}>
+      <div className="fixed top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] z-20 flex max-w-[calc(100vw-1.5rem-env(safe-area-inset-left)-env(safe-area-inset-right))] items-center gap-2 sm:gap-3 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full border border-border" style={{ background: "var(--surface-2)" }}>
         <div className="w-2.5 h-2.5 rounded-full bg-success shadow-[0_0_8px_var(--success)]" />
-        <span className="text-xs font-bold uppercase tracking-widest text-tx-mut">
+        <span className="min-w-0 truncate text-[10px] sm:text-xs font-bold uppercase tracking-widest text-tx-mut">
           Terminal Vinculada: <span className="text-tx-pri">{terminalLabel}</span>
         </span>
       </div>
@@ -81,16 +81,16 @@ const LockScreen: React.FC<LockScreenProps> = ({
       {mode === "login" && (
         <button
           onClick={onUnlinkStart}
-          className="absolute top-6 left-8 flex items-center gap-2 px-4 py-2.5 rounded-full border border-border text-tx-mut hover:text-danger hover:bg-red-500/10 transition-colors"
+          className="fixed top-[max(0.75rem,env(safe-area-inset-top))] left-[max(0.75rem,env(safe-area-inset-left))] z-20 flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full border border-border text-tx-mut hover:text-danger hover:bg-red-500/10 transition-colors"
           style={{ background: "var(--surface-2)" }}
         >
           <LogOut size={16} />
-          <span className="text-xs font-bold uppercase tracking-widest">Desvincular</span>
+          <span className="hidden sm:inline text-xs font-bold uppercase tracking-widest">Desvincular</span>
         </button>
       )}
 
-      <div className="relative z-10 flex flex-col items-center gap-8 w-full max-w-sm">
-        <h1 className={`text-2xl sm:text-3xl font-semibold tracking-tight text-center ${mode === "unlink" ? "text-danger" : "text-tx-pri"}`}>
+      <div className="relative z-10 my-16 flex flex-col items-center gap-5 sm:gap-8 w-full max-w-sm landscape:max-w-2xl landscape:grid landscape:grid-cols-[1fr_auto] landscape:items-center landscape:gap-8">
+        <h1 className={`text-xl sm:text-3xl font-semibold tracking-tight text-center landscape:text-left ${mode === "unlink" ? "text-danger" : "text-tx-pri"}`}>
           {mode === "unlink" ? "PIN de Administrador" : "Ingresa tu PIN de Acceso"}
         </h1>
         {mode === "unlink" && (
@@ -114,12 +114,12 @@ const LockScreen: React.FC<LockScreenProps> = ({
         </div>
 
         {/* KEYPAD */}
-        <div className="grid grid-cols-3 gap-5">
+        <div className="grid grid-cols-3 gap-3 sm:gap-5 w-full max-w-[min(84vw,300px)] landscape:w-[min(42vw,300px)]">
           {digits.map((digit) => (
             <button
               key={digit}
               onClick={() => onDigit(digit.toString())}
-              className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-medium text-tx-pri transition-all hover:bg-surf-3 active:scale-95"
+              className="aspect-square w-full rounded-full flex items-center justify-center text-[clamp(1.5rem,6vmin,1.875rem)] font-medium text-tx-pri transition-all hover:bg-surf-3 active:scale-95"
               style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
             >
               {digit}
@@ -129,28 +129,28 @@ const LockScreen: React.FC<LockScreenProps> = ({
           {mode === "unlink" ? (
              <button
               onClick={onCancelUnlink}
-              className="w-20 h-20 rounded-full flex items-center justify-center text-[10px] font-bold uppercase tracking-widest text-tx-mut transition-all hover:text-tx-pri hover:bg-surf-3 active:scale-95"
+              className="aspect-square w-full rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-tx-mut transition-all hover:text-tx-pri hover:bg-surf-3 active:scale-95"
             >
               Cancelar
             </button>
           ) : (
              <button
               onClick={onClear}
-              className="w-20 h-20 rounded-full flex items-center justify-center text-[10px] font-bold uppercase tracking-widest text-tx-mut transition-all hover:text-tx-pri hover:bg-surf-3 active:scale-95"
+              className="aspect-square w-full rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-tx-mut transition-all hover:text-tx-pri hover:bg-surf-3 active:scale-95"
             >
               Limpiar
             </button>
           )}
           <button
             onClick={() => onDigit("0")}
-            className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-medium text-tx-pri transition-all hover:bg-surf-3 active:scale-95"
+            className="aspect-square w-full rounded-full flex items-center justify-center text-[clamp(1.5rem,6vmin,1.875rem)] font-medium text-tx-pri transition-all hover:bg-surf-3 active:scale-95"
             style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
           >
             0
           </button>
           <button
             onClick={onBackspace}
-            className="w-20 h-20 rounded-full flex items-center justify-center text-tx-mut transition-all hover:text-tx-pri hover:bg-surf-3 active:scale-95"
+            className="aspect-square w-full rounded-full flex items-center justify-center text-tx-mut transition-all hover:text-tx-pri hover:bg-surf-3 active:scale-95"
             style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
           >
             <Delete size={26} />

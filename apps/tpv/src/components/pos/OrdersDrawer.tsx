@@ -60,7 +60,8 @@ const STATUS_TONE: Record<string, { dot: string; ring: string; chip: string }> =
   OUT_FOR_DELIVERY: { dot: "bg-blue-400", ring: "border-blue-400/40", chip: "text-blue-300" },
 };
 
-const toneFor = (status: string) => STATUS_TONE[status] ?? STATUS_TONE.PENDING;
+const DEFAULT_TONE = { dot: "bg-white/50", ring: "border-white/15", chip: "text-white/60" };
+const toneFor = (status: string) => STATUS_TONE[status] ?? DEFAULT_TONE;
 
 const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   isOpen,
