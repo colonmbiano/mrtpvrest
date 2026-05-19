@@ -23,7 +23,20 @@ const CMD = {
   DRAWER_KICK: ESC + 'p' + '\x00' + '\x19' + '\xFA',
 };
 
-async function printToIp(ip, port, data, isKDS = false) {
+function normalizeThermalText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[¡¿]/g, '')
+    .replace(/[·•]/g, '-')
+    .replace(/[–—]/g, '-')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/…/g, '...')
+    .replace(/[^\x00-\x7F]/g, '');
+}
+
+async function printToIp(ip, port, data, isKDS = false, normalizeText = true) {
   if (ip === '0.0.0.0' || !ip) {
     console.log('[printer] Skip printToIp for virtual device (0.0.0.0)');
     return Promise.resolve();
@@ -31,7 +44,8 @@ async function printToIp(ip, port, data, isKDS = false) {
 
   // Si es un KDS nativo, podemos enviar JSON en lugar de ESC/POS crudo
   // pero mantendremos compatibilidad enviando el buffer de datos solicitado.
-  const payload = isKDS ? data : Buffer.from(data, 'binary');
+  const printableData = normalizeText ? normalizeThermalText(data) : data;
+  const payload = isKDS ? printableData : Buffer.from(printableData, 'binary');
 
   return new Promise((resolve, reject) => {
     const client = new net.Socket();
@@ -353,7 +367,7 @@ async function printOrderRoundTicket(order, roundId) {
 // el puerto primero para evitar estados corruptos del printer.
 async function kickDrawer(ip, port) {
   const payload = CMD.INIT + CMD.DRAWER_KICK;
-  return printToIp(ip, port, payload);
+  return printToIp(ip, port, payload, false, false);
 }
 
 // Intenta abrir el cajón conectado a la impresora de caja (CASHIER + supports

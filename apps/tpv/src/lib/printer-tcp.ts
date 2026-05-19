@@ -48,6 +48,19 @@ export const CMD = {
 
 const LINE_WIDTH = 32;
 
+function normalizeThermalText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[¡¿]/g, "")
+    .replace(/[·•]/g, "-")
+    .replace(/[–—]/g, "-")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/…/g, "...")
+    .replace(/[^\x00-\x7F]/g, "");
+}
+
 export function row(left: string, right: string): string {
   const max = LINE_WIDTH;
   const r = right ?? "";
@@ -170,7 +183,8 @@ export async function sendRawTcp(target: PrintTarget, payload: string): Promise<
     clientId = conn.client;
     // ESC/POS es binario pero el plugin acepta utf8 → enviamos como string
     // raw porque buildXTicket genera bytes en code page latin1 compatible.
-    await Promise.race([plugin.send({ client: clientId, data: payload, encoding: "utf8" }), timeoutPromise]);
+    const safePayload = normalizeThermalText(payload);
+    await Promise.race([plugin.send({ client: clientId, data: safePayload, encoding: "utf8" }), timeoutPromise]);
   } finally {
     if (clientId !== null) {
       try { await plugin.disconnect({ client: clientId }); } catch { /* noop */ }
