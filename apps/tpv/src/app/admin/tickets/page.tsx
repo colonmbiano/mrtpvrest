@@ -148,7 +148,7 @@ export default function TicketConfigPage() {
     try {
       const { data } = await api.post("/api/upload/image", fd);
       setConfig({ ...config, logoUrl: data.url });
-    } catch (err) {
+    } catch (_err) {
       alert("Error al subir el logo");
     } finally {
       setUploading(false);
