@@ -206,6 +206,14 @@ function appendComplementNotes(notes, complements) {
   return [base, `Complementos: ${names}`].filter(Boolean).join('\n');
 }
 
+function appendVariantNotes(notes, variants) {
+  const base = typeof notes === 'string' ? notes.trim() : '';
+  if (!Array.isArray(variants) || variants.length === 0) return base || null;
+  const names = variants.map((v) => v.name).filter(Boolean).join(', ');
+  if (!names) return base || null;
+  return [base, `Variantes: ${names}`].filter(Boolean).join('\n');
+}
+
 
 // ── GET /admin — Pedidos del restaurante (filtra por sucursal si llega) ──
 // locationId es OPCIONAL: si se envía via x-location-id/header se filtra,
@@ -351,12 +359,14 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         include: {
           modifierGroups: { include: { modifiers: true } },
           complements: true,
+          variants: true,
         },
       });
 
       const basePrice = menuItem?.price || 0;
       const modifierIds = extractIds(item.modifiers, 'modifierId');
       const complementIds = extractIds(item.complements, 'complementId');
+      const variantIds = extractIds(item.variants, 'variantId');
 
       // Indexar todos los modificadores válidos del item por id, agrupados.
       const validModsById = new Map();
@@ -402,6 +412,22 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         selectedComplements.push(complement);
       }
 
+      // Variantes multi-select: se cobran como extra sobre el precio base
+      // (los sabores en $0 no suman; "Extra aderezo" etc. sí). El precio
+      // siempre se re-lee de DB para que el cliente no lo manipule.
+      const validVariantsById = new Map(
+        (menuItem?.variants || [])
+          .filter((v) => v.isAvailable !== false)
+          .map((v) => [v.id, v])
+      );
+      const selectedVariants = [];
+      for (const id of variantIds) {
+        const variant = validVariantsById.get(id);
+        if (!variant) continue;
+        unitExtra += Number(variant.price || 0);
+        selectedVariants.push(variant);
+      }
+
       const unitPrice = basePrice + unitExtra;
       const seatRaw = Number(item.seatNumber);
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
@@ -418,7 +444,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         price: unitPrice,
         quantity: item.quantity,
         subtotal: unitPrice * item.quantity,
-        notes: appendComplementNotes(item.notes, selectedComplements),
+        notes: appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants),
         seatNumber,
         course,
         _modifiers: flatMods,
@@ -541,10 +567,12 @@ async function addRoundHandler(req, res) {
         include: {
           modifierGroups: { include: { modifiers: true } },
           complements: true,
+          variants: true,
         },
       });
       const modifierIds = extractIds(item.modifiers, 'modifierId');
       const complementIds = extractIds(item.complements, 'complementId');
+      const variantIds = extractIds(item.variants, 'variantId');
 
       const validModsById = new Map();
       const groupsById = new Map();
@@ -587,6 +615,19 @@ async function addRoundHandler(req, res) {
         selectedComplements.push(complement);
       }
 
+      const validVariantsById = new Map(
+        (menuItem?.variants || [])
+          .filter((v) => v.isAvailable !== false)
+          .map((v) => [v.id, v])
+      );
+      const selectedVariants = [];
+      for (const variantId of variantIds) {
+        const variant = validVariantsById.get(variantId);
+        if (!variant) continue;
+        unitExtra += Number(variant.price || 0);
+        selectedVariants.push(variant);
+      }
+
       const price = (menuItem?.price || 0) + unitExtra;
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
       const seatRaw = Number(item.seatNumber);
@@ -601,7 +642,7 @@ async function addRoundHandler(req, res) {
         price,
         quantity: qty,
         subtotal: price * qty,
-        notes: appendComplementNotes(item.notes, selectedComplements),
+        notes: appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants),
         seatNumber,
         course,
         _modifiers: flatMods,

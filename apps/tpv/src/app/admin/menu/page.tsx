@@ -74,6 +74,9 @@ type MenuItem = {
   variants?: MenuItemVariant[];
   complements?: MenuItemComplement[];
   variantTemplates?: { id: string; name: string }[];
+  variantMultiSelect?: boolean;
+  variantMinSelection?: number;
+  variantMaxSelection?: number;
 };
 
 type ProductForm = {
@@ -88,6 +91,9 @@ type ProductForm = {
   isPromo: boolean;
   activeDays: string[];
   variantTemplateIds: string[];
+  variantMultiSelect: boolean;
+  variantMinSelection: number;
+  variantMaxSelection: number;
 };
 
 type Section = "products" | "categories" | "variants";
@@ -105,6 +111,9 @@ const emptyForm: ProductForm = {
   isPromo: false,
   activeDays: [],
   variantTemplateIds: [],
+  variantMultiSelect: false,
+  variantMinSelection: 0,
+  variantMaxSelection: 0,
 };
 
 const days = [
@@ -213,6 +222,9 @@ export default function MenuEditorPage() {
         isPromo: !!item.isPromo,
         activeDays: item.activeDays || [],
         variantTemplateIds: item.variantTemplates?.map((tpl) => tpl.id) || [],
+        variantMultiSelect: !!item.variantMultiSelect,
+        variantMinSelection: item.variantMinSelection ?? 0,
+        variantMaxSelection: item.variantMaxSelection ?? 0,
       });
       api.get(`/api/menu/items/${item.id}`).then(({ data }) => {
         setEditingItem(data);
@@ -661,6 +673,24 @@ export default function MenuEditorPage() {
 
               {editorTab === "variants" && (
                 <div className="grid gap-6 lg:grid-cols-2">
+                  <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <PanelTitle title="Seleccion de variantes" desc="Activa para dejar elegir varios sabores en el TPV (ej. 1kg de boneless con 3 sabores)." />
+                    <div className="mt-3">
+                      <Switch label="Permitir elegir varias" checked={form.variantMultiSelect} onChange={(v) => setForm((prev) => ({ ...prev, variantMultiSelect: v }))} />
+                    </div>
+                    {form.variantMultiSelect && (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <label className="flex flex-col gap-1">
+                          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Minimo (0 = opcional)</span>
+                          <input type="number" min={0} value={form.variantMinSelection} onChange={(e) => setForm((prev) => ({ ...prev, variantMinSelection: Math.max(0, parseInt(e.target.value, 10) || 0) }))} className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none" />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Maximo (0 = sin tope)</span>
+                          <input type="number" min={0} value={form.variantMaxSelection} onChange={(e) => setForm((prev) => ({ ...prev, variantMaxSelection: Math.max(0, parseInt(e.target.value, 10) || 0) }))} className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none" />
+                        </label>
+                      </div>
+                    )}
+                  </div>
                   <PanelTitle title="Grupos reutilizables" desc="Selecciona sabores/tamanos que se sincronizan al guardar." />
                   <div className="lg:col-span-2 grid gap-3 sm:grid-cols-2">
                     {templates.map((tpl) => {

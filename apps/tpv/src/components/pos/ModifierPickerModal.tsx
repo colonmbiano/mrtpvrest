@@ -11,6 +11,7 @@ import type {
 
 const COMPLEMENTS_GROUP_ID = "__complements";
 export const COMPLEMENT_MODIFIER_PREFIX = "complement:";
+export const VARIANT_MODIFIER_PREFIX = "variant:";
 
 interface ModifierPickerModalProps {
   product: Product;
