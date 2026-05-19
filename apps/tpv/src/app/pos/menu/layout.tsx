@@ -174,8 +174,15 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const fetchShift = useCallback(async () => {
     try {
       const { data } = await api.get("/api/shifts/active");
-      setShiftOpen(Boolean(data?.isOpen ?? data?.id));
+      const isOpen = Boolean(data?.isOpen ?? data?.id);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("tpv-shift-open", isOpen ? "true" : "false");
+      }
+      setShiftOpen(isOpen);
     } catch {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("tpv-shift-open", "false");
+      }
       setShiftOpen(false);
     }
   }, []);
