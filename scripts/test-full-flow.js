@@ -23,7 +23,7 @@ async function testFlow() {
       items: [
         { menuItemId: 'cmot0x9zi000k10fwg5yp47aw', name: 'Burger Test', quantity: 1, price: 150 }
       ],
-      customerName: 'Agente Gemini',
+      customerName: 'Agente IA',
       customerPhone: '1234567890',
       type: 'TAKEOUT',
       deliveryAddress: 'Calle Falsa 123',
@@ -58,7 +58,7 @@ async function testFlow() {
       console.log('⚠️ No se encontró estación KDS configurada.');
       console.log('Intentando crear una estación KDS virtual para la prueba...');
       const newKds = await axios.post(`${API_URL}/api/printers`, {
-        name: 'KDS Test Gemini',
+        name: 'KDS Test IA',
         type: 'KITCHEN',
         connectionType: 'NETWORK',
         ip: '0.0.0.0',

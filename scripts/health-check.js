@@ -18,11 +18,11 @@ const checks = [
   { name: "TPV Root",                  url: "https://tpv.mrtpvrest.com" },
 
   // Client store
-  { name: "Tienda Master Burgers",     url: "https://masterburguers.mrtpvrest.com" },
+  { name: "Tienda demo",     url: "https://demo.mrtpvrest.com" },
 
   // Backend API
-  { name: "API Health",                url: "https://master-burguers-production.up.railway.app/health" },
-  { name: "API Plans",                 url: "https://master-burguers-production.up.railway.app/api/saas/plans" },
+  { name: "API Health",                url: "https://api.mrtpvrest.com/health" },
+  { name: "API Plans",                 url: "https://api.mrtpvrest.com/api/saas/plans" },
 ];
 
 const TIMEOUT_MS = 10_000;

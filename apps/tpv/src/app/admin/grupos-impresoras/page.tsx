@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * /admin/grupos-impresoras — CRUD de Printer Groups (modelo Loyverse).
+ * /admin/grupos-impresoras — CRUD de Printer Groups.
  *
  * Cada grupo agrupa N impresoras + N categorías. Al cobrar, los items
  * de una categoría enrutan al grupo configurado, y todas las
@@ -10,7 +10,7 @@
  *
  * Override item-level se gestiona desde /admin/menu (no acá).
  *
- * Estilo Warm Tech consistente con /admin/mesas y /admin/impresoras.
+ * Estilo diseño operativo consistente con /admin/mesas y /admin/impresoras.
  */
 
 import React, { useEffect, useState } from "react";
@@ -167,7 +167,7 @@ export default function GruposImpresorasPage() {
             </span>
             <h1 className="text-3xl font-black text-white tracking-tight mb-1">Grupos de Impresoras</h1>
             <p className="text-sm text-zinc-400 font-medium">
-              Define qué impresoras reciben cada categoría. Modelo Loyverse: una categoría puede ir a varios grupos.
+              Define qué impresoras reciben cada categoría. Una categoría puede ir a varios grupos.
             </p>
           </div>
         </div>
@@ -286,7 +286,7 @@ export default function GruposImpresorasPage() {
                 <h2 className="text-xl font-black text-white tracking-tight mb-1">
                   {editingId ? "Editar grupo" : "Nuevo grupo"}
                 </h2>
-                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Enrutamiento Loyverse</p>
+                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Enrutamiento de impresoras</p>
               </div>
               <button
                 type="button"

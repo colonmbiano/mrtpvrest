@@ -17,7 +17,7 @@ type PlanInfo = {
 } | null;
 
 const MODULE_META: Record<string, { label: string; description: string; icon: string }> = {
-  KIOSK:    { label: "Kiosko de pedidos",   description: "Pantalla de autoservicio con pago QR vía MercadoPago.", icon: "🖥️" },
+  KIOSK:    { label: "Kiosko de pedidos",   description: "Pantalla de autoservicio con pago QR.", icon: "🖥️" },
   DELIVERY: { label: "Delivery propio",     description: "Gestión de repartidores y pedidos a domicilio.",        icon: "🛵" },
   WEBSTORE: { label: "Tienda online",       description: "Catálogo público y carrito de compras para clientes.",  icon: "🛒" },
   LOYALTY:  { label: "Programa de puntos",  description: "Acumula y canjea puntos de fidelidad.",                 icon: "⭐" },

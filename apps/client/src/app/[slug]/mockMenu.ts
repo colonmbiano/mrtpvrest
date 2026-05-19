@@ -24,7 +24,7 @@ export const MOCK_CATEGORIES: MockCategory[] = [
     items: [
       {
         id: 'burger-master',
-        name: 'Master Burger',
+        name: 'Platillo Demo',
         description: 'Doble carne, queso cheddar, tocino y salsa de la casa.',
         price: 120,
         image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&q=80',

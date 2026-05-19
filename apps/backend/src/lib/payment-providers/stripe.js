@@ -18,12 +18,12 @@ function normalizeStatus(raw) {
 
 class StripeProvider extends PaymentProvider {
   static get key()    { return 'STRIPE' }
-  static get label()  { return 'Stripe' }
+  static get label()  { return 'Tarjeta bancaria' }
   static get fields() { return ['secretKey', 'publicKey', 'webhookSecret'] }
 
   constructor(opts) {
     super(opts)
-    if (!this.config?.secretKey) throw new Error('Stripe: falta secretKey')
+    if (!this.config?.secretKey) throw new Error('Pasarela de tarjeta: falta secretKey')
     this.stripe = lazyStripe(this.config.secretKey)
   }
 

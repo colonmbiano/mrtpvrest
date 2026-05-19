@@ -218,7 +218,7 @@ export default function ApiKeysPage() {
               <div className="db-field">
                 <label>Nombre descriptivo</label>
                 <div className="db-field-wrap">
-                  <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Ej: Integración Rappi" />
+                  <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Ej: Integracion delivery" />
                 </div>
               </div>
               <div>

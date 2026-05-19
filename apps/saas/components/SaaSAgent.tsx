@@ -129,7 +129,7 @@ export default function SaaSAgent() {
             </div>
             <div>
               <h3 className="font-bold text-sm leading-none text-text-primary">MRTPV Intelligence</h3>
-              <span className="text-[9px] md:text-[10px] opacity-60 uppercase tracking-widest font-black text-text-secondary">Gemini Engine</span>
+              <span className="text-[9px] md:text-[10px] opacity-60 uppercase tracking-widest font-black text-text-secondary">AI Engine</span>
             </div>
           </div>
           <div className="flex items-center gap-1">

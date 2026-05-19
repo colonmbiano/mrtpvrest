@@ -17,7 +17,7 @@ const kdsWriteRoles = requireRole(
 // GET pedidos activos para una estación
 //
 // Enrutamiento (en este orden, fuentes que se UNEN — no se sobrescriben):
-//   1. PrinterGroup → categorías + items: el modelo Loyverse moderno.
+//   1. PrinterGroup → categorías + items: el modelo moderno.
 //      Una categoría/item asignado a un grupo cuyo miembro sea una
 //      impresora con type=station entra al filtro de esta estación.
 //   2. Printer.categories[] (legacy): array Postgres de categoryIds en la

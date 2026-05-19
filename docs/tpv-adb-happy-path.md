@@ -36,6 +36,17 @@ Si no quieres que el script meta el PIN o el producto automáticamente:
 ./scripts/tpv-adb-happy-path.ps1 -DeviceId ADNKCP3324400995
 ```
 
+Modo híbrido recomendado para esta tablet/WebView:
+
+```powershell
+./scripts/tpv-adb-happy-path.ps1 `
+  -DeviceId ADNKCP3324400995 `
+  -OrderType TAKEOUT `
+  -ManualCatalog
+```
+
+Ese modo deja manual la selección de categoría/producto y automatiza el resto del flujo con evidencia.
+
 ## Parámetros útiles
 
 - `-DeviceId`: dispositivo ADB objetivo.
@@ -45,6 +56,7 @@ Si no quieres que el script meta el PIN o el producto automáticamente:
 - `-ArtifactsRoot`: carpeta base para screenshots, XML y logs.
 - `-SkipLaunch`: reutiliza la pantalla actual en lugar de relanzar la app.
 - `-SkipLogcat`: evita grabar `logcat`.
+- `-ManualCatalog`: pausa para que el operador elija categoría y producto manualmente antes de retomar cobro y evidencia.
 
 ## Artifacts
 

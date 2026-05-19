@@ -50,7 +50,7 @@ const matchesFilter = (order: DrawerOrder, filter: FilterKey): boolean => {
   return true;
 };
 
-// Tonos de borde y dot por estado, alineados a la paleta Warm Tech.
+// Tonos de borde y dot por estado, alineados a la paleta diseño operativo.
 const STATUS_TONE: Record<string, { dot: string; ring: string; chip: string }> = {
   READY:        { dot: "bg-[#88D66C]", ring: "border-[#88D66C]/40", chip: "text-[#88D66C]" },
   PREPARING:    { dot: "bg-[#ffb84d]", ring: "border-[#ffb84d]/40", chip: "text-[#ffb84d]" },

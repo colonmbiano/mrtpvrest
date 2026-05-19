@@ -144,7 +144,7 @@ export default function AparienciaPage() {
             </h2>
           </div>
           <p className="text-[11px] font-medium text-zinc-500 mb-4">
-            Aplica al TPV completo. El default Loyverse-tight es Chico.
+            Aplica al TPV completo. El tamaño por defecto es Chico.
           </p>
           <div className="grid grid-cols-3 gap-3">
             {(Object.keys(UI_SCALE_META) as UiScale[]).map((s) => {
@@ -228,7 +228,7 @@ export default function AparienciaPage() {
             </h2>
           </div>
           <p className="text-[11px] font-medium text-zinc-500 mb-4">
-            Tema del color principal. El ámbar Warm Tech es el default.
+            Tema del color principal. El ámbar diseño operativo es el default.
           </p>
           <div className="grid grid-cols-3 gap-3">
             {THEMES.map((t) => {

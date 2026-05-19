@@ -278,7 +278,7 @@ export default function SaasDashboardPage() {
     { key: "openRegistration" as const, label: "Registro libre",      desc: "Nuevas marcas sin aprobación manual", accent: "green" },
     { key: "autoTrial" as const,        label: "Trial automático",     desc: "Al registrarse inicia período gratis", accent: "blue" },
     { key: "maintenanceMode" as const,  label: "Modo mantenimiento",   desc: "Bloquea acceso a todos los TPV",       accent: "red" },
-    { key: "whatsappEnabled" as const,  label: "Notif. WhatsApp",      desc: "Whapi.cloud activo globalmente",       accent: "green" },
+    { key: "whatsappEnabled" as const,  label: "Notif. mensajeria",      desc: "Canal de mensajeria activo globalmente",       accent: "green" },
   ];
 
   const PLAN_ACCENTS = ["blue", "purple", "green", "amber"] as const;

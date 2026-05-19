@@ -158,7 +158,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </Link>
       </aside>
 
-      {/* MAIN CONTENT - WARM TECH */}
+      {/* MAIN CONTENT - DISEÑO OPERATIVO */}
       <main className="flex-1 overflow-y-auto relative">
         {/* Ambient Glow */}
         <div className="absolute top-0 right-0 w-full h-full pointer-events-none overflow-hidden opacity-10">

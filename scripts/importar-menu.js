@@ -63,7 +63,7 @@ async function run() {
   const rows = parseCsv(path.resolve(csvPath));
   const modifierColumns = Object.keys(rows[0]).filter(k => k.startsWith('modificador - '));
 
-  // Agrupar por 'Handle' (es el ID único del producto en Loyverse)
+  // Agrupar por 'Handle' (es el ID único del producto en el origen)
   const groups = new Map();
   rows.forEach(row => {
     const handle = row['Handle'];
@@ -83,7 +83,7 @@ async function run() {
     if (!category) continue;
 
     const hasVariants = items.length > 1 || items[0]['Opción 1 valor'];
-    const basePrice = parseFloat(main['Precio [Master burger]']) || parseFloat(main['Precio por defecto']) || 0;
+    const basePrice = parseFloat(main['Precio [Sucursal Demo]']) || parseFloat(main['Precio por defecto']) || 0;
 
     // Upsert MenuItem
     let menuItem = await prisma.menuItem.findFirst({
@@ -113,7 +113,7 @@ async function run() {
           .filter(Boolean).join(' ').trim();
         if (!variantName) continue;
 
-        const vPrice = parseFloat(item['Precio [Master burger]']) || parseFloat(item['Precio por defecto']) || 0;
+        const vPrice = parseFloat(item['Precio [Sucursal Demo]']) || parseFloat(item['Precio por defecto']) || 0;
         
         const existingVariant = await prisma.menuItemVariant.findFirst({
           where: { menuItemId: menuItem.id, name: variantName }

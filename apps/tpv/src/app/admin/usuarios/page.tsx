@@ -22,7 +22,7 @@ import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 const ROLES = ["OWNER", "ADMIN", "MANAGER", "CASHIER", "WAITER", "KITCHEN", "COOK", "DELIVERY"];
 
 // Permisos legacy (sistema general). Se mantienen por compatibilidad
-// hacia atrás — la sección Warm Tech del bottom de la modal es la nueva.
+// hacia atrás — la sección diseño operativo del bottom de la modal es la nueva.
 const PERM_KEYS = [
   { key: "canCharge",        label: "Cobrar / Apertura Cajón" },
   { key: "canDiscount",      label: "Aplicar Descuentos" },
@@ -317,10 +317,10 @@ export default function UsuariosAdmin() {
   );
 }
 
-// ─── TOGGLE WARM TECH ─────────────────────────────────────────────────────
+// ─── TOGGLE DISEÑO OPERATIVO ─────────────────────────────────────────────────────
 //
 // Switch táctil con el ámbar miel como color activo. Sin hover (mandato
-// Warm Tech), feedback visible vía cambio de fondo y deslizamiento del
+// diseño operativo), feedback visible vía cambio de fondo y deslizamiento del
 // thumb. Soporta clic en cualquier parte de la fila gracias al wrapper
 // <button> que envuelve toda la tarjeta.
 

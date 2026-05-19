@@ -23,7 +23,7 @@ interface NumpadPINProps {
  *  - El gap también es relativo (`min(2vmin, 14px)`) para que el padding
  *    visual sea consistente en cualquier orientación.
  *
- * Sin :hover por mandato Warm Tech — solo `active:scale-95` para feedback
+ * Sin :hover por mandato diseño operativo — solo `active:scale-95` para feedback
  * táctil real en tablets.
  */
 export default function NumpadPIN({
@@ -83,7 +83,7 @@ export default function NumpadPIN({
       {/* PIN DOTS — escalan con el ancho del contenedor */}
       <div
         className="flex justify-center"
-        style={{ gap: 'min(3vmin, 14px)' }}
+        style={{ gap: 'min(4vmin, 20px)' }}
       >
         {Array.from({ length: maxDigits }).map((_, i) => {
           const filled = i < pin.length;
@@ -92,12 +92,12 @@ export default function NumpadPIN({
               key={i}
               className="rounded-full border-2 transition-all"
               style={{
-                width: 'clamp(14px, 4vmin, 22px)',
-                height: 'clamp(14px, 4vmin, 22px)',
+                width: 'clamp(20px, 6vmin, 32px)',
+                height: 'clamp(20px, 6vmin, 32px)',
                 background: filled ? '#ffb84d' : 'transparent',
-                borderColor: filled ? '#ffb84d' : 'rgba(255,255,255,0.25)',
+                borderColor: filled ? '#ffb84d' : 'rgba(255,255,255,0.2)',
                 boxShadow: filled
-                  ? '0 0 12px rgba(255,184,77,0.5)'
+                  ? '0 0 20px rgba(255,184,77,0.6)'
                   : 'none',
               }}
             />
@@ -108,7 +108,7 @@ export default function NumpadPIN({
       {/* GRID 3-COL · botones aspect-square */}
       <div
         className="grid grid-cols-3"
-        style={{ gap: 'min(2vmin, 14px)' }}
+        style={{ gap: 'min(3vmin, 24px)' }}
       >
         {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
           <button
@@ -118,8 +118,8 @@ export default function NumpadPIN({
             disabled={disabled || pin.length >= maxDigits}
             className={digitClass}
             style={{
-              fontSize: 'clamp(2rem, 8vmin, 4rem)',
-              minHeight: 64,
+              fontSize: 'clamp(2.5rem, 10vmin, 5rem)',
+              minHeight: 80,
             }}
           >
             {digit}
@@ -136,8 +136,8 @@ export default function NumpadPIN({
           disabled={disabled || pin.length >= maxDigits}
           className={digitClass}
           style={{
-            fontSize: 'clamp(2rem, 8vmin, 4rem)',
-            minHeight: 64,
+            fontSize: 'clamp(2.5rem, 10vmin, 5rem)',
+            minHeight: 80,
           }}
         >
           0
@@ -150,9 +150,9 @@ export default function NumpadPIN({
           disabled={disabled || pin.length === 0}
           aria-label="Borrar último dígito"
           className={delClass}
-          style={{ minHeight: 64 }}
+          style={{ minHeight: 80 }}
         >
-          <Delete style={{ width: 'clamp(20px, 4vmin, 28px)', height: 'auto' }} />
+          <Delete style={{ width: 'clamp(24px, 6vmin, 40px)', height: 'auto' }} />
         </button>
       </div>
     </div>

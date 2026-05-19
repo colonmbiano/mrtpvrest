@@ -50,7 +50,7 @@ export default function IngredientShortageModal({ order, onClose }: {
         <div className="text-5xl mb-3">✅</div>
         <h3 className="font-syne font-black text-xl mb-2">Notificación enviada</h3>
         <p className="text-sm mb-4" style={{color:"var(--muted)"}}>
-          Se notificó al cliente por WhatsApp y notificación push con las opciones disponibles.
+          Se notificó al cliente por mensajeria y notificación push con las opciones disponibles.
         </p>
         <button onClick={onClose}
           className="w-full py-3 rounded-xl font-syne font-black"
@@ -134,9 +134,9 @@ export default function IngredientShortageModal({ order, onClose }: {
 
           {/* Preview del mensaje */}
           <div className="rounded-xl p-4" style={{background:"rgba(37,211,102,0.08)",border:"1px solid rgba(37,211,102,0.2)"}}>
-            <div className="text-xs font-black mb-2" style={{color:"#25d366"}}>📱 Preview WhatsApp</div>
+            <div className="text-xs font-black mb-2" style={{color:"#25d366"}}>📱 Preview de mensaje</div>
             <div className="text-xs" style={{color:"var(--muted)",whiteSpace:"pre-line"}}>
-              {`*Master Burger's*\n⚠️ Aviso sobre tu pedido ${order.orderNumber}:\nNos falta *${missingItem || "[ingrediente]"}* para preparar tu pedido.\n${options.map((o,i) => `${i+1}. ${o}`).join('\n')}\nResponde con el número de tu opción.`}
+              {`*Restaurante Demo*\n⚠️ Aviso sobre tu pedido ${order.orderNumber}:\nNos falta *${missingItem || "[ingrediente]"}* para preparar tu pedido.\n${options.map((o,i) => `${i+1}. ${o}`).join('\n')}\nResponde con el número de tu opción.`}
             </div>
           </div>
         </div>

@@ -110,7 +110,7 @@ async function notifyOrderStatus(order, status) {
   if (order.userId) await sendPushToUser(order.userId, { title: msg.title, body: text, tag: order.id, data: { url: `/pedido/${order.id}` } });
   // WhatsApp
   const phone = order.customerPhone || order.user?.phone;
-  if (phone) await sendWhatsApp(phone, `*Master Burger's* \n${msg.emoji} ${text}`);
+  if (phone) await sendWhatsApp(phone, `*Restaurante Demo* \n${msg.emoji} ${text}`);
 }
 
 // ── Notificar falta de ingrediente ────────────────────────────────────────
@@ -129,7 +129,7 @@ async function notifyIngredientShortage(order, missingItem, options) {
       ? `\nOpciones:\n${options.map((o,i) => `${i+1}. ${o}`).join('\n')}`
       : '';
     await sendWhatsApp(phone,
-      `*Master Burger's* \n⚠️ Aviso sobre tu pedido ${order.orderNumber}:\n` +
+      `*Restaurante Demo* \n⚠️ Aviso sobre tu pedido ${order.orderNumber}:\n` +
       `Nos falta *${missingItem}* para preparar tu pedido.${optText}\n` +
       `Responde con el número de tu opción o escríbenos para ayudarte.`
     );

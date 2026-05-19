@@ -17,7 +17,7 @@ interface BackButtonProps {
 /**
  * BackButton — botón circular reutilizable para cabeceras y modales.
  *
- * Estilo HALO/Warm Tech: bg white/5, backdrop-blur, borde sutil,
+ * Estilo HALO/diseño operativo: bg white/5, backdrop-blur, borde sutil,
  * active:scale-95. Usa router.back() de Next.js para preservar el
  * estado de la navegación (filtros, scroll, memoria de la sesión).
  */

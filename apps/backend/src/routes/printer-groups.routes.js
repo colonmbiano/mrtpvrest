@@ -1,5 +1,5 @@
 /**
- * /api/printer-groups — CRUD de Printer Groups (modelo Loyverse).
+ * /api/printer-groups — CRUD de Printer Groups.
  *
  * Un grupo agrupa N impresoras (térmicas + KDS) que reciben las mismas
  * comandas. Las relaciones M:N a Printer / Category / MenuItem se

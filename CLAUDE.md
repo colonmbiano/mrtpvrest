@@ -6,7 +6,7 @@
 - **IA:** Estrategia Híbrida (Groq Llama 3.1 para texto/chat, Gemini 1.5 Flash para visión).
 - **Monorepo:** Estructura de carpetas en `apps/tpv`, `apps/backend`, `packages/shared`.
 
-## Identidad Visual (Warm Tech)
+## Identidad Visual (diseño operativo)
 - **Fuentes:** Syne (Títulos), Outfit (Cuerpo).
 - **Colores:** Fondo: #0C0C0E (Obsidiana), Acento: #FFB84D (Ámbar Miel), Éxito: #88D66C (Verde Salvia).
 - **Estilo:** Glassmorphism, bordes redondeados (3xl/full), transparencias sutiles.

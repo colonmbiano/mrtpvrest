@@ -345,7 +345,7 @@ export default function TenantDetailPage() {
                   </button>
                   {tenant.whatsappNumber && (
                     <a className="db-btn" style={{ justifyContent: "flex-start" }} href={`https://wa.me/${tenant.whatsappNumber.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">
-                      <MessageSquare size={13} /> WhatsApp
+                      <MessageSquare size={13} /> Mensaje
                     </a>
                   )}
                   <a className="db-btn" style={{ justifyContent: "flex-start" }} href={`mailto:${tenant.ownerEmail}`}>

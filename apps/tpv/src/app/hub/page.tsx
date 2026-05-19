@@ -178,7 +178,7 @@ function HubPageInner() {
       className="relative min-h-screen w-full overflow-hidden bg-[#0a0a0c]"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
-      {/* Ambient Warm Tech glows */}
+      {/* Ambient diseño operativo glows */}
       <div
         aria-hidden
         className="pointer-events-none absolute -top-60 -left-60 w-[700px] h-[700px] rounded-full blur-[120px] opacity-60"
@@ -245,7 +245,7 @@ function HubPageInner() {
 
       {/* Hero + tarjeta premium */}
       <main className="relative z-10 flex flex-col items-center justify-center px-6 pt-6 pb-24">
-        {/* Bloque tarjeta principal — glassmorphism Warm Tech */}
+        {/* Bloque tarjeta principal — glassmorphism diseño operativo */}
         <div
           className="w-full max-w-5xl bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8 md:p-12 shadow-[0_30px_80px_rgba(0,0,0,0.4)]"
         >

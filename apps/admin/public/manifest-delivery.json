@@ -1,7 +1,7 @@
 {
-  "name": "Master Burger's - Repartidor",
+  "name": "Restaurante Demo - Repartidor",
   "short_name": "Repartidor",
-  "description": "App de entregas Master Burger's",
+  "description": "App de entregas Restaurante Demo",
   "start_url": "/repartidor",
   "display": "standalone",
   "background_color": "#0a0a0a",

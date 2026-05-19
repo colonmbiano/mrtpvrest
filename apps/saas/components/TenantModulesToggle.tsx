@@ -128,9 +128,9 @@ export default function TenantModulesToggle({ tenant, onUpdated, onError }: Prop
               padding: "3px 8px", fontSize: 10, fontFamily: "DM Mono, monospace",
               color: local.whatsappNumber ? "var(--text2)" : "var(--text3)",
             }}
-            title="Editar WhatsApp"
+            title="Editar mensajeria"
           >
-            {local.whatsappNumber ? `📱 ${local.whatsappNumber}` : "+ WhatsApp"}
+            {local.whatsappNumber ? `📱 ${local.whatsappNumber}` : "+ Mensajeria"}
           </button>
         )}
       </div>

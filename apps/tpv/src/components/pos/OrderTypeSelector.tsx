@@ -62,7 +62,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center overflow-auto bg-[#0a0a0c]"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
-      {/* Ambient Warm Tech glows */}
+      {/* Ambient diseño operativo glows */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-60 -left-60 w-[700px] h-[700px] rounded-full blur-[120px] bg-amber-500/10" />
         <div className="absolute -bottom-60 -right-60 w-[700px] h-[700px] rounded-full blur-[120px] bg-amber-500/10" />

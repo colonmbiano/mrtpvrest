@@ -16,7 +16,7 @@ import java.net.Socket;
  * TcpListener — servidor TCP minimal para que el KDS reciba "comandas
  * impresas" como si fuera una impresora térmica de cocina.
  *
- * Loyverse (y la mayoría de los KDS comerciales) modelan así el flujo:
+ * La mayoría de los KDS comerciales modelan así el flujo:
  * el TPV manda ESC/POS por TCP a la IP del KDS exactamente igual que a
  * una impresora real. La pantalla escucha en port 9100, parsea el
  * payload (texto plano + comandos format) y muestra la comanda como

@@ -53,7 +53,7 @@ export default function Sidebar() {
       <div className="px-5 py-5 border-b" style={{borderColor:"var(--border)"}}>
         <div className="flex items-center gap-3">
           {!imgError ? (
-            <Image src="/logo.png" alt="Master Burger's" width={44} height={44}
+            <Image src="/logo.png" alt="Restaurante Demo" width={44} height={44}
               className="rounded-xl object-cover"
               onError={() => setImgError(true)}
             />
@@ -61,7 +61,7 @@ export default function Sidebar() {
             <span className="text-2xl">🍔</span>
           )}
           <div>
-            <div className="font-syne font-black text-sm leading-tight" style={{color:"var(--text)"}}>Master Burger&apos;s</div>
+            <div className="font-syne font-black text-sm leading-tight" style={{color:"var(--text)"}}>Restaurante Demo</div>
             <div className="text-xs font-bold" style={{color:"var(--gold)"}}>Panel Admin</div>
           </div>
         </div>

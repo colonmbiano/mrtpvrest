@@ -165,7 +165,7 @@ const ShiftOpenPage = () => {
       </main>
 
       <footer className="h-16 flex items-center justify-center text-[10px] font-black uppercase tracking-[0.2em] text-zinc-700">
-        MRTPVREST System · v2.4.0 · Warm Tech UI
+        MRTPVREST System · v2.4.0 · diseño operativo UI
       </footer>
     </div>
   );

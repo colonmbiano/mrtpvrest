@@ -75,7 +75,7 @@ router.post('/create', async (req, res) => {
         ...(process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes('localhost') ? { auto_return: 'approved' } : {}),
         external_reference: orderId,
         notification_url: `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/payments/webhook`,
-        statement_descriptor: "Master Burger's",
+        statement_descriptor: "Restaurante Demo",
       },
     });
 

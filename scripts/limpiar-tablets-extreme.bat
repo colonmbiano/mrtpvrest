@@ -3,7 +3,7 @@ set DEVICE_ID=%1
 
 if "%DEVICE_ID%"=="" (
     echo Error: Debes proporcionar un ID de dispositivo ADB.
-    echo Ejemplo: clean-tablet.bat adb-Tab70WiFi...
+    echo Ejemplo: clean-tablet.bat adb-tablet principalWiFi...
     exit /b 1
 )
 

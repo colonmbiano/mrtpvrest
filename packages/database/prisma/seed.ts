@@ -24,7 +24,7 @@ const PLATFORM = {
 
 const CUSTOMER = {
   tenantSlug: 'master-burgers-colo',
-  tenantName: "Master Burger's Colo",
+  tenantName: "Restaurante Demo Colo",
   restaurantSlug: 'master-burgers-colo-rest',
   locationSlug: 'master-burgers-colo-centro',
   locationName: 'Sucursal Centro',
@@ -198,7 +198,7 @@ async function seedCustomer() {
   const admin = await prisma.user.upsert({
     where: { email: CUSTOMER.adminEmail },
     create: {
-      name: 'Admin Master Burgers',
+      name: 'Admin Restaurante Demo',
       email: CUSTOMER.adminEmail,
       passwordHash,
       role: Role.ADMIN,

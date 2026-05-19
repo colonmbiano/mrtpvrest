@@ -312,7 +312,7 @@ export default function BrandConfigPage() {
                 <input type="text" value={config.phone} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, phone: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
               </div>
               <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">WhatsApp</label>
+                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Mensajeria</label>
                 <input type="text" value={config.whatsappNumber} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, whatsappNumber: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
               </div>
             </div>

@@ -242,7 +242,7 @@ export default function DeliveryApp() {
         <div className="text-center mb-8">
           <div className="text-6xl mb-3">🛵</div>
           <h1 className="font-syne text-3xl font-black">App Repartidor</h1>
-          <p className="text-sm mt-1" style={{color:"var(--muted)"}}>Master Burger&apos;s</p>
+          <p className="text-sm mt-1" style={{color:"var(--muted)"}}>Restaurante Demo</p>
         </div>
         <form onSubmit={handleLogin} className="rounded-2xl border p-6" style={{background:"var(--surf)",borderColor:"var(--border)"}}>
           <div className="mb-4">
@@ -359,7 +359,7 @@ export default function DeliveryApp() {
                         style={{background:"rgba(34,197,94,0.1)",color:"#22c55e"}}>📞 Llamar</a>
                       <a href={`https://wa.me/${order.customerPhone}`} target="_blank" rel="noreferrer"
                         className="text-xs flex items-center gap-1 px-2 py-1 rounded-lg"
-                        style={{background:"rgba(34,197,94,0.1)",color:"#22c55e"}}>💬 WhatsApp</a>
+                        style={{background:"rgba(34,197,94,0.1)",color:"#22c55e"}}>💬 Mensaje</a>
                     </div>
                   )}
                 </div>
@@ -383,11 +383,11 @@ export default function DeliveryApp() {
                     <div className="flex border-t" style={{borderColor:"var(--border)"}}>
                       <button onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(order.deliveryAddress)}`, '_blank')}
                         className="flex-1 py-2 text-xs font-bold flex items-center justify-center gap-1"
-                        style={{color:"#3b82f6"}}>🗺️ Google Maps</button>
+                        style={{color:"#3b82f6"}}>🗺️ Mapa</button>
                       <div className="w-px" style={{background:"var(--border)"}} />
                       <button onClick={() => window.open(`https://waze.com/ul?q=${encodeURIComponent(order.deliveryAddress)}`, '_blank')}
                         className="flex-1 py-2 text-xs font-bold flex items-center justify-center gap-1"
-                        style={{color:"#00c0f3"}}>🚗 Waze</button>
+                        style={{color:"#00c0f3"}}>🚗 Ruta</button>
                     </div>
                   </div>
                 </div>
@@ -445,7 +445,7 @@ export default function DeliveryApp() {
               <a href={`https://wa.me/${selectedOrder.customerPhone}`} target="_blank" rel="noreferrer"
                 className="flex-1 py-2 rounded-xl text-xs font-bold text-center"
                 style={{background:"rgba(37,211,102,0.1)",color:"#25d366",border:"1px solid rgba(37,211,102,0.2)"}}>
-                💬 WhatsApp
+                💬 Mensaje
               </a>
             </div>
           )}
@@ -458,11 +458,11 @@ export default function DeliveryApp() {
             <div className="flex gap-2">
               <button onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(selectedOrder.deliveryAddress)}`, '_blank')}
                 className="flex-1 py-2.5 rounded-xl text-xs font-black" style={{background:"#3b82f6",color:"#fff"}}>
-                🗺️ Google Maps
+                🗺️ Mapa
               </button>
               <button onClick={() => window.open(`https://waze.com/ul?q=${encodeURIComponent(selectedOrder.deliveryAddress)}`, '_blank')}
                 className="flex-1 py-2.5 rounded-xl text-xs font-black" style={{background:"#00c0f3",color:"#fff"}}>
-                🚗 Waze
+                🚗 Ruta
               </button>
             </div>
           </div>
