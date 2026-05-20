@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "@/lib/api";
@@ -15,11 +15,6 @@ export default function LoginPage() {
   const [pendingEmail, setPendingEmail] = useState("");
   const [resending, setResending]   = useState(false);
   const [resendDone, setResendDone] = useState(false);
-
-  useEffect(() => {
-    const token = localStorage.getItem("accessToken");
-    if (token) router.push("/dashboard");
-  }, []);
 
   const handleResend = async () => {
     setResending(true);
