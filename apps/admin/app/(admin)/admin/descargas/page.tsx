@@ -1,7 +1,5 @@
 "use client";
 import React from "react";
-import Image from "next/image";
-
 const APPS = [
   {
     id: "tpv",
@@ -67,14 +65,13 @@ export default function DescargasPage() {
             {/* Imagen ilustrativa */}
             <div className="w-full sm:w-1/3 flex-shrink-0 flex flex-col items-center justify-center gap-4">
               <div
-                className="w-full aspect-square relative rounded-xl overflow-hidden bg-black/5"
+                className="w-full aspect-square relative rounded-xl overflow-hidden bg-black/5 flex items-center justify-center"
                 style={{ border: "1px solid var(--border)" }}
               >
-                <Image
+                <img
                   src={app.image}
                   alt={app.title}
-                  fill
-                  className="object-cover"
+                  className="w-full h-full object-cover"
                 />
               </div>
               <a
