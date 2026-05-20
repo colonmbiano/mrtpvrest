@@ -54,6 +54,11 @@ const CSS = `
   .ia-chat-panel.open { transform: translateX(0); }
   .ia-overlay.open { display: block; }
 }
+
+@media print {
+  .ia-chat-panel, .ia-overlay, .ia-fab, .ia-no-print { display: none !important; }
+  .ia-main-panel { height: auto !important; overflow: visible !important; padding: 0 !important; }
+}
 `;
 
 /* ── Tokens ────────────────────────────────────────────────── */
@@ -187,6 +192,73 @@ export default function ReportesIAPage() {
   const [actions, setActions]   = useState<SuggestedAction[]>([]);
   const [daily, setDaily]       = useState<SalesByDay | null>(null);
   const [loading, setLoading]   = useState(true);
+  // Feedback efímero para acciones (copiar enlace, guardar). Se autodescarta.
+  const [toast, setToast]       = useState<string | null>(null);
+  // Reportes guardados en el navegador. Backend GET /api/reports/saved es stub
+  // que regresa [], así que mientras no exista persistencia real usamos
+  // localStorage para que el botón "Guardar" tenga consecuencia visible.
+  const [savedLocal, setSavedLocal] = useState<SavedReport[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("ia-saved-reports");
+      if (raw) setSavedLocal(JSON.parse(raw));
+    } catch { /* localStorage no disponible */ }
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2400);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  function persistSaved(list: SavedReport[]) {
+    setSavedLocal(list);
+    try { localStorage.setItem("ia-saved-reports", JSON.stringify(list)); } catch { /* noop */ }
+  }
+
+  function handleSaveReport() {
+    const id = `local-${Date.now()}`;
+    const ordersTxt = stats ? `${(stats.orders.value ?? 0).toLocaleString("es-MX")} pedidos` : "sin pedidos";
+    const next: SavedReport = {
+      id,
+      title: `Ventas por sucursal · ${PERIOD_LABEL[period]}`,
+      tag: "LOCAL",
+      tagColor: V.iris3 as string,
+      tagBg: V.irisS as string,
+      sub: `${sedes.length} ${sedes.length === 1 ? "sede" : "sedes"} · ${ordersTxt} · guardado ${new Date().toLocaleDateString("es-MX")}`,
+    };
+    persistSaved([next, ...savedLocal]);
+    setToast("Reporte guardado");
+  }
+
+  async function handleShareReport() {
+    const url = typeof window !== "undefined" ? `${window.location.origin}${window.location.pathname}?period=${period}` : "";
+    try {
+      await navigator.clipboard.writeText(url);
+      setToast("Enlace copiado al portapapeles");
+    } catch {
+      setToast("No se pudo copiar el enlace");
+    }
+  }
+
+  function handleExportPdf() {
+    if (typeof window !== "undefined") window.print();
+  }
+
+  function handleNewSavedReport() {
+    sendChat(`Quiero crear un reporte personalizado nuevo del periodo ${PERIOD_LABEL[period]}. ¿Qué métricas o cortes me sugieres incluir según los datos que ya tienes?`);
+    setIsChatOpen(true);
+  }
+
+  function handleMoreInsights() {
+    sendChat(`Dame más insights y patrones interesantes del periodo ${PERIOD_LABEL[period]} más allá de los que ya detectaste automáticamente.`);
+    setIsChatOpen(true);
+  }
+
+  function handleDeleteSaved(id: string) {
+    persistSaved(savedLocal.filter(s => s.id !== id));
+  }
 
   useEffect(() => {
     let cancel = false;
@@ -327,6 +399,14 @@ export default function ReportesIAPage() {
                   }}>{p}</button>
                 ))}
               </div>
+              <button onClick={handleExportPdf} style={btn(false, true)} title="Imprimir o guardar como PDF">
+                <span className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95" style={{ verticalAlign: -2, marginRight: 4 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                </span>
+                Exportar PDF
+              </button>
             </div>
           </div>
 
@@ -401,6 +481,7 @@ export default function ReportesIAPage() {
               <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: V.txHi }}>Insights que encontré para ti</h3>
               <div style={{ fontSize: 12, color: V.txMut, marginTop: 2 }}>Detectados automáticamente en {PERIOD_LABEL[period].toLowerCase()}</div>
             </div>
+            <button onClick={handleMoreInsights} style={btn(false, true)} title="Pedir más insights al asistente">Pedir más →</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: insights.length === 0 ? "1fr" : "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
             {insights.length === 0 && (
@@ -463,6 +544,28 @@ export default function ReportesIAPage() {
                   <span style={{ color: V.txDim }}>·</span>
                   <span>{stats ? `${(stats.orders.value ?? 0).toLocaleString("es-MX")} pedidos` : "sin pedidos"}</span>
                 </div>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={handleSaveReport} style={{ ...btn(false, true), padding: "8px 10px" }} title="Guardar reporte" aria-label="Guardar reporte">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                </button>
+                <button onClick={handleShareReport} style={{ ...btn(false, true), padding: "8px 10px" }} title="Copiar enlace al reporte" aria-label="Compartir">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                  </svg>
+                </button>
+                <button onClick={handleExportPdf} style={{ ...btn(false, true), padding: "8px 10px" }} title="Descargar / imprimir como PDF" aria-label="Descargar">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                </button>
               </div>
             </div>
 
@@ -765,26 +868,44 @@ export default function ReportesIAPage() {
               <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: V.txHi }}>Reportes guardados</h3>
               <div style={{ fontSize: 12, color: V.txMut, marginTop: 2 }}>Reportes recurrentes y favoritos</div>
             </div>
+            <button onClick={handleNewSavedReport} style={btn(false, true)} title="Pedir al asistente que defina uno nuevo">+ Nuevo reporte</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
-            {saved.length === 0 && (
-              <div style={{ gridColumn: "1 / -1", border: `1px dashed ${V.bd1}`, borderRadius: 12, padding: "28px 20px", textAlign: "center", color: V.txMut, fontSize: 13 }}>
-                Aún no has guardado reportes.
-              </div>
-            )}
-            {saved.map(s => (
-              <div key={s.id ?? s.title} style={{
-                background: s.active ? `linear-gradient(90deg,rgba(124,58,237,.08),transparent)` : V.surf1,
-                border: `1px solid ${s.active ? V.iris5 : V.bd1}`,
-                borderRadius: 12, padding: "14px 16px", cursor: "pointer",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontWeight: 600, color: V.tx, fontSize: 13 }}>{s.title}</span>
-                  <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".1em", color: s.tagColor, background: s.tagBg, padding: "2px 6px", borderRadius: 5, fontWeight: 600 }}>{s.tag}</span>
-                </div>
-                <div style={{ fontSize: 11, color: V.txMut }}>{s.sub}</div>
-              </div>
-            ))}
+            {(() => {
+              const all = [...savedLocal, ...saved];
+              if (all.length === 0) {
+                return (
+                  <div style={{ gridColumn: "1 / -1", border: `1px dashed ${V.bd1}`, borderRadius: 12, padding: "28px 20px", textAlign: "center", color: V.txMut, fontSize: 13 }}>
+                    Aún no has guardado reportes. Usa el botón 💾 del reporte para guardar uno.
+                  </div>
+                );
+              }
+              return all.map(s => {
+                const isLocal = String(s.id ?? "").startsWith("local-");
+                return (
+                  <div key={s.id ?? s.title} style={{
+                    background: s.active ? `linear-gradient(90deg,rgba(124,58,237,.08),transparent)` : V.surf1,
+                    border: `1px solid ${s.active ? V.iris5 : V.bd1}`,
+                    borderRadius: 12, padding: "14px 16px",
+                    position: "relative",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, gap: 8 }}>
+                      <span style={{ fontWeight: 600, color: V.tx, fontSize: 13 }}>{s.title}</span>
+                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".1em", color: s.tagColor, background: s.tagBg, padding: "2px 6px", borderRadius: 5, fontWeight: 600 }}>{s.tag}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: V.txMut }}>{s.sub}</div>
+                    {isLocal && (
+                      <button
+                        onClick={() => handleDeleteSaved(String(s.id))}
+                        style={{ position: "absolute", top: 8, right: 8, background: "transparent", border: "none", color: V.txDim, cursor: "pointer", padding: 4, lineHeight: 1, fontSize: 14 }}
+                        title="Eliminar reporte guardado"
+                        aria-label="Eliminar"
+                      >×</button>
+                    )}
+                  </div>
+                );
+              });
+            })()}
           </div>
 
         </div>
@@ -911,6 +1032,22 @@ export default function ReportesIAPage() {
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
         </button>
+      )}
+
+      {/* ═══ TOAST (feedback de copiar/guardar) ════════════ */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed", bottom: 96, left: "50%", transform: "translateX(-50%)",
+            background: V.surf1, border: `1px solid ${V.bd1}`, color: V.txHi,
+            padding: "10px 16px", borderRadius: 999, fontSize: 13, fontWeight: 600,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.35)", zIndex: 60,
+          }}
+        >
+          {toast}
+        </div>
       )}
     </>
   );
