@@ -445,12 +445,19 @@ export default function MenuEditorPage() {
       for (const item of aiItems) {
         const cat = item.category ? categoryMap.get(item.category.toLowerCase()) : fallbackCat;
         if (!cat?.id) continue;
-        await api.post("/api/menu/items", {
+        const { data: createdItem } = await api.post("/api/menu/items", {
           name: item.name,
           description: item.description || "",
           price: item.price || 0,
           categoryId: cat.id,
         });
+        if (item.variants && item.variants.length > 0) {
+          for (const v of item.variants) {
+            await api.post(`/api/menu/${createdItem.id}/variants`, {
+              name: v.name, price: v.price || 0
+            }).catch(e => console.error("Error variante IA", e));
+          }
+        }
       }
       toast.success("Menu importado");
       await fetchData();
