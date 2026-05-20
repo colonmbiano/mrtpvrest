@@ -42,6 +42,7 @@ const ILayoutDash = ({ size }: IconProps) => ic(<><rect x="1" y="1" width="6" he
 const IPuzzle    = ({ size }: IconProps) => ic(<><path d="M6 2h4v2a1 1 0 001 1h2v4h-2a1 1 0 00-1 1v2H6v-2a1 1 0 00-1-1H3V5h2a1 1 0 001-1V2z"/></>, size);
 const ICreditCard= ({ size }: IconProps) => ic(<><rect x="1" y="3" width="14" height="10" rx="1.5"/><line x1="1" y1="6.5" x2="15" y2="6.5"/><line x1="4" y1="10.5" x2="7" y2="10.5"/></>, size);
 const IDownload  = ({ size }: IconProps) => ic(<><path d="M14 11v2a1 1 0 01-1 1H3a1 1 0 01-1-1v-2"/><path d="M4 7l4 4 4-4M8 1v10"/></>, size);
+const ITag       = ({ size }: IconProps) => ic(<><path d="M1 1h5l7 7a2 2 0 010 2.83l-3.17 3.17a2 2 0 01-2.83 0L1 8V1z"/><circle cx="4" cy="4" r="1"/></>, size);
 
 // ── Nav sections ──────────────────────────────────────────────
 const SECTIONS = [
@@ -71,6 +72,7 @@ const SECTIONS = [
       { href: "/admin/menu",            icon: <IUtensils />, label: "Platillos" },
       { href: "/admin/menu/categorias", icon: <IFolder />,   label: "Categorías" },
       { href: "/admin/menu/variantes",  icon: <ISliders />,  label: "Variantes" },
+      { href: "/admin/promociones",     icon: <ITag />,      label: "Promociones IA" },
       { href: "/admin/banners",         icon: <IImage />,    label: "Banners" },
       { href: "/admin/inventario",          icon: <IBox />,      label: "Inventario" },
       { href: "/admin/inventario/compras",   icon: <IBox />,      label: "Compras & Bodega" },
