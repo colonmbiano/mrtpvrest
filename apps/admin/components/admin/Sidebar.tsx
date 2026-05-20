@@ -41,6 +41,7 @@ const IMapPin    = ({ size }: IconProps) => ic(<><path d="M8 14s5-4 5-8A5 5 0 00
 const ILayoutDash = ({ size }: IconProps) => ic(<><rect x="1" y="1" width="6" height="8" rx="1"/><rect x="9" y="1" width="6" height="4" rx="1"/><rect x="9" y="7" width="6" height="8" rx="1"/><rect x="1" y="11" width="6" height="4" rx="1"/></>, size);
 const IPuzzle    = ({ size }: IconProps) => ic(<><path d="M6 2h4v2a1 1 0 001 1h2v4h-2a1 1 0 00-1 1v2H6v-2a1 1 0 00-1-1H3V5h2a1 1 0 001-1V2z"/></>, size);
 const ICreditCard= ({ size }: IconProps) => ic(<><rect x="1" y="3" width="14" height="10" rx="1.5"/><line x1="1" y1="6.5" x2="15" y2="6.5"/><line x1="4" y1="10.5" x2="7" y2="10.5"/></>, size);
+const IDownload  = ({ size }: IconProps) => ic(<><path d="M14 11v2a1 1 0 01-1 1H3a1 1 0 01-1-1v-2"/><path d="M4 7l4 4 4-4M8 1v10"/></>, size);
 
 // ── Nav sections ──────────────────────────────────────────────
 const SECTIONS = [
@@ -58,6 +59,7 @@ const SECTIONS = [
       { href: "/admin/integraciones",        icon: <IPlug />,      label: "Integraciones" },
       { href: "/admin/modulos",             icon: <IPuzzle />,    label: "Módulos" },
       { href: "/admin/billing",              icon: <ICreditCard />, label: "Facturación" },
+      { href: "/admin/descargas",           icon: <IDownload />,  label: "Apps & Descargas" },
     ],
   },
   {

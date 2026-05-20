@@ -1,8 +1,7 @@
 const { prisma } = require('@mrtpvrest/database');
 const cron = require('node-cron');
-const OpenAI = require('openai');
-const { resolveGroqKey } = require('../services/ai-key.service');
-const { GROQ_BASE_URL, GROQ_MODEL } = require('../services/groq-error');
+const axios = require('axios');
+const { resolveGeminiKey } = require('../services/ai-key.service');
 
 /**
  * Motor de Promociones Automáticas con IA
@@ -85,25 +84,31 @@ async function runAutoPromos() {
 
         let aiDescription = item.description;
 
-        // Opcional: Usar Groq para generar una descripción llamativa de promoción
+        // Usar Gemini via Axios para generar una descripción llamativa de promoción
         if (!item.isPromo) {
           try {
-            const { apiKey } = await resolveGroqKey({ restaurantId: location.restaurantId });
-            const groq = new OpenAI({ apiKey, baseURL: GROQ_BASE_URL });
+            // Utilizamos resolveGeminiKey que internamente devuelve la key de plataforma (GOOGLE_AI_API_KEY)
+            const { apiKey } = resolveGeminiKey();
+            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
             
             const prompt = `Eres un experto en marketing de restaurantes. El platillo "${item.name}" (Descripción original: "${item.description || 'Sin descripción'}") no se está vendiendo bien. Hemos aplicado un descuento del ${location.autoPromoDiscount}%. Escribe una frase corta (máximo 15 palabras) muy llamativa y apetitosa para promocionar este platillo hoy. No uses comillas.`;
             
-            const completion = await groq.chat.completions.create({
-              model: GROQ_MODEL,
-              messages: [{ role: 'user', content: prompt }],
-              temperature: 0.8,
-              max_tokens: 60
+            const response = await axios.post(geminiUrl, {
+              contents: [{
+                parts: [{ text: prompt }]
+              }],
+              generationConfig: {
+                temperature: 0.8,
+                maxOutputTokens: 60,
+              }
+            }, {
+              headers: { 'Content-Type': 'application/json' }
             });
 
-            const aiText = completion.choices[0]?.message?.content?.trim();
+            const aiText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
             if (aiText) aiDescription = aiText;
           } catch (aiErr) {
-            console.error(`   - Error AI para ${item.name}: ${aiErr.message}`);
+            console.error(`   - Error AI (Gemini) para ${item.name}: ${aiErr.response?.data?.error?.message || aiErr.message}`);
           }
         }
 

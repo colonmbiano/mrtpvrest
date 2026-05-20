@@ -1,4 +1,4 @@
-﻿const express    = require('express')
+const express    = require('express')
 const bcrypt     = require('bcryptjs')
 const jwt        = require('jsonwebtoken')
 const crypto     = require('crypto')
@@ -32,13 +32,32 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { email },
-      include: { restaurant: true } // Traemos la info del restaurante al que pertenece
+      include: { restaurant: true, tenant: true } // Traemos info de restaurante y tenant
     })
 
     if (!user || !user.isActive) return res.status(401).json({ error: 'Credenciales incorrectas o cuenta inactiva' })
 
     const valid = await bcrypt.compare(password, user.passwordHash)
     if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' })
+
+    // Primer login después de verificar: enviamos email de bienvenida con links de descarga
+    if (user.role === 'ADMIN' && user.tenant && user.tenant.emailVerifiedAt && !user.tenant.welcomeEmailSent) {
+      const { welcomeEmailHtml, sendEmail } = require('../utils/mailer')
+      try {
+        await prisma.tenant.update({
+          where: { id: user.tenant.id },
+          data: { welcomeEmailSent: true }
+        })
+        const downloadsUrl = `${process.env.FRONTEND_URL || 'https://admin.mrtpvrest.com'}/descargas`
+        sendEmail(
+          user.email,
+          `¡Bienvenido a ${user.tenant.name}! Descarga tus aplicaciones`,
+          welcomeEmailHtml(user.name, user.tenant.name, downloadsUrl)
+        ).catch(err => log.error('login.welcome_email.failed', { err, email: user.email }))
+      } catch (e) {
+        log.error('login.welcome_email_update.failed', { err: e, email: user.email })
+      }
+    }
 
     // Generamos tokens con el contexto del restaurante y tenant del usuario
     const { accessToken, refreshToken } = generateTokens(user.id, user.restaurantId, user.role, user.tenantId)
