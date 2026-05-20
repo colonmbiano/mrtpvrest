@@ -21,7 +21,7 @@
     "csv-parser": "^3.2.1",
     "dotenv": "^16.4.4",
     "prettier": "^3.4.2",
-    "turbo": "^2.3.3"
+    "turbo": "^2.9.14"
   },
   "engines": {
     "node": ">=20",
