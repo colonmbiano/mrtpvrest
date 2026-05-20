@@ -27,25 +27,32 @@ export default function HomePage() {
           <button className="nav-link">Docs</button>
           <button className="nav-link">Blog</button>
         </div>
-        <a href="https://admin.mrtpvrest.com/register" className="nav-cta" style={{ textDecoration: 'none' }}>Empezar gratis →</a>
+        <div className="nav-actions">
+          <a href="https://admin.mrtpvrest.com/login" className="btn-login" style={{ textDecoration: 'none' }}>Iniciar sesión</a>
+          <a href="https://admin.mrtpvrest.com/register" className="nav-cta" style={{ textDecoration: 'none' }}>Empezar gratis →</a>
+        </div>
       </nav>
 
       <div className="hero">
-        <div className="hero-badge">
+        <div className="hero-badge animate-in">
           <div className="hero-badge-dot" />
           <span>ECOSISTEMA POS EN TIEMPO REAL · MRTPVREST.COM</span>
         </div>
-        <h1>
+        <h1 className="animate-in delay-1">
           El POS que <em>conecta</em>
           <br />
           todo tu negocio
         </h1>
-        <p>
+        <p className="animate-in delay-2">
           6 apps especializadas, una sola plataforma. Desde que el cliente ordena hasta que el dueño revisa sus reportes — todo
           sincronizado.
         </p>
-        <div className="hero-actions">
+        <div className="hero-actions animate-in delay-3">
           <a href="https://admin.mrtpvrest.com/register" className="btn-primary" style={{ textDecoration: 'none' }}>Registrar mi restaurante →</a>
+          <a href="https://admin.mrtpvrest.com/apks/tpv-debug.apk" className="btn-download" style={{ textDecoration: 'none' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Descargar TPV (APK)
+          </a>
           <Link href="/demo" className="btn-ghost" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             Ver demo
           </Link>
@@ -138,11 +145,12 @@ export default function HomePage() {
       <div className="cta-section">
         <h2>Digitaliza tu restaurante hoy</h2>
         <p>Regístrate en MRTPVREST y activa las 6 apps para tu negocio desde el primer día.</p>
-        <div className="cta-actions">
+        <div className="cta-actions animate-in delay-1">
           <a href="https://admin.mrtpvrest.com/register" className="btn-primary" style={{ textDecoration: 'none' }}>Registrar mi negocio →</a>
-          <Link href="/demo" className="btn-ghost" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-            Ver demo en vivo
-          </Link>
+          <a href="https://admin.mrtpvrest.com/apks/tpv-debug.apk" className="btn-download" style={{ textDecoration: 'none' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Descargar TPV (APK)
+          </a>
         </div>
         <p className="cta-note">RESTAURANTE DEMO · EL PRIMER RESTAURANTE EN LA PLATAFORMA</p>
       </div>

@@ -91,9 +91,31 @@ nav {
   border: none;
   background: transparent;
   font-family: var(--f-b), sans-serif;
+  transition: all .2s ease;
 }
 .nav-link:hover { background: var(--surf-2); color: var(--tx); }
 .nav-link.active { background: var(--iris-soft); color: var(--iris-300); }
+
+.nav-actions { display: flex; align-items: center; gap: 12px; }
+
+.btn-login {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tx-mid);
+  font-weight: 600;
+  font-size: 13px;
+  font-family: var(--f-b), sans-serif;
+  border: 1px solid var(--bd-2);
+  cursor: pointer;
+  transition: all .2s ease;
+}
+.btn-login:hover {
+  background: var(--surf-2);
+  color: var(--tx-hi);
+  border-color: var(--bd-1);
+}
+
 .nav-cta {
   padding: 8px 16px;
   border-radius: 8px;
@@ -155,7 +177,50 @@ nav {
   font-family: var(--f-b), sans-serif;
   border: 1px solid var(--bd-2);
   cursor: pointer;
+  transition: all .2s ease;
 }
+.btn-ghost:hover {
+  background: var(--surf-2);
+  border-color: var(--tx-mut);
+  color: var(--tx-hi);
+}
+.btn-download {
+  padding: 12px 24px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--f-b), sans-serif;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  cursor: pointer;
+  transition: all .3s ease;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.15);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-download:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+  color: #10b981;
+  transform: translateY(-2px);
+}
+
+/* ANIMATIONS */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-in {
+  animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+.delay-1 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.2s; }
+.delay-3 { animation-delay: 0.3s; }
+
 
 /* FLOW STRIP */
 .flow-strip {
@@ -176,6 +241,13 @@ nav {
   border-radius: 999px;
   padding: 5px 14px;
   letter-spacing: .04em;
+  transition: all 0.3s ease;
+  cursor: default;
+}
+.flow-pill:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.2);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
 }
 .flow-arrow { color: var(--tx-dim); font-size: 12px; }
 
