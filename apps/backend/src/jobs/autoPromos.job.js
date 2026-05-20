@@ -6,14 +6,18 @@ const { resolveGeminiKey } = require('../services/ai-key.service');
 /**
  * Motor de Promociones Automáticas con IA
  * Analiza ventas semanales por sucursal y pone en promoción platillos con bajas ventas.
+ * @param {string|null} onlyLocationId - Si se pasa, solo analiza esta sucursal (trigger manual)
  */
-async function runAutoPromos() {
+async function runAutoPromos(onlyLocationId = null) {
   console.log('🤖 [Cron] Iniciando Motor de Promociones Automáticas con IA...');
   
   try {
-    // 1. Obtener todas las sucursales que tienen habilitado el motor
+    // 1. Obtener sucursales con auto-promo habilitado
+    const where = { autoPromoEnabled: true };
+    if (onlyLocationId) where.id = onlyLocationId;
+
     const locations = await prisma.location.findMany({
-      where: { autoPromoEnabled: true },
+      where,
       include: {
         restaurant: {
           include: { menuItems: true }
