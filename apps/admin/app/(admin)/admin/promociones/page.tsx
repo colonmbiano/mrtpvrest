@@ -26,6 +26,7 @@ type PromoItem = {
 export default function PromocionesPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [promoItems, setPromoItems] = useState<PromoItem[]>([]);
+  const [menuItems, setMenuItems] = useState<PromoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState<string | null>(null);
   const [togglingItem, setTogglingItem] = useState<string | null>(null);
@@ -43,6 +44,7 @@ export default function PromocionesPage() {
       const { data } = await api.get("/api/admin/promos");
       setLocations(data.locations || []);
       setPromoItems(data.promoItems || []);
+      setMenuItems(data.menuItems || data.promoItems || []);
     } catch {
       showToast("Error al cargar promociones", false);
     } finally {
@@ -84,6 +86,7 @@ export default function PromocionesPage() {
 
   const enabledLocations = locations.filter(l => l.autoPromoEnabled);
   const disabledLocations = locations.filter(l => !l.autoPromoEnabled);
+  const visibleItems = menuItems.length > 0 ? menuItems : promoItems;
   const discount = (price: number, promo: number) =>
     Math.round(((price - promo) / price) * 100);
 
@@ -218,11 +221,11 @@ export default function PromocionesPage() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xs font-black uppercase tracking-widest text-gray-500">
-            Platillos en Promoción {promoItems.length > 0 && `(${promoItems.length})`}
+            Platillos {visibleItems.length > 0 && `(${visibleItems.length})`}
           </h2>
         </div>
 
-        {promoItems.length === 0 ? (
+        {visibleItems.length === 0 ? (
           <div className="bg-[#111] border border-dashed border-gray-700 rounded-[2rem] p-12 text-center">
             <div className="text-5xl mb-4">🎯</div>
             <p className="text-white font-black text-base mb-2">Sin platillos en promo actualmente</p>
@@ -241,8 +244,10 @@ export default function PromocionesPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {promoItems.map(item => (
-              <div key={item.id} className="bg-[#111] border border-orange-500/20 rounded-[1.75rem] p-5 flex gap-4">
+            {visibleItems.map(item => (
+              <div key={item.id} className={`bg-[#111] border rounded-[1.75rem] p-5 flex gap-4 ${
+                item.isPromo ? "border-orange-500/20" : "border-gray-800"
+              }`}>
                 {/* Imagen */}
                 <div className="w-16 h-16 rounded-2xl bg-gray-900 flex-shrink-0 overflow-hidden border border-gray-800">
                   {item.imageUrl ? (
@@ -274,7 +279,7 @@ export default function PromocionesPage() {
                   </div>
 
                   <div className="flex items-center gap-3 mt-2.5">
-                    {item.promoPrice && (
+                    {item.isPromo && item.promoPrice && (
                       <>
                         <span className="text-gray-500 line-through text-xs">${item.price.toFixed(2)}</span>
                         <span className="text-orange-400 font-black text-sm">${item.promoPrice.toFixed(2)}</span>

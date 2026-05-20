@@ -1,19 +1,22 @@
 import Image from 'next/image'
 import Link from 'next/link'
 
+const adminUrl = 'https://admin.mrtpvrest.com'
+const apkUrl = `${adminUrl}/apks/tpv-debug.apk`
+
 const apps = [
-  { src: '/showcase/app-cliente.png', alt: 'App cliente — pedidos online desde el celular', glow: 'green' },
-  { src: '/showcase/kiosko.png', alt: 'Kiosko — pantalla táctil de autoservicio', glow: 'iris' },
-  { src: '/showcase/tpv.png', alt: 'TPV — terminal punto de venta', glow: 'amber' },
-  { src: '/showcase/kds.png', alt: 'KDS — kitchen display system', glow: 'red' },
-  { src: '/showcase/delivery.jpg', alt: 'Delivery — app móvil para repartidores', glow: 'blue' },
-  { src: '/showcase/admin.jpg', alt: 'Admin — panel de control del negocio', glow: 'purple' },
+  { src: '/showcase/app-cliente.png', alt: 'App cliente - pedidos online desde el celular', glow: 'green', href: '#apps' },
+  { src: '/showcase/kiosko.png', alt: 'Kiosko - pantalla táctil de autoservicio', glow: 'iris', href: '#apps' },
+  { src: '/showcase/tpv.png', alt: 'TPV - terminal punto de venta', glow: 'amber', href: apkUrl },
+  { src: '/showcase/kds.png', alt: 'KDS - kitchen display system', glow: 'red', href: '#apps' },
+  { src: '/showcase/delivery.jpg', alt: 'Delivery - app móvil para repartidores', glow: 'blue', href: '#apps' },
+  { src: '/showcase/admin.jpg', alt: 'Admin - panel de control del negocio', glow: 'purple', href: `${adminUrl}/login` },
 ] as const
 
 export default function HomePage() {
   return (
     <>
-      <nav>
+      <nav id="plataforma">
         <div className="brand">
           <div className="brand-logo">M</div>
           <div>
@@ -22,14 +25,15 @@ export default function HomePage() {
           </div>
         </div>
         <div className="nav-links">
-          <button className="nav-link active">Plataforma</button>
-          <button className="nav-link">Precios</button>
-          <button className="nav-link">Docs</button>
-          <button className="nav-link">Blog</button>
+          <a className="nav-link active" href="#plataforma">Plataforma</a>
+          <a className="nav-link" href="#apps">Apps</a>
+          <a className="nav-link" href="#descargar">Descargar APK</a>
+          <a className="nav-link" href="#contacto">Contacto</a>
         </div>
         <div className="nav-actions">
-          <a href="https://admin.mrtpvrest.com/login" className="btn-login" style={{ textDecoration: 'none' }}>Iniciar sesión</a>
-          <a href="https://admin.mrtpvrest.com/register" className="nav-cta" style={{ textDecoration: 'none' }}>Empezar gratis →</a>
+          <a href={`${adminUrl}/login`} className="btn-login">Iniciar sesión</a>
+          <a href={apkUrl} className="btn-nav-download" download>APK</a>
+          <a href={`${adminUrl}/register`} className="nav-cta">Empezar gratis</a>
         </div>
       </nav>
 
@@ -44,16 +48,16 @@ export default function HomePage() {
           todo tu negocio
         </h1>
         <p className="animate-in delay-2">
-          6 apps especializadas, una sola plataforma. Desde que el cliente ordena hasta que el dueño revisa sus reportes — todo
-          sincronizado.
+          6 apps especializadas, una sola plataforma. Desde que el cliente ordena hasta que el dueño revisa sus reportes,
+          todo sincronizado.
         </p>
         <div className="hero-actions animate-in delay-3">
-          <a href="https://admin.mrtpvrest.com/register" className="btn-primary" style={{ textDecoration: 'none' }}>Registrar mi restaurante →</a>
-          <a href="https://admin.mrtpvrest.com/apks/tpv-debug.apk" className="btn-download" style={{ textDecoration: 'none' }}>
+          <a href={`${adminUrl}/register`} className="btn-primary">Registrar mi restaurante</a>
+          <a href={apkUrl} className="btn-download" download>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             Descargar TPV (APK)
           </a>
-          <Link href="/demo" className="btn-ghost" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+          <Link href="/demo" className="btn-ghost">
             Ver demo
           </Link>
         </div>
@@ -96,7 +100,7 @@ export default function HomePage() {
         </span>
       </div>
 
-      <div className="section">
+      <div id="apps" className="section">
         <div className="section-hd">
           <div className="section-label">Las 6 apps</div>
           <div className="section-title">Un rol para cada pantalla</div>
@@ -105,7 +109,7 @@ export default function HomePage() {
 
         <div className="banners">
           {apps.map((app, idx) => (
-            <a key={app.src} className={`banner ${app.glow}`} href="#">
+            <a key={app.src} className={`banner ${app.glow}`} href={app.href}>
               <Image
                 src={app.src}
                 alt={app.alt}
@@ -142,12 +146,12 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="cta-section">
+      <div id="descargar" className="cta-section">
         <h2>Digitaliza tu restaurante hoy</h2>
         <p>Regístrate en MRTPVREST y activa las 6 apps para tu negocio desde el primer día.</p>
         <div className="cta-actions animate-in delay-1">
-          <a href="https://admin.mrtpvrest.com/register" className="btn-primary" style={{ textDecoration: 'none' }}>Registrar mi negocio →</a>
-          <a href="https://admin.mrtpvrest.com/apks/tpv-debug.apk" className="btn-download" style={{ textDecoration: 'none' }}>
+          <a href={`${adminUrl}/register`} className="btn-primary">Registrar mi negocio</a>
+          <a href={apkUrl} className="btn-download" download>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             Descargar TPV (APK)
           </a>
@@ -155,20 +159,20 @@ export default function HomePage() {
         <p className="cta-note">RESTAURANTE DEMO · EL PRIMER RESTAURANTE EN LA PLATAFORMA</p>
       </div>
 
-      <footer>
+      <footer id="contacto">
         <div className="ft-copy">© 2026 MRTPVREST · TODOS LOS DERECHOS RESERVADOS</div>
         <div className="ft-links">
-          <a className="ft-link" href="#">
-            DOCS
+          <a className="ft-link" href="#apps">
+            APPS
           </a>
-          <a className="ft-link" href="#">
-            PRECIOS
+          <a className="ft-link" href={`${adminUrl}/register`}>
+            REGISTRO
           </a>
-          <a className="ft-link" href="#">
+          <a className="ft-link" href="mailto:contacto@mrtpvrest.com">
             CONTACTO
           </a>
-          <a className="ft-link" href="#">
-            PRIVACIDAD
+          <a className="ft-link" href={apkUrl} download>
+            APK
           </a>
         </div>
       </footer>

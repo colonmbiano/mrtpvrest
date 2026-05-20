@@ -534,7 +534,7 @@ router.get('/promos', authenticate, requireTenantAccess, requireAdmin, async (re
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const [locations, promoItems] = await Promise.all([
+    const [locations, menuItems] = await Promise.all([
       prisma.location.findMany({
         where: { restaurantId },
         select: {
@@ -545,9 +545,9 @@ router.get('/promos', authenticate, requireTenantAccess, requireAdmin, async (re
         }
       }),
       prisma.menuItem.findMany({
-        where: { restaurantId, isPromo: true },
+        where: { restaurantId },
         include: { category: { select: { name: true } } },
-        orderBy: { updatedAt: 'desc' }
+        orderBy: [{ isPromo: 'desc' }, { updatedAt: 'desc' }]
       })
     ]);
 
@@ -568,12 +568,13 @@ router.get('/promos', authenticate, requireTenantAccess, requireAdmin, async (re
       }
     }
 
-    const enrichedItems = promoItems.map(item => ({
+    const enrichedItems = menuItems.map(item => ({
       ...item,
       soldLast7Days: salesCount[item.id] || 0,
     }));
+    const promoItems = enrichedItems.filter(item => item.isPromo);
 
-    res.json({ locations, promoItems: enrichedItems });
+    res.json({ locations, promoItems, menuItems: enrichedItems });
   } catch (e) {
     console.error('GET /admin/promos:', e);
     res.status(500).json({ error: e.message });
@@ -602,7 +603,7 @@ router.post('/promos/trigger', authenticate, requireTenantAccess, requireAdmin, 
 
     // Ejecutar en background después de responder
     setImmediate(() => {
-      runAutoPromos(locationId).catch(e =>
+      runAutoPromos({ restaurantId, locationId }).catch(e =>
         console.error('Error en trigger manual de promos:', e)
       );
     });
@@ -623,11 +624,23 @@ router.put('/promos/:itemId', authenticate, requireTenantAccess, requireAdmin, a
       return res.status(404).json({ error: 'Platillo no encontrado' });
     }
 
+    const enabled = Boolean(isPromo);
+    let nextPromoPrice = null;
+    if (enabled) {
+      nextPromoPrice = promoPrice == null || promoPrice === ''
+        ? Math.round(item.price * 0.85 * 100) / 100
+        : Number(promoPrice);
+
+      if (!Number.isFinite(nextPromoPrice) || nextPromoPrice <= 0 || nextPromoPrice >= item.price) {
+        return res.status(400).json({ error: 'El precio promocional debe ser mayor a 0 y menor al precio regular.' });
+      }
+    }
+
     const updated = await prisma.menuItem.update({
       where: { id: req.params.itemId },
       data: {
-        isPromo: Boolean(isPromo),
-        promoPrice: isPromo ? (promoPrice || Math.round(item.price * 0.85 * 100) / 100) : null,
+        isPromo: enabled,
+        promoPrice: nextPromoPrice,
       }
     });
 
@@ -639,4 +652,3 @@ router.put('/promos/:itemId', authenticate, requireTenantAccess, requireAdmin, a
 });
 
 module.exports = router
-
