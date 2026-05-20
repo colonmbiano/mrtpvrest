@@ -171,10 +171,17 @@ export default function MenuPage() {
           setScanState(p => ({ ...p, currentFile: item.name, current: i + 1 }));
           const category = currentCats.find(c => c.name.toLowerCase() === (item.category || "").toLowerCase());
           try {
-            await api.post("/api/menu/items", {
+            const { data: createdItem } = await api.post("/api/menu/items", {
               name: item.name, description: item.description,
               price: item.price || 0, categoryId: category?.id || currentCats[0]?.id, isPopular: false
             });
+            if (item.variants && item.variants.length > 0) {
+              for (const v of item.variants) {
+                await api.post(`/api/menu/${createdItem.id}/variants`, {
+                  name: v.name, price: v.price || 0
+                }).catch(e => console.error("Error creando variante IA", e));
+              }
+            }
           } catch (err) { console.error("Error creando item IA", err); }
         }
       }

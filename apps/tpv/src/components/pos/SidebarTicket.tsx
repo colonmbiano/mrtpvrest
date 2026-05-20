@@ -295,6 +295,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         customerName: ticket.name ?? null,
       };
       clearActiveItems();
+      if (ticket.type !== "DINE_IN") {
+        updateTicket({ name: "", address: "", phone: "" });
+        clearActiveOrder();
+        setPreviousItems([]);
+      }
       printKitchenTickets(printers, { ...ticketContext, items: printItems, config: kitchenConfig ?? undefined })
         .then((res) => {
           if (res.failed.length > 0) {
