@@ -8,32 +8,39 @@ const APPS = [
     title: "Punto de Venta (TPV)",
     description: "App principal para tomar órdenes, cobrar e imprimir tickets. Ideal para tablets y terminales POS Android.",
     image: "/tpv.png",
-    apkUrl: "https://admin.mrtpvrest.com/apks/tpv-debug.apk",
+    apkUrl: "/apks/tpv-debug.apk",
   },
   {
     id: "kds",
     title: "Pantalla de Cocina (KDS)",
     description: "Visualiza y gestiona las órdenes directamente en la cocina sin tickets de papel. Mejora los tiempos de entrega.",
     image: "/app-kds.png",
-    apkUrl: "https://admin.mrtpvrest.com/apks/kds-debug.apk",
+    apkUrl: "/apks/kds-debug.apk",
   },
   {
     id: "delivery",
     title: "App para Repartidores",
     description: "Tus repartidores podrán ver los pedidos asignados, la ruta de entrega y confirmar el pago en efectivo o tarjeta.",
     image: "/delivery.jpg",
-    apkUrl: "https://admin.mrtpvrest.com/apks/delivery-debug.apk",
+    apkUrl: "/apks/delivery-debug.apk",
   },
   {
     id: "kiosk",
     title: "Kiosko de Auto-servicio",
     description: "Permite a tus clientes realizar sus propios pedidos y pagos directamente en una tablet instalada en tu local.",
     image: "/kiosko.png",
-    apkUrl: "https://admin.mrtpvrest.com/apks/kiosk-debug.apk",
+    apkUrl: "/apks/kiosk-debug.apk",
   },
 ];
 
 export default function DescargasPage() {
+  const [origin, setOrigin] = React.useState("https://admin.mrtpvrest.com");
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      setOrigin(window.location.origin);
+    }
+  }, []);
   return (
     <div className="max-w-6xl mx-auto pb-10">
       <div className="mb-8">
@@ -95,7 +102,7 @@ export default function DescargasPage() {
               <div className="flex items-center gap-4 mt-auto p-4 rounded-xl" style={{ background: "var(--surf2)" }}>
                 <div className="w-20 h-20 flex-shrink-0 bg-white p-1.5 rounded-lg shadow-sm">
                   <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(app.apkUrl)}`}
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(origin + app.apkUrl)}`}
                     alt={`QR Code para ${app.title}`}
                     className="w-full h-full object-contain"
                   />
