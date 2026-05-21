@@ -523,4 +523,132 @@ router.delete('/ai-key', authenticate, requireTenantAccess, requireAdmin, async 
   }
 });
 
+// ── MOTOR DE PROMOCIONES AUTOMÁTICAS ──────────────────────────────────────────
+
+// GET /api/admin/promos — Lista items en promo y config por sucursal
+router.get('/promos', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const [locations, menuItems] = await Promise.all([
+      prisma.location.findMany({
+        where: { restaurantId },
+        select: {
+          id: true, name: true,
+          autoPromoEnabled: true,
+          autoPromoThreshold: true,
+          autoPromoDiscount: true,
+        }
+      }),
+      prisma.menuItem.findMany({
+        where: { restaurantId },
+        include: { category: { select: { name: true } } },
+        orderBy: [{ isPromo: 'desc' }, { updatedAt: 'desc' }]
+      })
+    ]);
+
+    // Ventas de los últimos 7 días para enriquecer la respuesta
+    const recentOrders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        createdAt: { gte: sevenDaysAgo },
+        status: { notIn: ['CANCELLED'] }
+      },
+      include: { items: { select: { menuItemId: true, quantity: true } } }
+    });
+
+    const salesCount = {};
+    for (const order of recentOrders) {
+      for (const item of order.items) {
+        salesCount[item.menuItemId] = (salesCount[item.menuItemId] || 0) + item.quantity;
+      }
+    }
+
+    const enrichedItems = menuItems.map(item => ({
+      ...item,
+      soldLast7Days: salesCount[item.id] || 0,
+    }));
+    const promoItems = enrichedItems.filter(item => item.isPromo);
+
+    res.json({ locations, promoItems, menuItems: enrichedItems });
+  } catch (e) {
+    console.error('GET /admin/promos:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/promos/trigger — Dispara el motor manualmente para una o todas las sucursales
+router.post('/promos/trigger', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const { locationId } = req.body; // Opcional: solo para una sucursal específica
+
+    // Verificar que la sucursal pertenece al restaurante
+    if (locationId) {
+      const loc = await prisma.location.findUnique({ where: { id: locationId } });
+      if (!loc || loc.restaurantId !== restaurantId) {
+        return res.status(404).json({ error: 'Sucursal no encontrada' });
+      }
+    }
+
+    // Importar el motor y ejecutar en background (no bloqueamos la respuesta)
+    const { runAutoPromos } = require('../jobs/autoPromos.job');
+    res.json({ ok: true, message: 'Motor de promociones iniciado. Los cambios se aplicarán en segundos.' });
+
+    // Ejecutar en background después de responder
+    setImmediate(() => {
+      runAutoPromos({ restaurantId, locationId }).catch(e =>
+        console.error('Error en trigger manual de promos:', e)
+      );
+    });
+  } catch (e) {
+    console.error('POST /admin/promos/trigger:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/admin/promos/:itemId — Activar/desactivar promo manualmente en un item
+router.put('/promos/:itemId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const { isPromo, promoPrice } = req.body;
+
+    const item = await prisma.menuItem.findUnique({ where: { id: req.params.itemId } });
+    if (!item || item.restaurantId !== restaurantId) {
+      return res.status(404).json({ error: 'Platillo no encontrado' });
+    }
+
+    const enabled = Boolean(isPromo);
+    let nextPromoPrice = null;
+    if (enabled) {
+      nextPromoPrice = promoPrice == null || promoPrice === ''
+        ? Math.round(item.price * 0.85 * 100) / 100
+        : Number(promoPrice);
+
+      if (!Number.isFinite(nextPromoPrice) || nextPromoPrice <= 0 || nextPromoPrice >= item.price) {
+        return res.status(400).json({ error: 'El precio promocional debe ser mayor a 0 y menor al precio regular.' });
+      }
+    }
+
+    const updated = await prisma.menuItem.update({
+      where: { id: req.params.itemId },
+      data: {
+        isPromo: enabled,
+        promoPrice: nextPromoPrice,
+      }
+    });
+
+    res.json(updated);
+  } catch (e) {
+    console.error('PUT /admin/promos/:itemId:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router

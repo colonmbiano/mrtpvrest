@@ -46,6 +46,7 @@ model Tenant {
   emailVerifiedAt         DateTime?
   emailVerificationToken  String?   @unique
   emailVerificationExpiry DateTime?
+  welcomeEmailSent        Boolean   @default(false)
 
   subscription Subscription?
   restaurants  Restaurant[]

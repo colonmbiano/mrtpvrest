@@ -30,7 +30,10 @@ const ShiftOpenPage = () => {
         try {
           const { data } = await api.get("/api/shifts/active");
           if (!cancelled && (data?.isOpen || data?.id)) {
+            localStorage.setItem("tpv-shift-open", "true");
             router.replace("/pos/order-type");
+          } else if (!cancelled) {
+            localStorage.setItem("tpv-shift-open", "false");
           }
         } catch (err: any) {
           // 401 acá indica token expirado entre render y request;
@@ -61,6 +64,7 @@ const ShiftOpenPage = () => {
         employeeId: currentEmployee.id,
         employeeName: currentEmployee.name,
       });
+      localStorage.setItem("tpv-shift-open", "true");
       router.replace("/pos/order-type");
     } catch (err: any) {
       alert(err.response?.data?.error || "Error al abrir el turno");

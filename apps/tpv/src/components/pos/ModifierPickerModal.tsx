@@ -155,12 +155,12 @@ export default function ModifierPickerModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="absolute inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-[#0a0a0c]/95 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative w-full sm:max-w-lg bg-surf-1 border border-bd rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
+      <div className="relative w-full sm:max-w-lg bg-[#121316] border border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
         <div className="px-5 py-4 border-b border-bd flex items-center justify-between shrink-0">
           <div className="flex flex-col min-w-0">
             <span className="eyebrow">PERSONALIZAR</span>
@@ -192,7 +192,7 @@ export default function ModifierPickerModal({
                   <h3 className="text-[14px] font-black text-tx-pri">
                     {g.name}
                     {g.required && (
-                      <span className="ml-1 text-iris-500 text-[12px]">*</span>
+                      <span className="ml-1 text-amber-500 text-[12px]">*</span>
                     )}
                   </h3>
                   <span className="eyebrow text-tx-mut">
@@ -213,10 +213,10 @@ export default function ModifierPickerModal({
                         key={m.id}
                         type="button"
                         onClick={() => toggle(g, m)}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-pos ${
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-all active:scale-95 duration-150 min-h-[64px] ${
                           isOn
-                            ? "border-iris-500 bg-iris-500/10"
-                            : "border-bd bg-surf-2 hover:bg-surf-3"
+                            ? "border-amber-500 bg-amber-500/10 text-amber-500"
+                            : "border-white/5 bg-[#121316] text-zinc-300"
                         }`}
                       >
                         <div
@@ -224,8 +224,8 @@ export default function ModifierPickerModal({
                             g.multiSelect ? "rounded-md" : "rounded-full"
                           } flex items-center justify-center shrink-0 ${
                             isOn
-                              ? "bg-iris-500 text-white"
-                              : "bg-surf-1 border border-bd"
+                              ? "bg-amber-500 text-black"
+                              : "bg-[#0a0a0c] border border-white/10"
                           }`}
                         >
                           {isOn && <Check size={12} strokeWidth={3} />}
@@ -263,7 +263,7 @@ export default function ModifierPickerModal({
               placeholder="Sin cebolla, término medio, alergia a..."
               rows={2}
               maxLength={200}
-              className="w-full px-3 py-2.5 rounded-lg text-[13px] resize-none outline-none bg-surf-2 border border-bd text-tx-pri placeholder:text-tx-mut focus:border-iris-500"
+              className="w-full px-3 py-2.5 rounded-lg text-[13px] resize-none outline-none bg-[#0a0a0c] border border-white/10 text-white placeholder:text-zinc-600 focus:border-amber-500 transition-colors"
             />
             {notes.length > 0 && (
               <p className="text-[10px] font-bold text-tx-mut text-right tabular-nums">
@@ -289,7 +289,7 @@ export default function ModifierPickerModal({
             variant="primary"
             size="xl"
             fullWidth
-            className="h-12 text-xs font-black uppercase tracking-widest"
+            className="min-h-[64px] text-xs font-black uppercase tracking-widest bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)] active:scale-[0.97] transition-transform border-none"
             onClick={confirm}
             disabled={!!validationError}
           >

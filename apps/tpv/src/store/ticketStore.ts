@@ -112,6 +112,7 @@ export type TicketData = {
 interface TicketState {
   tickets: TicketData[];
   activeIndex: number;
+  quantitiesByProduct: Record<string, number>;
 
   /* Computed */
   getActiveTicket: () => TicketData;
@@ -156,9 +157,28 @@ const emptyTicket = (
  * borradores no cobrados siguen ahí. La key incluye el restaurantId para
  * no mezclar drafts entre dispositivos compartidos.
  */
-export const useTicketStore = create<TicketState>()(persist((set, get) => ({
-  tickets: [emptyTicket(1, "T1")],
-  activeIndex: 0,
+export const useTicketStore = create<TicketState>()(persist((_set, get) => {
+  const set = (fn: any) => {
+    _set((state: any) => {
+      const next = typeof fn === "function" ? fn(state) : fn;
+      const nextTickets = next.tickets !== undefined ? next.tickets : state.tickets;
+      const nextIndex = next.activeIndex !== undefined ? next.activeIndex : state.activeIndex;
+      
+      const t = nextTickets[nextIndex];
+      const q: Record<string, number> = {};
+      if (t) {
+        for (const item of t.items) {
+          q[item.menuItemId] = (q[item.menuItemId] || 0) + item.quantity;
+        }
+      }
+      return { ...next, quantitiesByProduct: q };
+    });
+  };
+
+  return {
+    tickets: [emptyTicket(1, "T1")],
+    activeIndex: 0,
+    quantitiesByProduct: {},
 
   getActiveTicket: () => {
     const { tickets, activeIndex } = get();
@@ -286,7 +306,8 @@ export const useTicketStore = create<TicketState>()(persist((set, get) => ({
       }),
     }));
   },
-}), {
+};
+}, {
   name: "tpv-tickets-draft",
   storage: createJSONStorage(() =>
     typeof window === "undefined" ? (undefined as any) : window.localStorage,

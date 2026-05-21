@@ -214,6 +214,38 @@ function appendVariantNotes(notes, variants) {
   return [base, `Variantes: ${names}`].filter(Boolean).join('\n');
 }
 
+function resolveVariantSelection(menuItem, item) {
+  const ids = Array.isArray(item.variantIds)
+    ? item.variantIds.filter(Boolean)
+    : item.variantId
+      ? [item.variantId]
+      : [];
+  const variants = ids.map((variantId) => {
+    const variant = (menuItem?.variants || []).find(
+      (v) => v.id === variantId && v.isAvailable !== false,
+    );
+    if (!variant) throw new Error(`Variante ${variantId} no disponible para este producto`);
+    return variant;
+  });
+
+  const defaultPrice = Number(menuItem?.promoPrice || menuItem?.price || 0);
+  const fullPrice = variants
+    .map((variant) => Number(variant.price || 0))
+    .filter((price) => price >= defaultPrice);
+  const extras = variants
+    .map((variant) => Number(variant.price || 0))
+    .filter((price) => price > 0 && price < defaultPrice)
+    .reduce((sum, price) => sum + price, 0);
+
+  const basePrice = Math.max(defaultPrice, ...fullPrice) + extras;
+  const baseName = menuItem?.name || 'Producto';
+  const name = variants.length > 0
+    ? `${baseName} (${variants.map((variant) => variant.name).join(', ')})`
+    : baseName;
+
+  return { variants, basePrice, name };
+}
+
 
 // ── GET /admin — Pedidos del restaurante (filtra por sucursal si llega) ──
 // locationId es OPCIONAL: si se envía via x-location-id/header se filtra,
@@ -349,6 +381,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
 
     const orderNumber = 'TPV-' + Date.now().toString().slice(-6);
     const isDineInTab = (orderType === 'DINE_IN') && !!tableId;
+    const paidOnCreate = Boolean(
+      paymentMethod && ['DELIVERED', 'COMPLETED', 'PAID'].includes(String(status || '').toUpperCase())
+    );
 
     // Resolver cada item con su menuItem y modificadores (validados contra DB).
     // El precio del item siempre se re-lee del servidor, igual que los priceAdd
@@ -363,7 +398,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         },
       });
 
-      const basePrice = menuItem?.price || 0;
+      const variantSelection = resolveVariantSelection(menuItem, item);
       const modifierIds = extractIds(item.modifiers, 'modifierId');
       const complementIds = extractIds(item.complements, 'complementId');
       const variantIds = extractIds(item.variants, 'variantId');
@@ -428,7 +463,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         selectedVariants.push(variant);
       }
 
-      const unitPrice = basePrice + unitExtra;
+      const unitPrice = variantSelection.basePrice + unitExtra;
       const seatRaw = Number(item.seatNumber);
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
         ? Math.floor(seatRaw)
@@ -440,7 +475,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       const course = courseRaw && courseRaw.length > 0 && courseRaw.length <= 32 ? courseRaw : null;
       return {
         menuItemId: item.menuItemId,
-        name: menuItem?.name || 'Producto',
+        name: variantSelection.name,
         price: unitPrice,
         quantity: item.quantity,
         subtotal: unitPrice * item.quantity,
@@ -472,6 +507,10 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           tableId: tableId || null,
           numberOfGuests: safeGuests,
           paymentMethod: paymentMethod || 'CASH',
+          paymentStatus: paidOnCreate ? 'PAID' : 'PENDING',
+          paidAt: paidOnCreate ? new Date() : null,
+          cashCollected: paidOnCreate && paymentMethod === 'CASH',
+          cashCollectedAt: paidOnCreate && paymentMethod === 'CASH' ? new Date() : null,
           subtotal: subtotal || 0,
           discount: discount || 0,
           total: total || 0,
@@ -518,6 +557,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     // Pasamos order.items (con id) para que discountInventory pueda
     // persistir costSnapshot en cada OrderItem.
     await discountInventory(prisma, order.items, order.id, restaurantId, req.locationId);
+    if (paidOnCreate) {
+      await releaseTableIfDineIn(order.id);
+    }
 
     const io = req.app.get('io');
     if (io) {
@@ -570,6 +612,7 @@ async function addRoundHandler(req, res) {
           variants: true,
         },
       });
+      const variantSelection = resolveVariantSelection(menuItem, item);
       const modifierIds = extractIds(item.modifiers, 'modifierId');
       const complementIds = extractIds(item.complements, 'complementId');
       const variantIds = extractIds(item.variants, 'variantId');
@@ -628,7 +671,7 @@ async function addRoundHandler(req, res) {
         selectedVariants.push(variant);
       }
 
-      const price = (menuItem?.price || 0) + unitExtra;
+      const price = variantSelection.basePrice + unitExtra;
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
       const seatRaw = Number(item.seatNumber);
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
@@ -638,7 +681,7 @@ async function addRoundHandler(req, res) {
       const course = courseRaw && courseRaw.length > 0 && courseRaw.length <= 32 ? courseRaw : null;
       return {
         menuItemId: item.menuItemId,
-        name: menuItem?.name || 'Producto',
+        name: variantSelection.name,
         price,
         quantity: qty,
         subtotal: price * qty,

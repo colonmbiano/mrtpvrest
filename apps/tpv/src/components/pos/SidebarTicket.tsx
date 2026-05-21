@@ -1,19 +1,20 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X, MapPin, Phone, Home } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X, MapPin, Phone, Home, Receipt } from "lucide-react";
 import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import DiscountModal from "@/components/pos/DiscountModal";
+import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
 import { COMPLEMENT_MODIFIER_PREFIX, VARIANT_MODIFIER_PREFIX } from "@/components/pos/ModifierPickerModal";
 import { useAuthStore } from "@/store/authStore";
 import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { useKitchenConfig } from "@/hooks/usePrinters";
-import { useClientValue, subscribeToEvents } from "@/hooks/useClientValue";
 import { hapticMedium, hapticSuccess, hapticError } from "@/lib/haptics";
 import api from "@/lib/api";
+import { apiOrQueue } from "@/lib/offline";
 import { toast } from "sonner";
 import {
   printKitchenTickets,
@@ -32,29 +33,16 @@ interface Props {
   isLoanMode?: boolean;
 }
 
-// Map de presets a px para el ancho del sidebar. El user lo cambia
-// desde ConfigMenu (POS); persistido en localStorage.sidebarWidth.
-const SIDEBAR_WIDTHS: Record<string, number> = { S: 320, M: 380, L: 440 };
-function readSidebarWidth(): number {
-  if (typeof window === "undefined") return 380;
-  const v = localStorage.getItem("sidebarWidth");
-  if (!v) return 380;
-  return SIDEBAR_WIDTHS[v] ?? 380;
-}
+// IVA estándar MX (16%). Se muestra desglosado del subtotal (precio
+// con IVA incluido) para que el cajero/contabilidad vea el componente
+// fiscal. No altera el cálculo del total que se cobra.
+const IVA_RATE = 0.16;
 
 export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanMode = false }: Props) {
   const [showPayment, setShowPayment] = useState(false);
   const [showTables, setShowTables] = useState(false);
   const [showDiscount, setShowDiscount] = useState(false);
   const [processing, setProcessing] = useState(false);
-  // Ancho del panel: localStorage como fuente de verdad, SSR-safe vía
-  // useSyncExternalStore. Se reajusta con el evento `sidebar-width-changed`
-  // que dispara ConfigMenu/apariencia tras escribir.
-  const sidebarWidthPx = useClientValue(
-    readSidebarWidth,
-    380,
-    subscribeToEvents("sidebar-width-changed", "storage"),
-  );
 
   // Permiso para aplicar descuento sin PIN. WAITER/CASHIER no tienen
   // `apply_discount` por default; admin/manager sí. Si el rol actual no
@@ -63,7 +51,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const canApplyDiscount =
     !!employee?.permissions?.includes("apply_discount");
 
-  const { activeOrderId, setActiveOrder, clear: clearActiveOrder } = useActiveOrderStore();
+  const { activeOrderId, activeOrderNumber, setActiveOrder, clear: clearActiveOrder } = useActiveOrderStore();
 
   const [previousItems, setPreviousItems] = useState<any[]>([]);
   const [_loadingHistory, setLoadingHistory] = useState(false);
@@ -143,6 +131,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const currentSubtotal = ticket.items.reduce((acc, item) => acc + item.subtotal, 0);
   const subtotal = currentSubtotal + historySubtotal;
   const total = subtotal - ticket.discount;
+  // Desglose fiscal MX: precios mostrados llevan IVA incluido. Subtotal
+  // sin IVA = subtotal / 1.16; IVA = diferencia.
+  const subtotalSinIva = subtotal / (1 + IVA_RATE);
+  const ivaAmount = subtotal - subtotalSinIva;
 
   // Config de comanda — header/footer/toggles cargados desde admin.
   // Se pasa al builder en cada printKitchenTickets; si aún no terminó
@@ -264,12 +256,15 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       const itemsPayload = buildItemsPayload();
 
       let order;
+      let queued = false;
       if (activeOrderId) {
         // Mesa ya tiene orden abierta — agregar ronda.
-        const { data } = await api.post(`/api/orders/${activeOrderId}/items`, { items: itemsPayload });
-        order = data;
+        const res = await apiOrQueue("order", "POST", `/api/orders/${activeOrderId}/items`, { items: itemsPayload });
+        if (!res.ok) throw new Error(res.error || "fallo desconocido");
+        queued = res.queued;
+        order = res.data;
         // Sincronizar historial local
-        setPreviousItems(data.items || []);
+        if (!queued) setPreviousItems(order?.items || []);
       } else {
         // Orden nueva (o el backend redirigirá si la mesa está OCCUPIED).
         const orderData = {
@@ -283,16 +278,18 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           discount: ticket.discount,
           total: currentSubtotal - ticket.discount,
         };
-        const { data } = await api.post("/api/orders/tpv", orderData);
-        order = data;
+        const res = await apiOrQueue("order", "POST", "/api/orders/tpv", orderData);
+        if (!res.ok) throw new Error(res.error || "fallo desconocido");
+        queued = res.queued;
+        order = res.data;
         // Guardar el id para que la siguiente ronda ya conozca la orden.
         if (order?.id && ticket.tableId) {
           setActiveOrder(order.id, ticket.tableId, order.orderNumber ?? null);
         }
-        setPreviousItems(data.items || []);
+        if (!queued) setPreviousItems(order?.items || []);
       }
 
-      toast.success("Pedido enviado a cocina");
+      toast.success(queued ? "Pedido en cola · se enviara al volver la red" : "Pedido enviado a cocina");
       const printItems = buildTicketItems();
       const ticketContext = {
         orderNumber: order?.orderNumber ?? null,
@@ -301,6 +298,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         customerName: ticket.name ?? null,
       };
       clearActiveItems();
+      if (ticket.type !== "DINE_IN") {
+        updateTicket({ name: "", address: "", phone: "" });
+        clearActiveOrder();
+        setPreviousItems([]);
+      }
       printKitchenTickets(printers, { ...ticketContext, items: printItems, config: kitchenConfig ?? undefined })
         .then((res) => {
           if (res.failed.length > 0) {
@@ -323,16 +325,32 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     try {
       const tipAmount = tip?.amount ?? 0;
       const itemsPayload = buildItemsPayload();
+      const printItems = buildTicketItems();
 
-      let order;
+      let order: any = null;
+      let queued = false;
       if (activeOrderId) {
         // 1. Si hay items en la "Nueva ronda", primero los enviamos al backend
         if (itemsPayload.length > 0) {
-          const { data } = await api.post(`/api/orders/${activeOrderId}/items`, { items: itemsPayload });
-          order = data;
-        } else {
-          const { data } = await api.get(`/api/orders/${activeOrderId}`);
-          order = data;
+          const addRes = await apiOrQueue<any>(
+            "order",
+            "POST",
+            `/api/orders/${activeOrderId}/items`,
+            { items: itemsPayload },
+          );
+          if (!addRes.ok) {
+            toast.error("Error al enviar ronda: " + (addRes.error || ""));
+            return;
+          }
+          queued = queued || addRes.queued;
+          order = addRes.data;
+        } else if (typeof navigator === "undefined" || navigator.onLine) {
+          try {
+            const { data } = await api.get(`/api/orders/${activeOrderId}`);
+            order = data;
+          } catch {
+            // Si no se pudo hidratar, igual podemos encolar el cobro por id.
+          }
         }
       } else {
         // 2. Si no hay activeOrderId, creamos la orden completa normalmente
@@ -353,15 +371,44 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             ? `Propina ${tip.percent}% ($${tipAmount.toFixed(2)})`
             : undefined,
         };
-        const { data } = await api.post("/api/orders/tpv", orderData);
-        order = data;
+        const createRes = await apiOrQueue<any>("order", "POST", "/api/orders/tpv", orderData);
+        if (!createRes.ok) {
+          toast.error("Error al crear orden: " + (createRes.error || ""));
+          return;
+        }
+        queued = queued || createRes.queued;
+        order = createRes.data;
       }
 
-      // 3. Procesar el pago de la orden (sea nueva o recuperada)
-      await api.put(`/api/orders/${order.id}/payment`, { paymentMethod: method });
+      const payableOrderId = activeOrderId || order?.id;
+      if (payableOrderId && !queued) {
+        const payRes = await apiOrQueue<any>(
+          "payment",
+          "PUT",
+          `/api/orders/${payableOrderId}/payment`,
+          { paymentMethod: method },
+        );
+        if (!payRes.ok) {
+          toast.error("Error al cobrar: " + (payRes.error || ""));
+          return;
+        }
+        queued = queued || payRes.queued;
+        if (payRes.data) order = { ...order, ...payRes.data };
+      } else if (activeOrderId && queued) {
+        const payRes = await apiOrQueue<any>(
+          "payment",
+          "PUT",
+          `/api/orders/${activeOrderId}/payment`,
+          { paymentMethod: method },
+        );
+        if (!payRes.ok) {
+          toast.error("Error al encolar cobro: " + (payRes.error || ""));
+          return;
+        }
+      }
 
       // BUG-24: asignar repartidor inmediatamente después del cobro DELIVERY.
-      if (ticket.type === "DELIVERY" && driverId) {
+      if (ticket.type === "DELIVERY" && driverId && order?.id && !queued) {
         try {
           await api.put("/api/delivery/assign", { orderId: order.id, driverId });
         } catch (assignErr: any) {
@@ -372,13 +419,12 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         }
       }
 
-      toast.success("Cobro procesado");
+      toast.success(queued ? "Cobro en cola · se registrara al volver la red" : "Cobro procesado");
       hapticSuccess();
       
       // Capturar contexto antes de limpiar el ticket activo.
-      const printItems = buildTicketItems();
       const ticketContext = {
-        orderNumber: order?.orderNumber ?? null,
+        orderNumber: order?.orderNumber ?? activeOrderNumber ?? null,
         orderType:   ticket.type ?? null,
         tableNumber: ticket.tableName || ticket.table || null,
         customerName: ticket.name ?? null,
@@ -412,17 +458,20 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       // Impresión de recibo de cliente (el total completo)
       const guests = ticket.numberOfGuests ?? 0;
       const isDineInSplit = ticket.type === "DINE_IN" && guests >= 2;
+      const receiptItems = order?.items
+        ? orderItemsToTicketItems(order.items)
+        : [...orderItemsToTicketItems(previousItems), ...printItems];
       if (isDineInSplit) {
         printSplitReceipts(
           printers,
-          { ...ticketContext, ...totals, items: orderItemsToTicketItems(order.items) },
+          { ...ticketContext, ...totals, items: receiptItems },
           guests,
         ).catch(() => {});
       } else {
         printCustomerReceipt(printers, {
           ...ticketContext,
           ...totals,
-          items: orderItemsToTicketItems(order.items),
+          items: receiptItems,
         }).catch(() => {});
       }
     } catch (error: any) {
@@ -454,139 +503,83 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
   return (
     <aside
-      className="w-full md:shrink-0 border-l border-white/5 bg-[#0a0a0c] flex flex-col h-full min-h-0 relative z-20"
-      style={{ width: sidebarWidthPx }}
+      className="w-full h-full min-h-0 bg-[#0c0c0e] flex flex-col relative z-20 overflow-hidden"
+      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
-      {/* TABS DE TICKETS — chip por ticket muestra "Ticket N · MesaX"
-          cuando aplica. El icono MapPin a la derecha del chip activo
-          abre TablePickerModal sin entrar en conflicto con el tap del
-          chip (que solo cambia tab activo). */}
-      <div className="flex h-16 bg-[#121316] border-b border-white/5 overflow-hidden shrink-0">
-        <div className="flex-1 flex scroll-x scrollbar-hide min-w-0 items-stretch">
-          {tickets.map((t, idx) => {
-            const isActive = idx === activeIndex;
-            const isDineIn = t.type === "DINE_IN";
-            const tableLabel = t.tableName || t.table;
-            return (
-              <div
-                key={t.id}
-                className={`flex items-stretch border-r border-white/5 relative shrink-0 ${isActive ? "bg-[#0a0a0c]" : ""}`}
-              >
-                <button
-                  onClick={() => setActiveIndex(idx)}
-                  className={`px-5 h-full flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] active:scale-95 transition-all ${isActive ? "text-amber-500" : "text-zinc-500"}`}
-                >
-                  <span>Ticket {idx + 1}</span>
-                  {isDineIn && tableLabel && (
-                    <>
-                      <span className={isActive ? "text-amber-500/40" : "text-zinc-600"}>·</span>
-                      <span className={isActive ? "text-emerald-400" : "text-zinc-400"}>
-                        {tableLabel}
-                      </span>
-                    </>
-                  )}
-                </button>
-                {isActive && isDineIn && (
-                  <button
-                    type="button"
-                    onClick={() => setShowTables(true)}
-                    title={tableLabel ? "Cambiar mesa" : "Asignar mesa"}
-                    aria-label={tableLabel ? "Cambiar mesa" : "Asignar mesa"}
-                    className="px-3 h-full flex items-center justify-center text-emerald-400 active:scale-90 transition-transform"
-                  >
-                    <MapPin size={16} />
-                  </button>
-                )}
-                {isActive && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-amber-500 rounded-t-full shadow-[0_0_10px_rgba(255,184,77,0.5)]" />
-                )}
-              </div>
-            );
-          })}
-          <button
-            onClick={() => addTicket()}
-            className="w-16 h-full flex items-center justify-center text-zinc-600 active:text-amber-500 border-r border-white/5 transition-colors shrink-0 active:scale-90"
-          >
-            <Plus size={22} />
-          </button>
-        </div>
-      </div>
-
-      {/* HEADER DEL TICKET — nombre cliente solo para TAKEOUT/DELIVERY,
-          DINE_IN no necesita ese campo (la mesa identifica el ticket). */}
-      <div className="p-6 pb-4 flex flex-col gap-4 shrink-0 bg-[#0a0a0c]">
+      {/* HEADER DEL TICKET */}
+      <div className="p-4 pb-3 flex flex-col gap-3 shrink-0 bg-[#0a0a0c] border-b border-white/5">
+        <OrderTypeToggle
+          active={ticket.type}
+          onChange={(type) => updateTicket({ type })}
+        />
         <div className="flex justify-between items-center">
-          <h2 className="text-[11px] font-black text-zinc-500 tracking-[0.2em] uppercase">Orden en curso</h2>
-          <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
+          <h2 className="text-[10px] font-black text-zinc-500 tracking-[0.2em] uppercase">Orden en curso</h2>
+          <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20">
             ID: {String(ticket.id).slice(-4)}
           </span>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           {ticket.type !== "DINE_IN" ? (
-            <div className="flex-1 min-w-0 bg-[#121316] border border-white/5 rounded-2xl h-14 flex items-center px-5 gap-4 focus-within:border-amber-500/50 transition-all">
-              <User size={18} className="text-zinc-600" />
+            <div className="flex-1 min-w-0 bg-[#121316] border border-white/5 rounded-xl h-11 flex items-center px-3 gap-2 focus-within:border-amber-500/50 transition-all">
+              <User size={15} className="text-zinc-600 shrink-0" />
               <input
                 placeholder="Nombre del cliente..."
-                className="bg-transparent border-none outline-none text-sm font-bold text-white w-full placeholder:text-zinc-600 placeholder:font-bold tracking-tight"
+                className="bg-transparent border-none outline-none text-xs font-bold text-white w-full placeholder:text-zinc-600 placeholder:font-bold tracking-tight"
                 value={ticket.name || ""}
                 onChange={(e) => useTicketStore.getState().updateTicket({ name: e.target.value })}
               />
             </div>
           ) : (
-            <div className="flex-1 min-w-0 h-14 flex items-center px-2 gap-3 text-zinc-500">
-              <MapPin size={18} className="text-emerald-400/70" />
-              <span className="text-xs font-black uppercase tracking-[0.2em]">
-                {ticket.tableName || ticket.table || "Sin mesa asignada"}
+            <div className="flex-1 min-w-0 h-11 flex items-center px-1 gap-2 text-zinc-500">
+              <MapPin size={15} className="text-emerald-400/70 shrink-0" />
+              <span className="text-[11px] font-black uppercase tracking-[0.18em] truncate">
+                {ticket.tableName || ticket.table || "Sin mesa"}
               </span>
               {(ticket.numberOfGuests ?? 0) > 0 && (
-                <span className="text-[10px] font-bold text-zinc-500">
-                  · {ticket.numberOfGuests} comensal{(ticket.numberOfGuests ?? 0) > 1 ? "es" : ""}
+                <span className="text-[9px] font-bold text-zinc-500 shrink-0">
+                  · {ticket.numberOfGuests} pax
                 </span>
               )}
             </div>
           )}
           <button
-            className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border border-white/5 bg-[#121316] text-zinc-600 active:bg-red-500/10 active:text-red-500 active:border-red-500/20 transition-all active:scale-95"
+            className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border border-white/5 bg-[#121316] text-zinc-600 active:bg-red-500/10 active:text-red-500 active:border-red-500/20 transition-all active:scale-95"
             onClick={clearActiveItems}
             aria-label="Limpiar ticket"
           >
-            <Trash2 size={20} />
+            <Trash2 size={16} />
           </button>
         </div>
 
-        {/* BUG-24: campos requeridos para DELIVERY. Sin dirección no hay
-            ruta para el repartidor; sin teléfono no puede llamar al cliente
-            al llegar. El cajero ve los campos desde el inicio del ticket. */}
+        {/* BUG-24: campos requeridos para DELIVERY. */}
         {ticket.type === "DELIVERY" && (
-          <div className="flex flex-col gap-3">
-            <div className="flex-1 bg-[#121316] border border-white/5 rounded-2xl h-14 flex items-center px-5 gap-4 focus-within:border-amber-500/50 transition-all">
-              <Home size={18} className="text-zinc-600" />
+          <div className="flex flex-col gap-2">
+            <div className="flex-1 bg-[#121316] border border-white/5 rounded-xl h-11 flex items-center px-3 gap-2 focus-within:border-amber-500/50 transition-all">
+              <Home size={15} className="text-zinc-600 shrink-0" />
               <input
-                placeholder="Dirección de entrega..."
-                className="bg-transparent border-none outline-none text-sm font-bold text-white w-full placeholder:text-zinc-600 placeholder:font-bold tracking-tight"
+                placeholder="Dirección..."
+                className="bg-transparent border-none outline-none text-xs font-bold text-white w-full placeholder:text-zinc-600 placeholder:font-bold tracking-tight"
                 value={ticket.address || ""}
                 onChange={(e) => useTicketStore.getState().updateTicket({ address: e.target.value })}
               />
-              {/* BUG-26: ocultar badge cuando el campo ya tiene valor (trim).
-                  Antes el badge REQ permanecía aunque el cajero llenara el dato. */}
               {!ticket.address?.trim() && (
-                <span className="text-[9px] font-black tracking-[0.2em] uppercase text-amber-500/70">
+                <span className="text-[8px] font-black tracking-[0.2em] uppercase text-amber-500/70 shrink-0">
                   Req
                 </span>
               )}
             </div>
-            <div className="flex-1 bg-[#121316] border border-white/5 rounded-2xl h-14 flex items-center px-5 gap-4 focus-within:border-amber-500/50 transition-all">
-              <Phone size={18} className="text-zinc-600" />
+            <div className="flex-1 bg-[#121316] border border-white/5 rounded-xl h-11 flex items-center px-3 gap-2 focus-within:border-amber-500/50 transition-all">
+              <Phone size={15} className="text-zinc-600 shrink-0" />
               <input
-                placeholder="Teléfono del cliente..."
+                placeholder="Teléfono..."
                 inputMode="tel"
-                className="bg-transparent border-none outline-none text-sm font-bold text-white w-full placeholder:text-zinc-600 placeholder:font-bold tracking-tight tabular-nums"
+                className="bg-transparent border-none outline-none text-xs font-bold text-white w-full placeholder:text-zinc-600 placeholder:font-bold tracking-tight tabular-nums"
                 value={ticket.phone || ""}
                 onChange={(e) => useTicketStore.getState().updateTicket({ phone: e.target.value })}
               />
               {!ticket.phone?.trim() && (
-                <span className="text-[9px] font-black tracking-[0.2em] uppercase text-amber-500/70">
+                <span className="text-[8px] font-black tracking-[0.2em] uppercase text-amber-500/70 shrink-0">
                   Req
                 </span>
               )}
@@ -595,8 +588,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         )}
       </div>
 
-      {/* LISTA DE ITEMS */}
-      <div className="flex-1 min-h-0 scroll-y px-8 space-y-5 py-4 bg-[#0a0a0c] scrollbar-hide">
+      {/* LISTA DE ITEMS — área scrollable que ocupa lo que sobre entre
+          header y bloque de totales/acciones (siempre fijo abajo). */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 space-y-3 py-3 bg-[#0a0a0c] scrollbar-hide">
         {/* Historial de rondas anteriores si existe activeOrderId */}
         {previousItems.length > 0 && (
           <div className="space-y-4 mb-8">
@@ -658,90 +652,116 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         )}
       </div>
 
-      {/* FOOTER DEL TICKET — sin bloque de precio. El total se ve en
-          PaymentModal al cobrar. Solo botones de acción. */}
-      <div className="p-6 bg-[#121316] border-t border-white/5 mt-auto shrink-0 relative overflow-hidden">
+      {/* FOOTER DEL TICKET — fijo al fondo. Incluye bloque de totales
+          (e-commerce style) + CTA primario + acciones secundarias. */}
+      <div className="bg-[#121316] border-t border-white/5 mt-auto shrink-0 relative overflow-hidden">
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-amber-500/5 blur-[60px] rounded-full pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col gap-3">
-          {isLoanMode ? (
-            // Modo préstamo (mesero en tablet de caja): CTA primario manda
-            // a cocina sin pasar por el flujo de cobro.
-            <button
-              onClick={handleSendToKitchen}
-              disabled={processing || ticket.items.length === 0}
-              className="w-full h-16 rounded-2xl text-sm font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)]"
-            >
-              <UtensilsCrossed size={16} strokeWidth={2.5} />
-              {processing ? "Enviando..." : "Enviar a cocina"}
-            </button>
-          ) : (
-            <button
-              onClick={isShiftOpen ? handleOpenPayment : onOpenShift}
-              disabled={
-                processing ||
-                (ticket.items.length === 0 && previousItems.length === 0) ||
-                (ticket.type === "DELIVERY" &&
-                  isShiftOpen &&
-                  (!ticket.address?.trim() || !ticket.phone?.trim())) ||
-                // BUG-25: simétrico al fix de Domicilio. EN MESA no debe poder
-                // cobrar sin mesa asignada (antes el botón quedaba enabled y
-                // el ticket mostraba "SIN MESA ASIGNADA").
-                (ticket.type === "DINE_IN" && isShiftOpen && !ticket.tableId)
-              }
-              title={
-                ticket.type === "DELIVERY" && isShiftOpen
-                  ? !ticket.address?.trim() && !ticket.phone?.trim()
-                    ? "Falta dirección y teléfono del cliente"
-                    : !ticket.address?.trim()
-                      ? "Falta dirección de entrega"
-                      : !ticket.phone?.trim()
-                        ? "Falta teléfono del cliente"
-                        : undefined
-                  : ticket.type === "DINE_IN" && isShiftOpen && !ticket.tableId
-                    ? "Asigna una mesa antes de cobrar"
-                    : undefined
-              }
-              className={`w-full h-16 rounded-2xl text-sm font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale ${
-                isShiftOpen
-                  ? "bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)]"
-                  : "bg-red-500 text-white shadow-[0_8px_32px_-10px_rgba(239,68,68,0.4)]"
-              }`}
-            >
-              {processing ? "Cargando..." : isShiftOpen ? "Cobrar Ticket" : "Abrir Turno"}
-            </button>
+        {/* BLOQUE DE TOTALES — Subtotal, IVA (16%), Descuento, Total.
+            Estilo e-commerce: rows alineadas con valores tabulares. */}
+        <div className="relative z-10 px-4 py-3 border-b border-white/5 flex flex-col gap-1.5 bg-[#0d0e11]">
+          <div className="flex justify-between items-baseline text-[11px]">
+            <span className="font-bold uppercase tracking-[0.15em] text-zinc-500">
+              Subtotal
+            </span>
+            <span className="font-bold text-zinc-300 mono tabular-nums">
+              ${subtotalSinIva.toFixed(2)}
+            </span>
+          </div>
+          <div className="flex justify-between items-baseline text-[11px]">
+            <span className="font-bold uppercase tracking-[0.15em] text-zinc-500">
+              IVA 16%
+            </span>
+            <span className="font-bold text-zinc-300 mono tabular-nums">
+              ${ivaAmount.toFixed(2)}
+            </span>
+          </div>
+          {ticket.discount > 0 && (
+            <div className="flex justify-between items-baseline text-[11px]">
+              <span className="font-bold uppercase tracking-[0.15em] text-emerald-400/80">
+                Descuento
+              </span>
+              <span className="font-bold text-emerald-400 mono tabular-nums">
+                −${ticket.discount.toFixed(2)}
+              </span>
+            </div>
           )}
+          <div className="flex justify-between items-baseline pt-1.5 mt-0.5 border-t border-white/5">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">
+              Total
+            </span>
+            <span className="text-lg font-black text-amber-500 mono tabular-nums leading-none">
+              ${total.toFixed(2)}
+            </span>
+          </div>
+        </div>
 
-          <div className="grid grid-cols-3 gap-2">
-             <button
-               onClick={handleSendToKitchen}
-               className="h-12 rounded-xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex flex-col items-center justify-center gap-0.5"
-             >
-               <UtensilsCrossed size={14} /> Cocina
-             </button>
-             <button
-               onClick={() => {
-                 if (ticket.items.length === 0) {
-                   toast.error("Agrega items antes de aplicar descuento");
-                   return;
-                 }
-                 setShowDiscount(true);
-               }}
-               className="h-12 rounded-xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex flex-col items-center justify-center gap-0.5"
-             >
-               <span className="text-sm leading-none font-black">
-                 {ticket.discount > 0 ? "✓" : "%"}
-               </span>
-               {ticket.discount > 0
-                 ? `−$${ticket.discount.toFixed(0)}`
-                 : "Descuento"}
-             </button>
-             <button
-              onClick={() => closeTicket(activeIndex)}
-              className="h-12 rounded-xl bg-[#1a1b1f] border border-white/5 text-[10px] font-black uppercase tracking-[0.15em] text-zinc-600 active:text-red-400 active:bg-red-500/5 transition-all active:scale-95 flex flex-col items-center justify-center gap-0.5"
-             >
-              <X size={14} /> Cerrar
-             </button>
+        <div className="relative z-10 flex flex-col gap-2 p-4 pt-3">
+          {/* LOYVERSE-STYLE FOOTER */}
+          <div className="flex gap-2 h-12">
+            {ticket.items.length > 0 ? (
+              <button
+                onClick={handleSendToKitchen}
+                disabled={processing}
+                className="flex-1 rounded-xl bg-surface-2 border border-border text-[11px] font-black uppercase tracking-widest text-zinc-300 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <UtensilsCrossed size={16} /> Guardar
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  import("@/store/useUIStore").then(({ useUIStore }) => {
+                    useUIStore.getState().setIsOrdersOpen(true);
+                  });
+                }}
+                className="flex-1 rounded-xl bg-surface-2 border border-border text-[11px] font-black uppercase tracking-widest text-zinc-300 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <Receipt size={16} /> Abiertos
+              </button>
+            )}
+
+            {isLoanMode ? (
+              <button
+                onClick={handleSendToKitchen}
+                disabled={processing || ticket.items.length === 0}
+                className="flex-[2] rounded-xl text-[12px] font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)]"
+              >
+                <UtensilsCrossed size={14} strokeWidth={2.5} />
+                {processing ? "Enviando..." : "Cocina"}
+              </button>
+            ) : (
+              <button
+                onClick={isShiftOpen ? handleOpenPayment : onOpenShift}
+                disabled={
+                  processing ||
+                  (ticket.items.length === 0 && previousItems.length === 0) ||
+                  (ticket.type === "DELIVERY" &&
+                    isShiftOpen &&
+                    (!ticket.address?.trim() || !ticket.phone?.trim())) ||
+                  (ticket.type === "DINE_IN" && isShiftOpen && !ticket.tableId)
+                }
+                title={
+                  ticket.type === "DELIVERY" && isShiftOpen
+                    ? !ticket.address?.trim() && !ticket.phone?.trim()
+                      ? "Falta dirección y teléfono del cliente"
+                      : !ticket.address?.trim()
+                        ? "Falta dirección de entrega"
+                        : !ticket.phone?.trim()
+                          ? "Falta teléfono del cliente"
+                          : undefined
+                    : ticket.type === "DINE_IN" && isShiftOpen && !ticket.tableId
+                      ? "Asigna una mesa antes de cobrar"
+                      : undefined
+                }
+                className={`flex-[2] rounded-xl text-[12px] font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale ${
+                  isShiftOpen
+                    ? "bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)]"
+                    : "bg-red-500 text-white shadow-[0_8px_32px_-10px_rgba(239,68,68,0.4)]"
+                }`}
+              >
+                {processing ? "Cargando..." : isShiftOpen ? "Cobrar" : "Turno"}
+              </button>
+            )}
           </div>
         </div>
 

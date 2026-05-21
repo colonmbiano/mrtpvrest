@@ -738,7 +738,7 @@ router.get('/public/:slug/menu', async (req, res) => {
           orderBy: [{ isPromo: 'desc' }, { isPopular: 'desc' }, { name: 'asc' }],
           select: {
             id: true, name: true, description: true,
-            price: true, imageUrl: true,
+            price: true, promoPrice: true, imageUrl: true,
             isPopular: true, isPromo: true, activeDays: true,
             complements: {
               where: { isAvailable: true },
