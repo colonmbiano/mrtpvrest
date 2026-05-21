@@ -95,4 +95,35 @@ function trialExpiredHtml(tenantName, billingUrl) {
   `
 }
 
-module.exports = { sendEmail, verificationEmailHtml, trialReminderHtml, trialExpiredHtml }
+function welcomeEmailHtml(ownerName, tenantName, downloadsUrl) {
+  return `
+    <div style="font-family:'DM Sans',Inter,sans-serif;max-width:560px;margin:0 auto;background:#080810;color:#f0f0f8;border-radius:16px;overflow:hidden;border:1px solid #1e1e30;">
+      <div style="background:linear-gradient(135deg,#7c3aed,#9f67ff);padding:24px 32px;">
+        <h1 style="margin:0;font-size:20px;font-weight:900;letter-spacing:-0.5px;color:#fff;">
+          MRTPVREST
+        </h1>
+      </div>
+      <div style="padding:32px;">
+        <p style="font-size:24px;font-weight:900;margin:0 0 8px;">¡Bienvenido, ${ownerName}! 🎉</p>
+        <p style="color:#6b6b90;margin:0 0 8px;">
+          Gracias por verificar tu cuenta de <strong style="color:#f0f0f8">${tenantName}</strong>.
+        </p>
+        <p style="color:#6b6b90;margin:0 0 24px;">
+          Ya puedes descargar nuestras aplicaciones móviles (TPV, KDS, Delivery y Kiosko) directamente desde tu panel de administración.
+        </p>
+        <a href="${downloadsUrl}"
+          style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#9f67ff);color:#fff;padding:16px 32px;border-radius:12px;font-weight:900;text-decoration:none;font-size:15px;letter-spacing:-0.3px;box-shadow:0 4px 20px rgba(124,58,237,0.4);">
+          IR AL PANEL DE DESCARGAS →
+        </a>
+        <p style="color:#4a4a6a;font-size:12px;margin:32px 0 0;">
+          Para cualquier consulta, no dudes en contactarnos.
+        </p>
+      </div>
+      <div style="padding:16px 32px;border-top:1px solid #1e1e30;color:#4a4a6a;font-size:12px;">
+        MRTPVREST · Sistema de punto de venta para restaurantes
+      </div>
+    </div>
+  `
+}
+
+module.exports = { sendEmail, verificationEmailHtml, trialReminderHtml, trialExpiredHtml, welcomeEmailHtml }

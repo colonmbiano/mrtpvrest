@@ -1,70 +1,161 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-"use client";
-import { useEffect, useState, useRef, useCallback } from "react";
-import { io } from "socket.io-client";
-import api from "@/lib/api";
-import { getApiUrl } from "@/lib/config";
-import GPSTracker from "@/components/delivery/GPSTracker";
-import { useOfflineStore } from "@/store/useOfflineStore";
-import { initBackgroundSync } from "@/lib/offline";
-// MIGRACIÓN: emojis sustituidos por lucide-react para alinearnos con TPV/KDS.
-import {
-  Bike, MapPin, Phone, Fuel, ShoppingCart, StickyNote, Map as MapIcon,
-  BarChart3, Wallet, DollarSign, CreditCard, MessageCircle, Package,
-  Check, CheckCircle2, Inbox, Settings, LogOut, Send, Lock,
-} from "lucide-react";
+'use client';
+// apps/delivery/src/app/page.tsx
+// Reemplazado por el handoff v2 del design system MRTPV Delivery.
+// Mantiene la lógica de negocio (API, socket, offline) y solo actualiza la capa visual.
 
-const STATUS_LABELS: Record<string, string> = {
-  PENDING:"Pendiente", CONFIRMED:"Confirmado", PREPARING:"Preparando",
-  READY:"Listo para recoger", ON_THE_WAY:"En camino", DELIVERED:"Entregado", CANCELLED:"Cancelado",
-};
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { io } from 'socket.io-client';
+import api from '@/lib/api';
+import { getApiUrl } from '@/lib/config';
+import GPSTracker from '@/components/delivery/GPSTracker';
+import { useOfflineStore } from '@/store/useOfflineStore';
+import { initBackgroundSync } from '@/lib/offline';
+import { LoginScreen }     from '@/components/delivery/screens/LoginScreen';
+import { HomeScreen }      from '@/components/delivery/screens/HomeScreen';
+import { DetailScreen }    from '@/components/delivery/screens/DetailScreen';
+import { CobrarScreen }    from '@/components/delivery/screens/CobrarScreen';
+import { CajaScreen }      from '@/components/delivery/screens/CajaScreen';
+import { ChatScreen }      from '@/components/delivery/screens/ChatScreen';
+import { GastoScreen }     from '@/components/delivery/screens/GastoScreen';
+import { DesempenoScreen } from '@/components/delivery/screens/DesempenoScreen';
+import { SetupScreen }     from '@/components/delivery/screens/SetupScreen';
+import { MapScreen }       from '@/components/delivery/screens/MapScreen';
+import { DispatchScreen }  from '@/components/delivery/screens/DispatchScreen';
 
-const EXPENSE_CATS = [
-  { value:"GASOLINE",           label:"Gasolina",          icon: Fuel,         color:"var(--brand)" },
-  { value:"EMERGENCY_PURCHASE", label:"Compra emergencia", icon: ShoppingCart, color:"#8b5cf6" },
-  { value:"OTHER",              label:"Otro gasto",        icon: StickyNote,   color:"#6b7280" },
-];
+type Screen =
+  | 'setup' | 'login' | 'home' | 'detail'
+  | 'chat'  | 'weekly'| 'cobrar' | 'caja'
+  | 'gasto' | 'map'   | 'dispatch';
 
-type Screen = "setup" | "login" | "home" | "detail" | "chat" | "history" | "cobrar" | "caja" | "gasto" | "weekly";
+// ── Accept Order Modal ─────────────────────────────────────────
+const RING_R = 52;
+const CIRC   = 2 * Math.PI * RING_R;
+
+function AcceptOrderModal({ order, onAccept, onReject }: {
+  order: any;
+  onAccept: () => void;
+  onReject: () => void;
+}) {
+  const [secs, setSecs] = useState(30);
+
+  useEffect(() => {
+    const t = setInterval(() => setSecs(s => {
+      if (s <= 1) { clearInterval(t); onReject(); return 0; }
+      return s - 1;
+    }), 1000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filled    = ((30 - secs) / 30) * CIRC;
+  const remaining = CIRC - filled;
+  const urgent    = secs <= 10;
+  const C_amber   = '#FFB84D', C_coral = '#FF5C33';
+  const font      = "'Outfit', system-ui, sans-serif";
+  const fontD     = "'Syne', system-ui, sans-serif";
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 200,
+      background: 'rgba(9,9,11,0.94)', backdropFilter: 'blur(24px)',
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', padding: '28px 20px', fontFamily: font,
+    }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: C_amber, letterSpacing: '0.24em', textTransform: 'uppercase', marginBottom: 6 }}>
+        Nueva Orden Entrante
+      </div>
+      <div style={{ fontFamily: fontD, fontSize: 24, fontWeight: 700, color: '#fff', marginBottom: 24 }}>
+        #{order?.orderNumber}
+      </div>
+
+      <div style={{ position: 'relative', width: 128, height: 128, marginBottom: 24 }}>
+        <svg width="128" height="128" viewBox="0 0 128 128">
+          <circle cx="64" cy="64" r={RING_R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8"/>
+          <circle cx="64" cy="64" r={RING_R} fill="none"
+            stroke={urgent ? C_coral : C_amber}
+            strokeWidth="8" strokeLinecap="round"
+            strokeDasharray={`${remaining} ${filled}`}
+            transform="rotate(-90 64 64)"
+            style={{ transition: 'stroke-dasharray 1s linear, stroke 0.3s' }}
+          />
+        </svg>
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{ fontFamily: fontD, fontSize: 36, fontWeight: 700, lineHeight: 1, color: urgent ? C_coral : C_amber, transition: 'color 0.3s' }}>
+            {secs}
+          </div>
+          <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 4 }}>seg</div>
+        </div>
+      </div>
+
+      <div style={{ width: '100%', background: '#141416', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, padding: 16, marginBottom: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>{order?.customerName}</div>
+        <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start', marginBottom: 14 }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke={C_amber} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" style={{ flexShrink: 0, marginTop: 2 }}>
+            <path d="M12 22s-8-4.5-8-11.8A8 8 0 0112 2a8 8 0 018 8.2c0 7.3-8 11.8-8 11.8z"/>
+            <circle cx="12" cy="10" r="3"/>
+          </svg>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.58)', lineHeight: 1.5 }}>{order?.deliveryAddress}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+          <div style={{ display: 'flex', gap: 20 }}>
+            {[['ETA', `${order?.etaMinutes || '—'} min`], ['Items', order?.items?.reduce((s: number, i: any) => s + (i.quantity || 1), 0) || '—']].map(([l, v]) => (
+              <div key={l as string}>
+                <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>{l}</div>
+                <div style={{ fontFamily: fontD, fontSize: 17, fontWeight: 700, color: '#fff' }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>Total</div>
+            <div style={{ fontFamily: fontD, fontSize: 26, fontWeight: 700, color: C_amber }}>${order?.total?.toFixed(2) || '0.00'}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+        <button onClick={onReject} style={{
+          flex: 1, height: 64, borderRadius: 18, cursor: 'pointer',
+          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
+          fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)',
+          letterSpacing: '0.16em', textTransform: 'uppercase', fontFamily: font,
+        }}>RECHAZAR</button>
+        <button onClick={onAccept} style={{
+          flex: 1.4, height: 64, borderRadius: 18, cursor: 'pointer',
+          background: C_amber, border: 'none', color: '#090909',
+          fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase',
+          fontFamily: font, boxShadow: '0 14px 44px rgba(255,184,77,0.38)',
+        }}>ACEPTAR</button>
+      </div>
+    </div>
+  );
+}
 
 export default function DeliveryApp() {
-  const [mounted, setMounted]   = useState(false);
-  const [screen, setScreen]     = useState<Screen>("login");
-  const [driver, setDriver]     = useState<any>(null);
-  const [orders, setOrders]     = useState<any[]>([]);
-  const [history, setHistory]   = useState<any[]>([]);
+  const [mounted, setMounted]           = useState(false);
+  const [screen, setScreen]             = useState<Screen>('login');
+  const [driver, setDriver]             = useState<any>(null);
+  const [orders, setOrders]             = useState<any[]>([]);
+  const [history, setHistory]           = useState<any[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [newMsg, setNewMsg]     = useState("");
-  const [sending, setSending]   = useState(false);
+  const [messages, setMessages]         = useState<any[]>([]);
+  const [cashSummary, setCashSummary]   = useState<any>(null);
+  const [movements, setMovements]       = useState<any[]>([]);
+  const [orderDetail, setOrderDetail]   = useState<any>(null);
   const [prevOrderCount, setPrevOrderCount] = useState(0);
+  const [incomingOrder, setIncomingOrder]   = useState<any>(null);
 
-  // --- ESTADOS SAAS ---
-  const [setupEmail, setSetupEmail] = useState("");
-  const [setupPassword, setSetupPassword] = useState("");
   const [locations, setLocations] = useState<any[]>([]);
-  const [setupStep, setSetupStep] = useState<"auth" | "location">("auth");
+  const [setupStep, setSetupStep] = useState<'auth' | 'location'>('auth');
 
-  // --- LOGIN REPARTIDOR ---
-  const [pin, setPin]           = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [loggingIn, setLoggingIn]   = useState(false);
-
-  const [payMethod, setPayMethod]   = useState<"CASH"|"TRANSFER">("CASH");
-  const [cashReceived, setCashReceived] = useState("");
-  const [cashSummary, setCashSummary] = useState<any>(null);
-  const [movements, setMovements]     = useState<any[]>([]);
-  const [loadingCash, setLoadingCash] = useState(false);
-
-  const [expenseCat, setExpenseCat]   = useState("GASOLINE");
-  const [expenseAmt, setExpenseAmt]   = useState("");
-  const [expenseDesc, setExpenseDesc] = useState("");
-  const [savingExpense, setSavingExpense] = useState(false);
-  const [orderDetail, setOrderDetail] = useState<any>(null);
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement|null>(null);
   const [isOnline, setIsOnline] = useState(true);
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const selectedOrderIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -72,16 +163,20 @@ export default function DeliveryApp() {
     window.addEventListener('online',  () => setIsOnline(true));
     window.addEventListener('offline', () => setIsOnline(false));
     audioRef.current = new Audio('/notification.mp3');
-
     initBackgroundSync();
 
-    const restId = localStorage.getItem("restaurantId");
-    const locId = localStorage.getItem("locationId");
-    if (!restId || !locId) setScreen("setup");
+    const restId = localStorage.getItem('restaurantId');
+    const locId  = localStorage.getItem('locationId');
+    if (!restId || !locId) setScreen('setup');
   }, []);
 
+  useEffect(() => {
+    selectedOrderIdRef.current = selectedOrder?.id || null;
+  }, [selectedOrder]);
+
   const fetchOrders = useCallback(async (d?: any) => {
-    const id = (d || driver)?.id; if (!id) return;
+    const id = (d || driver)?.id;
+    if (!id) return;
     try {
       const { data } = await api.get(`/api/delivery/${id}/orders`);
       if (data.length > prevOrderCount && prevOrderCount > 0) {
@@ -94,24 +189,25 @@ export default function DeliveryApp() {
 
   const fetchHistory = useCallback(async () => {
     if (!driver) return;
-    try { const { data } = await api.get(`/api/delivery/${driver.id}/history`); setHistory(data); } catch {}
+    try {
+      const { data } = await api.get(`/api/delivery/${driver.id}/history`);
+      setHistory(data);
+    } catch {}
   }, [driver]);
 
   const fetchCash = useCallback(async () => {
     if (!driver) return;
-    setLoadingCash(true);
     try {
       const { data } = await api.get(`/api/driver-cash/${driver.id}/movements`);
       setMovements(data.movements || []);
       setCashSummary(data.summary || {});
-    } catch {} finally { setLoadingCash(false); }
+    } catch {}
   }, [driver]);
 
   const fetchMessages = useCallback(async (orderId: string) => {
     try {
       const { data } = await api.get(`/api/delivery/orders/${orderId}/messages`);
       setMessages(data);
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior:"smooth" }), 100);
     } catch {}
   }, []);
 
@@ -122,642 +218,273 @@ export default function DeliveryApp() {
     } catch {}
   }, []);
 
-  const selectedOrderIdRef = useRef<string | null>(null);
   useEffect(() => {
-    selectedOrderIdRef.current = selectedOrder?.id || null;
-  }, [selectedOrder]);
+    if (!driver) return;
+    fetchOrders();
+    fetchHistory();
+
+    const socket = io(getApiUrl(), {
+      query: {
+        restaurantId: localStorage.getItem('restaurantId'),
+        locationId:   localStorage.getItem('locationId'),
+      },
+    });
+    socket.on('newOrder',     () => fetchOrders());
+    socket.on('orderUpdated', () => fetchOrders());
+    // Nueva orden asignada específicamente a este repartidor.
+    // Backend debe emitir 'orderAssigned' solo al socket del driver: socket.to(driverSocketId).emit('orderAssigned', { order })
+    socket.on('orderAssigned', (data: any) => {
+      if (data?.order) {
+        audioRef.current?.play().catch(() => {});
+        setIncomingOrder(data.order);
+      }
+    });
+    socket.on('newMessage', (data: any) => {
+      const currentId = selectedOrderIdRef.current;
+      if (currentId && currentId === data.orderId) {
+        fetchMessages(currentId);
+      }
+    });
+    return () => { socket.disconnect(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driver]);
 
   useEffect(() => {
-    if (driver) {
-      fetchOrders(); fetchHistory();
-      
-      const socket = io(getApiUrl(), {
-        query: { restaurantId: localStorage.getItem("restaurantId"), locationId: localStorage.getItem("locationId") }
-      });
+    if (screen === 'chat' && selectedOrder) fetchMessages(selectedOrder.id);
+    if (screen === 'caja') fetchCash();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, selectedOrder]);
 
-      socket.on("connect", () => console.log("Socket connected to Delivery App"));
-      socket.on("newOrder", () => fetchOrders());
-      socket.on("orderUpdated", () => fetchOrders());
-      socket.on("newMessage", (data: any) => {
-        if (selectedOrderIdRef.current && data.orderId === selectedOrderIdRef.current) {
-          fetchMessages(selectedOrderIdRef.current);
-        }
-      });
-
-      return () => {
-        socket.disconnect();
-      };
-    }
-  }, [driver, fetchOrders, fetchHistory, fetchMessages]);
-
-  useEffect(() => {
-    if (screen === "chat" && selectedOrder) {
-      fetchMessages(selectedOrder.id);
-    }
-    if (screen === "caja") {
-      fetchCash();
-    }
-  }, [screen, selectedOrder, fetchMessages, fetchCash]);
-
-  // ── FLUJO DE SETUP (DUEÑO) ──
-  async function handleSetupLogin(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSetupLogin(email: string, password: string) {
     setLoggingIn(true);
     try {
-      const { data } = await api.post("/api/auth/login", { email: setupEmail, password: setupPassword });
-      localStorage.setItem("accessToken", data.accessToken);
-      const locs = await api.get("/api/auth/my-locations");
+      const { data } = await api.post('/api/auth/login', { email, password });
+      localStorage.setItem('accessToken', data.accessToken);
+      const locs = await api.get('/api/auth/my-locations');
       setLocations(locs.data);
-      localStorage.setItem("restaurantId", data.user.restaurantId);
-      setSetupStep("location");
-    } catch (err) { alert("Credenciales incorrectas."); }
+      localStorage.setItem('restaurantId', data.user.restaurantId);
+      setSetupStep('location');
+    } catch { alert('Credenciales incorrectas.'); }
     finally { setLoggingIn(false); }
   }
 
   function finishSetup(loc: any) {
-    localStorage.setItem("locationId", loc.id);
-    localStorage.setItem("locationName", loc.name);
-    localStorage.removeItem("accessToken");
-    setScreen("login");
+    localStorage.setItem('locationId', loc.id);
+    localStorage.setItem('locationName', loc.name);
+    localStorage.removeItem('accessToken');
+    setScreen('login');
   }
 
-  // ── FLUJO LOGIN PIN ──
-  async function handlePinLogin(e?: React.FormEvent) {
-    if (e) e.preventDefault();
+  async function handlePinLogin(pin: string) {
     setLoggingIn(true);
     try {
-      const { data } = await api.post("/api/employees/login", { pin });
-      setDriver(data.employee); setLoginError("");
-      localStorage.setItem("accessToken", data.token);
-      setScreen("home");
+      const { data } = await api.post('/api/employees/login', { pin });
+      setDriver(data.employee);
+      setLoginError('');
+      localStorage.setItem('accessToken', data.token);
+      setScreen('home');
       fetchOrders(data.employee);
     } catch (err: any) {
       const status = err?.response?.status;
       const serverMsg = err?.response?.data?.error || err?.response?.data?.message;
-      const isNetwork = !err?.response;
-      let msg = "PIN incorrecto";
-      if (isNetwork) msg = "Sin conexión con el servidor. Revisa tu red.";
-      else if (status === 401 || status === 403) msg = serverMsg || "PIN incorrecto";
-      else if (status === 404) msg = "Repartidor no encontrado en esta sucursal";
-      else if (status && status >= 500) msg = "Servidor caído. Intenta de nuevo en unos segundos.";
-      else if (serverMsg) msg = serverMsg;
+      let msg = 'PIN incorrecto';
+      if (!err?.response)            msg = 'Sin conexión con el servidor';
+      else if (status === 404)       msg = 'Repartidor no encontrado en esta sucursal';
+      else if (status >= 500)        msg = 'Servidor caído. Intenta de nuevo.';
+      else if (serverMsg)            msg = serverMsg;
       setLoginError(msg);
-      setPin("");
     } finally { setLoggingIn(false); }
   }
 
   async function changeStatus(order: any, status: string, method?: string) {
     const data = {
-      orderId: order.id,
-      status,
-      ...(method ? { paymentMethod: method } : {})
+      orderId: order.id, status,
+      ...(method ? { paymentMethod: method } : {}),
     };
-
     if (!navigator.onLine) {
       useOfflineStore.getState().addToQueue({ type: 'CONFIRM_DELIVERY', data });
-      if (status === "DELIVERED") {
-        setOrders(orders.filter(o => o.id !== order.id));
-        setScreen("home");
+      if (status === 'DELIVERED') {
+        setOrders(os => os.filter(o => o.id !== order.id));
+        setScreen('home');
       }
       return;
     }
-
     try {
       await api.put(`/api/delivery/${driver.id}/orders/${order.id}/status`, data);
       fetchOrders();
-      if (status === "DELIVERED") setScreen("home");
-    } catch (err: any) { alert(err.response?.data?.error || "Error"); }
+      if (status === 'DELIVERED') setScreen('home');
+    } catch (err: any) { alert(err.response?.data?.error || 'Error'); }
   }
 
-  async function saveExpense() {
-    if (!expenseAmt || Number(expenseAmt) <= 0) return;
-    
-    const expenseData = {
-      type: "EXPENSE",
-      category: expenseCat,
-      amount: expenseAmt,
-      description: expenseDesc,
-      driverId: driver.id
-    };
+  async function saveExpense(cat: string, amount: string, desc: string) {
+    if (!amount || Number(amount) <= 0) return;
+    const expenseData = { type: 'EXPENSE', category: cat, amount, description: desc, driverId: driver.id };
 
     if (!navigator.onLine) {
       useOfflineStore.getState().addToQueue({ type: 'LOG_EXPENSE', data: expenseData });
-      setScreen("caja");
+      setScreen('caja');
       return;
     }
-
-    setSavingExpense(true);
     try {
       const formData = new FormData();
       Object.entries(expenseData).forEach(([k, v]) => formData.append(k, v as string));
       await api.post(`/api/driver-cash/${driver.id}/movements`, formData);
-      setScreen("caja");
-    } catch {} finally { setSavingExpense(false); }
+      setScreen('caja');
+    } catch {}
   }
 
-  async function sendMessage() {
-    if (!newMsg.trim() || !selectedOrder) return;
-    const msgData = { orderId: selectedOrder.id, message: newMsg, fromDriver: true };
-
+  async function sendMessage(text: string) {
+    if (!text.trim() || !selectedOrder) return;
+    const msgData = { orderId: selectedOrder.id, message: text, fromDriver: true };
     if (!navigator.onLine) {
       useOfflineStore.getState().addToQueue({ type: 'CHAT_MESSAGE', data: msgData });
-      setMessages([...messages, { ...msgData, id: Date.now().toString(), createdAt: new Date() }]);
-      setNewMsg("");
+      setMessages(m => [...m, { ...msgData, id: Date.now().toString(), createdAt: new Date() } as any]);
       return;
     }
-
     try {
-      setSending(true);
       await api.post(`/api/delivery/orders/${selectedOrder.id}/messages`, msgData);
-      setNewMsg("");
       fetchMessages(selectedOrder.id);
-    } catch {} finally { setSending(false); }
+    } catch {}
   }
 
   if (!mounted) return null;
 
-  // ── VISTA SETUP ──
-  if (screen === "setup") return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-10">
-          <div className="w-20 h-20 bg-halo-primary rounded-3xl flex items-center justify-center mx-auto shadow-lg shadow-halo-primary/20">
-            <Settings size={32} className="text-white" strokeWidth={2.5} />
-          </div>
-          <h1 className="text-2xl font-bold text-white mt-6 tracking-tight font-mono uppercase">Configuración</h1>
-          <p className="text-halo-muted text-sm mt-2">Vincula esta aplicación con tu sucursal</p>
+  const locationName = mounted ? (localStorage.getItem('locationName') || 'Sucursal') : '';
+
+  return (
+    <>
+      {driver && screen === 'home' && (
+        <div style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
+          <GPSTracker
+            driverId={driver?.id}
+            activeOrderId={orders.find((o: any) => o.status === 'ON_THE_WAY')?.id}
+          />
         </div>
-        
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[32px] shadow-2xl">
-          {setupStep === "auth" ? (
-            <form onSubmit={handleSetupLogin} className="space-y-6">
-              <p className="text-[10px] font-bold text-halo-primary tracking-[0.2em] uppercase text-center mb-2">Paso 1: Autenticación Admin</p>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-bold text-halo-muted mb-2 block uppercase tracking-wider">Email del Administrador</label>
-                  <input type="email" value={setupEmail} onChange={e=>setSetupEmail(e.target.value)} placeholder="dueño@ejemplo.com" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white placeholder:text-halo-muted/50 focus:border-halo-primary outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-halo-muted mb-2 block uppercase tracking-wider">Contraseña</label>
-                  <input type="password" value={setupPassword} onChange={e=>setSetupPassword(e.target.value)} placeholder="••••••••" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white placeholder:text-halo-muted/50 focus:border-halo-primary outline-none transition-all" />
-                </div>
-              </div>
-              <button className="w-full py-4 bg-[#2563EB] text-white font-bold rounded-2xl active:scale-95 transition-all uppercase tracking-widest text-xs shadow-lg shadow-blue-500/20">
-                {loggingIn ? "AUTENTICANDO..." : "CONTINUAR"}
-              </button>
-            </form>
-          ) : (
-            <div className="space-y-6">
-              <p className="text-[10px] font-bold text-halo-primary tracking-[0.2em] uppercase text-center mb-2">Paso 2: Selecciona Sucursal</p>
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                {locations.map(loc => (
-                  <button key={loc.id} onClick={()=>finishSetup(loc)} className="w-full py-4 bg-white/5 border border-white/5 rounded-2xl font-bold hover:bg-halo-primary hover:text-black transition-all uppercase text-xs flex items-center justify-center gap-2">
-                    <MapPin size={14} strokeWidth={2.5} /> {loc.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+      )}
+
+      {screen === 'setup' && (
+        <SetupScreen
+          step={setupStep}
+          locations={locations}
+          loggingIn={loggingIn}
+          onLogin={handleSetupLogin}
+          onSelectLocation={finishSetup}
+        />
+      )}
+
+      {screen === 'login' && (
+        <LoginScreen
+          locationName={locationName}
+          loggingIn={loggingIn}
+          loginError={loginError}
+          onLogin={handlePinLogin}
+        />
+      )}
+
+      {screen === 'home' && (
+        <HomeScreen
+          driver={driver}
+          orders={orders}
+          isOnline={isOnline}
+          pendingSync={useOfflineStore.getState().queue.length}
+          onSelectOrder={(order: any) => {
+            setSelectedOrder(order);
+            fetchOrderDetail(order.id);
+            setScreen('detail');
+          }}
+          onChat={(order: any) => { setSelectedOrder(order); setScreen('chat'); }}
+          onDeliverOrder={(order: any) => { setSelectedOrder(order); setScreen('cobrar'); }}
+          onNavigate={(s: string) => {
+            if (s === 'login') { setDriver(null); }
+            if (s === 'weekly') fetchHistory();
+            setScreen(s as Screen);
+          }}
+        />
+      )}
+
+      {screen === 'detail' && selectedOrder && (
+        <DetailScreen
+          order={selectedOrder}
+          orderDetail={orderDetail}
+          onBack={() => setScreen('home')}
+          onCobrar={() => setScreen('cobrar')}
+          onChat={() => setScreen('chat')}
+        />
+      )}
+
+      {screen === 'cobrar' && selectedOrder && (
+        <CobrarScreen
+          order={selectedOrder}
+          onBack={() => setScreen('detail')}
+          onConfirm={(method: string) => changeStatus(selectedOrder, 'DELIVERED', method)}
+        />
+      )}
+
+      {screen === 'caja' && (
+        <CajaScreen
+          driverId={driver?.id}
+          movements={movements}
+          summary={cashSummary}
+          onBack={() => setScreen('home')}
+          onGasto={() => setScreen('gasto')}
+        />
+      )}
+
+      {screen === 'gasto' && (
+        <GastoScreen
+          onBack={() => setScreen('caja')}
+          onSave={saveExpense}
+        />
+      )}
+
+      {screen === 'chat' && selectedOrder && (
+        <ChatScreen
+          order={selectedOrder}
+          messages={messages}
+          onBack={() => setScreen('home')}
+          onSend={sendMessage}
+        />
+      )}
+
+      {screen === 'weekly' && (
+        <DesempenoScreen
+          history={history}
+          onBack={() => setScreen('home')}
+        />
+      )}
+
+      {screen === 'map' && (
+        <MapScreen
+          orders={orders}
+          driverLat={undefined}
+          driverLng={undefined}
+          onBack={() => setScreen('home')}
+        />
+      )}
+
+      {screen === 'dispatch' && (
+        <DispatchScreen
+          onBack={() => setScreen('home')}
+          locationId={typeof window !== 'undefined' ? (localStorage.getItem('locationId') || undefined) : undefined}
+        />
+      )}
+
+      {/* AcceptOrderModal — flota sobre cualquier pantalla cuando llega una asignación */}
+      {incomingOrder && (
+        <AcceptOrderModal
+          order={incomingOrder}
+          onAccept={() => {
+            fetchOrders();
+            setIncomingOrder(null);
+            setScreen('home');
+          }}
+          onReject={() => {
+            api.post(`/api/delivery/${driver?.id}/orders/${incomingOrder.id}/reject`)
+              .catch(() => {});
+            setIncomingOrder(null);
+          }}
+        />
+      )}
+    </>
   );
-
-  // ── VISTA LOGIN PIN ──
-  if (screen === "login") return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-sm text-center">
-        <div className="w-20 h-20 bg-halo-primary rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-lg shadow-halo-primary/20">
-          <Bike size={36} className="text-white" strokeWidth={2.5} />
-        </div>
-        
-        <h1 className="text-3xl font-bold text-white uppercase tracking-tight mb-1 font-mono">MRTPV Delivery</h1>
-        <p className="text-halo-muted text-[10px] font-bold uppercase tracking-[0.4em] mb-10 opacity-70 italic">
-          {mounted ? localStorage.getItem("locationName") : "Cargando..."}
-        </p>
-        
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[32px] space-y-8 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-halo-primary/30"></div>
-          
-          <div className="text-center text-4xl font-mono font-bold tracking-[0.4em] text-halo-primary h-12 flex items-center justify-center">
-            {pin.length > 0 ? "●".repeat(pin.length) : <span className="text-halo-muted/30 text-[10px] tracking-[0.2em] font-sans font-bold uppercase">Ingresa tu PIN</span>}
-          </div>
-          
-          {loginError && <p className="text-xs text-red-500 font-bold bg-red-500/10 py-2 rounded-xl border border-red-500/20">{loginError}</p>}
-          
-          <div className="grid grid-cols-3 gap-4">
-            {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((k, i) => (
-              <button key={i} onClick={() => { if(k==="⌫") setPin(p=>p.slice(0,-1)); else if(k!=="") setPin(p=>p.length < 6 ? p+k : p); }}
-                className={`py-5 rounded-2xl text-2xl font-mono font-bold transition-all ${k === "" ? "opacity-0 pointer-events-none" : "bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 active:scale-90"}`}>
-                {k}
-              </button>
-            ))}
-          </div>
-          
-          <button onClick={() => handlePinLogin()} disabled={pin.length < 4 || loggingIn} className="w-full py-5 bg-halo-primary text-black font-bold rounded-2xl text-sm tracking-widest uppercase active:scale-95 transition-all disabled:opacity-50 shadow-lg shadow-halo-primary/20">
-            {loggingIn ? "ACCEDIENDO..." : "ACCEDER"}
-          </button>
-        </div>
-        
-        <button onClick={()=>{localStorage.clear(); window.location.reload();}} className="mt-12 text-[10px] text-halo-muted font-bold uppercase underline tracking-[0.2em] opacity-40 hover:opacity-100 transition-opacity">Configuración de Terminal</button>
-      </div>
-    </div>
-  );
-
-  // ── VISTA HOME ──
-  if (screen === "home") return (
-    <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <div className="px-6 py-5 flex items-center justify-between border-b border-white/5 bg-halo-bg/60 backdrop-blur-xl sticky top-0 z-20">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-brand/10 flex items-center justify-center border border-brand/20 shadow-lg shadow-brand/10 text-brand"><Bike size={22} strokeWidth={2.5} /></div>
-          <div>
-            <h1 className="font-bold text-base text-white tracking-tight">{driver?.name}</h1>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-halo-success animate-pulse shadow-[0_0_8px_rgba(136,214,108,0.5)]"></span>
-              <p className="text-[10px] text-halo-success font-bold uppercase tracking-widest">En Línea</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <button onClick={()=>{fetchHistory(); setScreen("weekly");}} aria-label="Mi desempeño" className="w-11 h-11 rounded-2xl bg-surf-1 border border-bd flex items-center justify-center text-tx-pri hover:bg-surf-2 transition-all shadow-lg"><BarChart3 size={18} strokeWidth={2.5} /></button>
-          <button onClick={()=>setScreen("caja")} aria-label="Mi caja" className="w-11 h-11 rounded-2xl bg-surf-1 border border-bd flex items-center justify-center text-success hover:bg-success/10 transition-all shadow-lg"><Wallet size={18} strokeWidth={2.5} /></button>
-          <button onClick={()=>{setDriver(null); setScreen("login");}} aria-label="Cerrar sesión" className="w-11 h-11 rounded-2xl bg-danger/5 border border-danger/10 flex items-center justify-center text-danger hover:bg-danger/10 transition-all shadow-lg"><LogOut size={18} strokeWidth={2.5} /></button>
-        </div>
-      </div>
-
-      <div className="flex-1 pb-10">
-        {/* Ticker Dinámico */}
-        <div className="px-6 py-3 bg-white/[0.02] border-b border-white/5 overflow-hidden">
-          <p className="text-[10px] font-bold text-[#B8B9B6] whitespace-nowrap animate-marquee uppercase tracking-[0.2em] italic">
-            Maneja con precaución • Hay reporte de lluvia en tu ruta • ¡Buen turno repartidor!
-          </p>
-        </div>
-
-        <div className="mt-6 px-6">
-          <GPSTracker driverId={driver?.id} activeOrderId={orders.find(o => o.status === "ON_THE_WAY")?.id} />
-        </div>
-
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-[11px] font-bold text-halo-muted tracking-[0.3em] uppercase">Ruta Activa</h2>
-              <p className="text-2xl font-bold text-white font-mono">{orders.length} <span className="text-xs font-sans text-halo-muted uppercase tracking-widest">Pedidos</span></p>
-            </div>
-            {!isOnline && <span className="text-[10px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-3 py-1.5 rounded-xl font-bold uppercase tracking-wider animate-pulse">Offline</span>}
-          </div>
-
-          <div className="grid gap-6">
-            {orders.map(order => (
-              <div key={order.id} className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[32px] p-6 shadow-2xl relative overflow-hidden group transition-all hover:bg-white/10">
-                <div className="absolute top-0 left-0 w-1.5 h-full bg-halo-primary/50"></div>
-                
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h3 className="text-2xl font-mono font-bold text-halo-primary tracking-tighter leading-none">#{order.orderNumber}</h3>
-                    <p className="text-sm font-bold text-white mt-2 tracking-tight">{order.customerName}</p>
-                  </div>
-                  <span className={`text-[10px] font-bold uppercase px-3 py-1.5 rounded-xl border ${order.status === 'ON_THE_WAY' ? 'bg-halo-primary/20 border-halo-primary/30 text-halo-primary' : 'bg-white/5 border-white/5 text-halo-muted'}`}>
-                    {STATUS_LABELS[order.status]}
-                  </span>
-                </div>
-
-                <div className="bg-black/40 p-5 rounded-2xl mb-6 text-sm text-white/90 border border-white/5 leading-relaxed font-medium">
-                  <span className="text-tx-mut text-[10px] uppercase font-bold mb-2 tracking-[0.15em] flex items-center gap-1.5"><MapPin size={12} strokeWidth={2.5} /> Dirección de Entrega</span>
-                  {order.deliveryAddress}
-                </div>
-
-                <div className="flex gap-4">
-                  <button onClick={()=>{setSelectedOrder(order); fetchOrderDetail(order.id); setScreen("detail");}} className="flex-1 py-4 bg-surf-1 border border-bd rounded-2xl text-[10px] font-bold uppercase tracking-[0.2em] hover:bg-surf-2 transition-all">Detalle</button>
-                  <button onClick={()=>{setSelectedOrder(order); setScreen("chat");}} aria-label="Chat con cliente" className="w-14 h-14 bg-info/10 text-info border border-info/20 rounded-2xl hover:bg-info/20 transition-all flex items-center justify-center shadow-lg shadow-info/10"><MessageCircle size={20} strokeWidth={2.5} /></button>
-
-                  {order.status === "READY" && (
-                    <button onClick={()=>changeStatus(order, "ON_THE_WAY")} className="flex-[1.5] py-4 bg-brand text-brand-fg font-bold rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-brand/30 active:scale-95 transition-all inline-flex items-center justify-center gap-2">
-                      <Package size={14} strokeWidth={2.5} /> Recoger
-                    </button>
-                  )}
-                  {order.status === "ON_THE_WAY" && (
-                    <button onClick={()=>{setSelectedOrder(order); setScreen("cobrar");}} className="flex-[1.5] py-4 bg-success text-black font-bold rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-success/30 active:scale-95 transition-all inline-flex items-center justify-center gap-2">
-                      <DollarSign size={14} strokeWidth={2.5} /> Entregar
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-            
-            {orders.length === 0 && (
-              <div className="py-28 text-center bg-white/5 rounded-[40px] border border-white/5 border-dashed">
-                <Inbox size={80} className="mx-auto mb-8 text-tx-dis animate-bounce" strokeWidth={1.5} />
-                <p className="text-tx-mut text-[11px] font-bold uppercase tracking-[0.4em] opacity-60 italic">Esperando nuevas órdenes...</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // ── VISTA CHAT ──
-  if (screen === "chat" && selectedOrder) return (
-    <div className="min-h-screen flex flex-col">
-      <div className="px-6 py-5 flex items-center gap-5 border-b border-white/5 bg-halo-bg/60 backdrop-blur-xl sticky top-0 z-20">
-        <button onClick={()=>setScreen("home")} className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-halo-muted hover:text-white transition-all shadow-lg">←</button>
-        <div>
-          <h1 className="font-bold text-lg text-white tracking-tight">{selectedOrder.customerName}</h1>
-          <p className="text-[10px] text-halo-primary font-bold font-mono tracking-[0.2em] uppercase italic opacity-80">Pedido #{selectedOrder.orderNumber}</p>
-        </div>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {messages.map(msg => (
-          <div key={msg.id} className={`flex ${msg.fromDriver ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] p-5 rounded-[24px] text-sm font-medium leading-relaxed shadow-xl backdrop-blur-md ${msg.fromDriver ? 'bg-halo-primary text-black rounded-tr-none' : 'bg-white/5 text-white border border-white/10 rounded-tl-none'}`}>
-              {msg.message}
-              <p className={`text-[9px] mt-2 font-bold uppercase tracking-wider ${msg.fromDriver ? 'text-black/60' : 'text-halo-muted'}`}>
-                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-      
-      <div className="p-6 bg-halo-bg/95 backdrop-blur-2xl border-t border-white/5 flex gap-4">
-        <input value={newMsg} onChange={e=>setNewMsg(e.target.value)} onKeyDown={e=>e.key==='Enter' && sendMessage()} placeholder="Escribe un mensaje..." className="flex-1 bg-white/5 border border-white/10 rounded-2xl p-4 text-sm font-medium focus:border-halo-primary outline-none transition-all placeholder:text-halo-muted/40" />
-        <button onClick={sendMessage} disabled={!newMsg.trim() || sending} aria-label="Enviar mensaje" className="w-16 h-14 bg-brand text-brand-fg rounded-2xl flex items-center justify-center shadow-lg shadow-brand/30 active:scale-95 transition-all disabled:opacity-50">
-          <Send size={22} strokeWidth={2.5} />
-        </button>
-      </div>
-    </div>
-  );
-
-  // ── VISTA CAJA ──
-  if (screen === "caja") return (
-    <div className="min-h-screen flex flex-col">
-      <div className="px-6 py-5 border-b border-white/5 flex justify-between items-center bg-halo-bg/60 backdrop-blur-xl sticky top-0 z-20">
-        <button onClick={()=>setScreen("home")} className="text-[10px] font-bold text-halo-muted hover:text-white transition-all tracking-[0.2em] uppercase">← Volver</button>
-        <h2 className="text-xs font-bold tracking-[0.3em] uppercase opacity-80">Mi Caja</h2>
-        <button onClick={()=>setScreen("gasto")} className="px-4 py-2 bg-halo-primary text-black rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] shadow-lg shadow-halo-primary/20">Registrar Gasto</button>
-      </div>
-      
-      <div className="p-6">
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[40px] p-12 text-center mb-10 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-halo-success/40"></div>
-          <p className="text-[10px] font-bold text-halo-muted mb-4 tracking-[0.4em] uppercase">Efectivo en Mano</p>
-          <p className="text-7xl font-mono font-bold text-halo-success tracking-tighter drop-shadow-[0_0_20px_rgba(136,214,108,0.3)]">${(cashSummary?.balance || 0).toFixed(0)}</p>
-        </div>
-        
-        <h3 className="text-[10px] font-bold text-halo-muted mb-5 tracking-[0.3em] uppercase ml-2">Historial Reciente</h3>
-        <div className="space-y-4">
-          {movements.map(m => (
-            <div key={m.id} className="bg-white/5 backdrop-blur-md p-6 rounded-[24px] flex justify-between items-center border border-white/5 hover:border-white/20 transition-all shadow-lg">
-              <div>
-                <p className="text-sm font-bold text-white tracking-tight">{m.description || m.category}</p>
-                <p className="text-[10px] text-halo-muted uppercase tracking-wider font-mono mt-1.5 opacity-60">{new Date(m.createdAt).toLocaleTimeString()}</p>
-              </div>
-              <p className={`text-xl font-mono font-bold ${m.type === "INCOME" ? 'text-halo-success' : 'text-red-500'}`}>
-                {m.type === "INCOME" ? '+' : '-'}${m.amount}
-              </p>
-            </div>
-          ))}
-          {movements.length === 0 && (
-            <div className="py-20 text-center text-halo-muted text-[11px] font-bold uppercase tracking-[0.3em] opacity-30 italic">No hay movimientos hoy</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
-  // ── VISTA GASTO ──
-  if (screen === "gasto") return (
-    <div className="min-h-screen flex flex-col">
-      <div className="px-6 py-5 border-b border-white/5 flex items-center bg-halo-bg/60 backdrop-blur-xl sticky top-0 z-20">
-        <button onClick={()=>setScreen("caja")} className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-halo-muted hover:text-white mr-4 transition-all shadow-lg">←</button>
-        <h2 className="text-xs font-bold tracking-[0.3em] uppercase opacity-80">Registrar Gasto</h2>
-      </div>
-      
-      <div className="p-6 space-y-8">
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[32px] shadow-2xl space-y-8">
-          <div>
-            <label className="text-[10px] font-bold text-halo-muted mb-4 block tracking-[0.2em] uppercase">Selecciona Categoría</label>
-            <div className="grid gap-3">
-              {EXPENSE_CATS.map(c => {
-                const CatIcon = c.icon;
-                const active = expenseCat === c.value;
-                return (
-                  <button key={c.value} onClick={()=>setExpenseCat(c.value)} className={`p-5 rounded-2xl text-xs font-bold border transition-all text-left flex justify-between items-center ${active ? 'bg-brand/20 border-brand/40 text-brand shadow-lg shadow-brand/10' : 'bg-surf-1 border-bd text-tx-mut hover:border-white/20'}`}>
-                    <span className="flex items-center gap-3"><CatIcon size={16} strokeWidth={2.5} style={{ color: c.color }} /> {c.label}</span>
-                    {active && <Check size={18} className="animate-in zoom-in-50" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          
-          <div>
-            <label className="text-[10px] font-bold text-halo-muted mb-4 block tracking-[0.2em] uppercase">Monto a Registrar</label>
-            <div className="relative group">
-              <span className="absolute left-5 top-1/2 -translate-y-1/2 text-2xl font-mono font-bold text-halo-primary opacity-50">$</span>
-              <input type="number" value={expenseAmt} onChange={e=>setExpenseAmt(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 pl-12 text-white text-4xl font-mono font-bold focus:border-halo-primary outline-none transition-all shadow-inner" placeholder="0.00" />
-            </div>
-          </div>
-          
-          <div>
-            <label className="text-[10px] font-bold text-halo-muted mb-4 block tracking-[0.2em] uppercase">Descripción Detallada</label>
-            <textarea value={expenseDesc} onChange={e=>setExpenseDesc(e.target.value as any)} className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-medium focus:border-halo-primary outline-none transition-all min-h-[120px] resize-none" placeholder="Ej. Recarga de combustible para la ruta del centro..." />
-          </div>
-          
-          <button onClick={saveExpense} disabled={savingExpense || !expenseAmt} className="w-full py-6 bg-halo-primary text-black font-bold rounded-2xl active:scale-95 transition-all disabled:opacity-50 text-base tracking-[0.2em] uppercase shadow-xl shadow-halo-primary/30">
-            {savingExpense ? 'GUARDANDO...' : 'GUARDAR MOVIMIENTO'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // ── VISTA COBRAR ──
-  if (screen === "cobrar" && selectedOrder) return (
-    <div className="min-h-screen flex flex-col">
-      <div className="px-6 py-5 border-b border-white/5 flex items-center bg-halo-bg/60 backdrop-blur-xl sticky top-0 z-20">
-        <button onClick={()=>setScreen("home")} className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-halo-muted hover:text-white mr-4 transition-all shadow-lg">←</button>
-        <h2 className="text-xs font-bold tracking-[0.3em] uppercase opacity-80">Finalizar Entrega</h2>
-      </div>
-      
-      <div className="p-6 space-y-10">
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[40px] p-12 text-center shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-halo-primary/40"></div>
-          <p className="text-[10px] font-bold text-halo-muted mb-4 tracking-[0.4em] uppercase">Total a Cobrar</p>
-          <p className="text-7xl font-mono font-bold text-white tracking-tighter drop-shadow-[0_0_20px_rgba(255,132,0,0.2)]">${(selectedOrder.total || 0).toFixed(2)}</p>
-        </div>
-        
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[32px] shadow-2xl space-y-10">
-          <div>
-            <label className="text-[10px] font-bold text-halo-muted mb-6 block tracking-[0.3em] uppercase text-center">Método de Pago Seleccionado</label>
-            <div className="flex gap-4">
-              <button onClick={()=>setPayMethod("CASH")} className={`flex-1 py-8 rounded-[28px] font-bold text-[10px] border transition-all flex flex-col items-center gap-4 tracking-[0.2em] shadow-lg ${payMethod === "CASH" ? 'bg-brand/20 border-brand/40 text-brand shadow-brand/10' : 'bg-surf-1 border-bd text-tx-mut hover:border-white/20'}`}>
-                <DollarSign size={32} strokeWidth={2.5} />
-                EFECTIVO
-              </button>
-              <button onClick={()=>setPayMethod("TRANSFER")} className={`flex-1 py-8 rounded-[28px] font-bold text-[10px] border transition-all flex flex-col items-center gap-4 tracking-[0.2em] shadow-lg ${payMethod === "TRANSFER" ? 'bg-brand/20 border-brand/40 text-brand shadow-brand/10' : 'bg-surf-1 border-bd text-tx-mut hover:border-white/20'}`}>
-                <CreditCard size={32} strokeWidth={2.5} />
-                TRANSFERENCIA
-              </button>
-            </div>
-          </div>
-          
-          {payMethod === "CASH" && (
-            <div className="animate-in fade-in slide-in-from-top-6 duration-500">
-              <label className="text-[10px] font-bold text-halo-muted mb-4 block tracking-[0.2em] uppercase">¿Cuánto recibiste?</label>
-              <div className="relative group">
-                <span className="absolute left-5 top-1/2 -translate-y-1/2 text-2xl font-mono font-bold text-halo-primary opacity-50">$</span>
-                <input type="number" value={cashReceived} onChange={e=>setCashReceived(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 pl-12 text-white text-4xl font-mono font-bold focus:border-halo-primary outline-none transition-all shadow-inner" placeholder="0.00" />
-              </div>
-              {Number(cashReceived) > selectedOrder.total && (
-                <div className="mt-6 p-6 bg-halo-success/10 border border-halo-success/20 rounded-2xl flex justify-between items-center shadow-lg animate-in zoom-in-95">
-                  <span className="text-[10px] font-bold text-halo-success tracking-[0.2em] uppercase">Cambio a Devolver:</span>
-                  <span className="text-3xl font-mono font-bold text-halo-success drop-shadow-[0_0_15px_rgba(136,214,108,0.3)]">${(Number(cashReceived) - selectedOrder.total).toFixed(2)}</span>
-                </div>
-              )}
-            </div>
-          )}
-          
-          <button onClick={()=>changeStatus(selectedOrder, "DELIVERED", payMethod)} className="w-full py-6 bg-success text-black font-bold rounded-2xl text-base tracking-[0.2em] shadow-xl shadow-success/30 active:scale-95 transition-all uppercase inline-flex items-center justify-center gap-3">
-            <CheckCircle2 size={22} strokeWidth={2.5} /> Confirmar Entrega
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // ── VISTA DETALLE ──
-  if (screen === "detail" && selectedOrder) return (
-    <div className="min-h-screen flex flex-col">
-      <div className="px-6 py-5 border-b border-white/5 flex items-center bg-halo-bg/60 backdrop-blur-xl sticky top-0 z-20">
-        <button onClick={()=>setScreen("home")} className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-halo-muted hover:text-white mr-4 transition-all shadow-lg">←</button>
-        <h2 className="text-xs font-bold tracking-[0.3em] uppercase font-mono opacity-80">Orden #{selectedOrder.orderNumber}</h2>
-      </div>
-      
-      <div className="p-6 space-y-6 pb-28">
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[32px] p-8 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-halo-primary/5 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-          <p className="text-[10px] font-bold text-halo-muted mb-3 tracking-[0.3em] uppercase">Datos del Cliente</p>
-          <p className="text-2xl font-bold text-white tracking-tight">{selectedOrder.customerName}</p>
-          {selectedOrder.customerPhone && (
-            <a href={`tel:${selectedOrder.customerPhone}`} className="inline-flex items-center gap-3 mt-5 text-sm font-bold text-brand bg-brand/10 px-6 py-3 rounded-2xl border border-brand/20 shadow-lg shadow-brand/5 hover:bg-brand/20 transition-all">
-              <Phone size={16} strokeWidth={2.5} /> {selectedOrder.customerPhone}
-            </a>
-          )}
-        </div>
-        
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[32px] p-8 shadow-2xl">
-          <p className="text-[10px] font-bold text-tx-mut mb-4 tracking-[0.3em] uppercase">Ubicación de Entrega</p>
-          <div className="flex gap-4 items-start">
-            <MapPin size={22} strokeWidth={2.5} className="mt-1 text-brand shrink-0" />
-            <p className="text-base font-medium text-tx-pri leading-relaxed tracking-tight">
-              {selectedOrder.deliveryAddress?.trim()
-                ? selectedOrder.deliveryAddress
-                : <span className="text-tx-mut italic opacity-70">Sin dirección registrada</span>}
-            </p>
-          </div>
-          <button className="w-full mt-8 py-4 bg-surf-1 border border-bd rounded-2xl text-[10px] font-bold tracking-[0.3em] uppercase hover:bg-surf-2 transition-all flex items-center justify-center gap-3 shadow-lg">
-            <MapIcon size={16} strokeWidth={2.5} /> MAPAS
-          </button>
-        </div>
-        
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[32px] p-8 shadow-2xl">
-          <p className="text-[10px] font-bold text-halo-muted mb-6 tracking-[0.3em] uppercase">Contenido del Pedido</p>
-          <div className="space-y-4">
-            {/* BUG-30: usar items embebidos en selectedOrder (vienen de
-                 /api/delivery/:driverId/orders con menuItem + modifiers).
-                 Antes leía orderDetail?.items que llegaba vacío y mostraba
-                 "1x — $135" sin nombre del producto. */}
-            {((selectedOrder.items && selectedOrder.items.length > 0)
-                ? selectedOrder.items
-                : (orderDetail?.items || [])
-              ).map((item: any, i: number) => {
-              const itemName = item.name || item.productName || item.menuItem?.name || 'Producto';
-              const mods = Array.isArray(item.modifiers) ? item.modifiers : [];
-              const lineTotal = item.subtotal != null
-                ? Number(item.subtotal)
-                : Number(item.price || 0) * Number(item.quantity || 0);
-              return (
-                <div key={item.id || i} className="text-sm pb-4 border-b border-white/5 last:border-0 last:pb-0">
-                  <div className="flex justify-between items-start gap-3">
-                    <span className="text-white/90 leading-snug">
-                      <span className="font-mono font-bold text-halo-primary mr-2">{item.quantity}x</span>
-                      <span className="font-medium">{itemName}</span>
-                    </span>
-                    <span className="font-mono text-white/60 tracking-tighter whitespace-nowrap">${lineTotal.toFixed(2)}</span>
-                  </div>
-                  {mods.length > 0 && (
-                    <ul className="mt-2 ml-10 space-y-0.5">
-                      {mods.map((m: any, mi: number) => (
-                        <li key={m.id || mi} className="text-[11px] text-halo-muted/80 leading-tight">
-                          + {m.name}{m.priceAdd > 0 ? ` ($${Number(m.priceAdd).toFixed(2)})` : ''}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {item.notes && (
-                    <p className="mt-1 ml-10 text-[11px] italic text-tx-mut/80 inline-flex items-center gap-1.5"><StickyNote size={11} strokeWidth={2.5} /> {item.notes}</p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div className="border-t border-white/10 mt-8 pt-8 flex justify-between items-center">
-            <span className="text-xs font-bold text-halo-muted tracking-[0.2em] uppercase">Total Recaudado</span>
-            <span className="text-4xl font-mono font-bold text-halo-success drop-shadow-[0_0_15px_rgba(136,214,108,0.3)]">${(selectedOrder.total || 0).toFixed(2)}</span>
-          </div>
-        </div>
-        
-        <button onClick={()=>setScreen("home")} className="w-full py-5 bg-white/5 border border-white/10 rounded-2xl font-bold text-[10px] tracking-[0.4em] uppercase hover:bg-white/10 transition-all shadow-lg">Volver a Ruta</button>
-      </div>
-    </div>
-  );
-
-  // ── VISTA HISTORIAL SEMANAL ──
-  if (screen === "weekly") return (
-    <div className="min-h-screen flex flex-col">
-      <div className="px-6 py-5 border-b border-white/5 flex items-center bg-halo-bg/60 backdrop-blur-xl sticky top-0 z-20">
-        <button onClick={()=>setScreen("home")} className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-halo-muted hover:text-white mr-4 transition-all shadow-lg">←</button>
-        <h2 className="text-xs font-bold tracking-[0.3em] uppercase opacity-80">Mi Desempeño</h2>
-      </div>
-      
-      <div className="p-6">
-        <div className="bg-halo-primary/10 backdrop-blur-xl border border-halo-primary/20 rounded-[40px] p-10 text-center mb-10 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-halo-primary shadow-[0_0_15px_rgba(255,132,0,0.5)]"></div>
-          <p className="text-[10px] font-bold text-halo-primary mb-4 tracking-[0.4em] uppercase">Entregas Hoy</p>
-          <p className="text-8xl font-mono font-bold text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.2)]">{history.filter(h=>new Date(h.updatedAt).toDateString() === new Date().toDateString()).length}</p>
-        </div>
-        
-        <h3 className="text-[10px] font-bold text-halo-muted mb-6 tracking-[0.3em] uppercase ml-2">Historial de Órdenes</h3>
-        <div className="grid gap-4">
-          {history.map(h => (
-            <div key={h.id} className="bg-white/5 backdrop-blur-md border border-white/5 rounded-[28px] p-6 flex justify-between items-center group hover:bg-white/10 transition-all shadow-lg">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center text-success"><Check size={18} strokeWidth={3} /></div>
-                <div>
-                  <p className="font-mono font-bold text-base text-white tracking-tighter">#{h.orderNumber}</p>
-                  <p className="text-[10px] text-halo-muted font-mono mt-1.5 uppercase tracking-wider opacity-60">{new Date(h.updatedAt).toLocaleTimeString()}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="font-mono font-bold text-white">${h.total?.toFixed(2)}</p>
-                <span className="text-[9px] font-bold text-halo-success uppercase tracking-[0.15em] opacity-80 mt-1 block">Entregado</span>
-              </div>
-            </div>
-          ))}
-          {history.length === 0 && (
-            <div className="py-24 text-center bg-white/5 rounded-[40px] border border-white/5 border-dashed">
-              <Inbox size={64} className="mx-auto mb-8 text-tx-dis" strokeWidth={1.5} />
-              <p className="text-halo-muted text-[11px] font-bold uppercase tracking-[0.3em] opacity-40 italic">No hay entregas registradas hoy</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
-  return null;
 }

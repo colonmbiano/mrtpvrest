@@ -155,7 +155,7 @@ router.get('/menu', async (req, res) => {
         where: { restaurantId: restaurant.id, isAvailable: true },
         select: {
           id: true, name: true, description: true, price: true,
-          isPromo: true, imageUrl: true,
+          isPromo: true, promoPrice: true, imageUrl: true,
           categoryId: true,
           variants: {
             where: { isAvailable: true },

@@ -306,7 +306,10 @@ router.get('/top-items', authenticate, requireTenantAccess, requireAdmin, async 
     res.json(items.map(i => ({
       name: i.name,
       quantity: i._sum.quantity || 0,
+      // `total` se mantiene por compatibilidad con consumidores existentes;
+      // `revenue` es el nombre que usa el panel de Reportes IA.
       total: i._sum.subtotal || 0,
+      revenue: i._sum.subtotal || 0,
     })));
   } catch (e) {
     console.error('dashboard/top-items', e);
@@ -604,6 +607,154 @@ router.get('/insights', authenticate, requireTenantAccess, requireAdmin, async (
     res.json(insights);
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/dashboard/suggested-actions?period=30D ─────────────────────────
+// Genera 0-4 acciones sugeridas a partir de señales reales del periodo:
+//  · Sede con peor caída de ventas → plan de acción
+//  · Producto top → idea de combo/upsell
+//  · Ingredientes bajo mínimo → orden de compra
+//  · Sede con ticket promedio muy por debajo de la mediana → coaching
+//
+// Cada acción incluye un `prompt` listo para mandar al asistente Mesero,
+// para que el botón del frontend pueda accionar la conversación.
+router.get('/suggested-actions', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = requireRestaurant(req, res);
+    if (!restaurantId) return;
+    const locationId = getLocationId(req);
+    const { from, to, prevFrom, prevTo } = getPeriodRange(req.query.period || '30D');
+
+    const baseWhere = { restaurantId, status: { not: 'CANCELLED' } };
+
+    const [locations, currByLoc, prevByLoc, topItems, lowStock] = await Promise.all([
+      prisma.location.findMany({
+        where: { restaurantId, isActive: true },
+        select: { id: true, name: true },
+      }),
+      prisma.order.groupBy({
+        by: ['locationId'],
+        where: { ...baseWhere, createdAt: { gte: from, lte: to } },
+        _sum: { total: true },
+        _avg: { total: true },
+        _count: { id: true },
+      }),
+      prisma.order.groupBy({
+        by: ['locationId'],
+        where: { ...baseWhere, createdAt: { gte: prevFrom, lte: prevTo } },
+        _sum: { total: true },
+      }),
+      prisma.orderItem.groupBy({
+        by: ['name'],
+        where: {
+          order: {
+            restaurantId,
+            status: { not: 'CANCELLED' },
+            createdAt: { gte: from, lte: to },
+            ...(locationId ? { locationId } : {}),
+          },
+        },
+        _sum: { quantity: true, subtotal: true },
+        orderBy: { _sum: { quantity: 'desc' } },
+        take: 1,
+      }),
+      locationId
+        ? prisma.ingredient.findMany({
+            where: { locationId, isActive: true, minStock: { gt: 0 } },
+            select: { id: true, name: true, unit: true, stock: true, minStock: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const currMap = Object.fromEntries(currByLoc.map(r => [r.locationId, r]));
+    const prevMap = Object.fromEntries(prevByLoc.map(r => [r.locationId, r]));
+
+    const sedes = locations.map(loc => {
+      const c = currMap[loc.id];
+      const p = prevMap[loc.id];
+      const sales = c?._sum.total || 0;
+      const prev = p?._sum.total || 0;
+      return {
+        id: loc.id,
+        name: loc.name,
+        sales,
+        avgTicket: Math.round(c?._avg.total || 0),
+        orders: c?._count.id || 0,
+        delta: pctDelta(sales, prev),
+      };
+    });
+
+    const actions = [];
+    let n = 1;
+
+    // 1) Sede con peor caída (delta <= -10%, prioriza la más fuerte)
+    const dropping = sedes
+      .filter(s => s.sales > 0 && s.delta <= -10)
+      .sort((a, b) => a.delta - b.delta);
+    if (dropping[0]) {
+      const s = dropping[0];
+      actions.push({
+        n: n++,
+        title: `Revisar caída en ${s.name}`,
+        sub: `Ventas ${Math.abs(s.delta)}% por debajo del periodo anterior`,
+        cta: 'Crear plan de acción',
+        prompt: `La sede "${s.name}" cayó ${Math.abs(s.delta)}% en ventas vs el periodo anterior. Analiza posibles causas (turnos, productos, días) y propón un plan de acción concreto.`,
+      });
+    }
+
+    // 2) Producto top → combo / upsell
+    if (topItems[0]) {
+      const t = topItems[0];
+      actions.push({
+        n: n++,
+        title: `Capitalizar "${t.name}"`,
+        sub: `${t._sum.quantity || 0} unidades — es tu producto más vendido`,
+        cta: 'Sugerir combo',
+        prompt: `Mi producto más vendido es "${t.name}" con ${t._sum.quantity || 0} unidades en este periodo. Propón 2-3 combos o estrategias de upsell concretas para subir el ticket promedio.`,
+      });
+    }
+
+    // 3) Inventario bajo (solo si hay sede activa)
+    if (lowStock.length > 0) {
+      const critical = lowStock
+        .filter(i => i.stock <= i.minStock)
+        .sort((a, b) => (a.stock / (a.minStock || 1)) - (b.stock / (b.minStock || 1)));
+      if (critical.length > 0) {
+        const top3 = critical.slice(0, 3).map(i => i.name).join(', ');
+        actions.push({
+          n: n++,
+          title: `Reabastecer ${critical.length} ingrediente${critical.length > 1 ? 's' : ''}`,
+          sub: `${top3}${critical.length > 3 ? ` y ${critical.length - 3} más` : ''} bajo mínimo`,
+          cta: 'Generar orden de compra',
+          prompt: `Tengo ${critical.length} ingredientes por debajo del stock mínimo: ${critical.slice(0, 5).map(i => `${i.name} (${i.stock}/${i.minStock} ${i.unit || ''})`).join(', ')}. ¿Cuáles priorizo y cuánto debo pedir?`,
+        });
+      }
+    }
+
+    // 4) Coaching en sede con ticket promedio muy bajo vs mediana
+    const tickets = sedes.map(s => s.avgTicket).filter(t => t > 0).sort((a, b) => a - b);
+    if (tickets.length >= 2) {
+      const median = tickets[Math.floor(tickets.length / 2)];
+      const lowTicket = sedes
+        .filter(s => s.avgTicket > 0 && s.avgTicket < median * 0.85)
+        .sort((a, b) => a.avgTicket - b.avgTicket)[0];
+      if (lowTicket && median > 0) {
+        const diff = Math.round((1 - lowTicket.avgTicket / median) * 100);
+        actions.push({
+          n: n++,
+          title: `Coaching · encargado ${lowTicket.name}`,
+          sub: `Ticket promedio ${diff}% bajo la mediana del restaurante`,
+          cta: 'Crear plan de acción',
+          prompt: `El ticket promedio de "${lowTicket.name}" ($${lowTicket.avgTicket}) está ${diff}% por debajo de la mediana de mis sedes ($${median}). ¿Qué pasos concretos sigue el encargado para mejorar upsell y cierre de mesa?`,
+        });
+      }
+    }
+
+    res.json(actions.slice(0, 4));
+  } catch (e) {
+    console.error('dashboard/suggested-actions', e);
+    res.status(500).json({ error: 'Error al obtener acciones sugeridas' });
   }
 });
 

@@ -198,7 +198,7 @@ async function parseInventoryFile(file) {
 async function scanMenuFromImages(imageParts, apiKey) {
   try {
     const model = getGeminiModel(apiKey);
-    const prompt = `Analiza estas imágenes de un menú de restaurante. Extrae platos, precios, descripciones y categorías. Devuelve un JSON: { "categories": [], "items": [{ "name": "", "price": 0, "description": "", "category": "" }] }. Solo JSON puro.`;
+    const prompt = `Analiza estas imágenes de un menú de restaurante. Extrae platos, precios, descripciones y categorías. Si la categoría es "Alitas y Boneless" o similar, divídela en dos categorías distintas: "Alitas" y "Boneless". Si un producto tiene sabores (ej. alitas, boneless) o opciones de tamaño/sabor (ej. aguas de sabor), pon esas opciones en un arreglo "variants". Devuelve un JSON con este formato exacto: { "categories": [], "items": [{ "name": "", "price": 0, "description": "", "category": "", "variants": [{ "name": "", "price": 0 }] }] }. Solo JSON puro.`;
     
     const formattedImages = imageParts.map(p => ({ inlineData: { data: p.data, mimeType: p.mimeType || "image/jpeg" } }));
     const result = await model.generateContent([prompt, ...formattedImages]);

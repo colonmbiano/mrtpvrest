@@ -82,6 +82,8 @@ nav {
 }
 .nav-links { display: flex; gap: 4px; }
 .nav-link {
+  display: inline-flex;
+  align-items: center;
   padding: 7px 14px;
   border-radius: 8px;
   font-size: 13px;
@@ -91,10 +93,40 @@ nav {
   border: none;
   background: transparent;
   font-family: var(--f-b), sans-serif;
+  text-decoration: none;
+  transition: all .2s ease;
 }
 .nav-link:hover { background: var(--surf-2); color: var(--tx); }
 .nav-link.active { background: var(--iris-soft); color: var(--iris-300); }
+
+.nav-actions { display: flex; align-items: center; gap: 12px; }
+
+.btn-login {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tx-mid);
+  font-weight: 600;
+  font-size: 13px;
+  font-family: var(--f-b), sans-serif;
+  border: 1px solid var(--bd-2);
+  cursor: pointer;
+  text-decoration: none;
+  transition: all .2s ease;
+}
+.btn-login:hover {
+  background: var(--surf-2);
+  color: var(--tx-hi);
+  border-color: var(--bd-1);
+}
+
 .nav-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 8px 16px;
   border-radius: 8px;
   background: var(--iris-500);
@@ -104,7 +136,32 @@ nav {
   font-family: var(--f-b), sans-serif;
   border: none;
   cursor: pointer;
+  text-decoration: none;
   box-shadow: 0 4px 14px var(--iris-glow);
+}
+
+.btn-nav-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(16, 185, 129, .1);
+  color: var(--ok);
+  font-weight: 800;
+  font-size: 12px;
+  font-family: var(--f-m), monospace;
+  letter-spacing: .06em;
+  border: 1px solid rgba(16, 185, 129, .32);
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, .14);
+  transition: all .2s ease;
+}
+.btn-nav-download:hover {
+  background: rgba(16, 185, 129, .2);
+  border-color: rgba(16, 185, 129, .55);
+  color: #34d399;
 }
 
 /* HERO */
@@ -134,6 +191,9 @@ nav {
 .hero p { font-size: 16px; color: var(--tx-mut); max-width: 520px; margin: 0 auto 36px; line-height: 1.7; }
 .hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 12px 24px;
   border-radius: 10px;
   background: var(--iris-500);
@@ -143,9 +203,13 @@ nav {
   font-family: var(--f-b), sans-serif;
   border: none;
   cursor: pointer;
+  text-decoration: none;
   box-shadow: 0 4px 20px var(--iris-glow);
 }
 .btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 12px 24px;
   border-radius: 10px;
   background: var(--surf-1);
@@ -155,7 +219,51 @@ nav {
   font-family: var(--f-b), sans-serif;
   border: 1px solid var(--bd-2);
   cursor: pointer;
+  text-decoration: none;
+  transition: all .2s ease;
 }
+.btn-ghost:hover {
+  background: var(--surf-2);
+  border-color: var(--tx-mut);
+  color: var(--tx-hi);
+}
+.btn-download {
+  padding: 12px 24px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--f-b), sans-serif;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  cursor: pointer;
+  transition: all .3s ease;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.15);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-download:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+  color: #10b981;
+  transform: translateY(-2px);
+}
+
+/* ANIMATIONS */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-in {
+  animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+.delay-1 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.2s; }
+.delay-3 { animation-delay: 0.3s; }
+
 
 /* FLOW STRIP */
 .flow-strip {
@@ -176,6 +284,13 @@ nav {
   border-radius: 999px;
   padding: 5px 14px;
   letter-spacing: .04em;
+  transition: all 0.3s ease;
+  cursor: default;
+}
+.flow-pill:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.2);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
 }
 .flow-arrow { color: var(--tx-dim); font-size: 12px; }
 
@@ -288,14 +403,20 @@ footer {
 .ft-link:hover { color: var(--tx-mid); }
 
 @media (max-width: 900px) {
+  nav { padding: 0 20px; }
   .banners { grid-template-columns: 1fr; }
   .stats-strip { grid-template-columns: 1fr 1fr; }
   .hero h1 { font-size: 36px; }
   .cta-section h2 { font-size: 30px; }
+  .nav-cta { display: none; }
 }
 @media (max-width: 600px) {
   .hero h1 { font-size: 28px; }
   .hero-actions, .cta-actions { flex-direction: column; }
   .nav-links { display: none; }
+  .brand-tag { display: none; }
+  .nav-actions { gap: 8px; }
+  .btn-login { padding: 8px 10px; font-size: 12px; }
+  .btn-nav-download { padding: 8px 10px; min-width: 40px; }
   .section { padding: 40px 20px; }
 }

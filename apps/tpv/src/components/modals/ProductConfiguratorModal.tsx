@@ -201,13 +201,13 @@ export default function ProductConfiguratorModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
+    <div className="absolute inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-[#0a0a0c]/95 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative flex max-h-[92vh] w-full flex-col rounded-t-2xl border border-bd bg-surf-1 shadow-2xl animate-in slide-in-from-bottom duration-200 sm:max-w-3xl sm:rounded-2xl sm:zoom-in-95">
-        <div className="flex shrink-0 items-center justify-between border-b border-bd px-5 py-4">
+      <div className="relative flex max-h-full w-full flex-col rounded-t-2xl border border-white/10 bg-[#121316] shadow-2xl animate-in slide-in-from-bottom duration-200 sm:max-w-3xl sm:rounded-2xl sm:zoom-in-95">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-4">
           <div className="min-w-0 flex flex-col">
             <span className="eyebrow">CONFIGURAR PRODUCTO</span>
             <h2 className="truncate text-[18px] font-black">{product.name}</h2>
@@ -236,16 +236,16 @@ export default function ProductConfiguratorModal({
                       key={variant.id}
                       type="button"
                       onClick={() => setSelectedVariantId(variant.id)}
-                      className={`flex flex-col items-center justify-center gap-2 rounded-2xl border px-4 py-4 transition-pos active:scale-95 ${
+                      className={`flex flex-col items-center justify-center gap-2 rounded-2xl border px-4 py-4 transition-all min-h-[64px] active:scale-95 duration-150 ${
                         isSelected
-                          ? "border-iris-500 bg-iris-500/10"
-                          : "border-bd bg-surf-2 hover:bg-surf-3"
+                          ? "border-amber-500 bg-amber-500/10"
+                          : "border-white/10 bg-[#121316]"
                       }`}
                     >
                       <span className="text-center text-[14px] font-black">
                         {variant.name}
                       </span>
-                      <span className="mono tnum tracking-tighter text-[16px] font-black text-iris-500">
+                      <span className="mono tnum tracking-tighter text-[16px] font-black text-amber-500">
                         ${variant.price.toFixed(2)}
                       </span>
                     </button>
@@ -268,7 +268,7 @@ export default function ProductConfiguratorModal({
                   <h3 className="text-[14px] font-black text-tx-pri">
                     {g.name}
                     {g.required && (
-                      <span className="ml-1 text-[12px] text-iris-500">*</span>
+                      <span className="ml-1 text-[12px] text-amber-500">*</span>
                     )}
                   </h3>
                   <span className="eyebrow text-tx-mut">
@@ -287,10 +287,10 @@ export default function ProductConfiguratorModal({
                         key={m.id}
                         type="button"
                         onClick={() => toggle(g, m)}
-                        className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-pos ${
+                        className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all active:scale-95 duration-150 min-h-[64px] ${
                           isOn
-                            ? "border-iris-500 bg-iris-500/10"
-                            : "border-bd bg-surf-2 hover:bg-surf-3"
+                            ? "border-amber-500 bg-amber-500/10 text-amber-500"
+                            : "border-white/10 bg-[#121316] text-zinc-300"
                         }`}
                       >
                         <div
@@ -298,8 +298,8 @@ export default function ProductConfiguratorModal({
                             g.multiSelect ? "rounded-md" : "rounded-full"
                           } ${
                             isOn
-                              ? "bg-iris-500 text-white"
-                              : "border border-bd bg-surf-1"
+                              ? "bg-amber-500 text-black"
+                              : "border border-white/10 bg-[#0a0a0c]"
                           }`}
                         >
                           {isOn && <Check size={12} strokeWidth={3} />}
@@ -359,12 +359,12 @@ export default function ProductConfiguratorModal({
               placeholder="Sin cebolla, termino medio, alergia a..."
               rows={2}
               maxLength={200}
-              className="w-full resize-none rounded-lg border border-bd bg-surf-2 px-3 py-2.5 text-[13px] text-tx-pri outline-none placeholder:text-tx-mut focus:border-iris-500"
+              className="w-full resize-none rounded-lg border border-white/10 bg-[#0a0a0c] px-3 py-2.5 text-[13px] text-white outline-none placeholder:text-zinc-600 focus:border-amber-500 transition-colors"
             />
           </section>
         </div>
 
-        <div className="flex shrink-0 flex-col gap-3 border-t border-bd bg-surf-2/50 px-5 py-4">
+        <div className="flex shrink-0 flex-col gap-3 border-t border-white/10 bg-[#0a0a0c]/50 px-5 py-4">
           {validationError && (
             <p className="text-[12px] font-bold text-danger">{validationError}</p>
           )}
@@ -383,7 +383,7 @@ export default function ProductConfiguratorModal({
             variant="primary"
             size="xl"
             fullWidth
-            className="h-12 text-xs font-black uppercase tracking-widest"
+            className="min-h-[64px] text-xs font-black uppercase tracking-widest bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)] active:scale-[0.97] transition-transform border-none"
             onClick={confirm}
             disabled={!!validationError}
           >

@@ -54,6 +54,11 @@ const CSS = `
   .ia-chat-panel.open { transform: translateX(0); }
   .ia-overlay.open { display: block; }
 }
+
+@media print {
+  .ia-chat-panel, .ia-overlay, .ia-fab, .ia-no-print { display: none !important; }
+  .ia-main-panel { height: auto !important; overflow: visible !important; padding: 0 !important; }
+}
 `;
 
 /* ── Tokens ────────────────────────────────────────────────── */
@@ -143,9 +148,23 @@ type StatsResponse = {
 };
 type SedeRow = { id: string; name: string; slug: string; sales: number; orders: number; avgTicket: number; delta: number };
 type SavedReport = { id: string; title: string; tag: string; tagColor: string; tagBg: string; sub: string; active?: boolean };
+type SuggestedAction = { n: number; title: string; sub: string; cta: string; prompt: string };
+type DailyPoint = { date: string; revenue: number; orders: number };
+type SalesByDay = {
+  days: number;
+  series: DailyPoint[];
+  totals: { current: { revenue: number; orders: number }; previous: { revenue: number; orders: number }; delta: number };
+};
+
+const PERIOD_LABEL: Record<"HOY"|"7D"|"30D"|"90D"|"AÑO"|"HIST", string> = {
+  HOY: "Hoy", "7D": "Últimos 7 días", "30D": "Últimos 30 días", "90D": "Últimos 90 días", "AÑO": "Últimos 365 días", HIST: "Histórico completo",
+};
+const PERIOD_DAYS: Record<"HOY"|"7D"|"30D"|"90D"|"AÑO"|"HIST", number> = {
+  HOY: 1, "7D": 7, "30D": 30, "90D": 90, "AÑO": 90, HIST: 90, // AÑO/HIST se acotan a 90 días para que la gráfica sea legible
+};
 
 /* ── Chat messages ─────────────────────────────────────────── */
-type Msg = { role: "ai" | "user"; text: string; chart?: boolean; tools?: string[] };
+type Msg = { role: "ai" | "user"; text: string; tools?: string[] };
 const INIT_MSGS: Msg[] = [
   { role: "ai", text: "Hola, soy Mesero. Puedo consultar ventas, productos top, inventario bajo y personal activo de tu sucursal activa. ¿Qué quieres saber?", tools: [] },
 ];
@@ -169,8 +188,77 @@ export default function ReportesIAPage() {
   const [sedes, setSedes]       = useState<SedeRow[]>([]);
   const [insights, setInsights] = useState<Insight[]>([]);
   const [saved, setSaved]       = useState<SavedReport[]>([]);
-  const [topItems, setTopItems] = useState<Array<{ id: string; name: string; quantity: number; revenue: number }>>([]);
+  const [topItems, setTopItems] = useState<Array<{ id?: string; name: string; quantity: number; revenue: number }>>([]);
+  const [actions, setActions]   = useState<SuggestedAction[]>([]);
+  const [daily, setDaily]       = useState<SalesByDay | null>(null);
   const [loading, setLoading]   = useState(true);
+  // Feedback efímero para acciones (copiar enlace, guardar). Se autodescarta.
+  const [toast, setToast]       = useState<string | null>(null);
+  // Reportes guardados en el navegador. Backend GET /api/reports/saved es stub
+  // que regresa [], así que mientras no exista persistencia real usamos
+  // localStorage para que el botón "Guardar" tenga consecuencia visible.
+  const [savedLocal, setSavedLocal] = useState<SavedReport[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("ia-saved-reports");
+      if (raw) setSavedLocal(JSON.parse(raw));
+    } catch { /* localStorage no disponible */ }
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2400);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  function persistSaved(list: SavedReport[]) {
+    setSavedLocal(list);
+    try { localStorage.setItem("ia-saved-reports", JSON.stringify(list)); } catch { /* noop */ }
+  }
+
+  function handleSaveReport() {
+    const id = `local-${Date.now()}`;
+    const ordersTxt = stats ? `${(stats.orders.value ?? 0).toLocaleString("es-MX")} pedidos` : "sin pedidos";
+    const next: SavedReport = {
+      id,
+      title: `Ventas por sucursal · ${PERIOD_LABEL[period]}`,
+      tag: "LOCAL",
+      tagColor: V.iris3 as string,
+      tagBg: V.irisS as string,
+      sub: `${sedes.length} ${sedes.length === 1 ? "sede" : "sedes"} · ${ordersTxt} · guardado ${new Date().toLocaleDateString("es-MX")}`,
+    };
+    persistSaved([next, ...savedLocal]);
+    setToast("Reporte guardado");
+  }
+
+  async function handleShareReport() {
+    const url = typeof window !== "undefined" ? `${window.location.origin}${window.location.pathname}?period=${period}` : "";
+    try {
+      await navigator.clipboard.writeText(url);
+      setToast("Enlace copiado al portapapeles");
+    } catch {
+      setToast("No se pudo copiar el enlace");
+    }
+  }
+
+  function handleExportPdf() {
+    if (typeof window !== "undefined") window.print();
+  }
+
+  function handleNewSavedReport() {
+    sendChat(`Quiero crear un reporte personalizado nuevo del periodo ${PERIOD_LABEL[period]}. ¿Qué métricas o cortes me sugieres incluir según los datos que ya tienes?`);
+    setIsChatOpen(true);
+  }
+
+  function handleMoreInsights() {
+    sendChat(`Dame más insights y patrones interesantes del periodo ${PERIOD_LABEL[period]} más allá de los que ya detectaste automáticamente.`);
+    setIsChatOpen(true);
+  }
+
+  function handleDeleteSaved(id: string) {
+    persistSaved(savedLocal.filter(s => s.id !== id));
+  }
 
   useEffect(() => {
     let cancel = false;
@@ -180,14 +268,16 @@ export default function ReportesIAPage() {
         const safe = <T,>(p: Promise<{ data: T }>, fallback: T): Promise<T> =>
           p.then(r => r.data).catch(() => fallback);
 
-        const [s, loc, ins, sv, items] = await Promise.all([
+        const [s, loc, ins, sv, items, acts, dly] = await Promise.all([
           safe<StatsResponse>(api.get(`/api/dashboard/stats?period=${period}`), null as any),
           safe<SedeRow[]>(api.get(`/api/dashboard/sales-by-location?period=${period}`), []),
           safe<Insight[]>(api.get(`/api/dashboard/insights?period=${period}`), []),
           safe<SavedReport[]>(api.get(`/api/reports/saved`), []),
-          safe<Array<{ id: string; name: string; quantity: number; revenue: number }>>(
+          safe<Array<{ id?: string; name: string; quantity: number; revenue: number }>>(
             api.get(`/api/dashboard/top-items?period=${period}&limit=5`), []
           ),
+          safe<SuggestedAction[]>(api.get(`/api/dashboard/suggested-actions?period=${period}`), []),
+          safe<SalesByDay>(api.get(`/api/dashboard/sales-by-day?days=${PERIOD_DAYS[period]}`), null as any),
         ]);
         if (cancel) return;
         setStats(s);
@@ -195,6 +285,8 @@ export default function ReportesIAPage() {
         setInsights(ins);
         setSaved(sv);
         setTopItems(items);
+        setActions(acts);
+        setDaily(dly);
       } finally {
         if (!cancel) setLoading(false);
       }
@@ -307,7 +399,7 @@ export default function ReportesIAPage() {
                   }}>{p}</button>
                 ))}
               </div>
-              <button style={btn(false, true)}>
+              <button onClick={handleExportPdf} style={btn(false, true)} title="Imprimir o guardar como PDF">
                 <span className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95" style={{ verticalAlign: -2, marginRight: 4 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -387,9 +479,9 @@ export default function ReportesIAPage() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
             <div>
               <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: V.txHi }}>Insights que encontré para ti</h3>
-              <div style={{ fontSize: 12, color: V.txMut, marginTop: 2 }}>Detectados automáticamente en los últimos 30 días</div>
+              <div style={{ fontSize: 12, color: V.txMut, marginTop: 2 }}>Detectados automáticamente en {PERIOD_LABEL[period].toLowerCase()}</div>
             </div>
-            <button style={btn(false, true)}>Ver todos →</button>
+            <button onClick={handleMoreInsights} style={btn(false, true)} title="Pedir más insights al asistente">Pedir más →</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: insights.length === 0 ? "1fr" : "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
             {insights.length === 0 && (
@@ -415,11 +507,11 @@ export default function ReportesIAPage() {
                   <h4 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi, marginBottom: 6, lineHeight: 1.25 }}>{ins.title}</h4>
                   <p style={{ fontSize: 12, color: V.txMid, lineHeight: 1.5, marginBottom: 12 }}>{ins.body}</p>
                   <div style={{ display: "flex", gap: 6 }}>
-                    <button 
+                    <button
                       onClick={() => {
                         const prompt = `Sobre este insight: "${ins.title}" (${ins.body}). Quiero ${ins.cta}. ¿Qué me sugieres hacer específicamente?`;
                         sendChat(prompt);
-                        window.scrollTo({ top: 0, behavior: 'smooth' }); // Subir para ver el chat
+                        setIsChatOpen(true);
                       }}
                       style={{ ...btn(true), padding: "6px 10px", fontSize: 11 }}
                     >
@@ -443,8 +535,8 @@ export default function ReportesIAPage() {
             <div style={{ padding: "18px 22px", borderBottom: `1px solid ${V.bd1}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: V.irisS, color: V.iris3, padding: "2px 8px", borderRadius: 5, fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 600, letterSpacing: ".06em" }}>✨ GENERADO POR MESERO</span>
-                  <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, letterSpacing: ".1em" }}>HACE 2 MIN · 30 DÍAS</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: V.irisS, color: V.iris3, padding: "2px 8px", borderRadius: 5, fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 600, letterSpacing: ".06em" }}>✨ DATOS EN VIVO</span>
+                  <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, letterSpacing: ".1em" }}>{PERIOD_LABEL[period].toUpperCase()}</span>
                 </div>
                 <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, color: V.txHi }}>Ventas por sucursal · período {period}</div>
                 <div style={{ fontSize: 12, color: V.txMut, marginTop: 2, display: "flex", alignItems: "center", gap: 8 }}>
@@ -454,9 +546,26 @@ export default function ReportesIAPage() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                {["💾","↗","⬇"].map(ic => (
-                  <button key={ic} style={{ ...btn(false, true), padding: "8px 10px" }}>{ic}</button>
-                ))}
+                <button onClick={handleSaveReport} style={{ ...btn(false, true), padding: "8px 10px" }} title="Guardar reporte" aria-label="Guardar reporte">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                </button>
+                <button onClick={handleShareReport} style={{ ...btn(false, true), padding: "8px 10px" }} title="Copiar enlace al reporte" aria-label="Compartir">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                  </svg>
+                </button>
+                <button onClick={handleExportPdf} style={{ ...btn(false, true), padding: "8px 10px" }} title="Descargar / imprimir como PDF" aria-label="Descargar">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                </button>
               </div>
             </div>
 
@@ -516,58 +625,100 @@ export default function ReportesIAPage() {
                 </p>
               </div>
 
-              {/* Chart */}
+              {/* Chart — evolución diaria real (datos de /api/dashboard/sales-by-day) */}
               <div style={{ marginBottom: 24 }}>
                 <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ width: 3, height: 14, background: V.iris4, borderRadius: 2, display: "inline-block" }} />
-                  Evolución diaria · ventas vs mes anterior
+                  Evolución diaria · ventas {daily ? `(últimos ${daily.days} días)` : ""}
                 </h3>
                 <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 12, padding: 16 }}>
-                  <div style={{ display: "flex", gap: 14, fontSize: 11, color: V.txMid, marginBottom: 8 }}>
-                    {[{ color: "#9472ff", label: "Este mes" }, { color: V.txDim, label: "Mes anterior" }, { color: V.ok, label: "Fin de semana", round: true }].map(l => (
-                      <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ width: 10, height: 10, borderRadius: l.round ? "50%" : 2, background: l.color, display: "inline-block" }} />
-                        {l.label}
-                      </div>
-                    ))}
-                  </div>
-                  <svg viewBox="0 0 900 260" preserveAspectRatio="none" style={{ width: "100%", height: 220 }}>
-                    <defs>
-                      <linearGradient id="gIA" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#9472ff" stopOpacity=".3"/>
-                        <stop offset="100%" stopColor="#9472ff" stopOpacity="0"/>
-                      </linearGradient>
-                    </defs>
-                    <g stroke="rgba(255,255,255,.05)" strokeWidth="1">
-                      {[30,90,150,210].map(y => <line key={y} x1="50" y1={y} x2="880" y2={y}/>)}
-                    </g>
-                    <g fontFamily="DM Mono" fontSize="10" fill="#6e6e92">
-                      {[["100k",34],["75k",94],["50k",154],["25k",214]].map(([v,y]) => (
-                        <text key={v} x="44" y={y} textAnchor="end">{v}</text>
-                      ))}
-                    </g>
-                    <path d="M 60,170 L 90,160 L 120,180 L 150,155 L 180,140 L 210,120 L 240,100 L 270,145 L 300,155 L 330,170 L 360,150 L 390,140 L 420,125 L 450,105 L 480,90 L 510,135 L 540,150 L 570,165 L 600,145 L 630,135 L 660,120 L 690,100 L 720,85 L 750,130 L 780,140 L 810,155 L 840,135 L 870,125"
-                      stroke="#6e6e92" strokeWidth="1.5" strokeDasharray="3 3" fill="none"/>
-                    <path d="M 60,160 L 90,145 L 120,168 L 150,140 L 180,120 L 210,95 L 240,75 L 270,130 L 300,140 L 330,152 L 360,130 L 390,115 L 420,100 L 450,80 L 480,60 L 510,115 L 540,130 L 570,148 L 600,128 L 630,115 L 660,95 L 690,75 L 720,58 L 750,110 L 780,118 L 810,135 L 840,110 L 870,95 L 870,220 L 60,220 Z"
-                      fill="url(#gIA)"/>
-                    <path d="M 60,160 L 90,145 L 120,168 L 150,140 L 180,120 L 210,95 L 240,75 L 270,130 L 300,140 L 330,152 L 360,130 L 390,115 L 420,100 L 450,80 L 480,60 L 510,115 L 540,130 L 570,148 L 600,128 L 630,115 L 660,95 L 690,75 L 720,58 L 750,110 L 780,118 L 810,135 L 840,110 L 870,95"
-                      stroke="#9472ff" strokeWidth="2" fill="none" strokeLinecap="round"/>
-                    <g fill="#10b981">
-                      {[[210,95],[240,75],[450,80],[480,60],[690,75],[720,58]].map(([cx,cy]) => (
-                        <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="3.5"/>
-                      ))}
-                    </g>
-                    <g transform="translate(680,20)">
-                      <rect width="160" height="34" rx="7" fill="#15152a" stroke="rgba(124,58,237,.3)"/>
-                      <text x="10" y="14" fontFamily="DM Mono" fontSize="9" fill="#9494b8" letterSpacing=".1em">PICO · SÁB 11 ABR</text>
-                      <text x="10" y="27" fontFamily="Syne" fontWeight="700" fontSize="11" fill="#fff">$94,200 · 168 pedidos</text>
-                    </g>
-                    <g fontFamily="DM Mono" fontSize="9" fill="#6e6e92" textAnchor="middle">
-                      {[["L 18",75],["J 21",180],["D 24",285],["M 27",390],["V 30",495],["L 03",600],["J 06",705],["D 09",810]].map(([label,x]) => (
-                        <text key={label} x={x} y="246">{label}</text>
-                      ))}
-                    </g>
-                  </svg>
+                  {(() => {
+                    const series = daily?.series ?? [];
+                    const hasData = series.some(p => (p.revenue ?? 0) > 0);
+                    if (!hasData) {
+                      return (
+                        <div style={{ padding: "48px 16px", textAlign: "center", color: V.txMut, fontSize: 13 }}>
+                          {loading ? "Cargando ventas por día…" : "Sin ventas registradas en este periodo"}
+                        </div>
+                      );
+                    }
+                    const W = 900, H = 260, PL = 50, PR = 20, PT = 20, PB = 40;
+                    const innerW = W - PL - PR, innerH = H - PT - PB;
+                    const maxRev = Math.max(...series.map(p => p.revenue || 0), 1);
+                    const niceMax = (v: number) => {
+                      const exp = Math.pow(10, Math.floor(Math.log10(v)));
+                      const m = v / exp;
+                      const r = m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10;
+                      return r * exp;
+                    };
+                    const yMax = niceMax(maxRev);
+                    const ticks = [0.25, 0.5, 0.75, 1].map(f => f * yMax);
+                    const xAt = (i: number) => PL + (series.length === 1 ? innerW / 2 : (i * innerW) / (series.length - 1));
+                    const yAt = (v: number) => PT + innerH - (v / yMax) * innerH;
+                    const linePath = series.map((p, i) => `${i === 0 ? "M" : "L"} ${xAt(i).toFixed(1)},${yAt(p.revenue || 0).toFixed(1)}`).join(" ");
+                    const areaPath = `${linePath} L ${xAt(series.length - 1).toFixed(1)},${(PT + innerH).toFixed(1)} L ${xAt(0).toFixed(1)},${(PT + innerH).toFixed(1)} Z`;
+                    let peakIdx = 0;
+                    series.forEach((p, i) => { if ((p.revenue || 0) > (series[peakIdx]!.revenue || 0)) peakIdx = i; });
+                    const peak = series[peakIdx]!;
+                    const peakDate = new Date(peak.date);
+                    const peakLabel = peakDate.toLocaleDateString("es-MX", { weekday: "short", day: "2-digit", month: "short" }).toUpperCase();
+                    const weekendDots = series
+                      .map((p, i) => ({ p, i, d: new Date(p.date).getDay() }))
+                      .filter(o => (o.d === 0 || o.d === 6) && (o.p.revenue || 0) > 0);
+                    const labelStep = Math.max(1, Math.ceil(series.length / 8));
+                    const xLabels = series.filter((_, i) => i % labelStep === 0).map((p, k) => {
+                      const i = k * labelStep;
+                      const d = new Date(p.date);
+                      return { label: d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" }).replace(".", ""), xPx: xAt(i) };
+                    });
+                    const fmtAxis = (v: number) => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v >= 1_000 ? `${Math.round(v / 1_000)}k` : `${Math.round(v)}`;
+                    const fmtMoney = (v: number) => `$${Math.round(v).toLocaleString("es-MX")}`;
+                    return (
+                      <>
+                        <div style={{ display: "flex", gap: 14, fontSize: 11, color: V.txMid, marginBottom: 8, flexWrap: "wrap" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ width: 10, height: 10, borderRadius: 2, background: "#9472ff", display: "inline-block" }} /> Ventas del día
+                          </div>
+                          {weekendDots.length > 0 && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ width: 10, height: 10, borderRadius: "50%", background: V.ok, display: "inline-block" }} /> Fin de semana
+                            </div>
+                          )}
+                        </div>
+                        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: 220 }}>
+                          <defs>
+                            <linearGradient id="gIA" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#9472ff" stopOpacity=".3"/>
+                              <stop offset="100%" stopColor="#9472ff" stopOpacity="0"/>
+                            </linearGradient>
+                          </defs>
+                          <g stroke="rgba(255,255,255,.05)" strokeWidth="1">
+                            {ticks.map(t => <line key={t} x1={PL} y1={yAt(t)} x2={W - PR} y2={yAt(t)}/>)}
+                          </g>
+                          <g fontFamily="DM Mono" fontSize="10" fill="#6e6e92">
+                            {ticks.map(t => (
+                              <text key={t} x={PL - 6} y={yAt(t) + 3} textAnchor="end">{fmtAxis(t)}</text>
+                            ))}
+                          </g>
+                          <path d={areaPath} fill="url(#gIA)"/>
+                          <path d={linePath} stroke="#9472ff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                          <g fill="#10b981">
+                            {weekendDots.map(o => <circle key={o.p.date} cx={xAt(o.i)} cy={yAt(o.p.revenue || 0)} r="3.5"/>)}
+                          </g>
+                          {(peak.revenue || 0) > 0 && (
+                            <g transform={`translate(${Math.min(W - 180, Math.max(PL, xAt(peakIdx) - 80))},${PT - 4})`}>
+                              <rect width="170" height="34" rx="7" fill="#15152a" stroke="rgba(124,58,237,.3)"/>
+                              <text x="10" y="14" fontFamily="DM Mono" fontSize="9" fill="#9494b8" letterSpacing=".1em">PICO · {peakLabel}</text>
+                              <text x="10" y="27" fontFamily="Syne" fontWeight="700" fontSize="11" fill="#fff">{fmtMoney(peak.revenue || 0)} · {peak.orders} pedidos</text>
+                            </g>
+                          )}
+                          <g fontFamily="DM Mono" fontSize="9" fill="#6e6e92" textAnchor="middle">
+                            {xLabels.map(l => <text key={l.label + l.xPx} x={l.xPx} y={H - 14}>{l.label}</text>)}
+                          </g>
+                        </svg>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -685,17 +836,23 @@ export default function ReportesIAPage() {
                     Acciones sugeridas
                   </h3>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {[
-                      { n: 1, title: "Renegociar proveedor de res",    sub: "Recuperar ~0.8pp de margen (~$17k/mes)", cta: "Agendar reunión" },
-                      { n: 2, title: "Replicar menú degustación",       sub: "En 3 sedes sin este producto (potencial +$42k/mes)", cta: "Clonar al menú" },
-                      { n: 3, title: "Coaching · encargado Coyoacán",  sub: "Ticket promedio 13% bajo el objetivo", cta: "Crear plan de acción" },
-                    ].map(a => (
+                    {actions.length === 0 && (
+                      <div style={{ background: V.surf2, border: `1px dashed ${V.bd1}`, borderRadius: 10, padding: "20px 14px", textAlign: "center", color: V.txMut, fontSize: 12 }}>
+                        {loading ? "Analizando señales del periodo…" : "Sin acciones automáticas para este periodo. Cuando haya caídas de ventas, productos top o stock bajo, aparecerán aquí."}
+                      </div>
+                    )}
+                    {actions.map(a => (
                       <div key={a.n} style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 10, padding: "12px 14px", display: "flex", gap: 10, alignItems: "flex-start" }}>
                         <div style={{ width: 22, height: 22, borderRadius: 6, background: V.irisS, color: V.iris3, display: "grid", placeItems: "center", flexShrink: 0, fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 11 }}>{a.n}</div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 13, color: V.tx, fontWeight: 600, marginBottom: 2 }}>{a.title}</div>
                           <div style={{ fontSize: 11, color: V.txMut, lineHeight: 1.5 }}>{a.sub}</div>
-                          <button style={{ ...btn(true), marginTop: 8, padding: "5px 10px", fontSize: 11 }}>{a.cta}</button>
+                          <button
+                            onClick={() => { sendChat(a.prompt); setIsChatOpen(true); }}
+                            style={{ ...btn(true), marginTop: 8, padding: "5px 10px", fontSize: 11 }}
+                          >
+                            {a.cta}
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -711,27 +868,44 @@ export default function ReportesIAPage() {
               <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: V.txHi }}>Reportes guardados</h3>
               <div style={{ fontSize: 12, color: V.txMut, marginTop: 2 }}>Reportes recurrentes y favoritos</div>
             </div>
-            <button style={btn(false, true)}>+ Nuevo reporte</button>
+            <button onClick={handleNewSavedReport} style={btn(false, true)} title="Pedir al asistente que defina uno nuevo">+ Nuevo reporte</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
-            {saved.length === 0 && (
-              <div style={{ gridColumn: "1 / -1", border: `1px dashed ${V.bd1}`, borderRadius: 12, padding: "28px 20px", textAlign: "center", color: V.txMut, fontSize: 13 }}>
-                Aún no has guardado reportes. Usa “+ Nuevo reporte” para crear el primero.
-              </div>
-            )}
-            {saved.map(s => (
-              <div key={s.id ?? s.title} style={{
-                background: s.active ? `linear-gradient(90deg,rgba(124,58,237,.08),transparent)` : V.surf1,
-                border: `1px solid ${s.active ? V.iris5 : V.bd1}`,
-                borderRadius: 12, padding: "14px 16px", cursor: "pointer",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontWeight: 600, color: V.tx, fontSize: 13 }}>{s.title}</span>
-                  <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".1em", color: s.tagColor, background: s.tagBg, padding: "2px 6px", borderRadius: 5, fontWeight: 600 }}>{s.tag}</span>
-                </div>
-                <div style={{ fontSize: 11, color: V.txMut }}>{s.sub}</div>
-              </div>
-            ))}
+            {(() => {
+              const all = [...savedLocal, ...saved];
+              if (all.length === 0) {
+                return (
+                  <div style={{ gridColumn: "1 / -1", border: `1px dashed ${V.bd1}`, borderRadius: 12, padding: "28px 20px", textAlign: "center", color: V.txMut, fontSize: 13 }}>
+                    Aún no has guardado reportes. Usa el botón 💾 del reporte para guardar uno.
+                  </div>
+                );
+              }
+              return all.map(s => {
+                const isLocal = String(s.id ?? "").startsWith("local-");
+                return (
+                  <div key={s.id ?? s.title} style={{
+                    background: s.active ? `linear-gradient(90deg,rgba(124,58,237,.08),transparent)` : V.surf1,
+                    border: `1px solid ${s.active ? V.iris5 : V.bd1}`,
+                    borderRadius: 12, padding: "14px 16px",
+                    position: "relative",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, gap: 8 }}>
+                      <span style={{ fontWeight: 600, color: V.tx, fontSize: 13 }}>{s.title}</span>
+                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".1em", color: s.tagColor, background: s.tagBg, padding: "2px 6px", borderRadius: 5, fontWeight: 600 }}>{s.tag}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: V.txMut }}>{s.sub}</div>
+                    {isLocal && (
+                      <button
+                        onClick={() => handleDeleteSaved(String(s.id))}
+                        style={{ position: "absolute", top: 8, right: 8, background: "transparent", border: "none", color: V.txDim, cursor: "pointer", padding: 4, lineHeight: 1, fontSize: 14 }}
+                        title="Eliminar reporte guardado"
+                        aria-label="Eliminar"
+                      >×</button>
+                    )}
+                  </div>
+                );
+              });
+            })()}
           </div>
 
         </div>
@@ -784,36 +958,6 @@ export default function ReportesIAPage() {
                       : { background: V.iris5, color: "#fff", borderTopRightRadius: 4, marginLeft: "auto" }),
                   }}>
                     {m.text}
-                    {m.chart && (
-                      <div style={{ marginTop: 10, background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 10, padding: 10 }}>
-                        <div style={{ fontSize: 11, color: V.txMut, marginBottom: 6, fontFamily: "'DM Mono',monospace", letterSpacing: ".06em", textTransform: "uppercase" }}>Δ vs mes anterior</div>
-                        <svg viewBox="0 0 220 80" style={{ width: "100%", height: 72 }}>
-                          <g fontFamily="DM Mono" fontSize="7" fill="#9494b8">
-                            {[["Polanco",13],["Sta Fe",26],["Reforma",39],["Condesa",52],["Coyoacán",65],["Del Valle",78]].map(([n,y]) => (
-                              <text key={n as string} x="0" y={y}>{n}</text>
-                            ))}
-                          </g>
-                          <rect x="52" y="7"  width="120" height="8" fill="#10b981" rx="2"/>
-                          <rect x="52" y="20" width="88"  height="8" fill="#10b981" rx="2"/>
-                          <rect x="52" y="33" width="60"  height="8" fill="#9472ff" rx="2"/>
-                          <rect x="52" y="46" width="46"  height="8" fill="#9472ff" rx="2"/>
-                          <rect x="24" y="59" width="28"  height="8" fill="#ef4444" rx="2"/>
-                          <rect x="12" y="72" width="40"  height="8" fill="#ef4444" rx="2"/>
-                          <line x1="52" y1="0" x2="52" y2="80" stroke="rgba(255,255,255,.1)"/>
-                          <g fontFamily="DM Mono" fontSize="7" fill="#fff" fontWeight="700">
-                            <text x="175" y="13">+28%</text><text x="143" y="26">+21%</text>
-                            <text x="115" y="39">+14%</text><text x="101" y="52">+11%</text>
-                            <text x="18"  y="65" textAnchor="end">−6%</text>
-                            <text x="6"   y="78" textAnchor="end">−9%</text>
-                          </g>
-                        </svg>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
-                          <button style={{ background: V.irisS, border: `1px solid rgba(124,58,237,.3)`, color: "#dcd0ff", padding: "4px 8px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>Abrir reporte</button>
-                          <button style={{ background: V.surf3, border: `1px solid ${V.bd1}`, color: V.txMid, padding: "4px 8px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>Guardar</button>
-                          <button style={{ background: V.surf3, border: `1px solid ${V.bd1}`, color: V.txMid, padding: "4px 8px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>Email</button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                   {m.tools && m.tools.length > 0 && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
@@ -888,6 +1032,22 @@ export default function ReportesIAPage() {
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
         </button>
+      )}
+
+      {/* ═══ TOAST (feedback de copiar/guardar) ════════════ */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed", bottom: 96, left: "50%", transform: "translateX(-50%)",
+            background: V.surf1, border: `1px solid ${V.bd1}`, color: V.txHi,
+            padding: "10px 16px", borderRadius: 999, fontSize: 13, fontWeight: 600,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.35)", zIndex: 60,
+          }}
+        >
+          {toast}
+        </div>
       )}
     </>
   );
