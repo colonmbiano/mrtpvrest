@@ -206,13 +206,12 @@ function appendComplementNotes(notes, complements) {
   return [base, `Complementos: ${names}`].filter(Boolean).join('\n');
 }
 
-function resolveVariantBasePrice(menuItem, variant) {
-  const defaultPrice = Number(menuItem?.promoPrice || menuItem?.price || 0);
-  if (!variant) return defaultPrice;
-  const variantPrice = Number(variant.price || 0);
-  if (variantPrice <= 0) return defaultPrice;
-  if (variantPrice < defaultPrice) return defaultPrice + variantPrice;
-  return variantPrice;
+function appendVariantNotes(notes, variants) {
+  const base = typeof notes === 'string' ? notes.trim() : '';
+  if (!Array.isArray(variants) || variants.length === 0) return base || null;
+  const names = variants.map((v) => v.name).filter(Boolean).join(', ');
+  if (!names) return base || null;
+  return [base, `Variantes: ${names}`].filter(Boolean).join('\n');
 }
 
 function resolveVariantSelection(menuItem, item) {
@@ -402,6 +401,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       const variantSelection = resolveVariantSelection(menuItem, item);
       const modifierIds = extractIds(item.modifiers, 'modifierId');
       const complementIds = extractIds(item.complements, 'complementId');
+      const variantIds = extractIds(item.variants, 'variantId');
 
       // Indexar todos los modificadores válidos del item por id, agrupados.
       const validModsById = new Map();
@@ -447,6 +447,22 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         selectedComplements.push(complement);
       }
 
+      // Variantes multi-select: se cobran como extra sobre el precio base
+      // (los sabores en $0 no suman; "Extra aderezo" etc. sí). El precio
+      // siempre se re-lee de DB para que el cliente no lo manipule.
+      const validVariantsById = new Map(
+        (menuItem?.variants || [])
+          .filter((v) => v.isAvailable !== false)
+          .map((v) => [v.id, v])
+      );
+      const selectedVariants = [];
+      for (const id of variantIds) {
+        const variant = validVariantsById.get(id);
+        if (!variant) continue;
+        unitExtra += Number(variant.price || 0);
+        selectedVariants.push(variant);
+      }
+
       const unitPrice = variantSelection.basePrice + unitExtra;
       const seatRaw = Number(item.seatNumber);
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
@@ -463,7 +479,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         price: unitPrice,
         quantity: item.quantity,
         subtotal: unitPrice * item.quantity,
-        notes: appendComplementNotes(item.notes, selectedComplements),
+        notes: appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants),
         seatNumber,
         course,
         _modifiers: flatMods,
@@ -599,6 +615,7 @@ async function addRoundHandler(req, res) {
       const variantSelection = resolveVariantSelection(menuItem, item);
       const modifierIds = extractIds(item.modifiers, 'modifierId');
       const complementIds = extractIds(item.complements, 'complementId');
+      const variantIds = extractIds(item.variants, 'variantId');
 
       const validModsById = new Map();
       const groupsById = new Map();
@@ -641,6 +658,19 @@ async function addRoundHandler(req, res) {
         selectedComplements.push(complement);
       }
 
+      const validVariantsById = new Map(
+        (menuItem?.variants || [])
+          .filter((v) => v.isAvailable !== false)
+          .map((v) => [v.id, v])
+      );
+      const selectedVariants = [];
+      for (const variantId of variantIds) {
+        const variant = validVariantsById.get(variantId);
+        if (!variant) continue;
+        unitExtra += Number(variant.price || 0);
+        selectedVariants.push(variant);
+      }
+
       const price = variantSelection.basePrice + unitExtra;
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
       const seatRaw = Number(item.seatNumber);
@@ -655,7 +685,7 @@ async function addRoundHandler(req, res) {
         price,
         quantity: qty,
         subtotal: price * qty,
-        notes: appendComplementNotes(item.notes, selectedComplements),
+        notes: appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants),
         seatNumber,
         course,
         _modifiers: flatMods,

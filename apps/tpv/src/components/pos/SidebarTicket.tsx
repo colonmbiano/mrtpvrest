@@ -6,7 +6,7 @@ import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import DiscountModal from "@/components/pos/DiscountModal";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
-import { COMPLEMENT_MODIFIER_PREFIX } from "@/components/pos/ModifierPickerModal";
+import { COMPLEMENT_MODIFIER_PREFIX, VARIANT_MODIFIER_PREFIX } from "@/components/pos/ModifierPickerModal";
 import { useAuthStore } from "@/store/authStore";
 import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
@@ -220,15 +220,27 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             : null
         )
         .filter((id): id is string => Boolean(id));
+      const variantIds = modifiers
+        .map((m) =>
+          m.id.startsWith(VARIANT_MODIFIER_PREFIX)
+            ? m.id.slice(VARIANT_MODIFIER_PREFIX.length)
+            : null
+        )
+        .filter((id): id is string => Boolean(id));
       return {
         menuItemId: item.menuItemId,
         quantity: item.quantity,
         notes: item.notes || "",
         seatNumber: item.seatNumber ?? null,
         modifiers: modifiers
-          .filter((m) => !m.id.startsWith(COMPLEMENT_MODIFIER_PREFIX))
+          .filter(
+            (m) =>
+              !m.id.startsWith(COMPLEMENT_MODIFIER_PREFIX) &&
+              !m.id.startsWith(VARIANT_MODIFIER_PREFIX),
+          )
           .map((m) => ({ modifierId: m.id })),
         complements: complementIds.map((complementId) => ({ complementId })),
+        variants: variantIds.map((variantId) => ({ variantId })),
       };
     });
 

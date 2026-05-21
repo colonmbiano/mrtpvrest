@@ -513,6 +513,13 @@ model MenuItem {
   barcode         String?
   activeDays      String[]
   hasVariants     Boolean  @default(false)
+  // Cuando variantMultiSelect=true el TPV deja elegir varias variantes
+  // (ej. varios sabores de boneless) en vez de una sola. min/max=0 = sin
+  // tope por ese lado. Sólo aplica al modo multi; el single-select clásico
+  // (talla S/M/L) queda intacto con estos defaults.
+  variantMultiSelect  Boolean @default(false)
+  variantMinSelection Int     @default(0)
+  variantMaxSelection Int     @default(0)
   preparationTime Int      @default(15)
   taxCategoryId   String?
 
