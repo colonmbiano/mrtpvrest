@@ -1,49 +1,42 @@
 import type { Metadata } from 'next'
-import { Syne, DM_Sans, DM_Mono } from 'next/font/google'
+import { JetBrains_Mono, Outfit } from 'next/font/google'
 import './globals.css'
 
-const syne = Syne({
+const outfit = Outfit({
   subsets: ['latin'],
-  weight: ['600', '700', '800'],
-  variable: '--f-d',
+  weight: ['400', '500', '600', '700', '800', '900'],
+  variable: '--font-body',
   display: 'swap',
 })
 
-const dmSans = DM_Sans({
+const jetBrainsMono = JetBrains_Mono({
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600'],
-  variable: '--f-b',
-  display: 'swap',
-})
-
-const dmMono = DM_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
-  variable: '--f-m',
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-mono',
   display: 'swap',
 })
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://mrtpvrest.com'),
-  title: 'MRTPVREST — Ecosistema POS para restaurantes',
+  title: 'MRTPVREST | POS Warm Tech para restaurantes',
   description:
-    'El POS que conecta todo tu negocio. 6 apps especializadas, una sola plataforma. Desde que el cliente ordena hasta que el dueño revisa sus reportes.',
-  keywords: ['POS', 'punto de venta', 'restaurante', 'kiosko', 'KDS', 'delivery', 'México', 'SaaS'],
+    'Controla tu restaurante en tiempo real con TPV, KDS, delivery, kiosko, app cliente y administración en una sola plataforma.',
+  keywords: ['POS', 'punto de venta', 'restaurante', 'KDS', 'delivery', 'kiosko', 'TPV', 'México', 'Latam'],
   authors: [{ name: 'MRTPVREST' }],
   openGraph: {
-    title: 'MRTPVREST — Ecosistema POS para restaurantes',
-    description: '6 apps conectadas en tiempo real para tu restaurante.',
+    title: 'MRTPVREST | POS Warm Tech para restaurantes',
+    description: 'Caja, cocina, delivery y reportes conectados en tiempo real para restaurantes LATAM.',
     url: 'https://mrtpvrest.com',
     siteName: 'MRTPVREST',
     locale: 'es_MX',
     type: 'website',
-    images: [{ url: '/og-image.png', width: 1200, height: 630 }],
+    images: [{ url: '/brand/mrtpvrest-logo.png', width: 1600, height: 900 }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'MRTPVREST — Ecosistema POS para restaurantes',
-    description: '6 apps conectadas en tiempo real.',
-    images: ['/og-image.png'],
+    title: 'MRTPVREST | POS Warm Tech para restaurantes',
+    description: 'Ecosistema POS para operar restaurantes en tiempo real.',
+    images: ['/brand/mrtpvrest-logo.png'],
   },
   icons: {
     icon: '/favicon.ico',
@@ -53,7 +46,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${syne.variable} ${dmSans.variable} ${dmMono.variable}`}>
+    <html lang="es" className={`${outfit.variable} ${jetBrainsMono.variable}`}>
       <body>{children}</body>
     </html>
   )
