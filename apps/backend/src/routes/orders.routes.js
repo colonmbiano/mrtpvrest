@@ -206,6 +206,47 @@ function appendComplementNotes(notes, complements) {
   return [base, `Complementos: ${names}`].filter(Boolean).join('\n');
 }
 
+function resolveVariantBasePrice(menuItem, variant) {
+  const defaultPrice = Number(menuItem?.promoPrice || menuItem?.price || 0);
+  if (!variant) return defaultPrice;
+  const variantPrice = Number(variant.price || 0);
+  if (variantPrice <= 0) return defaultPrice;
+  if (variantPrice < defaultPrice) return defaultPrice + variantPrice;
+  return variantPrice;
+}
+
+function resolveVariantSelection(menuItem, item) {
+  const ids = Array.isArray(item.variantIds)
+    ? item.variantIds.filter(Boolean)
+    : item.variantId
+      ? [item.variantId]
+      : [];
+  const variants = ids.map((variantId) => {
+    const variant = (menuItem?.variants || []).find(
+      (v) => v.id === variantId && v.isAvailable !== false,
+    );
+    if (!variant) throw new Error(`Variante ${variantId} no disponible para este producto`);
+    return variant;
+  });
+
+  const defaultPrice = Number(menuItem?.promoPrice || menuItem?.price || 0);
+  const fullPrice = variants
+    .map((variant) => Number(variant.price || 0))
+    .filter((price) => price >= defaultPrice);
+  const extras = variants
+    .map((variant) => Number(variant.price || 0))
+    .filter((price) => price > 0 && price < defaultPrice)
+    .reduce((sum, price) => sum + price, 0);
+
+  const basePrice = Math.max(defaultPrice, ...fullPrice) + extras;
+  const baseName = menuItem?.name || 'Producto';
+  const name = variants.length > 0
+    ? `${baseName} (${variants.map((variant) => variant.name).join(', ')})`
+    : baseName;
+
+  return { variants, basePrice, name };
+}
+
 
 // ── GET /admin — Pedidos del restaurante (filtra por sucursal si llega) ──
 // locationId es OPCIONAL: si se envía via x-location-id/header se filtra,
@@ -354,10 +395,11 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         include: {
           modifierGroups: { include: { modifiers: true } },
           complements: true,
+          variants: true,
         },
       });
 
-      const basePrice = menuItem?.price || 0;
+      const variantSelection = resolveVariantSelection(menuItem, item);
       const modifierIds = extractIds(item.modifiers, 'modifierId');
       const complementIds = extractIds(item.complements, 'complementId');
 
@@ -405,7 +447,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         selectedComplements.push(complement);
       }
 
-      const unitPrice = basePrice + unitExtra;
+      const unitPrice = variantSelection.basePrice + unitExtra;
       const seatRaw = Number(item.seatNumber);
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
         ? Math.floor(seatRaw)
@@ -417,7 +459,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       const course = courseRaw && courseRaw.length > 0 && courseRaw.length <= 32 ? courseRaw : null;
       return {
         menuItemId: item.menuItemId,
-        name: menuItem?.name || 'Producto',
+        name: variantSelection.name,
         price: unitPrice,
         quantity: item.quantity,
         subtotal: unitPrice * item.quantity,
@@ -551,8 +593,10 @@ async function addRoundHandler(req, res) {
         include: {
           modifierGroups: { include: { modifiers: true } },
           complements: true,
+          variants: true,
         },
       });
+      const variantSelection = resolveVariantSelection(menuItem, item);
       const modifierIds = extractIds(item.modifiers, 'modifierId');
       const complementIds = extractIds(item.complements, 'complementId');
 
@@ -597,7 +641,7 @@ async function addRoundHandler(req, res) {
         selectedComplements.push(complement);
       }
 
-      const price = (menuItem?.price || 0) + unitExtra;
+      const price = variantSelection.basePrice + unitExtra;
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
       const seatRaw = Number(item.seatNumber);
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
@@ -607,7 +651,7 @@ async function addRoundHandler(req, res) {
       const course = courseRaw && courseRaw.length > 0 && courseRaw.length <= 32 ? courseRaw : null;
       return {
         menuItemId: item.menuItemId,
-        name: menuItem?.name || 'Producto',
+        name: variantSelection.name,
         price,
         quantity: qty,
         subtotal: price * qty,
