@@ -1,13 +1,16 @@
 "use client";
-import React from "react";
+
+import React, { useEffect } from "react";
 import {
-  Utensils,
-  ShoppingBag,
-  Bike,
-  Receipt,
-  Wallet,
-  Settings,
   ArrowRight,
+  Bike,
+  LogOut,
+  Receipt,
+  Settings,
+  ShoppingBag,
+  Table2,
+  Utensils,
+  Wallet,
 } from "lucide-react";
 import type { OrderType } from "@/components/tpv/TicketPanel";
 import UserBadge from "@/components/UserBadge";
@@ -25,28 +28,64 @@ interface OrderTypeSelectorProps {
 type OrderTypeCard = {
   id: OrderType;
   title: string;
+  description: string;
+  nextStep: string;
   icon: typeof Utensils;
   accent: string;
+  shortcut: string;
 };
 
 const ORDER_TYPES: OrderTypeCard[] = [
   {
     id: "DINE_IN",
     title: "Comer Aquí",
+    description: "Servicio en salón con mesa, comensales y rondas.",
+    nextStep: "Elegir mesa",
     icon: Utensils,
-    accent: "#ffb84d",
+    accent: "#ff8400",
+    shortcut: "1",
   },
   {
     id: "TAKEOUT",
     title: "Para Llevar",
+    description: "Pedido rápido de mostrador sin mesa asignada.",
+    nextStep: "Ir al menú",
     icon: ShoppingBag,
     accent: "#3b82f6",
+    shortcut: "2",
   },
   {
     id: "DELIVERY",
     title: "Delivery",
+    description: "Venta preparada para reparto y seguimiento.",
+    nextStep: "Ir al menú",
     icon: Bike,
     accent: "#10b981",
+    shortcut: "3",
+  },
+];
+
+const SHORTCUTS = [
+  {
+    label: "Pedidos abiertos",
+    description: "Retomar cuentas activas",
+    icon: Receipt,
+    tone: "text-amber-300 bg-amber-500/10 border-amber-500/20",
+    action: "tickets" as const,
+  },
+  {
+    label: "Corte de caja",
+    description: "Cerrar y cuadrar turno",
+    icon: Wallet,
+    tone: "text-emerald-300 bg-emerald-500/10 border-emerald-500/20",
+    action: "shift" as const,
+  },
+  {
+    label: "Panel central",
+    description: "Ajustes y operación",
+    icon: Settings,
+    tone: "text-orange-200 bg-[#ff8400]/15 border-[#ff8400]/30",
+    action: "config" as const,
   },
 ];
 
@@ -57,189 +96,212 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onShiftClose,
   onConfig,
 }) => {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+
+      const match = ORDER_TYPES.find((type) => type.shortcut === event.key);
+      if (match) {
+        event.preventDefault();
+        onSelect(match.id);
+        return;
+      }
+
+      if (event.key === "Escape" && onClose) {
+        event.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, onSelect]);
+
+  const runShortcut = (action: (typeof SHORTCUTS)[number]["action"]) => {
+    if (action === "tickets") onOpenTickets?.();
+    if (action === "shift") onShiftClose?.();
+    if (action === "config") onConfig?.();
+  };
+
+  const enabledShortcuts = SHORTCUTS.filter((shortcut) => {
+    if (shortcut.action === "tickets") return Boolean(onOpenTickets);
+    if (shortcut.action === "shift") return Boolean(onShiftClose);
+    if (shortcut.action === "config") return Boolean(onConfig);
+    return false;
+  });
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-auto bg-[#0a0a0c]"
+      className="fixed inset-0 z-50 flex min-h-[100dvh] flex-col overflow-y-auto overflow-x-hidden bg-[#0C0C0E] px-4 py-[max(1rem,env(safe-area-inset-top))] text-white sm:px-6"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
-      {/* Ambient diseño operativo glows */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-60 -left-60 w-[700px] h-[700px] rounded-full blur-[120px] bg-amber-500/10" />
-        <div className="absolute -bottom-60 -right-60 w-[700px] h-[700px] rounded-full blur-[120px] bg-amber-500/10" />
-      </div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-60"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(255,132,0,0.10), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.04), transparent 42%)",
+        }}
+      />
 
-      {/* Badge global del empleado activo. Visible en todas las pantallas
-          fuera de la orden para que el cajero siempre vea quién está
-          logueado. */}
-      <div className="absolute top-5 right-5 z-20">
-        <UserBadge />
-      </div>
-
-      <div className="relative z-10 w-full max-w-6xl p-6 sm:p-10 flex flex-col items-center">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-block px-4 py-1.5 mb-6 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-[#ffb84d] bg-[#ffb84d]/10 border border-[#ffb84d]/20">
-            Panel de Operación
+      <header className="relative z-10 flex shrink-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#ff8400]/25 bg-[#ff8400]/10 text-[#ffb84d]">
+            <Table2 size={22} strokeWidth={2.5} />
           </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight">
-            ¿Cómo iniciamos
-            <br />tu turno?
-          </h1>
-          <p className="mt-4 text-base md:text-lg font-medium text-white/60 max-w-xl mx-auto leading-relaxed">
-            Elige el tipo de servicio o ejecuta una acción operativa.
-          </p>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">
+              Panel operativo
+            </p>
+            <h1 className="truncate text-lg font-black leading-tight tracking-tight sm:text-2xl">
+              Nueva venta
+            </h1>
+          </div>
         </div>
 
-        {/* === Tarjeta premium contenedora === */}
-        <div className="w-full bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 md:p-10 shadow-[0_30px_80px_rgba(0,0,0,0.4)]">
-          {/* Título sección Nueva Orden */}
-          <div className="flex items-center gap-3 mb-5 px-1">
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ffb84d]">
-              Nueva Orden
-            </span>
-            <div className="flex-1 h-px bg-white/10" />
-          </div>
+        <div className="hidden min-w-0 sm:block">
+          <UserBadge />
+        </div>
+      </header>
 
-          {/* Grid principal: 3 tarjetas compactas cuadradas */}
-          <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-10">
-            {ORDER_TYPES.map((t) => {
-              const Icon = t.icon;
-              const isPrimary = t.id === "DINE_IN";
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => onSelect(t.id)}
-                  className={`
-                    group relative flex flex-col items-center justify-center text-center
-                    aspect-square p-3 sm:p-4 rounded-2xl
-                    bg-white/5 border ${isPrimary ? "border-[#ffb84d]/40" : "border-white/10"}
-                    active:scale-95 transition-transform duration-150
-                    overflow-hidden
-                  `}
-                >
-                  {/* Halo ambiente del color de acento */}
-                  <div
-                    aria-hidden
-                    className="absolute -top-10 -right-10 w-32 h-32 rounded-full blur-[60px] opacity-20"
-                    style={{ background: t.accent }}
-                  />
+      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 items-center py-5 sm:py-8">
+        <div className="grid w-full gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <section className="rounded-xl border border-white/10 bg-white/[0.045] p-3 shadow-[0_24px_70px_rgba(0,0,0,0.35)] backdrop-blur-md sm:p-4">
+            <div className="mb-3 flex items-end justify-between gap-4 px-1">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#ffb84d]">
+                  Tipo de pedido
+                </p>
+                <h2 className="mt-1 text-xl font-black tracking-tight sm:text-3xl">
+                  ¿Cómo empieza la cuenta?
+                </h2>
+              </div>
+              <p className="hidden max-w-[220px] text-right text-xs font-semibold leading-snug text-white/45 sm:block">
+                Elige el flujo correcto antes de cargar productos.
+              </p>
+            </div>
 
-                  {/* Icono compacto */}
-                  <div
-                    className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center mb-2 shadow-xl"
-                    style={{
-                      background: isPrimary ? "#ffb84d" : "rgba(255,255,255,0.06)",
-                      color: isPrimary ? "#0a0a0c" : t.accent,
-                      border: isPrimary ? "none" : `1px solid ${t.accent}40`,
-                    }}
+            <div className="grid gap-3 md:grid-cols-3">
+              {ORDER_TYPES.map((type) => {
+                const Icon = type.icon;
+
+                return (
+                  <button
+                    key={type.id}
+                    type="button"
+                    onClick={() => onSelect(type.id)}
+                    className="group relative flex min-h-[168px] flex-col justify-between rounded-lg border border-white/10 bg-[#131316]/90 p-4 text-left shadow-md shadow-black/25 transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70 sm:min-h-[220px]"
                   >
-                    <Icon size={24} strokeWidth={2.5} />
-                  </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div
+                        className="flex h-12 w-12 items-center justify-center rounded-lg border"
+                        style={{
+                          backgroundColor: `${type.accent}1f`,
+                          borderColor: `${type.accent}40`,
+                          color: type.accent,
+                        }}
+                      >
+                        <Icon size={24} strokeWidth={2.5} />
+                      </div>
+                      <span
+                        className="flex h-8 min-w-8 items-center justify-center rounded-lg border text-sm font-black"
+                        style={{
+                          backgroundColor: `${type.accent}14`,
+                          borderColor: `${type.accent}30`,
+                          color: type.accent,
+                        }}
+                      >
+                        {type.shortcut}
+                      </span>
+                    </div>
 
-                  {/* Título — una sola línea */}
-                  <h3 className="text-xs sm:text-sm font-black text-white tracking-tight leading-tight whitespace-nowrap">
-                    {t.title}
-                  </h3>
+                    <div className="mt-6">
+                      <h3 className="text-2xl font-black leading-tight tracking-tight sm:text-3xl">
+                        {type.title}
+                      </h3>
+                      <p className="mt-2 min-h-[44px] text-sm font-medium leading-snug text-white/55">
+                        {type.description}
+                      </p>
+                    </div>
 
-                  {/* Flecha */}
-                  <div
-                    className="absolute bottom-2 right-2"
-                    style={{ color: isPrimary ? "#ffb84d" : "rgba(255,255,255,0.35)" }}
+                    <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-4">
+                      <span className="text-xs font-black uppercase tracking-[0.18em] text-white/40">
+                        {type.nextStep}
+                      </span>
+                      <ArrowRight
+                        size={18}
+                        strokeWidth={3}
+                        className="text-white/40 transition-transform group-active:translate-x-0.5"
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <aside className="rounded-xl border border-white/10 bg-[#131316]/80 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.35)] backdrop-blur-md sm:p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/35">
+                  Turno
+                </p>
+                <h2 className="mt-1 text-lg font-black tracking-tight">
+                  Accesos rápidos
+                </h2>
+              </div>
+              <div className="sm:hidden">
+                <UserBadge expanded={false} />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              {enabledShortcuts.map((shortcut) => {
+                const Icon = shortcut.icon;
+
+                return (
+                  <button
+                    key={shortcut.action}
+                    type="button"
+                    onClick={() => runShortcut(shortcut.action)}
+                    className="group flex min-h-[76px] items-center gap-3 rounded-lg border border-white/10 bg-white/[0.035] px-3 text-left transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70"
                   >
-                    <ArrowRight size={16} strokeWidth={3} />
-                  </div>
-
-                  {/* Pulse del primario */}
-                  {isPrimary && (
                     <span
-                      className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[#ffb84d] animate-pulse"
-                      aria-hidden
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${shortcut.tone}`}
+                    >
+                      <Icon size={21} strokeWidth={2.5} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-black text-white">
+                        {shortcut.label}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs font-semibold text-white/40">
+                        {shortcut.description}
+                      </span>
+                    </span>
+                    <ArrowRight
+                      size={16}
+                      strokeWidth={3}
+                      className="shrink-0 text-white/25"
                     />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* Título sección Atajos */}
-          <div className="flex items-center gap-3 mb-5 px-1">
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50">
-              Atajos Operativos
-            </span>
-            <div className="flex-1 h-px bg-white/10" />
-          </div>
-
-          {/* Atajos: solo 3 — Mapa, Corte, Configuración */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {onOpenTickets && (
+            {onClose && (
               <button
-                onClick={onOpenTickets}
-                className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-white/5 border border-white/10 active:scale-95 transition-transform duration-150"
+                type="button"
+                onClick={onClose}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white/45 transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-red-400/70"
               >
-                <div className="w-12 h-12 rounded-xl bg-[#ffb84d]/10 text-[#ffb84d] border border-[#ffb84d]/20 flex items-center justify-center flex-shrink-0">
-                  <Receipt size={22} strokeWidth={2.5} />
-                </div>
-                <div className="flex flex-col items-start min-w-0">
-                  <span className="text-sm font-black text-white tracking-tight">
-                    Tickets Abiertos
-                  </span>
-                  <span className="text-[11px] font-semibold text-white/50 truncate">
-                    Ver pedidos en curso
-                  </span>
-                </div>
+                <LogOut size={15} strokeWidth={2.5} />
+                Bloquear terminal
               </button>
             )}
-
-            {onShiftClose && (
-              <button
-                onClick={onShiftClose}
-                className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-white/5 border border-white/10 active:scale-95 transition-transform duration-150"
-              >
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center flex-shrink-0">
-                  <Wallet size={22} strokeWidth={2.5} />
-                </div>
-                <div className="flex flex-col items-start min-w-0">
-                  <span className="text-sm font-black text-white tracking-tight">
-                    Corte de Caja
-                  </span>
-                  <span className="text-[11px] font-semibold text-white/50 truncate">
-                    Cerrar turno y cuadrar dinero
-                  </span>
-                </div>
-              </button>
-            )}
-
-            {onConfig && (
-              <button
-                onClick={onConfig}
-                className="flex items-center gap-4 px-5 py-4 min-h-[64px] rounded-2xl bg-[#ffb84d] text-[#0a0a0c] active:scale-95 transition-transform duration-150 shadow-[0_15px_40px_rgba(255,184,77,0.25)]"
-              >
-                <div className="w-12 h-12 rounded-xl bg-[#0a0a0c]/15 flex items-center justify-center flex-shrink-0">
-                  <Settings size={22} strokeWidth={2.5} className="text-[#0a0a0c]" />
-                </div>
-                <div className="flex flex-col items-start min-w-0">
-                  <span className="text-sm font-black tracking-tight">
-                    Configuración
-                  </span>
-                  <span className="text-[11px] font-bold opacity-80 truncate">
-                    Administrar el sistema
-                  </span>
-                </div>
-              </button>
-            )}
-          </div>
+          </aside>
         </div>
-
-        {/* Cerrar sesión */}
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="mt-8 w-full max-w-xs min-h-[56px] py-4 rounded-2xl bg-transparent border border-white/10 flex items-center justify-center text-[11px] font-black uppercase tracking-[0.25em] text-white/50 active:scale-95 transition-transform duration-150"
-          >
-            Cerrar Sesión
-          </button>
-        )}
-      </div>
+      </main>
     </div>
   );
 };

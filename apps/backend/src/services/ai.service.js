@@ -198,7 +198,38 @@ async function parseInventoryFile(file) {
 async function scanMenuFromImages(imageParts, apiKey) {
   try {
     const model = getGeminiModel(apiKey);
-    const prompt = `Analiza estas imágenes de un menú de restaurante. Extrae platos, precios, descripciones y categorías. Si la categoría es "Alitas y Boneless" o similar, divídela en dos categorías distintas: "Alitas" y "Boneless". Si un producto tiene sabores (ej. alitas, boneless) o opciones de tamaño/sabor (ej. aguas de sabor), pon esas opciones en un arreglo "variants". Devuelve un JSON con este formato exacto: { "categories": [], "items": [{ "name": "", "price": 0, "description": "", "category": "", "variants": [{ "name": "", "price": 0 }] }] }. Solo JSON puro.`;
+    const prompt = `Analiza estas imágenes de un menú de restaurante. Extrae categorías, platos base, precios, descripciones, variantes y modificadores. 
+
+Aplica estrictamente estas reglas de negocio y diseño UX para un TPV de alta velocidad:
+
+1. SEPARACIÓN DE CATEGORÍAS: Si la categoría en la imagen es "Alitas y Boneless" o similar, divídela obligatoriamente en dos categorías distintas: "Alitas" y "Boneless".
+2. CONSOLIDACIÓN DE PRODUCTOS BASE: No dupliques platos. Si un producto cambia de precio por tamaño (chico/grande), gramaje (150g/250g) o tipo de carne base, conviértelo en un único producto y pon esas variaciones en el arreglo "base_options".
+3. EXTRACCIÓN DE MODIFICADORES GLOBALES: Los ingredientes extra (ej. tocino, queso extra, piña) o los sabores elegibles (ej. salsas de alitas, sabores de aguas) que apliquen a múltiples productos NO van en las variantes del producto. Extráelos en un bloque independiente llamado "global_modifiers" y vincula el producto usando su ID en "allowed_modifiers".
+4. REGLA UX 80/20: Analiza el menú e infiere cuáles son los productos estrella o de alta rotación (los más comunes). A esos productos, asígnales "pantalla_principal": true. Al resto, asígnales false.
+
+Devuelve un JSON puro (sin markdown, sin bloques \`\`\`json, solo el objeto) con este formato exacto:
+
+{
+  "categories": ["Hamburguesas", "Alitas", "Boneless"],
+  "items": [
+    {
+      "id": "slug_unico_del_producto",
+      "name": "Nombre del Producto Base",
+      "description": "Descripción o ingredientes base",
+      "category": "Categoría correspondiente",
+      "pantalla_principal": true,
+      "base_options": [
+        { "name": "Variante Base 1 (Ej: 150GR)", "price": 105 }
+      ],
+      "allowed_modifiers": ["id_del_grupo_de_modificadores"]
+    }
+  ],
+  "global_modifiers": {
+    "id_del_grupo_de_modificadores": [
+      { "name": "Nombre del modificador/extra/sabor", "price_extra": 20 }
+    ]
+  }
+}`;
     
     const formattedImages = imageParts.map(p => ({ inlineData: { data: p.data, mimeType: p.mimeType || "image/jpeg" } }));
     const result = await model.generateContent([prompt, ...formattedImages]);

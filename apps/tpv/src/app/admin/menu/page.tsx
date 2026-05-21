@@ -445,7 +445,9 @@ export default function MenuEditorPage() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       const aiCats: string[] = data?.data?.categories || [];
-      const aiItems: Array<{ name: string; description?: string; price?: number; category?: string }> = data?.data?.items || [];
+      const aiItems: any[] = data?.data?.items || [];
+      const aiGlobalModifiers: any = data?.data?.global_modifiers || null;
+      
       const categoryMap = new Map(categories.map((cat) => [cat.name.toLowerCase(), cat]));
       for (const catName of aiCats) {
         if (!categoryMap.has(catName.toLowerCase())) {
@@ -457,17 +459,42 @@ export default function MenuEditorPage() {
       for (const item of aiItems) {
         const cat = item.category ? categoryMap.get(item.category.toLowerCase()) : fallbackCat;
         if (!cat?.id) continue;
+        
+        const basePrice = item.base_options && item.base_options.length > 0 ? (item.base_options[0].price || 0) : 0;
+        
         const { data: createdItem } = await api.post("/api/menu/items", {
           name: item.name,
           description: item.description || "",
-          price: item.price || 0,
+          price: basePrice,
           categoryId: cat.id,
+          isPopular: !!item.pantalla_principal
         });
-        if (item.variants && item.variants.length > 0) {
-          for (const v of item.variants) {
+        
+        if (item.base_options && item.base_options.length > 0) {
+          for (const v of item.base_options) {
             await api.post(`/api/menu/${createdItem.id}/variants`, {
               name: v.name, price: v.price || 0
             }).catch(e => console.error("Error variante IA", e));
+          }
+        }
+        
+        if (item.allowed_modifiers && item.allowed_modifiers.length > 0 && aiGlobalModifiers) {
+          for (const modId of item.allowed_modifiers) {
+            const globalModOptions = aiGlobalModifiers[modId];
+            if (globalModOptions && globalModOptions.length > 0) {
+              try {
+                const { data: group } = await api.post(`/api/menu/items/${createdItem.id}/modifier-groups`, {
+                  name: modId.replace(/_/g, " ").toUpperCase(), 
+                  required: false, multiSelect: true, minSelection: 0, maxSelection: 0, freeModifiersLimit: 0
+                });
+                
+                for (const opt of globalModOptions) {
+                  await api.post(`/api/menu/modifier-groups/${group.id}/modifiers`, {
+                    name: opt.name, priceAdd: opt.price_extra || 0, isDefault: false
+                  });
+                }
+              } catch(e) { console.error("Error creando modifier group IA", e); }
+            }
           }
         }
       }
