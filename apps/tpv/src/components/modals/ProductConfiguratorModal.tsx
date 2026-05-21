@@ -12,6 +12,8 @@ import type {
 
 const COMPLEMENTS_GROUP_ID = "__complements";
 export const COMPLEMENT_MODIFIER_PREFIX = "complement:";
+const VARIANTS_GROUP_ID = "__variants";
+export const VARIANT_MODIFIER_PREFIX = "variant:";
 
 interface ProductConfiguratorModalProps {
   product: Product;
@@ -50,31 +52,61 @@ export default function ProductConfiguratorModal({
     [product],
   );
 
+  // Multi-select de variantes (ej. varios sabores de boneless). Cuando está
+  // activo las variantes se tratan como un grupo de modificadores: el precio
+  // base del producto se mantiene y cada variante con costo suma como extra.
+  // El single-select clásico (talla S/M/L) se conserva intacto.
+  const variantMultiSelect = !!product.variantMultiSelect && variants.length > 0;
+
   const groups = useMemo(() => {
     const baseGroups = product.modifierGroups || [];
+
+    const variantGroups: ModifierGroup[] = variantMultiSelect
+      ? [
+          {
+            id: VARIANTS_GROUP_ID,
+            name: "Variantes",
+            required: (product.variantMinSelection ?? 0) > 0,
+            multiSelect: true,
+            minSelection: product.variantMinSelection ?? 0,
+            maxSelection: product.variantMaxSelection ?? 0,
+            freeModifiersLimit: 0,
+            modifiers: variants.map((v) => ({
+              id: `${VARIANT_MODIFIER_PREFIX}${v.id}`,
+              groupId: VARIANTS_GROUP_ID,
+              name: v.name,
+              priceAdd: v.price,
+            })),
+          },
+        ]
+      : [];
+
     const complements = (product.complements || []).filter(
       (c) => c.isAvailable !== false,
     );
-    if (complements.length === 0) return baseGroups;
+    const complementGroups: ModifierGroup[] =
+      complements.length === 0
+        ? []
+        : [
+            {
+              id: COMPLEMENTS_GROUP_ID,
+              name: "Complementos",
+              required: false,
+              multiSelect: true,
+              minSelection: 0,
+              maxSelection: 0,
+              freeModifiersLimit: 0,
+              modifiers: complements.map((c) => ({
+                id: `${COMPLEMENT_MODIFIER_PREFIX}${c.id}`,
+                groupId: COMPLEMENTS_GROUP_ID,
+                name: c.name,
+                priceAdd: Number(c.price || 0),
+              })),
+            },
+          ];
 
-    const complementGroup: ModifierGroup = {
-      id: COMPLEMENTS_GROUP_ID,
-      name: "Complementos",
-      required: false,
-      multiSelect: true,
-      minSelection: 0,
-      maxSelection: 0,
-      freeModifiersLimit: 0,
-      modifiers: complements.map((c) => ({
-        id: `${COMPLEMENT_MODIFIER_PREFIX}${c.id}`,
-        groupId: COMPLEMENTS_GROUP_ID,
-        name: c.name,
-        priceAdd: Number(c.price || 0),
-      })),
-    };
-
-    return [...baseGroups, complementGroup];
-  }, [product]);
+    return [...variantGroups, ...baseGroups, ...complementGroups];
+  }, [product, variantMultiSelect, variants]);
 
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
     variants[0]?.id ?? null,
@@ -91,8 +123,11 @@ export default function ProductConfiguratorModal({
   });
 
   const selectedVariant = useMemo(
-    () => variants.find((v) => v.id === selectedVariantId) ?? null,
-    [selectedVariantId, variants],
+    () =>
+      variantMultiSelect
+        ? null
+        : variants.find((v) => v.id === selectedVariantId) ?? null,
+    [selectedVariantId, variants, variantMultiSelect],
   );
 
   const basePrice = selectedVariant?.price ?? product.promoPrice ?? product.price;
@@ -104,7 +139,7 @@ export default function ProductConfiguratorModal({
   const totalPrice = unitPrice * quantity;
 
   const validationError = useMemo(() => {
-    if (variants.length > 0 && !selectedVariant) {
+    if (!variantMultiSelect && variants.length > 0 && !selectedVariant) {
       return "Selecciona una variante";
     }
     for (const g of groups) {
@@ -118,7 +153,7 @@ export default function ProductConfiguratorModal({
       }
     }
     return null;
-  }, [groups, selections, selectedVariant, variants.length]);
+  }, [groups, selections, selectedVariant, variants.length, variantMultiSelect]);
 
   function toggle(group: ModifierGroup, mod: Modifier) {
     setSelections((prev) => {
@@ -187,7 +222,7 @@ export default function ProductConfiguratorModal({
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto p-5">
-          {variants.length > 0 && (
+          {!variantMultiSelect && variants.length > 0 && (
             <section className="space-y-3">
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-[14px] font-black text-tx-pri">Variantes</h3>

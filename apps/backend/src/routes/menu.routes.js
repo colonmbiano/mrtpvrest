@@ -232,7 +232,7 @@ router.get('/items/:id', async (req, res) => {
 
 router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { categoryId, name, description, imageUrl, price, preparationTime, isPopular, isPromo, activeDays, variantTemplateIds } = req.body
+    const { categoryId, name, description, imageUrl, price, preparationTime, isPopular, isPromo, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection } = req.body
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
 
     const category = await prisma.category.findUnique({ where: { id: categoryId, restaurantId: req.user?.restaurantId || req.restaurantId } });
@@ -249,6 +249,9 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
         isPopular: isPopular || false,
         isPromo: isPromo || false,
         activeDays: activeDays || [],
+        variantMultiSelect: !!variantMultiSelect,
+        variantMinSelection: Math.max(0, parseInt(variantMinSelection, 10) || 0),
+        variantMaxSelection: Math.max(0, parseInt(variantMaxSelection, 10) || 0),
         restaurantId: req.user?.restaurantId || req.restaurantId
       },
     })
@@ -261,7 +264,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
 
 router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, categoryId, isPromo, activeDays, variantTemplateIds } = req.body
+    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, categoryId, isPromo, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection } = req.body
     const item = await prisma.menuItem.update({
       where: {
         id: req.params.id,
@@ -278,6 +281,9 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
         ...(categoryId !== undefined && { categoryId }),
         ...(isPromo !== undefined && { isPromo }),
         ...(activeDays !== undefined && { activeDays }),
+        ...(variantMultiSelect !== undefined && { variantMultiSelect: !!variantMultiSelect }),
+        ...(variantMinSelection !== undefined && { variantMinSelection: Math.max(0, parseInt(variantMinSelection, 10) || 0) }),
+        ...(variantMaxSelection !== undefined && { variantMaxSelection: Math.max(0, parseInt(variantMaxSelection, 10) || 0) }),
       },
     })
     if (variantTemplateIds !== undefined) {
