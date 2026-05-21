@@ -1,11 +1,12 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Search, Settings2, Star, X as XIcon } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import CategoryChipRail, { FAVORITES_CHIP_ID } from "@/components/pos/CategoryChipRail";
 import CategoryGrid from "@/components/pos/CategoryGrid";
 import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
-import ProductCard from "@/components/pos/ProductCard";
+import ProductGrid from "@/components/pos/ProductGrid";
 import SeatTabs from "@/components/pos/SeatTabs";
 import CatalogSettingsSheet from "@/components/modals/CatalogSettingsSheet";
 import ProductConfiguratorModal from "@/components/modals/ProductConfiguratorModal";
@@ -17,10 +18,8 @@ import {
   type ModifierSelection,
   type Product,
 } from "@/store/ticketStore";
-import {
-  densityGridClasses,
-  useCatalogPrefs,
-} from "@/store/catalogPrefsStore";
+import { useCatalogPrefs } from "@/store/catalogPrefsStore";
+import { useUIStore } from "@/store/useUIStore";
 
 type View = "categories" | "products" | "favorites" | "search";
 
@@ -39,10 +38,12 @@ export default function CatalogPage() {
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [configProduct, setConfigProduct] = useState<Product | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
   const [optionsProduct, setOptionsProduct] = useState<Product | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [flatChip, setFlatChip] = useState<string | null>(null);
+
+  const searchQuery = useUIStore((s) => s.searchQuery);
+  const setSearchQuery = useUIStore((s) => s.setSearchQuery);
 
   const viewMode = useCatalogPrefs((s) => s.viewMode);
   const density = useCatalogPrefs((s) => s.density);
@@ -224,25 +225,19 @@ export default function CatalogPage() {
     setActiveCat(null);
   };
 
+  const isSearchOpen = useUIStore((s) => s.isSearchOpen);
+
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-surf-0 transition-colors duration-300">
-      <div className="px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 pb-1">
-        <OrderTypeToggle
-          active={ticket.type}
-          onChange={(type) => updateTicket({ type })}
-        />
-      </div>
-
-      <SeatTabs />
-
-      <div className="px-3 sm:px-4 lg:px-6 pb-2 pt-1 shrink-0">
-        <div className="flex items-center gap-2">
+      {isSearchOpen && (
+        <div className="px-3 sm:px-4 py-2 shrink-0 bg-surf-1 border-b border-white/5 animate-in slide-in-from-top-2">
           <div className="relative flex-1 min-w-0">
             <Search
               size={14}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-mut pointer-events-none"
             />
             <input
+              autoFocus
               value={searchQuery}
               onChange={(e) => {
                 const v = e.target.value;
@@ -251,7 +246,7 @@ export default function CatalogPage() {
                 else setView("categories");
               }}
               placeholder="Buscar producto..."
-              className="w-full h-11 min-h-[44px] bg-surf-2 border border-bd-main rounded-2xl pl-10 pr-10 text-[12px] font-bold text-tx-pri placeholder:text-tx-mut focus:outline-none focus:border-iris-500/40"
+              className="w-full h-9 min-h-[36px] bg-surf-2 border border-bd-main rounded-xl pl-10 pr-10 text-[12px] font-bold text-tx-pri placeholder:text-tx-mut focus:outline-none focus:border-iris-500/40"
             />
             {searchQuery && (
               <button
@@ -261,46 +256,54 @@ export default function CatalogPage() {
                   setView("categories");
                 }}
                 aria-label="Limpiar búsqueda"
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 min-h-[32px] rounded-xl bg-surf-3 active:bg-surf-1 text-tx-sec flex items-center justify-center"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 min-h-[28px] rounded-lg bg-surf-3 active:bg-surf-1 text-tx-sec flex items-center justify-center"
               >
-                <XIcon size={14} />
+                <XIcon size={12} />
               </button>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => setShowSettings(true)}
-            aria-label="Ajustes de vista del catálogo"
-            className="w-11 h-11 min-h-[44px] min-w-[44px] shrink-0 rounded-2xl bg-surf-2 border border-bd-main active:bg-surf-3 active:scale-95 transition-pos text-tx-sec flex items-center justify-center"
-          >
-            <Settings2 size={16} />
-          </button>
         </div>
+      )}
+
+      <SeatTabs />
+
+      {/* Solo dejamos el boton de Settings para la densidad */}
+      <div className="px-3 sm:px-4 pb-1 pt-1 shrink-0 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setShowSettings(true)}
+          aria-label="Ajustes de vista del catálogo"
+          className="w-9 h-9 min-h-[36px] min-w-[36px] shrink-0 rounded-xl bg-surf-2 border border-bd-main active:bg-surf-3 active:scale-95 transition-pos text-tx-sec flex items-center justify-center"
+        >
+          <Settings2 size={14} />
+        </button>
       </div>
 
       {viewMode === "flat" && view !== "search" && (
-        <CategoryChipRail
-          categories={categories}
-          activeId={flatChip}
-          onSelect={setFlatChip}
-          showFavorites={favoritesItems.length > 0}
-        />
+        <div className="shrink-0">
+          <CategoryChipRail
+            categories={categories}
+            activeId={flatChip}
+            onSelect={setFlatChip}
+            showFavorites={favoritesItems.length > 0}
+          />
+        </div>
       )}
 
       {viewMode === "drilldown" && view !== "categories" && view !== "search" && (
-        <div className="flex items-center gap-3 px-3 sm:px-4 lg:px-6 h-12 border-b border-white/5 shrink-0">
+        <div className="flex items-center gap-3 px-3 sm:px-4 h-10 border-b border-white/5 shrink-0">
           <button
             type="button"
             onClick={goBackToCategories}
             aria-label="Volver a categorías"
-            className="inline-flex items-center gap-2 h-10 px-3 rounded-2xl bg-stone-900 active:bg-stone-700 active:scale-95 transition-all border border-white/5 text-stone-200 font-black uppercase tracking-[0.15em] text-[11px]"
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-xl bg-stone-900 active:bg-stone-700 active:scale-95 transition-all border border-white/5 text-stone-200 font-black uppercase tracking-[0.15em] text-[10px]"
           >
-            <ChevronLeft size={16} /> Volver
+            <ChevronLeft size={14} /> Volver
           </button>
-          <h2 className="text-[11px] font-black uppercase tracking-[0.15em] text-stone-200 truncate flex items-center gap-1.5">
+          <h2 className="text-[10px] font-black uppercase tracking-[0.15em] text-stone-200 truncate flex items-center gap-1.5">
             {view === "favorites" ? (
               <>
-                <Star size={12} strokeWidth={2.5} fill="currentColor" className="text-amber-400" />
+                <Star size={11} strokeWidth={2.5} fill="currentColor" className="text-amber-400" />
                 Favoritos
               </>
             ) : (
@@ -310,7 +313,8 @@ export default function CatalogPage() {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 scroll-y p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 scrollbar-hide">
+      {/* Grid de productos — aprovecha al máximo el alto vertical. */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 pb-24 lg:pb-4 scrollbar-hide">
         {isLoading ? (
           <div className={`grid ${gridClass} gap-2 sm:gap-3`}>
             {[...Array(10)].map((_, i) => (

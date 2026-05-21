@@ -25,6 +25,7 @@
     "@capacitor/haptics": "^8.0.0",
     "@capacitor/status-bar": "^8.0.0",
     "@capgo/capacitor-updater": "^8.0.0",
+    "@tanstack/react-virtual": "^3.13.25",
     "axios": "^1.16.1",
     "capacitor-tcp-socket": "^7.1.0",
     "framer-motion": "^12.38.0",
