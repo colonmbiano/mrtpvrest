@@ -23,7 +23,9 @@ import {
 } from "@/lib/printer-tcp";
 
 import SidebarTicket from "@/components/pos/SidebarTicket";
-import MainSidebar from "@/components/pos/MainSidebar";
+import TopNavDropdown from "@/components/pos/TopNavDropdown";
+import TopActionsDropdown from "@/components/pos/TopActionsDropdown";
+import { useUIStore } from "@/store/useUIStore";
 import ShiftModal from "@/components/admin/ShiftModal";
 import { useThemeStore, type Palette } from "@/store/themeStore";
 import NotificationsPanel from "@/components/pos/NotificationsPanel";
@@ -605,15 +607,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   return (
     <div className="flex h-[100dvh] w-full bg-surf-0 overflow-hidden font-sans text-tx-pri">
-      {/* SIDE RAIL */}
-      <MainSidebar
-        onOpenMenu={() => setShowMenu(true)}
-        onOpenOrders={() => setShowOrders(true)}
-        onOpenNotifs={() => setShowNotifs((v) => !v)}
-        onOpenExpenses={isLoanMode ? undefined : () => setShowExpenses(true)}
-        hasOpenOrders={openOrders.length > 0}
-        unreadNotifs={unreadCount}
-      />
+      {/* SIDE RAIL ELIMINADO */}
+
 
       <PurchasesExpensesModal
         isOpen={showExpenses}
@@ -644,8 +639,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       />
 
       <OrdersDrawer
-        isOpen={showOrders}
-        onClose={() => setShowOrders(false)}
+        isOpen={useUIStore((s) => s.isOrdersOpen) || showOrders}
+        onClose={() => {
+          setShowOrders(false);
+          useUIStore.getState().setIsOrdersOpen(false);
+        }}
         orders={drawerOrders}
         onShowDetail={handleShowDetail}
         onConfirmPayment={handleOpenPaymentGuarded}
@@ -822,100 +820,86 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         />
       )}
 
-      {/* MAIN CONTENT AREA */}
-      <div className={`flex-1 flex flex-col min-w-0 min-h-0 ${mobileView === "menu" ? "flex" : "hidden"} md:flex`}>
-        {/* FASE 6 · BANNER MODO PRÉSTAMO */}
-        {isLoanMode && (
-          <div
-            className="shrink-0 px-5 py-2.5 flex items-center justify-center gap-3 border-b border-[#ffb84d]/30"
-            style={{
-              background:
-                "linear-gradient(90deg, rgba(255,184,77,0.14) 0%, rgba(255,184,77,0.08) 50%, rgba(255,184,77,0.14) 100%)",
-              fontFamily: "'Outfit', system-ui, sans-serif",
-            }}
-          >
-            <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
-              Modo préstamo
-            </span>
-            <span className="text-[11px] font-bold text-white/80 truncate">
-              {currentEmployee?.name || "Mesero"} · funciones de pago
-              deshabilitadas
-            </span>
-          </div>
-        )}
-
-        {/* TOP HEADER */}
-        <header className="h-16 sm:h-20 border-b border-border bg-surface-1 flex items-center px-6 gap-6 shrink-0 z-10">
-          <div className="flex items-center gap-3">
-            <h1 className="text-base font-black tracking-widest uppercase truncate max-w-[200px] text-tx-pri">
-              {restaurantName || "MRTPVREST"}
-            </h1>
-            <span className="hidden sm:inline-block px-2.5 py-1 rounded-md bg-surface-2 border border-border text-[10px] font-bold text-tx-mut">
-              {locationName?.toUpperCase() || "SUCURSAL"}
-            </span>
-          </div>
-
-          <div className="hidden md:flex flex-1 max-w-xl mx-auto relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-tx-mut" size={16} />
-            <input
-              placeholder="Buscar platillo o categoría..."
-              className="w-full h-12 bg-surface-2 border border-border rounded-xl pl-11 pr-4 text-sm font-medium focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/30 transition-all placeholder:text-tx-mut"
-            />
-          </div>
-
-          <div className="flex-1 md:hidden" />
-
-          <div className="flex items-center gap-4 shrink-0">
-            <div 
-              className={`hidden md:flex flex-col items-end cursor-pointer hover:opacity-80 transition-all`}
-              onClick={() => !shiftOpen && setShowShift(true)}
+      {/* LAYOUT PRINCIPAL — Grid 75/25 (col-span-3 catálogo, col-span-1 ticket).
+          En móvil se colapsa a una sola columna y el toggle FAB alterna vista. */}
+      <div className="flex-1 min-w-0 min-h-0 md:grid md:grid-cols-4 h-screen w-full bg-[#0a0a0c] overflow-hidden select-none font-outfit flex">
+        {/* CATALOGO — col-span-3 (75%) */}
+        <div
+          className={`${mobileView === "menu" ? "flex" : "hidden"} md:flex md:col-span-3 relative flex-col min-w-0 min-h-0 bg-[#0a0a0c] overflow-hidden border-r border-white/5 w-full`}
+        >
+          {/* FASE 6 · BANNER MODO PRÉSTAMO */}
+          {isLoanMode && (
+            <div
+              className="shrink-0 px-5 py-2 flex items-center justify-center gap-3 border-b border-[#ffb84d]/30"
+              style={{
+                background:
+                  "linear-gradient(90deg, rgba(255,184,77,0.14) 0%, rgba(255,184,77,0.08) 50%, rgba(255,184,77,0.14) 100%)",
+                fontFamily: "'Outfit', system-ui, sans-serif",
+              }}
             >
-              <span className="text-sm font-bold tracking-tight text-tx-pri">
-                {currentEmployee?.name || "Sin sesión"}
+              <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
+                Modo préstamo
               </span>
-              <span
-                className={`text-[10px] font-black uppercase tracking-widest ${
-                  shiftOpen === false ? "text-danger underline decoration-dotted" : ""
-                }`}
-                style={{ color: shiftOpen !== false ? "var(--brand)" : undefined }}
-              >
-                {shiftOpen === false ? "TURNO CERRADO" : shiftOpen ? "TURNO ACTIVO" : (currentEmployee?.role || "—")}
+              <span className="text-[11px] font-bold text-white/80 truncate">
+                {currentEmployee?.name || "Mesero"} · funciones de pago
+                deshabilitadas
               </span>
             </div>
-            
-            <button
-              type="button"
-              onClick={() => {
-                // Sólo ADMIN/OWNER pueden entrar directo al Panel Central.
-                // MANAGER ahora requiere PIN admin para escalar (BUG-3
-                // de QA: cualquiera con la tablet logueada como cajero
-                // podía entrar). Otros roles ven el ConfigMenu acotado.
-                const role = currentEmployee?.role;
-                if (role === "ADMIN" || role === "OWNER") {
-                  router.push("/admin");
-                } else if (role === "MANAGER" || role === "CASHIER") {
-                  setAskingAdminPin(true);
-                } else {
-                  setShowMenu(true);
-                }
-              }}
-              aria-label="Abrir configuración"
-              className="w-10 h-10 rounded-full bg-surface-2 border border-border flex items-center justify-center text-xs font-black text-tx-pri active:scale-95 transition-all hover:border-brand/50 focus:outline-none focus:ring-2 focus:ring-brand/40"
-              style={{ color: "var(--brand)" }}
-            >
-              {currentEmployee?.name?.charAt(0).toUpperCase() || "E"}
-            </button>
-          </div>
-        </header>
+          )}
 
-        {/* PAGE CONTENT */}
-        <main className="flex-1 overflow-hidden flex flex-col min-h-0">
-          {children}
-        </main>
-      </div>
+          {/* TOP HEADER compacto Loyverse-style */}
+          <header className="h-14 border-b border-border bg-surface-1 flex items-center px-4 gap-3 shrink-0 z-10 justify-between">
+            <div className="flex items-center gap-3">
+              <TopNavDropdown
+                onOpenMenu={() => setShowMenu(true)}
+                onOpenOrders={() => setShowOrders(true)}
+                onOpenNotifs={() => setShowNotifs((v) => !v)}
+                onOpenExpenses={isLoanMode ? undefined : () => setShowExpenses(true)}
+                hasOpenOrders={openOrders.length > 0}
+                unreadNotifs={unreadCount}
+              />
+              {/* Buscador minimalista en el Header */}
+              <button
+                onClick={() => {
+                  const ui = useUIStore.getState();
+                  ui.setIsSearchOpen(!ui.isSearchOpen);
+                }}
+                className={`w-10 h-10 flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
+                  useUIStore.getState().isSearchOpen
+                    ? "bg-amber-500/10 border-amber-500/50 text-amber-500"
+                    : "bg-surface-2 border-border text-tx-pri hover:border-brand/50"
+                }`}
+              >
+                <Search size={20} />
+              </button>
+            </div>
 
-      <div className={`${mobileView === "ticket" ? "flex" : "hidden"} md:flex w-full md:w-auto min-h-0 relative z-20`}>
-        <SidebarTicket onOpenShift={() => setShowShift(true)} isShiftOpen={!!shiftOpen} isLoanMode={isLoanMode} />
+            <div className="flex items-center gap-3 shrink-0">
+              <TopActionsDropdown
+                onClearTicket={() => useTicketStore.getState().clearActiveItems()}
+                hasItems={itemCount > 0}
+                onOpenDrawer={() => {}}
+                onReprintKitchen={() => {}}
+                onReprintReceipt={() => {}}
+                onSync={() => {}}
+                onSplitTicket={() => {}}
+                onMoveTicket={() => {}}
+              />
+            </div>
+          </header>
+
+          {/* PAGE CONTENT — catálogo aprovecha el alto disponible */}
+          <main className="flex-1 overflow-hidden flex flex-col min-h-0">
+            {children}
+          </main>
+        </div>
+
+        {/* TICKET LATERAL — col-span-1 (25%) */}
+        <div
+          className={`${mobileView === "ticket" ? "flex" : "hidden"} md:flex md:col-span-1 min-h-0 relative z-20 w-full`}
+        >
+          <SidebarTicket onOpenShift={() => setShowShift(true)} isShiftOpen={!!shiftOpen} isLoanMode={isLoanMode} />
+        </div>
       </div>
 
       {showShift && currentEmployee && (

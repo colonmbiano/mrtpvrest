@@ -69,9 +69,9 @@ export default function CategoryGrid({
             type="button"
             onClick={() => onSelect(cat.id)}
             aria-label={`Ver productos de ${formatDisplayName(cat.name)}`}
-            className="group flex flex-col items-start gap-1 px-3 py-3 min-h-[88px] rounded-2xl bg-surf-1 hover:bg-surf-2 active:bg-surf-3 active:scale-[0.98] transition-all duration-100 border border-bd-main focus-visible:ring-2 focus-visible:ring-amber-500 outline-none text-left shadow-md"
+            className="group flex flex-col items-start gap-1 px-3 py-3 min-h-[88px] rounded-2xl bg-[#121316] active:bg-[#1a1b1e] active:scale-95 transition-all duration-150 border border-white/5 focus-visible:ring-2 focus-visible:ring-amber-500 outline-none text-left shadow-md"
           >
-            <ChefHat size={12} className="text-tx-sec group-active:text-iris-500 transition-colors" />
+            <ChefHat size={12} className="text-zinc-500 group-active:text-amber-500 transition-colors" />
             <span className="text-[11px] font-black uppercase tracking-[0.05em] text-tx-pri leading-tight line-clamp-2">
               {formatDisplayName(cat.name)}
             </span>
