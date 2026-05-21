@@ -149,7 +149,7 @@ export default function MenuPage() {
       });
 
       clearInterval(cycleInterval);
-      const { categories: aiCats, items: aiItems } = data.data;
+      const { categories: aiCats, items: aiItems, global_modifiers: aiGlobalModifiers } = data.data;
 
       // Fase 2: importar categorías
       setScanState(p => ({ ...p, currentFile: 'Creando categorías...', current: 0, total: aiItems?.length || 0 }));
@@ -170,16 +170,44 @@ export default function MenuPage() {
           const item = aiItems[i];
           setScanState(p => ({ ...p, currentFile: item.name, current: i + 1 }));
           const category = currentCats.find(c => c.name.toLowerCase() === (item.category || "").toLowerCase());
+          
+          // El precio base ahora viene del primer base_options o es 0 si no hay
+          const basePrice = item.base_options && item.base_options.length > 0 ? (item.base_options[0].price || 0) : 0;
+          
           try {
             const { data: createdItem } = await api.post("/api/menu/items", {
               name: item.name, description: item.description,
-              price: item.price || 0, categoryId: category?.id || currentCats[0]?.id, isPopular: false
+              price: basePrice, categoryId: category?.id || currentCats[0]?.id, isPopular: !!item.pantalla_principal
             });
-            if (item.variants && item.variants.length > 0) {
-              for (const v of item.variants) {
+            
+            // Importar base_options como variantes
+            if (item.base_options && item.base_options.length > 0) {
+              for (const v of item.base_options) {
                 await api.post(`/api/menu/${createdItem.id}/variants`, {
                   name: v.name, price: v.price || 0
                 }).catch(e => console.error("Error creando variante IA", e));
+              }
+            }
+            
+            // Importar allowed_modifiers buscando en global_modifiers
+            if (item.allowed_modifiers && item.allowed_modifiers.length > 0 && aiGlobalModifiers) {
+              for (const modId of item.allowed_modifiers) {
+                const globalModOptions = aiGlobalModifiers[modId];
+                if (globalModOptions && globalModOptions.length > 0) {
+                  try {
+                    // Crea un ModifierGroup por cada ID permitido para este platillo
+                    const { data: group } = await api.post(`/api/menu/items/${createdItem.id}/modifier-groups`, {
+                      name: modId.replace(/_/g, " ").toUpperCase(), 
+                      required: false, multiSelect: true, minSelection: 0, maxSelection: 0, freeModifiersLimit: 0
+                    });
+                    
+                    for (const opt of globalModOptions) {
+                      await api.post(`/api/menu/modifier-groups/${group.id}/modifiers`, {
+                        name: opt.name, priceAdd: opt.price_extra || 0, isDefault: false
+                      });
+                    }
+                  } catch(e) { console.error("Error creando modifier group IA", e); }
+                }
               }
             }
           } catch (err) { console.error("Error creando item IA", err); }

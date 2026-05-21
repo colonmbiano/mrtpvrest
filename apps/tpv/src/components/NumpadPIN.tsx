@@ -1,116 +1,150 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Delete } from 'lucide-react';
+import { useEffect, useRef, useState } from "react";
+import { Delete } from "lucide-react";
 
 interface NumpadPINProps {
   onSubmit: (pin: string) => void | Promise<void>;
   disabled?: boolean;
   maxDigits?: number;
+  submitLabel?: string;
+  onChange?: (pin: string) => void;
 }
 
-/**
- * Numpad responsivo para ingreso de PIN.
- *
- * Estrategia de tamaño:
- *  - El contenedor llena el espacio disponible del padre, hasta 380px en
- *    portrait y se ensancha en landscape sin perder proporción.
- *  - Los botones usan `aspect-square` con grid 3-col para que se ajusten
- *    al ancho del contenedor — siempre cuadrados, nunca rectangulares.
- *  - La tipografía escala con `clamp(1.5rem, 5vmin, 2.5rem)`: el `vmin`
- *    asegura que crezca tanto en pantallas anchas como altas pero queda
- *    acotada para no romper layout.
- *  - El gap también es relativo (`min(2vmin, 14px)`) para que el padding
- *    visual sea consistente en cualquier orientación.
- *
- * Sin :hover por mandato diseño operativo — solo `active:scale-95` para feedback
- * táctil real en tablets.
- */
 export default function NumpadPIN({
   onSubmit,
   disabled = false,
   maxDigits = 4,
+  submitLabel = "Ingresar",
+  onChange,
 }: NumpadPINProps) {
-  const [pin, setPin] = useState('');
+  const [pin, setPin] = useState("");
+  const onChangeRef = useRef(onChange);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  const updatePin = (next: string) => {
+    setPin(next);
+    onChangeRef.current?.(next);
+  };
 
   const playSound = () => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
     try {
       const ctx = new (window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext)();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
-      osc.frequency.value = 800;
-      osc.type = 'sine';
-      gain.gain.setValueAtTime(0.25, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+      osc.frequency.value = 820;
+      osc.type = "sine";
+      gain.gain.setValueAtTime(0.16, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
       osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.1);
+      osc.stop(ctx.currentTime + 0.08);
     } catch {
-      /* algún navegador sin AudioContext habilitado — silencio */
+      /* AudioContext can be unavailable on locked-down terminals. */
     }
   };
 
   const handleDigitClick = (digit: string) => {
     if (disabled || pin.length >= maxDigits) return;
     playSound();
-    const next = pin + digit;
-    setPin(next);
-    if (next.length === maxDigits) {
-      onSubmit(next);
-    }
+    updatePin(pin + digit);
   };
 
   const handleDelete = () => {
-    if (disabled) return;
-    setPin((p) => p.slice(0, -1));
+    if (disabled || pin.length === 0) return;
+    updatePin(pin.slice(0, -1));
   };
 
-  // Estilos compartidos. Se inyectan via tailwind clases para evitar dependencia
-  // de variables CSS personalizadas que pudieran no estar definidas en algún build.
+  const handleClear = () => {
+    if (disabled || pin.length === 0) return;
+    updatePin("");
+  };
+
+  const handleSubmit = async () => {
+    if (disabled || pin.length !== maxDigits) return;
+    try {
+      await onSubmit(pin);
+    } finally {
+      updatePin("");
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (disabled || event.altKey || event.ctrlKey || event.metaKey) return;
+
+      if (/^\d$/.test(event.key)) {
+        event.preventDefault();
+        handleDigitClick(event.key);
+      } else if (event.key === "Backspace") {
+        event.preventDefault();
+        handleDelete();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        handleClear();
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        void handleSubmit();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  });
+
   const digitClass =
-    'aspect-square w-full rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 text-white font-black tabular-nums flex items-center justify-center active:scale-95 active:bg-white/10 disabled:opacity-30 disabled:active:scale-100 transition-transform select-none';
-  const delClass =
-    'aspect-square w-full rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 font-black flex items-center justify-center active:scale-95 active:bg-red-500/20 disabled:opacity-30 disabled:active:scale-100 transition-transform select-none';
+    "aspect-square w-full rounded-lg border border-white/10 bg-white/[0.055] text-white font-black tabular-nums flex items-center justify-center active:scale-[0.98] active:bg-white/10 disabled:opacity-35 disabled:active:scale-100 transition-colors select-none focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70";
+  const utilityClass =
+    "aspect-square w-full rounded-lg border border-white/10 bg-black/20 text-white/55 font-black flex items-center justify-center active:scale-[0.98] active:bg-white/10 disabled:opacity-35 disabled:active:scale-100 transition-colors select-none focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70";
+  const canSubmit = pin.length === maxDigits && !disabled;
 
   return (
     <div
-      className="w-full max-w-[min(86vw,420px)] landscape:max-w-[min(44vw,420px)] mx-auto flex flex-col"
-      style={{ gap: 'clamp(10px, 2.2vmin, 18px)' }}
+      className="mx-auto flex w-full max-w-[min(86vw,420px)] flex-col landscape:max-w-[min(44vw,420px)]"
+      style={{ gap: "clamp(10px, 2.2vmin, 18px)" }}
     >
-      {/* PIN DOTS — escalan con el ancho del contenedor */}
-      <div
-        className="flex justify-center"
-        style={{ gap: 'clamp(10px, 3vmin, 20px)' }}
-      >
-        {Array.from({ length: maxDigits }).map((_, i) => {
-          const filled = i < pin.length;
-          return (
-            <div
-              key={i}
-              className="rounded-full border-2 transition-all"
-              style={{
-                width: 'clamp(14px, 4.6vmin, 28px)',
-                height: 'clamp(14px, 4.6vmin, 28px)',
-                background: filled ? '#ffb84d' : 'transparent',
-                borderColor: filled ? '#ffb84d' : 'rgba(255,255,255,0.2)',
-                boxShadow: filled
-                  ? '0 0 20px rgba(255,184,77,0.6)'
-                  : 'none',
-              }}
-            />
-          );
-        })}
+      <div className="flex items-center justify-between gap-3">
+        <div
+          className="flex justify-center"
+          style={{ gap: "clamp(9px, 2.5vmin, 16px)" }}
+          aria-label={`${pin.length} de ${maxDigits} dígitos capturados`}
+        >
+          {Array.from({ length: maxDigits }).map((_, index) => {
+            const filled = index < pin.length;
+            return (
+              <div
+                key={index}
+                className="rounded-full border-2 transition-colors"
+                style={{
+                  width: "clamp(13px, 3.8vmin, 22px)",
+                  height: "clamp(13px, 3.8vmin, 22px)",
+                  background: filled ? "#ffb84d" : "transparent",
+                  borderColor: filled ? "#ffb84d" : "rgba(255,255,255,0.2)",
+                  boxShadow: filled
+                    ? "0 0 16px rgba(255,184,77,0.45)"
+                    : "none",
+                }}
+              />
+            );
+          })}
+        </div>
+        <span className="shrink-0 text-[11px] font-black uppercase tracking-[0.18em] text-white/35">
+          {pin.length}/{maxDigits}
+        </span>
       </div>
 
-      {/* GRID 3-COL · botones aspect-square */}
       <div
         className="grid grid-cols-3"
-        style={{ gap: 'clamp(10px, 2.4vmin, 18px)' }}
+        style={{ gap: "clamp(10px, 2.4vmin, 18px)" }}
       >
-        {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+        {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
           <button
             key={digit}
             type="button"
@@ -118,43 +152,61 @@ export default function NumpadPIN({
             disabled={disabled || pin.length >= maxDigits}
             className={digitClass}
             style={{
-              fontSize: 'clamp(2rem, 7.5vmin, 4rem)',
-              minHeight: 'clamp(58px, 15vmin, 86px)',
+              fontSize: "clamp(1.75rem, 6.5vmin, 3.25rem)",
+              minHeight: "clamp(58px, 14vmin, 86px)",
             }}
           >
             {digit}
           </button>
         ))}
 
-        {/* Empty placeholder · mantiene el grid alineado en la fila inferior */}
-        <div aria-hidden />
-
-        {/* 0 */}
         <button
           type="button"
-          onClick={() => handleDigitClick('0')}
+          onClick={handleClear}
+          disabled={disabled || pin.length === 0}
+          className={utilityClass}
+          style={{ minHeight: "clamp(58px, 14vmin, 86px)" }}
+        >
+          <span className="text-[10px] uppercase tracking-[0.18em]">
+            Limpiar
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleDigitClick("0")}
           disabled={disabled || pin.length >= maxDigits}
           className={digitClass}
           style={{
-            fontSize: 'clamp(2rem, 7.5vmin, 4rem)',
-            minHeight: 'clamp(58px, 15vmin, 86px)',
+            fontSize: "clamp(1.75rem, 6.5vmin, 3.25rem)",
+            minHeight: "clamp(58px, 14vmin, 86px)",
           }}
         >
           0
         </button>
 
-        {/* DEL */}
         <button
           type="button"
           onClick={handleDelete}
           disabled={disabled || pin.length === 0}
           aria-label="Borrar último dígito"
-          className={delClass}
-          style={{ minHeight: 'clamp(58px, 15vmin, 86px)' }}
+          className={utilityClass}
+          style={{ minHeight: "clamp(58px, 14vmin, 86px)" }}
         >
-          <Delete style={{ width: 'clamp(22px, 5vmin, 34px)', height: 'auto' }} />
+          <Delete
+            style={{ width: "clamp(22px, 5vmin, 34px)", height: "auto" }}
+          />
         </button>
       </div>
+
+      <button
+        type="button"
+        onClick={() => void handleSubmit()}
+        disabled={!canSubmit}
+        className="min-h-[54px] w-full rounded-lg bg-[#ffb84d] px-4 text-sm font-black uppercase tracking-[0.2em] text-[#0a0a0c] transition-colors active:scale-[0.99] disabled:bg-white/10 disabled:text-white/30 disabled:active:scale-100 focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70"
+      >
+        {disabled ? "Validando" : submitLabel}
+      </button>
     </div>
   );
 }
