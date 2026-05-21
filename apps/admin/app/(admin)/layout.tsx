@@ -68,7 +68,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {children}
         </main>
       </div>
-      <FloatingVoiceAgent />
+      {!pathname?.startsWith("/admin/reportes/ia") && <FloatingVoiceAgent />}
     </div>
   );
 }
