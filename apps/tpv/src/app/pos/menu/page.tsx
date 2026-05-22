@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Search, Settings2, Star, X as XIcon } from "lucide-react";
 import CategoryChipRail, { FAVORITES_CHIP_ID } from "@/components/pos/CategoryChipRail";
 import CategoryGrid from "@/components/pos/CategoryGrid";
@@ -27,7 +27,7 @@ interface CategoryLite {
 }
 
 export default function CatalogPage() {
-  const { getActiveTicket, updateTicket, addItemToActive } = useTicketStore();
+  const { getActiveTicket, addItemToActive } = useTicketStore();
   const ticket = getActiveTicket();
 
   const [categories, setCategories] = useState<CategoryLite[]>([]);
