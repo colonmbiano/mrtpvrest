@@ -7,7 +7,8 @@ import {
   SplitSquareHorizontal, 
   ArrowRightLeft, 
   RefreshCw,
-  Wallet
+  Wallet,
+  Receipt
 } from "lucide-react";
 import { toast } from "sonner";
 

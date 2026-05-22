@@ -80,6 +80,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   useKeepAwake(true);
 
   const { palette, mode, setPalette, toggleMode } = useThemeStore();
+  const isOrdersOpen = useUIStore((s) => s.isOrdersOpen);
   const activeTicket = useTicketStore((s) => s.getActiveTicket());
   const itemCount = activeTicket.items.reduce((acc, i) => acc + i.quantity, 0);
 
@@ -96,7 +97,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const {
     isLocked,
     restaurantName,
-    locationName,
     currentEmployee,
     logout,
   } = useTPVAuth();
@@ -639,7 +639,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       />
 
       <OrdersDrawer
-        isOpen={useUIStore((s) => s.isOrdersOpen) || showOrders}
+        isOpen={isOrdersOpen || showOrders}
         onClose={() => {
           setShowOrders(false);
           useUIStore.getState().setIsOrdersOpen(false);

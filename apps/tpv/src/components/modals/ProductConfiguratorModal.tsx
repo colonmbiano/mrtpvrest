@@ -203,10 +203,10 @@ export default function ProductConfiguratorModal({
   return (
     <div className="absolute inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div
-        className="absolute inset-0 bg-[#0a0a0c]/95 backdrop-blur-sm"
+        className="absolute inset-0 bg-[#0a0a0c]/95"
         onClick={onClose}
       />
-      <div className="relative flex max-h-full w-full flex-col rounded-t-2xl border border-white/10 bg-[#121316] shadow-2xl animate-in slide-in-from-bottom duration-200 sm:max-w-3xl sm:rounded-2xl sm:zoom-in-95">
+      <div className="relative flex max-h-full w-full flex-col rounded-t-2xl border border-white/10 bg-[#121316] animate-in slide-in-from-bottom duration-150 sm:max-w-3xl sm:rounded-2xl sm:zoom-in-95">
         <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-4">
           <div className="min-w-0 flex flex-col">
             <span className="eyebrow">CONFIGURAR PRODUCTO</span>
@@ -383,7 +383,7 @@ export default function ProductConfiguratorModal({
             variant="primary"
             size="xl"
             fullWidth
-            className="min-h-[64px] text-xs font-black uppercase tracking-widest bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)] active:scale-[0.97] transition-transform border-none"
+            className="min-h-[64px] text-xs font-black uppercase tracking-widest bg-amber-500 text-black active:scale-[0.97] active:bg-amber-600 transition-transform duration-100 border-none"
             onClick={confirm}
             disabled={!!validationError}
           >

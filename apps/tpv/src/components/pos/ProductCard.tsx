@@ -2,6 +2,7 @@
 import React, { memo, useCallback, useRef } from "react";
 import { Flame, Plus, Star } from "lucide-react";
 import { useTicketStore } from "@/store/ticketStore";
+import { categoryTone } from "@/lib/categoryTheme";
 
 export interface ProductCardProps {
   id: string;
@@ -18,14 +19,7 @@ export interface ProductCardProps {
   currency?: string;
 }
 
-const TILE_PALETTE = ["#121316", "#1a1b1f", "#22242a"] as const;
 const LONG_PRESS_MS = 500;
-
-function hashColor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return TILE_PALETTE[h % TILE_PALETTE.length];
-}
 
 // Suscripción atómica: sólo lee la cantidad de este producto en el ticket
 // activo. Cuando otros productos cambian, este card NO se re-renderiza
@@ -40,6 +34,7 @@ function ProductCardBase({
   name,
   price,
   imageUrl,
+  category,
   promoPrice,
   isAvailable = true,
   isFavorite = false,
@@ -52,7 +47,7 @@ function ProductCardBase({
 
   const hasPromo = !!promoPrice && promoPrice < price;
   const displayPrice = hasPromo ? promoPrice! : price;
-  const tileColor = hashColor(id || name);
+  const tone = categoryTone(category);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longFired = useRef(false);
@@ -93,36 +88,38 @@ function ProductCardBase({
       onPointerCancel={cancel}
       onClick={handleClick}
       aria-disabled={!isAvailable}
-      className="product-card relative flex flex-col text-left rounded-2xl overflow-hidden p-3 min-h-[120px] border border-white/5 shadow-xl active:scale-95 transition-all duration-150 disabled:active:scale-100 select-none"
+      className="product-card relative flex flex-col text-left rounded-2xl overflow-hidden p-3 min-h-[120px] border border-white/5 active:scale-[0.97] active:brightness-125 transition-transform duration-100 disabled:active:scale-100 select-none"
       style={{
-        background: imageUrl ? "#0a0a0c" : tileColor,
+        background: imageUrl ? "#0a0a0c" : tone.tile,
         opacity: isAvailable ? 1 : 0.55,
         touchAction: "manipulation",
         WebkitTapHighlightColor: "transparent",
       }}
     >
+      {/* Franja superior de acento semántico (azul=bebida, cálido=comida,
+          verde=modificador). Identificación de familia de un vistazo. */}
+      <span
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-1 z-10 pointer-events-none"
+        style={{ background: tone.accent }}
+      />
+
       {imageUrl && (
-        <>
-          <img
-            src={imageUrl}
-            alt={name}
-            loading="lazy"
-            decoding="async"
-            draggable={false}
-            className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none"
-          />
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background:
-                "linear-gradient(180deg, rgba(10,10,12,0) 0%, rgba(10,10,12,0.85) 100%)",
-            }}
-          />
-        </>
+        <img
+          src={imageUrl}
+          alt={name}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none"
+        />
       )}
 
       {hasPromo && (
-        <span className="relative z-10 self-start px-2 py-0.5 rounded-md text-[9px] font-black tracking-widest bg-[#ffb84d] text-black shadow-lg">
+        <span
+          className="relative z-10 self-start px-2 py-0.5 rounded-md text-[9px] font-black tracking-widest text-black"
+          style={{ background: tone.accent }}
+        >
           PROMO
         </span>
       )}
@@ -130,7 +127,7 @@ function ProductCardBase({
       {isFavorite && (
         <span
           aria-label="Favorito"
-          className="absolute z-10 left-2 top-2 w-6 h-6 rounded-full bg-[#ffb84d]/90 text-black flex items-center justify-center shadow-lg"
+          className="absolute z-10 left-2 top-3 w-6 h-6 rounded-full bg-[#ffb84d] text-black flex items-center justify-center"
         >
           <Star size={12} strokeWidth={2.5} fill="currentColor" />
         </span>
@@ -139,7 +136,7 @@ function ProductCardBase({
       {isPopular && (
         <span
           aria-label="Popular"
-          className="absolute z-10 right-2 top-2 inline-flex h-6 items-center gap-1 rounded-full bg-rose-500/90 px-2 text-[9px] font-black tracking-widest text-white shadow-lg"
+          className="absolute z-10 right-2 top-3 inline-flex h-6 items-center gap-1 rounded-full bg-rose-500 px-2 text-[9px] font-black tracking-widest text-white"
         >
           <Flame size={12} strokeWidth={2.5} fill="currentColor" />
           TOP
@@ -147,7 +144,7 @@ function ProductCardBase({
       )}
 
       {!isAvailable && (
-        <span className="absolute z-10 inset-x-2 top-2 px-2 py-0.5 rounded-md text-[9px] font-black tracking-widest bg-red-500/90 text-white text-center">
+        <span className="absolute z-10 inset-x-2 top-3 px-2 py-0.5 rounded-md text-[9px] font-black tracking-widest bg-red-500 text-white text-center">
           AGOTADO
         </span>
       )}
@@ -155,7 +152,7 @@ function ProductCardBase({
       {quantityInTicket > 0 && isAvailable && (
         <span
           aria-label={`${quantityInTicket} en comanda`}
-          className="absolute z-20 left-2 bottom-2 min-w-[26px] h-[26px] px-1.5 rounded-full bg-[#88d66c] text-black text-[11px] font-black tabular-nums flex items-center justify-center shadow-lg"
+          className="absolute z-20 left-2 bottom-2 min-w-[26px] h-[26px] px-1.5 rounded-full bg-[#88d66c] text-black text-[11px] font-black tabular-nums flex items-center justify-center"
         >
           ×{quantityInTicket}
         </span>
@@ -163,7 +160,10 @@ function ProductCardBase({
 
       <div className="flex-1" />
 
-      <div className="relative z-10 flex flex-col gap-0.5">
+      <div
+        className="relative z-10 flex flex-col gap-0.5 rounded-lg"
+        style={imageUrl ? { background: "#0a0a0ccc", padding: "4px 6px", margin: "-4px -6px" } : undefined}
+      >
         <span className="text-[11px] font-black leading-tight text-white tracking-tight line-clamp-2 pr-8">
           {name}
         </span>
@@ -182,7 +182,8 @@ function ProductCardBase({
 
       <span
         aria-hidden
-        className="absolute z-10 right-2 bottom-2 w-7 h-7 rounded-xl flex items-center justify-center bg-[#ffb84d] text-[#0a0a0c] shadow-[0_4px_12px_rgba(255,184,77,0.35)]"
+        className="absolute z-10 right-2 bottom-2 w-7 h-7 rounded-xl flex items-center justify-center"
+        style={{ background: tone.accent, color: tone.accentFg }}
       >
         <Plus size={14} strokeWidth={3} />
       </span>
@@ -198,6 +199,7 @@ function propsAreEqual(prev: ProductCardProps, next: ProductCardProps): boolean 
     prev.id === next.id &&
     prev.name === next.name &&
     prev.price === next.price &&
+    prev.category === next.category &&
     prev.promoPrice === next.promoPrice &&
     prev.imageUrl === next.imageUrl &&
     prev.isAvailable === next.isAvailable &&
