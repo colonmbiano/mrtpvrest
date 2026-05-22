@@ -96,7 +96,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const {
     isLocked,
     restaurantName,
-    locationName,
     currentEmployee,
     logout,
   } = useTPVAuth();
