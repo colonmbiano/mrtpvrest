@@ -28,7 +28,6 @@ export default function TopNavDropdown({
   onOpenOrders,
   onOpenNotifs,
   onOpenExpenses,
-  hasOpenOrders,
   unreadNotifs = 0,
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);

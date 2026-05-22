@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X, MapPin, Phone, Home, Receipt, Save, Zap } from "lucide-react";
+import { Trash2, ShoppingCart, User, UtensilsCrossed, MapPin, Phone, Home, Receipt, Save, Zap } from "lucide-react";
 import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
@@ -110,12 +110,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   }, [tpvConfig]);
 
   const {
-    tickets,
-    activeIndex,
     getActiveTicket,
-    addTicket,
-    setActiveIndex,
-    closeTicket,
     changeItemQty,
     clearActiveItems,
     updateTicket,
