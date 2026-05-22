@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X, MapPin, Phone, Home, Receipt } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, User, UtensilsCrossed, X, MapPin, Phone, Home, Receipt, Save, Zap } from "lucide-react";
 import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
@@ -123,8 +123,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   } = useTicketStore();
   
   const ticket = getActiveTicket();
+  const hasItems = ticket.items.length > 0;
 
-  const historySubtotal = useMemo(() => 
+  const historySubtotal = useMemo(() =>
     previousItems.reduce((acc, item) => acc + (item.price * item.quantity), 0),
   [previousItems]);
 
@@ -655,8 +656,6 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       {/* FOOTER DEL TICKET — fijo al fondo. Incluye bloque de totales
           (e-commerce style) + CTA primario + acciones secundarias. */}
       <div className="bg-[#121316] border-t border-white/5 mt-auto shrink-0 relative overflow-hidden">
-        <div className="absolute -top-24 -right-24 w-48 h-48 bg-amber-500/5 blur-[60px] rounded-full pointer-events-none" />
-
         {/* BLOQUE DE TOTALES — Subtotal, IVA (16%), Descuento, Total.
             Estilo e-commerce: rows alineadas con valores tabulares. */}
         <div className="relative z-10 px-4 py-3 border-b border-white/5 flex flex-col gap-1.5 bg-[#0d0e11]">
@@ -697,15 +696,18 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         </div>
 
         <div className="relative z-10 flex flex-col gap-2 p-4 pt-3">
-          {/* LOYVERSE-STYLE FOOTER */}
+          {/* FOOTER CONDICIONAL — flat, alto contraste.
+              · Vacío:        [ Tickets Abiertos ]  ·  [ Cobrar ] (off)
+              · Con producto: [ Guardar Orden ]     ·  [ Cobrar ] (verde) */}
           <div className="flex gap-2 h-12">
-            {ticket.items.length > 0 ? (
+            {/* BOTÓN IZQUIERDO (secundario) */}
+            {hasItems ? (
               <button
                 onClick={handleSendToKitchen}
                 disabled={processing}
-                className="flex-1 rounded-xl bg-surface-2 border border-border text-[11px] font-black uppercase tracking-widest text-zinc-300 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                className="flex-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] font-black uppercase tracking-widest text-amber-400 active:bg-amber-500/20 transition-transform duration-100 active:scale-[0.97] flex items-center justify-center gap-1.5 disabled:opacity-40"
               >
-                <UtensilsCrossed size={16} /> Guardar
+                <Save size={16} strokeWidth={2.5} /> Guardar Orden
               </button>
             ) : (
               <button
@@ -714,17 +716,18 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                     useUIStore.getState().setIsOrdersOpen(true);
                   });
                 }}
-                className="flex-1 rounded-xl bg-surface-2 border border-border text-[11px] font-black uppercase tracking-widest text-zinc-300 active:text-white active:bg-zinc-800 transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                className="flex-1 rounded-xl bg-surface-2 border border-border text-[11px] font-black uppercase tracking-widest text-zinc-300 active:text-white active:bg-zinc-800 transition-transform duration-100 active:scale-[0.97] flex items-center justify-center gap-1.5"
               >
-                <Receipt size={16} /> Abiertos
+                <Receipt size={16} strokeWidth={2.5} /> Tickets Abiertos
               </button>
             )}
 
+            {/* BOTÓN DERECHO (acción principal) */}
             {isLoanMode ? (
               <button
                 onClick={handleSendToKitchen}
-                disabled={processing || ticket.items.length === 0}
-                className="flex-[2] rounded-xl text-[12px] font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)]"
+                disabled={processing || !hasItems}
+                className="flex-[2] rounded-xl text-[12px] font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-transform duration-100 active:scale-[0.97] disabled:opacity-40 disabled:grayscale bg-amber-500 text-black"
               >
                 <UtensilsCrossed size={14} strokeWidth={2.5} />
                 {processing ? "Enviando..." : "Cocina"}
@@ -753,12 +756,13 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                       ? "Asigna una mesa antes de cobrar"
                       : undefined
                 }
-                className={`flex-[2] rounded-xl text-[12px] font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl disabled:opacity-20 disabled:grayscale ${
+                className={`flex-[2] rounded-xl text-[12px] font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-transform duration-100 active:scale-[0.97] disabled:opacity-40 disabled:grayscale ${
                   isShiftOpen
-                    ? "bg-amber-500 text-black shadow-[0_8px_32px_-10px_rgba(255,184,77,0.4)]"
-                    : "bg-red-500 text-white shadow-[0_8px_32px_-10px_rgba(239,68,68,0.4)]"
+                    ? "bg-[#88d66c] text-black active:bg-[#7ac75e]"
+                    : "bg-red-500 text-white active:bg-red-600"
                 }`}
               >
+                {isShiftOpen && <Zap size={15} strokeWidth={2.5} />}
                 {processing ? "Cargando..." : isShiftOpen ? "Cobrar" : "Turno"}
               </button>
             )}

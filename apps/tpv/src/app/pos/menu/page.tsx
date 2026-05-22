@@ -1,12 +1,10 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Search, Settings2, Star, X as XIcon } from "lucide-react";
-import { useShallow } from "zustand/react/shallow";
 import CategoryChipRail, { FAVORITES_CHIP_ID } from "@/components/pos/CategoryChipRail";
 import CategoryGrid from "@/components/pos/CategoryGrid";
 import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
-import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
-import ProductGrid from "@/components/pos/ProductGrid";
+import ProductCard from "@/components/pos/ProductCard";
 import SeatTabs from "@/components/pos/SeatTabs";
 import CatalogSettingsSheet from "@/components/modals/CatalogSettingsSheet";
 import ProductConfiguratorModal from "@/components/modals/ProductConfiguratorModal";
@@ -18,7 +16,7 @@ import {
   type ModifierSelection,
   type Product,
 } from "@/store/ticketStore";
-import { useCatalogPrefs } from "@/store/catalogPrefsStore";
+import { useCatalogPrefs, densityGridClasses } from "@/store/catalogPrefsStore";
 import { useUIStore } from "@/store/useUIStore";
 
 type View = "categories" | "products" | "favorites" | "search";
