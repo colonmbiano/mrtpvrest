@@ -42,21 +42,35 @@ const MODIFIER_KW = [
   "guarni", "acompan", "adicion",
 ];
 
-function normalize(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
+function normalize(value: unknown): string {
+  if (typeof value === "string") {
+    return value
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "");
+  }
+  if (value && typeof value === "object" && "name" in value) {
+    return normalize((value as { name?: unknown }).name);
+  }
+  return "";
 }
 
 /**
  * Devuelve el tono semántico para una categoría. Sin coincidencia explícita
  * de bebida o modificador, se asume comida (acento cálido), que es el caso
  * dominante en un restaurante.
+ *
+ * Acepta string, objeto Category ({ id, name, ... }) o nulo. Es defensivo
+ * a propósito porque el backend devuelve `category` como objeto (relación
+ * de Prisma) en /api/menu/items pero algunos call sites lo tratan como
+ * string. Sin el guard, llamar `.toLowerCase()` sobre un objeto crashea
+ * el render del catálogo entero ("e.toLowerCase is not a function").
  */
-export function categoryTone(category?: string | null): CategoryTone {
-  if (!category) return TONES.neutral;
+export function categoryTone(
+  category?: string | { name?: string | null } | null,
+): CategoryTone {
   const c = normalize(category);
+  if (!c) return TONES.neutral;
   if (DRINK_KW.some((kw) => c.includes(kw))) return TONES.drink;
   if (MODIFIER_KW.some((kw) => c.includes(kw))) return TONES.modifier;
   return TONES.food;
