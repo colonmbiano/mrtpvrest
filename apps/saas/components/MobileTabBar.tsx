@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import api from "@/lib/api";
 
 const IconHome = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
@@ -24,24 +26,59 @@ const IconError = () => (
   </svg>
 );
 
+const POLL_MS = 15_000;
+
 export default function MobileTabBar() {
   const pathname = usePathname();
+  const [errorsCount, setErrorsCount] = useState<number | null>(null);
+  const [alertsCount, setAlertsCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const fetchCounts = async () => {
+      try {
+        const [errRes, logsRes] = await Promise.allSettled([
+          api.get<{ total: number }>("/api/admin/logs/db", { params: { limit: 1, minLevel: "ERROR" } }),
+          api.get<{ total: number }>("/api/admin/logs/db", { params: { limit: 1, level: "WARN" } }),
+        ]);
+        if (cancelled) return;
+        if (errRes.status === "fulfilled") setErrorsCount(errRes.value.data.total ?? 0);
+        if (logsRes.status === "fulfilled") setAlertsCount(logsRes.value.data.total ?? 0);
+      } catch { /* silent */ }
+      finally {
+        if (!cancelled) timer = setTimeout(fetchCounts, POLL_MS);
+      }
+    };
+
+    fetchCounts();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   const tabs = [
-    { href: "/dashboard", label: "Inicio", icon: <IconHome /> },
-    { href: "/logs", label: "Alertas", icon: <IconBell />, badge: 3 },
-    { href: "/errors", label: "Errores", icon: <IconError />, badge: 12 },
+    { href: "/dashboard", label: "Inicio",  icon: <IconHome />,  badge: null as number | null },
+    { href: "/logs",      label: "Alertas", icon: <IconBell />,  badge: alertsCount },
+    { href: "/errors",    label: "Errores", icon: <IconError />, badge: errorsCount },
   ];
 
   return (
     <nav className="mobile-tabbar md:hidden">
       {tabs.map((tab) => {
         const isActive = pathname === tab.href;
+        const showBadge = typeof tab.badge === "number" && tab.badge > 0;
         return (
           <Link key={tab.href} href={tab.href} className={`tab-item ${isActive ? "active" : ""}`}>
             <div className="tab-icon-wrap">
               {tab.icon}
-              {tab.badge && <span className="tab-badge">{tab.badge}</span>}
+              {showBadge && (
+                <span className="tab-badge">
+                  {tab.badge! > 99 ? "99+" : tab.badge}
+                </span>
+              )}
             </div>
             <span className="tab-label">{tab.label}</span>
           </Link>
@@ -50,9 +87,10 @@ export default function MobileTabBar() {
 
       <style jsx>{`
         .mobile-tabbar {
-          height: 82px;
-          background: rgba(12, 12, 23, 0.9);
+          height: 70px;
+          background: rgba(8, 8, 16, 0.92);
           backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
           border-top: 1px solid var(--border);
           position: fixed;
           bottom: 0;
@@ -68,47 +106,51 @@ export default function MobileTabBar() {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 6px;
+          gap: 4px;
           text-decoration: none;
           color: var(--text3);
-          transition: all 0.2s;
+          transition: color 0.18s;
           flex: 1;
+          padding: 6px 0;
         }
         .tab-item.active {
           color: var(--orange);
         }
         .tab-icon-wrap {
           position: relative;
-          padding: 6px 16px;
-          border-radius: 20px;
-          transition: background 0.2s;
+          padding: 5px 18px;
+          border-radius: 18px;
+          transition: background 0.18s;
         }
         .tab-item.active .tab-icon-wrap {
           background: var(--orange-dim);
         }
         .tab-label {
-          font-size: 11px;
+          font-size: 10.5px;
           font-weight: 500;
+          letter-spacing: 0.1px;
         }
         .tab-item.active .tab-label {
-          font-weight: 600;
+          font-weight: 700;
         }
         .tab-badge {
           position: absolute;
-          top: 0;
-          right: 6px;
+          top: -2px;
+          right: 4px;
           background: var(--red);
           color: #fff;
           font-size: 9px;
-          font-weight: 700;
-          min-width: 16px;
-          height: 16px;
-          border-radius: 8px;
+          font-weight: 800;
+          font-variant-numeric: tabular-nums;
+          min-width: 17px;
+          height: 17px;
+          border-radius: 9px;
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 0 4px;
           border: 2px solid #0c0c17;
+          line-height: 1;
         }
       `}</style>
     </nav>
