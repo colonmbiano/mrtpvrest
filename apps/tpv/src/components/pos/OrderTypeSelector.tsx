@@ -181,7 +181,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               </p>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
               {ORDER_TYPES.map((type) => {
                 const Icon = type.icon;
 
@@ -190,21 +190,24 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                     key={type.id}
                     type="button"
                     onClick={() => onSelect(type.id)}
-                    className="group relative flex min-h-[168px] flex-col justify-between rounded-lg border border-white/10 bg-[#131316]/90 p-4 text-left shadow-md shadow-black/25 transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70 sm:min-h-[220px]"
+                    className="group relative flex aspect-square flex-col justify-between rounded-lg border border-white/10 bg-[#131316]/90 p-3 text-left shadow-md shadow-black/25 transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70 sm:aspect-auto sm:min-h-[220px] sm:p-4"
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start justify-between gap-2 sm:gap-3">
                       <div
-                        className="flex h-12 w-12 items-center justify-center rounded-lg border"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border sm:h-12 sm:w-12"
                         style={{
                           backgroundColor: `${type.accent}1f`,
                           borderColor: `${type.accent}40`,
                           color: type.accent,
                         }}
                       >
-                        <Icon size={24} strokeWidth={2.5} />
+                        <Icon
+                          strokeWidth={2.5}
+                          className="h-[18px] w-[18px] sm:h-6 sm:w-6"
+                        />
                       </div>
                       <span
-                        className="flex h-8 min-w-8 items-center justify-center rounded-lg border text-sm font-black"
+                        className="flex h-7 min-w-7 items-center justify-center rounded-lg border text-xs font-black sm:h-8 sm:min-w-8 sm:text-sm"
                         style={{
                           backgroundColor: `${type.accent}14`,
                           borderColor: `${type.accent}30`,
@@ -215,23 +218,22 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       </span>
                     </div>
 
-                    <div className="mt-6">
-                      <h3 className="text-2xl font-black leading-tight tracking-tight sm:text-3xl">
+                    <div className="mt-2 sm:mt-6">
+                      <h3 className="text-base font-black leading-tight tracking-tight sm:text-3xl">
                         {type.title}
                       </h3>
-                      <p className="mt-2 min-h-[44px] text-sm font-medium leading-snug text-white/55">
+                      <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-snug text-white/55 sm:mt-2 sm:line-clamp-none sm:min-h-[44px] sm:text-sm">
                         {type.description}
                       </p>
                     </div>
 
-                    <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-4">
-                      <span className="text-xs font-black uppercase tracking-[0.18em] text-white/40">
+                    <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2 sm:mt-5 sm:pt-4">
+                      <span className="truncate text-[9px] font-black uppercase tracking-[0.14em] text-white/40 sm:text-xs sm:tracking-[0.18em]">
                         {type.nextStep}
                       </span>
                       <ArrowRight
-                        size={18}
                         strokeWidth={3}
-                        className="text-white/40 transition-transform group-active:translate-x-0.5"
+                        className="h-3.5 w-3.5 shrink-0 text-white/40 transition-transform group-active:translate-x-0.5 sm:h-[18px] sm:w-[18px]"
                       />
                     </div>
                   </button>
