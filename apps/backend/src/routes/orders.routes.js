@@ -979,6 +979,17 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
       data: { status }
     });
 
+    // Cancelar un dine-in libera la mesa (AVAILABLE), no DIRTY: el ticket
+    // nunca llegó a usarse. Si no se libera, la mesa queda OCCUPIED con
+    // un ticket fantasma y el siguiente flow de "Comer Aquí" se rompe.
+    // Idempotente: si la mesa ya fue eliminada o liberada, no fallar.
+    if (status === 'CANCELLED' && order.tableId && order.orderType === 'DINE_IN') {
+      await prisma.table.update({
+        where: { id: order.tableId },
+        data: { status: 'AVAILABLE' },
+      }).catch(() => {});
+    }
+
     const io = req.app.get('io');
     if (io) {
       io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
