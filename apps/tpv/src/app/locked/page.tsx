@@ -156,28 +156,28 @@ export default function LockedPage() {
       </div>
 
       <div
-        className="relative z-10 flex min-h-[100dvh] w-full flex-col items-center justify-center px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(5rem,calc(env(safe-area-inset-top)+4.5rem))] sm:pt-[max(5rem,calc(env(safe-area-inset-top)+4rem))]"
+        className="relative z-10 flex min-h-[100dvh] w-full flex-col items-center justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(3.5rem,calc(env(safe-area-inset-top)+2.75rem))] sm:px-4 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pt-[max(5rem,calc(env(safe-area-inset-top)+4rem))]"
       >
       <main className="grid w-full max-w-[980px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.045] shadow-[0_30px_90px_rgba(0,0,0,0.45)] backdrop-blur-md lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1fr)] landscape:grid-cols-[minmax(0,0.9fr)_minmax(340px,1fr)]">
-        <section className="flex flex-col justify-between gap-8 border-b border-white/10 p-5 sm:p-7 lg:border-b-0 lg:border-r lg:p-8 landscape:border-b-0 landscape:border-r landscape:p-6">
+        <section className="flex flex-col justify-between gap-4 border-b border-white/10 p-4 sm:gap-8 sm:p-7 lg:border-b-0 lg:border-r lg:p-8 landscape:border-b-0 landscape:border-r landscape:p-6">
           <div>
-            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-[#ffb84d]/25 bg-[#ffb84d]/10 text-[#ffb84d]">
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-[#ffb84d]/25 bg-[#ffb84d]/10 text-[#ffb84d] sm:mb-5 sm:h-12 sm:w-12">
               <LockKeyhole size={24} strokeWidth={2.5} />
             </div>
 
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#ffb84d]">
               Acceso de empleado
             </p>
-            <h1 className="mt-2 text-[clamp(2rem,4vw,3.25rem)] font-black leading-[0.95] tracking-tight text-white">
+            <h1 className="mt-1 text-[clamp(1.5rem,5vw,3.25rem)] font-black leading-[0.95] tracking-tight text-white sm:mt-2">
               {terminalName}
             </h1>
-            <p className="mt-4 max-w-md text-sm font-semibold leading-relaxed text-white/55">
+            <p className="mt-2 max-w-md text-xs font-semibold leading-relaxed text-white/55 sm:mt-4 sm:text-sm">
               Ingresa el PIN de 4 dígitos para continuar con la venta.
             </p>
           </div>
 
           <div className="grid gap-2 text-xs font-bold text-white/45">
-            <div className="flex min-h-[44px] items-center gap-3 rounded-lg border border-white/10 bg-black/20 px-3">
+            <div className="flex min-h-[40px] items-center gap-3 rounded-lg border border-white/10 bg-black/20 px-3 sm:min-h-[44px]">
               <MonitorCheck size={17} className="text-emerald-300" />
               <span className="min-w-0 truncate">
                 Terminal vinculada a {locationName}
@@ -186,7 +186,7 @@ export default function LockedPage() {
           </div>
         </section>
 
-        <section className="flex flex-col justify-center p-5 sm:p-7 landscape:p-5">
+        <section className="flex flex-col justify-center p-3 sm:p-7 landscape:p-5">
           <NumpadPIN
             onSubmit={handlePINSubmit}
             disabled={isValidating}
@@ -195,7 +195,7 @@ export default function LockedPage() {
             }}
           />
 
-          <div className="min-h-[76px]">
+          <div className="min-h-[52px] sm:min-h-[76px]">
             {error && (
               <div className="mt-4 rounded-lg border border-red-400/25 bg-red-500/10 p-3 text-center">
                 <p className="text-sm font-bold text-red-300">{error}</p>
