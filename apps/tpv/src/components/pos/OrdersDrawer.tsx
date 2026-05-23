@@ -5,9 +5,7 @@ import {
   Receipt,
   Search,
   Bike,
-  Printer,
   ChevronRight,
-  Banknote,
 } from "lucide-react";
 
 export interface DrawerOrder {
@@ -68,9 +66,6 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   onClose,
   orders,
   onShowDetail,
-  onConfirmPayment,
-  onReprintOrder,
-  hideMoney = false,
 }) => {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("Todos");
   const [search, setSearch] = useState("");
@@ -200,7 +195,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {visibleOrders.map((order) => {
                 const tone = toneFor(order.status);
                 return (
@@ -208,97 +203,36 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     key={order.id}
                     type="button"
                     onClick={() => onShowDetail(order)}
-                    className={`relative p-4 rounded-3xl border-2 ${tone.ring} bg-white/5 backdrop-blur-md text-left flex flex-col gap-3 active:scale-[0.98] transition-transform overflow-hidden`}
+                    aria-label={`Abrir ticket de ${order.customerName} por $${order.total.toFixed(2)}`}
+                    className={`relative px-4 py-3 rounded-2xl border ${tone.ring} bg-white/5 backdrop-blur-md text-left flex items-center gap-3 active:scale-[0.98] transition-transform overflow-hidden min-h-[72px]`}
                   >
-                    {/* Glow accent */}
-                    <div
-                      aria-hidden
-                      className="absolute pointer-events-none -top-12 -right-12 w-32 h-32 rounded-full opacity-30 blur-2xl"
-                      style={{
-                        background:
-                          "radial-gradient(circle, rgba(255,184,77,0.4) 0%, transparent 70%)",
-                      }}
+                    <span
+                      className={`shrink-0 w-2.5 h-2.5 rounded-full ${tone.dot}`}
+                      aria-label={order.status}
                     />
 
-                    {/* TOP ROW: order# + status */}
-                    <div className="relative z-10 flex items-start justify-between gap-2">
-                      <div className="flex flex-col min-w-0">
-                        <span className="tabular-nums text-[10px] font-black text-white/50 tracking-wider uppercase">
-                          #{order.orderNumber}
-                        </span>
-                        <span className="text-[10px] font-black uppercase tracking-[0.15em] text-[#ffb84d] mt-0.5">
-                          {order.type}
-                        </span>
-                      </div>
-                      <div
-                        className={`flex items-center gap-1.5 px-2.5 h-7 rounded-full bg-white/5 border border-white/10 ${tone.chip}`}
-                      >
-                        <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">
-                          {order.status}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* CUSTOMER */}
-                    <div className="relative z-10 min-w-0">
-                      <h3 className="text-[16px] font-black text-white truncate leading-tight">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-[15px] font-black text-white truncate leading-tight">
                         {order.customerName}
                       </h3>
-                      <p className="text-[11px] font-bold text-white/50 mt-0.5">
-                        {order.itemsCount} prod · hace {order.time}
-                      </p>
-                      {order.driver && (
-                        <div className="flex items-center gap-1.5 mt-1.5 text-white/70">
-                          <Bike size={12} />
-                          <span className="text-[11px] font-bold truncate">
-                            {order.driver}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* TOTAL */}
-                    <div className="relative z-10 tabular-nums text-3xl font-black tracking-tight text-white">
-                      ${order.total.toFixed(2)}
-                    </div>
-
-                    {/* PRIMARY ACTION — oculto en modo préstamo */}
-                    {!hideMoney && (
-                      <div
-                        className="relative z-10"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onConfirmPayment(order);
-                          }}
-                          className="w-full min-h-[64px] h-14 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] text-[12px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)]"
-                        >
-                          <Banknote size={16} strokeWidth={2.5} />
-                          Cobrar
-                        </button>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-white/45">
+                        <span className="text-[#ffb84d]">{order.type}</span>
+                        <span className="text-white/20">·</span>
+                        <span className="tabular-nums">#{order.orderNumber}</span>
+                        {order.driver && (
+                          <>
+                            <span className="text-white/20">·</span>
+                            <Bike size={10} className="text-white/60" />
+                          </>
+                        )}
                       </div>
-                    )}
+                    </div>
 
-                    {/* SECONDARY: REPRINT */}
-                    <div
-                      className="relative z-10"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onReprintOrder(order);
-                        }}
-                        className="w-full h-10 rounded-xl bg-transparent border border-white/10 text-white/60 text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 active:scale-95 transition-transform"
-                      >
-                        <Printer size={12} />
-                        Reimprimir cuenta
-                      </button>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <span className="tabular-nums text-lg font-black tracking-tight text-white">
+                        ${order.total.toFixed(2)}
+                      </span>
+                      <ChevronRight size={16} className="text-white/40" />
                     </div>
                   </button>
                 );

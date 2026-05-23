@@ -113,7 +113,7 @@ export default function LockedPage() {
 
   return (
     <div
-      className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-y-auto overflow-x-hidden bg-[#0C0C0E] px-4 py-[max(1rem,env(safe-area-inset-top))]"
+      className="relative min-h-[100dvh] w-full overflow-y-auto overflow-x-hidden bg-[#0C0C0E]"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       <div
@@ -155,7 +155,10 @@ export default function LockedPage() {
         </span>
       </div>
 
-      <main className="relative z-10 mt-16 grid w-full max-w-[980px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.045] shadow-[0_30px_90px_rgba(0,0,0,0.45)] backdrop-blur-md lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1fr)] landscape:grid-cols-[minmax(0,0.9fr)_minmax(340px,1fr)]">
+      <div
+        className="relative z-10 flex min-h-[100dvh] w-full flex-col items-center justify-center px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(5rem,calc(env(safe-area-inset-top)+4.5rem))] sm:pt-[max(5rem,calc(env(safe-area-inset-top)+4rem))]"
+      >
+      <main className="grid w-full max-w-[980px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.045] shadow-[0_30px_90px_rgba(0,0,0,0.45)] backdrop-blur-md lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1fr)] landscape:grid-cols-[minmax(0,0.9fr)_minmax(340px,1fr)]">
         <section className="flex flex-col justify-between gap-8 border-b border-white/10 p-5 sm:p-7 lg:border-b-0 lg:border-r lg:p-8 landscape:border-b-0 landscape:border-r landscape:p-6">
           <div>
             <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-[#ffb84d]/25 bg-[#ffb84d]/10 text-[#ffb84d]">
@@ -216,6 +219,7 @@ export default function LockedPage() {
           </div>
         </section>
       </main>
+      </div>
     </div>
   );
 }

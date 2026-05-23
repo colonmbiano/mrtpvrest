@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
 import api from "@/lib/api";
 import DriverMovementsModal from "./DriverMovementsModal";
 
@@ -123,21 +124,29 @@ export default function DriversPanel({ isOpen, onClose, accent }: Props) {
   const onRouteCount = drivers.filter(d => d.activeRoute).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-[130] flex justify-end">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
       <div
         className="relative w-full sm:w-96 h-full flex flex-col shadow-2xl border-l"
-        style={{ background: "var(--surf)", borderColor: "var(--border)" }}
+        style={{
+          background: "var(--surf)",
+          borderColor: "var(--border)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
       >
         {/* Header */}
         <div
-          className="p-5 border-b flex items-center justify-between"
-          style={{ borderColor: "var(--border)", background: "var(--bg)" }}
+          className="p-5 border-b flex items-center justify-between gap-3"
+          style={{
+            borderColor: "var(--border)",
+            background: "var(--bg)",
+            paddingTop: "max(1.25rem, env(safe-area-inset-top))",
+          }}
         >
-          <div>
+          <div className="min-w-0">
             <h2 className="text-lg font-black text-white">🚴 Repartidores</h2>
             <p className="text-[11px] font-bold" style={{ color: "var(--muted)" }}>
               {drivers.length} activos · {onlineCount} online · {onRouteCount} en ruta
@@ -145,11 +154,10 @@ export default function DriversPanel({ isOpen, onClose, accent }: Props) {
           </div>
           <button
             onClick={onClose}
-            className="text-2xl leading-none"
-            style={{ color: "var(--muted)" }}
+            className="shrink-0 w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/10 border border-white/15 flex items-center justify-center text-white active:scale-95 transition-transform"
             aria-label="Cerrar"
           >
-            ✕
+            <X size={20} strokeWidth={2.5} />
           </button>
         </div>
 
