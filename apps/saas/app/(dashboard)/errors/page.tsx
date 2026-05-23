@@ -125,29 +125,35 @@ export default function SaasErrorsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#080810] text-white">
-      {/* Header (Mobile Design) */}
-      <div className="px-4 py-6 md:px-10">
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              Errores <span className="bg-red-500/20 text-red-500 px-2 py-0.5 rounded-lg text-xs tabular-nums">{records.length}</span>
+    <div className="min-h-full bg-[#080810] text-white">
+      {/* Header */}
+      <div className="px-4 pt-3 pb-2 md:px-10 md:pt-6">
+        <div className="flex items-center justify-between mb-1">
+          <div className="min-w-0">
+            <h1 className="text-[22px] md:text-2xl font-bold flex items-center gap-2 leading-tight">
+              Errores
+              <span className="bg-red-500/20 text-red-500 px-2 py-0.5 rounded-lg text-[11px] font-bold tabular-nums">
+                {records.length}
+              </span>
             </h1>
-            <p className="text-xs text-white/40 font-medium">Observabilidad global del SaaS</p>
+            <p className="text-[11px] md:text-xs text-white/40 font-medium mt-0.5">
+              Observabilidad global del SaaS
+            </p>
           </div>
           <button
             onClick={() => setPaused(!paused)}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${paused ? "bg-amber-500/20 text-amber-500" : "bg-white/5 text-white/40"}`}
+            aria-label={paused ? "Reanudar polling" : "Pausar polling"}
+            className={`w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center transition-all shrink-0 ${paused ? "bg-amber-500/20 text-amber-500" : "bg-white/5 text-white/50"}`}
           >
-            <RefreshCcw size={18} className={paused ? "" : "animate-spin-slow"} />
+            <RefreshCcw size={16} className={paused ? "" : "animate-spin-slow"} />
           </button>
         </div>
 
-        {/* Filter Chips (Horizontal Scroll) */}
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide py-4 -mx-4 px-4 no-scrollbar">
+        {/* Filter Chips */}
+        <div className="flex gap-2 overflow-x-auto py-3 -mx-4 px-4 no-scrollbar">
           <button
             onClick={() => setFilterLevel("ALL")}
-            className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filterLevel === "ALL" ? "bg-white text-black" : "bg-white/5 text-white/40 border border-white/10"}`}
+            className={`px-4 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all ${filterLevel === "ALL" ? "bg-white text-black" : "bg-white/5 text-white/50 border border-white/10"}`}
           >
             Todos
           </button>
@@ -155,42 +161,56 @@ export default function SaasErrorsPage() {
             <button
               key={lvl}
               onClick={() => setFilterLevel(lvl)}
-              className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filterLevel === lvl ? LEVEL_STYLE[lvl].active : "bg-white/5 text-white/40 border border-white/10"}`}
+              className={`px-4 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all ${filterLevel === lvl ? LEVEL_STYLE[lvl].active : "bg-white/5 text-white/50 border border-white/10"}`}
             >
               {lvl}
             </button>
           ))}
         </div>
 
-        {/* Search Bar */}
-        <div className="relative mb-6">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
+        {/* Search */}
+        <div className="relative mb-3">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/25" size={15} />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por mensaje, path, tenant..."
-            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-11 pr-4 text-sm outline-none focus:border-white/20 transition-all"
+            className="w-full bg-white/5 border border-white/10 rounded-2xl py-2.5 pl-10 pr-4 text-[13px] outline-none focus:border-white/20 transition-all"
           />
         </div>
 
+        {/* Export button (visible on mobile too) */}
+        <div className="flex justify-end mb-2 md:hidden">
+          <button
+            onClick={downloadExport}
+            disabled={exporting}
+            className="flex items-center gap-1.5 text-[11px] font-bold text-white/50 active:text-white/80 transition-colors disabled:opacity-50 px-2 py-1"
+          >
+            <Download size={12} /> {exporting ? "Exportando…" : "Exportar JSON"}
+          </button>
+        </div>
+
         {error && (
-          <div className="mb-6 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs font-bold">
+          <div className="mb-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs font-bold">
             {error}
           </div>
         )}
 
         {/* Error List */}
-        <div className="space-y-3 pb-32">
+        <div className="space-y-3 pb-24">
           {loading && records.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-white/20">
-              <Loader2 className="animate-spin mb-4" size={32} />
-              <p className="text-sm font-bold">Conectando con SystemLog...</p>
+            <div className="flex flex-col items-center justify-center py-12 text-white/30">
+              <Loader2 className="animate-spin mb-3" size={28} />
+              <p className="text-xs font-bold">Conectando con SystemLog…</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-white/20">
-              <Activity className="mb-4" size={32} />
-              <p className="text-sm font-bold">Sin errores detectados</p>
+            <div className="flex flex-col items-center justify-center py-12 text-white/25 bg-white/[0.02] border border-white/5 rounded-2xl">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-3">
+                <Activity className="text-emerald-400" size={22} />
+              </div>
+              <p className="text-sm font-bold text-white/70">Sin errores detectados</p>
+              <p className="text-[11px] text-white/35 mt-1">La plataforma está saludable</p>
             </div>
           ) : (
             filtered.map((r) => <ErrorRow key={r.id} record={r} />)
