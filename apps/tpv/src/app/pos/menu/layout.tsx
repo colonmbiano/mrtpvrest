@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Search, ShoppingCart, UtensilsCrossed } from "lucide-react";
 import ConfigMenu from "@/components/pos/ConfigMenu";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
-import OrderDetailModal from "@/components/pos/OrderDetailModal";
 import ReprintKitchenModal from "@/components/pos/ReprintKitchenModal";
 import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
@@ -87,11 +86,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   const [openOrders, setOpenOrders] = useState<any[]>([]);
   const [payOrder, setPayOrder] = useState<any | null>(null);
-  const [detailOrder, setDetailOrder] = useState<any | null>(null);
   const [reprintKitchenOrder, setReprintKitchenOrder] = useState<any | null>(null);
   const [shiftOpen, setShiftOpen] = useState<boolean | null>(null);
   const [showShift, setShowShift] = useState(false);
-  const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [mergeSource, setMergeSource] = useState<any | null>(null);
   const [assigningOrder, setAssigningOrder] = useState<any | null>(null);
 
@@ -118,52 +115,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       console.error("Error cargando órdenes abiertas:", err);
     }
   }, []);
-
-  // ── Edición/eliminación de items en orden abierta (Feature 11)
-  // Sólo expuesto al admin/manager (gateado en el render); el backend además
-  // valida tenant + estado de orden. Tras éxito, refrescamos detail + listado.
-  const canEditOpenOrderItems = currentEmployee?.role
-    ? ["ADMIN", "OWNER", "MANAGER"].includes(currentEmployee.role)
-    : false;
-
-  const handleUpdateOrderItem = useCallback(
-    async (itemId: string, patch: { quantity?: number; notes?: string }) => {
-      setUpdatingItemId(itemId);
-      try {
-        const { data: updated } = await api.put(`/api/orders/items/${itemId}`, patch);
-        setDetailOrder(updated);
-        fetchOpenOrders();
-      } catch (err: any) {
-        toast.error(
-          "Error al modificar: " +
-            (err?.response?.data?.error || err?.message || "fallo desconocido"),
-        );
-      } finally {
-        setUpdatingItemId(null);
-      }
-    },
-    [fetchOpenOrders],
-  );
-
-  const handleDeleteOrderItem = useCallback(
-    async (itemId: string) => {
-      if (!confirm("¿Eliminar este producto de la orden?")) return;
-      setUpdatingItemId(itemId);
-      try {
-        const { data: updated } = await api.delete(`/api/orders/items/${itemId}`);
-        setDetailOrder(updated);
-        fetchOpenOrders();
-      } catch (err: any) {
-        toast.error(
-          "Error al eliminar: " +
-            (err?.response?.data?.error || err?.message || "fallo desconocido"),
-        );
-      } finally {
-        setUpdatingItemId(null);
-      }
-    },
-    [fetchOpenOrders],
-  );
 
   useEffect(() => {
     if (!mounted || isLocked) return;
@@ -527,43 +478,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     setReprintKitchenOrder(full);
   };
 
-  // Si el usuario está viendo el detalle y decide cobrar, transferimos al
-  // modal de pago con la misma orden ya hidratada.
-  const handleChargeFromDetail = () => {
-    if (!detailOrder) return;
-    setPayOrder(detailOrder);
-    setDetailOrder(null);
-  };
-
-  const handleReprintFromDetail = async () => {
-    if (!detailOrder) return;
-    await handleReprintOrder(detailOrder);
-  };
-
-  const handleReprintKitchenFromDetail = async () => {
-    if (!detailOrder) return;
-    await handleReprintKitchen(detailOrder);
-  };
-
-  const handleCancelOrderFromDetail = useCallback(async () => {
-    if (!detailOrder) return;
-    if (!confirm(`¿Estás seguro de ELIMINAR el ticket #${detailOrder.orderNumber || detailOrder.id}? Esta acción no se puede deshacer.`)) return;
-    try {
-      await api.put(`/api/orders/${detailOrder.id}/status`, { status: "CANCELLED" });
-      toast.success("Ticket eliminado");
-      setDetailOrder(null);
-      fetchOpenOrders();
-    } catch (err: any) {
-      toast.error("Error al eliminar: " + (err?.response?.data?.error || err?.message));
-    }
-  }, [detailOrder, fetchOpenOrders]);
-
-  const handleAssignDriverFromDetail = useCallback(() => {
-    if (!detailOrder) return;
-    setAssigningOrder(detailOrder);
-    setDetailOrder(null);
-  }, [detailOrder]);
-
   // Tras desbloquear, /pos/order-type ya es la pantalla canónica de elección
   // de tipo. Reabrir el modal aquí causaba un loop infinito al hidratarse
   // Zustand (B3). Mantenemos solo el botón "Tickets abiertos" del drawer.
@@ -643,14 +557,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     await handleOpenPayment(o);
   };
 
-  const handleChargeFromDetailGuarded = () => {
-    if (isLoanMode) {
-      toast.error("Cobro no permitido en modo préstamo de caja");
-      return;
-    }
-    handleChargeFromDetail();
-  };
-
   if (!mounted) return <div className="h-screen w-full bg-surf-0" />;
 
   return (
@@ -698,69 +604,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         onReprintOrder={handleReprintOrder}
         hideMoney={isLoanMode}
       />
-
-      {detailOrder && (
-        <OrderDetailModal
-          isOpen={!!detailOrder}
-          onClose={() => setDetailOrder(null)}
-          orderNumber={
-            detailOrder.orderNumber ||
-            String(detailOrder.id).slice(-6).toUpperCase()
-          }
-          customerName={
-            detailOrder.customerName || detailOrder.user?.name || null
-          }
-          tableName={
-            detailOrder.table?.name || detailOrder.tableNumber || null
-          }
-          orderType={
-            ORDER_TYPE_LABEL[detailOrder.orderType] || detailOrder.orderType || null
-          }
-          status={detailOrder.status || null}
-          createdAt={detailOrder.createdAt || null}
-          subtotal={Number(detailOrder.subtotal ?? 0)}
-          discount={Number(detailOrder.discount ?? 0)}
-          total={Number(detailOrder.total ?? 0)}
-          items={(detailOrder.items || []).map((i: any) => ({
-            id: String(i.id),
-            name: i.name || i.menuItem?.name || "Producto",
-            quantity: i.quantity ?? 1,
-            subtotal: Number(i.subtotal ?? 0),
-            notes: i.notes || null,
-          }))}
-          onReprint={handleReprintFromDetail}
-          onReprintKitchen={handleReprintKitchenFromDetail}
-          onCharge={isLoanMode ? undefined : handleChargeFromDetailGuarded}
-          onCancelOrder={canEditOpenOrderItems ? handleCancelOrderFromDetail : undefined}
-          onAssignDriver={handleAssignDriverFromDetail}
-          onUpdateItem={
-            canEditOpenOrderItems &&
-            !["DELIVERED", "CANCELLED"].includes(detailOrder.status) &&
-            detailOrder.paymentStatus !== "PAID"
-              ? handleUpdateOrderItem
-              : undefined
-          }
-          onDeleteItem={
-            canEditOpenOrderItems &&
-            !["DELIVERED", "CANCELLED"].includes(detailOrder.status) &&
-            detailOrder.paymentStatus !== "PAID"
-              ? handleDeleteOrderItem
-              : undefined
-          }
-          updatingItemId={updatingItemId}
-          onMergeOrTransfer={
-            canEditOpenOrderItems &&
-            !["DELIVERED", "CANCELLED"].includes(detailOrder.status) &&
-            detailOrder.paymentStatus !== "PAID"
-              ? () => {
-                  setMergeSource(detailOrder);
-                  setDetailOrder(null);
-                }
-              : undefined
-          }
-        />
-
-      )}
 
       {mergeSource && (
         <MergeTableModal
