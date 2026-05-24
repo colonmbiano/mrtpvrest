@@ -2,6 +2,7 @@ const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const { notifyLowStock } = require('../services/notifications.service');
+const { recordCostChange } = require('../services/cost-history.service');
 const router = express.Router();
 
 // ── PROVEEDORES (Nivel Marca) ─────────────────────────────────────────────
@@ -87,27 +88,43 @@ router.post('/ingredients', authenticate, requireTenantAccess, requireAdmin, asy
     } = req.body;
     const factor = parseFloat(conversionFactor) || 1;
     const cost = purchaseCost ? parseFloat(purchaseCost) / factor : parseFloat(req.body.cost) || 0;
-    const ingredient = await prisma.ingredient.create({
-      data: {
-        restaurantId,
-        locationId,
-        name,
-        unit,
-        stock: parseFloat(stock) || 0,
-        minStock: parseFloat(minStock) || 0,
-        cost,
-        purchaseUnit: purchaseUnit || null,
-        purchaseQty: purchaseQty != null ? parseFloat(purchaseQty) : 1,
-        purchaseCost: purchaseCost ? parseFloat(purchaseCost) : null,
-        conversionFactor: factor,
-        supplierId: supplierId || null,
-        typeId: typeId || null,
-        categoryId: categoryId || null,
-        baseUnit: VALID_BASE_UNITS.includes(baseUnit) ? baseUnit : 'PIECE',
-        pesoBruto: pesoBruto != null ? parseFloat(pesoBruto) : null,
-        pesoNeto:  pesoNeto  != null ? parseFloat(pesoNeto)  : null,
-        isPackaging: Boolean(isPackaging),
+    const ingredient = await prisma.$transaction(async (tx) => {
+      const created = await tx.ingredient.create({
+        data: {
+          restaurantId,
+          locationId,
+          name,
+          unit,
+          stock: parseFloat(stock) || 0,
+          minStock: parseFloat(minStock) || 0,
+          cost,
+          purchaseUnit: purchaseUnit || null,
+          purchaseQty: purchaseQty != null ? parseFloat(purchaseQty) : 1,
+          purchaseCost: purchaseCost ? parseFloat(purchaseCost) : null,
+          conversionFactor: factor,
+          supplierId: supplierId || null,
+          typeId: typeId || null,
+          categoryId: categoryId || null,
+          baseUnit: VALID_BASE_UNITS.includes(baseUnit) ? baseUnit : 'PIECE',
+          pesoBruto: pesoBruto != null ? parseFloat(pesoBruto) : null,
+          pesoNeto:  pesoNeto  != null ? parseFloat(pesoNeto)  : null,
+          isPackaging: Boolean(isPackaging),
+        }
+      })
+      if (cost > 0 || (purchaseCost != null && parseFloat(purchaseCost) > 0)) {
+        await tx.ingredientCostHistory.create({
+          data: {
+            ingredientId: created.id,
+            cost,
+            purchaseCost: purchaseCost != null ? parseFloat(purchaseCost) : null,
+            purchaseUnit: purchaseUnit || null,
+            conversionFactor: factor,
+            changedBy: req.user?.id ?? null,
+            reason: 'manual_update',
+          },
+        })
       }
+      return created
     });
     res.json(ingredient);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -140,10 +157,28 @@ router.put('/ingredients/:id', authenticate, requireTenantAccess, requireAdmin, 
       ...(pesoNeto !== undefined && { pesoNeto: pesoNeto === null ? null : parseFloat(pesoNeto) }),
       ...(isPackaging !== undefined && { isPackaging: Boolean(isPackaging) }),
     };
-    const ingredient = await prisma.ingredient.update({
-      where: { id: req.params.id, locationId },
-      data
-    });
+    const ingredient = await prisma.$transaction(async (tx) => {
+      // Registrar cost history ANTES del update — captura el estado anterior
+      // y compara contra el nuevo. Si no hay cambio relevante, no inserta nada.
+      await recordCostChange(
+        tx,
+        req.params.id,
+        {
+          cost: data.cost,
+          purchaseCost: data.purchaseCost,
+          purchaseUnit: data.purchaseUnit,
+          conversionFactor: data.conversionFactor,
+        },
+        {
+          changedBy: req.user?.id ?? null,
+          reason: 'manual_update',
+        },
+      )
+      return tx.ingredient.update({
+        where: { id: req.params.id, locationId },
+        data,
+      })
+    })
     res.json(ingredient);
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Ingrediente no encontrado' });
@@ -185,29 +220,52 @@ router.post('/bulk-confirm', authenticate, requireTenantAccess, requireAdmin, as
       });
 
       if (existing) {
-        return prisma.ingredient.update({
-          where: { id: existing.id },
+        return prisma.$transaction(async (tx) => {
+          await recordCostChange(
+            tx,
+            existing.id,
+            { cost, purchaseCost: parseFloat(totalCost), conversionFactor: factor },
+            { changedBy: req.user?.id ?? null, reason: 'bulk_import' },
+          )
+          return tx.ingredient.update({
+            where: { id: existing.id },
+            data: {
+              cost,
+              purchaseCost: parseFloat(totalCost),
+              conversionFactor: factor,
+              stock: existing.stock + addedStock,
+              ...(unit && { unit }),
+            },
+          })
+        })
+      }
+
+      // En el create no hay history previo, pero queremos el primer datapoint
+      // para que la gráfica de costos arranque desde la primera compra.
+      return prisma.$transaction(async (tx) => {
+        const created = await tx.ingredient.create({
           data: {
+            restaurantId, locationId, name,
+            unit: unit || 'pz',
+            stock: addedStock,
+            minStock: 0,
             cost,
             purchaseCost: parseFloat(totalCost),
             conversionFactor: factor,
-            stock: existing.stock + addedStock,
-            ...(unit && { unit }),
           }
-        });
-      }
-
-      return prisma.ingredient.create({
-        data: {
-          restaurantId, locationId, name,
-          unit: unit || 'pz',
-          stock: addedStock,
-          minStock: 0,
-          cost,
-          purchaseCost: parseFloat(totalCost),
-          conversionFactor: factor,
-        }
-      });
+        })
+        await tx.ingredientCostHistory.create({
+          data: {
+            ingredientId: created.id,
+            cost,
+            purchaseCost: parseFloat(totalCost),
+            conversionFactor: factor,
+            changedBy: req.user?.id ?? null,
+            reason: 'bulk_import',
+          },
+        })
+        return created
+      })
     }));
 
     res.json({ ok: true, count: results.length });

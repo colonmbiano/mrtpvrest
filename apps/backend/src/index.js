@@ -200,7 +200,8 @@ app.use('/api/purchases',    require('./routes/purchases.routes'));
 app.use('/api/transfers',    require('./routes/transfers.routes'));
 app.use('/api/recipes',      require('./routes/recipes.routes'));
 app.use('/api/reports',      require('./routes/expenses-reports.routes'));
-app.use('/api/sales',        require('./routes/sales-import.routes'));
+app.use('/api/sales',        require('./routes/sales-import.routes'))
+app.use('/api/finance',      require('./routes/finance.routes'));
 
 app.get('/health', (req, res) => {
   res.json({

@@ -1179,6 +1179,7 @@ model Ingredient {
   purchaseOrderItems PurchaseOrderItem[]
   physicalCountItems PhysicalCountItem[]
   stockTransferItems StockTransferItem[]
+  costHistory        IngredientCostHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1188,6 +1189,30 @@ model Ingredient {
   @@index([restaurantId, typeId])
   @@index([restaurantId, categoryId])
   @@index([locationId])
+}
+
+// ── IngredientCostHistory ─────────────────────────────────────────────────
+// Registra cada cambio de purchaseCost/cost de un ingrediente. Habilita
+// gráficas de evolución de precio y detección de erosión de margen por
+// alzas de proveedor. Se llena via cost-history.service en la misma tx que
+// la actualización del Ingredient.
+model IngredientCostHistory {
+  id           String     @id @default(cuid())
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  cost             Float   // costo por unidad base
+  purchaseCost     Float?  // costo de la unidad de compra
+  purchaseUnit     String?
+  conversionFactor Float?
+
+  changedBy String? // userId o employeeId que disparó el cambio
+  reason    String? // manual_update | supplier_invoice | voice_agent | bulk_import | purchase_receipt
+
+  createdAt DateTime @default(now())
+
+  @@index([ingredientId, createdAt])
+  @@map("ingredient_cost_history")
 }
 
 model InventoryBatch {
