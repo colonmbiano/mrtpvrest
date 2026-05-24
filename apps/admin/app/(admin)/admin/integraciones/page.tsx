@@ -85,38 +85,38 @@ export default function IntegrationsPage() {
   if (loading) return <div className="p-8 text-white font-syne">Cargando ecosistema de integraciones...</div>;
 
   return (
-    <div className="p-8 bg-[#0a0a0a] min-h-screen text-white font-syne">
-      <div className="mb-12">
-        <h1 className="text-4xl font-black mb-2 uppercase tracking-tighter">Conexiones & APIs</h1>
-        <p className="text-gray-500">Configura tus pasarelas de pago y servicios externos sin código.</p>
+    <div className="p-4 sm:p-8 bg-[#0a0a0a] min-h-screen text-white font-syne">
+      <div className="mb-8 sm:mb-12">
+        <h1 className="text-2xl sm:text-4xl font-black mb-2 uppercase tracking-tighter">Conexiones & APIs</h1>
+        <p className="text-xs sm:text-base text-gray-500">Configura tus pasarelas de pago y servicios externos sin código.</p>
       </div>
 
       <AiKeyCard />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8">
         {Object.keys(types).map((key) => {
           const typeInfo = types[key];
           const form = configForms[key];
 
           return (
-            <div key={key} className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 flex flex-col">
-              <div className="flex justify-between items-start mb-8">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-3xl">
+            <div key={key} className="bg-[#111] border border-gray-800 rounded-3xl sm:rounded-[2.5rem] p-5 sm:p-8 flex flex-col">
+              <div className="flex flex-wrap justify-between items-start gap-3 mb-5 sm:mb-8">
+                <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 bg-white/5 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">
                     {typeInfo.icon}
                   </div>
-                  <div>
-                    <h3 className="text-xl font-bold">{typeInfo.label}</h3>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base sm:text-xl font-bold leading-tight break-words">{typeInfo.label}</h3>
                     <span className={`text-[10px] font-black uppercase tracking-widest ${form.enabled ? 'text-green-500' : 'text-gray-600'}`}>
                       {form.enabled ? '● Conectado' : '○ Desconectado'}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 bg-black/40 p-1 rounded-xl border border-white/5">
+                <div className="flex shrink-0 items-center gap-3 bg-black/40 p-1 rounded-xl border border-white/5">
                   <button
                     onClick={() => setConfigForms({...configForms, [key]: {...form, enabled: !form.enabled}})}
-                    className={`px-4 py-2 rounded-lg text-[10px] font-black transition-all ${form.enabled ? 'bg-green-500 text-black' : 'text-gray-500'}`}
+                    className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black transition-all ${form.enabled ? 'bg-green-500 text-black' : 'text-gray-500'}`}
                   >
                     {form.enabled ? 'ACTIVO' : 'INACTIVO'}
                   </button>
@@ -155,7 +155,7 @@ export default function IntegrationsPage() {
               <button
                 onClick={() => handleSave(key)}
                 disabled={saving === key}
-                className="w-full mt-8 bg-white hover:bg-orange-500 hover:text-white text-black py-4 rounded-2xl font-black text-xs transition-all uppercase tracking-widest shadow-xl active:scale-95"
+                className="w-full mt-6 sm:mt-8 bg-white hover:bg-orange-500 hover:text-white text-black py-3 sm:py-4 rounded-2xl font-black text-xs transition-all uppercase tracking-widest shadow-xl active:scale-95"
               >
                 {saving === key ? "Guardando..." : "Guardar Configuración"}
               </button>
@@ -164,8 +164,8 @@ export default function IntegrationsPage() {
         })}
       </div>
 
-      <div className="mt-12 p-6 bg-orange-500/5 border border-orange-500/10 rounded-3xl text-center">
-        <p className="text-xs text-gray-500">
+      <div className="mt-8 sm:mt-12 p-4 sm:p-6 bg-orange-500/5 border border-orange-500/10 rounded-2xl sm:rounded-3xl text-center">
+        <p className="text-[11px] sm:text-xs text-gray-500 leading-relaxed">
           ⚠️ <span className="font-bold text-gray-400">Seguridad:</span> Tus credenciales se encriptan antes de guardarse. Nunca compartas tus llaves secretas con nadie.
         </p>
       </div>
