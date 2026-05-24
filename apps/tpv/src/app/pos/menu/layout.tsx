@@ -12,6 +12,7 @@ import { useHydrated } from "@/hooks/useClientValue";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
+import { useActiveOrderStore } from "@/store/activeOrderStore";
 import api from "@/lib/api";
 import { apiOrQueue } from "@/lib/offline";
 import {
@@ -365,8 +366,55 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     }
   };
 
+  // Carga un ticket abierto en el sidebar derecho (modo "extender orden").
+  // El SidebarTicket detecta activeOrderId y muestra las rondas anteriores en
+  // gris, dejando lista una "nueva ronda" donde el cajero puede añadir más
+  // productos. Reemplaza el flujo anterior que abría un modal independiente.
   const handleShowDetail = async (o: any) => {
-    setDetailOrder(await fetchFullOrder(o));
+    const full = await fetchFullOrder(o);
+    const ticketStore = useTicketStore.getState();
+    const orderType = (full.orderType || "TAKEOUT") as "DINE_IN" | "TAKEOUT" | "DELIVERY";
+    const tableId = full.table?.id || full.tableId || "";
+    const tableName = full.table?.name || full.tableNumber || "";
+
+    const existingIdx = ticketStore.tickets.findIndex(
+      (t) => String(t.id) === String(full.id)
+    );
+    if (existingIdx >= 0) {
+      ticketStore.setActiveIndex(existingIdx);
+    } else {
+      ticketStore.addTicket(orderType);
+      ticketStore.updateTicket({
+        id: full.id,
+        name: full.customerName || full.user?.name || "",
+        phone: full.customerPhone || "",
+        type: orderType,
+        table: tableName,
+        tableId,
+        tableName,
+        address: full.deliveryAddress || "",
+        numberOfGuests: full.numberOfGuests ?? null,
+        activeSeat: null,
+        items: [],
+        discount: Number(full.discount ?? 0),
+        discountType: "fixed",
+      });
+    }
+
+    useActiveOrderStore.getState().setActiveOrder(
+      full.id,
+      tableId,
+      full.orderNumber ?? null,
+    );
+
+    setShowOrders(false);
+    useUIStore.getState().setIsOrdersOpen(false);
+    setMobileView("ticket");
+
+    const label = full.orderNumber
+      ? `#${full.orderNumber}`
+      : `#${String(full.id).slice(-6).toUpperCase()}`;
+    toast.success(`Ticket ${label} cargado · agrega productos o cobra`);
   };
 
   const handleOpenPayment = async (o: any) => {
