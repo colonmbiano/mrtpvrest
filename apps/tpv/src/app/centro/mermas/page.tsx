@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+
 import { AlertTriangle, Loader2, Plus, Trash2, X } from "lucide-react";
 import api from "@/lib/api";
 
@@ -67,16 +68,22 @@ export default function CentroMermasPage() {
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const { data } = await api.get<WasteRow[]>("/api/inventory/waste");
-      setRows(data);
-    } catch (e: any) {
-      setError(e?.response?.data?.error || e.message);
-    }
-  }, []);
+  // bump → fuerza re-run del effect tras registrar una merma nueva.
+  const [reloadTick, setReloadTick] = useState(0);
+  const load = useCallback(() => setReloadTick((t) => t + 1), []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const { data } = await api.get<WasteRow[]>("/api/inventory/waste");
+        if (!cancel) setRows(data);
+      } catch (e: any) {
+        if (!cancel) setError(e?.response?.data?.error || e.message);
+      }
+    })();
+    return () => { cancel = true; };
+  }, [reloadTick]);
 
   const totalCost = useMemo(() => (rows || []).reduce((s, r) => s + r.costImpact, 0), [rows]);
 

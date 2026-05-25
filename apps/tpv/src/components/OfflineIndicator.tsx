@@ -96,8 +96,13 @@ function PendingDrawer({
   syncInProgress: boolean;
   onClose: () => void;
 }) {
+  // Snapshot al montar el drawer — Date.now() durante render es impuro
+  // (react-compiler). Si el usuario deja el drawer abierto mucho rato los
+  // tiempos se quedarán congelados, lo cual está bien para un panel
+  // efímero que se cierra en segundos.
+  const [openedAt] = useState(() => Date.now());
   const fmtAgo = (ts: number) => {
-    const diff = Date.now() - ts;
+    const diff = openedAt - ts;
     const min = Math.floor(diff / 60000);
     if (min < 1) return "hace unos segundos";
     if (min < 60) return `hace ${min} min`;
