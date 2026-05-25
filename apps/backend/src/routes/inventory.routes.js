@@ -434,4 +434,319 @@ router.get('/recipes/:menuItemId', authenticate, requireTenantAccess, requireAdm
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── SUGGESTED PURCHASE ORDERS ─────────────────────────────────────────────
+// Para cada ingrediente activo:
+//   consumoDiario = Σ(|delta|) últimos 30d en reasons de consumo / 30
+//   diasStock = stock / consumoDiario
+//   leadTime = supplier.leadTimeDays
+// Si diasStock < leadTime + 2 → sugerir compra
+//   qtySugerida = consumoDiario × (leadTime + 7) - stock   (cubrir 7 días extra)
+//   urgencia = diasStock < leadTime ? URGENTE : PRONTO
+// Agrupado por supplierId. Sin supplier asignado → grupo NULL.
+
+const CONSUMO_REASONS = ['SALE', 'WASTE', 'ADJUSTMENT', 'PHYSICAL_COUNT']
+const WINDOW_DAYS = 30
+const SAFETY_DAYS = 7
+
+router.get('/purchase-suggestions', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const locationId = req.headers['x-location-id'] || req.query.locationId
+    const restaurantId = req.restaurantId || req.user?.restaurantId
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' })
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' })
+
+    const from = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000)
+
+    // 1) Ingredientes activos de la sucursal
+    const ingredients = await prisma.ingredient.findMany({
+      where: { locationId, isActive: true },
+      select: {
+        id: true, name: true, stock: true, minStock: true, unit: true, baseUnit: true,
+        cost: true, purchaseCost: true, purchaseQty: true, purchaseUnit: true,
+        conversionFactor: true,
+        supplierId: true,
+        supplier: { select: { id: true, name: true, phone: true, leadTimeDays: true, minOrderAmount: true } },
+      },
+    })
+
+    if (ingredients.length === 0) {
+      return res.json({ suggestions: [], generatedAt: new Date(), windowDays: WINDOW_DAYS })
+    }
+
+    // 2) Consumo últimos 30d agrupado por ingrediente
+    const movs = await prisma.stockMovement.groupBy({
+      by: ['ingredientId'],
+      where: {
+        locationId,
+        reason: { in: CONSUMO_REASONS },
+        createdAt: { gte: from },
+      },
+      _sum: { delta: true },
+    })
+    const consumoByIng = new Map()
+    for (const m of movs) {
+      const consumed = Math.max(0, -Number(m._sum.delta ?? 0))
+      consumoByIng.set(m.ingredientId, consumed)
+    }
+
+    // 3) Calcular sugerencias por ingrediente
+    const suggestions = []
+    for (const ing of ingredients) {
+      const consumed30 = consumoByIng.get(ing.id) || 0
+      const dailyAvg = consumed30 / WINDOW_DAYS
+      if (dailyAvg <= 0) continue // sin consumo histórico, no sugerimos
+
+      const leadTime = ing.supplier?.leadTimeDays ?? 3
+      const daysOfStock = dailyAvg > 0 ? Number(ing.stock) / dailyAvg : Infinity
+
+      // Solo sugerimos si va a quedar por debajo de la cobertura mínima
+      if (daysOfStock >= leadTime + 2) continue
+
+      // qtySugerida en unidad base
+      const targetCoverage = leadTime + SAFETY_DAYS
+      const qtyNeededBase = Math.max(0, dailyAvg * targetCoverage - Number(ing.stock))
+      if (qtyNeededBase <= 0) continue
+
+      // Convertir a unidad de compra si tiene purchaseQty/conversionFactor
+      // Para presentar al usuario en términos de "cajas / bultos" que pide al
+      // proveedor: qtyPurchase = qtyBase / conversionFactor
+      const factor = Number(ing.conversionFactor) || 1
+      const qtyPurchase = factor > 0 ? qtyNeededBase / factor : qtyNeededBase
+      // Redondeamos hacia arriba a entero por unidad de compra
+      const qtyPurchaseRounded = Math.max(1, Math.ceil(qtyPurchase))
+      const unitPrice = Number(ing.purchaseCost ?? (ing.cost * factor)) || 0
+      const lineTotal = qtyPurchaseRounded * unitPrice
+
+      suggestions.push({
+        ingredient: {
+          id: ing.id,
+          name: ing.name,
+          stock: ing.stock,
+          minStock: ing.minStock,
+          unit: ing.unit,
+          baseUnit: ing.baseUnit,
+        },
+        supplier: ing.supplier ? {
+          id: ing.supplier.id,
+          name: ing.supplier.name,
+          phone: ing.supplier.phone,
+          leadTimeDays: ing.supplier.leadTimeDays,
+          minOrderAmount: ing.supplier.minOrderAmount,
+        } : null,
+        dailyAvgConsumption: dailyAvg,
+        daysOfStock: Number.isFinite(daysOfStock) ? daysOfStock : null,
+        leadTimeDays: leadTime,
+        urgency: daysOfStock < leadTime ? 'URGENTE' : 'PRONTO',
+        qtySuggestedBase: qtyNeededBase,
+        qtySuggestedPurchase: qtyPurchaseRounded,
+        purchaseUnit: ing.purchaseUnit,
+        unitPrice,
+        lineTotal,
+      })
+    }
+
+    // 4) Agrupar por supplier
+    const groupsMap = new Map()
+    for (const s of suggestions) {
+      const key = s.supplier?.id ?? '__NO_SUPPLIER__'
+      const group = groupsMap.get(key) || {
+        supplier: s.supplier,
+        items: [],
+        urgentCount: 0,
+        totalAmount: 0,
+      }
+      group.items.push(s)
+      if (s.urgency === 'URGENTE') group.urgentCount++
+      group.totalAmount += s.lineTotal
+      groupsMap.set(key, group)
+    }
+
+    const groups = Array.from(groupsMap.values())
+      // Urgentes primero, después por monto
+      .sort((a, b) => (b.urgentCount - a.urgentCount) || (b.totalAmount - a.totalAmount))
+      // Marcar si pasa el minOrderAmount del proveedor
+      .map(g => ({
+        ...g,
+        belowMinOrder: g.supplier?.minOrderAmount > 0 && g.totalAmount < g.supplier.minOrderAmount,
+      }))
+
+    res.json({
+      suggestions: groups,
+      generatedAt: new Date(),
+      windowDays: WINDOW_DAYS,
+      safetyDays: SAFETY_DAYS,
+    })
+  } catch (e) {
+    console.error('GET /inventory/purchase-suggestions:', e)
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ── MERMAS (WasteLog) ──────────────────────────────────────────────────────
+// Cada merma = 1 StockMovement (reason=WASTE, delta negativo) + 1 WasteLog
+// (motivo tipado, foto opcional). Se descuenta del stock real del ingrediente
+// y queda contabilizada en /api/finance/variance.
+
+const VALID_WASTE_REASONS = new Set([
+  'EXPIRED', 'DAMAGED', 'COURTESY', 'OVERPREP',
+  'CONTAMINATION', 'STAFF_MEAL', 'TEST_KITCHEN', 'OTHER',
+]);
+
+router.get('/waste', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const take = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    const fromQuery = req.query.from ? new Date(String(req.query.from)) : null;
+    const toQuery = req.query.to ? new Date(String(req.query.to)) : null;
+
+    const wasteLogs = await prisma.wasteLog.findMany({
+      where: {
+        stockMovement: {
+          locationId,
+          ...(fromQuery || toQuery
+            ? { createdAt: { ...(fromQuery ? { gte: fromQuery } : {}), ...(toQuery ? { lte: toQuery } : {}) } }
+            : {}),
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take,
+      include: {
+        stockMovement: {
+          select: {
+            id: true,
+            delta: true,
+            unit: true,
+            unitCostAtMove: true,
+            createdAt: true,
+            user: { select: { id: true, name: true } },
+            ingredient: { select: { id: true, name: true, unit: true, cost: true } },
+          },
+        },
+        approvedByUser: { select: { id: true, name: true } },
+      },
+    });
+
+    res.json(wasteLogs.map(w => ({
+      id: w.id,
+      reason: w.reason,
+      reasonDetail: w.reasonDetail,
+      photoUrl: w.photoUrl,
+      createdAt: w.createdAt,
+      quantity: Math.abs(Number(w.stockMovement.delta || 0)),
+      unit: w.stockMovement.unit,
+      ingredient: w.stockMovement.ingredient,
+      // costImpact: cantidad * costo unitario (snapshot del movimiento si existe,
+      // si no, el costo actual del ingrediente).
+      costImpact:
+        Math.abs(Number(w.stockMovement.delta || 0)) *
+        Number(w.stockMovement.unitCostAtMove ?? w.stockMovement.ingredient?.cost ?? 0),
+      registeredBy: w.stockMovement.user,
+      approvedBy: w.approvedByUser,
+    })));
+  } catch (e) {
+    console.error('GET /inventory/waste:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/waste', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const locationId = req.headers['x-location-id'] || req.query.locationId;
+    const userId = req.user?.id || null;
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const { ingredientId, quantity, reason, reasonDetail, photoUrl } = req.body || {};
+    const qty = Number(quantity);
+    const reasonU = String(reason || '').toUpperCase();
+
+    if (!ingredientId) return res.status(400).json({ error: 'ingredientId requerido' });
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return res.status(400).json({ error: 'quantity debe ser un número positivo' });
+    }
+    if (!VALID_WASTE_REASONS.has(reasonU)) {
+      return res.status(400).json({ error: `reason inválido. Valores: ${[...VALID_WASTE_REASONS].join(', ')}` });
+    }
+
+    const ingredient = await prisma.ingredient.findUnique({
+      where: { id: ingredientId },
+      select: { id: true, locationId: true, stock: true, baseUnit: true, cost: true, name: true },
+    });
+    if (!ingredient || ingredient.locationId !== locationId) {
+      return res.status(404).json({ error: 'Ingrediente no encontrado en esta sucursal' });
+    }
+    if (Number(ingredient.stock) - qty < 0) {
+      return res.status(409).json({
+        error: 'Stock insuficiente para registrar la merma',
+        current: ingredient.stock,
+      });
+    }
+
+    const delta = -qty;
+    const newStock = Number(ingredient.stock) + delta;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedIng = await tx.ingredient.update({
+        where: { id: ingredientId },
+        data: { stock: newStock },
+        select: { id: true, name: true, unit: true, stock: true, minStock: true },
+      });
+
+      const movement = await tx.stockMovement.create({
+        data: {
+          ingredientId,
+          locationId,
+          delta,
+          unit: ingredient.baseUnit,
+          reason: 'WASTE',
+          refType: 'wasteLog',
+          // refId se actualiza después de crear el WasteLog para apuntar al log,
+          // pero como WasteLog es la fuente de verdad y se relaciona via
+          // stockMovementId, no es estrictamente necesario.
+          balanceAfter: newStock,
+          unitCostAtMove: Number(ingredient.cost) || null,
+          userId,
+          notes: reasonU,
+        },
+      });
+
+      const wasteLog = await tx.wasteLog.create({
+        data: {
+          stockMovementId: movement.id,
+          reason: reasonU,
+          reasonDetail: reasonDetail ? String(reasonDetail).slice(0, 500) : null,
+          photoUrl: photoUrl || null,
+          approvedByUserId: userId,
+        },
+      });
+
+      // Si registramos el refId del movement para apuntar al wasteLog, lo
+      // hacemos sin romper la 1:1 (wasteLog.stockMovementId sigue intacto).
+      await tx.stockMovement.update({
+        where: { id: movement.id },
+        data: { refId: wasteLog.id },
+      });
+
+      return { movement, wasteLog, ingredient: updatedIng };
+    });
+
+    const lowStock = result.ingredient.minStock > 0 && result.ingredient.stock <= result.ingredient.minStock;
+    if (lowStock) notifyLowStock(result.ingredient, locationId).catch(() => {});
+
+    res.status(201).json({
+      id: result.wasteLog.id,
+      reason: result.wasteLog.reason,
+      quantity: qty,
+      unit: result.movement.unit,
+      ingredient: result.ingredient,
+      costImpact: qty * (Number(ingredient.cost) || 0),
+      lowStock,
+    });
+  } catch (e) {
+    console.error('POST /inventory/waste:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

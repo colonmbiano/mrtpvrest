@@ -1,8 +1,9 @@
 "use client";
-import React from "react";
-import { CloudOff, RefreshCcw, CloudUpload } from "lucide-react";
-import useOfflineStore from "@/store/useOfflineStore";
+import React, { useState } from "react";
+import { CloudOff, RefreshCcw, CloudUpload, X, Clock } from "lucide-react";
+import useOfflineStore, { type OfflineTransaction } from "@/store/useOfflineStore";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { syncOfflineQueue } from "@/lib/offline";
 
 // Chip flotante top-right que aparece SOLO cuando hay algo que comunicar:
 // - Offline → rojo, prioridad máxima.
@@ -10,62 +11,182 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 // - Pendientes en cola → cyan informativo.
 // Cuando todo está OK no renderiza nada, así no roba foco.
 //
+// Click en el chip → drawer con la lista de transacciones pendientes y
+// botón "Forzar sync" (útil al volver online cuando aún no disparó el
+// siguiente tick del background sync de 5s).
+//
 // Posicionado top-right para evitar chocar con el FAB de /pos/menu
 // (bottom-right) y con el sticky CTA de /meseros/[id] (bottom).
 export default function OfflineIndicator() {
   const isOnline = useOnlineStatus();
   const queue = useOfflineStore((s) => s.queue);
   const syncInProgress = useOfflineStore((s) => s.syncInProgress);
-  const unsynced = queue.filter((tx) => !tx.synced).length;
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const unsynced = queue.filter((tx) => !tx.synced);
+  const unsyncedCount = unsynced.length;
 
-  if (isOnline && !syncInProgress && unsynced === 0) return null;
+  if (isOnline && !syncInProgress && unsyncedCount === 0) return null;
 
   const base =
-    "fixed top-3 right-3 z-[60] flex items-center gap-2 px-3.5 py-2 rounded-full border backdrop-blur-md shadow-lg text-[10px] font-black uppercase tracking-[0.2em]";
+    "fixed top-3 right-3 z-[60] flex items-center gap-2 px-3.5 py-2 rounded-full border backdrop-blur-md shadow-lg text-[10px] font-black uppercase tracking-[0.2em] active:scale-95 transition-transform";
 
-  if (!isOnline) {
-    return (
-      <div
-        className={`${base} bg-red-500/15 border-red-500/40 text-red-400 animate-pulse`}
-        role="status"
-        aria-live="polite"
-      >
-        <CloudOff size={14} strokeWidth={2.5} />
-        <span>Sin conexión</span>
-        {unsynced > 0 && (
-          <span className="tabular-nums text-red-300/80">· {unsynced}</span>
-        )}
-      </div>
-    );
-  }
-
-  if (syncInProgress) {
-    return (
-      <div
-        className={`${base} bg-[#ffb84d]/15 border-[#ffb84d]/40 text-[#ffb84d]`}
-        role="status"
-        aria-live="polite"
-      >
-        <RefreshCcw size={14} strokeWidth={2.5} className="animate-spin" />
-        <span>Sincronizando</span>
-        {unsynced > 0 && (
-          <span className="tabular-nums opacity-80">· {unsynced}</span>
-        )}
-      </div>
-    );
-  }
-
-  // Pendientes sin estar sincronizando ahora (ej. acabamos de volver
-  // online y el siguiente tick aún no corre).
-  return (
-    <div
+  const chip = !isOnline ? (
+    <button
+      type="button"
+      onClick={() => unsyncedCount > 0 && setDrawerOpen(true)}
+      className={`${base} bg-red-500/15 border-red-500/40 text-red-400 animate-pulse`}
+      aria-label="Estado offline"
+    >
+      <CloudOff size={14} strokeWidth={2.5} />
+      <span>Sin conexión</span>
+      {unsyncedCount > 0 && (
+        <span className="tabular-nums text-red-300/80">· {unsyncedCount}</span>
+      )}
+    </button>
+  ) : syncInProgress ? (
+    <button
+      type="button"
+      onClick={() => setDrawerOpen(true)}
+      className={`${base} bg-[#ffb84d]/15 border-[#ffb84d]/40 text-[#ffb84d]`}
+      aria-label="Sincronizando"
+    >
+      <RefreshCcw size={14} strokeWidth={2.5} className="animate-spin" />
+      <span>Sincronizando</span>
+      {unsyncedCount > 0 && (
+        <span className="tabular-nums opacity-80">· {unsyncedCount}</span>
+      )}
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={() => setDrawerOpen(true)}
       className={`${base} bg-[#88D66C]/15 border-[#88D66C]/40 text-[#88D66C]`}
-      role="status"
+      aria-label="Pendientes de sincronizar"
     >
       <CloudUpload size={14} strokeWidth={2.5} />
       <span>
-        {unsynced} pendiente{unsynced === 1 ? "" : "s"}
+        {unsyncedCount} pendiente{unsyncedCount === 1 ? "" : "s"}
       </span>
+    </button>
+  );
+
+  return (
+    <>
+      {chip}
+      {drawerOpen && (
+        <PendingDrawer
+          unsynced={unsynced}
+          isOnline={isOnline}
+          syncInProgress={syncInProgress}
+          onClose={() => setDrawerOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function PendingDrawer({
+  unsynced,
+  isOnline,
+  syncInProgress,
+  onClose,
+}: {
+  unsynced: OfflineTransaction[];
+  isOnline: boolean;
+  syncInProgress: boolean;
+  onClose: () => void;
+}) {
+  const fmtAgo = (ts: number) => {
+    const diff = Date.now() - ts;
+    const min = Math.floor(diff / 60000);
+    if (min < 1) return "hace unos segundos";
+    if (min < 60) return `hace ${min} min`;
+    const h = Math.floor(min / 60);
+    return `hace ${h}h`;
+  };
+
+  const typeLabel: Record<string, string> = {
+    order: "Orden",
+    payment: "Pago",
+    adjustment: "Ajuste",
+    override: "Override",
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-end md:items-start md:justify-end p-0 md:p-3"
+      onClick={onClose}
+    >
+      <div
+        className="w-full md:max-w-md max-h-[85vh] overflow-auto rounded-t-3xl md:rounded-3xl bg-[#0e0e11] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.6)] p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-black text-white">Cola offline</h2>
+            <p className="text-[11px] text-white/40 mt-0.5">
+              {unsynced.length} pendiente{unsynced.length === 1 ? "" : "s"} ·{" "}
+              {isOnline ? "Online" : "Sin conexión"}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/5 active:scale-95"
+            aria-label="Cerrar"
+          >
+            <X size={16} className="text-white/60" />
+          </button>
+        </header>
+
+        {unsynced.length === 0 ? (
+          <p className="text-sm text-white/40 text-center py-8">Sin pendientes.</p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-white/5 mb-4">
+            {unsynced.map((tx) => {
+              const path = (tx.data as any)?.path || "";
+              return (
+                <li key={tx.id} className="py-3 flex items-start gap-3">
+                  <Clock size={14} className="text-amber-300 mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold text-white">
+                      {typeLabel[tx.type] || tx.type}
+                      <span className="text-[11px] text-white/40 ml-2 font-normal">
+                        {fmtAgo(tx.timestamp)}
+                      </span>
+                    </div>
+                    {path && (
+                      <div className="text-[11px] text-white/40 truncate font-mono">{path}</div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-full text-[12px] font-bold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10"
+          >
+            Cerrar
+          </button>
+          <button
+            disabled={!isOnline || syncInProgress || unsynced.length === 0}
+            onClick={() => {
+              void syncOfflineQueue();
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-black text-[#0a0a0c] bg-amber-400 active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
+          >
+            {syncInProgress ? (
+              <RefreshCcw size={12} strokeWidth={3} className="animate-spin" />
+            ) : (
+              <CloudUpload size={12} strokeWidth={3} />
+            )}
+            Forzar sync
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

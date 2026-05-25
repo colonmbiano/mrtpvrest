@@ -653,6 +653,32 @@ router.get('/summary', async (req, res) => {
       .sort((a, b) => b.changePct - a.changePct)
       .slice(0, 5)
 
+    // Mermas del mes — suma de costImpact de WasteLogs en los últimos 30 días.
+    // Útil como KPI standalone aunque también esté contabilizado en variance.
+    const wasteMonth = await prisma.wasteLog.findMany({
+      where: {
+        stockMovement: {
+          ingredient: { restaurantId, ...(locationId ? { locationId } : {}) },
+          ...(locationId ? { locationId } : {}),
+          createdAt: { gte: from30 },
+        },
+      },
+      select: {
+        stockMovement: {
+          select: {
+            delta: true,
+            unitCostAtMove: true,
+            ingredient: { select: { cost: true } },
+          },
+        },
+      },
+    })
+    const wasteCost30d = wasteMonth.reduce((sum, w) => {
+      const qty = Math.abs(Number(w.stockMovement.delta || 0))
+      const unitCost = Number(w.stockMovement.unitCostAtMove ?? w.stockMovement.ingredient?.cost ?? 0)
+      return sum + qty * unitCost
+    }, 0)
+
     // Alertas — heurística básica
     const alerts = []
     if (today.foodCostPct > 35) {
@@ -674,6 +700,13 @@ router.get('/summary', async (req, res) => {
         severity: 'info',
         message: `Variance acumulado en ${varianceResp[0].name} — ${Math.round(Math.abs(varianceResp[0].costImpact))} MXN.`,
         cta: { label: 'Ver variance', href: '/centro/variance' },
+      })
+    }
+    if (wasteCost30d > 0) {
+      alerts.push({
+        severity: 'info',
+        message: `Mermas del mes: $${Math.round(wasteCost30d).toLocaleString('es-MX')}.`,
+        cta: { label: 'Ver mermas', href: '/centro/mermas' },
       })
     }
 
@@ -700,6 +733,8 @@ router.get('/summary', async (req, res) => {
         marginPct: last30.marginPct,
         topVarianceIngredients: varianceResp,
         risingCosts,
+        wasteCost: wasteCost30d,
+        wasteCount: wasteMonth.length,
       },
       alerts,
     })

@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   BarChart3, ChefHat, Network, AlertTriangle, TrendingUp,
-  ArrowLeft, LogOut, AlertCircle,
+  ArrowLeft, LogOut, AlertCircle, Trash2, ShoppingCart,
 } from "lucide-react";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
@@ -16,11 +16,13 @@ const FINANCE_ROLES = ["OWNER", "ADMIN"] as const;
 type ModuleStatus = "loading" | "ok" | "missing" | "denied" | "error";
 
 const TABS = [
-  { href: "/centro/resumen",    label: "Resumen",    Icon: BarChart3 },
-  { href: "/centro/platos",     label: "Platos",     Icon: ChefHat },
-  { href: "/centro/ingenieria", label: "Ingeniería", Icon: Network },
-  { href: "/centro/variance",   label: "Variance",   Icon: AlertTriangle },
-  { href: "/centro/costos",     label: "Costos",     Icon: TrendingUp },
+  { href: "/centro/resumen",     label: "Resumen",     Icon: BarChart3 },
+  { href: "/centro/platos",      label: "Platos",      Icon: ChefHat },
+  { href: "/centro/ingenieria",  label: "Ingeniería",  Icon: Network },
+  { href: "/centro/variance",    label: "Variance",    Icon: AlertTriangle },
+  { href: "/centro/costos",      label: "Costos",      Icon: TrendingUp },
+  { href: "/centro/mermas",      label: "Mermas",      Icon: Trash2 },
+  { href: "/centro/sugerencias", label: "Sugerencias", Icon: ShoppingCart },
 ] as const;
 
 export default function CentroLayout({ children }: { children: React.ReactNode }) {
