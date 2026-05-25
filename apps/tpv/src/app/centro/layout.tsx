@@ -71,7 +71,7 @@ export default function CentroLayout({ children }: { children: React.ReactNode }
           return;
         }
         setModuleStatus("ok");
-      } catch (err) {
+      } catch {
         if (!cancelled) setModuleStatus("error");
       }
     })();
