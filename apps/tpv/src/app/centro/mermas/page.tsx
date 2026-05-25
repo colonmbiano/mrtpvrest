@@ -117,7 +117,7 @@ export default function CentroMermasPage() {
         <div className="rounded-2xl bg-white/5 border border-white/10 p-10 text-center text-white/40">
           <Trash2 size={28} className="mx-auto mb-3 opacity-40" />
           <p className="text-sm font-semibold">Sin mermas registradas todavía.</p>
-          <p className="text-[11px] mt-1">Pulsa "Registrar merma" para empezar.</p>
+          <p className="text-[11px] mt-1">Pulsa &quot;Registrar merma&quot; para empezar.</p>
         </div>
       ) : (
         <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
