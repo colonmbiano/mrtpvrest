@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import { useState } from "react";
 import { CloudOff, RefreshCcw, CloudUpload, X, Clock } from "lucide-react";
 import useOfflineStore, { type OfflineTransaction } from "@/store/useOfflineStore";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";

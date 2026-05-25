@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Loader2, Plus, Trash2, X } from "lucide-react";
 import api from "@/lib/api";
 
@@ -67,16 +67,16 @@ export default function CentroMermasPage() {
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const { data } = await api.get<WasteRow[]>("/api/inventory/waste");
       setRows(data);
     } catch (e: any) {
       setError(e?.response?.data?.error || e.message);
     }
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const totalCost = useMemo(() => (rows || []).reduce((s, r) => s + r.costImpact, 0), [rows]);
 
