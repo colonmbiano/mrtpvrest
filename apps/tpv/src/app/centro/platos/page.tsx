@@ -53,7 +53,9 @@ export default function CentroPlatosPage() {
 
   useEffect(() => {
     let cancel = false;
-    setData(null);
+    // Defer el reset para que la actualización de range no dispare
+    // un setState síncrono durante el effect (react-compiler).
+    queueMicrotask(() => { if (!cancel) setData(null); });
     (async () => {
       try {
         const params: Record<string, string> = {};

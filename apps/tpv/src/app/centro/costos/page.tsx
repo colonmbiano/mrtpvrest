@@ -106,9 +106,12 @@ export default function CentroCostosPage() {
 
   // Cuando cambia selectedId, fetch detallado
   useEffect(() => {
-    if (!selectedId) { setDetail(null); return; }
-    setLoadingDetail(true);
     let cancel = false;
+    if (!selectedId) {
+      queueMicrotask(() => { if (!cancel) setDetail(null); });
+      return () => { cancel = true; };
+    }
+    queueMicrotask(() => { if (!cancel) setLoadingDetail(true); });
     (async () => {
       try {
         const { data } = await api.get<CostHistoryResponse>(`/api/finance/cost-history/${selectedId}`);

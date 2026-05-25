@@ -50,7 +50,7 @@ export default function CentroVariancePage() {
 
   useEffect(() => {
     let cancel = false;
-    setData(null);
+    queueMicrotask(() => { if (!cancel) setData(null); });
     (async () => {
       try {
         const r = RANGES.find((x) => x.key === range)!;
