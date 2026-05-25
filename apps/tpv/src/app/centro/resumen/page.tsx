@@ -19,6 +19,8 @@ interface SummaryResponse {
     revenue: number; foodCostPct: number; marginPct: number;
     topVarianceIngredients: Array<{ name: string; costImpact: number }>;
     risingCosts: Array<{ ingredientId: string; name: string; changePct: number }>;
+    wasteCost?: number;
+    wasteCount?: number;
   };
   alerts: Array<{ severity: "info" | "warn" | "err"; message: string; cta?: { label: string; href: string } }>;
 }
@@ -185,10 +187,15 @@ export default function CentroResumenPage() {
         <h3 className="text-[11px] font-black tracking-[0.25em] text-white/50 uppercase mb-3">
           Últimos 30 días
         </h3>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Mini label="Ventas" value={fmtMoney(data.last30d.revenue)} />
           <Mini label="Food cost %" value={fmtPct(data.last30d.foodCostPct)} />
           <Mini label="Margen %" value={fmtPct(data.last30d.marginPct)} />
+          <Mini
+            label={`Mermas${data.last30d.wasteCount ? ` (${data.last30d.wasteCount})` : ""}`}
+            value={fmtMoney(data.last30d.wasteCost ?? 0)}
+            tone="rose"
+          />
         </div>
       </section>
     </div>
@@ -260,11 +267,12 @@ function Panel({ title, cta, children }: { title: string; cta?: { label: string;
   );
 }
 
-function Mini({ label, value }: { label: string; value: string }) {
+function Mini({ label, value, tone }: { label: string; value: string; tone?: "rose" | "emerald" }) {
+  const valueTone = tone === "rose" ? "text-rose-300" : tone === "emerald" ? "text-emerald-300" : "text-white";
   return (
     <div className="rounded-xl bg-white/5 border border-white/10 p-3 flex flex-col gap-1">
       <span className="text-[9px] font-black tracking-[0.22em] text-white/40 uppercase">{label}</span>
-      <span className="text-base font-black text-white tabular-nums">{value}</span>
+      <span className={`text-base font-black ${valueTone} tabular-nums`}>{value}</span>
     </div>
   );
 }

@@ -38,6 +38,10 @@ function isNetworkError(err: any): boolean {
   return false;
 }
 
+function genTxId(type: TransactionType) {
+  return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export async function apiOrQueue<T = any>(
   type: TransactionType,
   method: 'POST' | 'PUT',
@@ -47,6 +51,15 @@ export async function apiOrQueue<T = any>(
 ): Promise<ApiOrQueueResult<T>> {
   const store = useOfflineStore.getState();
 
+  // Generamos el txId arriba para poder usarlo como clientOrderId al armar
+  // el body. Si el server recibe la misma orden 2x (sync corre antes de
+  // markSynced), la dedupe DB-level por clientOrderId garantiza no duplicar.
+  const txId = genTxId(type);
+  const bodyOut =
+    type === 'order' && !data.clientOrderId
+      ? { ...data, clientOrderId: txId }
+      : data;
+
   // Pre-check: si el navegador YA sabe que está offline, evitamos la
   // request y vamos directo a cola (ahorra timeout en pantalla).
   const isOffline =
@@ -54,9 +67,9 @@ export async function apiOrQueue<T = any>(
 
   if (isOffline) {
     const tx = {
-      id: `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: txId,
       type,
-      data: { method, path, body: data },
+      data: { method, path, body: bodyOut },
       timestamp: Date.now(),
       synced: false,
       supervisor: opts?.supervisor,
@@ -68,15 +81,15 @@ export async function apiOrQueue<T = any>(
   try {
     const res =
       method === 'POST'
-        ? await api.post<T>(path, data)
-        : await api.put<T>(path, data);
+        ? await api.post<T>(path, bodyOut)
+        : await api.put<T>(path, bodyOut);
     return { ok: true, queued: false, data: res.data };
   } catch (err: any) {
     if (isNetworkError(err)) {
       const tx = {
-        id: `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: txId,
         type,
-        data: { method, path, body: data },
+        data: { method, path, body: bodyOut },
         timestamp: Date.now(),
         synced: false,
         supervisor: opts?.supervisor,
