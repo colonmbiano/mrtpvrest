@@ -31,6 +31,9 @@ const createOrderSchema = z.object({
   customerName:  z.string().max(120).optional().nullable(),
   customerPhone: z.string().max(40).optional().nullable(),
   status:        z.string().optional(),
+  // Idempotencia DB-level para replays de la cola offline del TPV.
+  // El cliente genera el id antes de mandar (uuid/txId del outbox).
+  clientOrderId: z.string().min(1).max(120).optional().nullable(),
 }).passthrough();
 
 const addItemsSchema = z.object({
