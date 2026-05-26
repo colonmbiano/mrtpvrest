@@ -3,9 +3,10 @@ const express = require('express')
 const router  = express.Router()
 const { prisma } = require('@mrtpvrest/database')
 const { authenticate, requireRole } = require('../middleware/auth.middleware')
+const { invalidateModuleCache } = require('../middleware/module.middleware')
 
 // Módulos válidos en la plataforma
-const VALID_MODULES = ['KIOSK', 'DELIVERY', 'WEBSTORE', 'LOYALTY', 'KDS', 'REPORTS']
+const VALID_MODULES = ['KIOSK', 'DELIVERY', 'WEBSTORE', 'LOYALTY', 'KDS', 'REPORTS', 'FINANCE']
 
 // ─── GET /api/modules — Estado de módulos del tenant ───────────────────────
 router.get('/', authenticate, async (req, res) => {
@@ -98,6 +99,9 @@ router.patch('/:key', authenticate, requireRole('OWNER', 'ADMIN', 'SUPER_ADMIN')
       data:  { enabledModules: updatedModules },
       select: { enabledModules: true },
     })
+
+    // Invalidar cache de requireModule para que el cambio surta efecto inmediato
+    invalidateModuleCache(req.restaurantId)
 
     res.json({ enabledModules: updatedTenant.enabledModules })
   } catch (err) {

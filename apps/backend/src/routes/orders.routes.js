@@ -355,10 +355,28 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
-    const { items, orderType, tableNumber, tableId, numberOfGuests, paymentMethod, subtotal, discount, total, customerName, customerPhone, status } = req.body;
+    const { items, orderType, tableNumber, tableId, numberOfGuests, paymentMethod, subtotal, discount, total, customerName, customerPhone, status, clientOrderId } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'Sin productos' });
 
     const restaurantId = req.user?.restaurantId || req.restaurantId;
+
+    // Idempotencia DB-level para replays de la cola offline. El cliente puede
+    // mandar la misma POST 2x (sync corrió, server respondió, el ack se perdió,
+    // próximo tick reintenta). Devolvemos la orden existente sin crear duplicado.
+    if (clientOrderId) {
+      const existing = await prisma.order.findUnique({
+        where: { clientOrderId: String(clientOrderId) },
+        include: {
+          items: { include: { menuItem: { include: { category: true } }, modifiers: true } },
+          rounds: true,
+          table: true,
+        },
+      });
+      if (existing) {
+        res.setHeader('X-Idempotent-Replay', 'true');
+        return res.json(existing);
+      }
+    }
 
     // Validar tableId si vino: debe pertenecer a esta sucursal y estar activa.
     let table = null;
@@ -501,6 +519,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           locationId: req.locationId,
           shiftId: req.shiftId,
           orderNumber,
+          clientOrderId: clientOrderId ? String(clientOrderId) : null,
           status: status || (isDineInTab ? 'OPEN' : 'CONFIRMED'),
           orderType: orderType || 'TAKEOUT',
           tableNumber: tableNumber || (table ? null : null),
