@@ -10,7 +10,6 @@ import { COMPLEMENT_MODIFIER_PREFIX, VARIANT_MODIFIER_PREFIX } from "@/component
 import { useAuthStore } from "@/store/authStore";
 import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
-import { useUIStore } from "@/store/useUIStore";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { useKitchenConfig } from "@/hooks/usePrinters";
 import { hapticMedium, hapticSuccess, hapticError } from "@/lib/haptics";
@@ -617,13 +616,15 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                 />
               ))}
             </div>
-            <div className="flex items-center gap-3">
-              <div className="h-[1px] flex-1 bg-amber-500/20" />
-              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-500/50">
-                Nueva ronda
-              </span>
-              <div className="h-[1px] flex-1 bg-amber-500/20" />
-            </div>
+            {ticket.items.length > 0 && (
+              <div className="flex items-center gap-3">
+                <div className="h-[1px] flex-1 bg-amber-500/20" />
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-500/50">
+                  Nueva ronda
+                </span>
+                <div className="h-[1px] flex-1 bg-amber-500/20" />
+              </div>
+            )}
           </div>
         )}
 
@@ -693,7 +694,6 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           </div>
         </div>
 
-<<<<<<< Updated upstream
         <div className="relative z-10 flex flex-col gap-2 p-4 pt-3">
           {/* FOOTER CONDICIONAL — flat, alto contraste.
               · Vacío:        [ Tickets Abiertos ]  ·  [ Cobrar ] (off)
