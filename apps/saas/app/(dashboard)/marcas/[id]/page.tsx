@@ -188,11 +188,11 @@ export default function TenantDetailPage() {
         )}
 
         {/* Header card */}
-        <div className="db-card" style={{
+        <div className="db-card brand-header-card" style={{
           marginBottom: 18,
           background: `linear-gradient(135deg, ${avatarColor}14, var(--surface) 60%)`,
         }}>
-          <div className="db-card-body" style={{ display: "flex", alignItems: "center", gap: 18, padding: 20 }}>
+          <div className="db-card-body brand-header-body">
             {tenant.logoUrl ? (
               <img src={tenant.logoUrl} alt="" style={{ width: 64, height: 64, borderRadius: 16, objectFit: "cover" }} />
             ) : (
@@ -238,7 +238,7 @@ export default function TenantDetailPage() {
                 </span>
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div className="brand-header-actions">
               {sub?.status === "TRIAL" && (
                 <button className="db-btn db-btn-orange" onClick={() => changeStatus("ACTIVE")}>
                   <Check size={13} /> Activar
