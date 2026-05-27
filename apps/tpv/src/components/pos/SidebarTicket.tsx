@@ -10,6 +10,7 @@ import { COMPLEMENT_MODIFIER_PREFIX, VARIANT_MODIFIER_PREFIX } from "@/component
 import { useAuthStore } from "@/store/authStore";
 import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
+import { useUIStore } from "@/store/useUIStore";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { useKitchenConfig } from "@/hooks/usePrinters";
 import { hapticMedium, hapticSuccess, hapticError } from "@/lib/haptics";
@@ -497,6 +498,8 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     setShowPayment(true);
   };
 
+  const cartHasItems = ticket.items.length > 0;
+
   return (
     <aside
       className="w-full h-full min-h-0 bg-[#0c0c0e] flex flex-col relative z-20 overflow-hidden"
@@ -690,6 +693,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           </div>
         </div>
 
+<<<<<<< Updated upstream
         <div className="relative z-10 flex flex-col gap-2 p-4 pt-3">
           {/* FOOTER CONDICIONAL — flat, alto contraste.
               · Vacío:        [ Tickets Abiertos ]  ·  [ Cobrar ] (off)
@@ -730,14 +734,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             ) : (
               <button
                 onClick={isShiftOpen ? handleOpenPayment : onOpenShift}
-                disabled={
-                  processing ||
-                  (ticket.items.length === 0 && previousItems.length === 0) ||
-                  (ticket.type === "DELIVERY" &&
-                    isShiftOpen &&
-                    (!ticket.address?.trim() || !ticket.phone?.trim())) ||
-                  (ticket.type === "DINE_IN" && isShiftOpen && !ticket.tableId)
-                }
+                disabled={processing || !cartHasItems}
                 title={
                   ticket.type === "DELIVERY" && isShiftOpen
                     ? !ticket.address?.trim() && !ticket.phone?.trim()

@@ -90,6 +90,7 @@ export default function RecetasPage() {
 
   const [loadingRecipe, setLoadingRecipe] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   useEffect(() => {
@@ -257,6 +258,35 @@ export default function RecetasPage() {
     }
   }
 
+  async function generateWithAI() {
+    if (!selected) return;
+    setGenerating(true);
+    setMsg(null);
+    try {
+      await api.post("/api/ai/generate-recipe", { menuItemId: selected.id });
+      
+      // Recargar ingredientes y subrecetas (pudieron crearse nuevos)
+      const [i, s] = await Promise.all([
+        api.get("/api/inventory/ingredients"),
+        api.get("/api/recipes/subrecipes"),
+      ]);
+      setIngredients(i.data || []);
+      setSubRecipes(s.data || []);
+      
+      // Recargar la receta del item
+      await selectItem(selected);
+      setMsg({ kind: "ok", text: "Receta generada con IA exitosamente." });
+    } catch (err: any) {
+      if (err?.response?.data?.action === 'configure_ai_key') {
+        setMsg({ kind: "err", text: "Requiere configurar API Key de Gemini en configuración." });
+      } else {
+        setMsg({ kind: "err", text: err?.response?.data?.error || "Error al generar receta con IA" });
+      }
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   const filtered = menuItems.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -345,14 +375,28 @@ export default function RecetasPage() {
                     Precio venta: <strong style={{ color: "var(--text)" }}>${selected.price?.toFixed(2)}</strong>
                   </p>
                 </div>
-                <button
-                  onClick={saveRecipe}
-                  disabled={saving}
-                  className="px-5 py-2.5 rounded-xl text-sm font-syne font-black shrink-0"
-                  style={{ background: saving ? "var(--muted)" : "var(--gold)", color: "#000" }}
-                >
-                  {saving ? "Guardando…" : "💾 Guardar"}
-                </button>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={generateWithAI}
+                    disabled={generating || saving}
+                    className="px-4 py-2.5 rounded-xl text-sm font-bold border flex items-center gap-2"
+                    style={{ 
+                      borderColor: "var(--gold)", 
+                      color: "var(--gold)",
+                      opacity: generating || saving ? 0.5 : 1
+                    }}
+                  >
+                    {generating ? "✨ Generando..." : "✨ Autogenerar con IA"}
+                  </button>
+                  <button
+                    onClick={saveRecipe}
+                    disabled={saving || generating}
+                    className="px-5 py-2.5 rounded-xl text-sm font-syne font-black"
+                    style={{ background: saving || generating ? "var(--muted)" : "var(--gold)", color: "#000" }}
+                  >
+                    {saving ? "Guardando…" : "💾 Guardar"}
+                  </button>
+                </div>
               </div>
 
               {/* Message */}

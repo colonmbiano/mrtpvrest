@@ -82,6 +82,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const { palette, mode, setPalette, toggleMode } = useThemeStore();
   const isOrdersOpen = useUIStore((s) => s.isOrdersOpen);
   const activeTicket = useTicketStore((s) => s.getActiveTicket());
+  const updateTicket = useTicketStore((s) => s.updateTicket);
+  const searchQuery = useUIStore((s) => s.searchQuery);
+  const setSearchQuery = useUIStore((s) => s.setSearchQuery);
+  const isOrdersStoreOpen = useUIStore((s) => s.isOrdersOpen);
   const itemCount = activeTicket.items.reduce((acc, i) => acc + i.quantity, 0);
 
   const [openOrders, setOpenOrders] = useState<any[]>([]);
@@ -822,10 +826,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
       {/* LAYOUT PRINCIPAL — Grid 75/25 (col-span-3 catálogo, col-span-1 ticket).
           En móvil se colapsa a una sola columna y el toggle FAB alterna vista. */}
-      <div className="flex-1 min-w-0 min-h-0 md:grid md:grid-cols-4 h-screen w-full bg-[#0a0a0c] overflow-hidden select-none font-outfit flex">
+      <div className="flex h-screen w-full flex-1 select-none overflow-hidden bg-slate-100 font-outfit md:grid md:grid-cols-[minmax(0,7fr)_minmax(340px,3fr)]">
         {/* CATALOGO — col-span-3 (75%) */}
         <div
-          className={`${mobileView === "menu" ? "flex" : "hidden"} md:flex md:col-span-3 relative flex-col min-w-0 min-h-0 bg-[#0a0a0c] overflow-hidden border-r border-white/5 w-full`}
+          className={`${mobileView === "menu" ? "flex" : "hidden"} relative min-h-0 min-w-0 w-full flex-col overflow-hidden border-r border-slate-300 bg-slate-100 md:flex`}
         >
           {/* FASE 6 · BANNER MODO PRÉSTAMO */}
           {isLoanMode && (
@@ -847,9 +851,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
             </div>
           )}
 
-          {/* TOP HEADER compacto Loyverse-style */}
-          <header className="h-14 border-b border-border bg-surface-1 flex items-center px-4 gap-3 shrink-0 z-10 justify-between">
-            <div className="flex items-center gap-3">
+          {/* TOP BAR: busqueda rapida + cuentas frecuentes. */}
+          <header className="z-10 flex h-16 shrink-0 items-center gap-3 border-b border-slate-300 bg-white px-3">
+            <div className="flex shrink-0 items-center gap-2">
               <TopNavDropdown
                 onOpenMenu={() => setShowMenu(true)}
                 onOpenOrders={() => setShowOrders(true)}
@@ -858,20 +862,43 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                 hasOpenOrders={openOrders.length > 0}
                 unreadNotifs={unreadCount}
               />
-              {/* Buscador minimalista en el Header */}
-              <button
-                onClick={() => {
-                  const ui = useUIStore.getState();
-                  ui.setIsSearchOpen(!ui.isSearchOpen);
-                }}
-                className={`w-10 h-10 flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
-                  useUIStore.getState().isSearchOpen
-                    ? "bg-amber-500/10 border-amber-500/50 text-amber-500"
-                    : "bg-surface-2 border-border text-tx-pri hover:border-brand/50"
-                }`}
-              >
-                <Search size={20} />
-              </button>
+            </div>
+
+            <label className="relative min-w-[220px] flex-1">
+              <Search
+                size={22}
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+              />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Buscar producto..."
+                className="h-12 w-full rounded-lg border-2 border-slate-300 bg-slate-50 pl-12 pr-4 text-[17px] font-black text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-950"
+              />
+            </label>
+
+            <div className="hidden shrink-0 gap-2 lg:flex">
+              {[
+                ["Mostrador", "TAKEOUT"],
+                ["Mesa", "DINE_IN"],
+                ["Domicilio", "DELIVERY"],
+              ].map(([label, type]) => {
+                const active = activeTicket.type === type;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => updateTicket({ type: type as typeof activeTicket.type })}
+                    className={`h-12 min-w-[104px] rounded-lg border-2 px-3 text-[12px] font-black uppercase focus:outline-none focus:ring-2 focus:ring-slate-950 ${
+                      active
+                        ? "border-slate-950 bg-slate-950 text-white"
+                        : "border-slate-300 bg-slate-100 text-slate-800 active:bg-slate-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
 
             <div className="flex items-center gap-3 shrink-0">
@@ -896,7 +923,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
         {/* TICKET LATERAL — col-span-1 (25%) */}
         <div
-          className={`${mobileView === "ticket" ? "flex" : "hidden"} md:flex md:col-span-1 min-h-0 relative z-20 w-full`}
+          className={`${mobileView === "ticket" ? "flex" : "hidden"} relative z-20 min-h-0 w-full md:flex`}
         >
           <SidebarTicket onOpenShift={() => setShowShift(true)} isShiftOpen={!!shiftOpen} isLoanMode={isLoanMode} />
         </div>
@@ -915,8 +942,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       {/* MOBILE FAB: TOGGLE MENU/TICKET */}
       <button
         onClick={() => setMobileView(mobileView === "menu" ? "ticket" : "menu")}
-        className="md:hidden fixed bottom-6 right-6 z-50 h-16 w-16 rounded-full text-brand-fg shadow-[0_0_24px_rgba(255,132,0,0.4)] flex items-center justify-center active:scale-95 transition-all"
-        style={{ background: "var(--brand)" }}
+        className="fixed bottom-6 right-6 z-50 flex h-16 w-16 items-center justify-center rounded-lg bg-slate-950 text-white active:bg-slate-700 md:hidden"
         aria-label={mobileView === "menu" ? "Ver ticket" : "Ver menú"}
       >
         {mobileView === "menu" ? (

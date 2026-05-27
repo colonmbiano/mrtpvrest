@@ -276,7 +276,7 @@ model Restaurant {
 
   // FASE COMPRAS/GASTOS · taxonomía de gastos operativos (luz/agua/sueldos/etc).
   // NOTA: el modelo Expense legacy (de Logística) lleva gastos de viaje por
-  // Ride/Vehicle. OperatingExpense is para gastos del local registrados
+  // Ride/Vehicle. OperatingExpense es para gastos del local registrados
   // desde el TPV — son conceptos distintos, dejados explícitamente separados.
   operatingExpenseCategories OperatingExpenseCategory[]
   operatingExpenses          OperatingExpense[]
@@ -1165,6 +1165,7 @@ model Ingredient {
   // ── Flags ──
   isPackaging Boolean @default(false) // empaque para delivery (charolas, vasos)
   isActive    Boolean @default(true)
+  isPendingReview Boolean @default(false) // Creado por IA, pendiente asignar costo
 
   // ── Multi-supplier ──
   supplierId String?
@@ -2082,6 +2083,8 @@ model SubRecipe {
   // Esta SubRecipe usada como item dentro de otra SubRecipe (anidación)
   usedAsNested  SubRecipeItem[] @relation("NestedSubRecipe")
   usedInRecipes RecipeItem[]
+  preparationSteps String[]        @default([])
+  isPendingReview  Boolean         @default(false)
   isActive      Boolean         @default(true)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
@@ -2140,6 +2143,7 @@ model Recipe {
   //   marginDeliv   = (priceDelivery - totalCost - priceDelivery*platformCommissionPct/100) / priceDelivery
 
   items     RecipeItem[]
+  preparationSteps String[] @default([])
   isActive  Boolean      @default(true)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
@@ -2278,7 +2282,7 @@ model PurchaseOrder {
   notes       String?
 
   // Método de pago. Si CASH_DRAWER, también se crea un ShiftExpense
-  // vinculado al cashShiftId activo para que el cierre de caja cuadre.
+  // vinculado al cashShiftId para que el cierre de caja cuadre.
   paymentMethod ExpensePaymentMethod @default(TRANSFER)
   cashShiftId   String?  // turno donde se pagó (solo cuando CASH_DRAWER)
   cashShift     CashShift? @relation("PurchaseOrderCashShift", fields: [cashShiftId], references: [id])
@@ -2448,7 +2452,7 @@ model OperatingExpenseCategory {
 
   name         String       // "LUZ", "AGUA", "SUELDOS", etc.
   icon         String?      // emoji / icon name (UI hint)
-  color        String?      // hex para agrupar en reportes de gasto
+  color        String?      // hex para reportes
   isActive     Boolean      @default(true)
   expenses     OperatingExpense[]
   createdAt    DateTime     @default(now())

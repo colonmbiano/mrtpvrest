@@ -1,4 +1,5 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { prisma } = require('@mrtpvrest/database');
 
 /**
  * Servicio de IA consolidado para Menú e Inventario.
@@ -15,6 +16,34 @@ function getGeminiModel(apiKey, json = false) {
 const ExcelJS = require('exceljs');
 const csv = require('csv-parser');
 const { Readable } = require('stream');
+
+const VALID_RECIPE_UNITS = new Set(['GRAM', 'ML', 'PIECE']);
+
+function extractJsonObject(text) {
+  const cleaned = String(text || '').replace(/```json|```/g, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start >= 0 && end > start) return JSON.parse(cleaned.slice(start, end + 1));
+    throw new Error('La IA no devolvió un JSON válido');
+  }
+}
+
+function normalizeRecipeUnit(unit, fallback = 'GRAM') {
+  const value = String(unit || '').trim().toUpperCase();
+  return VALID_RECIPE_UNITS.has(value) ? value : fallback;
+}
+
+function normalizePositiveNumber(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : fallback;
+}
+
+function normalizeName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
 
 // Helpers para detectar archivos estructurados (no IA).
 const SPREADSHEET_EXTS = ['.xlsx', '.csv'];
@@ -281,4 +310,194 @@ Si no puedes determinar un valor, usa 0. Consolida duplicados en una sola entrad
   }
 }
 
-module.exports = { scanMenuFromImages, scanInventoryFromImages, parseInventoryFile, isSpreadsheet };
+async function generateRecipeForId({ menuItemId, restaurantId, apiKey }) {
+  const menuItem = await prisma.menuItem.findFirst({ where: { id: menuItemId, restaurantId } });
+  if (!menuItem) throw new Error('Platillo no encontrado');
+
+  const model = getGeminiModel(apiKey, true);
+  const prompt = `Actúa como un Chef Ejecutivo y un Ingeniero de Costos experto en Food & Beverage para restaurantes de comida rápida.
+
+Tu tarea es tomar el producto del menú "${menuItem.name}" e inferir de forma automática su "Receta Técnica de Inventario" y sus pasos de preparación rápida para la cocina.
+
+Para los ingredientes que no tengan cantidades explícitas en el menú, infiere proporciones estándar de la industria (ej: 30g de queso, 15g de aderezo, 20g de lechuga, 1 pieza de pan).
+
+Devuelve un JSON puro con este formato exacto:
+{
+  "recetas": [
+    {
+      "producto_id": "${menuItem.id}",
+      "insumos_inventario": [
+        { "nombre_insumo": "Carne Angus", "cantidad": 150, "unidad": "GRAM" }
+      ],
+      "subrecetas_incluidas": [
+        { "nombre_subreceta": "Salsa BBQ Casera", "cantidad": 30, "unidad": "ML" }
+      ],
+      "instrucciones_cocina": [
+        "Sellar carne en plancha a 180°C por 3 minutos por lado."
+      ]
+    }
+  ],
+  "subrecetas_globales": [
+    {
+      "nombre_subreceta": "Salsa BBQ Casera",
+      "rendimiento": { "cantidad": 1000, "unidad": "ML" },
+      "insumos_inventario": [
+        { "nombre_insumo": "Ketchup", "cantidad": 500, "unidad": "ML" },
+        { "nombre_insumo": "Azúcar Mascabado", "cantidad": 200, "unidad": "GRAM" }
+      ],
+      "instrucciones_preparacion": [
+        "Mezclar todos los ingredientes y reducir a fuego lento por 20 mins."
+      ]
+    }
+  ]
+}
+
+Ten en cuenta que las unidades válidas son "GRAM", "ML" y "PIECE". NO uses IDs o slugs, usa solo el campo "nombre_insumo" y "nombre_subreceta".
+Genera las recetas automáticas para el siguiente platillo:
+- Nombre: ${menuItem.name}
+- Descripción: ${menuItem.description || "N/A"}`;
+
+  const result = await model.generateContent([prompt]);
+  const text = result.response.text();
+  const aiResponse = extractJsonObject(text);
+
+  return await prisma.$transaction(async (tx) => {
+    // 1. Crear subrecetas globales
+    const subRecipesGlobales = aiResponse.subrecetas_globales || [];
+    for (const rawSub of subRecipesGlobales) {
+      const subRecipeName = normalizeName(rawSub.nombre_subreceta);
+      if (!subRecipeName) continue;
+      const yieldQty = normalizePositiveNumber(rawSub.rendimiento?.cantidad, 1000);
+      const yieldUnit = normalizeRecipeUnit(rawSub.rendimiento?.unidad);
+
+      let subRecipe = await tx.subRecipe.findFirst({
+        where: { name: { equals: subRecipeName, mode: 'insensitive' }, restaurantId: menuItem.restaurantId }
+      });
+
+      if (!subRecipe) {
+        subRecipe = await tx.subRecipe.create({
+          data: {
+            restaurantId: menuItem.restaurantId,
+            name: subRecipeName,
+            yieldQty,
+            yieldUnit,
+            preparationSteps: rawSub.instrucciones_preparacion || [],
+            isPendingReview: true
+          }
+        });
+
+        for (const rawIng of (rawSub.insumos_inventario || [])) {
+          const ingredientName = normalizeName(rawIng.nombre_insumo);
+          const quantity = normalizePositiveNumber(rawIng.cantidad);
+          const unit = normalizeRecipeUnit(rawIng.unidad);
+          if (!ingredientName || quantity <= 0) continue;
+
+          let ingredient = await tx.ingredient.findFirst({
+            where: { name: { equals: ingredientName, mode: 'insensitive' }, restaurantId: menuItem.restaurantId }
+          });
+
+          if (!ingredient) {
+            ingredient = await tx.ingredient.create({
+              data: {
+                restaurantId: menuItem.restaurantId,
+                name: ingredientName,
+                cost: 0,
+                baseUnit: unit,
+                isPendingReview: true
+              }
+            });
+          }
+
+          await tx.subRecipeItem.create({
+            data: {
+              subRecipeId: subRecipe.id,
+              ingredientId: ingredient.id,
+              qty: quantity,
+              unit
+            }
+          });
+        }
+      }
+    }
+
+    // 2. Armar receta del platillo
+    const recetaData = aiResponse.recetas?.find(r => r.producto_id === menuItem.id) || aiResponse.recetas?.[0];
+    if (!recetaData) throw new Error('La IA no devolvió receta para este platillo');
+
+    // Limpiar items previos de la receta si existen
+    const existingRecipe = await tx.recipe.findUnique({ where: { menuItemId } });
+    if (existingRecipe) {
+      await tx.recipeItem.deleteMany({ where: { recipeId: existingRecipe.id } });
+    }
+
+    const recipe = await tx.recipe.upsert({
+      where: { menuItemId },
+      update: {
+        preparationSteps: recetaData.instrucciones_cocina || []
+      },
+      create: {
+        menuItemId,
+        restaurantId: menuItem.restaurantId,
+        preparationSteps: recetaData.instrucciones_cocina || []
+      }
+    });
+
+    for (const rawIng of (recetaData.insumos_inventario || [])) {
+      const ingredientName = normalizeName(rawIng.nombre_insumo);
+      const quantity = normalizePositiveNumber(rawIng.cantidad);
+      const unit = normalizeRecipeUnit(rawIng.unidad);
+      if (!ingredientName || quantity <= 0) continue;
+
+      let ingredient = await tx.ingredient.findFirst({
+        where: { name: { equals: ingredientName, mode: 'insensitive' }, restaurantId: menuItem.restaurantId }
+      });
+
+      if (!ingredient) {
+        ingredient = await tx.ingredient.create({
+          data: {
+            restaurantId: menuItem.restaurantId,
+            name: ingredientName,
+            cost: 0,
+            baseUnit: unit,
+            isPendingReview: true
+          }
+        });
+      }
+
+      await tx.recipeItem.create({
+        data: {
+          recipeId: recipe.id,
+          ingredientId: ingredient.id,
+          quantity,
+          unit
+        }
+      });
+    }
+
+    for (const rawSub of (recetaData.subrecetas_incluidas || [])) {
+      const subRecipeName = normalizeName(rawSub.nombre_subreceta);
+      const quantity = normalizePositiveNumber(rawSub.cantidad);
+      const unit = normalizeRecipeUnit(rawSub.unidad);
+      if (!subRecipeName || quantity <= 0) continue;
+
+      let subRecipe = await tx.subRecipe.findFirst({
+        where: { name: { equals: subRecipeName, mode: 'insensitive' }, restaurantId: menuItem.restaurantId }
+      });
+
+      if (subRecipe) {
+        await tx.recipeItem.create({
+          data: {
+            recipeId: recipe.id,
+            subRecipeId: subRecipe.id,
+            quantity,
+            unit
+          }
+        });
+      }
+    }
+
+    return recipe;
+  });
+}
+
+module.exports = { scanMenuFromImages, scanInventoryFromImages, parseInventoryFile, isSpreadsheet, generateRecipeForId };
