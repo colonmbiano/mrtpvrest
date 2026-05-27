@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { useHydrated } from "@/hooks/useClientValue";
 import Link from "next/link";
-import { Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, Grid3x3, Palette, Layers, BookOpen, LogOut } from "lucide-react";
+import { Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, Grid3x3, Palette, Layers, BookOpen, LogOut, TrendingUp } from "lucide-react";
+import api from "@/lib/api";
 
 const ADMIN_ROLES = ["OWNER", "ADMIN", "MANAGER"] as const;
 
@@ -16,6 +17,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const logout = useAuthStore(s => s.logout);
   const hydrated = useHydrated();
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const [financeEnabled, setFinanceEnabled] = useState(false);
+
+  // Verificar módulo FINANCE para decidir si mostramos el atajo a /centro.
+  // Si falla, simplemente no mostramos — el TPV admin sigue funcionando.
+  useEffect(() => {
+    if (!hydrated || !employee) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const { data } = await api.get("/api/modules");
+        if (cancel) return;
+        const fin = (data?.modules ?? []).find((m: any) => m.key === "FINANCE");
+        setFinanceEnabled(Boolean(fin?.enabled && fin?.allowedByPlan));
+      } catch {
+        // silent — el módulo no se muestra pero el resto del admin sí
+      }
+    })();
+    return () => { cancel = true; };
+  }, [hydrated, employee]);
 
   // Esperar a que Zustand hidrate desde storage antes de validar el rol.
   // Sin este gate el employee queda null en el primer render, el guard
@@ -55,6 +75,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navItems = [
     { href: "/admin",            label: "Inicio",                icon: BarChart3 },
     { href: "/admin/reportes",   label: "Reportes",              icon: BarChart3 },
+    // Centro financiero (módulo FINANCE) — solo se muestra si el plan lo
+    // incluye Y el tenant lo tiene activado. Cae fuera del /admin route group
+    // a propósito porque tiene su propio layout (sub-tabs internas).
+    ...(financeEnabled ? [{ href: "/centro", label: "Centro $", icon: TrendingUp }] : []),
     { href: "/admin/menu",       label: "Menú",                  icon: BookOpen },
     { href: "/admin/mesas",      label: "Mesas",                 icon: Grid3x3 },
     { href: "/admin/impresoras", label: "Impresoras",            icon: Printer },

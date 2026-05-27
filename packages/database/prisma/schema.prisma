@@ -620,6 +620,12 @@ model Order {
   location     Location?  @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
   orderNumber String   @unique
+  // clientOrderId · idempotencia DB-level para replays de la cola offline
+  // del TPV. El cliente genera el id antes de mandar (uuid o txId del outbox)
+  // y el backend lo usa como llave única: si ya existe, devuelve la orden
+  // existente en vez de crear duplicado. Complementa el Idempotency-Key
+  // in-memory del middleware (que se pierde tras restart).
+  clientOrderId String?  @unique
   userId      String?
   user        User?    @relation(fields: [userId], references: [id])
   addressId   String?
@@ -1104,6 +1110,14 @@ model Supplier {
   isActive    Boolean      @default(true)
   ingredients Ingredient[]
 
+  // ── Suggested PO inputs ──
+  // leadTimeDays  → días entre que se manda la PO y llega el pedido.
+  //                  Se usa para detectar cuándo lanzar la sugerencia.
+  // minOrderAmount → tope mínimo de compra (MXN) que el proveedor exige.
+  //                  Si la sugerencia queda por debajo, mostramos warning.
+  leadTimeDays   Int   @default(3)
+  minOrderAmount Float @default(0)
+
   // FASE INVENTARIO/COSTEO · multi-supplier + órdenes de compra
   ingredientSuppliers IngredientSupplier[]
   purchaseOrders      PurchaseOrder[]
@@ -1180,6 +1194,7 @@ model Ingredient {
   purchaseOrderItems PurchaseOrderItem[]
   physicalCountItems PhysicalCountItem[]
   stockTransferItems StockTransferItem[]
+  costHistory        IngredientCostHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1189,6 +1204,30 @@ model Ingredient {
   @@index([restaurantId, typeId])
   @@index([restaurantId, categoryId])
   @@index([locationId])
+}
+
+// ── IngredientCostHistory ─────────────────────────────────────────────────
+// Registra cada cambio de purchaseCost/cost de un ingrediente. Habilita
+// gráficas de evolución de precio y detección de erosión de margen por
+// alzas de proveedor. Se llena via cost-history.service en la misma tx que
+// la actualización del Ingredient.
+model IngredientCostHistory {
+  id           String     @id @default(cuid())
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  cost             Float   // costo por unidad base
+  purchaseCost     Float?  // costo de la unidad de compra
+  purchaseUnit     String?
+  conversionFactor Float?
+
+  changedBy String? // userId o employeeId que disparó el cambio
+  reason    String? // manual_update | supplier_invoice | voice_agent | bulk_import | purchase_receipt
+
+  createdAt DateTime @default(now())
+
+  @@index([ingredientId, createdAt])
+  @@map("ingredient_cost_history")
 }
 
 model InventoryBatch {
