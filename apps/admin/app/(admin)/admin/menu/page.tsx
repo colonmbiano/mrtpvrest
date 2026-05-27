@@ -509,20 +509,20 @@ export default function MenuPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-syne text-3xl font-black">Menú</h1>
+          <h1 className="font-syne text-2xl sm:text-3xl font-black">Menú</h1>
           <p className="text-xs text-gray-500 uppercase font-bold tracking-widest mt-1">Gestión de artículos y categorías</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 sm:gap-3 flex-wrap">
           {/* BOTÓN IA ESCANEO */}
-          <label className={`px-4 py-2 rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 shadow-lg ${scanState.active ? 'bg-orange-200 text-black cursor-not-allowed' : 'bg-orange-500 text-white shadow-orange-500/20 cursor-pointer'}`}>
-            🤖 Escaneo Inteligente (IA)
+          <label className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg ${scanState.active ? 'bg-orange-200 text-black cursor-not-allowed' : 'bg-orange-500 text-white shadow-orange-500/20 cursor-pointer'}`}>
+            🤖 <span className="whitespace-nowrap">Escaneo IA</span>
             {!scanState.active && <input type="file" accept="image/*" multiple onChange={handleAIScan} className="hidden" />}
           </label>
 
           <button onClick={() => openForm()}
-            className="px-4 py-2 rounded-xl text-sm font-syne font-black bg-white text-black hover:bg-gray-200 transition-all"
+            className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-syne font-black bg-white text-black hover:bg-gray-200 transition-all whitespace-nowrap"
           >
             + Nuevo platillo
           </button>
@@ -604,49 +604,95 @@ export default function MenuPage() {
 
       {/* Lista compacta */}
       {loading ? <div className="text-center py-20">Cargando...</div> : showItemsList && (
-        <div className="rounded-2xl border overflow-hidden" style={{borderColor:"var(--border)"}}>
-          <div className="grid grid-cols-12 gap-3 px-4 py-3 text-xs font-black uppercase tracking-wider border-b"
-            style={{background:"var(--surf2)",borderColor:"var(--border)",color:"var(--muted)"}}>
-            <div className="col-span-1 flex items-center gap-2">
-              <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
-                checked={filtered.length > 0 && selectedIds.size === filtered.length}
-                onChange={toggleSelectAll} />
+        <>
+          {/* Tabla (desktop ≥ md) */}
+          <div className="hidden md:block rounded-2xl border overflow-hidden" style={{borderColor:"var(--border)"}}>
+            <div className="grid grid-cols-12 gap-3 px-4 py-3 text-xs font-black uppercase tracking-wider border-b"
+              style={{background:"var(--surf2)",borderColor:"var(--border)",color:"var(--muted)"}}>
+              <div className="col-span-1 flex items-center gap-2">
+                <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
+                  checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                  onChange={toggleSelectAll} />
+              </div>
+              <span className="col-span-3">Nombre del artículo</span>
+              <span className="col-span-2">Categoría</span>
+              <span className="col-span-1 text-right">Precio</span>
+              <span className="col-span-2 text-center">Estado</span>
+              <span className="col-span-3 text-right">Acciones</span>
             </div>
-            <span className="col-span-3">Nombre del artículo</span>
-            <span className="col-span-2">Categoría</span>
-            <span className="col-span-1 text-right">Precio</span>
-            <span className="col-span-2 text-center">Estado</span>
-            <span className="col-span-3 text-right">Acciones</span>
-          </div>
 
-          {filtered.map((item, idx) => {
-            const sel = selectedIds.has(item.id);
-            return (
-              <div key={item.id} className="grid grid-cols-12 gap-3 px-4 py-3 items-center border-b transition-all"
-                style={{borderColor:"var(--border)", background: sel ? "rgba(245,166,35,0.05)" : idx % 2 === 0 ? "var(--surf)" : "transparent", opacity: item.isAvailable ? 1 : 0.5}}>
-                <div className="col-span-1 flex items-center gap-2">
-                  <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
-                    checked={sel} onChange={() => toggleSelect(item.id)} />
-                  <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:"var(--surf2)"}}>
-                    {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={32} height={32} className="object-cover w-full h-full" /> : <span className="text-sm">🍔</span>}
+            {filtered.map((item, idx) => {
+              const sel = selectedIds.has(item.id);
+              return (
+                <div key={item.id} className="grid grid-cols-12 gap-3 px-4 py-3 items-center border-b transition-all"
+                  style={{borderColor:"var(--border)", background: sel ? "rgba(245,166,35,0.05)" : idx % 2 === 0 ? "var(--surf)" : "transparent", opacity: item.isAvailable ? 1 : 0.5}}>
+                  <div className="col-span-1 flex items-center gap-2">
+                    <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
+                      checked={sel} onChange={() => toggleSelect(item.id)} />
+                    <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:"var(--surf2)"}}>
+                      {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={32} height={32} className="object-cover w-full h-full" /> : <span className="text-sm">🍔</span>}
+                    </div>
+                  </div>
+                  <div className="col-span-3 font-syne font-bold text-sm truncate">{item.name}</div>
+                  <div className="col-span-2 text-xs font-medium text-[var(--muted)]">{item.category?.name || "—"}</div>
+                  <div className="col-span-1 text-right font-syne font-black text-sm text-[var(--gold)]">${item.price}</div>
+                  <div className="col-span-2 flex justify-center">
+                    <button onClick={() => toggleAvailable(item)} className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${item.isAvailable ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
+                      {item.isAvailable ? "● Activo" : "● Inactivo"}
+                    </button>
+                  </div>
+                  <div className="col-span-3 flex gap-2 justify-end">
+                    <button onClick={() => openForm(item)} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{borderColor:"var(--border)",color:"var(--muted)"}}>✏️ Editar</button>
+                    <button onClick={() => deleteItem(item)} className="px-2 py-1.5 rounded-lg text-xs bg-red-500/10 text-red-500 border border-red-500/20">🗑️</button>
                   </div>
                 </div>
-                <div className="col-span-3 font-syne font-bold text-sm truncate">{item.name}</div>
-                <div className="col-span-2 text-xs font-medium text-[var(--muted)]">{item.category?.name || "—"}</div>
-                <div className="col-span-1 text-right font-syne font-black text-sm text-[var(--gold)]">${item.price}</div>
-                <div className="col-span-2 flex justify-center">
-                  <button onClick={() => toggleAvailable(item)} className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${item.isAvailable ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
-                    {item.isAvailable ? "● Activo" : "● Inactivo"}
-                  </button>
-                </div>
-                <div className="col-span-3 flex gap-2 justify-end">
-                  <button onClick={() => openForm(item)} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{borderColor:"var(--border)",color:"var(--muted)"}}>✏️ Editar</button>
-                  <button onClick={() => deleteItem(item)} className="px-2 py-1.5 rounded-lg text-xs bg-red-500/10 text-red-500 border border-red-500/20">🗑️</button>
-                </div>
+              );
+            })}
+          </div>
+
+          {/* Tarjetas (mobile < md) */}
+          <div className="md:hidden flex flex-col gap-2 pb-24">
+            {filtered.length > 0 && (
+              <div className="flex items-center gap-2 px-2 py-2">
+                <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)] w-4 h-4"
+                  checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                  onChange={toggleSelectAll} />
+                <span className="text-xs font-bold uppercase tracking-wider" style={{color:"var(--muted)"}}>
+                  Seleccionar todos
+                </span>
               </div>
-            );
-          })}
-        </div>
+            )}
+            {filtered.map((item) => {
+              const sel = selectedIds.has(item.id);
+              return (
+                <div key={item.id} className="rounded-2xl border p-3 transition-all"
+                  style={{borderColor: sel ? "var(--gold)" : "var(--border)", background: sel ? "rgba(245,166,35,0.05)" : "var(--surf)", opacity: item.isAvailable ? 1 : 0.55}}>
+                  <div className="flex items-start gap-3">
+                    <input type="checkbox" className="mt-1 rounded cursor-pointer accent-[var(--gold)] w-4 h-4 flex-shrink-0"
+                      checked={sel} onChange={() => toggleSelect(item.id)} />
+                    <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:"var(--surf2)"}}>
+                      {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={48} height={48} className="object-cover w-full h-full" /> : <span className="text-xl">🍔</span>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-syne font-black text-sm leading-tight truncate">{item.name}</h3>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-xs font-medium" style={{color:"var(--muted)"}}>{item.category?.name || "—"}</span>
+                        <span className="font-syne font-black text-sm text-[var(--gold)]">${item.price}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-3 flex-wrap">
+                    <button onClick={() => toggleAvailable(item)} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${item.isAvailable ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
+                      {item.isAvailable ? "● Activo" : "● Inactivo"}
+                    </button>
+                    <button onClick={() => openForm(item)} className="ml-auto px-3 py-1.5 rounded-lg text-xs font-bold border" style={{borderColor:"var(--border)",color:"var(--muted)"}}>✏️ Editar</button>
+                    <button onClick={() => deleteItem(item)} className="px-3 py-1.5 rounded-lg text-xs bg-red-500/10 text-red-500 border border-red-500/20">🗑️</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Overlay IA Escaneo */}
@@ -702,32 +748,32 @@ export default function MenuPage() {
 
       {/* Floating Bulk Action Bar */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border"
+        <div className="fixed bottom-3 sm:bottom-6 left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-40 flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2.5 sm:py-3 rounded-2xl shadow-2xl border overflow-x-auto"
           style={{background:"var(--surf)",borderColor:"var(--gold)",boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}>
-          <span className="text-xs font-black uppercase tracking-widest px-2 py-1 rounded-lg" style={{background:"rgba(245,166,35,0.15)",color:"var(--gold)"}}>
-            {selectedIds.size} seleccionado{selectedIds.size !== 1 ? "s" : ""}
+          <span className="text-xs font-black uppercase tracking-widest px-2 py-1 rounded-lg flex-shrink-0" style={{background:"rgba(245,166,35,0.15)",color:"var(--gold)"}}>
+            {selectedIds.size} <span className="hidden sm:inline">seleccionado{selectedIds.size !== 1 ? "s" : ""}</span>
           </span>
           <button onClick={() => bulkToggleAvailable(true)}
-            className="px-3 py-1.5 rounded-xl text-xs font-black text-green-400 border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 transition-all">
+            className="px-3 py-1.5 rounded-xl text-xs font-black text-green-400 border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 transition-all flex-shrink-0">
             ● Activar
           </button>
           <button onClick={() => bulkToggleAvailable(false)}
-            className="px-3 py-1.5 rounded-xl text-xs font-black text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all">
+            className="px-3 py-1.5 rounded-xl text-xs font-black text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all flex-shrink-0">
             ● Desactivar
           </button>
           <select onChange={e => { bulkChangeCategory(e.target.value); e.target.value = ""; }}
             defaultValue=""
-            className="px-3 py-1.5 rounded-xl text-xs font-black outline-none"
+            className="px-3 py-1.5 rounded-xl text-xs font-black outline-none flex-shrink-0 max-w-[140px] sm:max-w-none"
             style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}}>
             <option value="" disabled>Mover a categoría…</option>
             {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <button onClick={bulkDelete}
-            className="px-3 py-1.5 rounded-xl text-xs font-black text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all">
-            🗑️ Eliminar
+            className="px-3 py-1.5 rounded-xl text-xs font-black text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all flex-shrink-0">
+            🗑️ <span className="hidden sm:inline">Eliminar</span>
           </button>
           <button onClick={() => setSelectedIds(new Set())}
-            className="w-7 h-7 rounded-xl flex items-center justify-center text-sm transition-all"
+            className="w-7 h-7 rounded-xl flex items-center justify-center text-sm transition-all flex-shrink-0"
             style={{background:"var(--surf2)",color:"var(--muted)"}}>✕</button>
         </div>
       )}
