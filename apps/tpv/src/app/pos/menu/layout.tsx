@@ -85,7 +85,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const searchQuery = useUIStore((s) => s.searchQuery);
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
-  const isOrdersStoreOpen = useUIStore((s) => s.isOrdersOpen);
   const itemCount = activeTicket.items.reduce((acc, i) => acc + i.quantity, 0);
 
   const [openOrders, setOpenOrders] = useState<any[]>([]);

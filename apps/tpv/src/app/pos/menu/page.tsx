@@ -1,13 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, Search, Settings2, Star, X as XIcon } from "lucide-react";
-import CategoryChipRail, { FAVORITES_CHIP_ID } from "@/components/pos/CategoryChipRail";
-import CategoryGrid from "@/components/pos/CategoryGrid";
+import { ChevronLeft, Search, X, Plus, Minus, Check } from "lucide-react";
 import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
-import ProductCard from "@/components/pos/ProductCard";
-import SeatTabs from "@/components/pos/SeatTabs";
-import CatalogSettingsSheet from "@/components/modals/CatalogSettingsSheet";
-import ProductConfiguratorModal from "@/components/modals/ProductConfiguratorModal";
 import api from "@/lib/api";
 import { hapticLight } from "@/lib/haptics";
 import {
@@ -19,7 +13,6 @@ import {
   type ModifierSelection,
   type Product,
 } from "@/store/ticketStore";
-import { useCatalogPrefs, densityGridClasses } from "@/store/catalogPrefsStore";
 import { useUIStore } from "@/store/useUIStore";
 
 type CategoryLite = {
@@ -37,8 +30,7 @@ const COMPLEMENTS_GROUP_ID = "__complements";
 const VARIANTS_GROUP_ID = "__variants";
 
 export default function CatalogPage() {
-  const { getActiveTicket, addItemToActive } = useTicketStore();
-  const ticket = getActiveTicket();
+  const { addItemToActive } = useTicketStore();
   const searchQuery = useUIStore((s) => s.searchQuery);
 
   const [categories, setCategories] = useState<CategoryLite[]>([]);
@@ -88,7 +80,7 @@ export default function CatalogPage() {
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const product of products) {
-      const cid = product.categoryId || product.category || "";
+      const cid = product.categoryId || getCategoryIdOrName(product.category) || "";
       if (!cid) continue;
       counts[cid] = (counts[cid] || 0) + 1;
     }
@@ -368,7 +360,7 @@ function ProductTile({
         onLongPress();
       }}
       disabled={isDisabled}
-      className={`relative flex min-h-[132px] flex-col rounded-lg border-2 p-3 text-left ${palette} disabled:opacity-45 disabled:grayscale focus:outline-none focus:ring-2 focus:ring-slate-950`}
+      className={`product-card relative flex min-h-[132px] flex-col rounded-lg border-2 p-3 text-left ${palette} disabled:opacity-45 disabled:grayscale focus:outline-none focus:ring-2 focus:ring-slate-950`}
       style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
     >
       {quantity > 0 && (
@@ -781,21 +773,36 @@ function fuzzyScore(value: string, query: string): number {
   return queryIndex === query.length ? score : 0;
 }
 
-function sameCategory(a: string, b: string): boolean {
+function getCategoryIdOrName(category: unknown): string {
+  if (typeof category === "string") return category;
+  if (category && typeof category === "object") {
+    if ("id" in category && typeof (category as any).id === "string") return (category as any).id;
+    if ("name" in category && typeof (category as any).name === "string") return (category as any).name;
+  }
+  return "";
+}
+
+function sameCategory(a: unknown, b: unknown): boolean {
   const left = normalize(a);
   const right = normalize(b);
   return left === right || left.includes(right) || right.includes(left);
 }
 
-function normalize(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
+function normalize(value: unknown): string {
+  if (typeof value === "string") {
+    return value
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+  }
+  if (value && typeof value === "object" && "name" in value) {
+    return normalize((value as { name?: unknown }).name);
+  }
+  return "";
 }
 
-function categoryTone(name: string): "food" | "wings" | "snack" | "drink" | "neutral" {
+function categoryTone(name: unknown): "food" | "wings" | "snack" | "drink" | "neutral" {
   const normalized = normalize(name);
   if (normalized.includes("bebida") || normalized.includes("agua") || normalized.includes("refresco")) return "drink";
   if (normalized.includes("alita") || normalized.includes("boneless")) return "wings";
