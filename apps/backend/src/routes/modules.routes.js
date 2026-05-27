@@ -8,6 +8,33 @@ const { invalidateModuleCache } = require('../middleware/module.middleware')
 // Módulos válidos en la plataforma
 const VALID_MODULES = ['KIOSK', 'DELIVERY', 'WEBSTORE', 'LOYALTY', 'KDS', 'REPORTS', 'FINANCE']
 
+// El campo `plan.allowedModules` ha sido sembrado con dos convenciones distintas
+// a lo largo del tiempo: lowercase canónico (`'kiosk'`, `'client_menu'`,
+// `'loyalty_advanced'`, …) por `seed-tiers.js`, y UPPERCASE (`'KIOSK'`,
+// `'WEBSTORE'`, …) por `seed-modules.js` / `module.middleware.js`. El toggle UI
+// compara contra UPPERCASE así que tenants viejos sembrados con lowercase veían
+// todos los módulos como "Upgrade requerido". Este mapa concilia ambas
+// convenciones sin tocar la data ni las gates existentes.
+const MODULE_ALIASES = {
+  KIOSK:    ['KIOSK', 'kiosk'],
+  DELIVERY: ['DELIVERY', 'delivery'],
+  WEBSTORE: ['WEBSTORE', 'webstore', 'client_menu'],
+  LOYALTY:  ['LOYALTY', 'loyalty', 'loyalty_advanced'],
+  KDS:      ['KDS', 'kds'],
+  REPORTS:  ['REPORTS', 'reports'],
+  FINANCE:  ['FINANCE', 'finance'],
+}
+
+function planAllows(key, allowedByPlan) {
+  const aliases = MODULE_ALIASES[key] || [key]
+  return aliases.some(a => allowedByPlan.includes(a))
+}
+
+function tenantHasEnabled(key, enabledModules) {
+  const aliases = MODULE_ALIASES[key] || [key]
+  return aliases.some(a => enabledModules.includes(a))
+}
+
 // ─── GET /api/modules — Estado de módulos del tenant ───────────────────────
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -31,12 +58,16 @@ router.get('/', authenticate, async (req, res) => {
     const allowedByPlan  = tenant?.subscription?.plan?.allowedModules ?? []
     const enabledModules = tenant?.enabledModules ?? []
 
-    const modules = VALID_MODULES.map(key => ({
-      key,
-      allowedByPlan: allowedByPlan.includes(key),
-      enabled:       enabledModules.includes(key) || allowedByPlan.includes(key),
-      toggledOn:     enabledModules.includes(key),
-    }))
+    const modules = VALID_MODULES.map(key => {
+      const allowed = planAllows(key, allowedByPlan)
+      const toggled = tenantHasEnabled(key, enabledModules)
+      return {
+        key,
+        allowedByPlan: allowed,
+        enabled:       toggled || allowed,
+        toggledOn:     toggled,
+      }
+    })
 
     res.json({
       plan:    tenant?.subscription?.plan ?? null,
@@ -66,14 +97,15 @@ router.patch('/:key', authenticate, requireRole('OWNER', 'ADMIN', 'SUPER_ADMIN')
     })
     if (!restaurant) return res.status(404).json({ error: 'Restaurante no encontrado' })
 
-    // Verificar que el plan permita este módulo antes de activarlo
+    // Verificar que el plan permita este módulo antes de activarlo (acepta
+    // tanto la convención UPPERCASE como los alias lowercase legacy).
     if (enabled) {
       const tenant = await prisma.tenant.findUnique({
         where:  { id: restaurant.tenantId },
         select: { subscription: { select: { plan: { select: { allowedModules: true } } } } },
       })
       const allowedByPlan = tenant?.subscription?.plan?.allowedModules ?? []
-      if (!allowedByPlan.includes(moduleKey)) {
+      if (!planAllows(moduleKey, allowedByPlan)) {
         return res.status(403).json({
           error: `Tu plan actual no incluye el módulo "${moduleKey}". Actualiza tu plan para activarlo.`,
           module: moduleKey,
@@ -86,12 +118,16 @@ router.patch('/:key', authenticate, requireRole('OWNER', 'ADMIN', 'SUPER_ADMIN')
       select: { enabledModules: true },
     })
     const currentModules = currentTenant?.enabledModules ?? []
+    const aliases = MODULE_ALIASES[moduleKey] || [moduleKey]
 
     let updatedModules
     if (enabled) {
-      updatedModules = [...new Set([...currentModules, moduleKey])]
+      // Al activar, escribimos la clave UPPERCASE canónica y limpiamos
+      // cualquier alias previo para evitar duplicados.
+      updatedModules = [...new Set([...currentModules.filter(m => !aliases.includes(m)), moduleKey])]
     } else {
-      updatedModules = currentModules.filter(m => m !== moduleKey)
+      // Al desactivar, removemos cualquier alias presente.
+      updatedModules = currentModules.filter(m => !aliases.includes(m))
     }
 
     const updatedTenant = await prisma.tenant.update({

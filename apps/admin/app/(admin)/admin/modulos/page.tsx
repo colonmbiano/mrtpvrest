@@ -23,6 +23,7 @@ const MODULE_META: Record<string, { label: string; description: string; icon: st
   LOYALTY:  { label: "Programa de puntos",  description: "Acumula y canjea puntos de fidelidad.",                 icon: "⭐" },
   KDS:      { label: "Kitchen Display",     description: "Pantalla de cocina en tiempo real.",                    icon: "📺" },
   REPORTS:  { label: "Reportes avanzados",  description: "Análisis de ventas, turnos e inventario.",              icon: "📊" },
+  FINANCE:  { label: "Centro Financiero",   description: "Costeo, margen, P&L y dashboard ejecutivo.",            icon: "💰" },
 };
 
 export default function ModulosPage() {
