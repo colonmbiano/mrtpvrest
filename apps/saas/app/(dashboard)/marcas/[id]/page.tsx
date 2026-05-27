@@ -9,7 +9,7 @@ import {
 import api from "@/lib/api";
 import TenantModulesToggle from "@/components/TenantModulesToggle";
 
-interface Plan { id: string; name: string; displayName: string; price: number }
+interface Plan { id: string; name: string; displayName: string; price: number; allowedModules?: string[] }
 interface Subscription {
   id: string; status: string; daysLeft: number | null;
   trialEndsAt: string | null; currentPeriodEnd: string | null;
@@ -24,6 +24,7 @@ interface Tenant {
   id: string; name: string; slug: string; ownerEmail: string;
   logoUrl: string | null; onboardingDone: boolean; createdAt: string;
   hasInventory: boolean; hasDelivery: boolean; hasWebStore: boolean;
+  enabledModules: string[];
   whatsappNumber: string | null;
   subscription: Subscription | null;
   restaurants: Restaurant[];
@@ -407,11 +408,13 @@ export default function TenantDetailPage() {
               <TenantModulesToggle
                 tenant={{
                   id: tenant.id,
+                  enabledModules: tenant.enabledModules ?? [],
                   hasInventory: tenant.hasInventory,
                   hasDelivery: tenant.hasDelivery,
                   hasWebStore: tenant.hasWebStore,
                   whatsappNumber: tenant.whatsappNumber,
                 }}
+                plan={sub?.plan ? { displayName: sub.plan.displayName, allowedModules: sub.plan.allowedModules ?? [] } : null}
                 onUpdated={(patch) => setTenant(t => t ? { ...t, ...patch } as Tenant : t)}
                 onError={showToast}
               />
