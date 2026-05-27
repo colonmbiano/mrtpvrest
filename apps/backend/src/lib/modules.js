@@ -35,6 +35,30 @@ const MODULES = {
 
 const ENFORCE = String(process.env.ENFORCE_PLAN_FLAGS || '').toLowerCase() === 'true'
 
+const MODULE_ALIASES = {
+  WEBSTORE: ['client_menu', 'webstore'],
+  CLIENT_MENU: ['client_menu', 'webstore'],
+  LOYALTY: ['loyalty_advanced', 'loyalty'],
+  KIOSK: ['kiosk'],
+  DELIVERY: ['delivery'],
+  KDS: ['kds'],
+  REPORTS: ['reports'],
+  INVENTORY: ['inventory'],
+  FINANCE: ['finance'],
+}
+
+function moduleKeys(moduleKey) {
+  const raw = String(moduleKey || '')
+  const lower = raw.toLowerCase()
+  const aliasKey = raw.toUpperCase()
+  return new Set([lower, raw, ...(MODULE_ALIASES[aliasKey] ?? [])].map((key) => String(key).toLowerCase()))
+}
+
+function includesModule(values, moduleKey) {
+  const wanted = moduleKeys(moduleKey)
+  return (values ?? []).some((value) => wanted.has(String(value).toLowerCase()))
+}
+
 /**
  * Verifica si el restaurante tiene un módulo habilitado.
  * Prioridad: enabledModules del tenant (override manual) → allowedModules del plan.
@@ -56,10 +80,10 @@ async function restaurantHasModule(restaurantId, moduleKey) {
   if (!restaurant?.tenant) return false
 
   const { tenant } = restaurant
-  if (tenant.enabledModules?.includes(moduleKey)) return true
+  if (includesModule(tenant.enabledModules, moduleKey)) return true
 
   const allowedByPlan = tenant.subscription?.plan?.allowedModules ?? []
-  return allowedByPlan.includes(moduleKey)
+  return includesModule(allowedByPlan, moduleKey)
 }
 
 /**

@@ -8,6 +8,7 @@ type ModuleInfo = {
   allowedByPlan: boolean;
   enabled: boolean;
   toggledOn: boolean;
+  managedByPlan?: boolean;
 };
 
 type PlanInfo = {
@@ -115,6 +116,8 @@ export default function ModulosPage() {
           {modules.map((mod) => {
             const meta = MODULE_META[mod.key] ?? { label: mod.key, description: "", icon: "🔧" };
             const isToggling = toggling === mod.key;
+            const isActive = mod.enabled || mod.toggledOn;
+            const isPlanManaged = Boolean(mod.managedByPlan);
             return (
               <div
                 key={mod.key}
@@ -153,16 +156,22 @@ export default function ModulosPage() {
                 {/* Toggle */}
                 <button
                   type="button"
-                  disabled={!mod.allowedByPlan || isToggling}
-                  onClick={() => toggleModule(mod.key, mod.toggledOn)}
+                  disabled={!mod.allowedByPlan || isPlanManaged || isToggling}
+                  onClick={() => toggleModule(mod.key, isActive)}
                   className="relative flex-shrink-0 w-12 h-6 rounded-full transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{
-                    background: mod.toggledOn
+                    background: isActive
                       ? "var(--brand-primary)"
                       : "var(--surf2)",
-                    border: `2px solid ${mod.toggledOn ? "var(--brand-primary)" : "var(--border)"}`,
+                    border: `2px solid ${isActive ? "var(--brand-primary)" : "var(--border)"}`,
                   }}
-                  title={!mod.allowedByPlan ? "No incluido en tu plan" : undefined}
+                  title={
+                    !mod.allowedByPlan
+                      ? "No incluido en tu plan"
+                      : isPlanManaged
+                        ? "Incluido y activo por tu plan"
+                        : undefined
+                  }
                 >
                   {isToggling ? (
                     <span className="absolute inset-0 flex items-center justify-center">
@@ -172,9 +181,9 @@ export default function ModulosPage() {
                     <span
                       className="absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200"
                       style={{
-                        background: mod.toggledOn ? "#fff" : "var(--muted)",
-                        left: mod.toggledOn ? "calc(100% - 1.1rem)" : "0.15rem",
-                        opacity: mod.toggledOn ? 1 : 0.5,
+                        background: isActive ? "#fff" : "var(--muted)",
+                        left: isActive ? "calc(100% - 1.1rem)" : "0.15rem",
+                        opacity: isActive ? 1 : 0.5,
                       }}
                     />
                   )}
