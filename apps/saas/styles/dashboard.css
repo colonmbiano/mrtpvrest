@@ -848,6 +848,118 @@ body {
   }
 }
 
+/* ── Mobile drawer (sidebar móvil) ────────────────────────────────────────
+   Duplicado en dashboard.css además de styled-jsx en MobileTopBar.tsx para
+   garantizar que se apliquen aunque la hidratación scoped de styled-jsx falle
+   (los items se veían inline cuando solo dependíamos del styled-jsx). */
+.mobile-drawer-nav {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0;
+  padding: 10px 10px 14px;
+}
+.mobile-drawer-section {
+  display: block !important;
+  width: 100%;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text3);
+  letter-spacing: 2px;
+  padding: 14px 12px 6px;
+  text-transform: uppercase;
+}
+.mobile-drawer-item {
+  display: flex !important;
+  width: 100%;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text2);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+  text-decoration: none;
+  line-height: 1.2;
+}
+.mobile-drawer-item.active {
+  background: var(--orange-dim);
+  color: var(--orange);
+  border-color: var(--orange-glow);
+}
+.mobile-drawer-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+}
+.mobile-drawer-item.active .mobile-drawer-icon { opacity: 1; }
+
+/* ── Brand detail header card ─────────────────────────────────────────
+   En desktop renderiza horizontal (avatar | info | botones). En móvil se
+   apila vertical para que el texto del slug y los meta-datos no queden
+   atrapados en una columna angosta de ~80px. */
+.brand-header-body {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px;
+}
+.brand-header-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+@media (max-width: 768px) {
+  .brand-header-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 16px;
+  }
+  .brand-header-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .brand-header-actions > * {
+    flex: 1 1 calc(50% - 3px);
+    justify-content: center;
+  }
+}
+
+/* Detail page tabs: scroll horizontal en móvil para que no se desborden. */
+@media (max-width: 768px) {
+  .db-tabs {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .db-tabs::-webkit-scrollbar { display: none; }
+  .db-tab {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+}
+
+/* Padding inferior extra en mobile para que el MobileTabBar (70px + safe area)
+   no se sobreponga al final del contenido. El layout ya tiene pb-[120px] en
+   <main>, pero algunos contenidos sticky/absolute escapan a ese padding. */
+@media (max-width: 768px) {
+  .db-content {
+    padding-bottom: calc(90px + env(safe-area-inset-bottom));
+  }
+}
+
 /* ── Mobile header + drawer helpers (solo móvil) ── */
 .db-mobile-header {
   display: none;
