@@ -105,6 +105,11 @@ export default function MenuPage() {
   const [newCatName, setNewCatName] = useState("");
   const [creatingCat, setCreatingCat] = useState(false);
 
+  // Wipe del menú (zona de peligro)
+  const [showWipe, setShowWipe] = useState(false);
+  const [wipeConfirm, setWipeConfirm] = useState("");
+  const [wiping, setWiping] = useState(false);
+
   async function fetchData() {
     try {
       const [i, c, vt] = await Promise.all([
@@ -407,8 +412,37 @@ export default function MenuPage() {
   }
   async function bulkDelete() {
     if (!confirm(`¿Eliminar ${selectedIds.size} platillo(s)? Esta acción no se puede deshacer.`)) return;
-    await Promise.all([...selectedIds].map(id => api.delete(`/api/menu/items/${id}`).catch(() => {})));
-    setSelectedIds(new Set()); fetchData();
+    const results = await Promise.allSettled(
+      [...selectedIds].map(id => api.delete(`/api/menu/items/${id}`))
+    );
+    const failed = results.filter(r => r.status === 'rejected');
+    setSelectedIds(new Set());
+    fetchData();
+    if (failed.length > 0) {
+      const firstErr: any = (failed[0] as PromiseRejectedResult).reason;
+      const msg = firstErr?.response?.data?.error || firstErr?.message || 'Error desconocido';
+      alert(`No se pudieron eliminar ${failed.length} de ${results.length} platillo(s).\n\nMotivo: ${msg}`);
+    }
+  }
+
+  async function wipeAllMenu() {
+    if (wipeConfirm !== "BORRAR") return;
+    setWiping(true);
+    try {
+      const { data } = await api.post('/api/menu/wipe-all', { confirm: 'BORRAR' });
+      const d = data?.deleted || {};
+      alert(`Menú borrado: ${d.menuItems || 0} platillos, ${d.categories || 0} categorías, ${d.variantTemplates || 0} grupos de variantes, ${d.orderItems || 0} líneas de orden afectadas.`);
+      setShowWipe(false);
+      setWipeConfirm("");
+      setSelectedIds(new Set());
+      setDrillCategoryId(null);
+      setView("categories");
+      fetchData();
+    } catch (e: any) {
+      alert(e.response?.data?.error || 'Error al borrar el menú');
+    } finally {
+      setWiping(false);
+    }
   }
   async function bulkChangeCategory(categoryId: string) {
     if (!categoryId) return;
@@ -1018,6 +1052,64 @@ export default function MenuPage() {
                 <button type="submit" disabled={saving || uploading} className="flex-1 py-2.5 rounded-xl font-syne font-black text-sm" style={{background:"var(--gold)",color:"#000"}}>Guardar</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Zona de peligro — Wipe del menú */}
+      {!loading && (
+        <div className="mt-10 mb-6 rounded-2xl border p-4 sm:p-5" style={{borderColor:"rgba(239,68,68,0.3)",background:"rgba(239,68,68,0.04)"}}>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="font-syne font-black text-sm uppercase tracking-wider" style={{color:"#ef4444"}}>Zona de peligro</h3>
+              <p className="text-xs mt-1" style={{color:"var(--muted)"}}>
+                Borra todo el menú del restaurante (platillos, categorías y grupos de variantes). Útil para volver a generarlo con IA desde cero.
+              </p>
+            </div>
+            <button type="button" onClick={() => { setShowWipe(true); setWipeConfirm(""); }}
+              className="px-4 py-2 rounded-xl text-xs font-black border whitespace-nowrap transition-all"
+              style={{borderColor:"#ef4444",color:"#ef4444",background:"rgba(239,68,68,0.08)"}}>
+              🗑️ Borrar todo el menú
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmación wipe */}
+      {showWipe && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:"rgba(0,0,0,0.8)"}}>
+          <div className="w-full max-w-md rounded-2xl border" style={{background:"var(--surf)",borderColor:"#ef4444"}}>
+            <div className="p-5 sm:p-6 flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">⚠️</span>
+                <h2 className="font-syne font-black text-lg sm:text-xl" style={{color:"#ef4444"}}>Borrar todo el menú</h2>
+              </div>
+              <p className="text-sm" style={{color:"var(--muted)"}}>
+                Esta acción <strong style={{color:"var(--text)"}}>no se puede deshacer</strong>. Se eliminarán todos los platillos, categorías y grupos de variantes de este restaurante, junto con sus referencias en órdenes pasadas.
+              </p>
+              <p className="text-xs" style={{color:"var(--muted)"}}>Escribe <strong style={{color:"#ef4444"}}>BORRAR</strong> para confirmar:</p>
+              <input
+                autoFocus
+                value={wipeConfirm}
+                onChange={e => setWipeConfirm(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && wipeConfirm === 'BORRAR') wipeAllMenu(); if (e.key === 'Escape') setShowWipe(false); }}
+                placeholder="BORRAR"
+                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                style={{background:"var(--surf2)",border:"1.5px solid var(--border)",color:"var(--text)"}}
+              />
+              <div className="flex gap-3 mt-2">
+                <button type="button" onClick={() => { setShowWipe(false); setWipeConfirm(""); }}
+                  className="flex-1 py-2.5 rounded-xl font-bold text-sm border"
+                  style={{borderColor:"var(--border)",color:"var(--muted)"}}>
+                  Cancelar
+                </button>
+                <button type="button" onClick={wipeAllMenu} disabled={wipeConfirm !== "BORRAR" || wiping}
+                  className="flex-1 py-2.5 rounded-xl font-syne font-black text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{background:"#ef4444",color:"#fff"}}>
+                  {wiping ? "Borrando..." : "Borrar todo"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
