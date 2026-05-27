@@ -321,13 +321,48 @@ router.patch('/items/:id/favorite', authenticate, requireTenantAccess, requireAd
 
 router.delete('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    await prisma.menuItem.delete({
-      where: {
-        id: req.params.id,
-        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId
-      }
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const itemId = req.params.id;
+
+    // Borrar primero los OrderItem que referencian este MenuItem (FK sin cascade
+    // para preservar historial en producción). En la operación de eliminar un
+    // platillo desde admin lo sacrificamos a propósito: si el admin lo borra,
+    // se borra también su huella en órdenes pasadas.
+    await prisma.$transaction(async (tx) => {
+      await tx.orderItem.deleteMany({ where: { menuItemId: itemId, menuItem: { restaurantId } } });
+      await tx.menuItem.delete({ where: { id: itemId, restaurantId } });
     });
     res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Wipe completo del menú del tenant ─────────────────────────────────────
+// Endpoint destructivo: nukea menuItems + categorías + variant templates de
+// un tenant. Pensado para tests / reset de demo. Requiere body { confirm: "BORRAR" }
+// para evitar disparos accidentales.
+router.post('/wipe-all', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    if (req.body?.confirm !== 'BORRAR') {
+      return res.status(400).json({ error: 'Confirmación inválida. Envía { confirm: "BORRAR" }.' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1) OrderItems que referencian menuItems de este tenant — necesario por
+      //    la FK sin cascade entre OrderItem.menuItem y MenuItem.
+      const oi = await tx.orderItem.deleteMany({ where: { menuItem: { restaurantId } } });
+      // 2) MenuItems del tenant — cascadea variants, complements, modifier
+      //    groups, modifiers, printerGroups, recipe y recipeItems.
+      const mi = await tx.menuItem.deleteMany({ where: { restaurantId } });
+      // 3) Categorías del tenant.
+      const cat = await tx.category.deleteMany({ where: { restaurantId } });
+      // 4) Plantillas de variantes (cascadea sus options).
+      const vt = await tx.variantTemplate.deleteMany({ where: { restaurantId } });
+      return { orderItems: oi.count, menuItems: mi.count, categories: cat.count, variantTemplates: vt.count };
+    });
+
+    res.json({ ok: true, deleted: result });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
