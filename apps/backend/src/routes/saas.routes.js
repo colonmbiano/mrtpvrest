@@ -1,6 +1,7 @@
 const router  = require('express').Router();
 const prisma   = require('@mrtpvrest/database').prisma;
 const { authenticate, requireSuperAdmin } = require('../middleware/auth.middleware');
+const { invalidateModuleCache } = require('../middleware/module.middleware');
 
 // Tenant de sistema — contenedor del SUPER_ADMIN de plataforma. Se excluye
 // de toda lista / métrica visible a clientes o super-admins del SaaS.
@@ -280,12 +281,32 @@ router.patch('/tenants/:id/status', async (req, res) => {
 });
 
 // PATCH /api/saas/tenants/:id/modules  — togglear módulos SaaS y storefront config
-// Body: { hasInventory?, hasDelivery?, hasWebStore?, whatsappNumber?, themeConfig? }
-// Solo se actualizan los campos enviados (merge parcial).
+// Body: {
+//   enabledModules?: string[],   // fuente de verdad para el toggle UI
+//   hasInventory?, hasDelivery?, hasWebStore?,  // legacy booleans (sync auto)
+//   whatsappNumber?, themeConfig?
+// }
+// Solo se actualizan los campos enviados (merge parcial). Si llega
+// enabledModules, los booleanos legacy se sincronizan automáticamente para
+// que código antiguo que lee tenant.hasDelivery/etc. siga funcionando.
+const WEBSTORE_ALIASES = ['WEBSTORE', 'webstore', 'client_menu'];
+const DELIVERY_ALIASES = ['DELIVERY', 'delivery'];
+const INVENTORY_ALIASES = ['INVENTORY', 'inventory'];
+function hasAny(arr, aliases) { return aliases.some(a => arr.includes(a)); }
+
 router.patch('/tenants/:id/modules', async (req, res) => {
-  const { hasInventory, hasDelivery, hasWebStore, whatsappNumber, themeConfig } = req.body || {};
+  const { enabledModules, hasInventory, hasDelivery, hasWebStore, whatsappNumber, themeConfig } = req.body || {};
 
   const data = {};
+  if (Array.isArray(enabledModules)) {
+    // Normaliza a strings únicos (preserva el casing original del cliente).
+    const cleaned = [...new Set(enabledModules.filter(m => typeof m === 'string' && m.trim()))];
+    data.enabledModules = cleaned;
+    // Sincroniza booleanos legacy para no romper código antiguo.
+    data.hasDelivery  = hasAny(cleaned, DELIVERY_ALIASES);
+    data.hasWebStore  = hasAny(cleaned, WEBSTORE_ALIASES);
+    data.hasInventory = hasAny(cleaned, INVENTORY_ALIASES);
+  }
   if (typeof hasInventory === 'boolean')  data.hasInventory = hasInventory;
   if (typeof hasDelivery  === 'boolean')  data.hasDelivery  = hasDelivery;
   if (typeof hasWebStore  === 'boolean')  data.hasWebStore  = hasWebStore;
@@ -305,8 +326,13 @@ router.patch('/tenants/:id/modules', async (req, res) => {
     const tenant = await prisma.tenant.update({
       where: { id: req.params.id },
       data,
-      include: { subscription: { include: { plan: true } } }
+      include: { subscription: { include: { plan: true } }, restaurants: { select: { id: true } } }
     });
+    // Si tocamos módulos, invalida cache de las gates para cada restaurante
+    // de este tenant — así el cambio surte efecto en <1s en el TPV.
+    if (data.enabledModules !== undefined) {
+      for (const r of tenant.restaurants) invalidateModuleCache(r.id);
+    }
     res.json(tenant);
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Tenant no encontrado' });
