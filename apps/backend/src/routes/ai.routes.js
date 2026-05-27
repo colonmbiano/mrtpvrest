@@ -1,5 +1,5 @@
 const express = require('express');
-const { scanMenuFromImages, scanInventoryFromImages, parseInventoryFile, isSpreadsheet } = require('../services/ai.service');
+const { scanMenuFromImages, scanInventoryFromImages, parseInventoryFile, isSpreadsheet, generateRecipeForId } = require('../services/ai.service');
 const { runAssistant } = require('../services/assistant.service');
 const { runVoiceAgent } = require('../services/voice-agent.service');
 const { resolveGeminiKey } = require('../services/ai-key.service');
@@ -163,6 +163,26 @@ router.post('/agent', authenticate, requireTenantAccess, async (req, res) => {
     if (error?.code) return sendAiError(res, error);
     console.error('Error en AI Agent Route:', error.message);
     res.status(500).json({ error: 'Hubo un problema al procesar la instrucción de voz.' });
+  }
+});
+
+// POST /api/ai/generate-recipe — Autogenera receta para un platillo
+router.post('/generate-recipe', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    
+    const { menuItemId } = req.body;
+    if (!menuItemId) return res.status(400).json({ error: 'menuItemId requerido' });
+
+    const { apiKey } = resolveGeminiKey();
+
+    const recipe = await generateRecipeForId({ menuItemId, restaurantId, apiKey });
+    res.status(201).json(recipe);
+  } catch (error) {
+    if (error?.code) return sendAiError(res, error);
+    console.error('Error en generate-recipe:', error);
+    res.status(500).json({ error: error.message || 'Error al generar la receta con IA' });
   }
 });
 
