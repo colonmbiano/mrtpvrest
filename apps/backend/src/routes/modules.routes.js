@@ -6,7 +6,34 @@ const { authenticate, requireRole } = require('../middleware/auth.middleware')
 const { invalidateModuleCache } = require('../middleware/module.middleware')
 
 // Módulos válidos en la plataforma
-const VALID_MODULES = ['KIOSK', 'DELIVERY', 'WEBSTORE', 'LOYALTY', 'KDS', 'REPORTS', 'FINANCE']
+const MODULE_DEFINITIONS = {
+  KIOSK:    { planKeys: ['kiosk'] },
+  DELIVERY: { planKeys: ['delivery'] },
+  WEBSTORE: { planKeys: ['client_menu', 'webstore'] },
+  LOYALTY:  { planKeys: ['loyalty_advanced', 'loyalty'], planFlag: 'hasLoyalty' },
+  KDS:      { planKeys: ['kds'], planFlag: 'hasKDS' },
+  REPORTS:  { planKeys: ['reports'], planFlag: 'hasReports' },
+  FINANCE:  { planKeys: ['finance'] },
+}
+const VALID_MODULES = Object.keys(MODULE_DEFINITIONS)
+
+function normalizeList(values) {
+  return new Set((values ?? []).map((value) => String(value).toLowerCase()))
+}
+
+function hasAnyModule(values, planKeys) {
+  const normalized = normalizeList(values)
+  return planKeys.some((key) => normalized.has(String(key).toLowerCase()))
+}
+
+function isAllowedByPlan(plan, definition) {
+  return hasAnyModule(plan?.allowedModules, definition.planKeys) || Boolean(plan?.[definition.planFlag])
+}
+
+function isEnabledForTenant(tenant, definition, allowedByPlan) {
+  // Hoy no existe disabledModules: si el plan lo incluye, queda activo por default.
+  return allowedByPlan || hasAnyModule(tenant?.enabledModules, definition.planKeys)
+}
 
 // ─── GET /api/modules — Estado de módulos del tenant ───────────────────────
 router.get('/', authenticate, async (req, res) => {
@@ -23,23 +50,39 @@ router.get('/', authenticate, async (req, res) => {
       select: {
         enabledModules: true,
         subscription: {
-          select: { plan: { select: { name: true, displayName: true, allowedModules: true } } },
+          select: {
+            plan: {
+              select: {
+                name: true,
+                displayName: true,
+                allowedModules: true,
+                hasKDS: true,
+                hasLoyalty: true,
+                hasReports: true,
+              },
+            },
+          },
         },
       },
     })
 
-    const allowedByPlan  = tenant?.subscription?.plan?.allowedModules ?? []
-    const enabledModules = tenant?.enabledModules ?? []
+    const plan = tenant?.subscription?.plan ?? null
+    const modules = VALID_MODULES.map(key => {
+      const definition = MODULE_DEFINITIONS[key]
+      const allowedByPlan = isAllowedByPlan(plan, definition)
+      const enabled = isEnabledForTenant(tenant, definition, allowedByPlan)
 
-    const modules = VALID_MODULES.map(key => ({
-      key,
-      allowedByPlan: allowedByPlan.includes(key),
-      enabled:       enabledModules.includes(key) || allowedByPlan.includes(key),
-      toggledOn:     enabledModules.includes(key),
-    }))
+      return {
+        key,
+        allowedByPlan,
+        enabled,
+        toggledOn: enabled,
+        managedByPlan: allowedByPlan,
+      }
+    })
 
     res.json({
-      plan:    tenant?.subscription?.plan ?? null,
+      plan,
       modules,
     })
   } catch (err) {
@@ -55,11 +98,12 @@ router.patch('/:key', authenticate, requireRole('OWNER', 'ADMIN', 'SUPER_ADMIN')
     const { key }    = req.params
     const { enabled } = req.body
 
-    if (!VALID_MODULES.includes(key.toUpperCase())) {
+    const moduleKey = key.toUpperCase()
+    const definition = MODULE_DEFINITIONS[moduleKey]
+
+    if (!definition) {
       return res.status(400).json({ error: `Módulo inválido: ${key}` })
     }
-    const moduleKey = key.toUpperCase()
-
     const restaurant = await prisma.restaurant.findUnique({
       where:  { id: req.restaurantId },
       select: { tenantId: true },
@@ -70,10 +114,23 @@ router.patch('/:key', authenticate, requireRole('OWNER', 'ADMIN', 'SUPER_ADMIN')
     if (enabled) {
       const tenant = await prisma.tenant.findUnique({
         where:  { id: restaurant.tenantId },
-        select: { subscription: { select: { plan: { select: { allowedModules: true } } } } },
+        select: {
+          subscription: {
+            select: {
+              plan: {
+                select: {
+                  allowedModules: true,
+                  hasKDS: true,
+                  hasLoyalty: true,
+                  hasReports: true,
+                },
+              },
+            },
+          },
+        },
       })
-      const allowedByPlan = tenant?.subscription?.plan?.allowedModules ?? []
-      if (!allowedByPlan.includes(moduleKey)) {
+      const allowedByPlan = isAllowedByPlan(tenant?.subscription?.plan, definition)
+      if (!allowedByPlan) {
         return res.status(403).json({
           error: `Tu plan actual no incluye el módulo "${moduleKey}". Actualiza tu plan para activarlo.`,
           module: moduleKey,
@@ -86,12 +143,19 @@ router.patch('/:key', authenticate, requireRole('OWNER', 'ADMIN', 'SUPER_ADMIN')
       select: { enabledModules: true },
     })
     const currentModules = currentTenant?.enabledModules ?? []
+    const moduleAliases = new Set([
+      moduleKey,
+      moduleKey.toLowerCase(),
+      ...definition.planKeys,
+      ...definition.planKeys.map((key) => String(key).toUpperCase()),
+    ])
+    const canonicalKey = definition.planKeys[0]
 
     let updatedModules
     if (enabled) {
-      updatedModules = [...new Set([...currentModules, moduleKey])]
+      updatedModules = [...new Set([...currentModules, canonicalKey])]
     } else {
-      updatedModules = currentModules.filter(m => m !== moduleKey)
+      updatedModules = currentModules.filter(m => !moduleAliases.has(String(m)))
     }
 
     const updatedTenant = await prisma.tenant.update({

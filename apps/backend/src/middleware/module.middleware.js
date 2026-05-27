@@ -14,6 +14,29 @@ const { prisma } = require('@mrtpvrest/database')
 const CACHE_TTL_MS = 60 * 1000
 const cache = new Map() // restaurantId -> { at, allowed: Set<string>, enabled: Set<string> }
 
+const MODULE_ALIASES = {
+  WEBSTORE: ['client_menu', 'webstore'],
+  CLIENT_MENU: ['client_menu', 'webstore'],
+  LOYALTY: ['loyalty_advanced', 'loyalty'],
+  KIOSK: ['kiosk'],
+  DELIVERY: ['delivery'],
+  KDS: ['kds'],
+  REPORTS: ['reports'],
+  INVENTORY: ['inventory'],
+  FINANCE: ['finance'],
+}
+
+function aliasesFor(moduleKey) {
+  const raw = String(moduleKey || '')
+  const aliasKey = raw.toUpperCase()
+  return [raw, raw.toLowerCase(), ...(MODULE_ALIASES[aliasKey] ?? [])]
+    .map((key) => String(key).toLowerCase())
+}
+
+function setHasAny(set, moduleKey) {
+  return aliasesFor(moduleKey).some((key) => set.has(key))
+}
+
 async function loadModulesForRestaurant(restaurantId) {
   const cached = cache.get(restaurantId)
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached
@@ -33,8 +56,8 @@ async function loadModulesForRestaurant(restaurantId) {
     },
   })
 
-  const allowed = new Set(restaurant?.tenant?.subscription?.plan?.allowedModules ?? [])
-  const enabled = new Set(restaurant?.tenant?.enabledModules ?? [])
+  const allowed = new Set((restaurant?.tenant?.subscription?.plan?.allowedModules ?? []).map((key) => String(key).toLowerCase()))
+  const enabled = new Set((restaurant?.tenant?.enabledModules ?? []).map((key) => String(key).toLowerCase()))
 
   const entry = { at: Date.now(), allowed, enabled }
   cache.set(restaurantId, entry)
@@ -59,14 +82,14 @@ function requireModule(moduleKey) {
       }
 
       const { allowed, enabled } = await loadModulesForRestaurant(restaurantId)
-      if (!allowed.has(key)) {
+      if (!setHasAny(allowed, key)) {
         return res.status(403).json({
           error: 'MODULE_NOT_IN_PLAN',
           module: key,
           message: `El módulo "${key}" no está incluido en tu plan actual.`,
         })
       }
-      if (!enabled.has(key)) {
+      if (!setHasAny(enabled, key) && !setHasAny(allowed, key)) {
         return res.status(403).json({
           error: 'MODULE_NOT_ENABLED',
           module: key,
