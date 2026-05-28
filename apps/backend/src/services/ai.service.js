@@ -235,6 +235,12 @@ Aplica estrictamente estas reglas de negocio y diseño UX para un TPV de alta ve
 2. CONSOLIDACIÓN DE PRODUCTOS BASE: No dupliques platos. Si un producto cambia de precio por tamaño (chico/grande), gramaje (150g/250g) o tipo de carne base, conviértelo en un único producto y pon esas variaciones en el arreglo "base_options".
 3. EXTRACCIÓN DE MODIFICADORES GLOBALES: Los ingredientes extra (ej. tocino, queso extra, piña) o los sabores elegibles (ej. salsas de alitas, sabores de aguas) que apliquen a múltiples productos NO van en las variantes del producto. Extráelos en un bloque independiente llamado "global_modifiers" y vincula el producto usando su ID en "allowed_modifiers".
 4. REGLA UX 80/20: Analiza el menú e infiere cuáles son los productos estrella o de alta rotación (los más comunes). A esos productos, asígnales "pantalla_principal": true. Al resto, asígnales false.
+5. CATEGORÍAS GEMELAS (MISMO RELLENO, DISTINTA PREPARACIÓN): Si detectas dos categorías que comparten exactamente el mismo conjunto de proteínas/rellenos/sabores y solo cambian por estilo de preparación y precio (ejemplos típicos: "Burritos" vs "Gringas", "Alitas" vs "Boneless", "Tacos" vs "Volcanes", "Tortas" vs "Quesadillas"), aplica TODAS estas sub-reglas:
+   a) Crea las DOS categorías por separado (NO las consolides en un solo producto con base_options).
+   b) En cada categoría, crea un producto independiente por cada relleno/sabor con su precio específico.
+   c) Usa la MISMA raíz de id para emparejar los productos hermanos: por ejemplo "burrito-pastor" y "gringa-pastor", "alitas-bbq" y "boneless-bbq". El prefijo siempre debe ser el slug de la categoría.
+   d) Ambos productos gemelos deben referenciar el MISMO grupo de modificadores en "allowed_modifiers" (no dupliques el grupo en global_modifiers; reutilízalo).
+   e) Si el menú define los extras o aderezos en una sola tabla compartida (ej. "Add Aderezo Extra +$15" que aplica para Alitas Y Boneless), ese grupo debe quedar en global_modifiers UNA sola vez y vincularse desde ambos lados.
 
 Devuelve un JSON puro (sin markdown, sin bloques \`\`\`json, solo el objeto) con este formato exacto:
 
