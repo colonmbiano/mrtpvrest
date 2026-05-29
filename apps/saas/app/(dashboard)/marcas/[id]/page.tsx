@@ -7,9 +7,15 @@ import {
   Check, Clock, Download, Trash2, Pause, Play, DollarSign, TrendingUp, Zap, HeartPulse,
 } from "lucide-react";
 import api from "@/lib/api";
-import TenantModulesToggle from "@/components/TenantModulesToggle";
+import TenantModulesPanel from "@/components/TenantModulesPanel";
 
-interface Plan { id: string; name: string; displayName: string; price: number }
+interface Plan {
+  id: string; name: string; displayName: string; price: number;
+  allowedModules?: string[] | null;
+  hasKDS?: boolean | null;
+  hasLoyalty?: boolean | null;
+  hasReports?: boolean | null;
+}
 interface Subscription {
   id: string; status: string; daysLeft: number | null;
   trialEndsAt: string | null; currentPeriodEnd: string | null;
@@ -24,6 +30,7 @@ interface Tenant {
   id: string; name: string; slug: string; ownerEmail: string;
   logoUrl: string | null; onboardingDone: boolean; createdAt: string;
   hasInventory: boolean; hasDelivery: boolean; hasWebStore: boolean;
+  enabledModules: string[];
   whatsappNumber: string | null;
   subscription: Subscription | null;
   restaurants: Restaurant[];
@@ -400,18 +407,20 @@ export default function TenantDetailPage() {
         {tab === "modules" && (
           <div className="db-card">
             <div className="db-card-header">
-              <div className="db-card-title">Módulos activos</div>
+              <div className="db-card-title">Módulos de la marca</div>
               <div className="db-card-sub">El TPV los lee al boot · cambios optimistas</div>
             </div>
             <div className="db-card-body">
-              <TenantModulesToggle
+              <TenantModulesPanel
                 tenant={{
                   id: tenant.id,
                   hasInventory: tenant.hasInventory,
                   hasDelivery: tenant.hasDelivery,
                   hasWebStore: tenant.hasWebStore,
+                  enabledModules: tenant.enabledModules ?? [],
                   whatsappNumber: tenant.whatsappNumber,
                 }}
+                plan={sub?.plan ?? null}
                 onUpdated={(patch) => setTenant(t => t ? { ...t, ...patch } as Tenant : t)}
                 onError={showToast}
               />
