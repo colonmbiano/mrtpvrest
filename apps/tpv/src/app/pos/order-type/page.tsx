@@ -7,6 +7,7 @@ import OrderTypeSelector from "@/components/pos/OrderTypeSelector";
 import type { ExtendedOrderType } from "@/components/pos/OrderTypeSelector";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import GuestCountModal from "@/components/pos/GuestCountModal";
+import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useAuthStore } from "@/store/authStore";
@@ -35,6 +36,7 @@ export default function OrderTypePage() {
   const [picked, setPicked]             = useState<TableLite | null>(null);
   const [askingGuests, setAskingGuests] = useState(false);
   const [askingAdminPin, setAskingAdminPin] = useState(false);
+  const [showExpenses, setShowExpenses] = useState(false);
 
   const handlePickType = (type: ExtendedOrderType) => {
     if (type === "DINE_IN") {
@@ -123,6 +125,7 @@ export default function OrderTypePage() {
 
   const goOpenTickets = () => router.push("/pos/menu?orders=1");
   const goShiftClose  = () => router.push("/cierre");
+  const goExpenses    = () => setShowExpenses(true);
   const goConfig     = () => {
     // Solo ADMIN/OWNER entran sin segundo factor. Cualquier otro rol
     // (MANAGER, CASHIER, WAITER…) debe ingresar un PIN admin para
@@ -142,6 +145,7 @@ export default function OrderTypePage() {
         onClose={handleLogout}
         onOpenTickets={goOpenTickets}
         onShiftClose={goShiftClose}
+        onExpenses={goExpenses}
         onConfig={goConfig}
       />
 
@@ -165,6 +169,11 @@ export default function OrderTypePage() {
           });
         }}
         onConfirm={handleConfirmGuests}
+      />
+
+      <PurchasesExpensesModal
+        isOpen={showExpenses}
+        onClose={() => setShowExpenses(false)}
       />
 
       <AdminPinGuardModal
