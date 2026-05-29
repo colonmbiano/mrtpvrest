@@ -35,6 +35,7 @@ import MergeTableModal from "@/components/pos/MergeTableModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import DeliveryAssignModal from "@/components/admin/DeliveryAssignModal";
+import ChangeOrderTypeModal from "@/components/pos/ChangeOrderTypeModal";
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
   DINE_IN: "MESA",
@@ -96,6 +97,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [mergeSource, setMergeSource] = useState<any | null>(null);
   const [assigningOrder, setAssigningOrder] = useState<any | null>(null);
+  const [changeTypeOrder, setChangeTypeOrder] = useState<any | null>(null);
 
   const {
     isLocked,
@@ -519,6 +521,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     setDetailOrder(null);
   }, [detailOrder]);
 
+  const handleChangeTypeFromDetail = useCallback(() => {
+    if (!detailOrder) return;
+    setChangeTypeOrder(detailOrder);
+    setDetailOrder(null);
+  }, [detailOrder]);
+
   // Tras desbloquear, /pos/order-type ya es la pantalla canónica de elección
   // de tipo. Reabrir el modal aquí causaba un loop infinito al hidratarse
   // Zustand (B3). Mantenemos solo el botón "Tickets abiertos" del drawer.
@@ -713,6 +721,13 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                 }
               : undefined
           }
+          onChangeType={
+            canEditOpenOrderItems &&
+            !["DELIVERED", "CANCELLED"].includes(detailOrder.status) &&
+            detailOrder.paymentStatus !== "PAID"
+              ? handleChangeTypeFromDetail
+              : undefined
+          }
         />
 
       )}
@@ -784,6 +799,20 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                 typeof it.seatNumber === "number" ? it.seatNumber : null,
             };
           })}
+        />
+      )}
+
+      {changeTypeOrder && (
+        <ChangeOrderTypeModal
+          isOpen={!!changeTypeOrder}
+          onClose={() => setChangeTypeOrder(null)}
+          orderId={changeTypeOrder.id}
+          currentType={changeTypeOrder.orderType ?? null}
+          currentAddress={changeTypeOrder.deliveryAddress ?? null}
+          onSuccess={() => {
+            setChangeTypeOrder(null);
+            fetchOpenOrders();
+          }}
         />
       )}
 

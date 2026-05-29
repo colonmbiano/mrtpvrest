@@ -497,7 +497,12 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     setShowPayment(true);
   };
 
-  const cartHasItems = ticket.items.length > 0;
+  // Cobrable cuando hay items en la ronda nueva (ticket.items) O en el
+  // historial cargado de una orden abierta (previousItems). Antes el botón
+  // "Cobrar" solo miraba ticket.items, así que al cargar un ticket abierto
+  // (ronda nueva vacía) quedaba deshabilitado y el tap no abría nada — aunque
+  // handleOpenPayment sí permitía cobrar previousItems. Ahora ambos coinciden.
+  const cartHasItems = ticket.items.length > 0 || previousItems.length > 0;
 
   return (
     <aside
