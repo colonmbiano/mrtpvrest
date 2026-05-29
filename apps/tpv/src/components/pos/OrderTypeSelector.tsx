@@ -4,6 +4,7 @@ import React, { useEffect } from "react";
 import {
   ArrowRight,
   Bike,
+  Coins,
   LogOut,
   Receipt,
   Settings,
@@ -22,6 +23,7 @@ interface OrderTypeSelectorProps {
   onClose?: () => void;
   onOpenTickets?: () => void;
   onShiftClose?: () => void;
+  onExpenses?: () => void;
   onConfig?: () => void;
 }
 
@@ -81,6 +83,13 @@ const SHORTCUTS = [
     action: "shift" as const,
   },
   {
+    label: "Gastos y compras",
+    description: "Registrar salidas de caja",
+    icon: Coins,
+    tone: "text-rose-300 bg-rose-500/10 border-rose-500/20",
+    action: "expenses" as const,
+  },
+  {
     label: "Panel central",
     description: "Ajustes y operación",
     icon: Settings,
@@ -94,6 +103,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onClose,
   onOpenTickets,
   onShiftClose,
+  onExpenses,
   onConfig,
 }) => {
   useEffect(() => {
@@ -120,12 +130,14 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   const runShortcut = (action: (typeof SHORTCUTS)[number]["action"]) => {
     if (action === "tickets") onOpenTickets?.();
     if (action === "shift") onShiftClose?.();
+    if (action === "expenses") onExpenses?.();
     if (action === "config") onConfig?.();
   };
 
   const enabledShortcuts = SHORTCUTS.filter((shortcut) => {
     if (shortcut.action === "tickets") return Boolean(onOpenTickets);
     if (shortcut.action === "shift") return Boolean(onShiftClose);
+    if (shortcut.action === "expenses") return Boolean(onExpenses);
     if (shortcut.action === "config") return Boolean(onConfig);
     return false;
   });
