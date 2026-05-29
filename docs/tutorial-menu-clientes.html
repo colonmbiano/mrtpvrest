@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Guía visual: Registrar menú en MRTPVREST</title>
+  <style>
+    :root {
+      --ink: #171717;
+      --muted: #626262;
+      --line: #dedede;
+      --paper: #ffffff;
+      --soft: #f6f4f0;
+      --gold: #f5a623;
+      --orange: #ff5c35;
+      --green: #1f9d68;
+      --blue: #2563eb;
+      --shadow: 0 18px 50px rgba(0, 0, 0, .08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--soft);
+    }
+
+    .hero {
+      min-height: 72vh;
+      display: grid;
+      align-items: end;
+      padding: 48px 20px 34px;
+      background:
+        linear-gradient(180deg, rgba(0,0,0,.12), rgba(0,0,0,.76)),
+        url("https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1800&q=80") center/cover;
+      color: white;
+    }
+
+    .wrap {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding: 8px 12px;
+      border: 1px solid rgba(255,255,255,.35);
+      border-radius: 999px;
+      background: rgba(255,255,255,.12);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 790px;
+      margin: 0;
+      font-size: clamp(42px, 7vw, 86px);
+      line-height: .92;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      max-width: 650px;
+      margin: 22px 0 0;
+      color: rgba(255,255,255,.86);
+      font-size: clamp(18px, 2.2vw, 24px);
+      line-height: 1.35;
+    }
+
+    main {
+      padding: 26px 20px 64px;
+    }
+
+    .quick-path {
+      margin-top: -72px;
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    .quick-path div {
+      min-height: 110px;
+      padding: 16px;
+      border-radius: 8px;
+      background: #fafafa;
+      border: 1px solid #ececec;
+    }
+
+    .num {
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      margin-bottom: 10px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: white;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .quick-path strong,
+    .step strong {
+      display: block;
+      font-size: 15px;
+      line-height: 1.16;
+    }
+
+    .quick-path span,
+    .step p,
+    .note,
+    .checklist li {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .section-title {
+      margin: 56px 0 18px;
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .section-title p {
+      max-width: 390px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .step {
+      min-height: 260px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: 0 10px 26px rgba(0,0,0,.04);
+    }
+
+    .icon {
+      display: grid;
+      place-items: center;
+      width: 52px;
+      height: 52px;
+      margin-bottom: 18px;
+      border-radius: 8px;
+      font-size: 26px;
+      background: #f2f2f2;
+    }
+
+    .step h3 {
+      margin: 0 0 10px;
+      font-size: 22px;
+      line-height: 1.08;
+    }
+
+    .screen {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #e8e8e8;
+      background: #fbfbfb;
+      font-size: 13px;
+      color: #333;
+    }
+
+    .screen-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid #ececec;
+    }
+
+    .screen-row:last-child { border-bottom: 0; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: #fff3dc;
+      color: #7a4b00;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .panel {
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: 0 10px 26px rgba(0,0,0,.04);
+    }
+
+    .panel h3 {
+      margin: 0 0 14px;
+      font-size: 24px;
+    }
+
+    .example {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .example div {
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #ececec;
+      background: #fbfbfb;
+    }
+
+    .example b { display: block; margin-bottom: 4px; }
+
+    .checklist {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .checklist li {
+      padding: 14px 14px 14px 44px;
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+    }
+
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 14px;
+      top: 13px;
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--green);
+      color: white;
+      font-weight: 900;
+      font-size: 13px;
+    }
+
+    .warning {
+      margin-top: 18px;
+      padding: 18px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 92, 53, .32);
+      background: rgba(255, 92, 53, .08);
+      color: #7c2815;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    .ai-band {
+      display: grid;
+      grid-template-columns: .9fr 1.1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .ai-card {
+      padding: 28px;
+      border-radius: 8px;
+      background: #171717;
+      color: white;
+      box-shadow: var(--shadow);
+    }
+
+    .ai-card h3 {
+      margin: 0 0 12px;
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1;
+    }
+
+    .ai-card p {
+      margin: 0;
+      color: rgba(255,255,255,.74);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .ai-steps {
+      display: grid;
+      gap: 10px;
+    }
+
+    .ai-steps div {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+    }
+
+    .ai-steps b {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 16px;
+    }
+
+    .ai-steps span:last-child {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .footer-card {
+      margin-top: 28px;
+      padding: 28px;
+      border-radius: 8px;
+      background: #171717;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .footer-card h2 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.05;
+    }
+
+    .footer-card p {
+      max-width: 470px;
+      margin: 0;
+      color: rgba(255,255,255,.72);
+      line-height: 1.45;
+    }
+
+    @media (max-width: 900px) {
+      .quick-path,
+      .steps,
+      .flow,
+      .checklist,
+      .ai-band {
+        grid-template-columns: 1fr;
+      }
+
+      .quick-path {
+        margin-top: -42px;
+      }
+
+      .section-title {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .footer-card {
+        align-items: start;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <div class="eyebrow">MRTPVREST · Guía para clientes</div>
+      <h1>Cómo registrar tu menú paso a paso</h1>
+      <p>Aprende a cargar categorías, platillos, variantes y extras para que tu menú aparezca correctamente en el TPV y en la tienda online.</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+      <section class="quick-path" aria-label="Ruta rápida">
+        <div>
+          <span class="num">1</span>
+          <strong>Entrar al panel</strong>
+          <span>Inicia sesión como administrador.</span>
+        </div>
+        <div>
+          <span class="num">2</span>
+          <strong>Crear categorías</strong>
+          <span>Ordena tu menú por secciones.</span>
+        </div>
+        <div>
+          <span class="num">3</span>
+          <strong>Crear variantes</strong>
+          <span>Tamaños, sabores o presentaciones.</span>
+        </div>
+        <div>
+          <span class="num">4</span>
+          <strong>Agregar platillos</strong>
+          <span>Nombre, precio, foto y categoría.</span>
+        </div>
+        <div>
+          <span class="num">5</span>
+          <strong>Probar en TPV</strong>
+          <span>Confirma que se venda bien.</span>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-title">
+          <h2>Flujo Visual</h2>
+          <p>Este es el orden recomendado para registrar un menú completo sin perder información importante.</p>
+        </div>
+
+        <div class="steps">
+          <article class="step">
+            <div class="icon">🔐</div>
+            <h3>1. Entra al panel</h3>
+            <p>Abre MRTPVREST, inicia sesión y confirma que estás trabajando en la marca o sucursal correcta.</p>
+            <div class="screen">
+              <div class="screen-row"><span>Ruta</span><b>Admin</b></div>
+              <div class="screen-row"><span>Usuario</span><b>Administrador</b></div>
+              <div class="screen-row"><span>Revisar</span><b>Marca / sucursal</b></div>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="icon">📂</div>
+            <h3>2. Crea categorías</h3>
+            <p>Las categorías son las secciones del menú. Ayudan a encontrar rápido los productos.</p>
+            <div class="screen">
+              <div class="screen-row"><span>Ir a</span><b>Menú → Categorías</b></div>
+              <div class="screen-row"><span>Botón</span><b>+ Nueva categoría</b></div>
+              <div class="screen-row"><span>Ejemplo</span><b>Bebidas</b></div>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="icon">⚙️</div>
+            <h3>3. Crea variantes</h3>
+            <p>Usa variantes cuando un producto tenga tamaños, sabores o presentaciones.</p>
+            <div class="screen">
+              <div class="screen-row"><span>Ir a</span><b>Menú → Variantes</b></div>
+              <div class="screen-row"><span>Grupo</span><b>Sabores</b></div>
+              <div class="screen-row"><span>Opciones</span><b>BBQ, Búfalo, Mango</b></div>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="icon">🍔</div>
+            <h3>4. Agrega platillos</h3>
+            <p>Registra cada producto con nombre, precio base, categoría e imagen.</p>
+            <div class="screen">
+              <div class="screen-row"><span>Ir a</span><b>Menú → Platillos</b></div>
+              <div class="screen-row"><span>Botón</span><b>+ Nuevo platillo</b></div>
+              <div class="screen-row"><span>Guardar</span><b>Al terminar</b></div>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="icon">➕</div>
+            <h3>5. Agrega extras</h3>
+            <p>Los modificadores sirven para queso extra, sin cebolla, tipo de leche o instrucciones similares.</p>
+            <div class="screen">
+              <div class="screen-row"><span>Primero</span><b>Guarda el platillo</b></div>
+              <div class="screen-row"><span>Luego</span><b>Editar platillo</b></div>
+              <div class="screen-row"><span>Sección</span><b>Modificadores</b></div>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="icon">✅</div>
+            <h3>6. Haz una prueba</h3>
+            <p>Abre el TPV, busca el producto, elige sus opciones y confirma que el precio final sea correcto.</p>
+            <div class="screen">
+              <div class="screen-row"><span>Revisar</span><b>TPV</b></div>
+              <div class="screen-row"><span>Probar</span><b>Agregar al ticket</b></div>
+              <div class="screen-row"><span>Confirmar</span><b>Precio y opciones</b></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-title">
+          <h2>Ejemplos Claros</h2>
+          <p>Estos ejemplos ayudan a decidir cuándo usar categoría, variante o modificador.</p>
+        </div>
+
+        <div class="flow">
+          <article class="panel">
+            <h3>Ejemplo 1: Boneless</h3>
+            <p class="note">Útil cuando el cliente debe elegir uno o varios sabores.</p>
+            <div class="example">
+              <div><b>Categoría</b>Boneless</div>
+              <div><b>Platillo</b>Boneless 500g · $120</div>
+              <div><b>Variantes</b>BBQ, Mango Habanero, Búfalo</div>
+              <div><b>Modificadores</b>Extra aderezo +$15</div>
+            </div>
+          </article>
+
+          <article class="panel">
+            <h3>Ejemplo 2: Hamburguesa</h3>
+            <p class="note">Útil cuando el producto tiene extras y preferencias.</p>
+            <div class="example">
+              <div><b>Categoría</b>Hamburguesas</div>
+              <div><b>Platillo</b>Hamburguesa Clásica · $89</div>
+              <div><b>Modificadores</b>Queso extra +$15, Tocino +$20</div>
+              <div><b>Sin ingredientes</b>Sin cebolla, sin tomate, sin picante</div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-title">
+          <h2>Menú Con IA</h2>
+          <p>Si ya tienes una foto, captura o PDF visual del menú, MRTPVREST puede ayudarte a cargarlo más rápido con inteligencia artificial.</p>
+        </div>
+
+        <div class="ai-band">
+          <article class="ai-card">
+            <div class="eyebrow">Carga rápida</div>
+            <h3>Escaneo IA</h3>
+            <p>La IA lee imágenes del menú, detecta categorías, productos, precios y algunas opciones. Después solo revisas y corriges antes de vender.</p>
+          </article>
+
+          <div class="ai-steps">
+            <div>
+              <span class="num">1</span>
+              <span><b>Abre Menú → Platillos</b>Entra al panel de administración y busca el botón <b>Escaneo IA</b>.</span>
+            </div>
+            <div>
+              <span class="num">2</span>
+              <span><b>Sube las imágenes</b>Usa fotos claras, bien iluminadas y donde se vean completos los nombres y precios.</span>
+            </div>
+            <div>
+              <span class="num">3</span>
+              <span><b>Espera el análisis</b>La IA creará categorías, platillos, variantes y algunos modificadores cuando los detecte.</span>
+            </div>
+            <div>
+              <span class="num">4</span>
+              <span><b>Revisa antes de vender</b>Confirma precios, ortografía, categorías, variantes y disponibilidad de cada producto.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="warning">
+          Recomendación: usa la IA para cargar el primer borrador del menú, pero siempre revisa el resultado manualmente antes de empezar a tomar pedidos.
+        </div>
+      </section>
+
+      <section>
+        <div class="section-title">
+          <h2>Checklist Final</h2>
+          <p>Antes de empezar a vender, revisa estos puntos.</p>
+        </div>
+
+        <ul class="checklist">
+          <li>Todas las categorías principales están creadas.</li>
+          <li>Cada platillo tiene nombre, precio y categoría.</li>
+          <li>Las fotos se ven correctamente.</li>
+          <li>Las variantes tienen precios correctos.</li>
+          <li>Los extras o modificadores aparecen al tocar el producto.</li>
+          <li>Las promociones tienen días configurados.</li>
+          <li>Si usaste IA, revisaste nombres y precios importados.</li>
+          <li>El producto aparece en el TPV.</li>
+          <li>Se hizo una venta de prueba.</li>
+        </ul>
+
+        <div class="warning">
+          Si un producto no aparece, revisa que esté disponible, que su categoría esté activa y que estés usando la marca o sucursal correcta.
+        </div>
+      </section>
+
+      <section class="footer-card">
+        <h2>Ruta recomendada</h2>
+        <p><b>Manual:</b> Menú → Categorías → Variantes → Platillos → Modificadores → Prueba en TPV. <b>Con IA:</b> Menú → Platillos → Escaneo IA → Revisar → Prueba en TPV.</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
