@@ -1044,6 +1044,70 @@ router.put('/:id/payment', authenticate, requireTenantAccess, validateBody(updat
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── PATCH /:id/type — Cambiar el tipo de una orden abierta
+// (DINE_IN ↔ TAKEOUT ↔ DELIVERY). Útil cuando el cliente pidió en mesa y
+// luego decide llevar/domicilio (o viceversa). Reglas de saneo:
+//   · type !== 'DINE_IN'  → tableId: null. Si venía de dine-in con mesa
+//     asignada, se libera la mesa a AVAILABLE (el ticket se reasigna; la
+//     mesa nunca llegó a "usarse", por eso no va a DIRTY).
+//   · type !== 'DELIVERY' → deliveryAddress: null.
+//   · type === 'DELIVERY' → se acepta deliveryAddress opcional del body.
+// No se permite sobre órdenes ya pagadas ni cerradas (DELIVERED/CANCELLED).
+const ORDER_TYPES = ['DINE_IN', 'TAKEOUT', 'DELIVERY'];
+router.patch('/:id/type', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'), async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const { type, deliveryAddress } = req.body || {};
+    if (!ORDER_TYPES.includes(type)) {
+      return res.status(400).json({ error: `Tipo inválido. Use uno de: ${ORDER_TYPES.join(', ')}` });
+    }
+
+    const existing = await prisma.order.findFirst({
+      where: { id: req.params.id, restaurantId },
+      select: { id: true, orderType: true, tableId: true, locationId: true, status: true, paymentStatus: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (existing.paymentStatus === 'PAID') {
+      return res.status(400).json({ error: 'No se puede cambiar el tipo de una orden ya pagada' });
+    }
+    if (['DELIVERED', 'CANCELLED'].includes(existing.status)) {
+      return res.status(400).json({ error: 'No se puede cambiar el tipo de una orden cerrada' });
+    }
+
+    const order = await prisma.order.update({
+      where: { id: existing.id },
+      data: {
+        orderType: type,
+        // undefined = no tocar (al pasar A dine-in conservamos la mesa actual).
+        tableId: type === 'DINE_IN' ? undefined : null,
+        deliveryAddress:
+          type === 'DELIVERY'
+            ? (typeof deliveryAddress === 'string' && deliveryAddress.trim()
+                ? deliveryAddress.trim()
+                : undefined)
+            : null,
+      },
+    });
+
+    // Salir de un dine-in con mesa asignada libera la mesa.
+    if (existing.orderType === 'DINE_IN' && existing.tableId && type !== 'DINE_IN') {
+      await prisma.table.update({
+        where: { id: existing.tableId },
+        data: { status: 'AVAILABLE' },
+      }).catch(() => {});
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
+    }
+
+    res.json(order);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── POST /:id/transfer-to/:targetId — Transferir todos los items
 // de una orden abierta a otra orden abierta. La orden origen se cierra
 // (CANCELLED) y, si era dine-in, libera la mesa. Solo admin/manager.
