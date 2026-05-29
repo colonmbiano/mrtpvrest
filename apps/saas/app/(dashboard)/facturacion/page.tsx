@@ -132,6 +132,7 @@ export default function FacturacionPage() {
             ) : invoices.length === 0 ? (
               <div style={{ padding:40, textAlign:"center", color:"var(--text3)", fontSize:12 }}>Sin facturas registradas</div>
             ) : (
+              <div className="db-table-wrap">
               <table className="db-brands-table">
                 <thead>
                   <tr><th>Período</th><th>Monto</th><th>Estado</th><th>Pagado</th></tr>
@@ -155,6 +156,7 @@ export default function FacturacionPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>

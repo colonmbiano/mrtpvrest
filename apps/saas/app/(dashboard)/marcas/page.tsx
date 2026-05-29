@@ -164,6 +164,7 @@ function MarcasContent() {
           ) : filtered.length === 0 ? (
             <div style={{ padding:40, textAlign:"center", color:"var(--text3)", fontSize:13 }}>Sin resultados</div>
           ) : (
+            <div className="db-table-wrap">
             <table className="db-brands-table">
               <thead>
                 <tr>
@@ -245,6 +246,7 @@ function MarcasContent() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>
