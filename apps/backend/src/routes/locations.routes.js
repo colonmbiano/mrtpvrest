@@ -10,6 +10,22 @@ const router = express.Router()
 
 const VALID_BUSINESS_TYPES = ['RESTAURANT', 'RETAIL', 'BAR', 'CAFE']
 
+// Cerebro Adaptativo · presets operativos por tipo de negocio.
+// Al elegir el tipo, el TPV se adapta automáticamente: define qué flags de
+// sucursal se encienden y qué tipos de orden acepta (allowedOrderTypes en la
+// TpvRemoteConfig). Así, p.ej., un bar deja de mostrar Delivery/Para Llevar
+// sin que el admin tenga que tocar nada más.
+//   · RESTAURANT → flujo completo (mesa + para llevar + domicilio).
+//   · BAR        → solo consumo en mesa + cuentas abiertas; sin delivery/takeaway.
+//   · CAFE       → mostrador rápido: para llevar + mesa, sin delivery.
+//   · RETAIL     → venta de mostrador: solo para llevar.
+const BUSINESS_TYPE_PRESETS = {
+  RESTAURANT: { hasDelivery: true,  hasTakeaway: true,  hasTableMap: true,  hasOpenTabs: false, allowedOrderTypes: ['DINE_IN', 'TAKEOUT', 'DELIVERY'] },
+  BAR:        { hasDelivery: false, hasTakeaway: false, hasTableMap: false, hasOpenTabs: true,  allowedOrderTypes: ['DINE_IN'] },
+  CAFE:       { hasDelivery: false, hasTakeaway: true,  hasTableMap: false, hasOpenTabs: false, allowedOrderTypes: ['TAKEOUT', 'DINE_IN'] },
+  RETAIL:     { hasDelivery: false, hasTakeaway: true,  hasTableMap: false, hasOpenTabs: false, allowedOrderTypes: ['TAKEOUT'] },
+}
+
 // Listado de sucursales consolidado en GET /api/admin/locations (audit M1).
 // Este router mantiene sólo detalle (:id) y mutaciones específicas de location.
 
@@ -77,25 +93,60 @@ router.put('/:id/business-type', authenticate, requireTenantAccess, requireAdmin
       return res.status(403).json({ error: 'No puedes modificar una sucursal ajena' })
     }
 
-    const updated = await prisma.location.update({
-      where:  { id },
-      data:   { businessType },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        businessType: true,
-        restaurantId: true,
-      },
+    // Aplicamos el preset operativo del tipo elegido. Cambiar el tipo de
+    // negocio es una acción deliberada ("adapta tu terminal al flujo
+    // perfecto"), así que sobrescribimos las capacidades de la sucursal y los
+    // allowedOrderTypes del TPV para reflejar el modelo del negocio.
+    const preset = BUSINESS_TYPE_PRESETS[businessType]
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const loc = await tx.location.update({
+        where: { id },
+        data: {
+          businessType,
+          ...(preset
+            ? {
+                hasDelivery: preset.hasDelivery,
+                hasTakeaway: preset.hasTakeaway,
+                hasTableMap: preset.hasTableMap,
+                hasOpenTabs: preset.hasOpenTabs,
+              }
+            : {}),
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          businessType: true,
+          restaurantId: true,
+          hasDelivery: true,
+          hasTakeaway: true,
+          hasTableMap: true,
+          hasOpenTabs: true,
+        },
+      })
+
+      // Sincronizamos los tipos de orden que el TPV mostrará (upsert porque la
+      // sucursal puede no tener fila de config remota todavía).
+      if (preset) {
+        await tx.tpvRemoteConfig.upsert({
+          where:  { locationId: id },
+          create: { locationId: id, allowedOrderTypes: preset.allowedOrderTypes },
+          update: { allowedOrderTypes: preset.allowedOrderTypes },
+        })
+      }
+
+      return loc
     })
 
     log.info('location.businessType.changed', {
       id: updated.id,
       restaurantId: updated.restaurantId,
       businessType: updated.businessType,
+      allowedOrderTypes: preset?.allowedOrderTypes,
       actor: req.user?.id,
     })
-    res.json(updated)
+    res.json({ ...updated, allowedOrderTypes: preset?.allowedOrderTypes })
   } catch (err) {
     log.error('location.businessType.failed', { err, id: req.params.id, userId: req.user?.id })
     res.status(500).json({ error: 'Error al actualizar el tipo de negocio' })

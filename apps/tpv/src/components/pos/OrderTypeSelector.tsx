@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   ArrowRight,
   Bike,
@@ -25,6 +25,13 @@ interface OrderTypeSelectorProps {
   onShiftClose?: () => void;
   onExpenses?: () => void;
   onConfig?: () => void;
+  /**
+   * Tipos de orden que la sucursal acepta (subset de DINE_IN / TAKEOUT /
+   * DELIVERY) según su TpvRemoteConfig. Un bar, por ejemplo, suele recibir
+   * solo ["DINE_IN"] y aquí ocultamos las tarjetas de Para Llevar y Delivery.
+   * Si se omite, se muestran todos los tipos (comportamiento legacy).
+   */
+  allowedTypes?: OrderType[];
 }
 
 type OrderTypeCard = {
@@ -105,12 +112,26 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onShiftClose,
   onExpenses,
   onConfig,
+  allowedTypes,
 }) => {
+  // Filtra las tarjetas a los tipos que la sucursal acepta. Si no se pasa
+  // `allowedTypes` (o viene vacío) mostramos todos — así el componente sigue
+  // funcionando standalone sin config remota.
+  const visibleTypes = useMemo(
+    () =>
+      allowedTypes && allowedTypes.length > 0
+        ? ORDER_TYPES.filter((type) => allowedTypes.includes(type.id))
+        : ORDER_TYPES,
+    [allowedTypes],
+  );
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey) return;
 
-      const match = ORDER_TYPES.find((type) => type.shortcut === event.key);
+      // Solo dispara el atajo de tipos visibles: en un bar la tecla "3"
+      // (Delivery) no debe iniciar una venta de un tipo deshabilitado.
+      const match = visibleTypes.find((type) => type.shortcut === event.key);
       if (match) {
         event.preventDefault();
         onSelect(match.id);
@@ -125,7 +146,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, onSelect]);
+  }, [onClose, onSelect, visibleTypes]);
 
   const runShortcut = (action: (typeof SHORTCUTS)[number]["action"]) => {
     if (action === "tickets") onOpenTickets?.();
@@ -194,7 +215,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
             </div>
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-              {ORDER_TYPES.map((type) => {
+              {visibleTypes.map((type) => {
                 const Icon = type.icon;
 
                 return (
