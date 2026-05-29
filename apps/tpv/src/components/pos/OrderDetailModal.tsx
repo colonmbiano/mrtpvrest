@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { X, Receipt, Printer, Banknote, ChefHat, Pencil, Plus, Minus, Trash2, Check, Bike } from "lucide-react";
+import { X, Receipt, Printer, Banknote, ChefHat, Pencil, Plus, Minus, Trash2, Check, Bike, Repeat } from "lucide-react";
 
 export interface OrderDetailItem {
   /** itemId del backend (OrderItem.id). Requerido para editar/eliminar. */
@@ -42,6 +42,9 @@ interface OrderDetailModalProps {
   updatingItemId?: string | null;
   /** Si se provee, abre el flujo de mover/fusionar la cuenta. */
   onMergeOrTransfer?: () => void;
+  /** Si se provee, abre el flujo de cambiar el tipo de orden
+   *  (MESA ↔ LLEVAR ↔ DOMICILIO). */
+  onChangeType?: () => void;
 }
 
 const formatTime = (iso?: string | null) => {
@@ -78,6 +81,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   onDeleteItem,
   updatingItemId,
   onMergeOrTransfer,
+  onChangeType,
 }) => {
   const [editing, setEditing] = useState(false);
   const [noteDraft, setNoteDraft] = useState<{ id: string; value: string } | null>(null);
@@ -342,7 +346,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         </div>
 
         {/* ACTIONS */}
-        {(onReprint || onReprintKitchen || onCharge || onMergeOrTransfer || onCancelOrder || (onAssignDriver && isDelivery)) && (
+        {(onReprint || onReprintKitchen || onCharge || onMergeOrTransfer || onChangeType || onCancelOrder || (onAssignDriver && isDelivery)) && (
           <div className="relative z-10 p-4 border-t border-white/5 bg-[#0C0C0E] flex flex-col gap-3 shrink-0">
             {/* DUAL REPRINT (Fase 4) */}
             {(onReprint || onReprintKitchen) && (
@@ -375,6 +379,17 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             )}
 
             <div className="grid grid-cols-2 gap-3">
+              {onChangeType && (
+                <button
+                  type="button"
+                  onClick={onChangeType}
+                  className="min-h-[56px] h-14 rounded-2xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                >
+                  <Repeat size={16} />
+                  Cambiar tipo
+                </button>
+              )}
+
               {onMergeOrTransfer && (
                 <button
                   type="button"
