@@ -822,11 +822,102 @@ body {
   .db-mobile-header {
     display: none !important; /* Usamos MobileTopBar en su lugar */
   }
+  /* El padding lo controlan topbar/content para que las barras sticky lleguen
+     al borde de la pantalla y no quede doble margen. */
   .db-main {
     width: 100%;
-    padding: 16px;
+    padding: 0;
   }
+
+  /* Topbar de página: compacta y con wrap para no desbordar acciones */
+  .db-topbar { padding: 12px 16px; gap: 10px; flex-wrap: wrap; }
+  .db-topbar-left h1 { font-size: 15px; }
+  .db-topbar-left p  { font-size: 11px; }
+  .db-topbar-right { gap: 8px; flex-wrap: wrap; }
+
+  .db-content { padding: 16px; }
+
+  /* Tabs deslizables en horizontal (no se aplastan ni se cortan) */
+  .db-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .db-tabs::-webkit-scrollbar { display: none; }
+  .db-tab { white-space: nowrap; flex-shrink: 0; padding: 7px 12px; }
+
+  /* Tablas anchas: scroll horizontal en vez de aplastarse */
+  .db-brands-table { min-width: 560px; }
+  .db-brands-table th,
+  .db-brands-table td { padding-left: 14px; padding-right: 14px; }
+
+  /* Grids → menos columnas */
+  .db-metrics { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .db-plans-grid { grid-template-columns: 1fr; }
+  .db-settings-grid { grid-template-columns: 1fr; }
+  .db-split { grid-template-columns: 1fr !important; }
+  .db-fields-grid { grid-template-columns: 1fr !important; }
+
+  /* Targets táctiles cómodos */
+  .db-btn, .db-btn-primary { min-height: 40px; }
+
+  /* Cards y tipografía un poco más compactas */
+  .db-card-header { padding: 13px 16px; }
+  .db-card-body { padding: 13px 16px; }
+  .db-metric-value { font-size: 24px; }
+
+  .db-container { padding: 16px; }
 }
+
+@media (max-width: 420px) {
+  .db-metrics { grid-template-columns: 1fr; }
+}
+
+/* ── Utilidades responsive compartidas ── */
+/* Contenedor con scroll horizontal para tablas. En desktop no se nota porque
+   la tabla cabe; en móvil habilita el swipe lateral. */
+.db-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.db-table-wrap::-webkit-scrollbar { height: 6px; }
+.db-table-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* Split 2/1 que colapsa a 1 columna en móvil (ver media query arriba). */
+.db-split {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+}
+
+/* ── Clases de página usadas por tpv-updates (antes sin estilo) ── */
+.db-container { padding: 22px 24px; }
+.db-page-header { margin-bottom: 18px; }
+.db-page-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--text);
+  line-height: 1.15;
+}
+.db-page-subtitle { font-size: 12px; color: var(--text3); margin-top: 4px; }
+.db-btn-primary {
+  padding: 9px 16px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  background: var(--orange);
+  color: #fff;
+  border: 1px solid var(--orange);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s;
+}
+.db-btn-primary:hover { background: var(--orange2); }
 
 /* ── Mobile Layout Helpers ── */
 @font-face {

@@ -99,6 +99,7 @@ export default function TpvConfigPage() {
           ) : filtered.length === 0 ? (
             <div style={{ padding: 40, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>Sin sucursales</div>
           ) : (
+            <div className="db-table-wrap">
             <table className="db-brands-table">
               <thead>
                 <tr>
@@ -135,6 +136,7 @@ export default function TpvConfigPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

@@ -199,7 +199,7 @@ export default function TenantDetailPage() {
           marginBottom: 18,
           background: `linear-gradient(135deg, ${avatarColor}14, var(--surface) 60%)`,
         }}>
-          <div className="db-card-body" style={{ display: "flex", alignItems: "center", gap: 18, padding: 20 }}>
+          <div className="db-card-body" style={{ display: "flex", alignItems: "center", gap: 18, padding: 20, flexWrap: "wrap" }}>
             {tenant.logoUrl ? (
               <img src={tenant.logoUrl} alt="" style={{ width: 64, height: 64, borderRadius: 16, objectFit: "cover" }} />
             ) : (
@@ -325,12 +325,12 @@ export default function TenantDetailPage() {
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14 }}>
+            <div className="db-split">
               <div className="db-card">
                 <div className="db-card-header">
                   <div className="db-card-title">Suscripción</div>
                 </div>
-                <div className="db-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, fontSize: 12 }}>
+                <div className="db-card-body db-settings-grid" style={{ fontSize: 12 }}>
                   <Field label="Plan" value={sub?.plan?.displayName ?? "—"} />
                   <Field label="Precio" value={fmtMoney(sub?.priceSnapshot ?? sub?.plan?.price ?? 0)} />
                   <Field label="Estado" value={sub?.status ?? "—"} />

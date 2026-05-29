@@ -106,6 +106,13 @@ export default function MobileTopBar() {
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
+  // El botón "Menú" del tab bar inferior abre este mismo drawer.
+  useEffect(() => {
+    const openNav = () => setOpen(true);
+    window.addEventListener("saas:open-nav", openNav);
+    return () => window.removeEventListener("saas:open-nav", openNav);
+  }, []);
+
   return (
     <>
       <header className="mobile-topbar md:hidden">
