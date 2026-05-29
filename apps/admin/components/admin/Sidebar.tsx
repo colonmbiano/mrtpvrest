@@ -43,6 +43,7 @@ const IPuzzle    = ({ size }: IconProps) => ic(<><path d="M6 2h4v2a1 1 0 001 1h2
 const ICreditCard= ({ size }: IconProps) => ic(<><rect x="1" y="3" width="14" height="10" rx="1.5"/><line x1="1" y1="6.5" x2="15" y2="6.5"/><line x1="4" y1="10.5" x2="7" y2="10.5"/></>, size);
 const IDownload  = ({ size }: IconProps) => ic(<><path d="M14 11v2a1 1 0 01-1 1H3a1 1 0 01-1-1v-2"/><path d="M4 7l4 4 4-4M8 1v10"/></>, size);
 const ITag       = ({ size }: IconProps) => ic(<><path d="M1 1h5l7 7a2 2 0 010 2.83l-3.17 3.17a2 2 0 01-2.83 0L1 8V1z"/><circle cx="4" cy="4" r="1"/></>, size);
+const IBook      = ({ size }: IconProps) => ic(<><path d="M3 2.5h4a2 2 0 012 2v9a2 2 0 00-2-2H3z"/><path d="M13 2.5H9a2 2 0 00-2 2v9a2 2 0 012-2h4z"/></>, size);
 
 // ── Nav sections ──────────────────────────────────────────────
 const SECTIONS = [
@@ -61,6 +62,7 @@ const SECTIONS = [
       { href: "/admin/modulos",             icon: <IPuzzle />,    label: "Módulos" },
       { href: "/admin/billing",              icon: <ICreditCard />, label: "Facturación" },
       { href: "/admin/descargas",           icon: <IDownload />,  label: "Apps & Descargas" },
+      { href: "/admin/guias",               icon: <IBook />,      label: "Guias de uso" },
     ],
   },
   {
