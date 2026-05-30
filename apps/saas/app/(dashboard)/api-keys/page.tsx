@@ -150,6 +150,7 @@ export default function ApiKeysPage() {
             <div className="db-card-title">API Keys</div>
             {error && <span className="db-badge db-badge-red" style={{ fontSize:9 }}>{error}</span>}
           </div>
+          <div className="db-table-wrap">
           <table className="db-brands-table">
             <thead>
               <tr>
@@ -204,6 +205,7 @@ export default function ApiKeysPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
 

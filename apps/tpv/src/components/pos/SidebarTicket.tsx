@@ -514,6 +514,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         <OrderTypeToggle
           active={ticket.type}
           onChange={(type) => updateTicket({ type })}
+          allowedTypes={tpvConfig.allowedOrderTypes}
         />
         <div className="flex justify-between items-center">
           <h2 className="text-[10px] font-black text-zinc-500 tracking-[0.2em] uppercase">Orden en curso</h2>
