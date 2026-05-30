@@ -151,9 +151,9 @@ export default function PlanesPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
           <h1 className="font-syne text-3xl font-black">Planes</h1>
           <p className="text-xs uppercase tracking-widest text-gray-500 mt-1">

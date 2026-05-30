@@ -10,6 +10,7 @@ import GuestCountModal from "@/components/pos/GuestCountModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
+import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -31,6 +32,10 @@ export default function OrderTypePage() {
   useTPVAuth();
   const logout   = useAuthStore((s) => s.logout);
   const employee = useAuthStore((s) => s.employee);
+
+  // Config remota de la sucursal: define qué tipos de orden acepta. Un bar
+  // con allowedOrderTypes=["DINE_IN"] oculta las tarjetas Para Llevar/Delivery.
+  const tpvConfig = useTpvConfig();
 
   const [pickingTable, setPickingTable] = useState(false);
   const [picked, setPicked]             = useState<TableLite | null>(null);
@@ -147,6 +152,7 @@ export default function OrderTypePage() {
         onShiftClose={goShiftClose}
         onExpenses={goExpenses}
         onConfig={goConfig}
+        allowedTypes={tpvConfig.allowedOrderTypes}
       />
 
       <TablePickerModal

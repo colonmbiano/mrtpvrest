@@ -279,11 +279,28 @@ router.patch('/tenants/:id/status', async (req, res) => {
   }
 });
 
+// Claves de módulo válidas en `enabledModules` (deben alinear con los planKeys
+// de MODULE_DEFINITIONS en modules.routes.js).
+const VALID_MODULE_KEYS = new Set([
+  'delivery',
+  'webstore', 'client_menu',
+  'kiosk',
+  'loyalty', 'loyalty_advanced',
+  'kds',
+  'reports',
+  'finance',
+]);
+
 // PATCH /api/saas/tenants/:id/modules  — togglear módulos SaaS y storefront config
-// Body: { hasInventory?, hasDelivery?, hasWebStore?, whatsappNumber?, themeConfig? }
+// Body: { hasInventory?, hasDelivery?, hasWebStore?, whatsappNumber?, themeConfig?, enabledModules? }
 // Solo se actualizan los campos enviados (merge parcial).
+//
+// `enabledModules` es la lista canónica de módulos opcionales que el TPV lee al
+// boot (ver modules.routes.js). Para mantener consistencia con los flags
+// booleanos legacy, al recibir el array derivamos hasDelivery/hasWebStore desde
+// él (salvo que el caller los mande explícitos).
 router.patch('/tenants/:id/modules', async (req, res) => {
-  const { hasInventory, hasDelivery, hasWebStore, whatsappNumber, themeConfig } = req.body || {};
+  const { hasInventory, hasDelivery, hasWebStore, whatsappNumber, themeConfig, enabledModules } = req.body || {};
 
   const data = {};
   if (typeof hasInventory === 'boolean')  data.hasInventory = hasInventory;
@@ -291,6 +308,23 @@ router.patch('/tenants/:id/modules', async (req, res) => {
   if (typeof hasWebStore  === 'boolean')  data.hasWebStore  = hasWebStore;
   if (whatsappNumber !== undefined)       data.whatsappNumber = whatsappNumber || null;
   if (themeConfig    !== undefined)       data.themeConfig    = themeConfig;
+
+  if (Array.isArray(enabledModules)) {
+    // Normaliza: lowercase, trim, dedupe y solo claves conocidas. Evita que
+    // un payload arbitrario inyecte módulos inexistentes.
+    const clean = [...new Set(
+      enabledModules
+        .map(m => String(m).toLowerCase().trim())
+        .filter(m => VALID_MODULE_KEYS.has(m))
+    )];
+    data.enabledModules = clean;
+
+    // Sincroniza los flags booleanos legacy con el array para que el gate de
+    // Logística (hasDelivery) y la tienda web (hasWebStore) no queden
+    // desfasados. Si el caller los envió explícitos, respetamos su valor.
+    if (typeof hasDelivery !== 'boolean') data.hasDelivery = clean.includes('delivery');
+    if (typeof hasWebStore !== 'boolean') data.hasWebStore = clean.includes('webstore') || clean.includes('client_menu');
+  }
 
   if (Object.keys(data).length === 0) {
     return res.status(400).json({ error: 'No se enviaron campos para actualizar' });
