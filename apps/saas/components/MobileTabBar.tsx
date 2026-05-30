@@ -89,7 +89,7 @@ export default function MobileTabBar() {
       {/* "Menú" abre el drawer completo (gestionado por MobileTopBar) */}
       <button
         type="button"
-        className="tab-item tab-item-btn"
+        className="tab-item"
         aria-label="Abrir menú"
         onClick={() => window.dispatchEvent(new Event("saas:open-nav"))}
       >
@@ -99,75 +99,6 @@ export default function MobileTabBar() {
         </div>
         <span className="tab-label">Menú</span>
       </button>
-
-      <style jsx>{`
-        .mobile-tabbar {
-          height: 64px;
-          background: rgba(8, 8, 16, 0.92);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border-top: 1px solid var(--border);
-          position: fixed;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          display: flex;
-          align-items: stretch;
-          justify-content: space-around;
-          padding-bottom: env(safe-area-inset-bottom);
-          z-index: 50;
-        }
-        .tab-item {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 3px;
-          text-decoration: none;
-          color: var(--text3);
-          transition: color 0.18s;
-          flex: 1;
-          padding: 6px 0;
-          background: none;
-          border: none;
-          font-family: inherit;
-          cursor: pointer;
-          -webkit-tap-highlight-color: transparent;
-        }
-        .tab-item.active { color: var(--orange); }
-        .tab-icon-wrap {
-          position: relative;
-          padding: 4px 16px;
-          border-radius: 16px;
-          transition: background 0.18s;
-        }
-        .tab-item.active .tab-icon-wrap { background: var(--orange-dim); }
-        .tab-label {
-          font-size: 10.5px;
-          font-weight: 500;
-          letter-spacing: 0.1px;
-        }
-        .tab-item.active .tab-label { font-weight: 700; }
-        .tab-badge {
-          position: absolute;
-          top: -2px;
-          right: 6px;
-          background: var(--red);
-          color: #fff;
-          font-size: 9px;
-          font-weight: 800;
-          font-variant-numeric: tabular-nums;
-          min-width: 17px;
-          height: 17px;
-          border-radius: 9px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 0 4px;
-          border: 2px solid #0c0c17;
-          line-height: 1;
-        }
-      `}</style>
     </nav>
   );
 }
