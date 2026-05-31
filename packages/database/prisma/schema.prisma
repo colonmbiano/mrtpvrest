@@ -55,11 +55,31 @@ model Tenant {
   rides        Ride[]
   expenses     Expense[]
   devices      Device[]
+  promos       Promo[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("tenants")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROMOS — publicidad gestionada desde admin para la pantalla de cliente del TPV
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Promo {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  imageUrl  String
+  title     String?
+  subtitle  String?
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
