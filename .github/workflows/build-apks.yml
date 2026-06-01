@@ -1,0 +1,177 @@
+name: Build Android APKs
+
+# Construye los APK debug de las apps Capacitor (TPV, KDS, Delivery, Kiosk)
+# directamente en el runner — instala Android SDK, hace el export estático de
+# Next, sincroniza Capacitor y compila con Gradle. Así no dependes de tener el
+# Android SDK en tu máquina local para reconstruir los instaladores que sirve
+# el portal /admin/descargas (admin.mrtpvrest.com).
+#
+# Cada APK se publica como artifact descargable y, si commit=true (por defecto),
+# se commitean a apps/admin/public/apks/ en la rama que disparó el workflow,
+# lo que dispara el redeploy del admin en Vercel con los APK frescos.
+#
+# Disparo: manual (workflow_dispatch). Elige qué apps construir y si commitear.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: 'Apps a construir (separadas por coma) o "all"'
+        type: string
+        default: 'all'
+      commit:
+        description: 'Commitear los APK a apps/admin/public/apks/'
+        type: boolean
+        default: true
+
+concurrency:
+  group: build-apks-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # Resuelve el input "apps" a una matriz JSON de apps a construir.
+  setup:
+    name: Resolver matriz de apps
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - name: Calcular matriz
+        id: set
+        run: |
+          INPUT="${{ github.event.inputs.apps }}"
+          [ -z "$INPUT" ] && INPUT="all"
+          ALL='["tpv","kds","delivery","kiosk"]'
+          if [ "$INPUT" = "all" ]; then
+            MATRIX="$ALL"
+          else
+            # Convierte "tpv, kds" -> ["tpv","kds"] filtrando solo apps válidas.
+            MATRIX=$(node -e '
+              const valid = ["tpv","kds","delivery","kiosk"];
+              const wanted = process.argv[1].split(",").map(s => s.trim()).filter(Boolean);
+              const picked = wanted.filter(a => valid.includes(a));
+              if (picked.length === 0) { console.error("No hay apps válidas en: " + process.argv[1]); process.exit(1); }
+              process.stdout.write(JSON.stringify(picked));
+            ' "$INPUT")
+          fi
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "::notice::Apps a construir: $MATRIX"
+
+  build:
+    name: Build ${{ matrix.app }} APK
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+          run_install: false
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages (platform 36 + build-tools)
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "platform-tools" >/dev/null
+          # build-tools 36.0.0 empareja con compileSdk 36 / AGP 9; si el string
+          # exacto no existiera, AGP los descarga solo (licencias ya aceptadas).
+          sdkmanager "build-tools;36.0.0" >/dev/null || echo "::warning::build-tools;36.0.0 no instalado explícitamente; AGP lo resolverá."
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web + Capacitor sync (${{ matrix.app }})
+        env:
+          CAPACITOR_BUILD: 'true'
+          NEXT_PUBLIC_API_URL: https://api.mrtpvrest.com
+        run: pnpm --filter @mrtpvrest/${{ matrix.app }} run build:apk
+
+      - name: Gradle assembleDebug (${{ matrix.app }})
+        working-directory: apps/${{ matrix.app }}/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Stage APK con nombre final
+        run: |
+          SRC="apps/${{ matrix.app }}/android/app/build/outputs/apk/debug/app-debug.apk"
+          DST="${{ matrix.app }}-debug.apk"
+          ls -lh "$SRC"
+          cp "$SRC" "$DST"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-debug-apk
+          path: ${{ matrix.app }}-debug.apk
+          retention-days: 30
+
+  commit:
+    name: Commit APKs a apps/admin/public/apks
+    needs: build
+    if: ${{ github.event.inputs.commit != 'false' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout (rama disparadora)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Descargar artifacts de APK
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/apks
+          pattern: '*-debug-apk'
+          merge-multiple: true
+
+      - name: Copiar APKs al portal de descargas
+        run: |
+          mkdir -p apps/admin/public/apks
+          shopt -s nullglob
+          found=0
+          for apk in /tmp/apks/*-debug.apk; do
+            cp "$apk" "apps/admin/public/apks/$(basename "$apk")"
+            echo "Copiado $(basename "$apk")"
+            found=1
+          done
+          if [ "$found" = "0" ]; then
+            echo "::error::No se descargó ningún APK; nada que commitear."
+            exit 1
+          fi
+          ls -lh apps/admin/public/apks
+
+      - name: Commit y push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- apps/admin/public/apks; then
+            echo "::notice::Los APK no cambiaron; no hay nada que commitear."
+            exit 0
+          fi
+          git add apps/admin/public/apks
+          git commit -m "chore: rebuild public debug apks [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}
