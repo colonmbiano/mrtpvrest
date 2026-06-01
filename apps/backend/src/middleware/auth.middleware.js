@@ -1,5 +1,5 @@
 ﻿const jwt    = require('jsonwebtoken')
-const prisma = require('@mrtpvrest/database').prisma
+const { prisma, runWithBypass } = require('@mrtpvrest/database')
 const { increment } = require('../lib/auth-metrics');
 const log = require('../lib/logger')('auth');
 
@@ -19,13 +19,15 @@ const authenticate = async (req, res, next) => {
     // Caso 1: JWT de dispositivo (KDS, kiosko, etc.). El "actor" es el Device.
     // No hay user/employee humano detrás — el rol viene del payload.
     if (payload.isDevice) {
-      const device = await prisma.device.findUnique({
+      // Resolución de identidad: legítimamente cross-tenant (aún no sabemos a
+      // qué restaurante pertenece el actor). Saltamos el tenant-guard.
+      const device = await runWithBypass(() => prisma.device.findUnique({
         where: { id },
         select: {
           id: true, type: true, isActive: true, locationId: true, tenantId: true,
           location: { select: { restaurantId: true } },
         },
-      });
+      }));
       if (!device || !device.isActive) {
         increment('user_inactive');
         return res.status(401).json({ error: 'Dispositivo desactivado' });
@@ -46,10 +48,11 @@ const authenticate = async (req, res, next) => {
     }
 
     // Caso 2: usuario humano. Buscar como User o Employee.
-    let user = await prisma.user.findUnique({
+    // Resolución de identidad: cross-tenant por diseño → bypass del guard.
+    let user = await runWithBypass(() => prisma.user.findUnique({
       where: { id },
       select: { id: true, name: true, email: true, role: true, isActive: true, restaurantId: true, tenantId: true },
-    });
+    }));
 
     if (!user) {
       // Intentar buscar como empleado si no es usuario.
@@ -57,7 +60,7 @@ const authenticate = async (req, res, next) => {
       // ya que Employee no tiene esos campos en su tabla. Esto garantiza que
       // requireTenantAccess encuentre `req.user.tenantId` aunque el JWT antiguo
       // no lo incluyera explícitamente.
-      const emp = await prisma.employee.findUnique({
+      const emp = await runWithBypass(() => prisma.employee.findUnique({
         where: { id },
         select: {
           id: true,
@@ -80,7 +83,7 @@ const authenticate = async (req, res, next) => {
             },
           },
         },
-      });
+      }));
       if (emp) {
         const restaurantId = emp.location?.restaurantId ?? payload.restaurantId ?? null;
         const tenantId     = emp.location?.restaurant?.tenantId ?? payload.tenantId ?? null;
