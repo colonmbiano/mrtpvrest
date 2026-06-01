@@ -75,4 +75,29 @@
 
 ---
 
+## 11. Estado de Implementación (snapshot 2026-06)
+
+> Esta sección mantiene honesto el ARD: separa lo **implementado** de lo
+> **aspiracional**. Las secciones anteriores describen el diseño objetivo;
+> aquí está dónde estamos realmente. Actualizar cuando cambie.
+
+| Área (sección) | Diseño objetivo | Estado real | Notas |
+|----------------|-----------------|-------------|-------|
+| Aislamiento multi-tenant (§7) | Prisma Client Extension global que fuerza `where: { restaurantId }`. | ✅ **Implementado** | `packages/database/tenant-guard.js`. Default `TENANT_GUARD_MODE=warn` (observa sin alterar); pasar a `enforce` tras validar logs. Ver `docs/TENANCY.md`. |
+| RLS en Postgres (§7) | RLS activado en Supabase como 2ª línea. | ⚠️ **Pendiente** | No verificado en migraciones. El guard de Prisma es hoy la defensa principal. |
+| Colas en background (§6) | **BullMQ** + Redis (DLQ, 5 reintentos). | ⚠️ **Parcial** | El backend usa `bull` v4 (no BullMQ) + `node-cron`. Jobs reales: `trialExpiry`, `autoPromos`. DLQ no implementada. |
+| pgvector / búsqueda semántica (§5) | Embeddings de catálogo en Supabase. | ❌ **No implementado** | IA actual: escaneo de menú (Gemini) + asistentes texto (Groq/OpenAI). |
+| `AuditLog` inmutable (§9) | Tabla legal de auditoría con delta antes/después. | ⚠️ **Parcial** | Existe `AccessLog` + `SystemLog` (errores). No hay tabla de auditoría de negocio con deltas. |
+| Tracing `X-Correlation-ID` (§9) | UUID por request en logger + BullMQ. | ⚠️ **Pendiente** | Logger estructurado presente; correlation-id no propagado de forma sistemática. |
+| Observabilidad externa (§9) | BetterStack / Axiom. | ⚠️ **Parcial** | Sentry integrado (`lib/sentry`). Stream a BetterStack/Axiom no configurado. |
+| Tests Unit/Service ≥60% (§10) | 60% global, 90% flujos de dinero. | ⚠️ **Parcial** | Lógica de dinero pura (`lib/money.js`) y tenant-guard cubiertas ~100%. Cobertura global real ~6%: rutas/servicios sin tests. Gate de CI backend activo (`ci-backend.yml`). |
+| Tests Integration con Postgres real (§10) | `pnpm test:integration` sin mocks. | ❌ **No implementado** | Los tests actuales mockean Prisma. Falta el job con contenedor Postgres. |
+| E2E bloqueante (§10) | Playwright bloquea merge a master. | ⚠️ **Provisional** | Suite Playwright existe; pipeline en `e2e.yml` (manual) — requiere secrets + seed de PINs deterministas para promoverse a required check. |
+| Versionado de API `/v1`,`/v2` (§6) | Versionado explícito en URL. | ❌ **No implementado** | Rutas sin prefijo de versión. |
+
+### Notas de estructura
+- El monorepo tiene `packages/{config,database,types}`. **No existe `packages/shared`**
+  (mencionado en docs antiguas y en el filtro de `tpv-ota-release.yml`); ese path
+  está muerto y puede eliminarse del workflow.
+
 *Decision Log (Sección 20) comenzará a poblarse en futuras iteraciones mediante `ard-update`.*
