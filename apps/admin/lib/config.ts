@@ -12,6 +12,12 @@ export function getApiUrl(): string {
   return url;
 }
 
+export function getStoreBaseUrl(): string {
+  const url = process.env.NEXT_PUBLIC_STORE_URL;
+  if (url) return url.replace(/\/+$/, "");
+  return "https://mrtpvrest.com";
+}
+
 export function getSaasUrl(): string {
   const url = process.env.NEXT_PUBLIC_SAAS_URL;
   if (url) return url;
