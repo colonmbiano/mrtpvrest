@@ -60,14 +60,15 @@ router.get('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       prisma.restaurantConfig.findUnique({ where: { restaurantId } }),
       prisma.restaurant.findUnique({
         where: { id: restaurantId },
-        select: { name: true, logoUrl: true }
+        select: { name: true, logoUrl: true, slug: true }
       })
     ]);
     res.set('Cache-Control', 'no-store');
     res.json({
       ...(config || {}),
       name: restaurant?.name || 'Nuevo Restaurante',
-      logoUrl: restaurant?.logoUrl || null
+      logoUrl: restaurant?.logoUrl || null,
+      slug: restaurant?.slug || null
     });
   } catch (e) { res.status(500).json({ error: 'Error al obtener configuracion' }) }
 })
@@ -170,7 +171,7 @@ router.get('/locations/:id', authenticate, requireTenantAccess, requireAdmin, as
 
 router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { name, slug, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount } = req.body;
+    const { name, slug, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount, hasDelivery, hasTakeaway, hasTableMap } = req.body;
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
@@ -190,6 +191,9 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
         ...(autoPromoEnabled !== undefined && { autoPromoEnabled }),
         ...(autoPromoThreshold !== undefined && { autoPromoThreshold }),
         ...(autoPromoDiscount !== undefined && { autoPromoDiscount }),
+        ...(hasDelivery !== undefined && { hasDelivery: Boolean(hasDelivery) }),
+        ...(hasTakeaway !== undefined && { hasTakeaway: Boolean(hasTakeaway) }),
+        ...(hasTableMap !== undefined && { hasTableMap: Boolean(hasTableMap) }),
         ticketConfig: { create: { businessName: restaurant.name, header: restaurant.name } },
       },
     });
@@ -199,7 +203,7 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
 
 router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { name, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount, isCentralWarehouse } = req.body;
+    const { name, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount, isCentralWarehouse, hasDelivery, hasTakeaway, hasTableMap } = req.body;
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const location = await prisma.location.findUnique({ where: { id: req.params.id } });
     if (!location || location.restaurantId !== restaurantId)
@@ -212,6 +216,9 @@ router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, as
       ...(autoPromoThreshold !== undefined && { autoPromoThreshold }),
       ...(autoPromoDiscount !== undefined && { autoPromoDiscount }),
       ...(isCentralWarehouse !== undefined && { isCentralWarehouse: Boolean(isCentralWarehouse) }),
+      ...(hasDelivery !== undefined && { hasDelivery: Boolean(hasDelivery) }),
+      ...(hasTakeaway !== undefined && { hasTakeaway: Boolean(hasTakeaway) }),
+      ...(hasTableMap !== undefined && { hasTableMap: Boolean(hasTableMap) }),
     };
     // Sólo una Bodega Central por restaurant: si se marca esta, se desmarca el resto.
     const updated = await prisma.$transaction(async (tx) => {

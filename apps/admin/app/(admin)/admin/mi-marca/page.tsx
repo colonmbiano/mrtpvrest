@@ -2,8 +2,9 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import Image from "next/image";
+import { getStoreBaseUrl } from "@/lib/config";
 
-type Location = { id: string; name: string; slug: string; address?: string; phone?: string; autoPromoEnabled?: boolean; autoPromoThreshold?: number; autoPromoDiscount?: number; };
+type Location = { id: string; name: string; slug: string; address?: string; phone?: string; autoPromoEnabled?: boolean; autoPromoThreshold?: number; autoPromoDiscount?: number; hasDelivery?: boolean; hasTakeaway?: boolean; hasTableMap?: boolean; };
 
 function slugify(text: string) {
   return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
@@ -14,7 +15,7 @@ function LocationsSection() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Location | null>(null);
-  const [form, setForm] = useState({ name: "", address: "", phone: "", autoPromoEnabled: false, autoPromoThreshold: 10, autoPromoDiscount: 15 });
+  const [form, setForm] = useState({ name: "", address: "", phone: "", autoPromoEnabled: false, autoPromoThreshold: 10, autoPromoDiscount: 15, hasDelivery: true, hasTakeaway: true, hasTableMap: true });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -28,8 +29,8 @@ function LocationsSection() {
 
   useEffect(() => { fetchLocations(); }, []);
 
-  const openCreate = () => { setEditing(null); setForm({ name: "", address: "", phone: "", autoPromoEnabled: false, autoPromoThreshold: 10, autoPromoDiscount: 15 }); setError(""); setShowModal(true); };
-  const openEdit = (loc: Location) => { setEditing(loc); setForm({ name: loc.name, address: loc.address || "", phone: loc.phone || "", autoPromoEnabled: loc.autoPromoEnabled || false, autoPromoThreshold: loc.autoPromoThreshold || 10, autoPromoDiscount: loc.autoPromoDiscount || 15 }); setError(""); setShowModal(true); };
+  const openCreate = () => { setEditing(null); setForm({ name: "", address: "", phone: "", autoPromoEnabled: false, autoPromoThreshold: 10, autoPromoDiscount: 15, hasDelivery: true, hasTakeaway: true, hasTableMap: true }); setError(""); setShowModal(true); };
+  const openEdit = (loc: Location) => { setEditing(loc); setForm({ name: loc.name, address: loc.address || "", phone: loc.phone || "", autoPromoEnabled: loc.autoPromoEnabled || false, autoPromoThreshold: loc.autoPromoThreshold || 10, autoPromoDiscount: loc.autoPromoDiscount || 15, hasDelivery: loc.hasDelivery ?? true, hasTakeaway: loc.hasTakeaway ?? true, hasTableMap: loc.hasTableMap ?? true }); setError(""); setShowModal(true); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +99,15 @@ function LocationsSection() {
               </div>
               {loc.address && <p className="text-xs text-gray-500">{loc.address}</p>}
               {loc.phone && <p className="text-xs text-gray-600">{loc.phone}</p>}
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {[
+                  { on: loc.hasDelivery ?? true, label: "Delivery" },
+                  { on: loc.hasTakeaway ?? true, label: "Para llevar" },
+                  { on: loc.hasTableMap ?? true, label: "En mesa" },
+                ].map(t => (
+                  <span key={t.label} className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${t.on ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : "border-gray-800 text-gray-600 bg-black/40 line-through"}`}>{t.label}</span>
+                ))}
+              </div>
             </div>
           ))}
         </div>
@@ -179,6 +189,27 @@ function LocationsSection() {
                 )}
               </div>
 
+              <div className="bg-black/50 p-5 rounded-3xl border border-white/10">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Tipos de pedido en esta sucursal</p>
+                <div className="space-y-3">
+                  {[
+                    { key: "hasDelivery" as const, label: "Delivery (envío a domicilio)" },
+                    { key: "hasTakeaway" as const, label: "Para llevar (takeaway)" },
+                    { key: "hasTableMap" as const, label: "En mesa (dine-in / mapa de mesas)" },
+                  ].map(opt => (
+                    <label key={opt.key} className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form[opt.key]}
+                        onChange={e => setForm({ ...form, [opt.key]: e.target.checked })}
+                        className="w-5 h-5 accent-orange-500 rounded"
+                      />
+                      <span className="text-xs font-bold text-gray-200">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               {error && <p className="text-red-400 text-xs font-bold ml-2">{error}</p>}
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest border border-gray-700 text-gray-400 hover:border-gray-500 transition-all">
@@ -200,21 +231,36 @@ export default function BrandConfigPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [config, setConfig] = useState({
     name: "",
     logoUrl: "",
+    slug: "",
     phone: "",
     address: "",
     whatsappNumber: "",
     deliveryFee: 0,
+    minOrderAmount: 0,
+    freeDeliveryFrom: 0,
     estimatedDelivery: 40,
     storefrontTheme: "KAWAII"
   });
 
+  const storeUrl = config.slug ? `${getStoreBaseUrl()}/${config.slug}` : "";
+
+  const copyStoreUrl = async () => {
+    if (!storeUrl) return;
+    try {
+      await navigator.clipboard.writeText(storeUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { alert("No se pudo copiar el enlace"); }
+  };
+
   useEffect(() => {
     api.get("/api/admin/config")
       .then(res => {
-        setConfig(prev => ({ ...prev, ...res.data }));
+        setConfig(prev => ({ ...prev, ...res.data, freeDeliveryFrom: res.data?.freeDeliveryFrom ?? 0 }));
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -246,8 +292,11 @@ export default function BrandConfigPage() {
       console.log("[mi-marca] handleSave START — API_URL:", process.env.NEXT_PUBLIC_API_URL);
       await api.put("/api/admin/brand", { name: current.name, logoUrl: current.logoUrl });
       console.log("[mi-marca] brand OK");
-      const { logoUrl: _logo, ...configWithoutLogo } = current;
-      await api.put("/api/admin/config", configWithoutLogo);
+      const { logoUrl: _logo, slug: _slug, ...configWithoutLogo } = current;
+      await api.put("/api/admin/config", {
+        ...configWithoutLogo,
+        freeDeliveryFrom: current.freeDeliveryFrom > 0 ? current.freeDeliveryFrom : null,
+      });
       console.log("[mi-marca] config OK — reloading");
       window.location.reload();
     } catch (err: any) {
@@ -348,6 +397,61 @@ export default function BrandConfigPage() {
               </div>
             </div>
           </div>
+
+          {/* Envíos y reglas de la tienda online */}
+          <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 space-y-6">
+            <div>
+              <p className="text-sm font-black uppercase tracking-tighter">Envíos y Tienda Online</p>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">Reglas que verá el cliente al pedir</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Costo de envío ($)</label>
+                <input type="number" min="0" value={config.deliveryFee} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({...p, deliveryFee: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Compra mínima ($)</label>
+                <input type="number" min="0" value={config.minOrderAmount} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({...p, minOrderAmount: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Envío gratis desde ($)</label>
+                <input type="number" min="0" value={config.freeDeliveryFrom} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({...p, freeDeliveryFrom: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+                <p className="text-[9px] text-gray-600 mt-1 ml-2">0 = sin envío gratis</p>
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Tiempo estimado (min)</label>
+                <input type="number" min="0" value={config.estimatedDelivery} onChange={(e) => { const v = parseInt(e.target.value) || 0; setConfig(p => ({...p, estimatedDelivery: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+              </div>
+            </div>
+          </div>
+
+          {/* Enlace público de la tienda */}
+          {storeUrl && (
+            <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8">
+              <p className="text-sm font-black uppercase tracking-tighter mb-1">Tu Tienda Online</p>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-6">Comparte este enlace o QR con tus clientes</p>
+              <div className="flex flex-col sm:flex-row gap-6 items-center">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(storeUrl)}`}
+                  alt="QR de la tienda"
+                  width={150}
+                  height={150}
+                  className="rounded-2xl bg-white p-2 shrink-0"
+                />
+                <div className="flex-1 w-full space-y-3">
+                  <div className="bg-black border border-white/10 rounded-2xl px-5 py-4 font-mono text-sm text-orange-400 break-all">{storeUrl}</div>
+                  <div className="flex gap-3">
+                    <button type="button" onClick={copyStoreUrl} className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest border border-gray-700 text-gray-300 hover:border-orange-500/50 hover:text-orange-400 transition-all">
+                      {copied ? "¡Copiado!" : "Copiar enlace"}
+                    </button>
+                    <a href={storeUrl} target="_blank" rel="noopener noreferrer" className="flex-1 text-center py-3 rounded-2xl font-black text-xs uppercase tracking-widest bg-orange-500 hover:bg-orange-600 text-white transition-all">
+                      Ver tienda
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <button
             type="button"
