@@ -254,8 +254,9 @@ router.get('/menu', async (req, res) => {
               id: true, name: true,
               required: true, multiSelect: true,
               minSelection: true, maxSelection: true,
+              // NOTA: el modelo Modifier NO tiene campo isAvailable; filtrar por
+              // él hacía que toda la consulta del menú fallara con 500.
               modifiers: {
-                where: { isAvailable: true },
                 select: { id: true, name: true, priceAdd: true },
               },
             },
