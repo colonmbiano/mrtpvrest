@@ -11,7 +11,9 @@ name: TPV OTA Release
 #   Resultado monotónico (ej. 0.1.42) sin necesidad de commit-back.
 #
 # Secrets requeridos:
-#   OTA_ADMIN_TOKEN — JWT de un usuario SUPER_ADMIN (lo emite el backend).
+#   OTA_PUBLISH_TOKEN — token de servicio estático, igual al OTA_PUBLISH_TOKEN
+#   configurado en el backend (Railway). No caduca; es lo que permite publicar
+#   desde CI sin un JWT humano que expira a los 15 min.
 
 on:
   push:
@@ -98,14 +100,16 @@ jobs:
 
       - name: Publish a /api/ota/publish
         env:
-          OTA_ADMIN_TOKEN: ${{ secrets.OTA_ADMIN_TOKEN }}
+          # Token de servicio estático que coincide con OTA_PUBLISH_TOKEN en el
+          # backend (Railway). No caduca, a diferencia de los JWT de login.
+          OTA_PUBLISH_TOKEN: ${{ secrets.OTA_PUBLISH_TOKEN }}
         run: |
-          if [ -z "$OTA_ADMIN_TOKEN" ]; then
-            echo "::error::Falta el secret OTA_ADMIN_TOKEN. Configúralo en Settings → Secrets → Actions."
+          if [ -z "$OTA_PUBLISH_TOKEN" ]; then
+            echo "::error::Falta el secret OTA_PUBLISH_TOKEN. Configúralo en Settings → Secrets → Actions con el mismo valor que OTA_PUBLISH_TOKEN del backend (Railway)."
             exit 1
           fi
           curl -fsSL -X POST https://api.mrtpvrest.com/api/ota/publish \
-            -H "Authorization: Bearer $OTA_ADMIN_TOKEN" \
+            -H "Authorization: Bearer $OTA_PUBLISH_TOKEN" \
             -F "appId=com.mrtpvrest.tpv" \
             -F "version=${{ steps.ver.outputs.version }}" \
             -F "channel=${{ steps.meta.outputs.channel }}" \

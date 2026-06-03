@@ -47,6 +47,43 @@ const requireSuperAdmin = (req, res, next) => {
   return res.status(403).json({ error: 'Solo SUPER_ADMIN puede gestionar OTA' });
 };
 
+// Comparación en tiempo constante para evitar timing attacks al validar el
+// token de servicio.
+const timingSafeEqualStr = (a, b) => {
+  const ba = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+};
+
+// Auth para publicar bundles OTA. Acepta dos credenciales:
+//   1) Un token de servicio estático en OTA_PUBLISH_TOKEN (Railway), pensado
+//      para CI/automatización (GitHub Actions). No caduca, a diferencia de los
+//      JWT de login (15 min), por eso es el mecanismo correcto para el workflow.
+//   2) Un JWT humano de SUPER_ADMIN (flujo manual desde el admin).
+// Si OTA_PUBLISH_TOKEN no está configurado, el camino de servicio queda
+// deshabilitado y solo se acepta el JWT.
+const authenticateOtaPublisher = (req, res, next) => {
+  const serviceToken = process.env.OTA_PUBLISH_TOKEN;
+  const authHeader = req.headers.authorization || '';
+  const presented = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  if (serviceToken && presented && timingSafeEqualStr(presented, serviceToken)) {
+    req.user = {
+      id: 'ota-service',
+      name: 'OTA Service Token',
+      email: null,
+      role: 'SUPER_ADMIN',
+      isServiceToken: true,
+    };
+    return next();
+  }
+
+  // Fallback: JWT humano. `authenticate` ya responde 401 si el token falta o
+  // es inválido; solo continuamos a requireSuperAdmin en caso de éxito.
+  return authenticate(req, res, () => requireSuperAdmin(req, res, next));
+};
+
 // 50 MB max por bundle. El zip de un Next static export del TPV ronda 5-15 MB.
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -97,8 +134,7 @@ router.post('/check', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post(
   '/publish',
-  authenticate,
-  requireSuperAdmin,
+  authenticateOtaPublisher,
   upload.single('bundle'),
   async (req, res) => {
     try {
