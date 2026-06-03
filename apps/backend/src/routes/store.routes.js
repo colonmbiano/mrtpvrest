@@ -270,6 +270,22 @@ router.get('/menu', async (req, res) => {
       items: items.filter(i => i.categoryId === cat.id),
     }));
 
+    // Items disponibles que NO quedaron en ninguna categoría activa (categoría
+    // inactiva, eliminada o sin categoría). Sin esto, los temas que solo
+    // renderizan category.items los ocultaban → "la tienda no muestra productos".
+    const shownIds = new Set(categoriesWithItems.flatMap(c => c.items.map(i => i.id)));
+    const orphanItems = items.filter(i => !shownIds.has(i.id));
+    if (orphanItems.length > 0) {
+      categoriesWithItems.push({
+        id: '__sin_categoria__',
+        name: 'Menú',
+        description: null,
+        imageUrl: null,
+        sortOrder: 9999,
+        items: orphanItems,
+      });
+    }
+
     res.json({ categories: categoriesWithItems, items });
   } catch (e) {
     console.error('[store] GET /menu error:', e.message);
