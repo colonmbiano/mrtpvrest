@@ -18,6 +18,25 @@ export function getStoreBaseUrl(): string {
   return "https://mrtpvrest.com";
 }
 
+// Construye la URL pública del storefront para un slug de tienda.
+// En producción las tiendas se sirven por SUBDOMINIO: https://{slug}.mrtpvrest.com
+// (el middleware de apps/client reescribe {slug}.mrtpvrest.com -> /[slug]).
+//
+// Overrides:
+//   - NEXT_PUBLIC_STORE_URL: base completa en modo PATH (ej. dev http://localhost:3003
+//     -> http://localhost:3003/{slug}). Tiene prioridad; util en local donde no hay
+//     wildcard DNS.
+//   - NEXT_PUBLIC_STORE_DOMAIN: dominio base para el subdominio (default "mrtpvrest.com").
+export function getStoreUrl(slug: string): string {
+  if (!slug) return "";
+  const explicit = process.env.NEXT_PUBLIC_STORE_URL;
+  if (explicit) return `${explicit.replace(/\/+$/, "")}/${slug}`;
+  const domain = (process.env.NEXT_PUBLIC_STORE_DOMAIN || "mrtpvrest.com")
+    .replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "");
+  return `https://${slug}.${domain}`;
+}
+
 export function getSaasUrl(): string {
   const url = process.env.NEXT_PUBLIC_SAAS_URL;
   if (url) return url;
