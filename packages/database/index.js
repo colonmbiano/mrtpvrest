@@ -1,5 +1,13 @@
 const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
+const {
+  tenantGuard,
+  tenantStore,
+  getTenantContext,
+  runWithTenant,
+  runWithBypass,
+  SCOPED_MODELS,
+} = require('./tenant-guard');
 
 const globalForPrisma = globalThis;
 
@@ -22,10 +30,17 @@ function createClient() {
     idle_in_transaction_session_timeout: 15_000,
     max: Number(process.env.DB_POOL_MAX || 10),
   });
-  return new PrismaClient({
+  const base = new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   });
+
+  // Aislamiento multi-tenant automático (ver tenant-guard.js / TENANCY.md).
+  // El modo se controla con TENANT_GUARD_MODE: off | warn | enforce.
+  // Default 'warn' → no altera queries, solo observa (rollout seguro).
+  return base.$extends(
+    tenantGuard({ mode: process.env.TENANT_GUARD_MODE || 'warn' })
+  );
 }
 
 const prisma = globalForPrisma.prisma ?? createClient();
@@ -34,4 +49,13 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
 
-module.exports = { prisma, PrismaClient };
+module.exports = {
+  prisma,
+  PrismaClient,
+  // Helpers de contexto de tenant — el backend los usa en su middleware.
+  tenantStore,
+  getTenantContext,
+  runWithTenant,
+  runWithBypass,
+  SCOPED_MODELS,
+};

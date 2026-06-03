@@ -1,0 +1,63 @@
+name: CI — Backend Test (dinero + tenant guard)
+
+# Gate de calidad para el backend. Corre en cada PR/push que toque el backend o
+# los paquetes compartidos. Cubre la lógica PURA crítica (money.js: totales,
+# variantes, modificadores, corte de caja) y el aislamiento multi-tenant
+# (tenant-guard). NO necesita BD: los tests mockean Prisma o prueban funciones
+# puras. Ver ARD §10.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "apps/backend/**"
+      - "packages/**"
+      - ".github/workflows/ci-backend.yml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "apps/backend/**"
+      - "packages/**"
+      - ".github/workflows/ci-backend.yml"
+
+env:
+  PNPM_VERSION: "9"
+  NODE_VERSION: "20"
+
+jobs:
+  test:
+    name: Jest + Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm ${{ env.PNPM_VERSION }}
+        uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      # Algunos módulos requieren el cliente Prisma generado al cargar.
+      - name: Generar cliente Prisma
+        run: pnpm --filter @mrtpvrest/database run db:generate
+
+      - name: Pruebas unitarias + cobertura
+        run: pnpm --filter @mrtpvrest/backend run test:coverage --ci
