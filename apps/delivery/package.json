@@ -10,6 +10,7 @@
     "build:apk": "cross-env CAPACITOR_BUILD=true next build && npx cap sync android",
     "apk:debug": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleDebug && cd ..",
     "apk:release": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleRelease && cd ..",
+    "aab:release": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat bundleRelease && cd ..",
     "cap:open": "npx cap open android",
     "cap:sync": "npx cap sync android"
   },

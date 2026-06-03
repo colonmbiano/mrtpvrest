@@ -47,6 +47,7 @@ const requireSuperAdmin = (req, res, next) => {
   return res.status(403).json({ error: 'Solo SUPER_ADMIN puede gestionar OTA' });
 };
 
+<<<<<<< Updated upstream
 // Comparación en tiempo constante para evitar timing attacks al validar el
 // token de servicio.
 const timingSafeEqualStr = (a, b) => {
@@ -82,6 +83,15 @@ const authenticateOtaPublisher = (req, res, next) => {
   // Fallback: JWT humano. `authenticate` ya responde 401 si el token falta o
   // es inválido; solo continuamos a requireSuperAdmin en caso de éxito.
   return authenticate(req, res, () => requireSuperAdmin(req, res, next));
+=======
+const authenticateOrBuildToken = (req, res, next) => {
+  const buildToken = req.headers['x-ota-build-token'];
+  if (buildToken && process.env.OTA_BUILD_SECRET && buildToken === process.env.OTA_BUILD_SECRET) {
+    req.user = { role: 'SUPER_ADMIN', email: 'buildbot@mrtpvrest.com' };
+    return next();
+  }
+  return authenticate(req, res, next);
+>>>>>>> Stashed changes
 };
 
 // 50 MB max por bundle. El zip de un Next static export del TPV ronda 5-15 MB.
@@ -108,6 +118,7 @@ router.post('/check', async (req, res) => {
     const latest = await prisma.otaBundle.findFirst({
       where: { appId, channel, isActive: true },
       orderBy: { createdAt: 'desc' },
+      take: 1, // optimización
     });
 
     if (!latest || !semver.gt(latest.version, currentVersion)) {
@@ -134,7 +145,12 @@ router.post('/check', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post(
   '/publish',
+<<<<<<< Updated upstream
   authenticateOtaPublisher,
+=======
+  authenticateOrBuildToken,
+  requireSuperAdmin,
+>>>>>>> Stashed changes
   upload.single('bundle'),
   async (req, res) => {
     try {

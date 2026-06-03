@@ -89,7 +89,7 @@ export async function enterPIN(page: Page, pin: string) {
   await expect(page.locator('[class*="grid-cols-3"]').first()).toBeVisible({ timeout: 15_000 });
 
   for (const digit of pin) {
-    await page.getByRole('button', { name: digit, exact: true }).first().click();
+    await page.getByRole('button', { name: digit, exact: true }).first().click({ delay: 150 });
   }
 
   await page.getByRole('button', { name: /ingresar/i }).click();

@@ -11,9 +11,13 @@ name: TPV OTA Release
 #   Resultado monotónico (ej. 0.1.42) sin necesidad de commit-back.
 #
 # Secrets requeridos:
+<<<<<<< Updated upstream
 #   OTA_PUBLISH_TOKEN — token de servicio estático, igual al OTA_PUBLISH_TOKEN
 #   configurado en el backend (Railway). No caduca; es lo que permite publicar
 #   desde CI sin un JWT humano que expira a los 15 min.
+=======
+#   OTA_BUILD_SECRET — Token de build estático para autenticación sin expiración.
+>>>>>>> Stashed changes
 
 on:
   push:
@@ -100,6 +104,7 @@ jobs:
 
       - name: Publish a /api/ota/publish
         env:
+<<<<<<< Updated upstream
           # Token de servicio estático que coincide con OTA_PUBLISH_TOKEN en el
           # backend (Railway). No caduca, a diferencia de los JWT de login.
           OTA_PUBLISH_TOKEN: ${{ secrets.OTA_PUBLISH_TOKEN }}
@@ -110,6 +115,16 @@ jobs:
           fi
           curl -fsSL -X POST https://api.mrtpvrest.com/api/ota/publish \
             -H "Authorization: Bearer $OTA_PUBLISH_TOKEN" \
+=======
+          OTA_BUILD_SECRET: ${{ secrets.OTA_BUILD_SECRET }}
+        run: |
+          if [ -z "$OTA_BUILD_SECRET" ]; then
+            echo "::error::Falta el secret OTA_BUILD_SECRET. Configúralo en Settings → Secrets → Actions."
+            exit 1
+          fi
+          curl -fsSL -X POST https://api.mrtpvrest.com/api/ota/publish \
+            -H "X-OTA-Build-Token: $OTA_BUILD_SECRET" \
+>>>>>>> Stashed changes
             -F "appId=com.mrtpvrest.tpv" \
             -F "version=${{ steps.ver.outputs.version }}" \
             -F "channel=${{ steps.meta.outputs.channel }}" \

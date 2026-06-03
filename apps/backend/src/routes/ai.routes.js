@@ -2,6 +2,7 @@ const express = require('express');
 const { scanMenuFromImages, scanInventoryFromImages, parseInventoryFile, isSpreadsheet, generateRecipeForId } = require('../services/ai.service');
 const { runAssistant } = require('../services/assistant.service');
 const { runVoiceAgent } = require('../services/voice-agent.service');
+const { runOrderDictation } = require('../services/order-dictation.service');
 const { resolveGeminiKey } = require('../services/ai-key.service');
 const { authenticate, requireAdmin, requireRole, requireTenantAccess } = require('../middleware/auth.middleware');
 
@@ -135,6 +136,27 @@ router.post('/assistant', authenticate, requireTenantAccess, requireAdmin, async
     if (error?.code) return sendAiError(res, error);
     console.error('Error en AI Assistant Route:', error);
     res.status(500).json({ error: 'Hubo un problema al procesar la solicitud.' });
+  }
+});
+
+// POST /api/ai/order-dictation
+// Dictado operativo del TPV: convierte texto reconocido por el navegador en
+// productos reales del menu. No usa LLM ni precios del cliente; solo arma un
+// borrador para que el cajero confirme en el ticket actual.
+router.post('/order-dictation', authenticate, requireTenantAccess, requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const { prompt } = req.body || {};
+    if (!prompt?.trim()) return res.status(400).json({ error: 'prompt requerido' });
+
+    const result = await runOrderDictation({ prompt, restaurantId });
+    res.json(result);
+  } catch (error) {
+    if (error?.code) return sendAiError(res, error);
+    console.error('Error en Order Dictation Route:', error.message);
+    res.status(500).json({ error: 'Hubo un problema al interpretar el pedido dictado.' });
   }
 });
 

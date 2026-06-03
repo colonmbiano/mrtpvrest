@@ -7,6 +7,7 @@ import OrderDetailModal from "@/components/pos/OrderDetailModal";
 import ReprintKitchenModal from "@/components/pos/ReprintKitchenModal";
 import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
+import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { usePrinters, useReceiptIdentity, useKitchenConfig, useFullTicketConfig } from "@/hooks/usePrinters";
 import { useHydrated } from "@/hooks/useClientValue";
 import { toast } from "sonner";
@@ -25,6 +26,7 @@ import {
 import SidebarTicket from "@/components/pos/SidebarTicket";
 import TopNavDropdown from "@/components/pos/TopNavDropdown";
 import TopActionsDropdown from "@/components/pos/TopActionsDropdown";
+import VoiceOrderDictation from "@/components/pos/VoiceOrderDictation";
 import { useUIStore } from "@/store/useUIStore";
 import ShiftModal from "@/components/admin/ShiftModal";
 import { useThemeStore, type Palette } from "@/store/themeStore";
@@ -112,6 +114,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const { businessName, businessFooter } = useReceiptIdentity();
   const { config: ticketConfig } = useFullTicketConfig();
   const { kitchenConfig } = useKitchenConfig();
+  const tpvConfig = useTpvConfig();
+  const showVoiceOrderDictation =
+    tpvConfig.extra?.voiceOrderDictationEnabled === true;
 
   const fetchOpenOrders = useCallback(async () => {
     try {
@@ -930,6 +935,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
             </div>
 
             <div className="flex items-center gap-3 shrink-0">
+              {showVoiceOrderDictation && <VoiceOrderDictation />}
               <TopActionsDropdown
                 onClearTicket={() => useTicketStore.getState().clearActiveItems()}
                 hasItems={itemCount > 0}

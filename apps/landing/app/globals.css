@@ -506,6 +506,33 @@ details p {
   gap: 18px;
 }
 
+.apk-downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.apk-downloads a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 1px solid rgba(136, 214, 108, 0.26);
+  border-radius: 12px;
+  background: rgba(136, 214, 108, 0.08);
+  color: var(--sage);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.apk-downloads a:hover {
+  border-color: rgba(136, 214, 108, 0.45);
+  background: rgba(136, 214, 108, 0.13);
+}
+
 .app-card {
   position: relative;
   overflow: hidden;

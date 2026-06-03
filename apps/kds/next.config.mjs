@@ -2,6 +2,7 @@ const isMobileBuild = process.env.CAPACITOR_BUILD === 'true';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  basePath: '/kds',
   output: isMobileBuild ? 'export' : undefined,
   typescript: { ignoreBuildErrors: true },
   images: {

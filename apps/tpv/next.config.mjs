@@ -13,5 +13,15 @@ const nextConfig = {
       { protocol: 'https', hostname: '**' },
     ],
   },
+  ...(isMobileBuild ? {} : {
+    async rewrites() {
+      return [
+        {
+          source: '/kds/:path*',
+          destination: 'http://localhost:3009/kds/:path*',
+        },
+      ];
+    },
+  }),
 };
 export default nextConfig;

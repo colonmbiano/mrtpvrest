@@ -16,6 +16,13 @@ const APPS = [
     apkUrl: "/apks/kds-debug.apk",
   },
   {
+    id: "meseros-lite",
+    title: "Meseros Lite",
+    description: "App ligera para meseros: toma pedidos desde mesa, consulta menu y sincroniza la orden con cocina y caja.",
+    image: "/app-cliente.png",
+    apkUrl: "/apks/meseros-lite-debug.apk",
+  },
+  {
     id: "delivery",
     title: "App para Repartidores",
     description: "Tus repartidores podrán ver los pedidos asignados, la ruta de entrega y confirmar el pago en efectivo o tarjeta.",
