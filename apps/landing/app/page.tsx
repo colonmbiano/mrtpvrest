@@ -4,15 +4,30 @@ import Link from 'next/link'
 const adminUrl = 'https://admin.mrtpvrest.com'
 const registerUrl = `${adminUrl}/register`
 const loginUrl = `${adminUrl}/login`
-const apkUrl = `${adminUrl}/apks/tpv-debug.apk`
+const apkUrls = {
+  tpv: `${adminUrl}/apks/tpv-debug.apk`,
+  kiosk: `${adminUrl}/apks/kiosk-debug.apk`,
+  kds: `${adminUrl}/apks/kds-debug.apk`,
+  delivery: `${adminUrl}/apks/delivery-debug.apk`,
+  meseros: `${adminUrl}/apks/meseros-lite-debug.apk`,
+} as const
+const apkUrl = apkUrls.tpv
 
 const apps = [
   { src: '/showcase-warm/app-cliente.png', title: 'App Cliente', text: 'Pedidos QR y online sin perder control.', tone: 'sage', href: '#apps' },
-  { src: '/showcase-warm/kiosko.png', title: 'Kiosko', text: 'Autoservicio rápido para horas pico.', tone: 'amber', href: '#apps' },
-  { src: '/showcase-warm/tpv.png', title: 'TPV', text: 'Cobro, mesas, tickets y caja en una pantalla.', tone: 'orange', href: apkUrl },
-  { src: '/showcase-warm/kds.png', title: 'KDS', text: 'Cocina recibe ordenes al instante.', tone: 'ember', href: '#apps' },
-  { src: '/showcase-warm/delivery.png', title: 'Delivery', text: 'Reparto conectado con operación y caja.', tone: 'steel', href: '#apps' },
+  { src: '/showcase-warm/kiosko.png', title: 'Kiosko', text: 'Autoservicio rápido para horas pico.', tone: 'amber', href: apkUrls.kiosk },
+  { src: '/showcase-warm/tpv.png', title: 'TPV', text: 'Cobro, mesas, tickets y caja en una pantalla.', tone: 'orange', href: apkUrls.tpv },
+  { src: '/showcase-warm/kds.png', title: 'KDS', text: 'Cocina recibe ordenes al instante.', tone: 'ember', href: apkUrls.kds },
+  { src: '/showcase-warm/delivery.png', title: 'Delivery', text: 'Reparto conectado con operación y caja.', tone: 'steel', href: apkUrls.delivery },
   { src: '/showcase-warm/admin.png', title: 'Admin', text: 'Reportes, inventario y permisos por rol.', tone: 'gold', href: loginUrl },
+] as const
+
+const apkDownloads = [
+  ['TPV', apkUrls.tpv],
+  ['Kiosko', apkUrls.kiosk],
+  ['KDS', apkUrls.kds],
+  ['Delivery', apkUrls.delivery],
+  ['Meseros Lite', apkUrls.meseros],
 ] as const
 
 const pains = [
@@ -174,6 +189,13 @@ export default function HomePage() {
                   <strong>{app.title}</strong>
                   <small>{app.text}</small>
                 </span>
+              </a>
+            ))}
+          </div>
+          <div className="apk-downloads" aria-label="Descargas Android">
+            {apkDownloads.map(([label, href]) => (
+              <a href={href} download key={label}>
+                Descargar {label}
               </a>
             ))}
           </div>

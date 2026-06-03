@@ -157,6 +157,7 @@ function ConfigSummary({ cfg }: { cfg: ConfigPayload }) {
   if (cfg.allowedOrderTypes.length < 3) bits.push(`Tipos: ${cfg.allowedOrderTypes.join("/")}`);
   if (cfg.lockTimeoutSec > 0) bits.push(`Lock: ${cfg.lockTimeoutSec}s`);
   if (cfg.accentColor)       bits.push(`Color: ${cfg.accentColor}`);
+  if (cfg.extra?.voiceOrderDictationEnabled === true) bits.push("Voz: pedidos");
   if (bits.length === 0) return <span className="db-badge db-badge-blue">Defaults</span>;
   return <span style={{ fontSize: 11, color: "var(--text2)", fontFamily: "DM Mono,monospace" }}>{bits.join(" · ")}</span>;
 }
@@ -175,6 +176,8 @@ function EditDrawer({ row, onClose, onSaved }: {
   const [allowedOrderTypes, setAllowedOrderTypes] = useState<string[]>(initial.allowedOrderTypes);
   const [lockTimeoutSec, setLockTimeoutSec]       = useState<number>(initial.lockTimeoutSec || 0);
   const [accentColor, setAccentColor]             = useState(initial.accentColor || "");
+  const [voiceOrderDictationEnabled, setVoiceOrderDictationEnabled] =
+    useState(initial.extra?.voiceOrderDictationEnabled === true);
   const [extraText, setExtraText]                 = useState(JSON.stringify(initial.extra ?? {}, null, 2));
   const [error, setError]                         = useState("");
   const [saving, setSaving]                       = useState(false);
@@ -206,6 +209,7 @@ function EditDrawer({ row, onClose, onSaved }: {
       setError("El JSON de campo 'extra' no es válido");
       return;
     }
+    extra.voiceOrderDictationEnabled = voiceOrderDictationEnabled;
     setSaving(true);
     try {
       await api.put(`/api/saas/tpv-configs/${row.locationId}`, {
@@ -292,6 +296,30 @@ function EditDrawer({ row, onClose, onSaved }: {
                 <div style={{ width: 28, height: 28, borderRadius: 6, background: accentColor, border: "1px solid var(--border)" }} />
               )}
             </div>
+          </Field>
+
+          <Field label="Dictado por voz" hint="Muestra u oculta el boton de microfono en el TPV para agregar productos al ticket con voz.">
+            <label style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid var(--border)",
+              background: voiceOrderDictationEnabled ? "var(--orange-dim)" : "var(--surface2)",
+              cursor: "pointer",
+            }}>
+              <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
+                {voiceOrderDictationEnabled ? "Microfono visible" : "Microfono oculto"}
+              </span>
+              <input
+                type="checkbox"
+                checked={voiceOrderDictationEnabled}
+                onChange={(e) => setVoiceOrderDictationEnabled(e.target.checked)}
+                style={{ accentColor: "var(--orange)" }}
+              />
+            </label>
           </Field>
 
           <Field label="Extra (JSON)" hint="Para flags futuros sin tocar schema. Debe ser un objeto.">

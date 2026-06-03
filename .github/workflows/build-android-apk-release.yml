@@ -82,20 +82,28 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 --decode > apps/tpv/android/app/tpv-release.jks
           ls -lh apps/tpv/android/app/tpv-release.jks
 
-      - name: Build release APK
+      - name: Build release APK & AAB
         working-directory: apps/tpv/android
         env:
           KEYSTORE_PATH: app/tpv-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
 
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
         with:
           name: tpv-release-apk-${{ github.sha }}
           path: apps/tpv/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload signed release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: tpv-release-aab-${{ github.sha }}
+          path: apps/tpv/android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 90
 

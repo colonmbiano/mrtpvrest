@@ -113,7 +113,7 @@ export default function LockedPage() {
 
   return (
     <div
-      className="relative min-h-[100dvh] w-full overflow-y-auto overflow-x-hidden bg-[#0C0C0E]"
+      className="scroll-y relative h-[100dvh] min-h-[100dvh] w-full overflow-x-hidden bg-[#0C0C0E]"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       <div

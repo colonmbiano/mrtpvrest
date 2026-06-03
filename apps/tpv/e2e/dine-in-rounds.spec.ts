@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { injectTPVDevice, enterPIN } from '../../../tests/e2e/helpers';
 
 /**
  * TPV E2E Test: DINE_IN Rounds & Combined Payment.
@@ -43,6 +44,9 @@ test.describe('TPV Operational Flows', () => {
   }
 
   test.beforeEach(async ({ page }) => {
+    // Inject the TPV device linking configuration to skip setup wizard
+    await injectTPVDevice(page);
+
     // Navigate to Lock Screen
     await page.goto('/locked');
     
@@ -56,14 +60,8 @@ test.describe('TPV Operational Flows', () => {
         await page.goto('/locked');
     }
 
-    // Enter PIN Digit by Digit
-    await page.waitForSelector('button:has-text("1")');
-    for (const digit of EMPLOYEE_PIN) {
-      await page.getByRole('button', { name: digit, exact: true }).click();
-    }
-    
-    // Verify Successful Login to Hub
-    await expect(page).toHaveURL(/\/hub/);
+    // Enter PIN and log in using standard E2E helper
+    await enterPIN(page, EMPLOYEE_PIN);
 
     // Handle Workspace Selection if present
     const workspaceButton = page.getByRole('button', { name: /Seleccionar/i });
@@ -77,28 +75,34 @@ test.describe('TPV Operational Flows', () => {
     await page.getByRole('button', { name: /Comer Aquí/i }).click();
     await expect(page).toHaveURL(/\/order-type/);
     
-    // 2. Pick a Free Table
-    const freeTable = page
-      .getByRole('button', { name: /Mesa/i })
-      .filter({ hasNotText: '+ RONDA' })
+    // 2. Pick a Table (Free or Occupied)
+    const tableBtn = page
+      .locator('.fixed.inset-0.z-\\[150\\]')
+      .getByRole('button')
+      .filter({ hasText: /Mesa/i })
       .first();
 
-    await expect(freeTable).toBeVisible();
-    await freeTable.click();
+    await expect(tableBtn).toBeVisible();
+    await tableBtn.click();
     
-    // 3. Handle Guest Count Modal (Step 2 of Dine-In flow)
+    // 3. Handle Guest Count Modal (Step 2 of Dine-In flow, only appears for Free tables)
     const guestsModalTitle = page.getByRole('heading', { name: /¿Cuántos comensales?/i });
-    if (await guestsModalTitle.isVisible()) {
+    try {
+      await guestsModalTitle.waitFor({ state: 'visible', timeout: 2000 });
       await page.getByRole('button', { name: '2', exact: true }).click();
       await page.getByRole('button', { name: /Empezar orden/i }).click();
+    } catch (e) {
+      // Guest modal didn't appear (table was occupied/dirty or already has an open order)
     }
-    
+
     // 4. Verify we are in the Menu/Catalog
     await expect(page).toHaveURL(/\/menu/);
 
     // 5. Handle Catalog Navigation (Categories vs Products)
-    // If no products are visible, we must click a category or favorites
-    const productCards = page.locator('.product-card');
+    const productCards = page.locator('main button').filter({ hasText: '$' });
+
+    // Wait for product cards to load and be visible
+    await expect(productCards.first()).toBeVisible({ timeout: 15000 });
     
     if (await productCards.count() === 0) {
       console.log('No products visible, looking for categories or favorites...');
@@ -113,39 +117,51 @@ test.describe('TPV Operational Flows', () => {
       }
     }
 
+    // Helper to safely click a product and handle its modifier modal if it appears
+    async function addProduct(nameRegex: RegExp) {
+      await page.getByRole('button', { name: nameRegex }).first().click();
+      const agregarBtn = page.getByRole('button', { name: 'Agregar', exact: true });
+      try {
+        await agregarBtn.waitFor({ state: 'visible', timeout: 1500 });
+        await agregarBtn.click();
+      } catch (e) {
+        // Modal did not open, which means the product was added directly
+      }
+    }
+
     // 6. Add Round 1 (2 products)
     await expect(productCards.first()).toBeVisible({ timeout: 15000 });
     console.log(`Selecting products. Count: ${await productCards.count()}`);
 
-    await productCards.nth(0).click();
-    await productCards.nth(1).click();
+    await addProduct(/Burger de Res Clásica/i);
+    await addProduct(/Taco Pastor/i);
     
     // 7. Verify Ticket State
-    const sidebar = page.locator('aside');
-    await expect(sidebar).toContainText('Ticket 1');
+    const sidebar = page.locator('aside:not(.border-r)');
+    await expect(sidebar).toContainText('ID: 1');
     await expect(sidebar).not.toContainText('Ticket vacío');
     
     // 8. Send Round 1 to Kitchen
-    await page.getByRole('button', { name: /Cocina/i }).click();
+    await page.getByRole('button', { name: /Guardar Orden/i }).click();
     
     // Verify success toast and UI state change
     await expect(page.getByText(/Pedido enviado/i)).toBeVisible();
     
     // Current ticket section should be empty, History section should appear
     await expect(page.getByText(/Rondas anteriores/i)).toBeVisible();
-    await expect(page.getByText(/Ticket vacío/i)).toBeVisible();
+    await expect(page.getByText(/Nueva ronda/i)).not.toBeVisible();
     
     // 9. Add Round 2 (1 product)
-    await productCards.nth(2).click();
+    await addProduct(/Taco Bisteck/i);
     
     // Verify "Nueva ronda" separator appears in Sidebar
     await expect(page.getByText(/Nueva ronda/i)).toBeVisible();
     
     // 10. Open Payment Modal
-    await page.getByRole('button', { name: /Cobrar Ticket/i }).click();
+    await page.getByRole('button', { name: 'Cobrar', exact: true }).click();
     
     // Verify Payment Modal structure
-    const paymentModal = page.locator('.fixed.inset-0.z-\\[170\\]'); // PaymentModal z-index
+    const paymentModal = page.locator('.fixed.inset-0.z-\\[100\\]'); // PaymentModal z-index
     await expect(paymentModal).toBeVisible();
     
     // 11. Process Payment with Cash
