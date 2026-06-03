@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import DualScreenSettings from "@/components/settings/DualScreenSettings";
 
 type DisplaySettings = {
   gridSize?: number;
@@ -700,6 +701,10 @@ export default function TPVConfigModal({ onClose, settings, onUpdate }: Props) {
                 style={{background:saved?"#22c55e":"var(--gold)",color:"#000"}}>
                 {saved?"✅ Guardado":"💾 Guardar configuración"}
               </button>
+
+              {/* ── Doble pantalla / pantalla de cliente ── */}
+              <div className="h-px my-2" style={{background:"var(--border)"}} />
+              <DualScreenSettings />
             </div>
           )}
 

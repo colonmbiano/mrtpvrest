@@ -76,6 +76,7 @@ const SECTIONS = [
       { href: "/admin/menu/variantes",  icon: <ISliders />,  label: "Variantes" },
       { href: "/admin/promociones",     icon: <ITag />,      label: "Promociones IA" },
       { href: "/admin/banners",         icon: <IImage />,    label: "Banners" },
+      { href: "/admin/pantalla-cliente", icon: <IImage />,   label: "Pantalla Cliente" },
       { href: "/admin/inventario",          icon: <IBox />,      label: "Inventario" },
       { href: "/admin/inventario/compras",   icon: <IBox />,      label: "Compras & Bodega" },
     ],

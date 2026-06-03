@@ -12,6 +12,8 @@ import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { useKitchenConfig } from "@/hooks/usePrinters";
+import { useDualScreen } from "@/hooks/useDualScreen";
+import type { CartSnapshot } from "@/lib/dual-screen/channel";
 import { hapticMedium, hapticSuccess, hapticError } from "@/lib/haptics";
 import api from "@/lib/api";
 import { apiOrQueue } from "@/lib/offline";
@@ -131,6 +133,53 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // sin IVA = subtotal / 1.16; IVA = diferencia.
   const subtotalSinIva = subtotal / (1 + IVA_RATE);
   const ivaAmount = subtotal - subtotalSinIva;
+
+  // ── Doble pantalla (pantalla de cliente) ──────────────────────────────
+  // Empuja el carrito en vivo al segundo monitor. No-op si está apagado.
+  const dualScreen = useDualScreen();
+  const justCompletedRef = React.useRef(false);
+
+  const cartSnapshot = useMemo<CartSnapshot>(() => {
+    const lines = [
+      // Rondas previas (modo extender orden)
+      ...previousItems.map((it, idx) => ({
+        id: `prev-${it.id ?? idx}`,
+        name: it.name as string,
+        qty: it.quantity as number,
+        unitPrice: it.price as number,
+        total: (it.price as number) * (it.quantity as number),
+        note: (it.notes as string) || undefined,
+      })),
+      // Ronda actual
+      ...ticket.items.map((it, idx) => ({
+        id: `cur-${it.menuItemId}-${idx}`,
+        name: it.variantName ? `${it.name} (${it.variantName})` : it.name,
+        qty: it.quantity,
+        unitPrice: it.quantity > 0 ? it.subtotal / it.quantity : it.price,
+        total: it.subtotal,
+        note: it.notes || undefined,
+      })),
+    ];
+    return {
+      lines,
+      subtotal,
+      discount: ticket.discount,
+      discountLabel: ticket.discount > 0 ? "Descuento" : undefined,
+      total,
+      currency: "MXN",
+    };
+  }, [previousItems, ticket.items, ticket.discount, subtotal, total]);
+
+  useEffect(() => {
+    if (!dualScreen.enabled) return;
+    // Tras un cobro, ignorar el primer "carrito vacío" para que la pantalla
+    // de gracias no desaparezca de inmediato (se mantiene hasta la próxima venta).
+    if (cartSnapshot.lines.length === 0 && justCompletedRef.current) {
+      justCompletedRef.current = false;
+      return;
+    }
+    dualScreen.pushCart(cartSnapshot);
+  }, [cartSnapshot, dualScreen]);
 
   // Config de comanda — header/footer/toggles cargados desde admin.
   // Se pasa al builder en cada printKitchenTickets; si aún no terminó
@@ -417,6 +466,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
       toast.success(queued ? "Cobro en cola · se registrara al volver la red" : "Cobro procesado");
       hapticSuccess();
+
+      // Doble pantalla: mostrar agradecimiento en la pantalla de cliente.
+      justCompletedRef.current = true;
+      dualScreen.completeSale({ total: total + tipAmount });
       
       // Capturar contexto antes de limpiar el ticket activo.
       const ticketContext = {
