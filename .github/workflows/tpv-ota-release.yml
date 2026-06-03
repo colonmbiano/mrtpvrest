@@ -104,16 +104,24 @@ jobs:
           # backend (Railway). No caduca, a diferencia de los JWT de login.
           OTA_PUBLISH_TOKEN: ${{ secrets.OTA_PUBLISH_TOKEN }}
         run: |
+          set -o pipefail
           if [ -z "$OTA_PUBLISH_TOKEN" ]; then
             echo "::error::Falta el secret OTA_PUBLISH_TOKEN. Configúralo en Settings → Secrets → Actions con el mismo valor que OTA_PUBLISH_TOKEN del backend (Railway)."
             exit 1
           fi
-          curl -fsSL -X POST https://api.mrtpvrest.com/api/ota/publish \
+          # Capturamos código HTTP y cuerpo por separado: un 4xx/5xx debe poner
+          # el job en ROJO y mostrar el error del backend (antes un pipe a tee
+          # enmascaraba el fallo de curl y el job salía verde sin publicar).
+          HTTP=$(curl -sS -o /tmp/publish.json -w '%{http_code}' -X POST https://api.mrtpvrest.com/api/ota/publish \
             -H "Authorization: Bearer $OTA_PUBLISH_TOKEN" \
             -F "appId=com.mrtpvrest.tpv" \
             -F "version=${{ steps.ver.outputs.version }}" \
             -F "channel=${{ steps.meta.outputs.channel }}" \
             -F "notes=${{ steps.meta.outputs.notes }}" \
-            -F "bundle=@/tmp/bundle.zip" \
-            | tee /tmp/publish.json
+            -F "bundle=@/tmp/bundle.zip")
+          echo "HTTP $HTTP"; cat /tmp/publish.json; echo
+          if [ "$HTTP" -lt 200 ] || [ "$HTTP" -ge 300 ]; then
+            echo "::error::OTA publish falló (HTTP $HTTP): $(cat /tmp/publish.json)"
+            exit 1
+          fi
           echo "::notice::Publicado v${{ steps.ver.outputs.version }} en canal ${{ steps.meta.outputs.channel }}"
