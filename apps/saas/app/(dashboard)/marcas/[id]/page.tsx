@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import TenantModulesPanel from "@/components/TenantModulesPanel";
+import { enabledModulesForPanel, type TenantModuleRow } from "@/lib/modules";
 
 interface Plan {
   id: string; name: string; displayName: string; price: number;
@@ -31,6 +32,7 @@ interface Tenant {
   logoUrl: string | null; onboardingDone: boolean; createdAt: string;
   hasInventory: boolean; hasDelivery: boolean; hasWebStore: boolean;
   enabledModules: string[];
+  tenantModules?: TenantModuleRow[];
   whatsappNumber: string | null;
   subscription: Subscription | null;
   restaurants: Restaurant[];
@@ -417,11 +419,15 @@ export default function TenantDetailPage() {
                   hasInventory: tenant.hasInventory,
                   hasDelivery: tenant.hasDelivery,
                   hasWebStore: tenant.hasWebStore,
-                  enabledModules: tenant.enabledModules ?? [],
+                  // Fuente unificada: prefiere tenantModules (canónico), cae a legacy.
+                  enabledModules: enabledModulesForPanel(tenant),
                   whatsappNumber: tenant.whatsappNumber,
                 }}
                 plan={sub?.plan ?? null}
-                onUpdated={(patch) => setTenant(t => t ? { ...t, ...patch } as Tenant : t)}
+                // Tras editar, limpiamos tenantModules para que un remount (cambio
+                // de pestaña) re-derive desde los campos legacy ya actualizados por
+                // el PATCH, evitando re-sembrar un snapshot canónico obsoleto.
+                onUpdated={(patch) => setTenant(t => t ? { ...t, ...patch, tenantModules: undefined } as Tenant : t)}
                 onError={showToast}
               />
             </div>

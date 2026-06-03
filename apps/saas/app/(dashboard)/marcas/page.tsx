@@ -2,13 +2,15 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
-import TenantModulesToggle from "@/components/TenantModulesToggle";
+import { MODULE_CATALOG, activeModuleKeys, type TenantModuleRow } from "@/lib/modules";
 
 interface Plan { id: string; name: string; displayName: string; price: number }
 interface Tenant {
   id: string; name: string; slug: string; ownerEmail: string;
   logoUrl: string | null; onboardingDone: boolean; createdAt: string;
   hasInventory: boolean; hasDelivery: boolean; hasWebStore: boolean;
+  enabledModules?: string[];
+  tenantModules?: TenantModuleRow[];
   whatsappNumber: string | null;
   subscription: { status: string; daysLeft: number | null; trialEndsAt: string; plan: Plan } | null;
   _count: { restaurants: number; users: number };
@@ -204,20 +206,38 @@ function MarcasContent() {
                           : sub?.trialEndsAt ? timeAgo(sub.trialEndsAt) : "—"}
                       </td>
                       <td style={{ fontSize:12, fontFamily:"DM Mono,monospace" }}>{t._count.users}</td>
-                      <td onClick={e => e.stopPropagation()}>
-                        <TenantModulesToggle
-                          tenant={{
-                            id: t.id,
-                            hasInventory:   t.hasInventory,
-                            hasDelivery:    t.hasDelivery,
-                            hasWebStore:    t.hasWebStore,
-                            whatsappNumber: t.whatsappNumber,
-                          }}
-                          onUpdated={(patch) => {
-                            setTenants((prev) => prev.map(x => x.id === t.id ? { ...x, ...patch } : x));
-                          }}
-                          onError={showToast}
-                        />
+                      <td>
+                        {(() => {
+                          const active = activeModuleKeys(t);
+                          const chips = MODULE_CATALOG.filter(m => active.has(m.key));
+                          return (
+                            <div style={{ display:"flex", gap:5, flexWrap:"wrap", maxWidth:280, alignItems:"center" }}>
+                              {chips.map(m => (
+                                <span key={m.key} title={m.label} style={{
+                                  display:"inline-flex", alignItems:"center", gap:5,
+                                  padding:"3px 8px", borderRadius:999, fontSize:10,
+                                  fontFamily:"DM Mono, monospace", whiteSpace:"nowrap",
+                                  border:`1px solid var(--${m.accent})`, background:`var(--${m.accent}-dim)`,
+                                  color:`var(--${m.accent})`,
+                                }}>
+                                  <span style={{ width:6, height:6, borderRadius:"50%", background:`var(--${m.accent})` }} />
+                                  {m.shortLabel}
+                                </span>
+                              ))}
+                              {t.whatsappNumber && (
+                                <span title={`WhatsApp: ${t.whatsappNumber}`} style={{
+                                  display:"inline-flex", alignItems:"center", gap:5,
+                                  padding:"3px 8px", borderRadius:999, fontSize:10,
+                                  fontFamily:"DM Mono, monospace", whiteSpace:"nowrap",
+                                  border:"1px solid var(--green)", background:"var(--green-dim)", color:"var(--green)",
+                                }}>📱 WhatsApp</span>
+                              )}
+                              {chips.length === 0 && !t.whatsappNumber && (
+                                <span style={{ fontSize:11, color:"var(--text3)", fontFamily:"DM Mono, monospace" }}>—</span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td onClick={e => e.stopPropagation()}>
                         <div style={{ display:"flex", gap:6 }}>
