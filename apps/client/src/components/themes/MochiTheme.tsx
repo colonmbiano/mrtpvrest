@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { useCart } from '../../lib/cartStore';
+import StoreCheckout from '../StoreCheckout';
+import type { DeliveryConfig } from '../../lib/delivery';
 
 type MochiThemeProps = {
   data: {
@@ -13,6 +15,8 @@ type MochiThemeProps = {
       logo: string | null;
       hasWebStore: boolean;
       whatsappNumber: string | null;
+      minOrderAmount?: number;
+      delivery?: DeliveryConfig;
       themeConfig: {
         theme?: string;
         primaryColor?: string;
@@ -28,7 +32,9 @@ type MochiThemeProps = {
 export function MochiTheme({ data }: MochiThemeProps) {
   const { info, menu, locations } = data;
   const [isCartOpen, setIsCartOpen] = useState(false);
-  
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const primary = info.themeConfig?.primaryColor || '#ff5c35';
+
   // Zustand Cart Store
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
@@ -228,8 +234,9 @@ export function MochiTheme({ data }: MochiThemeProps) {
                   <p className="font-syne font-extrabold text-4xl text-gray-900">{fmt(total)}</p>
                 </div>
               </div>
-              <button 
+              <button
                 disabled={quantity === 0}
+                onClick={() => { setIsCartOpen(false); setCheckoutOpen(true); }}
                 className="w-full py-5 rounded-[24px] bg-primary text-white font-syne font-bold text-xl shadow-xl shadow-primary/30 hover:shadow-primary/40 active:scale-95 transition-all disabled:opacity-50 disabled:shadow-none"
               >
                 Confirmar Pedido
@@ -238,6 +245,16 @@ export function MochiTheme({ data }: MochiThemeProps) {
           </div>
         </div>
       )}
+
+      <StoreCheckout
+        open={checkoutOpen}
+        onClose={() => setCheckoutOpen(false)}
+        slug={info.slug}
+        primary={primary}
+        locations={locations}
+        delivery={info.delivery}
+        minOrderAmount={info.minOrderAmount}
+      />
     </div>
   );
 }

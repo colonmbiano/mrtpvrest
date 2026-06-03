@@ -1,3 +1,14 @@
+export type DeliveryConfig = {
+  mode: 'FLAT' | 'DISTANCE';
+  flatFee: number;
+  freeFrom: number | null;
+  baseFee: number;
+  perKm: number;
+  freeRadiusKm: number | null;
+  maxKm: number | null;
+  origin: { lat: number; lng: number } | null;
+};
+
 export type StoreProps = {
   id: string;
   name: string;
@@ -6,6 +17,8 @@ export type StoreProps = {
   primaryColor: string;
   slug?: string;
   storefrontTheme?: string;
+  minOrderAmount?: number;
+  delivery?: DeliveryConfig;
 };
 
 export type CartLine = { id: string; name: string; quantity: number; price: number };

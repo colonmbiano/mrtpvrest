@@ -17,6 +17,66 @@ const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const router = express.Router();
 
+// ── Envío: distancia y cálculo de costo ──────────────────────────────────
+// Haversine: distancia en km entre dos coordenadas (misma fórmula que
+// gps.routes.js pero devolviendo km, que es la unidad del cobro por km).
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371; // radio terrestre en km
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Calcula el costo de envío de forma autoritativa en el backend.
+ * @param {object} config - RestaurantConfig
+ * @param {number} subtotal - subtotal del pedido (para envío gratis por monto)
+ * @param {{lat:number,lng:number}|null} dest - coordenadas del cliente
+ * @returns {{ fee:number, distanceKm:number|null, error:string|null }}
+ */
+function computeDeliveryFee(config, subtotal, dest) {
+  const mode = config?.deliveryMode || 'FLAT';
+
+  // Envío gratis por monto de compra (aplica en cualquier modo).
+  const freeFrom = config?.freeDeliveryFrom;
+  if (freeFrom != null && subtotal >= freeFrom) {
+    return { fee: 0, distanceKm: null, error: null };
+  }
+
+  if (mode !== 'DISTANCE') {
+    return { fee: Number(config?.deliveryFee || 0), distanceKm: null, error: null };
+  }
+
+  // Modo DISTANCE: requiere origen configurado y coordenadas del cliente.
+  const origin = (config?.originLat != null && config?.originLng != null)
+    ? { lat: config.originLat, lng: config.originLng }
+    : null;
+  if (!origin || !dest || dest.lat == null || dest.lng == null) {
+    // Sin datos suficientes: caemos a la tarifa base como mínimo razonable.
+    return { fee: Number(config?.deliveryBaseFee || config?.deliveryFee || 0), distanceKm: null, error: null };
+  }
+
+  const distanceKm = Math.round(haversineKm(origin.lat, origin.lng, dest.lat, dest.lng) * 100) / 100;
+
+  // Fuera de cobertura.
+  if (config?.deliveryMaxKm != null && distanceKm > config.deliveryMaxKm) {
+    return { fee: 0, distanceKm, error: 'OUT_OF_RANGE' };
+  }
+
+  // Dentro del radio de envío gratis.
+  if (config?.deliveryFreeRadiusKm != null && distanceKm <= config.deliveryFreeRadiusKm) {
+    return { fee: 0, distanceKm, error: null };
+  }
+
+  const base = Number(config?.deliveryBaseFee || 0);
+  const perKm = Number(config?.deliveryPerKm || 0);
+  const fee = Math.round((base + perKm * distanceKm) * 100) / 100;
+  return { fee, distanceKm, error: null };
+}
+
 // ── Anti-fraude: rate limit por kiosko ───────────────────────────────────
 // Cache en memoria de pedidos PENDING por terminal. Si un mismo terminal
 // crea muchas órdenes sin pagar en ventana corta, lo bloqueamos. Para
@@ -135,6 +195,29 @@ router.get('/info', async (req, res) => {
     whatsappNumber: config?.whatsappNumber || tenantConfig.whatsappNumber,
     storefrontTheme: (() => { const t = config?.storefrontTheme; const map = { MOCHI: "KAWAII", BENTO: "HALO", POCKET: "BRUTALIST" }; return map[t] || t || "KAWAII"; })(),
     primaryColor:    restaurant.accentColor || "#ff5c35",
+
+    // Estado de la tienda — el storefront debe bloquear pedidos si está cerrada.
+    isOpen:        config?.isOpen ?? true,
+    closedMessage: config?.closedMessage || null,
+
+    // Reglas de pedido visibles para el cliente
+    minOrderAmount:    config?.minOrderAmount ?? 0,
+    estimatedDelivery: config?.estimatedDelivery ?? 40,
+
+    // Configuración de envío (el storefront calcula la vista previa; el backend
+    // recalcula y manda la verdad al crear la orden).
+    delivery: {
+      mode:         config?.deliveryMode || 'FLAT',
+      flatFee:      config?.deliveryFee ?? 0,
+      freeFrom:     config?.freeDeliveryFrom ?? null, // envío gratis por monto de compra
+      baseFee:      config?.deliveryBaseFee ?? 0,
+      perKm:        config?.deliveryPerKm ?? 0,
+      freeRadiusKm: config?.deliveryFreeRadiusKm ?? null,
+      maxKm:        config?.deliveryMaxKm ?? null,
+      origin: (config?.originLat != null && config?.originLng != null)
+        ? { lat: config.originLat, lng: config.originLng }
+        : null,
+    },
   });
 });
 
@@ -232,12 +315,19 @@ router.post('/orders', async (req, res) => {
   if (!store) return;
   const { restaurant, location } = store;
 
+  // Configuración del restaurante: fuente de verdad para envío, mínimos y
+  // estado abierto/cerrado. El bug previo usaba restaurant.deliveryFee (campo
+  // inexistente) → el envío siempre cobraba $0.
+  const config = await prisma.restaurantConfig.findUnique({ where: { restaurantId: restaurant.id } });
+
   const {
     items,
     customerName,
     customerPhone,
     orderType = 'DELIVERY',
     deliveryAddress,
+    deliveryLat: rawLat,
+    deliveryLng: rawLng,
     paymentMethod = 'CASH_ON_DELIVERY',
     notes,
     locationId: bodyLocationId,
@@ -247,6 +337,8 @@ router.post('/orders', async (req, res) => {
     couponCode: rawCouponCode,
     loyaltyQrCode: rawLoyaltyQr,
   } = req.body;
+  const deliveryLat = (rawLat != null && !Number.isNaN(Number(rawLat))) ? Number(rawLat) : null;
+  const deliveryLng = (rawLng != null && !Number.isNaN(Number(rawLng))) ? Number(rawLng) : null;
   const tip = Math.max(0, Number(rawTip) || 0);
   const couponCode = typeof rawCouponCode === 'string' ? rawCouponCode.trim().toUpperCase() : '';
   const loyaltyQrCode = typeof rawLoyaltyQr === 'string' ? rawLoyaltyQr.trim() : '';
@@ -258,6 +350,15 @@ router.post('/orders', async (req, res) => {
   const tableNumber = resolvedOrderType === 'DINE_IN' && rawTableNumber
     ? (Math.max(1, Math.min(999, parseInt(rawTableNumber) || 0)) || null)
     : null;
+
+  // Tienda cerrada: bloquear pedidos online (kioskos operan presencialmente y
+  // no dependen de este flag). 423 Locked = recurso temporalmente no disponible.
+  if (rawSource !== 'KIOSK' && config && config.isOpen === false) {
+    return res.status(423).json({
+      error: config.closedMessage || 'La tienda está cerrada en este momento.',
+      code: 'STORE_CLOSED',
+    });
+  }
 
   // Validaciones básicas
   if (!items || !Array.isArray(items) || items.length === 0) {
@@ -362,7 +463,33 @@ router.post('/orders', async (req, res) => {
     );
 
     const subtotal    = itemsData.reduce((s, i) => s + i.subtotal, 0);
-    const deliveryFee = resolvedOrderType === 'DELIVERY' ? (restaurant.deliveryFee || 0) : 0;
+
+    // Mínimo de compra (solo pedidos online; el TPV/kiosko no lo aplica).
+    if (rawSource !== 'KIOSK' && config?.minOrderAmount > 0 && subtotal < config.minOrderAmount) {
+      return res.status(400).json({
+        error: `El pedido mínimo es de $${config.minOrderAmount}.`,
+        code: 'MIN_ORDER_NOT_MET',
+        minOrderAmount: config.minOrderAmount,
+      });
+    }
+
+    // Envío: calculado en el backend (fuente de verdad). Para DELIVERY usa el
+    // modo configurado (FLAT o DISTANCE) con las coordenadas del cliente.
+    let deliveryFee = 0;
+    let deliveryDistanceKm = null;
+    if (resolvedOrderType === 'DELIVERY') {
+      const dest = (deliveryLat != null && deliveryLng != null) ? { lat: deliveryLat, lng: deliveryLng } : null;
+      const calc = computeDeliveryFee(config, subtotal, dest);
+      if (calc.error === 'OUT_OF_RANGE') {
+        return res.status(400).json({
+          error: 'Tu ubicación está fuera del área de cobertura de envío.',
+          code: 'OUT_OF_DELIVERY_RANGE',
+          distanceKm: calc.distanceKm,
+        });
+      }
+      deliveryFee = calc.fee;
+      deliveryDistanceKm = calc.distanceKm;
+    }
 
     // Cupón opcional. Si es inválido, NO bloquea el pedido — solo se ignora
     // y se manda warning en respuesta. Mejor experiencia que rechazar todo.
@@ -428,6 +555,9 @@ router.post('/orders', async (req, res) => {
         customerName:    customerName.trim(),
         customerPhone:   customerPhone?.trim() || null,
         deliveryAddress: resolvedOrderType === 'DELIVERY' ? deliveryAddress.trim() : null,
+        deliveryLat:     resolvedOrderType === 'DELIVERY' ? deliveryLat : null,
+        deliveryLng:     resolvedOrderType === 'DELIVERY' ? deliveryLng : null,
+        deliveryDistanceKm: resolvedOrderType === 'DELIVERY' ? deliveryDistanceKm : null,
         notes:           notes?.trim() || null,
         userId:          loyaltyUserId,
         items: { create: itemsData },
