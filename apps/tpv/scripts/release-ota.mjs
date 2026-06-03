@@ -5,8 +5,9 @@
 //   pnpm --filter @mrtpvrest/tpv ota:release [--version 1.0.5] [--channel production] [--notes "..."]
 //
 // Vars de entorno requeridas:
-//   OTA_API_URL     (default https://api.mrtpvrest.com)
-//   OTA_ADMIN_TOKEN JWT de un usuario SUPER_ADMIN (login en admin → DevTools → localStorage 'token')
+//   OTA_API_URL       (default https://api.mrtpvrest.com)
+//   OTA_PUBLISH_TOKEN token de servicio estático (igual al del backend). Recomendado.
+//   OTA_ADMIN_TOKEN   alternativa: JWT de SUPER_ADMIN (login en admin → localStorage 'token'). Caduca a los 15 min.
 //
 // Pasos:
 //   1) Lee versión de package.json (o de --version)
@@ -88,9 +89,11 @@ async function main() {
   }
 
   const apiBase = process.env.OTA_API_URL || 'https://api.mrtpvrest.com';
-  const token = process.env.OTA_ADMIN_TOKEN;
+  // Preferimos el token de servicio estático (no caduca); como fallback,
+  // un JWT humano de SUPER_ADMIN copiado del admin.
+  const token = process.env.OTA_PUBLISH_TOKEN || process.env.OTA_ADMIN_TOKEN;
   if (!token) {
-    console.error('OTA_ADMIN_TOKEN no está seteado. Login en admin y copia el JWT desde localStorage.');
+    console.error('Falta credencial: setea OTA_PUBLISH_TOKEN (token de servicio) o OTA_ADMIN_TOKEN (JWT SUPER_ADMIN del admin).');
     process.exit(1);
   }
 
