@@ -89,17 +89,9 @@ async function main() {
   }
 
   const apiBase = process.env.OTA_API_URL || 'https://api.mrtpvrest.com';
-<<<<<<< Updated upstream
-  // Preferimos el token de servicio estático (no caduca); como fallback,
-  // un JWT humano de SUPER_ADMIN copiado del admin.
-  const token = process.env.OTA_PUBLISH_TOKEN || process.env.OTA_ADMIN_TOKEN;
+  const token = process.env.OTA_PUBLISH_TOKEN || process.env.OTA_ADMIN_TOKEN || process.env.OTA_BUILD_SECRET;
   if (!token) {
-    console.error('Falta credencial: setea OTA_PUBLISH_TOKEN (token de servicio) o OTA_ADMIN_TOKEN (JWT SUPER_ADMIN del admin).');
-=======
-  const token = process.env.OTA_ADMIN_TOKEN || process.env.OTA_BUILD_SECRET;
-  if (!token) {
-    console.error('OTA_ADMIN_TOKEN o OTA_BUILD_SECRET no está seteado. Setea una de las dos variables.');
->>>>>>> Stashed changes
+    console.error('Falta credencial: setea OTA_PUBLISH_TOKEN, OTA_ADMIN_TOKEN u OTA_BUILD_SECRET.');
     process.exit(1);
   }
 

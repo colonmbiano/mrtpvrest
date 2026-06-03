@@ -107,13 +107,13 @@ export default function NumpadPIN({
 
   return (
     <div
-      className="mx-auto flex w-full max-w-[min(80vw,38vh,420px)] flex-col sm:max-w-[min(86vw,420px)] landscape:max-w-[min(44vw,420px)]"
-      style={{ gap: "clamp(6px, 1.7vmin, 18px)" }}
+      className="mx-auto flex w-full max-w-[min(80vw,36dvh,400px)] flex-col sm:max-w-[min(72vw,36dvh,400px)] landscape:max-w-[min(36vw,36dvh,400px)]"
+      style={{ gap: "clamp(5px, 1.4vmin, 14px)" }}
     >
       <div className="flex items-center justify-between gap-3">
         <div
           className="flex justify-center"
-          style={{ gap: "clamp(9px, 2.5vmin, 16px)" }}
+          style={{ gap: "clamp(8px, 2vmin, 14px)" }}
           aria-label={`${pin.length} de ${maxDigits} dígitos capturados`}
         >
           {Array.from({ length: maxDigits }).map((_, index) => {
@@ -123,8 +123,8 @@ export default function NumpadPIN({
                 key={index}
                 className="rounded-full border-2 transition-colors"
                 style={{
-                  width: "clamp(11px, 3.2vmin, 22px)",
-                  height: "clamp(11px, 3.2vmin, 22px)",
+                  width: "clamp(10px, 2.8vmin, 20px)",
+                  height: "clamp(10px, 2.8vmin, 20px)",
                   background: filled ? "#ffb84d" : "transparent",
                   borderColor: filled ? "#ffb84d" : "rgba(255,255,255,0.2)",
                   boxShadow: filled
@@ -142,7 +142,7 @@ export default function NumpadPIN({
 
       <div
         className="grid grid-cols-3"
-        style={{ gap: "clamp(6px, 1.9vmin, 18px)" }}
+        style={{ gap: "clamp(5px, 1.5vmin, 14px)" }}
       >
         {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
           <button
@@ -152,8 +152,8 @@ export default function NumpadPIN({
             disabled={disabled || pin.length >= maxDigits}
             className={digitClass}
             style={{
-              fontSize: "clamp(1.5rem, min(6vmin, 4.5vh), 3.25rem)",
-              minHeight: "clamp(52px, min(13vmin, 9.5vh), 86px)",
+              fontSize: "clamp(1.35rem, min(5.2vmin, 4dvh), 3rem)",
+              minHeight: "clamp(44px, min(11vmin, 8.5dvh), 80px)",
             }}
           >
             {digit}
@@ -165,7 +165,7 @@ export default function NumpadPIN({
           onClick={handleClear}
           disabled={disabled || pin.length === 0}
           className={utilityClass}
-          style={{ minHeight: "clamp(52px, min(13vmin, 9.5vh), 86px)" }}
+          style={{ minHeight: "clamp(44px, min(11vmin, 8.5dvh), 80px)" }}
         >
           <span className="text-[10px] uppercase tracking-[0.18em]">
             Limpiar
@@ -178,8 +178,8 @@ export default function NumpadPIN({
           disabled={disabled || pin.length >= maxDigits}
           className={digitClass}
           style={{
-            fontSize: "clamp(1.5rem, min(6vmin, 4.5vh), 3.25rem)",
-            minHeight: "clamp(52px, min(13vmin, 9.5vh), 86px)",
+            fontSize: "clamp(1.35rem, min(5.2vmin, 4dvh), 3rem)",
+            minHeight: "clamp(44px, min(11vmin, 8.5dvh), 80px)",
           }}
         >
           0
@@ -191,11 +191,11 @@ export default function NumpadPIN({
           disabled={disabled || pin.length === 0}
           aria-label="Borrar último dígito"
           className={utilityClass}
-          style={{ minHeight: "clamp(52px, min(13vmin, 9.5vh), 86px)" }}
+          style={{ minHeight: "clamp(44px, min(11vmin, 8.5dvh), 80px)" }}
         >
           <Delete
             style={{
-              width: "clamp(18px, min(4.5vmin, 3.4vh), 34px)",
+              width: "clamp(17px, min(4vmin, 3dvh), 30px)",
               height: "auto",
             }}
           />
@@ -206,7 +206,7 @@ export default function NumpadPIN({
         type="button"
         onClick={() => void handleSubmit()}
         disabled={!canSubmit}
-        className="min-h-[46px] w-full rounded-lg bg-[#ffb84d] px-4 text-sm font-black uppercase tracking-[0.2em] text-[#0a0a0c] transition-colors active:scale-[0.99] disabled:bg-white/10 disabled:text-white/30 disabled:active:scale-100 focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70 sm:min-h-[54px]"
+        className="min-h-[42px] w-full rounded-lg bg-[#ffb84d] px-4 text-sm font-black uppercase tracking-[0.2em] text-[#0a0a0c] transition-colors active:scale-[0.99] disabled:bg-white/10 disabled:text-white/30 disabled:active:scale-100 focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70 sm:min-h-[48px]"
       >
         {disabled ? "Validando" : submitLabel}
       </button>

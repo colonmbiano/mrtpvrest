@@ -36,6 +36,8 @@ public/assets/
 !apps/landing/public/brand/*.png
 !apps/landing/public/people/*.png
 !apps/landing/public/showcase-warm/*.png
+!apps/tpv/public/brand/
+!apps/tpv/public/brand/*.png
 # … pero los icons/splash de Capacitor Android sí van al repo:
 !**/android/**/*.png
 !**/android/**/*.jpg
