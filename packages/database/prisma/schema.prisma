@@ -684,6 +684,12 @@ model Order {
   source           String    @default("ONLINE")
   deliveryDriverId String?
   deliveryAddress  String?
+  // Coordenadas del cliente (GPS del navegador en el checkout) y distancia
+  // calculada al origen de la tienda. Se usan para el envío por distancia y
+  // para mostrar el pin al repartidor. Nullables: TAKEOUT/DINE_IN no los tienen.
+  deliveryLat        Float?
+  deliveryLng        Float?
+  deliveryDistanceKm Float?
   customerName     String?
   customerPhone    String?
   paidAt           DateTime?
@@ -909,6 +915,21 @@ model RestaurantConfig {
   estimatedDelivery Int     @default(40)
   isOpen            Boolean @default(true)
   closedMessage     String?
+
+  // ─── ENVÍO POR DISTANCIA ───────────────────────────────────────────────
+  // deliveryMode controla cómo se calcula el costo de envío:
+  //   FLAT     → tarifa fija = deliveryFee (comportamiento histórico).
+  //   DISTANCE → deliveryBaseFee + (deliveryPerKm × distancia_km), con radio
+  //              de envío gratis y distancia máxima de cobertura opcionales.
+  // El origen (originLat/originLng) es la ubicación de la tienda desde donde
+  // se mide la distancia al cliente (GPS del navegador en el checkout).
+  deliveryMode         String @default("FLAT") // FLAT | DISTANCE
+  originLat            Float?
+  originLng            Float?
+  deliveryBaseFee      Float  @default(0)
+  deliveryPerKm        Float  @default(0)
+  deliveryFreeRadiusKm Float? // dentro de este radio, envío gratis
+  deliveryMaxKm        Float? // fuera de este radio, no hay cobertura
 
   pointsPerTen     Int   @default(1)
   pointsValuePesos Float @default(0.10)

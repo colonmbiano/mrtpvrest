@@ -97,11 +97,34 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       'phone','whatsappNumber','address','deliveryFee','freeDeliveryFrom',
       'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
       'pointsPerTen','pointsValuePesos','storefrontTheme',
-      'centralWarehouseEnabled'
+      'centralWarehouseEnabled',
+      // Envío por distancia
+      'deliveryMode','originLat','originLng','deliveryBaseFee','deliveryPerKm',
+      'deliveryFreeRadiusKm','deliveryMaxKm',
     ];
-    const data = Object.fromEntries(
-      Object.entries(req.body).filter(([k]) => VALID_FIELDS.includes(k))
-    );
+    // Numéricos que SÍ admiten null (campos opcionales en el schema).
+    const NULLABLE_NUMERIC = new Set([
+      'freeDeliveryFrom','originLat','originLng','deliveryFreeRadiusKm','deliveryMaxKm',
+    ]);
+    // Numéricos NOT NULL (con default): un vacío se interpreta como 0.
+    const NUMERIC_NOT_NULL = new Set([
+      'deliveryFee','minOrderAmount','estimatedDelivery','pointsPerTen',
+      'pointsValuePesos','deliveryBaseFee','deliveryPerKm',
+    ]);
+    const data = {};
+    for (const [k, v] of Object.entries(req.body)) {
+      if (!VALID_FIELDS.includes(k)) continue;
+      if (NULLABLE_NUMERIC.has(k)) {
+        if (v === '' || v === null || v === undefined) { data[k] = null; continue; }
+        const n = Number(v);
+        data[k] = Number.isNaN(n) ? null : n;
+      } else if (NUMERIC_NOT_NULL.has(k)) {
+        const n = Number(v);
+        data[k] = Number.isNaN(n) ? 0 : n;
+      } else {
+        data[k] = v;
+      }
+    }
     const config = await prisma.restaurantConfig.upsert({
       where:  { restaurantId },
       create: { restaurantId, ...data },

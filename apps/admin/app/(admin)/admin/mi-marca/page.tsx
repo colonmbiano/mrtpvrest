@@ -1,8 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import Image from "next/image";
-import { getStoreUrl } from "@/lib/config";
 
 type Location = { id: string; name: string; slug: string; address?: string; phone?: string; autoPromoEnabled?: boolean; autoPromoThreshold?: number; autoPromoDiscount?: number; hasDelivery?: boolean; hasTakeaway?: boolean; hasTableMap?: boolean; };
 
@@ -231,36 +229,15 @@ export default function BrandConfigPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [config, setConfig] = useState({
     name: "",
     logoUrl: "",
-    slug: "",
-    phone: "",
-    address: "",
-    whatsappNumber: "",
-    deliveryFee: 0,
-    minOrderAmount: 0,
-    freeDeliveryFrom: 0,
-    estimatedDelivery: 40,
-    storefrontTheme: "KAWAII"
   });
-
-  const storeUrl = config.slug ? getStoreUrl(config.slug) : "";
-
-  const copyStoreUrl = async () => {
-    if (!storeUrl) return;
-    try {
-      await navigator.clipboard.writeText(storeUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch { alert("No se pudo copiar el enlace"); }
-  };
 
   useEffect(() => {
     api.get("/api/admin/config")
       .then(res => {
-        setConfig(prev => ({ ...prev, ...res.data, freeDeliveryFrom: res.data?.freeDeliveryFrom ?? 0 }));
+        setConfig(prev => ({ ...prev, name: res.data?.name ?? "", logoUrl: res.data?.logoUrl ?? "" }));
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -287,22 +264,11 @@ export default function BrandConfigPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      const current = config;
-      // Log para diagnóstico — confirma que la función ejecuta y la URL destino
-      console.log("[mi-marca] handleSave START — API_URL:", process.env.NEXT_PUBLIC_API_URL);
-      await api.put("/api/admin/brand", { name: current.name, logoUrl: current.logoUrl });
-      console.log("[mi-marca] brand OK");
-      const { logoUrl: _logo, slug: _slug, ...configWithoutLogo } = current;
-      await api.put("/api/admin/config", {
-        ...configWithoutLogo,
-        freeDeliveryFrom: current.freeDeliveryFrom > 0 ? current.freeDeliveryFrom : null,
-      });
-      console.log("[mi-marca] config OK — reloading");
+      await api.put("/api/admin/brand", { name: config.name, logoUrl: config.logoUrl });
       window.location.reload();
     } catch (err: any) {
       const status = err?.response?.status;
       const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message || "Error desconocido";
-      console.error("[mi-marca] handleSave FAIL", { status, msg, err });
       alert(`Error al guardar (${status ?? "sin respuesta"}): ${msg}`);
       setSaving(false);
     }
@@ -354,104 +320,7 @@ export default function BrandConfigPage() {
               <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Nombre del Restaurante</label>
               <input type="text" value={config.name} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, name: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all font-black text-lg" />
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Teléfono</label>
-                <input type="text" value={config.phone} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, phone: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Mensajeria</label>
-                <input type="text" value={config.whatsappNumber} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, whatsappNumber: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Dirección Principal</label>
-              <input type="text" value={config.address} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, address: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-3 block tracking-widest">Estilo de Tienda Online</label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {[
-                  { id: "KAWAII", name: "Kawaii", emoji: "🌸", desc: "Soft / Pastel / Editorial" },
-                  { id: "HALO", name: "Halo", emoji: "🛰", desc: "Sci-Fi / HUD táctico" },
-                  { id: "BRUTALIST", name: "Brutalist", emoji: "⚡", desc: "Street / Alto contraste" }
-                ].map(t => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setConfig(p => ({ ...p, storefrontTheme: t.id }))}
-                    className={`p-4 rounded-3xl border-2 transition-all text-left group ${
-                      config.storefrontTheme === t.id 
-                        ? "border-orange-500 bg-orange-500/10" 
-                        : "border-white/5 bg-black hover:border-white/20"
-                    }`}
-                  >
-                    <span className="text-2xl mb-2 block">{t.emoji}</span>
-                    <p className="font-black text-sm uppercase tracking-tight">{t.name}</p>
-                    <p className="text-[10px] text-gray-500 font-bold group-hover:text-gray-400">{t.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
-
-          {/* Envíos y reglas de la tienda online */}
-          <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 space-y-6">
-            <div>
-              <p className="text-sm font-black uppercase tracking-tighter">Envíos y Tienda Online</p>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">Reglas que verá el cliente al pedir</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Costo de envío ($)</label>
-                <input type="number" min="0" value={config.deliveryFee} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({...p, deliveryFee: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Compra mínima ($)</label>
-                <input type="number" min="0" value={config.minOrderAmount} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({...p, minOrderAmount: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Envío gratis desde ($)</label>
-                <input type="number" min="0" value={config.freeDeliveryFrom} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({...p, freeDeliveryFrom: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
-                <p className="text-[9px] text-gray-600 mt-1 ml-2">0 = sin envío gratis</p>
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Tiempo estimado (min)</label>
-                <input type="number" min="0" value={config.estimatedDelivery} onChange={(e) => { const v = parseInt(e.target.value) || 0; setConfig(p => ({...p, estimatedDelivery: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
-              </div>
-            </div>
-          </div>
-
-          {/* Enlace público de la tienda */}
-          {storeUrl && (
-            <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8">
-              <p className="text-sm font-black uppercase tracking-tighter mb-1">Tu Tienda Online</p>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-6">Comparte este enlace o QR con tus clientes</p>
-              <div className="flex flex-col sm:flex-row gap-6 items-center">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(storeUrl)}`}
-                  alt="QR de la tienda"
-                  width={150}
-                  height={150}
-                  className="rounded-2xl bg-white p-2 shrink-0"
-                />
-                <div className="flex-1 w-full space-y-3">
-                  <div className="bg-black border border-white/10 rounded-2xl px-5 py-4 font-mono text-sm text-orange-400 break-all">{storeUrl}</div>
-                  <div className="flex gap-3">
-                    <button type="button" onClick={copyStoreUrl} className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest border border-gray-700 text-gray-300 hover:border-orange-500/50 hover:text-orange-400 transition-all">
-                      {copied ? "¡Copiado!" : "Copiar enlace"}
-                    </button>
-                    <a href={storeUrl} target="_blank" rel="noopener noreferrer" className="flex-1 text-center py-3 rounded-2xl font-black text-xs uppercase tracking-widest bg-orange-500 hover:bg-orange-600 text-white transition-all">
-                      Ver tienda
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           <button
             type="button"

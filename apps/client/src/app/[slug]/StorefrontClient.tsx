@@ -8,6 +8,8 @@ import StorefrontHalo from './themes/StorefrontHalo';
 import StorefrontBrutalist from './themes/StorefrontBrutalist';
 import type { StoreProps } from './themes/types';
 
+import { computeDeliveryPreview } from '../../lib/delivery';
+
 const fmt = (n: number) => `$${n.toFixed(0)}`;
 const API = getApiUrl();
 
@@ -43,7 +45,29 @@ export default function StorefrontClient({
   const [orderSuccess, setOrderSuccess] = useState<any>(null);
   const [locations, setLocations] = useState<any[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<any>(null);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoStatus, setGeoStatus] = useState<'' | 'loading' | 'ok' | 'error'>('');
+  const [checkoutError, setCheckoutError] = useState('');
   const catRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  const delivery = store.delivery;
+  const minOrder = store.minOrderAmount || 0;
+
+  // Vista previa del envío (lógica compartida con el backend vía lib/delivery).
+  const deliveryPreview = useMemo(() => computeDeliveryPreview(delivery, total, coords), [delivery, coords, total]);
+
+  const useMyLocation = () => {
+    if (!navigator.geolocation) { setGeoStatus('error'); return; }
+    setGeoStatus('loading');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setGeoStatus('ok'); },
+      () => setGeoStatus('error'),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const grandTotal = total + (deliveryPreview.outOfRange ? 0 : deliveryPreview.fee);
+  const needsLocationForFee = delivery?.mode === 'DISTANCE' && !!delivery?.origin && !coords;
 
   useMemo(() => {
     (async () => {
@@ -65,7 +89,16 @@ export default function StorefrontClient({
 
   const handleSendOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCheckoutError('');
     if (!customerName || !deliveryAddress) return;
+    if (minOrder > 0 && total < minOrder) {
+      setCheckoutError(`El pedido mínimo es de ${fmt(minOrder)}.`);
+      return;
+    }
+    if (deliveryPreview.outOfRange) {
+      setCheckoutError('Tu ubicación está fuera del área de cobertura de envío.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const res = await fetch(`${API}/api/store/orders?r=${encodeURIComponent(store.slug || '')}`, {
@@ -75,15 +108,20 @@ export default function StorefrontClient({
           customerName, customerPhone, deliveryAddress,
           orderType: 'DELIVERY', paymentMethod: 'CASH',
           locationId: selectedLocation?.id,
+          deliveryLat: coords?.lat ?? null,
+          deliveryLng: coords?.lng ?? null,
           items: lines.map(l => ({ menuItemId: l.id, quantity: l.quantity })),
         }),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setOrderSuccess(await res.json());
+        setOrderSuccess(data);
         clear();
+      } else {
+        setCheckoutError(data?.error || 'No se pudo enviar el pedido.');
       }
     } catch {
-      alert('Error al enviar pedido');
+      setCheckoutError('Error de red al enviar el pedido.');
     } finally {
       setIsSubmitting(false);
     }
@@ -145,11 +183,50 @@ export default function StorefrontClient({
               <textarea required placeholder="Dirección de entrega"
                 className="w-full p-4 bg-gray-100 rounded-2xl outline-none h-24"
                 value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} />
-              <div className="pt-6 border-t border-gray-100 flex items-center justify-between mb-4">
-                <span className="font-bold text-gray-400">Total</span>
-                <span className="text-3xl font-black" style={{ color: primary }}>{fmt(total)}</span>
+
+              {/* Ubicación GPS para envío por distancia */}
+              {delivery?.mode === 'DISTANCE' && (
+                <button type="button" onClick={useMyLocation}
+                  className="w-full p-4 rounded-2xl font-bold text-sm border-2 transition-all"
+                  style={{ borderColor: coords ? '#10b981' : primary, color: coords ? '#10b981' : primary }}>
+                  {geoStatus === 'loading' ? 'Obteniendo ubicación…'
+                    : coords ? '✓ Ubicación detectada — toca para actualizar'
+                    : '📍 Usar mi ubicación para calcular el envío'}
+                </button>
+              )}
+              {geoStatus === 'error' && (
+                <p className="text-amber-600 text-xs font-bold">No pudimos obtener tu ubicación. Revisa los permisos del navegador.</p>
+              )}
+
+              {/* Desglose */}
+              <div className="pt-6 border-t border-gray-100 space-y-2 mb-2">
+                <div className="flex items-center justify-between text-sm font-bold text-gray-500">
+                  <span>Subtotal</span><span>{fmt(total)}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm font-bold text-gray-500">
+                  <span>
+                    Envío
+                    {deliveryPreview.distanceKm != null && <span className="text-gray-400 font-medium"> · {deliveryPreview.distanceKm} km</span>}
+                  </span>
+                  <span>
+                    {deliveryPreview.outOfRange ? 'Fuera de cobertura'
+                      : needsLocationForFee ? 'Calcula con tu ubicación'
+                      : deliveryPreview.fee === 0 ? 'Gratis'
+                      : fmt(deliveryPreview.fee)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <span className="font-bold text-gray-400">Total</span>
+                  <span className="text-3xl font-black" style={{ color: primary }}>{fmt(grandTotal)}</span>
+                </div>
               </div>
-              <button disabled={isSubmitting} type="submit"
+
+              {minOrder > 0 && total < minOrder && (
+                <p className="text-amber-600 text-xs font-bold">Pedido mínimo: {fmt(minOrder)}.</p>
+              )}
+              {checkoutError && <p className="text-red-500 text-xs font-bold">{checkoutError}</p>}
+
+              <button disabled={isSubmitting || deliveryPreview.outOfRange || (minOrder > 0 && total < minOrder)} type="submit"
                 className="w-full py-5 text-white font-black rounded-2xl shadow-xl transition-all active:scale-95 disabled:opacity-50"
                 style={{ background: primary }}>
                 {isSubmitting ? 'ENVIANDO...' : 'CONFIRMAR PEDIDO'}

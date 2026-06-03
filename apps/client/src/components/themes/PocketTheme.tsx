@@ -3,10 +3,13 @@
 import { useState, useRef } from 'react';
 import Image from 'next/image';
 import { useCart } from '../../lib/cartStore';
+import StoreCheckout from '../StoreCheckout';
 
 export function PocketTheme({ data }: { data: any }) {
   const { info, menu, locations } = data;
-  
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const primary = info.themeConfig?.primaryColor || '#ff5c35';
+
   // Zustand Cart Store
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
@@ -147,7 +150,7 @@ export function PocketTheme({ data }: { data: any }) {
       {/* 4. BOTTOM BAR - CARRITO FLOTANTE (Solo visible si hay ítems) */}
       {quantity > 0 && (
         <div className="fixed bottom-6 left-4 right-4 z-50 animate-slide-up">
-          <button className="w-full bg-primary text-white p-5 rounded-[28px] shadow-2xl shadow-primary/40 flex items-center justify-between active:scale-95 transition-transform overflow-hidden relative">
+          <button onClick={() => setCheckoutOpen(true)} className="w-full bg-primary text-white p-5 rounded-[28px] shadow-2xl shadow-primary/40 flex items-center justify-between active:scale-95 transition-transform overflow-hidden relative">
             <div className="flex items-center gap-4 relative z-10">
               <div className="bg-white/20 backdrop-blur-md w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm">
                 {quantity}
@@ -169,6 +172,16 @@ export function PocketTheme({ data }: { data: any }) {
         .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes shimmer { 100% { transform: translateX(100%); } }
       `}} />
+
+      <StoreCheckout
+        open={checkoutOpen}
+        onClose={() => setCheckoutOpen(false)}
+        slug={info.slug}
+        primary={primary}
+        locations={locations}
+        delivery={info.delivery}
+        minOrderAmount={info.minOrderAmount}
+      />
     </div>
   );
 }

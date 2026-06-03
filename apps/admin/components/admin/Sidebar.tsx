@@ -44,6 +44,7 @@ const ICreditCard= ({ size }: IconProps) => ic(<><rect x="1" y="3" width="14" he
 const IDownload  = ({ size }: IconProps) => ic(<><path d="M14 11v2a1 1 0 01-1 1H3a1 1 0 01-1-1v-2"/><path d="M4 7l4 4 4-4M8 1v10"/></>, size);
 const ITag       = ({ size }: IconProps) => ic(<><path d="M1 1h5l7 7a2 2 0 010 2.83l-3.17 3.17a2 2 0 01-2.83 0L1 8V1z"/><circle cx="4" cy="4" r="1"/></>, size);
 const IBook      = ({ size }: IconProps) => ic(<><path d="M3 2.5h4a2 2 0 012 2v9a2 2 0 00-2-2H3z"/><path d="M13 2.5H9a2 2 0 00-2 2v9a2 2 0 012-2h4z"/></>, size);
+const IStore     = ({ size }: IconProps) => ic(<><path d="M2 6l1-3.5h10L14 6M2 6v7a1 1 0 001 1h10a1 1 0 001-1V6M2 6h12M6 14V9.5h4V14"/></>, size);
 
 // ── Nav sections ──────────────────────────────────────────────
 const SECTIONS = [
@@ -58,6 +59,7 @@ const SECTIONS = [
       // Mantenemos un solo punto de entrada bajo "Reportes" con la versión IA.
       { href: "/admin/reportes/ia",          icon: <ITrending />,  label: "Reportes" },
       { href: "/admin/mi-marca",             icon: <IBuilding />,  label: "Mi Marca" },
+      { href: "/admin/tienda",               icon: <IStore />,     label: "Tienda" },
       { href: "/admin/integraciones",        icon: <IPlug />,      label: "Integraciones" },
       { href: "/admin/modulos",             icon: <IPuzzle />,    label: "Módulos" },
       { href: "/admin/billing",              icon: <ICreditCard />, label: "Facturación" },
