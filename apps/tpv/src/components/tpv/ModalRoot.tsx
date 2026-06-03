@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { ModalProvider } from "@/contexts/ModalContext";
 import { usePOSStore } from "@/store/usePOSStore";
 import { useHardwareBack } from "@/hooks/useHardwareBack";
+import { usePromoSync } from "@/hooks/usePromoSync";
 
 /**
  * Aplica el tamaño de letra UI persistido en localStorage al boot.
@@ -35,6 +36,8 @@ export default function ModalRoot({ children }: { children: ReactNode }) {
   const mode = usePOSStore((s) => s.mode);
   useHardwareBack();
   useUiScale();
+  // Sincroniza las promos del negocio (solo si el doble pantalla está activo).
+  usePromoSync();
 
   return (
     <ModalProvider>
