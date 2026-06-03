@@ -183,6 +183,7 @@ const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
+const { resolveVariantSelection, applyFreeModifiers } = require('../lib/money');
 const {
   createOrderSchema,
   addItemsSchema,
@@ -214,37 +215,7 @@ function appendVariantNotes(notes, variants) {
   return [base, `Variantes: ${names}`].filter(Boolean).join('\n');
 }
 
-function resolveVariantSelection(menuItem, item) {
-  const ids = Array.isArray(item.variantIds)
-    ? item.variantIds.filter(Boolean)
-    : item.variantId
-      ? [item.variantId]
-      : [];
-  const variants = ids.map((variantId) => {
-    const variant = (menuItem?.variants || []).find(
-      (v) => v.id === variantId && v.isAvailable !== false,
-    );
-    if (!variant) throw new Error(`Variante ${variantId} no disponible para este producto`);
-    return variant;
-  });
-
-  const defaultPrice = Number(menuItem?.promoPrice || menuItem?.price || 0);
-  const fullPrice = variants
-    .map((variant) => Number(variant.price || 0))
-    .filter((price) => price >= defaultPrice);
-  const extras = variants
-    .map((variant) => Number(variant.price || 0))
-    .filter((price) => price > 0 && price < defaultPrice)
-    .reduce((sum, price) => sum + price, 0);
-
-  const basePrice = Math.max(defaultPrice, ...fullPrice) + extras;
-  const baseName = menuItem?.name || 'Producto';
-  const name = variants.length > 0
-    ? `${baseName} (${variants.map((variant) => variant.name).join(', ')})`
-    : baseName;
-
-  return { variants, basePrice, name };
-}
+// resolveVariantSelection vive ahora en ../lib/money (puro y testeado).
 
 
 // ── GET /admin — Pedidos del restaurante (filtra por sucursal si llega) ──
@@ -440,17 +411,8 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       }
 
       // Aplicar freeModifiersLimit por grupo: los más baratos van gratis primero.
-      let unitExtra = 0;
-      const flatMods = [];
-      for (const [groupId, mods] of selectedByGroup.entries()) {
-        const free = groupsById.get(groupId)?.freeModifiersLimit || 0;
-        const sorted = [...mods].sort((a, b) => a.priceAdd - b.priceAdd);
-        sorted.forEach((m, idx) => {
-          const charge = idx >= free ? m.priceAdd : 0;
-          unitExtra += charge;
-          flatMods.push({ modifierId: m.id, name: m.name, priceAdd: charge });
-        });
-      }
+      const { unitExtra: modsExtra, flatMods } = applyFreeModifiers(selectedByGroup, groupsById);
+      let unitExtra = modsExtra;
 
       const validComplementsById = new Map(
         (menuItem?.complements || [])
@@ -652,17 +614,8 @@ async function addRoundHandler(req, res) {
         selectedByGroup.set(mod.groupId, arr);
       }
 
-      let unitExtra = 0;
-      const flatMods = [];
-      for (const [groupId, mods] of selectedByGroup.entries()) {
-        const free = groupsById.get(groupId)?.freeModifiersLimit || 0;
-        const sorted = [...mods].sort((a, b) => a.priceAdd - b.priceAdd);
-        sorted.forEach((m, idx) => {
-          const charge = idx >= free ? m.priceAdd : 0;
-          unitExtra += charge;
-          flatMods.push({ modifierId: m.id, name: m.name, priceAdd: charge });
-        });
-      }
+      const { unitExtra: modsExtra, flatMods } = applyFreeModifiers(selectedByGroup, groupsById);
+      let unitExtra = modsExtra;
 
       const validComplementsById = new Map(
         (menuItem?.complements || [])

@@ -4,6 +4,7 @@ const { authenticate, requireAdmin, requireTenantAccess } = require('../middlewa
 const { requireModule, MODULES } = require('../lib/modules');
 const { validateBody } = require('../lib/validate');
 const { openShiftSchema, closeShiftSchema } = require('../schemas/shifts.schema');
+const { summarizePayments, cashCutSummary } = require('../lib/money');
 const router = express.Router();
 
 // Gate: módulo "cash_shift" en plan.allowedModules. Si el plan no lo
@@ -158,24 +159,17 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
       }
     });
 
-    const pmMap = {
-      CASH: 'totalCash', CASH_ON_DELIVERY: 'totalCash',
-      CARD_PRESENT: 'totalCard', CARD: 'totalCard',
-      TRANSFER: 'totalTransfer', SPEI: 'totalTransfer', OXXO: 'totalTransfer',
-      COURTESY: 'totalCourtesy',
-    };
-
-    const totals = { totalCash: 0, totalCard: 0, totalTransfer: 0, totalCourtesy: 0 };
-    for (const order of orders) {
-      const key = pmMap[order.paymentMethod];
-      if (key) totals[key] += Number(order.total);
-    }
+    const totals = summarizePayments(orders);
 
     const totalExpenses = shift.expenses.reduce((s, e) => s + e.amount, 0);
     const totalSales = Object.values(totals).reduce((a, b) => a + b, 0);
 
     // Snapshot para Cierre Ciego: Calculamos lo que DEBERÍA haber en efectivo
-    const expectedCash = shift.openingFloat + totals.totalCash - totalExpenses;
+    const { expectedCash } = cashCutSummary({
+      openingFloat: shift.openingFloat,
+      totalCash: totals.totalCash,
+      totalExpenses,
+    });
 
     const closed = await prisma.cashShift.update({
       where: { id: shiftId },

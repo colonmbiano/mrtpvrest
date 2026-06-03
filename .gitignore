@@ -13,6 +13,9 @@ yarn.lock
 .vercel/
 .turbo/
 
+# Reportes de cobertura de tests
+**/coverage/
+
 # Output de skills locales (no versionar)
 graphify-out/
 

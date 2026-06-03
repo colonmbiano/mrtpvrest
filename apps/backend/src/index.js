@@ -11,6 +11,7 @@ const rateLimit   = require('express-rate-limit')
 const sentry      = require('./lib/sentry');
 const shiftsRoutes = require('./routes/shifts.routes');
 const tenantMiddleware = require('./middleware/tenant.middleware');
+const tenantContextMiddleware = require('./middleware/tenant-context.middleware');
 const idempotencyMiddleware = require('./middleware/idempotency.middleware');
 const jwt = require('jsonwebtoken');
 
@@ -136,6 +137,10 @@ app.use('/api/ota',               require('./routes/ota.routes'))
 
 // --- MIDDLEWARE DE SAAS (TENANT) ---
 app.use(tenantMiddleware);
+
+// Abre el contexto AsyncLocalStorage con el restaurante resuelto para que el
+// guard de Prisma aísle las queries por restaurantId aguas abajo.
+app.use(tenantContextMiddleware);
 
 // Idempotencia para replays de la cola offline del TPV. Va DESPUÉS del
 // tenant middleware para que tengamos req.restaurantId al scopear la
