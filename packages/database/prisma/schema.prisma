@@ -56,11 +56,41 @@ model Tenant {
   expenses     Expense[]
   devices      Device[]
   promos       Promo[]
+  tenantModules TenantModule[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("tenants")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANT MODULES — fuente de verdad canónica de los módulos por tenant.
+//
+// Reemplaza la representación dispersa anterior (enabledModules String[] +
+// flags booleanos hasInventory/hasDelivery/hasWebStore + activeModules Json),
+// que vivía en distintos campos leídos por distintas vistas del panel SaaS.
+// Una fila por (tenantId, moduleKey). `enabled` indica si está activo;
+// `requiresPlan` marca módulos premium (gated por plan) vs flags libres.
+//
+// Durante la migración los campos legacy del Tenant se mantienen sincronizados
+// (dual-write en el backend) para no romper el gating en runtime.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TenantModule {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  moduleKey    String // inventory | delivery | webstore | kiosk | loyalty | kds | reports | finance
+  enabled      Boolean  @default(false)
+  requiresPlan Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, moduleKey])
+  @@index([tenantId])
+  @@map("tenant_modules")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

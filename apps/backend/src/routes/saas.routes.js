@@ -1,6 +1,7 @@
 const router  = require('express').Router();
 const prisma   = require('@mrtpvrest/database').prisma;
 const { authenticate, requireSuperAdmin } = require('../middleware/auth.middleware');
+const { deriveActiveKeys, syncTenantModuleRows } = require('../lib/tenantModules');
 
 // Tenant de sistema — contenedor del SUPER_ADMIN de plataforma. Se excluye
 // de toda lista / métrica visible a clientes o super-admins del SaaS.
@@ -155,6 +156,7 @@ router.get('/tenants', async (req, res) => {
       include: {
         subscription: { include: { plan: true } },
         restaurants:  { select: { id: true, slug: true, name: true, isActive: true } },
+        tenantModules: { select: { moduleKey: true, enabled: true, requiresPlan: true } },
         _count:       { select: { restaurants: true, users: true } }
       },
       orderBy: { createdAt: 'desc' }
@@ -237,6 +239,7 @@ router.get('/tenants/:id', async (req, res) => {
       include: {
         subscription: { include: { plan: true } },
         restaurants:  { include: { config: true, _count: { select: { locations: true, orders: true } } } },
+        tenantModules: { select: { moduleKey: true, enabled: true, requiresPlan: true } },
         _count:       { select: { users: true } }
       }
     });
@@ -336,12 +339,24 @@ router.patch('/tenants/:id/modules', async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Tenant no encontrado' });
     if (existing.slug === PLATFORM_TENANT_SLUG) return res.status(403).json({ error: 'No se puede modificar el tenant de plataforma' });
 
-    const tenant = await prisma.tenant.update({
-      where: { id: req.params.id },
-      data,
-      include: { subscription: { include: { plan: true } } }
+    // Update legacy + sync de la tabla canónica TenantModule en una transacción.
+    // TenantModule es la fuente de verdad nueva; los campos legacy se mantienen
+    // sincronizados (dual-write) hasta que el gating en runtime migre a la tabla.
+    const tenant = await prisma.$transaction(async (tx) => {
+      const updated = await tx.tenant.update({
+        where: { id: req.params.id },
+        data,
+        include: { subscription: { include: { plan: true } } }
+      });
+      await syncTenantModuleRows(tx, updated.id, deriveActiveKeys(updated));
+      return updated;
     });
-    res.json(tenant);
+
+    const tenantModules = await prisma.tenantModule.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { moduleKey: 'asc' },
+    });
+    res.json({ ...tenant, tenantModules });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Tenant no encontrado' });
     res.status(500).json({ error: e.message });

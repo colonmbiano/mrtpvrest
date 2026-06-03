@@ -4,6 +4,7 @@ const router  = express.Router()
 const { prisma } = require('@mrtpvrest/database')
 const { authenticate, requireRole } = require('../middleware/auth.middleware')
 const { invalidateModuleCache } = require('../middleware/module.middleware')
+const { deriveActiveKeys, syncTenantModuleRows } = require('../lib/tenantModules')
 
 // Módulos válidos en la plataforma
 const MODULE_DEFINITIONS = {
@@ -161,8 +162,11 @@ router.patch('/:key', authenticate, requireRole('OWNER', 'ADMIN', 'SUPER_ADMIN')
     const updatedTenant = await prisma.tenant.update({
       where: { id: restaurant.tenantId },
       data:  { enabledModules: updatedModules },
-      select: { enabledModules: true },
+      select: { enabledModules: true, hasInventory: true, hasDelivery: true, hasWebStore: true },
     })
+
+    // Sincroniza la fuente canónica TenantModule con el estado legacy resultante.
+    await syncTenantModuleRows(prisma, restaurant.tenantId, deriveActiveKeys(updatedTenant))
 
     // Invalidar cache de requireModule para que el cambio surta efecto inmediato
     invalidateModuleCache(req.restaurantId)
