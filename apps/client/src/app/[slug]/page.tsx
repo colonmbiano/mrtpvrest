@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { MochiTheme } from '@/components/themes/MochiTheme';
+import { BentoTheme } from '@/components/themes/BentoTheme';
 import { PocketTheme } from '@/components/themes/PocketTheme';
 import { getApiUrl } from '@/lib/config';
 import StorefrontClient from './StorefrontClient';
@@ -162,18 +163,8 @@ export default async function StorefrontPage({
       className="min-h-screen bg-white"
     >
       {theme === 'MOCHI' && <MochiTheme data={data} />}
+      {theme === 'BENTO' && <BentoTheme data={data} />}
       {theme === 'POCKET' && <PocketTheme data={data} />}
-
-      {/* BENTO/HALO: usamos el tema legacy Halo (sci-fi), totalmente funcional
-          con checkout. El BentoTheme moderno aún era un placeholder. */}
-      {theme === 'BENTO' && (
-        <div style={{ ['--primary' as string]: primary } as React.CSSProperties}>
-          <StorefrontClient
-            store={{ ...legacyStore, storefrontTheme: 'HALO' }}
-            categories={menu.categories || []}
-          />
-        </div>
-      )}
 
       {/* Fallback to legacy client if no modern theme is selected or during transition */}
       {theme === 'DEFAULT' && (
