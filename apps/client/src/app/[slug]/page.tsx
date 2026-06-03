@@ -15,11 +15,28 @@ type StoreInfo = {
   logo: string | null;
   hasWebStore: boolean;
   whatsappNumber: string | null;
-  themeConfig: {
+  // El backend (GET /api/store/info) devuelve estos campos planos:
+  storefrontTheme?: string | null;
+  primaryColor?: string | null;
+  // Retrocompat: algunas respuestas antiguas anidaban el tema aquí.
+  themeConfig?: {
     theme?: string;
     primaryColor?: string;
   } | null;
 };
+
+// El backend mapea el enum de la DB a alias (MOCHI→KAWAII, BENTO→HALO,
+// POCKET→BRUTALIST). Aquí normalizamos cualquier variante al nombre canónico
+// que usa el render de abajo. Sin esto el tema nunca coincide y cae a DEFAULT.
+function normalizeTheme(raw?: string | null): 'MOCHI' | 'BENTO' | 'POCKET' | 'DEFAULT' {
+  const map: Record<string, 'MOCHI' | 'BENTO' | 'POCKET' | 'DEFAULT'> = {
+    MOCHI: 'MOCHI', KAWAII: 'MOCHI',
+    BENTO: 'BENTO', HALO: 'BENTO',
+    POCKET: 'POCKET', BRUTALIST: 'POCKET',
+    DEFAULT: 'DEFAULT',
+  };
+  return map[(raw || '').toUpperCase()] || 'DEFAULT';
+}
 
 async function fetchStore(slug: string): Promise<StoreInfo | null> {
   try {
@@ -63,20 +80,28 @@ async function fetchLocations(slug: string) {
 export default async function StorefrontPage({
   params,
 }: {
-  params: { slug: string };
+  // Next.js 15+/16: params es asíncrono y DEBE await-earse. Acceder a
+  // params.slug de forma síncrona devuelve undefined -> fetchStore(undefined)
+  // -> 404 para CUALQUIER slug. Este era el bug que tiraba 404 en toda tienda.
+  params: Promise<{ slug: string }>;
 }) {
+  const { slug } = await params;
+
   const [store, menu, locations] = await Promise.all([
-    fetchStore(params.slug),
-    fetchMenu(params.slug),
-    fetchLocations(params.slug),
+    fetchStore(slug),
+    fetchMenu(slug),
+    fetchLocations(slug),
   ]);
 
   if (!store || !store.hasWebStore) notFound();
 
-  const primary = store.themeConfig?.primaryColor || '#ff5c35';
-  const theme = store.themeConfig?.theme || 'DEFAULT';
+  const primary = store.primaryColor || store.themeConfig?.primaryColor || '#ff5c35';
+  const theme = normalizeTheme(store.storefrontTheme || store.themeConfig?.theme);
 
-  const data = { info: store, menu, locations };
+  // Los componentes de tema tipan info.themeConfig; lo sintetizamos a partir
+  // de los campos planos para mantener compatibilidad de tipos y runtime.
+  const info = { ...store, themeConfig: { theme, primaryColor: primary } };
+  const data = { info, menu, locations };
 
   return (
     <div

@@ -1,7 +1,7 @@
 {
   "framework": "nextjs",
-  "installCommand": "cd ../.. && npx pnpm@9.15.0 install --no-frozen-lockfile",
-  "buildCommand": "cd ../.. && npx pnpm@9.15.0 turbo build --filter @mrtpvrest/client",
+  "installCommand": "npx pnpm@9.15.0 install --no-frozen-lockfile",
+  "buildCommand": "npx pnpm@9.15.0 exec next build --webpack",
   "outputDirectory": ".next",
   "rewrites": [
     { "source": "/(.*)", "destination": "/$1" }
