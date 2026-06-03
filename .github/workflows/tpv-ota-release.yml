@@ -101,6 +101,7 @@ jobs:
           OTA_PUBLISH_TOKEN: ${{ secrets.OTA_PUBLISH_TOKEN }}
           OTA_BUILD_SECRET: ${{ secrets.OTA_BUILD_SECRET }}
         run: |
+          set -o pipefail
           HEADER_NAME=""
           HEADER_VALUE=""
           if [ -n "$OTA_PUBLISH_TOKEN" ]; then
