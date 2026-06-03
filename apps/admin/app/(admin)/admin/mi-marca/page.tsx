@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import Image from "next/image";
-import { getStoreBaseUrl } from "@/lib/config";
+import { getStoreUrl } from "@/lib/config";
 
 type Location = { id: string; name: string; slug: string; address?: string; phone?: string; autoPromoEnabled?: boolean; autoPromoThreshold?: number; autoPromoDiscount?: number; hasDelivery?: boolean; hasTakeaway?: boolean; hasTableMap?: boolean; };
 
@@ -246,7 +246,7 @@ export default function BrandConfigPage() {
     storefrontTheme: "KAWAII"
   });
 
-  const storeUrl = config.slug ? `${getStoreBaseUrl()}/${config.slug}` : "";
+  const storeUrl = config.slug ? getStoreUrl(config.slug) : "";
 
   const copyStoreUrl = async () => {
     if (!storeUrl) return;
