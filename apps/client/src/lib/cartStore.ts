@@ -1,15 +1,28 @@
 import { create } from 'zustand';
 
 export type CartLine = {
+  id: string;               // clave única de la línea (compuesta si hay variante/modificadores)
+  menuItemId: string;       // id real del producto para enviar al backend
+  name: string;             // nombre a mostrar (incluye variante/modificadores)
+  price: number;            // precio unitario YA con variante + modificadores
+  quantity: number;
+  variantId?: string | null;
+  modifierIds?: string[];
+};
+
+export type AddInput = {
   id: string;
   name: string;
   price: number;
-  quantity: number;
+  menuItemId?: string;
+  variantId?: string | null;
+  modifierIds?: string[];
+  quantity?: number;
 };
 
 type CartState = {
   lines: CartLine[];
-  add: (item: { id: string; name: string; price: number }) => void;
+  add: (item: AddInput) => void;
   remove: (id: string) => void;
   clear: () => void;
   total: () => number;
@@ -21,14 +34,24 @@ export const useCart = create<CartState>((set, get) => ({
   add: item =>
     set(state => {
       const existing = state.lines.find(l => l.id === item.id);
+      const qty = Math.max(1, item.quantity || 1);
       if (existing) {
         return {
           lines: state.lines.map(l =>
-            l.id === item.id ? { ...l, quantity: l.quantity + 1 } : l
+            l.id === item.id ? { ...l, quantity: l.quantity + qty } : l
           ),
         };
       }
-      return { lines: [...state.lines, { ...item, quantity: 1 }] };
+      const line: CartLine = {
+        id: item.id,
+        menuItemId: item.menuItemId ?? item.id,
+        name: item.name,
+        price: item.price,
+        quantity: qty,
+        variantId: item.variantId ?? null,
+        modifierIds: item.modifierIds ?? [],
+      };
+      return { lines: [...state.lines, line] };
     }),
   remove: id =>
     set(state => {

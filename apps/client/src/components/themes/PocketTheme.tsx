@@ -5,11 +5,13 @@ import Image from 'next/image';
 import { useCart } from '../../lib/cartStore';
 import StoreCheckout from '../StoreCheckout';
 import BannerCarousel from '../BannerCarousel';
+import ProductModal, { needsModal } from '../ProductModal';
 
 export function PocketTheme({ data }: { data: any }) {
   const { info, menu, locations } = data;
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [modalProduct, setModalProduct] = useState<any>(null);
   const primary = info.themeConfig?.primaryColor || '#ff5c35';
 
   // Zustand Cart Store
@@ -18,6 +20,13 @@ export function PocketTheme({ data }: { data: any }) {
   const remove = useCart(s => s.remove);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
+
+  // Abrir personalización si el producto tiene variantes/modificadores; si no, agregar directo.
+  const pick = (p: any) => {
+    if (needsModal(p)) { setModalProduct(p); return; }
+    const price = p.isPromo && p.promoPrice ? p.promoPrice : p.price;
+    add({ id: p.id, menuItemId: p.id, name: p.name, price });
+  };
 
   const categories = menu.categories || [];
   const [activeCategory, setActiveCategory] = useState(categories[0]?.id);
@@ -132,8 +141,8 @@ export function PocketTheme({ data }: { data: any }) {
                       ) : (
                         <div className="w-full h-full bg-surface-2 rounded-[22px] flex items-center justify-center text-2xl">🍔</div>
                       )}
-                      <button 
-                        onClick={() => add({ id: product.id, name: product.name, price })}
+                      <button
+                        onClick={() => pick(product)}
                         className="absolute -bottom-1 -right-1 w-9 h-9 bg-white border border-gray-100 rounded-2xl shadow-xl text-primary font-bold text-2xl flex items-center justify-center active:scale-90 transition-all hover:bg-gray-50"
                       >
                         +
@@ -204,7 +213,7 @@ export function PocketTheme({ data }: { data: any }) {
                     <div className="flex items-center gap-2 bg-white rounded-xl p-1 border border-gray-100">
                       <button onClick={() => remove(line.id)} className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-lg text-gray-500">−</button>
                       <span className="text-sm font-bold w-5 text-center">{line.quantity}</span>
-                      <button onClick={() => add({ id: line.id, name: line.name, price: line.price })} className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-lg text-white" style={{ background: primary }}>+</button>
+                      <button onClick={() => add({ id: line.id, menuItemId: line.menuItemId, name: line.name, price: line.price, variantId: line.variantId, modifierIds: line.modifierIds })} className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-lg text-white" style={{ background: primary }}>+</button>
                     </div>
                   </div>
                 ))
@@ -226,6 +235,10 @@ export function PocketTheme({ data }: { data: any }) {
             )}
           </div>
         </div>
+      )}
+
+      {modalProduct && (
+        <ProductModal product={modalProduct} accent={primary} variant="light" onClose={() => setModalProduct(null)} />
       )}
 
       <StoreCheckout

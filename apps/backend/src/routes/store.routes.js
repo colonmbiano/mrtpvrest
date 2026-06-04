@@ -313,6 +313,10 @@ router.get('/locations', async (req, res) => {
             phone: true,
             businessType: true,
             autoPromoEnabled: true,
+            // Tipos de pedido habilitados por sucursal (gating en el checkout).
+            hasDelivery: true,
+            hasTakeaway: true,
+            hasTableMap: true,
             // Banners de promociones de la sucursal. Los temas del storefront
             // los leen en locations[].banners para mostrar el carrusel.
             banners: {

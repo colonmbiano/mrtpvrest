@@ -110,7 +110,7 @@ export default function StorefrontClient({
           locationId: selectedLocation?.id,
           deliveryLat: coords?.lat ?? null,
           deliveryLng: coords?.lng ?? null,
-          items: lines.map(l => ({ menuItemId: l.id, quantity: l.quantity })),
+          items: lines.map(l => ({ menuItemId: l.menuItemId, variantId: l.variantId || undefined, modifierIds: l.modifierIds || [], quantity: l.quantity })),
         }),
       });
       const data = await res.json().catch(() => ({}));
