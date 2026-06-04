@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useCart } from '../../lib/cartStore';
 import StoreCheckout from '../StoreCheckout';
 import BannerCarousel from '../BannerCarousel';
+import ProductModal, { needsModal } from '../ProductModal';
 import type { DeliveryConfig } from '../../lib/delivery';
 
 type MochiThemeProps = {
@@ -34,7 +35,14 @@ export function MochiTheme({ data }: MochiThemeProps) {
   const { info, menu, locations } = data;
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [modalProduct, setModalProduct] = useState<any>(null);
   const primary = info.themeConfig?.primaryColor || '#ff5c35';
+
+  const pick = (p: any) => {
+    if (needsModal(p)) { setModalProduct(p); return; }
+    const price = p.isPromo && p.promoPrice ? p.promoPrice : p.price;
+    add({ id: p.id, menuItemId: p.id, name: p.name, price });
+  };
 
   // Zustand Cart Store
   const lines = useCart(s => s.lines);
@@ -138,23 +146,23 @@ export function MochiTheme({ data }: MochiThemeProps) {
                         
                         {line ? (
                           <div className="flex items-center bg-gray-50 rounded-2xl p-1 border border-gray-100">
-                            <button 
+                            <button
                               onClick={() => remove(product.id)}
                               className="w-8 h-8 rounded-xl bg-white shadow-sm flex items-center justify-center text-lg font-bold hover:bg-gray-100 active:scale-90 transition-all"
                             >
                               −
                             </button>
                             <span className="font-bold text-sm w-8 text-center">{line.quantity}</span>
-                            <button 
-                              onClick={() => add({ id: product.id, name: product.name, price })}
+                            <button
+                              onClick={() => add({ id: product.id, menuItemId: product.id, name: product.name, price })}
                               className="w-8 h-8 rounded-xl bg-primary text-white shadow-sm flex items-center justify-center text-lg font-bold hover:opacity-90 active:scale-90 transition-all"
                             >
                               +
                             </button>
                           </div>
                         ) : (
-                          <button 
-                            onClick={() => add({ id: product.id, name: product.name, price })}
+                          <button
+                            onClick={() => pick(product)}
                             className="w-10 h-10 rounded-full bg-gray-50 text-gray-800 hover:bg-primary hover:text-white transition-all duration-300 flex items-center justify-center font-bold text-xl shadow-sm border border-gray-100"
                           >
                             +
@@ -216,7 +224,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
                     <div className="flex items-center gap-3">
                        <button onClick={() => remove(line.id)} className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center font-bold text-gray-400 hover:text-red-500 transition-colors">−</button>
                        <span className="font-bold text-sm">{line.quantity}</span>
-                       <button onClick={() => add({ id: line.id, name: line.name, price: line.price })} className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center font-bold text-gray-800 hover:bg-primary hover:text-white transition-all">+</button>
+                       <button onClick={() => add({ id: line.id, menuItemId: line.menuItemId, name: line.name, price: line.price, variantId: line.variantId, modifierIds: line.modifierIds })} className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center font-bold text-gray-800 hover:bg-primary hover:text-white transition-all">+</button>
                     </div>
                   </div>
                 ))
@@ -240,6 +248,10 @@ export function MochiTheme({ data }: MochiThemeProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {modalProduct && (
+        <ProductModal product={modalProduct} accent={primary} variant="light" onClose={() => setModalProduct(null)} />
       )}
 
       <StoreCheckout
