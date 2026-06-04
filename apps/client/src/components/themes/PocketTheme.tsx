@@ -9,11 +9,13 @@ import BannerCarousel from '../BannerCarousel';
 export function PocketTheme({ data }: { data: any }) {
   const { info, menu, locations } = data;
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
   const primary = info.themeConfig?.primaryColor || '#ff5c35';
 
   // Zustand Cart Store
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
+  const remove = useCart(s => s.remove);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
 
@@ -146,9 +148,9 @@ export function PocketTheme({ data }: { data: any }) {
       </main>
 
       {/* 4. BOTTOM BAR - CARRITO FLOTANTE (Solo visible si hay ítems) */}
-      {quantity > 0 && (
+      {quantity > 0 && !cartOpen && (
         <div className="fixed bottom-6 left-4 right-4 z-50 animate-slide-up">
-          <button onClick={() => setCheckoutOpen(true)} className="w-full bg-primary text-white p-5 rounded-[28px] shadow-2xl shadow-primary/40 flex items-center justify-between active:scale-95 transition-transform overflow-hidden relative">
+          <button onClick={() => setCartOpen(true)} className="w-full bg-primary text-white p-5 rounded-[28px] shadow-2xl shadow-primary/40 flex items-center justify-between active:scale-95 transition-transform overflow-hidden relative">
             <div className="flex items-center gap-4 relative z-10">
               <div className="bg-white/20 backdrop-blur-md w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm">
                 {quantity}
@@ -170,6 +172,61 @@ export function PocketTheme({ data }: { data: any }) {
         .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes shimmer { 100% { transform: translateX(100%); } }
       `}} />
+
+      {/* CARRITO (bottom sheet) — revisar productos antes de pagar */}
+      {cartOpen && (
+        <div className="fixed inset-0 z-[60] flex items-end" onClick={() => setCartOpen(false)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative w-full bg-white rounded-t-[32px] max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-6 flex items-center justify-between border-b border-gray-100">
+              <div>
+                <h2 className="font-syne font-bold text-2xl text-gray-900">Tu Pedido</h2>
+                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-0.5">{quantity} {quantity === 1 ? 'artículo' : 'artículos'}</p>
+              </div>
+              <button onClick={() => setCartOpen(false)} className="w-10 h-10 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-500">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              {lines.length === 0 ? (
+                <div className="py-12 text-center">
+                  <span className="text-5xl opacity-20 block mb-3">🛒</span>
+                  <p className="text-gray-400 font-bold">Tu carrito está vacío</p>
+                </div>
+              ) : (
+                lines.map((line: any) => (
+                  <div key={line.id} className="flex items-center gap-3 bg-gray-50 rounded-2xl p-3 border border-gray-100">
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-gray-900 text-sm truncate">{line.name}</h4>
+                      <p className="text-xs font-bold" style={{ color: primary }}>{fmt(line.price)} × {line.quantity}</p>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white rounded-xl p-1 border border-gray-100">
+                      <button onClick={() => remove(line.id)} className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-lg text-gray-500">−</button>
+                      <span className="text-sm font-bold w-5 text-center">{line.quantity}</span>
+                      <button onClick={() => add({ id: line.id, name: line.name, price: line.price })} className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-lg text-white" style={{ background: primary }}>+</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {lines.length > 0 && (
+              <div className="p-6 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-xs font-black uppercase tracking-widest text-gray-400">Subtotal</span>
+                  <span className="font-syne font-extrabold text-3xl text-gray-900">{fmt(total)}</span>
+                </div>
+                <button onClick={() => { setCartOpen(false); setCheckoutOpen(true); }}
+                  className="w-full py-4 rounded-[22px] text-white font-syne font-bold text-lg uppercase tracking-widest active:scale-95 transition-all"
+                  style={{ background: primary, boxShadow: `0 10px 24px ${primary}55` }}>
+                  Continuar al pago
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <StoreCheckout
         open={checkoutOpen}
