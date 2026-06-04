@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import { useCart } from '../../lib/cartStore';
 import StoreCheckout from '../StoreCheckout';
+import BannerCarousel from '../BannerCarousel';
 import type { DeliveryConfig } from '../../lib/delivery';
 
 type MochiThemeProps = {
@@ -80,15 +81,10 @@ export function MochiTheme({ data }: MochiThemeProps) {
         </div>
       </header>
 
-      {/* HERO BANNER */}
+      {/* BANNERS DE PROMOCIONES (carrusel) */}
       {banners.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 mt-6">
-          <div className="relative w-full h-[200px] md:h-[350px] rounded-saas overflow-hidden shadow-lg border border-gray-100">
-            <img src={banners[0].imageUrl} alt={banners[0].title || 'Promo'} className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-6 md:p-10">
-              <h2 className="text-white font-syne font-bold text-2xl md:text-4xl tracking-tight">{banners[0].title}</h2>
-            </div>
-          </div>
+          <BannerCarousel banners={banners} variant="light" accent={primary} />
         </section>
       )}
 

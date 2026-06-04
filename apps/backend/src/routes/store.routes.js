@@ -313,13 +313,48 @@ router.get('/locations', async (req, res) => {
             phone: true,
             businessType: true,
             autoPromoEnabled: true,
+            // Banners de promociones de la sucursal. Los temas del storefront
+            // los leen en locations[].banners para mostrar el carrusel.
+            banners: {
+              where: { isActive: true },
+              orderBy: { sortOrder: 'asc' },
+              select: {
+                id: true, imageUrl: true, title: true, description: true,
+                linkType: true, linkValue: true,
+                scheduleDays: true, scheduleStart: true, scheduleEnd: true,
+                dateFrom: true, dateTo: true,
+              },
+            },
           }
         }
       }
     });
 
     if (!restaurant) return res.status(404).json({ error: 'Restaurante no encontrado.' });
-    res.json(restaurant.locations);
+
+    // Filtrado por programación (día de la semana, rango horario y de fechas),
+    // igual que el panel admin (banners.routes.js). Así solo se muestran los
+    // banners vigentes en este momento.
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const bannerIsLive = (b) => {
+      try {
+        const days = JSON.parse(b.scheduleDays || '[]');
+        if (Array.isArray(days) && days.length > 0 && !days.includes(dayOfWeek)) return false;
+      } catch {}
+      if (b.dateFrom && now < new Date(b.dateFrom)) return false;
+      if (b.dateTo && now > new Date(b.dateTo)) return false;
+      if (b.scheduleStart && b.scheduleEnd && (timeStr < b.scheduleStart || timeStr > b.scheduleEnd)) return false;
+      return true;
+    };
+
+    const locations = restaurant.locations.map((loc) => ({
+      ...loc,
+      banners: (loc.banners || []).filter(bannerIsLive),
+    }));
+
+    res.json(locations);
   } catch (e) {
     console.error('[store] GET /locations error:', e.message);
     res.status(500).json({ error: 'Error al obtener sucursales.' });
