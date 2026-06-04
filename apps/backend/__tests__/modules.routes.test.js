@@ -4,6 +4,7 @@ jest.mock('@mrtpvrest/database', () => ({
   prisma: {
     restaurant: { findUnique: jest.fn() },
     tenant: { findUnique: jest.fn(), update: jest.fn() },
+    tenantModule: { upsert: jest.fn() },
   },
 }));
 
@@ -83,6 +84,12 @@ describe('module routes', () => {
 
     expect(prisma.tenant.update).toHaveBeenCalledWith(expect.objectContaining({
       data: { enabledModules: ['client_menu'] },
+    }));
+
+    // Dual-write: la fuente canónica TenantModule se sincroniza con webstore activo.
+    expect(prisma.tenantModule.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where:  { tenantId_moduleKey: { tenantId: 'tenant-1', moduleKey: 'webstore' } },
+      update: expect.objectContaining({ enabled: true }),
     }));
   });
 });
