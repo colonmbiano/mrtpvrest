@@ -332,12 +332,15 @@ router.get('/locations', async (req, res) => {
 
     if (!restaurant) return res.status(404).json({ error: 'Restaurante no encontrado.' });
 
-    // Filtrado por programación (día de la semana, rango horario y de fechas),
-    // igual que el panel admin (banners.routes.js). Así solo se muestran los
-    // banners vigentes en este momento.
+    // Filtrado por programación (día de la semana, rango horario y de fechas).
+    // IMPORTANTE: el servidor corre en UTC, pero la programación se define en
+    // hora local de México. Calculamos día/hora en America/Mexico_City para que
+    // un banner "miércoles 15:00-21:00" se muestre a esa hora local, no UTC.
     const now = new Date();
-    const dayOfWeek = now.getDay();
-    const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const tz = process.env.STORE_TIMEZONE || 'America/Mexico_City';
+    const local = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+    const dayOfWeek = local.getDay();
+    const timeStr = String(local.getHours()).padStart(2, '0') + ':' + String(local.getMinutes()).padStart(2, '0');
     const bannerIsLive = (b) => {
       try {
         const days = JSON.parse(b.scheduleDays || '[]');
