@@ -5,6 +5,7 @@ import api from "@/lib/api";
 import { getApiUrl } from "@/lib/config";
 import ModifierGroupsEditor from "@/components/admin/ModifierGroupsEditor";
 import { uploadMenuImage } from "@/lib/supabaseUpload";
+import { extractErrorMessage } from "@/lib/errors";
 
 // ── Componente para aplicar grupo de variantes ────────────────────────────
 function ApplyTemplateButton({ itemId, onApplied }: { itemId: string, onApplied: (v: any[]) => void }) {
@@ -381,7 +382,7 @@ export default function MenuPage() {
       setShowForm(false);
       fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.error || "Error al guardar");
+      alert(extractErrorMessage(err, "Error al guardar"));
     } finally { setSaving(false); }
   }
 
