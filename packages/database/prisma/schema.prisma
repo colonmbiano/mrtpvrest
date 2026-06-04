@@ -285,6 +285,7 @@ model Restaurant {
   integrations     IntegrationConfig[]
   orders           Order[]
   suppliers        Supplier[]
+  whatsappSessions WhatsappSession[]
 
   // FASE INVENTARIO/COSTEO · taxonomía + recetario (multi-tenant scope)
   ingredientTypes      IngredientType[]
@@ -1534,6 +1535,42 @@ model ExternalOrder {
   rawData    String
   status     String   @default("PENDING")
   createdAt  DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHATBOT DE WHATSAPP — estado de la conversación de toma de pedidos.
+//
+// Persistimos el estado en DB (no en memoria) a propósito: el backend de
+// Railway se reinicia en cada deploy a master, y una conversación a medias no
+// debe perderse. Una sesión es única por (restaurantId, phone). El campo `data`
+// guarda el "contexto" serializado (carrito, tipo de pedido, dirección,
+// coordenadas, nombre, navegación del menú). `expiresAt` permite caducar
+// conversaciones abandonadas (el job/lazy-cleanup las descarta).
+// ─────────────────────────────────────────────────────────────────────────────
+model WhatsappSession {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  // Número del cliente, normalizado a solo dígitos con código de país (ej. 521...).
+  phone String
+
+  // Estado de la máquina de estados (ver services/whatsapp-bot/engine.js).
+  state String @default("GREETING")
+
+  // Contexto serializado de la conversación (JSON).
+  data String @default("{}")
+
+  // Última orden creada desde esta conversación (para "repetir"/seguimiento).
+  lastOrderId String?
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, phone])
+  @@index([expiresAt])
+  @@map("whatsapp_sessions")
 }
 
 model PushSubscription {

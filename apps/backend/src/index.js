@@ -131,6 +131,9 @@ app.use('/api/public', require('./routes/menu.routes'))
 app.use('/api/store',  require('./routes/store.routes'))
 app.use('/api/payments/terminal', require('./routes/terminal.routes'))
 app.use('/api/kiosk/webhook',     require('./routes/kiosk-webhook.routes'))
+// Chatbot de WhatsApp — webhook público multi-tenant (resuelve restaurante por
+// :restaurantId en la URL). Sin tenantMiddleware: el proveedor no manda headers.
+app.use('/api/whatsapp/webhook',  require('./routes/whatsapp-webhook.routes'))
 // OTA — el TPV consulta esto en arranque sin contexto de tenant todavía.
 // /publish, /bundles y DELETE están protegidos con SUPER_ADMIN dentro del router.
 app.use('/api/ota',               require('./routes/ota.routes'))
