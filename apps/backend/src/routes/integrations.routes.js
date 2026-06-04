@@ -45,24 +45,39 @@ router.put('/:type', authenticate, requireTenantAccess, requireAdmin, validateBo
 
     if (!INTEGRATION_TYPES[type]) return res.status(400).json({ error: 'Tipo de integración no soportado' });
 
+    const restaurantId = req.user?.restaurantId || req.user?.restaurantId || req.restaurantId;
+
+    // El GET enmascara credenciales (ej. "APP_••••3914"). Si el frontend reenvía
+    // ese valor enmascarado (o vacío) al guardar — p.ej. al solo activar el
+    // toggle sin re-teclear el token — NO debemos sobreescribir el valor real.
+    // Fusionamos con lo ya guardado conservando el secreto existente.
+    const existing = await prisma.integrationConfig.findUnique({
+      where: { restaurantId_type: { restaurantId, type } },
+    });
+    let prevConfig = {};
+    try { prevConfig = existing?.config ? JSON.parse(existing.config) : {}; } catch {}
+
+    const isMasked = (v) => typeof v === 'string' && v.includes('•');
+    const mergedConfig = { ...prevConfig };
+    Object.keys(config || {}).forEach((k) => {
+      const v = config[k];
+      if (v === '' || v === null || v === undefined || isMasked(v)) return; // conserva el previo
+      mergedConfig[k] = v;
+    });
+
     const integration = await prisma.integrationConfig.upsert({
-      where: {
-        restaurantId_type: {
-          restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId,
-          type
-        }
-      },
+      where: { restaurantId_type: { restaurantId, type } },
       update: {
         enabled,
         mode: mode || 'sandbox',
-        config: JSON.stringify(config)
+        config: JSON.stringify(mergedConfig)
       },
       create: {
-        restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId,
+        restaurantId,
         type,
         enabled: enabled || false,
         mode: mode || 'sandbox',
-        config: JSON.stringify(config)
+        config: JSON.stringify(mergedConfig)
       }
     });
 
