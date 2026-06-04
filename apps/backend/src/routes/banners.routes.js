@@ -31,9 +31,13 @@ async function assertBannerAccess(req, res, id) {
 
 router.get('/', async (req, res) => {
   try {
+    // Día/hora en hora local de México (el servidor corre en UTC). Sin esto la
+    // programación por día/horario se evaluaba contra UTC y fallaba.
     const now = new Date();
-    const dayOfWeek = now.getDay();
-    const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+    const tz = process.env.STORE_TIMEZONE || 'America/Mexico_City';
+    const local = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+    const dayOfWeek = local.getDay();
+    const timeStr = local.getHours().toString().padStart(2, '0') + ':' + local.getMinutes().toString().padStart(2, '0');
     const locationIds = await locationIdsForRequest(req);
 
     const allBanners = await prisma.banner.findMany({
