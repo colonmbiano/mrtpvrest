@@ -18,6 +18,7 @@ type MochiThemeProps = {
       hasWebStore: boolean;
       whatsappNumber: string | null;
       minOrderAmount?: number;
+      onlinePayment?: boolean;
       delivery?: DeliveryConfig;
       themeConfig: {
         theme?: string;
@@ -262,6 +263,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
         locations={locations}
         delivery={info.delivery}
         minOrderAmount={info.minOrderAmount}
+        onlinePayment={info.onlinePayment}
       />
     </div>
   );

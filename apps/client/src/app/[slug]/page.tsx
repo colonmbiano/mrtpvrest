@@ -30,6 +30,7 @@ type StoreInfo = {
   closedMessage?: string | null;
   minOrderAmount?: number;
   estimatedDelivery?: number;
+  onlinePayment?: boolean;
   delivery?: DeliveryConfig;
   // El backend (GET /api/store/info) devuelve estos campos planos:
   storefrontTheme?: string | null;
