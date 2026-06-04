@@ -18,6 +18,7 @@ type StoreCheckoutProps = {
   locations?: any[];
   delivery?: DeliveryConfig | null;
   minOrderAmount?: number;
+  onlinePayment?: boolean;
 };
 
 const STATUS_LABEL: Record<string, { t: string; c: string }> = {
@@ -31,7 +32,7 @@ const STATUS_LABEL: Record<string, { t: string; c: string }> = {
 };
 
 export default function StoreCheckout({
-  open, onClose, slug, primary, locations = [], delivery, minOrderAmount = 0,
+  open, onClose, slug, primary, locations = [], delivery, minOrderAmount = 0, onlinePayment = false,
 }: StoreCheckoutProps) {
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
@@ -53,7 +54,7 @@ export default function StoreCheckout({
   const selectedLocation = locations.find(l => l.id === locationId) || locations[0] || null;
 
   // Pago
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER'>('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'ONLINE'>('CASH');
 
   // Cupón
   const [couponCode, setCouponCode] = useState('');
@@ -165,7 +166,7 @@ export default function StoreCheckout({
           deliveryLng: isDelivery ? (coords?.lng ?? null) : null,
           tableNumber: orderType === 'DINE_IN' ? Number(tableNumber) : undefined,
           locationId: locationId || selectedLocation?.id,
-          paymentMethod,
+          paymentMethod: paymentMethod === 'ONLINE' ? 'CARD' : paymentMethod,
           tip,
           couponCode: coupon?.code || undefined,
           loyaltyQrCode: loyalty?.qrCode || undefined,
@@ -178,8 +179,28 @@ export default function StoreCheckout({
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) { setSuccess(data); setLiveStatus(data.status || 'PENDING'); clear(); }
-      else setError(data?.error || 'No se pudo enviar el pedido.');
+      if (!res.ok) { setError(data?.error || 'No se pudo enviar el pedido.'); setIsSubmitting(false); return; }
+
+      // Pago en línea: crear checkout en la pasarela y redirigir.
+      if (paymentMethod === 'ONLINE') {
+        try {
+          const payRes = await fetch(`${API}/api/store/payment/create?r=${encodeURIComponent(slug)}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId: data.id, returnUrl: typeof window !== 'undefined' ? window.location.origin + '/' : undefined }),
+          });
+          const pay = await payRes.json().catch(() => ({}));
+          if (payRes.ok && pay.checkoutUrl) { clear(); window.location.href = pay.checkoutUrl; return; }
+          // Si falla la pasarela, el pedido ya existe: lo mostramos como pendiente de pago.
+          setError(pay?.error || 'No se pudo iniciar el pago en línea. Tu pedido quedó registrado, paga en la tienda.');
+          setSuccess(data); setLiveStatus(data.status || 'PENDING'); clear();
+        } catch {
+          setError('No se pudo abrir la pasarela. Tu pedido quedó registrado.');
+          setSuccess(data); setLiveStatus(data.status || 'PENDING'); clear();
+        }
+        return;
+      }
+
+      setSuccess(data); setLiveStatus(data.status || 'PENDING'); clear();
     } catch {
       setError('Error de red al enviar el pedido.');
     } finally { setIsSubmitting(false); }
@@ -363,7 +384,7 @@ export default function StoreCheckout({
             <div>
               <p className={sectionTitle}>Pago</p>
               <div className="grid grid-cols-3 gap-2">
-                {([['CASH', '💵 Efectivo'], ['CARD', '💳 Tarjeta'], ['TRANSFER', '🏦 Transfer.']] as ['CASH'|'CARD'|'TRANSFER', string][]).map(([m, label]) => (
+                {([['CASH', '💵 Efectivo'], ['CARD', '💳 Al recibir'], ['TRANSFER', '🏦 Transfer.']] as ['CASH'|'CARD'|'TRANSFER', string][]).map(([m, label]) => (
                   <button key={m} type="button" onClick={() => setPaymentMethod(m)}
                     className="py-3 rounded-2xl text-xs font-bold border-2 transition-all"
                     style={{ borderColor: paymentMethod === m ? primary : '#e5e7eb', background: paymentMethod === m ? `${primary}14` : 'transparent', color: paymentMethod === m ? primary : '#6b7280' }}>
@@ -371,7 +392,16 @@ export default function StoreCheckout({
                   </button>
                 ))}
               </div>
-              <p className="text-[10px] text-gray-400 mt-1">El pago se realiza al recibir o en la sucursal.</p>
+              {onlinePayment && (
+                <button type="button" onClick={() => setPaymentMethod('ONLINE')}
+                  className="w-full mt-2 py-3 rounded-2xl text-sm font-bold border-2 transition-all flex items-center justify-center gap-2"
+                  style={{ borderColor: paymentMethod === 'ONLINE' ? primary : '#e5e7eb', background: paymentMethod === 'ONLINE' ? `${primary}14` : 'transparent', color: paymentMethod === 'ONLINE' ? primary : '#374151' }}>
+                  💳 Pagar ahora con tarjeta (en línea)
+                </button>
+              )}
+              <p className="text-[10px] text-gray-400 mt-1">
+                {paymentMethod === 'ONLINE' ? 'Te llevaremos a la pasarela segura para completar el pago.' : 'El pago se realiza al recibir o en la sucursal.'}
+              </p>
             </div>
 
             {/* Desglose */}
@@ -395,7 +425,7 @@ export default function StoreCheckout({
             <button disabled={isSubmitting || belowMin || (isDelivery && preview.outOfRange)} type="submit"
               className="w-full py-5 text-white font-black rounded-2xl shadow-xl transition-all active:scale-95 disabled:opacity-50"
               style={{ background: primary }}>
-              {isSubmitting ? 'ENVIANDO...' : `CONFIRMAR · ${fmt(grandTotal)}`}
+              {isSubmitting ? 'PROCESANDO...' : `${paymentMethod === 'ONLINE' ? 'PAGAR' : 'CONFIRMAR'} · ${fmt(grandTotal)}`}
             </button>
           </form>
         )}

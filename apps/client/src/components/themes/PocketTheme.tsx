@@ -249,6 +249,7 @@ export function PocketTheme({ data }: { data: any }) {
         locations={locations}
         delivery={info.delivery}
         minOrderAmount={info.minOrderAmount}
+        onlinePayment={info.onlinePayment}
       />
     </div>
   );

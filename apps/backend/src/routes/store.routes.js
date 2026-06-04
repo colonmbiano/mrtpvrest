@@ -15,6 +15,11 @@
 
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
+const {
+  resolveProviderForRestaurant,
+  getProviderForRestaurant,
+  instantiateFromIntegration,
+} = require('../lib/payment-providers');
 const router = express.Router();
 
 // ── Envío: distancia y cálculo de costo ──────────────────────────────────
@@ -173,6 +178,12 @@ router.get('/info', async (req, res) => {
   // Cargamos la configuración específica del restaurante (marca)
   const config = await prisma.restaurantConfig.findUnique({ where: { restaurantId: restaurant.id } });
 
+  // ¿Hay alguna pasarela de pago en línea habilitada para este restaurante?
+  const onlinePaymentEnabled = !!(await prisma.integrationConfig.findFirst({
+    where: { restaurantId: restaurant.id, enabled: true, type: { in: ['MERCADOPAGO', 'STRIPE'] } },
+    select: { id: true },
+  }));
+
   // Cargamos el Tenant padre para flags globales (hasWebStore)
   let tenantConfig = { hasWebStore: false, whatsappNumber: null };
   if (restaurant.tenantId) {
@@ -199,6 +210,9 @@ router.get('/info', async (req, res) => {
     // Estado de la tienda — el storefront debe bloquear pedidos si está cerrada.
     isOpen:        config?.isOpen ?? true,
     closedMessage: config?.closedMessage || null,
+
+    // ¿Se puede pagar en línea (tarjeta) en esta tienda?
+    onlinePayment: onlinePaymentEnabled,
 
     // Reglas de pedido visibles para el cliente
     minOrderAmount:    config?.minOrderAmount ?? 0,
@@ -839,6 +853,139 @@ router.get('/orders/by-number/:orderNumber', async (req, res) => {
     res.json(order);
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGO EN LÍNEA (tarjeta) — Checkout Pro de la pasarela del restaurante
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Aplica el resultado de un pago a la orden y notifica a cocina/cliente.
+async function applyStorePaymentResult(orderId, { status, rawStatus, providerId }, io) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) return;
+  await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      paymentProviderId:     providerId,
+      paymentProviderStatus: rawStatus,
+      paymentStatus:         status,
+      status:                status === 'PAID' ? 'CONFIRMED' : order.status,
+      paidAt:                status === 'PAID' ? new Date() : undefined,
+    },
+  });
+  if (io && status === 'PAID') {
+    io.to(`restaurant:${order.restaurantId}`).emit('order:paid', { orderId, source: 'ONLINE' });
+    io.to(`restaurant:${order.restaurantId}`).emit('order:new', { orderId, source: 'ONLINE' });
+    io.to(`restaurant:${order.restaurantId}:kitchen`).emit('order:new', { orderId, source: 'ONLINE' });
+  }
+}
+
+// ── POST /api/store/payment/create ───────────────────────────────────────────
+// Inicia el checkout en línea para un pedido ya creado (paymentStatus PENDING).
+// Body: { orderId, returnUrl }  → devuelve { checkoutUrl }
+router.post('/payment/create', async (req, res) => {
+  const store = await resolveStore(req, res);
+  if (!store) return;
+  const { restaurant } = store;
+
+  const orderId = String(req.body?.orderId || '');
+  const returnUrl = String(req.body?.returnUrl || '').trim();
+  if (!orderId) return res.status(400).json({ error: 'orderId requerido.' });
+
+  try {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, restaurantId: restaurant.id },
+      include: { items: { select: { menuItemId: true, name: true, quantity: true, price: true } } },
+    });
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    if (order.paymentStatus === 'PAID') return res.status(400).json({ error: 'El pedido ya está pagado.' });
+
+    const resolved = await resolveProviderForRestaurant(restaurant.id, req.body?.provider || 'MERCADOPAGO');
+    if (!resolved) return res.status(400).json({ error: 'Esta tienda no tiene pagos en línea configurados.', code: 'NO_PAYMENT_PROVIDER' });
+
+    // Construimos los items para la pasarela. Incluimos envío/propina como
+    // conceptos extra para que el total cobrado coincida con el de la orden.
+    const items = order.items.map(oi => ({ id: oi.menuItemId, title: oi.name, quantity: oi.quantity, unitPrice: oi.price }));
+    const extras = order.total - order.items.reduce((s, i) => s + i.price * i.quantity, 0) + (order.discount || 0);
+    if ((order.deliveryFee || 0) > 0) items.push({ id: 'envio', title: 'Envío', quantity: 1, unitPrice: order.deliveryFee });
+    if ((order.tip || 0) > 0) items.push({ id: 'propina', title: 'Propina', quantity: 1, unitPrice: order.tip });
+    if ((order.discount || 0) > 0) items.push({ id: 'descuento', title: 'Descuento', quantity: 1, unitPrice: -order.discount });
+
+    const backUrl = returnUrl || (restaurant.slug ? `https://${restaurant.slug}.mrtpvrest.com/` : (process.env.FRONTEND_URL || ''));
+    const notificationUrl = `${process.env.BACKEND_URL || 'https://api.mrtpvrest.com'}/api/store/webhook/${resolved.key.toLowerCase()}`;
+
+    const result = await resolved.provider.createCheckout({ order, items, backUrl, notificationUrl, currency: 'MXN' });
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { paymentProvider: resolved.key, paymentProviderRef: result.providerRef, paymentMethod: 'CARD' },
+    });
+
+    res.json({ checkoutUrl: result.checkoutUrl, provider: resolved.key });
+  } catch (e) {
+    console.error('[store] POST /payment/create error:', e.message);
+    res.status(500).json({ error: 'No se pudo iniciar el pago en línea.' });
+  }
+});
+
+// ── POST /api/store/webhook/mercadopago ──────────────────────────────────────
+// Receptor público de notificaciones de MercadoPago para pedidos de la tienda.
+// Esta es la URL que se configura en el panel de MercadoPago.
+router.post('/webhook/mercadopago', async (req, res) => {
+  try {
+    const { type, data } = req.body || {};
+    if (type !== 'payment' || !data?.id) return res.status(200).json({ received: true });
+
+    // MP solo manda payment.id; consultamos el pago para obtener el orderId.
+    const fallback = await prisma.integrationConfig.findFirst({ where: { type: 'MERCADOPAGO', enabled: true } });
+    if (!fallback) return res.status(200).json({ received: true });
+    const tempProvider = instantiateFromIntegration(fallback);
+    const firstLookup = await tempProvider.getPayment(data.id);
+    const orderId = firstLookup.externalReference;
+    if (!orderId) return res.status(200).json({ received: true });
+
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) return res.status(200).json({ received: true });
+
+    // Re-verificar con el token del restaurante dueño (autoridad real).
+    let verified = firstLookup;
+    const restaurantProvider = await getProviderForRestaurant(order.restaurantId, 'MERCADOPAGO');
+    if (restaurantProvider) {
+      try {
+        verified = await restaurantProvider.getPayment(data.id);
+        if (verified.externalReference !== orderId) return res.status(200).json({ received: true });
+      } catch (_) { /* usa firstLookup */ }
+    }
+
+    await applyStorePaymentResult(orderId, verified, req.app.get('io'));
+    res.status(200).json({ received: true });
+  } catch (err) {
+    console.error('[store-webhook:mercadopago] error:', err.message);
+    res.status(200).json({ received: true });
+  }
+});
+
+// ── POST /api/store/webhook/stripe ───────────────────────────────────────────
+router.post('/webhook/stripe', async (req, res) => {
+  try {
+    const event = req.body || {};
+    const relevant = ['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'payment_intent.succeeded', 'payment_intent.payment_failed'];
+    if (!relevant.includes(event?.type)) return res.status(200).json({ received: true });
+    const session = event.data?.object ?? {};
+    const orderId = session.client_reference_id || session.metadata?.orderId;
+    if (!orderId) return res.status(200).json({ received: true });
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) return res.status(200).json({ received: true });
+    const provider = await getProviderForRestaurant(order.restaurantId, 'STRIPE');
+    if (!provider) return res.status(200).json({ received: true });
+    const result = await provider.getPayment(session.payment_intent || session.id).catch(() => null);
+    if (!result || result.externalReference !== orderId) return res.status(200).json({ received: true });
+    await applyStorePaymentResult(orderId, result, req.app.get('io'));
+    res.status(200).json({ received: true });
+  } catch (err) {
+    console.error('[store-webhook:stripe] error:', err.message);
+    res.status(200).json({ received: true });
   }
 });
 

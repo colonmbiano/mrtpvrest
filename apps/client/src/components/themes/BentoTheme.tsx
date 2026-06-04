@@ -17,6 +17,7 @@ type BentoThemeProps = {
       hasWebStore: boolean;
       whatsappNumber: string | null;
       minOrderAmount?: number;
+      onlinePayment?: boolean;
       delivery?: DeliveryConfig;
       themeConfig: { theme?: string; primaryColor?: string } | null;
     };
@@ -265,6 +266,7 @@ export function BentoTheme({ data }: BentoThemeProps) {
         locations={locations}
         delivery={info.delivery}
         minOrderAmount={info.minOrderAmount}
+        onlinePayment={info.onlinePayment}
       />
 
       <style dangerouslySetInnerHTML={{ __html: `.no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}` }} />
