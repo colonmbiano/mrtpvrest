@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useCart } from '../../lib/cartStore';
 import StoreCheckout from '../StoreCheckout';
+import BannerCarousel from '../BannerCarousel';
 import type { DeliveryConfig } from '../../lib/delivery';
 
 type BentoThemeProps = {
@@ -102,16 +103,10 @@ export function BentoTheme({ data }: BentoThemeProps) {
       </header>
 
       <main className="max-w-6xl mx-auto px-5 mt-6">
-        {/* Hero banner en celda bento grande */}
+        {/* Banners de promociones (carrusel) */}
         {banners.length > 0 && (
-          <div className="relative w-full h-[200px] md:h-[280px] rounded-[28px] overflow-hidden mb-5" style={{ border: '1px solid #FFFFFF14' }}>
-            <img src={banners[0].imageUrl} alt={banners[0].title || 'Promo'} className="w-full h-full object-cover" />
-            <div className="absolute inset-0 flex items-end p-6" style={{ background: 'linear-gradient(to top, #0C0C0EE6, transparent)' }}>
-              <div>
-                <span className="text-[9px] font-bold px-2 py-1 rounded" style={{ background: `${accent}25`, color: accent }}>🔥 DESTACADO</span>
-                <h2 className="text-2xl md:text-3xl font-bold mt-2" style={{ fontFamily: 'Syne, sans-serif' }}>{banners[0].title}</h2>
-              </div>
-            </div>
+          <div className="mb-5">
+            <BannerCarousel banners={banners} variant="dark" accent={accent} />
           </div>
         )}
 

@@ -4,6 +4,7 @@ import { useState, useRef } from 'react';
 import Image from 'next/image';
 import { useCart } from '../../lib/cartStore';
 import StoreCheckout from '../StoreCheckout';
+import BannerCarousel from '../BannerCarousel';
 
 export function PocketTheme({ data }: { data: any }) {
   const { info, menu, locations } = data;
@@ -83,13 +84,10 @@ export function PocketTheme({ data }: { data: any }) {
       {/* 3. CONTENIDO PRINCIPAL */}
       <main className="px-4 mt-4">
         
-        {/* Banner Hero Reducido (App Style) */}
+        {/* Banners de promociones (carrusel) */}
         {banners.length > 0 && (
-          <div className="relative w-full h-[160px] rounded-saas overflow-hidden mb-6 shadow-md border border-gray-100">
-             <img src={banners[0].imageUrl} alt={banners[0].title || 'Promo'} className="w-full h-full object-cover" />
-             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-5">
-               <h2 className="text-white font-syne font-bold text-xl leading-tight">{banners[0].title}</h2>
-             </div>
+          <div className="mb-6">
+            <BannerCarousel banners={banners} variant="light" accent={primary} />
           </div>
         )}
 
