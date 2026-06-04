@@ -55,6 +55,7 @@ const SCOPED_MODELS = new Set([
   'Supplier',
   'User',
   'VariantTemplate',
+  'WhatsappSession',
 ]);
 
 const SCOPE_FIELD = 'restaurantId';

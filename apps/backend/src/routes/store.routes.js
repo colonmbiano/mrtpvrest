@@ -20,67 +20,9 @@ const {
   getProviderForRestaurant,
   instantiateFromIntegration,
 } = require('../lib/payment-providers');
+// Cálculo de envío: fuente única compartida con el chatbot de WhatsApp.
+const { computeDeliveryFee } = require('../lib/delivery-fee');
 const router = express.Router();
-
-// ── Envío: distancia y cálculo de costo ──────────────────────────────────
-// Haversine: distancia en km entre dos coordenadas (misma fórmula que
-// gps.routes.js pero devolviendo km, que es la unidad del cobro por km).
-function haversineKm(lat1, lng1, lat2, lng2) {
-  const R = 6371; // radio terrestre en km
-  const toRad = (d) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/**
- * Calcula el costo de envío de forma autoritativa en el backend.
- * @param {object} config - RestaurantConfig
- * @param {number} subtotal - subtotal del pedido (para envío gratis por monto)
- * @param {{lat:number,lng:number}|null} dest - coordenadas del cliente
- * @returns {{ fee:number, distanceKm:number|null, error:string|null }}
- */
-function computeDeliveryFee(config, subtotal, dest) {
-  const mode = config?.deliveryMode || 'FLAT';
-
-  // Envío gratis por monto de compra (aplica en cualquier modo).
-  const freeFrom = config?.freeDeliveryFrom;
-  if (freeFrom != null && subtotal >= freeFrom) {
-    return { fee: 0, distanceKm: null, error: null };
-  }
-
-  if (mode !== 'DISTANCE') {
-    return { fee: Number(config?.deliveryFee || 0), distanceKm: null, error: null };
-  }
-
-  // Modo DISTANCE: requiere origen configurado y coordenadas del cliente.
-  const origin = (config?.originLat != null && config?.originLng != null)
-    ? { lat: config.originLat, lng: config.originLng }
-    : null;
-  if (!origin || !dest || dest.lat == null || dest.lng == null) {
-    // Sin datos suficientes: caemos a la tarifa base como mínimo razonable.
-    return { fee: Number(config?.deliveryBaseFee || config?.deliveryFee || 0), distanceKm: null, error: null };
-  }
-
-  const distanceKm = Math.round(haversineKm(origin.lat, origin.lng, dest.lat, dest.lng) * 100) / 100;
-
-  // Fuera de cobertura.
-  if (config?.deliveryMaxKm != null && distanceKm > config.deliveryMaxKm) {
-    return { fee: 0, distanceKm, error: 'OUT_OF_RANGE' };
-  }
-
-  // Dentro del radio de envío gratis.
-  if (config?.deliveryFreeRadiusKm != null && distanceKm <= config.deliveryFreeRadiusKm) {
-    return { fee: 0, distanceKm, error: null };
-  }
-
-  const base = Number(config?.deliveryBaseFee || 0);
-  const perKm = Number(config?.deliveryPerKm || 0);
-  const fee = Math.round((base + perKm * distanceKm) * 100) / 100;
-  return { fee, distanceKm, error: null };
-}
 
 // ── Anti-fraude: rate limit por kiosko ───────────────────────────────────
 // Cache en memoria de pedidos PENDING por terminal. Si un mismo terminal
