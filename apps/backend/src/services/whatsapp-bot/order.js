@@ -6,6 +6,7 @@
 // (lib/delivery-fee) para que WhatsApp y la web cobren idéntico.
 
 const { computeDeliveryFee } = require('../../lib/delivery-fee');
+const { resolveProviderForRestaurant } = require('../../lib/payment-providers');
 const { effectivePrice } = require('./catalog');
 
 class BotOrderError extends Error {
@@ -89,11 +90,13 @@ async function createBotOrder({ prisma, io, restaurant, config, data }) {
 
   // Mapeo del método de pago elegido al enum del modelo.
   const paymentMethod =
-    data.paymentMethod === 'TRANSFER'
-      ? 'TRANSFER'
-      : orderType === 'DELIVERY'
-        ? 'CASH_ON_DELIVERY'
-        : 'CASH';
+    data.paymentMethod === 'ONLINE'
+      ? 'CARD'
+      : data.paymentMethod === 'TRANSFER'
+        ? 'TRANSFER'
+        : orderType === 'DELIVERY'
+          ? 'CASH_ON_DELIVERY'
+          : 'CASH';
 
   const estimatedMinutes = Number(config?.estimatedDelivery) || 30;
   const orderNumber = 'WA-' + Date.now().toString().slice(-6);
@@ -136,4 +139,57 @@ async function createBotOrder({ prisma, io, restaurant, config, data }) {
   return { order, estimatedMinutes };
 }
 
-module.exports = { createBotOrder, BotOrderError };
+/**
+ * ¿El restaurante tiene alguna pasarela de pago en línea habilitada?
+ * Determina si el chatbot ofrece la opción "Pago en línea (tarjeta)".
+ */
+async function hasOnlinePayment(prisma, restaurantId) {
+  const found = await prisma.integrationConfig.findFirst({
+    where: { restaurantId, enabled: true, type: { in: ['MERCADOPAGO', 'STRIPE'] } },
+    select: { id: true },
+  });
+  return !!found;
+}
+
+/**
+ * Genera un link de checkout para un pedido ya creado y guarda la referencia.
+ * El pago se confirma de forma asíncrona vía el webhook público existente
+ * (/api/store/webhook/<provider>), que pone el pedido en PAID/CONFIRMED.
+ * @returns {Promise<string|null>} checkoutUrl o null si no hay pasarela.
+ */
+async function createCheckoutLink({ prisma, restaurant, order }) {
+  const resolved = await resolveProviderForRestaurant(restaurant.id);
+  if (!resolved) return null;
+
+  const items = (order.items || []).map((oi) => ({
+    id: oi.menuItemId,
+    title: oi.name,
+    quantity: oi.quantity,
+    unitPrice: oi.price,
+  }));
+  if ((order.deliveryFee || 0) > 0) {
+    items.push({ id: 'envio', title: 'Envío', quantity: 1, unitPrice: order.deliveryFee });
+  }
+
+  const backUrl = restaurant.slug
+    ? `https://${restaurant.slug}.mrtpvrest.com/`
+    : (process.env.FRONTEND_URL || '');
+  const notificationUrl = `${process.env.BACKEND_URL || 'https://api.mrtpvrest.com'}/api/store/webhook/${resolved.key.toLowerCase()}`;
+
+  const result = await resolved.provider.createCheckout({
+    order,
+    items,
+    backUrl,
+    notificationUrl,
+    currency: 'MXN',
+  });
+
+  await prisma.order.update({
+    where: { id: order.id },
+    data: { paymentProvider: resolved.key, paymentProviderRef: result.providerRef },
+  });
+
+  return result.checkoutUrl || null;
+}
+
+module.exports = { createBotOrder, createCheckoutLink, hasOnlinePayment, BotOrderError };

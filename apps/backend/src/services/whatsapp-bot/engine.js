@@ -64,7 +64,7 @@ function capableLocations(locations, orderType) {
   return capable.length > 0 ? capable : all;
 }
 
-async function handleInbound({ restaurant, config, locations = [], session, message, deps }) {
+async function handleInbound({ restaurant, config, locations = [], session, message, deps, onlinePayment = false }) {
   const data = { ...freshData(session?.data?.phone || message?.from), ...(session?.data || {}) };
   if (!data.nav) data.nav = { categoryId: null };
   let state = session?.state || STATES.GREETING;
@@ -199,7 +199,7 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
       if (!name) return result(m.askName, STATES.NAME);
       data.customerName = name.slice(0, 80);
       if (data.orderType === 'DELIVERY') return result(m.askAddress, STATES.ADDRESS);
-      return result(m.askPayment(data.orderType), STATES.PAYMENT);
+      return result(m.askPayment(data.orderType, onlinePayment), STATES.PAYMENT);
     }
 
     case STATES.ADDRESS: {
@@ -209,7 +209,7 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
       if ((config?.deliveryMode || 'FLAT') === 'DISTANCE') {
         return result(m.askLocationPin, STATES.LOCATION_PIN);
       }
-      return result(m.askPayment(data.orderType), STATES.PAYMENT);
+      return result(m.askPayment(data.orderType, onlinePayment), STATES.PAYMENT);
     }
 
     case STATES.LOCATION_PIN: {
@@ -223,12 +223,12 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
         }
         data.deliveryLat = dest.lat;
         data.deliveryLng = dest.lng;
-        return result(m.askPayment(data.orderType), STATES.PAYMENT);
+        return result(m.askPayment(data.orderType, onlinePayment), STATES.PAYMENT);
       }
       if (command === 'omitir' || command === 'saltar') {
         data.deliveryLat = null;
         data.deliveryLng = null;
-        return result(m.askPayment(data.orderType), STATES.PAYMENT);
+        return result(m.askPayment(data.orderType, onlinePayment), STATES.PAYMENT);
       }
       if (command === 'cambiar') {
         return result(m.askAddress, STATES.ADDRESS);
@@ -240,7 +240,8 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
       let method = null;
       if (command === '1' || /efectivo|cash/.test(command)) method = 'CASH';
       else if (command === '2' || /transfer/.test(command)) method = 'TRANSFER';
-      if (!method) return result(m.invalidPayment, STATES.PAYMENT);
+      else if (onlinePayment && (command === '3' || /linea|tarjeta|online|card/.test(command))) method = 'ONLINE';
+      if (!method) return result(m.invalidPayment(onlinePayment), STATES.PAYMENT);
       data.paymentMethod = method;
       return result(buildConfirm(data, config), STATES.CONFIRM);
     }
@@ -256,16 +257,21 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
       try {
         const { order, estimatedMinutes } = await deps.createOrder(data);
         const fresh = freshData(data.phone, order.id);
-        return result(
+        const replies = [
           m.orderCreated({
             orderNumber: order.orderNumber,
             total: order.total,
             orderType: order.orderType,
             estimatedMinutes,
           }),
-          STATES.GREETING,
-          fresh
-        );
+        ];
+        // Pago en línea: generamos el link de checkout y lo enviamos después.
+        if (data.paymentMethod === 'ONLINE' && deps.createCheckout) {
+          let url = null;
+          try { url = await deps.createCheckout(order); } catch (_) { url = null; }
+          replies.push(url ? m.payOnline(url) : m.payOnlinePending);
+        }
+        return result(replies, STATES.GREETING, fresh);
       } catch (err) {
         if (err.code === 'MIN_ORDER') {
           return result([err.message, m.cartEmpty].join('\n'), STATES.CATEGORY);
@@ -333,7 +339,12 @@ function buildConfirm(data, config) {
       : null;
     deliveryFee = computeDeliveryFee(config, subtotal, dest).fee;
   }
-  const paymentLabel = data.paymentMethod === 'TRANSFER' ? 'Transferencia' : 'Efectivo';
+  const paymentLabel =
+    data.paymentMethod === 'TRANSFER'
+      ? 'Transferencia'
+      : data.paymentMethod === 'ONLINE'
+        ? 'Pago en línea (tarjeta)'
+        : 'Efectivo';
   return m.confirm({
     cart: data.cart,
     orderType: data.orderType,

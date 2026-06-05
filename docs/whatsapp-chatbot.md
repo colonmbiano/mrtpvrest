@@ -88,8 +88,10 @@ GREETING → ORDER_TYPE → [LOCATION] → CATEGORY ⇄ ITEM → QUANTITY → CA
   (cada variante es una línea seleccionable). El cliente responde con números.
 - **ADDRESS/LOCATION_PIN:** solo delivery. Si el envío es por `DISTANCE`, se
   pide compartir la ubicación para calcular el costo y validar cobertura.
-- **PAYMENT:** efectivo (contra entrega / al recoger) o transferencia.
-- **CONFIRM:** muestra el resumen con total y envío; *SÍ* crea el pedido.
+- **PAYMENT:** efectivo (contra entrega / al recoger), transferencia o —si el
+  restaurante tiene pasarela habilitada— **pago en línea (tarjeta)**.
+- **CONFIRM:** muestra el resumen con total y envío; *SÍ* crea el pedido. Si el
+  pago es en línea, además se envía un **link de checkout** (ver §5c).
 
 Comandos globales en cualquier momento: `menú`, `carrito`, `finalizar`,
 `cancelar`, `ayuda`.
@@ -115,6 +117,23 @@ configurada, con **su propio token**; si no, cae al token global de plataforma.
 - Best-effort y no bloqueante: los pedidos sin teléfono (ej. dine-in del TPV)
   se omiten silenciosamente.
 
+## 5c. Pago en línea con link
+
+Si el restaurante tiene una pasarela habilitada (MercadoPago o Stripe en
+`IntegrationConfig`), el chatbot ofrece la opción **"Pago en línea (tarjeta)"**
+en el paso de pago. Al confirmar:
+
+1. Se crea el pedido (`paymentMethod = CARD`, `paymentStatus = PENDING`).
+2. Se genera un **link de checkout** con la pasarela del restaurante
+   (`services/whatsapp-bot/order.js` → `createCheckoutLink`, reutilizando
+   `lib/payment-providers`) y se envía por WhatsApp.
+3. El pago se confirma de forma asíncrona vía el **webhook público ya existente**
+   `POST /api/store/webhook/<provider>`, que pone el pedido en `PAID/CONFIRMED`
+   y dispara la notificación a cocina.
+
+La opción solo se muestra cuando hay pasarela; si la generación del link falla,
+el bot ofrece pagar en efectivo como respaldo.
+
 ## 6. Variables de entorno
 
 | Variable | Uso |
@@ -139,8 +158,8 @@ pnpm --filter @mrtpvrest/backend exec jest whatsapp-bot
 ## 8. Roadmap (fases siguientes)
 
 - ✅ ~~Notificaciones de estado al cliente por WhatsApp~~ (ver §5b).
+- ✅ ~~Pago en línea con link de checkout~~ (ver §5c).
 - Base de clientes + **remarketing** por WhatsApp/SMS.
 - **Juegos promocionales** (descuentos / productos gratis).
 - Reportes de ventas por **zona / sucursal** del canal WhatsApp.
-- Pago en línea con link de checkout (reutilizando `POST /api/store/payment/create`).
 - NLU opcional con Groq para entender pedidos en lenguaje libre.
