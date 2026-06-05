@@ -35,23 +35,26 @@ function makeDeps(overrides = {}) {
     },
     estimatedMinutes: 40,
   }));
+  const createCheckout = jest.fn(async () => 'https://pago.example/checkout/abc');
   return {
     loadMenu: overrides.loadMenu || (async () => FAKE_MENU),
     createOrder: overrides.createOrder || createOrder,
+    createCheckout: overrides.createCheckout || createCheckout,
     _createOrder: createOrder,
+    _createCheckout: createCheckout,
   };
 }
 
 const FLAT_CONFIG = { minOrderAmount: 0, deliveryMode: 'FLAT', deliveryFee: 25, estimatedDelivery: 40, isOpen: true };
 
 // Helper: ejecuta un turno y devuelve el outcome. Threadea state/data.
-function turn(prev, input, deps, config = FLAT_CONFIG, locations = []) {
+function turn(prev, input, deps, config = FLAT_CONFIG, locations = [], onlinePayment = false) {
   const message =
     typeof input === 'object'
       ? { from: '5215511112222', ...input }
       : { type: 'text', text: input, from: '5215511112222' };
   const session = prev ? { state: prev.state, data: prev.data } : null;
-  return handleInbound({ restaurant, config, locations, session, message, deps });
+  return handleInbound({ restaurant, config, locations, session, message, deps, onlinePayment });
 }
 
 describe('engine :: helpers', () => {
@@ -258,5 +261,52 @@ describe('engine :: comandos globales y validaciones', () => {
     o = await turn(o, '1', deps);
     expect(o.state).toBe(STATES.GREETING);
     expect(o.replies[0]).toMatch(/no hay productos/i);
+  });
+});
+
+describe('engine :: pago en línea', () => {
+  // Llega hasta PAYMENT en un pedido pickup con pago en línea habilitado.
+  async function reachPayment(deps, online) {
+    let o = await turn(null, 'hola', deps, FLAT_CONFIG, [], online);
+    o = await turn(o, '2', deps, FLAT_CONFIG, [], online); // pickup
+    o = await turn(o, '1', deps, FLAT_CONFIG, [], online); // Hamburguesas
+    o = await turn(o, '1', deps, FLAT_CONFIG, [], online); // Clásica
+    o = await turn(o, '1', deps, FLAT_CONFIG, [], online); // cantidad
+    o = await turn(o, 'finalizar', deps, FLAT_CONFIG, [], online);
+    o = await turn(o, 'Ana', deps, FLAT_CONFIG, [], online);
+    return o;
+  }
+
+  test('ofrece la opción 3 y genera el link tras confirmar', async () => {
+    const deps = makeDeps();
+    let o = await reachPayment(deps, true);
+    expect(o.state).toBe(STATES.PAYMENT);
+    expect(o.replies[0]).toMatch(/Pago en línea/i);
+
+    o = await turn(o, '3', deps, FLAT_CONFIG, [], true);
+    expect(o.state).toBe(STATES.CONFIRM);
+    expect(o.replies[0]).toMatch(/Pago en línea/i);
+
+    o = await turn(o, 'si', deps, FLAT_CONFIG, [], true);
+    expect(deps._createOrder).toHaveBeenCalledTimes(1);
+    expect(deps._createCheckout).toHaveBeenCalledTimes(1);
+    expect(deps._createOrder.mock.calls[0][0].paymentMethod).toBe('ONLINE');
+    expect(o.replies.join(' ')).toMatch(/pago\.example/);
+  });
+
+  test('si falla la generación del link, avisa con fallback', async () => {
+    const deps = makeDeps({ createCheckout: jest.fn(async () => null) });
+    let o = await reachPayment(deps, true);
+    o = await turn(o, '3', deps, FLAT_CONFIG, [], true);
+    o = await turn(o, 'si', deps, FLAT_CONFIG, [], true);
+    expect(o.replies.join(' ')).toMatch(/efectivo al recibir/i);
+  });
+
+  test('sin pago en línea, la opción 3 no se ofrece ni se acepta', async () => {
+    const deps = makeDeps();
+    let o = await reachPayment(deps, false);
+    expect(o.replies[0]).not.toMatch(/Pago en línea/i);
+    o = await turn(o, '3', deps, FLAT_CONFIG, [], false);
+    expect(o.state).toBe(STATES.PAYMENT); // opción inválida → reprompt
   });
 });

@@ -95,13 +95,24 @@ module.exports = {
   outOfRange: (km) =>
     `😔 Tu ubicación está a ${km} km y queda fuera de nuestra zona de cobertura. Escribe *cambiar* para mandar otra dirección o *cancelar*.`,
 
-  askPayment: (orderType) => {
+  askPayment: (orderType, onlinePayment) => {
     const cashLabel =
       orderType === 'DELIVERY' ? 'Efectivo (contra entrega)' : 'Efectivo (al recoger)';
-    return `💳 ¿Cómo vas a pagar?\n\n*1.* 💵 ${cashLabel}\n*2.* 🏦 Transferencia\n\n_Responde con el número._`;
+    let opts = `*1.* 💵 ${cashLabel}\n*2.* 🏦 Transferencia`;
+    if (onlinePayment) opts += '\n*3.* 💳 Pago en línea (tarjeta)';
+    return `💳 ¿Cómo vas a pagar?\n\n${opts}\n\n_Responde con el número._`;
   },
 
-  invalidPayment: 'Responde *1* para efectivo o *2* para transferencia, por favor.',
+  invalidPayment: (onlinePayment) =>
+    onlinePayment
+      ? 'Responde *1* (efectivo), *2* (transferencia) o *3* (pago en línea), por favor.'
+      : 'Responde *1* para efectivo o *2* para transferencia, por favor.',
+
+  payOnline: (url) =>
+    `💳 Para completar tu pago, abre este link seguro:\n${url}\n\nEn cuanto recibamos tu pago confirmamos tu pedido. 🙌`,
+
+  payOnlinePending:
+    'No pudimos generar tu link de pago en este momento 😕. No te preocupes: puedes pagar en efectivo al recibir tu pedido, o escríbenos y lo resolvemos.',
 
   confirm: ({ cart, orderType, deliveryFee, address, locationName, customerName, paymentLabel }) => {
     const subtotal = cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0);

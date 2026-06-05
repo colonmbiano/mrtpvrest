@@ -49,14 +49,15 @@ async function processMessage({ restaurant, integration, message, io }) {
   const cfg = provider.resolveConfig(integration);
   const phone = message.from;
 
-  // Config y sucursales del restaurante (scope explícito por restaurantId).
-  const [config, locations] = await Promise.all([
+  // Config, sucursales y disponibilidad de pago en línea (scope por restaurantId).
+  const [config, locations, onlinePayment] = await Promise.all([
     prisma.restaurantConfig.findUnique({ where: { restaurantId: restaurant.id } }),
     prisma.location.findMany({
       where: { restaurantId: restaurant.id, isActive: true },
       orderBy: { name: 'asc' },
       select: { id: true, name: true, address: true, hasDelivery: true, hasTakeaway: true },
     }),
+    orderSvc.hasOnlinePayment(prisma, restaurant.id),
   ]);
 
   // Tienda cerrada → no tomamos pedidos nuevos.
@@ -86,11 +87,12 @@ async function processMessage({ restaurant, integration, message, io }) {
       return menuCache;
     },
     createOrder: (data) => orderSvc.createBotOrder({ prisma, io, restaurant, config, data }),
+    createCheckout: (order) => orderSvc.createCheckoutLink({ prisma, restaurant, order }),
   };
 
   let outcome;
   try {
-    outcome = await engine.handleInbound({ restaurant, config, locations, session, message, deps });
+    outcome = await engine.handleInbound({ restaurant, config, locations, session, message, deps, onlinePayment });
   } catch (err) {
     console.error('[wa-bot] engine error:', err);
     await provider.sendText(cfg, phone, m.genericError);
@@ -135,7 +137,7 @@ async function processMessage({ restaurant, integration, message, io }) {
 async function handleWebhook({ restaurantId, body, io }) {
   const restaurant = await prisma.restaurant.findUnique({
     where: { id: restaurantId },
-    select: { id: true, name: true, isActive: true },
+    select: { id: true, name: true, slug: true, isActive: true },
   });
   if (!restaurant || !restaurant.isActive) return;
 
