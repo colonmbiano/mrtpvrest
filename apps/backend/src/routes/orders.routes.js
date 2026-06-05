@@ -967,6 +967,14 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
       io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
     }
 
+    // Notificar al cliente el cambio de estado (push + WhatsApp con la config
+    // del restaurante). Best-effort: no bloquea la respuesta al operador y los
+    // pedidos sin teléfono (ej. dine-in del TPV) se omiten dentro del servicio.
+    const { notifyOrderStatus } = require('../services/notifications.service');
+    notifyOrderStatus(order, status).catch((err) =>
+      console.error('[orders] notifyOrderStatus:', err.message)
+    );
+
     res.json(order);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
