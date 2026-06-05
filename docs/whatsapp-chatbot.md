@@ -102,6 +102,19 @@ Comandos globales en cualquier momento: `menú`, `carrito`, `finalizar`,
 - Emite `order:new` por Socket.io a `restaurant:<id>`, `:kitchen` y, si aplica,
   a los canales de la sucursal — igual que la tienda web.
 
+## 5b. Notificaciones de estado al cliente
+
+Cuando el pedido cambia de estado (`PUT /api/orders/:id/status`), el cliente
+recibe automáticamente un aviso por push + WhatsApp (confirmado, en preparación,
+listo, en camino, entregado, cancelado). El mensaje sale con el **nombre real
+del restaurante** y, si el restaurante tiene su integración `WHATSAPP`
+configurada, con **su propio token**; si no, cae al token global de plataforma.
+
+- Lógica en `services/notifications.service.js` (`notifyOrderStatus` →
+  `sendOrderWhatsApp`), reutilizando la misma capa `provider` del chatbot.
+- Best-effort y no bloqueante: los pedidos sin teléfono (ej. dine-in del TPV)
+  se omiten silenciosamente.
+
 ## 6. Variables de entorno
 
 | Variable | Uso |
@@ -125,6 +138,7 @@ pnpm --filter @mrtpvrest/backend exec jest whatsapp-bot
 
 ## 8. Roadmap (fases siguientes)
 
+- ✅ ~~Notificaciones de estado al cliente por WhatsApp~~ (ver §5b).
 - Base de clientes + **remarketing** por WhatsApp/SMS.
 - **Juegos promocionales** (descuentos / productos gratis).
 - Reportes de ventas por **zona / sucursal** del canal WhatsApp.

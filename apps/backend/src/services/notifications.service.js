@@ -2,6 +2,7 @@ require('dotenv').config();
 const webpush = require('web-push');
 const { prisma } = require('@mrtpvrest/database');
 const axios = require('axios');
+const { resolveConfig, sendText } = require('./whatsapp-bot/provider');
 
 const vapidSubject = process.env.VAPID_EMAIL
   ? (process.env.VAPID_EMAIL.startsWith('mailto:') || process.env.VAPID_EMAIL.startsWith('https://')
@@ -46,7 +47,9 @@ async function sendPushToUser(userId, payload) {
   } catch (e) { console.error('Push error:', e.message); }
 }
 
-// ── Enviar WhatsApp ───────────────────────────────────────────────────────
+// ── Enviar WhatsApp (legacy / fallback de plataforma) ─────────────────────
+// Usa el token GLOBAL de la plataforma. Se mantiene como fallback para
+// restaurantes que aún no configuraron su propia integración WHATSAPP.
 async function sendWhatsApp(phone, message) {
   if (!phone || !WHAPI_TOKEN) return;
   try {
@@ -58,6 +61,32 @@ async function sendWhatsApp(phone, message) {
     }, { headers: { Authorization: `Bearer ${WHAPI_TOKEN}` } });
     console.log('✅ WhatsApp enviado a', number);
   } catch (e) { console.error('WhatsApp error:', e.response?.data || e.message); }
+}
+
+// ── Enviar WhatsApp con la config PROPIA del restaurante ──────────────────
+// Resuelve la integración WHATSAPP del restaurante (mismo proveedor que usa
+// el chatbot) y envía con su token. Si el restaurante no tiene integración
+// habilitada, cae al token global de plataforma (sendWhatsApp). Best-effort.
+async function sendOrderWhatsApp(restaurantId, phone, message) {
+  if (!phone) return;
+  try {
+    const integration = restaurantId
+      ? await prisma.integrationConfig.findFirst({
+          where: { restaurantId, type: 'WHATSAPP', enabled: true },
+        })
+      : null;
+    if (integration) {
+      const cfg = resolveConfig(integration);
+      if (cfg.token) {
+        await sendText(cfg, phone, message);
+        return;
+      }
+    }
+  } catch (e) {
+    console.error('sendOrderWhatsApp error:', e.message);
+  }
+  // Fallback: token global de plataforma.
+  await sendWhatsApp(phone, message);
 }
 
 // ── Notificaciones por estado ─────────────────────────────────────────────
@@ -108,9 +137,15 @@ async function notifyOrderStatus(order, status) {
     data: { orderId: order.id, url: `/pedido/${order.id}` }
   });
   if (order.userId) await sendPushToUser(order.userId, { title: msg.title, body: text, tag: order.id, data: { url: `/pedido/${order.id}` } });
-  // WhatsApp
+  // WhatsApp — con la config propia del restaurante y su nombre real.
   const phone = order.customerPhone || order.user?.phone;
-  if (phone) await sendWhatsApp(phone, `*Restaurante Demo* \n${msg.emoji} ${text}`);
+  if (phone) {
+    const restaurant = order.restaurantId
+      ? await prisma.restaurant.findUnique({ where: { id: order.restaurantId }, select: { name: true } })
+      : null;
+    const name = restaurant?.name || 'Tu pedido';
+    await sendOrderWhatsApp(order.restaurantId, phone, `*${name}*\n${msg.emoji} ${text}`);
+  }
 }
 
 // ── Notificar falta de ingrediente ────────────────────────────────────────
@@ -128,8 +163,12 @@ async function notifyIngredientShortage(order, missingItem, options) {
     const optText = options?.length > 0
       ? `\nOpciones:\n${options.map((o,i) => `${i+1}. ${o}`).join('\n')}`
       : '';
-    await sendWhatsApp(phone,
-      `*Restaurante Demo* \n⚠️ Aviso sobre tu pedido ${order.orderNumber}:\n` +
+    const restaurant = order.restaurantId
+      ? await prisma.restaurant.findUnique({ where: { id: order.restaurantId }, select: { name: true } })
+      : null;
+    const name = restaurant?.name || 'Tu pedido';
+    await sendOrderWhatsApp(order.restaurantId, phone,
+      `*${name}*\n⚠️ Aviso sobre tu pedido ${order.orderNumber}:\n` +
       `Nos falta *${missingItem}* para preparar tu pedido.${optText}\n` +
       `Responde con el número de tu opción o escríbenos para ayudarte.`
     );
@@ -195,4 +234,4 @@ async function notifyLowStock(ingredient, locationId) {
   } catch (e) { console.error('notifyLowStock:', e.message); }
 }
 
-module.exports = { notifyOrderStatus, notifyIngredientShortage, notifyNewOrder, notifyLowStock, sendWhatsApp, sendPushToOrder };
+module.exports = { notifyOrderStatus, notifyIngredientShortage, notifyNewOrder, notifyLowStock, sendWhatsApp, sendOrderWhatsApp, sendPushToOrder };
