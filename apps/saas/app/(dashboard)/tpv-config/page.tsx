@@ -298,7 +298,7 @@ function EditDrawer({ row, onClose, onSaved }: {
             </div>
           </Field>
 
-          <Field label="Dictado por voz" hint="Muestra u oculta el boton de microfono en el TPV para agregar productos al ticket con voz.">
+          <Field label="Dictado por voz" hint="Muestra u oculta el botón de micrófono en el TPV para agregar productos al ticket dictando por voz.">
             <label style={{
               display: "flex",
               alignItems: "center",
