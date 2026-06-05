@@ -134,6 +134,58 @@ en el paso de pago. Al confirmar:
 La opción solo se muestra cuando hay pasarela; si la generación del link falla,
 el bot ofrece pagar en efectivo como respaldo.
 
+## 5d. CRM de clientes + remarketing
+
+Cada pedido por el chatbot registra/actualiza un `WhatsappContact`
+(`services/whatsapp-bot/contacts.js`): teléfono, nombre, nº de pedidos, total
+gastado, último pedido y consentimiento (`optIn`).
+
+El dueño puede enviar **campañas** segmentadas
+(`services/remarketing.service.js`):
+
+- Segmentos: `ALL`, `INACTIVE` (sin pedir en 30 días), `RECENT` (últimos 7 días),
+  `FREQUENT` (3+ pedidos).
+- Personalización: `{nombre}` en el mensaje se reemplaza por el nombre del
+  contacto. Se respeta `optIn` y se registra `lastContactedAt`. Envío con
+  throttle para no saturar la API.
+
+## 5e. Juegos promocionales
+
+"Ruleta de premios" configurable (`services/promo-games.service.js`):
+
+- El dueño define premios con **peso** (probabilidad) y tipo (`PERCENTAGE`,
+  `FIXED` o `NONE` = "sigue participando"), límite de jugadas por número y
+  disparador (`ON_COMMAND` o `ON_ORDER`).
+- El cliente juega escribiendo *premio* (o automáticamente al cerrar un pedido).
+  Si gana, se emite un **Coupon real** (mismo sistema de cupones) y se le manda
+  el código por WhatsApp.
+
+## 5f. Reportes del canal WhatsApp
+
+`GET /api/whatsapp/marketing/reports?from=&to=` devuelve ventas del canal
+WhatsApp (ingresos, pedidos, ticket promedio, envíos) **por sucursal** y una
+comparativa **por fuente** (WhatsApp vs. otros canales).
+
+## 5g. NLU opcional (Groq)
+
+Con `WHATSAPP_NLU_ENABLED=true`, cuando el cliente escribe en lenguaje libre
+("quiero 2 hamburguesas y un refresco") en el paso del menú, el bot usa Groq
+(Llama 3.1, vía `services/whatsapp-bot/nlu.js`) para mapearlo a productos y
+agregarlos al carrito. Es best-effort: sin API key o ante error, el flujo
+numerado determinista sigue funcionando.
+
+## Endpoints de administración (`/api/whatsapp/marketing`, admin)
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/contacts` | Base de clientes + stats |
+| GET | `/segments` | Segmentos disponibles |
+| POST | `/campaigns` | Enviar remarketing `{ segment, message, limit }` |
+| GET | `/games` | Listar juegos promocionales |
+| POST | `/games` | Crear/actualizar juego |
+| DELETE | `/games/:id` | Eliminar juego |
+| GET | `/reports` | Reportes del canal WhatsApp |
+
 ## 6. Variables de entorno
 
 | Variable | Uso |
@@ -142,7 +194,10 @@ el bot ofrece pagar en efectivo como respaldo.
 | `WHATSAPP_API_URL` | Override del endpoint Whapi (default `gate.whapi.cloud`) |
 | `WHATSAPP_VERIFY_TOKEN` | Verify token de plataforma para Meta (fallback) |
 | `WHATSAPP_SESSION_TTL_MS` | Vida de sesión inactiva (default 6 h) |
+| `WHATSAPP_NLU_ENABLED` | `true` para activar NLU con Groq (default off) |
+| `GROQ_API_KEY` | Key de plataforma para NLU (fallback durante trial) |
 | `AI_ENCRYPTION_KEY` | Para descifrar tokens guardados cifrados |
+| `BACKEND_URL` / `FRONTEND_URL` | Para construir las URLs del checkout en línea |
 
 ## 7. Tests
 
@@ -151,15 +206,21 @@ pnpm --filter @mrtpvrest/backend exec jest whatsapp-bot
 ```
 
 - `whatsapp-bot.engine.test.js` — flujos completos (delivery, pickup, distancia,
-  cancelar, mínimo de compra, menú vacío, mensajes no soportados).
+  pago en línea, juegos, NLU, cancelar, mínimo de compra, menú vacío).
 - `whatsapp-bot.helpers.test.js` — selección numerada, normalización de
   entrada (Whapi/Meta) y cálculo de envío.
+- `whatsapp-marketing.test.js` — selección de premios por peso y segmentación.
+- `notifications.whatsapp.test.js` — enrutamiento de notificaciones por tenant.
 
-## 8. Roadmap (fases siguientes)
+## 8. Estado del roadmap
 
-- ✅ ~~Notificaciones de estado al cliente por WhatsApp~~ (ver §5b).
-- ✅ ~~Pago en línea con link de checkout~~ (ver §5c).
-- Base de clientes + **remarketing** por WhatsApp/SMS.
-- **Juegos promocionales** (descuentos / productos gratis).
-- Reportes de ventas por **zona / sucursal** del canal WhatsApp.
-- NLU opcional con Groq para entender pedidos en lenguaje libre.
+- ✅ Webhook + flujo conversacional de pedidos (delivery + pickup).
+- ✅ Notificaciones de estado al cliente por WhatsApp (§5b).
+- ✅ Pago en línea con link de checkout (§5c).
+- ✅ Base de clientes + remarketing (§5d).
+- ✅ Juegos promocionales (§5e).
+- ✅ Reportes del canal WhatsApp por sucursal (§5f).
+- ✅ NLU opcional con Groq (§5g).
+
+Ideas futuras: panel de UI en el admin para configurar juegos/campañas,
+programación de campañas (envíos diferidos) y soporte de SMS además de WhatsApp.

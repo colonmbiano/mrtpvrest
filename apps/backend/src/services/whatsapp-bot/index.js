@@ -9,7 +9,11 @@ const provider = require('./provider');
 const catalog = require('./catalog');
 const engine = require('./engine');
 const orderSvc = require('./order');
+const nlu = require('./nlu');
+const promoGames = require('../promo-games.service');
 const m = require('./messages');
+
+const NLU_ENABLED = process.env.WHATSAPP_NLU_ENABLED === 'true';
 
 // Vida de una conversación inactiva (se reinicia tras este lapso sin actividad).
 const SESSION_TTL_MS = parseInt(process.env.WHATSAPP_SESSION_TTL_MS || `${6 * 60 * 60 * 1000}`, 10);
@@ -88,6 +92,10 @@ async function processMessage({ restaurant, integration, message, io }) {
     },
     createOrder: (data) => orderSvc.createBotOrder({ prisma, io, restaurant, config, data }),
     createCheckout: (order) => orderSvc.createCheckoutLink({ prisma, restaurant, order }),
+    playGame: (trigger) => promoGames.playGame({ restaurantId: restaurant.id, phone, trigger }),
+    ...(NLU_ENABLED && {
+      parseOrderText: (text, menu) => nlu.parseOrderText({ restaurantId: restaurant.id, text, menu }),
+    }),
   };
 
   let outcome;

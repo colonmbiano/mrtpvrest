@@ -56,6 +56,9 @@ const SCOPED_MODELS = new Set([
   'User',
   'VariantTemplate',
   'WhatsappSession',
+  'WhatsappContact',
+  'PromoGame',
+  'PromoGamePlay',
 ]);
 
 const SCOPE_FIELD = 'restaurantId';
