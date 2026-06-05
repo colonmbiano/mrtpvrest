@@ -1,27 +1,46 @@
 // lib/modules.ts — Catálogo canónico de módulos por tenant (panel SaaS).
 //
-// Fuente única para las dos vistas de "Marcas" (lista y detalle), espejo del
-// catálogo del backend (apps/backend/src/lib/tenantModules.js). Antes la lista
-// leía 3 flags booleanos legacy y el detalle leía enabledModules[], lo que
-// producía desync (la lista no mostraba kiosk/loyalty/kds/reports/finance).
+// ÚNICA fuente de verdad de los módulos en apps/saas: la consumen la LISTA
+// (marcas/page.tsx, chips), el DETALLE (marcas/[id]/page.tsx) y el panel de
+// toggles (components/TenantModulesPanel.tsx). No redefinir el catálogo en
+// otro lado del frontend.
+//
+// Espejo del catálogo del backend (apps/backend/src/lib/tenantModules.js):
+// mantener key/aliases/kind/planFlag en sync entre ambos. Antes la lista leía
+// 3 flags booleanos legacy y el detalle leía enabledModules[], lo que producía
+// desync (la lista no mostraba kiosk/loyalty/kds/reports/finance).
+
+import {
+  Boxes, Truck, Globe, MonitorSmartphone, Heart, ChefHat, BarChart3, Wallet,
+  type LucideIcon,
+} from "lucide-react";
+
+export type Accent = "orange" | "green" | "blue" | "amber" | "red";
 
 export interface ModuleDef {
   key: string;
-  label: string;       // etiqueta larga (detalle)
-  shortLabel: string;  // etiqueta corta (chips de la lista)
-  accent: "orange" | "green" | "blue" | "amber" | "red";
-  aliases?: string[];
+  label: string;        // etiqueta larga (detalle / panel)
+  shortLabel: string;   // etiqueta corta (chips de la lista)
+  description: string;  // descripción (tarjeta del panel de detalle)
+  Icon: LucideIcon;
+  accent: Accent;
+  // "flag" → solo booleano del Tenant (no vive en enabledModules[], p.ej. inventory).
+  // "key"  → módulo opcional en enabledModules[], puede estar gated por plan.
+  kind: "flag" | "key";
+  flag?: "hasInventory";                          // solo kind "flag"
+  aliases?: string[];                             // claves históricas equivalentes
+  planFlag?: "hasKDS" | "hasLoyalty" | "hasReports"; // booleano del Plan que también lo habilita
 }
 
 export const MODULE_CATALOG: ModuleDef[] = [
-  { key: "inventory", label: "Inventario",         shortLabel: "Inventario", accent: "green"  },
-  { key: "delivery",  label: "Reparto / Delivery", shortLabel: "Reparto",    accent: "orange" },
-  { key: "webstore",  label: "Tienda Web",         shortLabel: "Tienda Web", accent: "blue", aliases: ["client_menu"] },
-  { key: "kiosk",     label: "Kiosko",             shortLabel: "Kiosko",     accent: "amber"  },
-  { key: "loyalty",   label: "Lealtad",            shortLabel: "Lealtad",    accent: "red", aliases: ["loyalty_advanced"] },
-  { key: "kds",       label: "KDS",                shortLabel: "KDS",        accent: "orange" },
-  { key: "reports",   label: "Reportes",           shortLabel: "Reportes",   accent: "blue"   },
-  { key: "finance",   label: "Finanzas",           shortLabel: "Finanzas",   accent: "green"  },
+  { key: "inventory", label: "Inventario",         shortLabel: "Inventario", description: "Control de stock, recetas y mermas.",        Icon: Boxes,             accent: "green",  kind: "flag", flag: "hasInventory" },
+  { key: "delivery",  label: "Reparto / Delivery", shortLabel: "Reparto",    description: "Repartidores y pedidos a domicilio.",        Icon: Truck,             accent: "orange", kind: "key" },
+  { key: "webstore",  label: "Tienda Web",         shortLabel: "Tienda Web", description: "Menú y pedidos online para el cliente final.", Icon: Globe,             accent: "blue",   kind: "key", aliases: ["client_menu"] },
+  { key: "kiosk",     label: "Kiosko",             shortLabel: "Kiosko",     description: "Autoservicio en pantalla para el comensal.",  Icon: MonitorSmartphone, accent: "amber",  kind: "key" },
+  { key: "loyalty",   label: "Lealtad",            shortLabel: "Lealtad",    description: "Puntos, recompensas y fidelización.",         Icon: Heart,             accent: "red",    kind: "key", aliases: ["loyalty_advanced"], planFlag: "hasLoyalty" },
+  { key: "kds",       label: "KDS",                shortLabel: "KDS",        description: "Pantalla de cocina (Kitchen Display).",       Icon: ChefHat,           accent: "orange", kind: "key", planFlag: "hasKDS" },
+  { key: "reports",   label: "Reportes",           shortLabel: "Reportes",   description: "Analítica avanzada y exportaciones.",         Icon: BarChart3,         accent: "blue",   kind: "key", planFlag: "hasReports" },
+  { key: "finance",   label: "Finanzas",           shortLabel: "Finanzas",   description: "Gastos, compras y cortes de caja.",           Icon: Wallet,            accent: "green",  kind: "key" },
 ];
 
 const ALIAS_TO_CANONICAL: Record<string, string> = {};
@@ -32,6 +51,11 @@ for (const m of MODULE_CATALOG) {
 
 export function toCanonicalKey(raw: string): string | null {
   return ALIAS_TO_CANONICAL[String(raw ?? "").toLowerCase().trim()] ?? null;
+}
+
+/** Claves de plan que habilitan un módulo (clave canónica + alias). */
+export function planKeysFor(def: ModuleDef): string[] {
+  return [def.key, ...(def.aliases ?? [])];
 }
 
 export interface TenantModuleRow {

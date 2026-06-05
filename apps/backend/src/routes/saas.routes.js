@@ -1,7 +1,7 @@
 const router  = require('express').Router();
 const prisma   = require('@mrtpvrest/database').prisma;
 const { authenticate, requireSuperAdmin } = require('../middleware/auth.middleware');
-const { deriveActiveKeys, syncTenantModuleRows } = require('../lib/tenantModules');
+const { deriveActiveKeys, syncTenantModuleRows, VALID_MODULE_KEYS } = require('../lib/tenantModules');
 
 // Tenant de sistema — contenedor del SUPER_ADMIN de plataforma. Se excluye
 // de toda lista / métrica visible a clientes o super-admins del SaaS.
@@ -282,17 +282,6 @@ router.patch('/tenants/:id/status', async (req, res) => {
   }
 });
 
-// Claves de módulo válidas en `enabledModules` (deben alinear con los planKeys
-// de MODULE_DEFINITIONS en modules.routes.js).
-const VALID_MODULE_KEYS = new Set([
-  'delivery',
-  'webstore', 'client_menu',
-  'kiosk',
-  'loyalty', 'loyalty_advanced',
-  'kds',
-  'reports',
-  'finance',
-]);
 
 // PATCH /api/saas/tenants/:id/modules  — togglear módulos SaaS y storefront config
 // Body: { hasInventory?, hasDelivery?, hasWebStore?, whatsappNumber?, themeConfig?, enabledModules? }

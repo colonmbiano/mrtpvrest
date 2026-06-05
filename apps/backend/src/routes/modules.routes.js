@@ -4,18 +4,10 @@ const router  = express.Router()
 const { prisma } = require('@mrtpvrest/database')
 const { authenticate, requireRole } = require('../middleware/auth.middleware')
 const { invalidateModuleCache } = require('../middleware/module.middleware')
-const { deriveActiveKeys, syncTenantModuleRows } = require('../lib/tenantModules')
+const { deriveActiveKeys, syncTenantModuleRows, MODULE_DEFINITIONS } = require('../lib/tenantModules')
 
-// Módulos válidos en la plataforma
-const MODULE_DEFINITIONS = {
-  KIOSK:    { planKeys: ['kiosk'] },
-  DELIVERY: { planKeys: ['delivery'] },
-  WEBSTORE: { planKeys: ['client_menu', 'webstore'] },
-  LOYALTY:  { planKeys: ['loyalty_advanced', 'loyalty'], planFlag: 'hasLoyalty' },
-  KDS:      { planKeys: ['kds'], planFlag: 'hasKDS' },
-  REPORTS:  { planKeys: ['reports'], planFlag: 'hasReports' },
-  FINANCE:  { planKeys: ['finance'] },
-}
+// MODULE_DEFINITIONS (gating por plan) se deriva del catálogo único en
+// lib/tenantModules.js — no redefinir aquí.
 const VALID_MODULES = Object.keys(MODULE_DEFINITIONS)
 
 function normalizeList(values) {
