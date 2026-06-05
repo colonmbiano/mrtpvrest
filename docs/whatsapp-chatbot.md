@@ -174,6 +174,14 @@ Con `WHATSAPP_NLU_ENABLED=true`, cuando el cliente escribe en lenguaje libre
 agregarlos al carrito. Es best-effort: sin API key o ante error, el flujo
 numerado determinista sigue funcionando.
 
+## Panel de administración (UI)
+
+- **`/admin/whatsapp`** (sidebar → Menú → *WhatsApp Bot*): panel con pestañas
+  **Reportes**, **Clientes**, **Campañas** y **Juegos** (editor de premios visual).
+- **`/admin/guias/whatsapp`**: guía de configuración paso a paso para el dueño,
+  con su URL de webhook personalizada y botón de copiar. Enlazada desde
+  *Guías de uso*.
+
 ## Endpoints de administración (`/api/whatsapp/marketing`, admin)
 
 | Método | Ruta | Descripción |
@@ -222,5 +230,8 @@ pnpm --filter @mrtpvrest/backend exec jest whatsapp-bot
 - ✅ Reportes del canal WhatsApp por sucursal (§5f).
 - ✅ NLU opcional con Groq (§5g).
 
-Ideas futuras: panel de UI en el admin para configurar juegos/campañas,
-programación de campañas (envíos diferidos) y soporte de SMS además de WhatsApp.
+- ✅ Panel de UI en el admin (`/admin/whatsapp`) + guía de configuración
+  (`/admin/guias/whatsapp`).
+
+Ideas futuras: programación de campañas (envíos diferidos) y soporte de SMS
+además de WhatsApp.

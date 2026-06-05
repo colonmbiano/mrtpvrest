@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const manualSteps = [
   {
     title: "Entrar al panel",
@@ -138,6 +140,38 @@ export default function GuiasUsoPage() {
           </div>
         </div>
       </header>
+
+      {/* Otras guías disponibles */}
+      <section className="mt-8">
+        <h2 className="mb-4 text-2xl font-black md:text-3xl" style={{ color: "var(--text)", fontFamily: "Syne, sans-serif" }}>
+          Todas las guías
+        </h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Link
+            href="/admin/guias/whatsapp"
+            className="block rounded-lg border p-5 transition-all hover:scale-[1.01]"
+            style={{ background: "linear-gradient(135deg, rgba(37,211,102,0.18), rgba(37,211,102,0.04)), var(--surf)", borderColor: "rgba(37,211,102,0.4)" }}
+          >
+            <div className="mb-2 inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest" style={{ background: "rgba(37,211,102,0.18)", color: "#25D366" }}>
+              Nuevo
+            </div>
+            <h3 className="text-xl font-black" style={{ color: "var(--text)" }}>Chatbot de WhatsApp 🤖</h3>
+            <p className="mt-2 text-sm" style={{ color: "var(--muted)", lineHeight: 1.6 }}>
+              Activa tu asistente que toma pedidos solo: conexión, envío, pago en línea, juegos de premios y campañas.
+            </p>
+            <div className="mt-3 text-xs font-black uppercase tracking-widest" style={{ color: "#25D366" }}>Abrir guía →</div>
+          </Link>
+          <div className="rounded-lg border p-5" style={{ background: "var(--surf)", borderColor: "var(--border)" }}>
+            <div className="mb-2 inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest" style={{ background: "var(--surf2)", color: "var(--brand-primary)" }}>
+              Esta guía
+            </div>
+            <h3 className="text-xl font-black" style={{ color: "var(--text)" }}>Registrar el menú 🍽️</h3>
+            <p className="mt-2 text-sm" style={{ color: "var(--muted)", lineHeight: 1.6 }}>
+              Carga categorías, platillos, variantes y modificadores (manual o con Escaneo IA). Continúa leyendo abajo.
+            </p>
+          </div>
+        </div>
+      </section>
 
       <section className="mt-8">
         <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">

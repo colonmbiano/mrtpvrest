@@ -45,6 +45,7 @@ const IDownload  = ({ size }: IconProps) => ic(<><path d="M14 11v2a1 1 0 01-1 1H
 const ITag       = ({ size }: IconProps) => ic(<><path d="M1 1h5l7 7a2 2 0 010 2.83l-3.17 3.17a2 2 0 01-2.83 0L1 8V1z"/><circle cx="4" cy="4" r="1"/></>, size);
 const IBook      = ({ size }: IconProps) => ic(<><path d="M3 2.5h4a2 2 0 012 2v9a2 2 0 00-2-2H3z"/><path d="M13 2.5H9a2 2 0 00-2 2v9a2 2 0 012-2h4z"/></>, size);
 const IStore     = ({ size }: IconProps) => ic(<><path d="M2 6l1-3.5h10L14 6M2 6v7a1 1 0 001 1h10a1 1 0 001-1V6M2 6h12M6 14V9.5h4V14"/></>, size);
+const IChat      = ({ size }: IconProps) => ic(<><path d="M2 3.5h12a1 1 0 011 1V11a1 1 0 01-1 1H6l-3.5 2.5V12H2a1 1 0 01-1-1V4.5a1 1 0 011-1z"/></>, size);
 
 // ── Nav sections ──────────────────────────────────────────────
 const SECTIONS = [
@@ -77,6 +78,7 @@ const SECTIONS = [
       { href: "/admin/menu/categorias", icon: <IFolder />,   label: "Categorías" },
       { href: "/admin/menu/variantes",  icon: <ISliders />,  label: "Variantes" },
       { href: "/admin/promociones",     icon: <ITag />,      label: "Promociones IA" },
+      { href: "/admin/whatsapp",        icon: <IChat />,     label: "WhatsApp Bot" },
       { href: "/admin/banners",         icon: <IImage />,    label: "Banners" },
       { href: "/admin/pantalla-cliente", icon: <IImage />,   label: "Pantalla Cliente" },
       { href: "/admin/inventario",          icon: <IBox />,      label: "Inventario" },
