@@ -4,24 +4,25 @@ import Link from "next/link";
 
 const GREEN = "#25D366";
 
-// Pasos para conectar WhatsApp.
-const connectSteps = [
-  {
-    title: "Elige tu proveedor de WhatsApp",
-    text: "Puedes usar Whapi (rápido de activar, recomendado para empezar) o la API oficial de Meta (WhatsApp Cloud API). Con cualquiera de los dos funciona el bot.",
-  },
-  {
-    title: "Consigue tu token",
-    text: "En el panel de tu proveedor, crea un canal con tu número de WhatsApp y copia el token de acceso. Si usas Meta, copia también el phoneNumberId y define un verify token.",
-  },
-  {
-    title: "Pégalo en Integraciones",
-    text: "Entra a Integraciones → WhatsApp, activa la integración y pega tu token (y phoneNumberId / verify token si usas Meta). Guarda los cambios.",
-  },
-  {
-    title: "Configura el webhook",
-    text: "En el panel de tu proveedor, pega la URL de webhook que aparece abajo (es única para tu restaurante). Con Meta, primero verifica con tu verify token.",
-  },
+// Ruta rápida: Whapi.
+const whapiSteps = [
+  { title: "Crea tu canal en Whapi", text: "Entra a whapi.cloud, crea un canal y escanea el QR con el WhatsApp de tu negocio (igual que WhatsApp Web)." },
+  { title: "Copia el token del canal", text: "En el panel de Whapi, copia el token de acceso de tu canal." },
+  { title: "Pégalo en Integraciones", text: "Aquí en el panel: Integraciones → Mensajería (Chatbot). Proveedor = Whapi, pega el token y activa la integración." },
+  { title: "Configura el webhook", text: "En Whapi → Settings → Webhooks, pega tu URL de webhook (la de arriba) y activa el evento de mensajes (messages)." },
+];
+
+// Ruta oficial: WhatsApp Cloud API de Meta.
+const metaSteps = [
+  { title: "Crea una app en Meta for Developers", text: "Entra a developers.facebook.com → My Apps → Create App → tipo «Business». Necesitas una cuenta de Meta Business." },
+  { title: "Agrega el producto «WhatsApp»", text: "Dentro de la app, en «Add products», agrega WhatsApp. Esto crea un número de prueba y tu WhatsApp Business Account (WABA)." },
+  { title: "Toma tu Phone number ID", text: "En WhatsApp → API Setup verás el «Phone number ID» (un número largo). Cópialo. Aquí también puedes registrar tu número real más adelante." },
+  { title: "Genera un token permanente", text: "En Business Settings → Usuarios → Usuarios del sistema, crea un usuario del sistema, asígnale la app y genera un token con permisos whatsapp_business_messaging y whatsapp_business_management. Usa el token permanente (no el temporal de 24 h)." },
+  { title: "Inventa un Verify token", text: "Es un texto secreto que tú eliges (ej. mrtpv-verify-2026). Lo usarás en dos lugares: aquí y en el webhook de Meta. Deben ser idénticos." },
+  { title: "Llena Integraciones aquí", text: "Integraciones → Mensajería (Chatbot): Proveedor = Meta, pega el Token, el Phone number ID y tu Verify token. Activa la integración y guarda." },
+  { title: "Configura el webhook en Meta", text: "En WhatsApp → Configuration → Webhook: pega tu URL de webhook (la de arriba como Callback URL) y el mismo Verify token. Dale «Verify and save»." },
+  { title: "Suscríbete a «messages»", text: "En esa misma sección de Webhook, en «Webhook fields», activa la suscripción al campo messages. Sin esto, Meta no te envía los mensajes entrantes." },
+  { title: "Pasa a producción", text: "Registra tu número real y pon la app en modo Live. Mientras esté en modo de prueba, solo responde a números agregados como testers." },
 ];
 
 const flowSteps = [
@@ -146,11 +147,36 @@ export default function GuiaWhatsappPage() {
       </section>
 
       {/* Paso a paso: conectar */}
-      <Section title="1. Conecta WhatsApp" subtitle="Lo configuras una sola vez.">
-        <div className="grid gap-4 md:grid-cols-2">
-          {connectSteps.map((step, i) => (
+      <Section title="1. Conecta WhatsApp" subtitle="Elige UNA de las dos rutas. Lo configuras una sola vez.">
+        {/* Ruta A: Whapi */}
+        <div className="mb-3 inline-flex rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-widest" style={{ background: `${GREEN}22`, color: GREEN }}>
+          Opción A · Whapi (rápido, recomendado para empezar)
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {whapiSteps.map((step, i) => (
             <NumberedCard key={step.title} index={i + 1} {...step} accent={GREEN} accentText="#06231a" />
           ))}
+        </div>
+
+        {/* Ruta B: Meta */}
+        <div className="mt-8 mb-3 inline-flex rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-widest" style={{ background: "rgba(24,119,242,0.18)", color: "#1877F2" }}>
+          Opción B · WhatsApp Cloud API (Meta, oficial)
+        </div>
+        <p className="mb-4 text-sm" style={{ color: "var(--muted)", lineHeight: 1.6 }}>
+          Más pasos, pero es la API oficial de Meta (mejor a gran escala). Necesitas una cuenta de Meta Business.
+          Sigue el orden exacto — el <strong>Verify token</strong> debe ser idéntico aquí y en Meta.
+        </p>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {metaSteps.map((step, i) => (
+            <NumberedCard key={step.title} index={i + 1} {...step} accent="#1877F2" accentText="#fff" />
+          ))}
+        </div>
+
+        <div className="mt-5 rounded-lg border p-4 text-sm" style={{ background: "rgba(24,119,242,0.06)", borderColor: "rgba(24,119,242,0.3)", color: "var(--text)" }}>
+          <strong>💡 Resumen Meta:</strong> en <em>Integraciones → Mensajería (Chatbot)</em> pones
+          Proveedor = <strong>Meta</strong>, Token, Phone number ID y Verify token. En
+          <em> Meta → WhatsApp → Configuration</em> pegas tu URL de webhook (arriba) + el mismo
+          Verify token y te suscribes al campo <strong>messages</strong>.
         </div>
       </Section>
 

@@ -10,6 +10,16 @@ function safeParseConfig(raw: any): Record<string, any> {
   try { return JSON.parse(raw); } catch { return {}; }
 }
 
+// Etiquetas y ayudas amigables por campo (sobre todo para WhatsApp / Meta).
+// `secret:false` muestra el valor (input de texto) en vez de ocultarlo.
+const FIELD_META: Record<string, { label: string; hint?: string; placeholder?: string; secret?: boolean }> = {
+  provider:      { label: "Proveedor", secret: false, hint: "Whapi es lo más rápido de activar. Meta es la API oficial (WhatsApp Cloud API)." },
+  token:         { label: "Token de acceso", hint: "Whapi: el token del canal. Meta: el token permanente del Usuario del sistema." },
+  phoneNumberId: { label: "Phone number ID", secret: false, placeholder: "Solo Meta — ej. 123456789012345", hint: "Solo Meta: lo ves en la app de Meta → WhatsApp → API Setup." },
+  verifyToken:   { label: "Verify token", secret: false, placeholder: "Solo Meta — un texto que tú inventes", hint: "Solo Meta: invéntalo y úsalo igual al configurar el webhook en Meta." },
+  wabaId:        { label: "WABA ID (opcional)", secret: false, placeholder: "Solo Meta — WhatsApp Business Account ID", hint: "Solo Meta y opcional." },
+};
+
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<any[]>([]);
   const [types, setTypes] = useState<any>({});
@@ -138,18 +148,36 @@ export default function IntegrationsPage() {
                   </div>
                 </div>
 
-                {typeInfo.fields.map((field: string) => (
-                  <div key={field}>
-                    <label className="text-[9px] font-black text-gray-500 uppercase ml-2 mb-1 block">{field}</label>
-                    <input
-                      type="password"
-                      placeholder={`Ingresa tu ${field}`}
-                      value={form.config[field] || ""}
-                      onChange={(e) => updateField(key, field, e.target.value)}
-                      className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-xs font-mono outline-none focus:border-orange-500 transition-all"
-                    />
-                  </div>
-                ))}
+                {typeInfo.fields.map((field: string) => {
+                  const meta = FIELD_META[field];
+                  const label = meta?.label || field;
+                  return (
+                    <div key={field}>
+                      <label className="text-[9px] font-black text-gray-500 uppercase ml-2 mb-1 block">{label}</label>
+                      {field === "provider" ? (
+                        <select
+                          value={form.config.provider || "WHAPI"}
+                          onChange={(e) => updateField(key, "provider", e.target.value)}
+                          className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-orange-500 transition-all"
+                        >
+                          <option value="WHAPI">Whapi (gate.whapi.cloud)</option>
+                          <option value="META">WhatsApp Cloud API (Meta)</option>
+                        </select>
+                      ) : (
+                        <input
+                          type={meta?.secret === false ? "text" : "password"}
+                          placeholder={meta?.placeholder || `Ingresa tu ${field}`}
+                          value={form.config[field] || ""}
+                          onChange={(e) => updateField(key, field, e.target.value)}
+                          className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-xs font-mono outline-none focus:border-orange-500 transition-all"
+                        />
+                      )}
+                      {meta?.hint && (
+                        <p className="text-[10px] text-gray-600 ml-2 mt-1 leading-snug">{meta.hint}</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <button
