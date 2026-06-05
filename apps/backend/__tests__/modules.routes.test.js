@@ -1,11 +1,16 @@
 'use strict';
 
-jest.mock('@mrtpvrest/database', () => ({
-  prisma: {
+jest.mock('@mrtpvrest/database', () => {
+  const prisma = {
     restaurant: { findUnique: jest.fn() },
     tenant: { findUnique: jest.fn(), update: jest.fn() },
-  },
-}));
+    tenantModule: { upsert: jest.fn() },
+  };
+  // El update legacy + sync de TenantModule corren en una transacción; el tx
+  // expuesto es el mismo cliente mock.
+  prisma.$transaction = jest.fn((cb) => cb(prisma));
+  return { prisma };
+});
 
 jest.mock('../src/middleware/auth.middleware', () => ({
   authenticate: (req, _res, next) => {
@@ -81,8 +86,16 @@ describe('module routes', () => {
 
     await request(makeApp()).patch('/api/modules/WEBSTORE').send({ enabled: true }).expect(200);
 
+    // Los flags legacy derivados se sincronizan con el array: webstore (client_menu)
+    // → hasWebStore true; delivery ausente → hasDelivery false. hasInventory no se toca.
     expect(prisma.tenant.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: { enabledModules: ['client_menu'] },
+      data: { enabledModules: ['client_menu'], hasDelivery: false, hasWebStore: true },
+    }));
+
+    // Dual-write: la fuente canónica TenantModule se sincroniza con webstore activo.
+    expect(prisma.tenantModule.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where:  { tenantId_moduleKey: { tenantId: 'tenant-1', moduleKey: 'webstore' } },
+      update: expect.objectContaining({ enabled: true }),
     }));
   });
 });
