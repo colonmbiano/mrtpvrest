@@ -286,6 +286,8 @@ model Restaurant {
   orders           Order[]
   suppliers        Supplier[]
   whatsappSessions WhatsappSession[]
+  whatsappContacts WhatsappContact[]
+  promoGames       PromoGame[]
 
   // FASE INVENTARIO/COSTEO · taxonomía + recetario (multi-tenant scope)
   ingredientTypes      IngredientType[]
@@ -1571,6 +1573,83 @@ model WhatsappSession {
   @@unique([restaurantId, phone])
   @@index([expiresAt])
   @@map("whatsapp_sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CRM DE WHATSAPP — base de clientes para remarketing.
+//
+// Cada número que hace un pedido por el chatbot se registra/actualiza aquí
+// (best-effort). Permite segmentar y enviar campañas (ofertas, recordatorios).
+// `optIn` respeta el consentimiento: si el cliente pide salir, no se le manda
+// más marketing.
+// ─────────────────────────────────────────────────────────────────────────────
+model WhatsappContact {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  phone           String
+  name            String?
+  optIn           Boolean   @default(true) // consentimiento de marketing
+  orderCount      Int       @default(0)
+  totalSpent      Float     @default(0)
+  lastOrderAt     DateTime?
+  lastContactedAt DateTime?
+  tags            String    @default("[]") // JSON array de etiquetas
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, phone])
+  @@index([restaurantId])
+  @@map("whatsapp_contacts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JUEGOS PROMOCIONALES — "ruleta de premios" que amarra ventas.
+//
+// El dueño configura premios con peso (probabilidad). El chatbot juega por
+// comando ("premio") o automáticamente tras un pedido (según `trigger`) y, si
+// el cliente gana, emite un Coupon real reutilizando el sistema de cupones.
+// `prizes` es JSON: [{ label, type:'PERCENTAGE'|'FIXED'|'NONE', value, weight,
+//   minOrderAmount, expiresInDays }]. type NONE = "sigue participando".
+// ─────────────────────────────────────────────────────────────────────────────
+model PromoGame {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name          String
+  enabled       Boolean @default(false)
+  trigger       String  @default("ON_COMMAND") // ON_COMMAND | ON_ORDER
+  prizes        String  @default("[]")
+  maxPerContact Int     @default(1) // 0 = ilimitado
+
+  plays PromoGamePlay[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId])
+  @@map("promo_games")
+}
+
+model PromoGamePlay {
+  id     String    @id @default(cuid())
+  gameId String
+  game   PromoGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  // Scope de tenant (columna plana, sin relación inversa para no inflar Restaurant).
+  restaurantId String
+  phone        String
+  prizeLabel   String
+  couponId     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([gameId])
+  @@index([restaurantId, phone])
+  @@map("promo_game_plays")
 }
 
 model PushSubscription {

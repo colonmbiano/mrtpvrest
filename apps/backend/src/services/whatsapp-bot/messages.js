@@ -76,6 +76,9 @@ module.exports = {
   invalidCategory:
     'No reconozco esa opción. Responde con el número de una categoría, *carrito* o *finalizar*.',
 
+  nluAdded: (summary) =>
+    `✅ Entendí tu pedido: *${summary}*. Lo agregué a tu carrito.`,
+
   invalidItem: 'Responde con el número de un producto, o *0* para volver.',
 
   cartEmpty:
@@ -165,4 +168,21 @@ module.exports = {
 
   genericError:
     '⚠️ Ocurrió un problema procesando tu mensaje. Escribe *menú* para reintentar o *cancelar* para empezar de nuevo.',
+
+  // ── Juegos promocionales ──────────────────────────────────────────────────
+  prizeWon: (label, code, expiresAt) => {
+    const vence = expiresAt
+      ? `\n_Válido hasta el ${new Date(expiresAt).toLocaleDateString('es-MX')}._`
+      : '';
+    return `🎉 ¡Felicidades! Ganaste: *${label}* 🎁\n\nUsa el código *${code}* en tu próximo pedido.${vence}`;
+  },
+
+  prizeKeepPlaying: (label) =>
+    `🎰 ${label || 'Esta vez no hubo premio'}. ¡Sigue participando en tu próximo pedido! 🍀`,
+
+  gameUnavailable:
+    '🎰 Por ahora no tenemos un juego de premios disponible. ¡Haz tu pedido y atento a nuestras promos!',
+
+  gameMaxReached:
+    '🙌 Ya participaste en nuestro juego de premios. ¡Gracias! Atento a las próximas promociones.',
 };

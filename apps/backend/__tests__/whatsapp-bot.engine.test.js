@@ -310,3 +310,78 @@ describe('engine :: pago en línea', () => {
     expect(o.state).toBe(STATES.PAYMENT); // opción inválida → reprompt
   });
 });
+
+describe('engine :: juegos promocionales', () => {
+  test('comando "premio" ejecuta el juego sin alterar el estado', async () => {
+    const deps = {
+      ...makeDeps(),
+      playGame: jest.fn(async (t) =>
+        t === 'ON_COMMAND'
+          ? { played: true, won: true, prizeLabel: '10% de descuento', couponCode: 'PRZ-ABC123' }
+          : { played: false }
+      ),
+    };
+    let o = await turn(null, 'hola', deps); // → ORDER_TYPE
+    o = await turn(o, 'premio', deps);
+    expect(deps.playGame).toHaveBeenCalledWith('ON_COMMAND');
+    expect(o.replies[0]).toMatch(/PRZ-ABC123/);
+    expect(o.state).toBe(STATES.ORDER_TYPE); // estado intacto
+  });
+
+  test('juego no disponible avisa con mensaje neutro', async () => {
+    const deps = { ...makeDeps(), playGame: jest.fn(async () => ({ played: false, reason: 'NO_GAME' })) };
+    let o = await turn(null, 'hola', deps);
+    o = await turn(o, 'ruleta', deps);
+    expect(o.replies[0]).toMatch(/no tenemos un juego/i);
+  });
+
+  test('premio automático tras el pedido (ON_ORDER) se anexa al confirmar', async () => {
+    const deps = {
+      ...makeDeps(),
+      playGame: jest.fn(async (t) =>
+        t === 'ON_ORDER'
+          ? { played: true, won: true, prizeLabel: 'Refresco gratis', couponCode: 'PRZ-XYZ' }
+          : { played: false }
+      ),
+    };
+    let o = await turn(null, 'hola', deps);
+    o = await turn(o, '2', deps); // pickup
+    o = await turn(o, '1', deps); // Hamburguesas
+    o = await turn(o, '1', deps); // Clásica
+    o = await turn(o, '1', deps); // cantidad
+    o = await turn(o, 'finalizar', deps);
+    o = await turn(o, 'Ana', deps);
+    o = await turn(o, '1', deps); // efectivo
+    o = await turn(o, 'si', deps);
+    expect(deps.playGame).toHaveBeenCalledWith('ON_ORDER');
+    expect(o.replies.join(' ')).toMatch(/PRZ-XYZ/);
+  });
+});
+
+describe('engine :: NLU opcional', () => {
+  test('texto libre en CATEGORY usa parseOrderText y agrega al carrito', async () => {
+    const deps = {
+      ...makeDeps(),
+      parseOrderText: jest.fn(async () => [
+        { menuItemId: 'mi1', variantId: null, name: 'Clásica', unitPrice: 100, quantity: 2 },
+      ]),
+    };
+    let o = await turn(null, 'hola', deps);
+    o = await turn(o, '1', deps); // → CATEGORY
+    o = await turn(o, 'quiero dos clásicas porfa', deps);
+    expect(deps.parseOrderText).toHaveBeenCalled();
+    expect(o.state).toBe(STATES.CATEGORY);
+    expect(o.data.cart).toHaveLength(1);
+    expect(o.data.cart[0].quantity).toBe(2);
+    expect(o.replies[0]).toMatch(/Entendí/i);
+  });
+
+  test('si NLU no encuentra nada, reprompta categoría', async () => {
+    const deps = { ...makeDeps(), parseOrderText: jest.fn(async () => []) };
+    let o = await turn(null, 'hola', deps);
+    o = await turn(o, '1', deps);
+    o = await turn(o, 'bla bla bla', deps);
+    expect(o.state).toBe(STATES.CATEGORY);
+    expect(o.replies[0]).toMatch(/No reconozco/i);
+  });
+});

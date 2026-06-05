@@ -8,6 +8,7 @@
 const { computeDeliveryFee } = require('../../lib/delivery-fee');
 const { resolveProviderForRestaurant } = require('../../lib/payment-providers');
 const { effectivePrice } = require('./catalog');
+const { upsertContact } = require('./contacts');
 
 class BotOrderError extends Error {
   constructor(code, message) {
@@ -124,6 +125,13 @@ async function createBotOrder({ prisma, io, restaurant, config, data }) {
       items: { create: itemsData },
     },
     include: { items: { include: { menuItem: { select: { name: true } } } } },
+  });
+
+  // CRM: registrar/actualizar el contacto del cliente (best-effort).
+  await upsertContact(prisma, restaurant.id, {
+    phone: data.phone,
+    name: order.customerName,
+    orderTotal: order.total,
   });
 
   // Notificación en tiempo real a TPV / KDS / admin (mismo patrón que la tienda).

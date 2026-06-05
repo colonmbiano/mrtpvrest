@@ -93,6 +93,13 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
       if (!data.cart || data.cart.length === 0) return result(m.cartEmpty, state);
       return result(`${m.cartSummary(data.cart)}\n\nEscribe *finalizar*, *menú* para agregar más, o *cancelar*.`, STATES.CART);
     }
+    if (['premio', 'premios', 'jugar', 'ruleta', 'sorteo'].includes(command)) {
+      const r = deps.playGame ? await deps.playGame('ON_COMMAND') : { played: false, reason: 'NO_GAME' };
+      if (!r.played) {
+        return result(r.reason === 'MAX_REACHED' ? m.gameMaxReached : m.gameUnavailable);
+      }
+      return result(r.won ? m.prizeWon(r.prizeLabel, r.couponCode, r.expiresAt) : m.prizeKeepPlaying(r.prizeLabel));
+    }
   }
 
   // Mensajes no-texto solo se esperan en LOCATION_PIN. En otros estados, reprompt.
@@ -136,7 +143,19 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
         return result(m.emptyMenu, STATES.GREETING, freshData(data.phone, data.lastOrderId));
       }
       const cat = pickByNumber(menu, text);
-      if (!cat) return result(m.invalidCategory, STATES.CATEGORY);
+      if (!cat) {
+        // Fallback NLU opcional: intentar entender lenguaje libre ("2 tacos").
+        if (deps.parseOrderText) {
+          const items = await deps.parseOrderText(text, menu).catch(() => []);
+          if (items && items.length > 0) {
+            for (const it of items) addToCart(data.cart, it, it.quantity);
+            const summary = items.map((i) => `${i.quantity}x ${i.name}`).join(', ');
+            const next = await showCategories(deps, data, (r, s, d) => ({ replies: [r], state: s, data: d }), m);
+            return result([m.nluAdded(summary), ...next.replies], next.state, next.data);
+          }
+        }
+        return result(m.invalidCategory, STATES.CATEGORY);
+      }
       data.nav.categoryId = cat.id;
       return result(m.items(cat.name, cat.lines), STATES.ITEM);
     }
@@ -270,6 +289,12 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
           let url = null;
           try { url = await deps.createCheckout(order); } catch (_) { url = null; }
           replies.push(url ? m.payOnline(url) : m.payOnlinePending);
+        }
+        // Juego promocional automático tras el pedido (solo si gana, para no
+        // saturar). El cupón queda disponible para su próxima compra.
+        if (deps.playGame) {
+          const g = await deps.playGame('ON_ORDER').catch(() => ({ played: false }));
+          if (g.played && g.won) replies.push(m.prizeWon(g.prizeLabel, g.couponCode, g.expiresAt));
         }
         return result(replies, STATES.GREETING, fresh);
       } catch (err) {
