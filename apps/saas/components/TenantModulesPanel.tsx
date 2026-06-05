@@ -1,10 +1,9 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
-import {
-  Boxes, Truck, Globe, MonitorSmartphone, Heart, ChefHat, BarChart3, Wallet,
-  MessageSquare,
-} from "lucide-react";
+import { MessageSquare } from "lucide-react";
 import api from "@/lib/api";
+// Catálogo único del frontend (lista + detalle + este panel).
+import { MODULE_CATALOG, planKeysFor, type ModuleDef, type Accent } from "@/lib/modules";
 
 export interface TenantModulesData {
   id: string;
@@ -28,77 +27,6 @@ interface Props {
   onUpdated?: (patch: Partial<TenantModulesData>) => void;
   onError?: (msg: string) => void;
 }
-
-type Accent = "orange" | "green" | "blue" | "amber" | "red";
-
-// kind "flag" → controla un boolean del Tenant (legacy, p.ej. inventario, que no
-//               tiene clave en el sistema de módulos opcionales).
-// kind "key"  → vive en enabledModules[]; el backend sincroniza los flags legacy
-//               (hasDelivery / hasWebStore) a partir de ese array.
-interface ModuleDef {
-  id: string;
-  label: string;
-  description: string;
-  Icon: typeof Boxes;
-  accent: Accent;
-  kind: "flag" | "key";
-  flag?: "hasInventory";
-  moduleKey?: string;
-  aliases?: string[];
-  planKeys?: string[];
-  planFlag?: "hasKDS" | "hasLoyalty" | "hasReports";
-}
-
-const CATALOG: ModuleDef[] = [
-  {
-    id: "inventory", label: "Inventario",
-    description: "Control de stock, recetas y mermas.",
-    Icon: Boxes, accent: "green", kind: "flag", flag: "hasInventory",
-  },
-  {
-    id: "delivery", label: "Reparto / Delivery",
-    description: "Repartidores y pedidos a domicilio.",
-    Icon: Truck, accent: "orange", kind: "key", moduleKey: "delivery",
-    planKeys: ["delivery"],
-  },
-  {
-    id: "webstore", label: "Tienda Web",
-    description: "Menú y pedidos online para el cliente final.",
-    Icon: Globe, accent: "blue", kind: "key", moduleKey: "webstore",
-    aliases: ["client_menu"], planKeys: ["webstore", "client_menu"],
-  },
-  {
-    id: "kiosk", label: "Kiosko",
-    description: "Autoservicio en pantalla para el comensal.",
-    Icon: MonitorSmartphone, accent: "amber", kind: "key", moduleKey: "kiosk",
-    planKeys: ["kiosk"],
-  },
-  {
-    id: "loyalty", label: "Lealtad",
-    description: "Puntos, recompensas y fidelización.",
-    Icon: Heart, accent: "red", kind: "key", moduleKey: "loyalty",
-    aliases: ["loyalty_advanced"], planKeys: ["loyalty", "loyalty_advanced"],
-    planFlag: "hasLoyalty",
-  },
-  {
-    id: "kds", label: "KDS",
-    description: "Pantalla de cocina (Kitchen Display).",
-    Icon: ChefHat, accent: "orange", kind: "key", moduleKey: "kds",
-    planKeys: ["kds"], planFlag: "hasKDS",
-  },
-  {
-    id: "reports", label: "Reportes",
-    description: "Analítica avanzada y exportaciones.",
-    Icon: BarChart3, accent: "blue", kind: "key", moduleKey: "reports",
-    planKeys: ["reports"], planFlag: "hasReports",
-  },
-  {
-    id: "finance", label: "Finanzas",
-    description: "Gastos, compras y cortes de caja.",
-    Icon: Wallet, accent: "green", kind: "key", moduleKey: "finance",
-    planKeys: ["finance"],
-  },
-];
 
 function lowerSet(values?: (string | null | undefined)[] | null): Set<string> {
   return new Set((values ?? []).filter(Boolean).map(v => String(v).toLowerCase()));
@@ -124,11 +52,11 @@ export default function TenantModulesPanel({ tenant, plan, onUpdated, onError }:
   function isOn(def: ModuleDef): boolean {
     if (def.kind === "flag" && def.flag) return Boolean(local[def.flag]);
     const set = lowerSet(local.enabledModules);
-    return [def.moduleKey, ...(def.aliases ?? [])].some(k => k != null && set.has(k.toLowerCase()));
+    return [def.key, ...(def.aliases ?? [])].some(k => set.has(k.toLowerCase()));
   }
 
   function includedByPlan(def: ModuleDef): boolean {
-    if (def.planKeys?.some(k => planModules.has(k.toLowerCase()))) return true;
+    if (planKeysFor(def).some(k => planModules.has(k.toLowerCase()))) return true;
     if (def.planFlag && plan?.[def.planFlag]) return true;
     return false;
   }
@@ -168,10 +96,10 @@ export default function TenantModulesPanel({ tenant, plan, onUpdated, onError }:
     }
     // Módulo por clave: recalculamos el array enabledModules.
     const set = lowerSet(local.enabledModules);
-    const keys = [def.moduleKey, ...(def.aliases ?? [])].filter(Boolean) as string[];
+    const keys = [def.key, ...(def.aliases ?? [])];
     const currentlyOn = keys.some(k => set.has(k.toLowerCase()));
     if (currentlyOn) keys.forEach(k => set.delete(k.toLowerCase()));
-    else if (def.moduleKey) set.add(def.moduleKey.toLowerCase());
+    else set.add(def.key.toLowerCase());
     persist({ enabledModules: [...set] });
   }
 
@@ -185,13 +113,13 @@ export default function TenantModulesPanel({ tenant, plan, onUpdated, onError }:
     setEditingPhone(false);
   }
 
-  const activeCount = CATALOG.filter(isOn).length;
+  const activeCount = MODULE_CATALOG.filter(isOn).length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, opacity: isPending ? 0.7 : 1, transition: "opacity .15s" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div style={{ fontSize: 11.5, color: "var(--text2)" }}>
-          {activeCount} de {CATALOG.length} módulos activos · el TPV los lee al boot
+          {activeCount} de {MODULE_CATALOG.length} módulos activos · el TPV los lee al boot
         </div>
         {plan && (
           <span style={{ fontSize: 10, color: "var(--text3)", fontFamily: "DM Mono, monospace" }}>
@@ -201,13 +129,13 @@ export default function TenantModulesPanel({ tenant, plan, onUpdated, onError }:
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
-        {CATALOG.map(def => {
+        {MODULE_CATALOG.map(def => {
           const on = isOn(def);
           const inPlan = includedByPlan(def);
           const Icon = def.Icon;
           return (
             <button
-              key={def.id}
+              key={def.key}
               type="button"
               role="switch"
               aria-checked={on}

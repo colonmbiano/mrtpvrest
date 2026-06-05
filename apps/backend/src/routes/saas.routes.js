@@ -1,11 +1,23 @@
 const router  = require('express').Router();
 const prisma   = require('@mrtpvrest/database').prisma;
 const { authenticate, requireSuperAdmin } = require('../middleware/auth.middleware');
+const { deriveActiveKeys, syncTenantModuleRows, VALID_MODULE_KEYS } = require('../lib/tenantModules');
 
 // Tenant de sistema — contenedor del SUPER_ADMIN de plataforma. Se excluye
 // de toda lista / métrica visible a clientes o super-admins del SaaS.
 const PLATFORM_TENANT_SLUG = 'mrtpvrest-platform';
 const excludePlatform = { slug: { not: PLATFORM_TENANT_SLUG } };
+
+// Select de la fuente canónica de módulos (ver lib/tenantModules.js).
+const TENANT_MODULES_SELECT = { select: { moduleKey: true, enabled: true, requiresPlan: true } };
+
+// Durante la migración la tabla tenant_modules puede no existir aún en prod si el
+// `prisma db push` no corrió (el push a master auto-despliega Railway antes del
+// push manual de schema). Para que las vistas de Marcas no caigan con 500, ante el
+// error Prisma P2021 ("table does not exist") reintentamos la query SIN el include
+// de tenantModules y devolvemos []. El frontend cae a los campos legacy. Una vez
+// hecho el `db push` + backfill, las filas canónicas pasan a ser autoritativas.
+const isMissingTenantModulesTable = (e) => e?.code === 'P2021';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS PÚBLICAS (sin auth)
@@ -149,16 +161,27 @@ router.get('/plans/all', async (req, res) => {
 
 // GET /api/saas/tenants
 router.get('/tenants', async (req, res) => {
+  const baseInclude = {
+    subscription: { include: { plan: true } },
+    restaurants:  { select: { id: true, slug: true, name: true, isActive: true } },
+    _count:       { select: { restaurants: true, users: true } }
+  };
   try {
-    const tenants = await prisma.tenant.findMany({
-      where: excludePlatform,
-      include: {
-        subscription: { include: { plan: true } },
-        restaurants:  { select: { id: true, slug: true, name: true, isActive: true } },
-        _count:       { select: { restaurants: true, users: true } }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    let tenants;
+    try {
+      tenants = await prisma.tenant.findMany({
+        where: excludePlatform,
+        include: { ...baseInclude, tenantModules: TENANT_MODULES_SELECT },
+        orderBy: { createdAt: 'desc' }
+      });
+    } catch (e) {
+      if (!isMissingTenantModulesTable(e)) throw e;
+      tenants = (await prisma.tenant.findMany({
+        where: excludePlatform,
+        include: baseInclude,
+        orderBy: { createdAt: 'desc' }
+      })).map(t => ({ ...t, tenantModules: [] }));
+    }
 
     const now = Date.now();
     const result = tenants.map(t => ({
@@ -231,15 +254,23 @@ router.post('/tenants', async (req, res) => {
 
 // GET /api/saas/tenants/:id
 router.get('/tenants/:id', async (req, res) => {
+  const baseInclude = {
+    subscription: { include: { plan: true } },
+    restaurants:  { include: { config: true, _count: { select: { locations: true, orders: true } } } },
+    _count:       { select: { users: true } }
+  };
   try {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: req.params.id },
-      include: {
-        subscription: { include: { plan: true } },
-        restaurants:  { include: { config: true, _count: { select: { locations: true, orders: true } } } },
-        _count:       { select: { users: true } }
-      }
-    });
+    let tenant;
+    try {
+      tenant = await prisma.tenant.findUnique({
+        where: { id: req.params.id },
+        include: { ...baseInclude, tenantModules: TENANT_MODULES_SELECT }
+      });
+    } catch (e) {
+      if (!isMissingTenantModulesTable(e)) throw e;
+      tenant = await prisma.tenant.findUnique({ where: { id: req.params.id }, include: baseInclude });
+      if (tenant) tenant.tenantModules = [];
+    }
     if (!tenant) return res.status(404).json({ error: 'Tenant no encontrado' });
     res.json(tenant);
   } catch (e) {
@@ -279,17 +310,6 @@ router.patch('/tenants/:id/status', async (req, res) => {
   }
 });
 
-// Claves de módulo válidas en `enabledModules` (deben alinear con los planKeys
-// de MODULE_DEFINITIONS en modules.routes.js).
-const VALID_MODULE_KEYS = new Set([
-  'delivery',
-  'webstore', 'client_menu',
-  'kiosk',
-  'loyalty', 'loyalty_advanced',
-  'kds',
-  'reports',
-  'finance',
-]);
 
 // PATCH /api/saas/tenants/:id/modules  — togglear módulos SaaS y storefront config
 // Body: { hasInventory?, hasDelivery?, hasWebStore?, whatsappNumber?, themeConfig?, enabledModules? }
@@ -336,12 +356,24 @@ router.patch('/tenants/:id/modules', async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Tenant no encontrado' });
     if (existing.slug === PLATFORM_TENANT_SLUG) return res.status(403).json({ error: 'No se puede modificar el tenant de plataforma' });
 
-    const tenant = await prisma.tenant.update({
-      where: { id: req.params.id },
-      data,
-      include: { subscription: { include: { plan: true } } }
+    // Update legacy + sync de la tabla canónica TenantModule en una transacción.
+    // TenantModule es la fuente de verdad nueva; los campos legacy se mantienen
+    // sincronizados (dual-write) hasta que el gating en runtime migre a la tabla.
+    const tenant = await prisma.$transaction(async (tx) => {
+      const updated = await tx.tenant.update({
+        where: { id: req.params.id },
+        data,
+        include: { subscription: { include: { plan: true } } }
+      });
+      await syncTenantModuleRows(tx, updated.id, deriveActiveKeys(updated));
+      return updated;
     });
-    res.json(tenant);
+
+    const tenantModules = await prisma.tenantModule.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { moduleKey: 'asc' },
+    });
+    res.json({ ...tenant, tenantModules });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Tenant no encontrado' });
     res.status(500).json({ error: e.message });

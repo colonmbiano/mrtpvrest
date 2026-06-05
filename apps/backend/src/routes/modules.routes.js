@@ -4,17 +4,10 @@ const router  = express.Router()
 const { prisma } = require('@mrtpvrest/database')
 const { authenticate, requireRole } = require('../middleware/auth.middleware')
 const { invalidateModuleCache } = require('../middleware/module.middleware')
+const { deriveActiveKeys, syncTenantModuleRows, MODULE_DEFINITIONS } = require('../lib/tenantModules')
 
-// Módulos válidos en la plataforma
-const MODULE_DEFINITIONS = {
-  KIOSK:    { planKeys: ['kiosk'] },
-  DELIVERY: { planKeys: ['delivery'] },
-  WEBSTORE: { planKeys: ['client_menu', 'webstore'] },
-  LOYALTY:  { planKeys: ['loyalty_advanced', 'loyalty'], planFlag: 'hasLoyalty' },
-  KDS:      { planKeys: ['kds'], planFlag: 'hasKDS' },
-  REPORTS:  { planKeys: ['reports'], planFlag: 'hasReports' },
-  FINANCE:  { planKeys: ['finance'] },
-}
+// MODULE_DEFINITIONS (gating por plan) se deriva del catálogo único en
+// lib/tenantModules.js — no redefinir aquí.
 const VALID_MODULES = Object.keys(MODULE_DEFINITIONS)
 
 function normalizeList(values) {
@@ -158,10 +151,30 @@ router.patch('/:key', authenticate, requireRole('OWNER', 'ADMIN', 'SUPER_ADMIN')
       updatedModules = currentModules.filter(m => !moduleAliases.has(String(m)))
     }
 
-    const updatedTenant = await prisma.tenant.update({
-      where: { id: restaurant.tenantId },
-      data:  { enabledModules: updatedModules },
-      select: { enabledModules: true },
+    // Sincronizamos los flags legacy derivados (hasDelivery/hasWebStore) con el
+    // array resultante, igual que la ruta SaaS. Sin esto, desactivar delivery o
+    // webstore por aquí dejaría el array sin la clave pero el flag en true, y
+    // deriveActiveKeys (array OR flag) volvería a marcar el módulo como activo en
+    // TenantModule → reintroduciría el desync que esta tabla busca eliminar.
+    // hasInventory NO se toca: inventory vive solo como flag (sin clave en este
+    // endpoint), así que lo preservamos.
+    const norm = new Set(updatedModules.map((m) => String(m).toLowerCase()))
+    const tenantData = {
+      enabledModules: updatedModules,
+      hasDelivery: norm.has('delivery'),
+      hasWebStore: norm.has('webstore') || norm.has('client_menu'),
+    }
+
+    // Update legacy + sync de TenantModule en una transacción (atómico), evitando
+    // que un fallo del sync deje legacy y canónico desalineados.
+    const updatedTenant = await prisma.$transaction(async (tx) => {
+      const updated = await tx.tenant.update({
+        where: { id: restaurant.tenantId },
+        data:  tenantData,
+        select: { enabledModules: true, hasInventory: true, hasDelivery: true, hasWebStore: true },
+      })
+      await syncTenantModuleRows(tx, restaurant.tenantId, deriveActiveKeys(updated))
+      return updated
     })
 
     // Invalidar cache de requireModule para que el cambio surta efecto inmediato
