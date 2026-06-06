@@ -1,5 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
+const otaDisabled = process.env.CAPACITOR_OTA_DISABLED === 'true';
+
 const config: CapacitorConfig = {
   appId: 'com.mrtpvrest.tpv',
   appName: 'MRTPVREST',
@@ -20,7 +22,7 @@ const config: CapacitorConfig = {
     // y aplica al próximo arranque — cero interrupción al cajero. directUpdate
     // false para evitar cambio de bundle a mitad de turno.
     CapacitorUpdater: {
-      autoUpdate: true,
+      autoUpdate: !otaDisabled,
       updateUrl: 'https://api.mrtpvrest.com/api/ota/check',
       defaultChannel: 'production',
       directUpdate: false,

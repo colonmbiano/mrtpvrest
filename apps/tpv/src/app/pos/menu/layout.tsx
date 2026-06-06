@@ -9,7 +9,7 @@ import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { usePrinters, useReceiptIdentity, useKitchenConfig, useFullTicketConfig } from "@/hooks/usePrinters";
-import { useHydrated } from "@/hooks/useClientValue";
+import { subscribeToEvents, useClientValue, useHydrated } from "@/hooks/useClientValue";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
@@ -26,6 +26,7 @@ import {
 import SidebarTicket from "@/components/pos/SidebarTicket";
 import TopNavDropdown from "@/components/pos/TopNavDropdown";
 import TopActionsDropdown from "@/components/pos/TopActionsDropdown";
+import CatalogSettingsSheet from "@/components/modals/CatalogSettingsSheet";
 import VoiceOrderDictation from "@/components/pos/VoiceOrderDictation";
 import { useUIStore } from "@/store/useUIStore";
 import ShiftModal from "@/components/admin/ShiftModal";
@@ -71,6 +72,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [showOrders, setShowOrders] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [showExpenses, setShowExpenses] = useState(false);
+  const [showCatalogSettings, setShowCatalogSettings] = useState(false);
   const [mobileView, setMobileView] = useState<"menu" | "ticket">("menu");
 
   // Sistema de notificaciones en tiempo real vía Socket.io
@@ -89,6 +91,17 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const searchQuery = useUIStore((s) => s.searchQuery);
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
   const itemCount = activeTicket.items.reduce((acc, i) => acc + i.quantity, 0);
+  const sidebarWidth = useClientValue(
+    () => {
+      if (typeof window === "undefined") return 380;
+      const preset = window.localStorage.getItem("sidebarWidth");
+      if (preset === "S") return 320;
+      if (preset === "L") return 440;
+      return 380;
+    },
+    380,
+    subscribeToEvents("sidebar-width-changed", "storage"),
+  );
 
   const [openOrders, setOpenOrders] = useState<any[]>([]);
   const [payOrder, setPayOrder] = useState<any | null>(null);
@@ -838,6 +851,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         onClose={() => setShowNotifs(false)}
       />
 
+      {showCatalogSettings && (
+        <CatalogSettingsSheet onClose={() => setShowCatalogSettings(false)} />
+      )}
+
       {payOrder && !isLoanMode && (
         <PaymentModal
           isOpen={!!payOrder}
@@ -859,10 +876,13 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
       {/* LAYOUT PRINCIPAL — Grid 75/25 (col-span-3 catálogo, col-span-1 ticket).
           En móvil se colapsa a una sola columna y el toggle FAB alterna vista. */}
-      <div className="flex h-screen w-full flex-1 select-none overflow-hidden bg-slate-100 font-outfit md:grid md:grid-cols-[minmax(0,7fr)_minmax(340px,3fr)]">
+      <div
+        className="flex h-screen w-full flex-1 select-none overflow-hidden bg-[#ebe5dc] font-outfit md:grid"
+        style={{ gridTemplateColumns: `minmax(0,1fr) ${sidebarWidth}px` }}
+      >
         {/* CATALOGO — col-span-3 (75%) */}
         <div
-          className={`${mobileView === "menu" ? "flex" : "hidden"} relative min-h-0 min-w-0 w-full flex-col overflow-hidden border-r border-slate-300 bg-slate-100 md:flex`}
+          className={`${mobileView === "menu" ? "flex" : "hidden"} relative min-h-0 min-w-0 w-full flex-col overflow-hidden border-r border-[#d8cbbb] bg-[#ebe5dc] md:flex`}
         >
           {/* FASE 6 · BANNER MODO PRÉSTAMO */}
           {isLoanMode && (
@@ -885,7 +905,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           )}
 
           {/* TOP BAR: busqueda rapida + cuentas frecuentes. */}
-          <header className="z-10 flex h-16 shrink-0 items-center gap-3 border-b border-slate-300 bg-white px-3">
+          <header className="z-10 flex h-14 shrink-0 items-center gap-2 border-b border-[#d8cbbb] bg-[#f7f0e6] px-3 shadow-[0_1px_0_rgba(255,255,255,0.75)]">
             <div className="flex shrink-0 items-center gap-2">
               <TopNavDropdown
                 onOpenMenu={() => setShowMenu(true)}
@@ -899,14 +919,14 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
             <label className="relative min-w-[220px] flex-1">
               <Search
-                size={22}
+                size={20}
                 className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
               />
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Buscar producto..."
-                className="h-12 w-full rounded-lg border-2 border-slate-300 bg-slate-50 pl-12 pr-4 text-[17px] font-black text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-950"
+                className="h-11 w-full rounded-lg border-2 border-[#cfc2b2] bg-[#fff8ee] pl-11 pr-4 text-[16px] font-black text-slate-950 outline-none placeholder:text-slate-400 focus:border-[#ff8400]"
               />
             </label>
 
@@ -922,10 +942,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                     key={type}
                     type="button"
                     onClick={() => updateTicket({ type: type as typeof activeTicket.type })}
-                    className={`h-12 min-w-[104px] rounded-lg border-2 px-3 text-[12px] font-black uppercase focus:outline-none focus:ring-2 focus:ring-slate-950 ${
+                    className={`h-11 min-w-[94px] rounded-lg border-2 px-3 text-[11px] font-black uppercase focus:outline-none focus:ring-2 focus:ring-slate-950 ${
                       active
-                        ? "border-slate-950 bg-slate-950 text-white"
-                        : "border-slate-300 bg-slate-100 text-slate-800 active:bg-slate-200"
+                        ? "border-[#ff8400] bg-[#201915] text-[#ffb84d] shadow-[0_0_0_1px_rgba(255,132,0,0.12)]"
+                        : "border-[#cfc2b2] bg-[#fff8ee] text-slate-800 active:bg-[#f5eadc]"
                     }`}
                   >
                     {label}
@@ -945,6 +965,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                 onSync={() => {}}
                 onSplitTicket={() => {}}
                 onMoveTicket={() => {}}
+                onOpenCatalogSettings={() => setShowCatalogSettings(true)}
               />
             </div>
           </header>

@@ -8,7 +8,8 @@ import {
   ArrowRightLeft, 
   RefreshCw,
   Wallet,
-  Receipt
+  Receipt,
+  SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -20,6 +21,7 @@ interface Props {
   onSync?: () => void;
   onSplitTicket?: () => void;
   onMoveTicket?: () => void;
+  onOpenCatalogSettings?: () => void;
   hasItems: boolean;
 }
 
@@ -31,6 +33,7 @@ export default function TopActionsDropdown({
   onSync,
   onSplitTicket,
   onMoveTicket,
+  onOpenCatalogSettings,
   hasItems
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
@@ -59,13 +62,21 @@ export default function TopActionsDropdown({
     <div className="relative z-50" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-2 border border-border text-tx-pri active:scale-95 transition-all hover:border-brand/50"
+        className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#6b5641] bg-[#1e1b18] text-[#f8e8d0] shadow-[0_4px_12px_rgba(44,31,19,0.22)] transition-all active:scale-95 hover:border-[#ff8400]/60 hover:text-[#ffb84d]"
       >
         <MoreVertical size={20} />
       </button>
 
       {isOpen && (
         <div className="absolute top-12 right-0 w-56 bg-[#121316] border border-white/10 rounded-2xl shadow-2xl p-2 flex flex-col gap-1 overflow-hidden origin-top-right animate-in fade-in zoom-in-95 duration-200">
+          <button
+            onClick={() => handleAction(onOpenCatalogSettings)}
+            className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-3 text-amber-300 transition-all active:scale-95 hover:bg-amber-500/15"
+          >
+            <SlidersHorizontal size={16} />
+            <span className="text-xs font-bold">Vista catálogo</span>
+          </button>
+
           <button
             onClick={() => handleAction(onOpenDrawer)}
             className="flex items-center gap-3 px-3 py-3 rounded-xl text-zinc-300 hover:text-white hover:bg-white/5 transition-all active:scale-95"
