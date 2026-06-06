@@ -428,7 +428,11 @@ router.post('/orders', async (req, res) => {
         let variantName = null;
 
         if (variantId) {
-          const variant = menuItem.variants.find(v => v.id === variantId && v.isActive);
+          // El modelo MenuItemVariant usa `isAvailable` (no existe `isActive`).
+          // Antes se filtraba por `v.isActive` -> siempre undefined -> TODO pedido
+          // con variante fallaba con "Variante no disponible". Alinear con el campo
+          // real y con el filtro del menú (variants where isAvailable: true).
+          const variant = menuItem.variants.find(v => v.id === variantId && v.isAvailable);
           if (!variant) throw new Error(`Variante ${variantId} no disponible.`);
           basePrice = variant.price;
           variantName = variant.name;
