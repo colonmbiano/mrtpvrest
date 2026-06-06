@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Search, X, Plus, Minus, Check } from "lucide-react";
 import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
 import api from "@/lib/api";
+import { useCatalogPrefs, type CatalogDensity } from "@/store/catalogPrefsStore";
 import { hapticLight } from "@/lib/haptics";
 import {
   useTicketStore,
@@ -14,6 +15,10 @@ import {
   type Product,
 } from "@/store/ticketStore";
 import { useUIStore } from "@/store/useUIStore";
+import {
+  COMPLEMENT_MODIFIER_PREFIX,
+  VARIANT_MODIFIER_PREFIX,
+} from "@/components/pos/ModifierPickerModal";
 
 type CategoryLite = {
   id: string;
@@ -32,6 +37,8 @@ const VARIANTS_GROUP_ID = "__variants";
 export default function CatalogPage() {
   const { addItemToActive } = useTicketStore();
   const searchQuery = useUIStore((s) => s.searchQuery);
+  const density = useCatalogPrefs((s) => s.density);
+  const viewMode = useCatalogPrefs((s) => s.viewMode);
 
   const [categories, setCategories] = useState<CategoryLite[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -185,18 +192,45 @@ export default function CatalogPage() {
     }
   };
 
+  const isSearching = searchQuery.trim().length > 0;
+  // Modo drill-down: sin búsqueda activa y sin categoría elegida mostramos
+  // primero una cuadrícula de categorías; al elegir una, se entra a sus items.
+  // El modo flat mantiene el chip-rail con todos los productos visibles.
+  const showCategoryOverview =
+    viewMode === "drilldown" && !isSearching && activeCat === "all";
+  const selectedCategory = visibleCategories.find((cat) => cat.id === activeCat);
+
+  const goToCategories = () => {
+    setConfigProduct(null);
+    setActiveCat("all");
+    useUIStore.getState().setSearchQuery("");
+  };
+
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 text-slate-950">
-      <CategoryBar
-        categories={visibleCategories}
-        counts={categoryCounts}
-        activeId={searchQuery.trim() ? "search" : activeCat}
-        onSelect={(id) => {
-          setConfigProduct(null);
-          setActiveCat(id);
-          useUIStore.getState().setSearchQuery("");
-        }}
-      />
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#ebe5dc] text-slate-950">
+      {viewMode === "drilldown" ? (
+        !showCategoryOverview && (
+          <DrilldownHeader
+            title={
+              isSearching
+                ? "Resultados"
+                : selectedCategory?.name || "Todos los productos"
+            }
+            onBack={goToCategories}
+          />
+        )
+      ) : (
+        <CategoryBar
+          categories={visibleCategories}
+          counts={categoryCounts}
+          activeId={isSearching ? "search" : activeCat}
+          onSelect={(id) => {
+            setConfigProduct(null);
+            setActiveCat(id);
+            useUIStore.getState().setSearchQuery("");
+          }}
+        />
+      )}
 
       <main className="min-h-0 flex-1 overflow-hidden p-3">
         {configProduct ? (
@@ -211,6 +245,16 @@ export default function CatalogPage() {
           />
         ) : isLoading ? (
           <ProductSkeleton />
+        ) : showCategoryOverview ? (
+          <CategoryGrid
+            categories={visibleCategories}
+            counts={categoryCounts}
+            density={density}
+            onSelect={(id) => {
+              setConfigProduct(null);
+              setActiveCat(id);
+            }}
+          />
         ) : filteredProducts.length === 0 ? (
           <EmptyState query={searchQuery} />
         ) : (
@@ -218,6 +262,7 @@ export default function CatalogPage() {
             products={filteredProducts}
             onPick={handleProductClick}
             onLongPress={setOptionsProduct}
+            density={density}
           />
         )}
       </main>
@@ -246,8 +291,8 @@ function CategoryBar({
   onSelect: (id: string) => void;
 }) {
   return (
-    <nav className="shrink-0 border-b border-slate-300 bg-white px-3 py-3">
-      <div className="flex h-14 gap-2 overflow-x-auto scrollbar-hide">
+    <nav className="shrink-0 border-b border-[#d8cbbb] bg-[#f7f0e6] px-3 py-2">
+      <div className="flex h-[58px] gap-2 overflow-x-auto scrollbar-hide">
         <CategoryButton
           label="Todos"
           count={Object.values(counts).reduce((sum, count) => sum + count, 0)}
@@ -270,6 +315,96 @@ function CategoryBar({
   );
 }
 
+function DrilldownHeader({
+  title,
+  onBack,
+}: {
+  title: string;
+  onBack: () => void;
+}) {
+  return (
+    <nav className="shrink-0 border-b border-[#d8cbbb] bg-[#f7f0e6] px-3 py-2">
+      <div className="flex h-[58px] items-center gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex h-11 items-center gap-1.5 rounded-lg border-2 border-[#6b5641] bg-[#1e1b18] px-3 text-[#f8e8d0] active:bg-[#28221c] focus:outline-none focus:ring-2 focus:ring-[#ff8400]"
+        >
+          <ChevronLeft size={20} strokeWidth={3} />
+          <span className="text-[13px] font-black uppercase">Categorías</span>
+        </button>
+        <span className="min-w-0 flex-1 truncate text-[18px] font-black text-slate-950">
+          {title}
+        </span>
+      </div>
+    </nav>
+  );
+}
+
+function CategoryGrid({
+  categories,
+  counts,
+  density,
+  onSelect,
+}: {
+  categories: CategoryLite[];
+  counts: Record<string, number>;
+  density: CatalogDensity;
+  onSelect: (id: string) => void;
+}) {
+  const gridClass =
+    density === 3
+      ? "grid-cols-2 sm:grid-cols-3"
+      : density === 6
+        ? "grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
+        : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5";
+  const rowHeight = density === 6 ? 108 : density === 3 ? 144 : 124;
+
+  return (
+    <div className="h-full overflow-y-auto overscroll-contain scrollbar-hide">
+      <div
+        className={`grid gap-2.5 pb-4 ${gridClass}`}
+        style={{ gridAutoRows: `${rowHeight}px` }}
+      >
+        {categories.map((category) => {
+          const tone = categoryTone(category.name);
+          const palette = {
+            food: "bg-[#fff4e7] text-slate-950 border-orange-300 active:bg-[#ffe8cf]",
+            wings: "bg-[#fff0ee] text-slate-950 border-red-300 active:bg-[#ffe2df]",
+            snack: "bg-[#fff7e6] text-slate-950 border-amber-300 active:bg-[#ffedc6]",
+            drink: "bg-[#eef6ff] text-slate-950 border-blue-300 active:bg-[#dcecff]",
+            neutral: "bg-white text-slate-950 border-slate-300 active:bg-slate-100",
+          }[tone];
+          const accent = {
+            food: "bg-orange-500",
+            wings: "bg-red-500",
+            snack: "bg-amber-400",
+            drink: "bg-blue-500",
+            neutral: "bg-slate-500",
+          }[tone];
+          return (
+            <button
+              key={category.id}
+              type="button"
+              onClick={() => onSelect(category.id)}
+              className={`relative flex h-full flex-col justify-between overflow-hidden rounded-lg border-2 p-3 text-left shadow-sm ${palette} focus:outline-none focus:ring-2 focus:ring-slate-950`}
+              style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+            >
+              <span aria-hidden className={`absolute inset-x-0 top-0 h-1.5 ${accent}`} />
+              <span className="line-clamp-2 pt-1 text-[17px] font-black leading-tight">
+                {category.name}
+              </span>
+              <span className="text-[12px] font-black uppercase opacity-60">
+                {counts[category.id] ?? counts[category.name] ?? 0} items
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function CategoryButton({
   label,
   count,
@@ -284,22 +419,23 @@ function CategoryButton({
   onClick: () => void;
 }) {
   const palette = {
-    food: active ? "bg-orange-600 text-white border-orange-700" : "bg-orange-100 text-orange-950 border-orange-300 active:bg-orange-200",
-    wings: active ? "bg-red-600 text-white border-red-700" : "bg-red-100 text-red-950 border-red-300 active:bg-red-200",
-    snack: active ? "bg-amber-500 text-black border-amber-600" : "bg-amber-100 text-amber-950 border-amber-300 active:bg-amber-200",
-    drink: active ? "bg-blue-600 text-white border-blue-700" : "bg-blue-100 text-blue-950 border-blue-300 active:bg-blue-200",
-    neutral: active ? "bg-slate-900 text-white border-slate-950" : "bg-slate-100 text-slate-950 border-slate-300 active:bg-slate-200",
+    food: active ? "bg-orange-600 text-white border-orange-700" : "bg-[#251914] text-orange-100 border-orange-500/35 active:bg-[#321f16]",
+    wings: active ? "bg-red-600 text-white border-red-700" : "bg-[#251719] text-red-100 border-red-500/35 active:bg-[#321b1e]",
+    snack: active ? "bg-amber-500 text-black border-amber-600" : "bg-[#261f14] text-amber-100 border-amber-500/40 active:bg-[#342916]",
+    drink: active ? "bg-blue-600 text-white border-blue-700" : "bg-[#161f2b] text-blue-100 border-blue-400/35 active:bg-[#1b2838]",
+    neutral: active ? "bg-slate-950 text-white border-slate-950" : "bg-[#1e1b18] text-[#f8e8d0] border-[#6b5641] active:bg-[#28221c]",
   }[tone];
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`min-w-[150px] rounded-lg border px-4 text-left ${palette} focus:outline-none focus:ring-2 focus:ring-slate-950`}
+      className={`flex flex-col justify-center rounded-lg border-2 px-3 text-left shadow-[0_4px_12px_rgba(44,31,19,0.18)] ${palette} focus:outline-none focus:ring-2 focus:ring-[#ff8400]`}
+      style={{ width: 116, minWidth: 116, height: 58 }}
     >
-      <span className="block truncate text-[15px] font-black leading-tight">{label}</span>
-      <span className="mt-0.5 block text-[11px] font-bold uppercase text-current opacity-75">
-        {count} productos
+      <span className="block truncate text-[13px] font-black leading-tight">{label}</span>
+      <span className="mt-0.5 block text-[11px] font-black uppercase text-current opacity-70">
+        {count} items
       </span>
     </button>
   );
@@ -309,14 +445,27 @@ function ProductGrid({
   products,
   onPick,
   onLongPress,
+  density,
 }: {
   products: Product[];
   onPick: (product: Product) => void;
   onLongPress: (product: Product) => void;
+  density: CatalogDensity;
 }) {
+  const gridClass =
+    density === 3
+      ? "grid-cols-2 sm:grid-cols-3"
+      : density === 6
+        ? "grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
+        : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5";
+  const rowHeight = density === 6 ? 108 : density === 3 ? 144 : 124;
+
   return (
     <div className="h-full overflow-y-auto overscroll-contain scrollbar-hide">
-      <div className="grid auto-rows-[minmax(132px,1fr)] grid-cols-2 gap-3 pb-4 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+      <div
+        className={`grid gap-2.5 pb-4 ${gridClass}`}
+        style={{ gridAutoRows: `${rowHeight}px` }}
+      >
         {products.map((product) => (
           <ProductTile
             key={product.id}
@@ -342,11 +491,31 @@ function ProductTile({
   const quantity = useTicketStore((s) => s.quantitiesByProduct?.[product.id] ?? 0);
   const tone = categoryTone(product.category || product.name);
   const palette = {
-    food: "bg-orange-500 text-black border-orange-700 active:bg-orange-600",
-    wings: "bg-red-500 text-white border-red-700 active:bg-red-600",
-    snack: "bg-amber-400 text-black border-amber-600 active:bg-amber-500",
-    drink: "bg-blue-500 text-white border-blue-700 active:bg-blue-600",
-    neutral: "bg-slate-200 text-slate-950 border-slate-400 active:bg-slate-300",
+    food: {
+      card: "bg-[#fff4e7] text-slate-950 border-orange-300 active:bg-[#ffe8cf]",
+      accent: "bg-orange-500",
+      button: "bg-orange-500 text-black",
+    },
+    wings: {
+      card: "bg-[#fff0ee] text-slate-950 border-red-300 active:bg-[#ffe2df]",
+      accent: "bg-red-500",
+      button: "bg-red-500 text-white",
+    },
+    snack: {
+      card: "bg-[#fff7e6] text-slate-950 border-amber-300 active:bg-[#ffedc6]",
+      accent: "bg-amber-400",
+      button: "bg-amber-400 text-black",
+    },
+    drink: {
+      card: "bg-[#eef6ff] text-slate-950 border-blue-300 active:bg-[#dcecff]",
+      accent: "bg-blue-500",
+      button: "bg-blue-500 text-white",
+    },
+    neutral: {
+      card: "bg-white text-slate-950 border-slate-300 active:bg-slate-100",
+      accent: "bg-slate-500",
+      button: "bg-slate-950 text-white",
+    },
   }[tone];
   const price = Number(product.promoPrice || product.price || 0);
   const isDisabled = product.isAvailable === false;
@@ -360,11 +529,12 @@ function ProductTile({
         onLongPress();
       }}
       disabled={isDisabled}
-      className={`product-card relative flex min-h-[132px] flex-col rounded-lg border-2 p-3 text-left ${palette} disabled:opacity-45 disabled:grayscale focus:outline-none focus:ring-2 focus:ring-slate-950`}
+      className={`product-card relative flex h-full flex-col overflow-hidden rounded-lg border-2 p-3 text-left shadow-sm ${palette.card} disabled:opacity-45 disabled:grayscale focus:outline-none focus:ring-2 focus:ring-slate-950`}
       style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
     >
+      <span aria-hidden className={`absolute inset-x-0 top-0 h-1.5 ${palette.accent}`} />
       {quantity > 0 && (
-        <span className="absolute right-2 top-2 flex h-8 min-w-8 items-center justify-center rounded-full bg-white px-2 text-[13px] font-black text-slate-950">
+        <span className="absolute right-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-slate-950 px-2 text-[12px] font-black text-white">
           x{quantity}
         </span>
       )}
@@ -373,14 +543,14 @@ function ProductTile({
           Agotado
         </span>
       )}
-      <span className="line-clamp-3 pr-8 text-[17px] font-black leading-tight">
+      <span className="line-clamp-2 pr-8 pt-1 text-[16px] font-black leading-tight">
         {product.name}
       </span>
-      <span className="mt-auto pt-4 text-[24px] font-black tabular-nums">
+      <span className="mt-auto pt-2 text-[25px] font-black tabular-nums leading-none">
         ${price.toFixed(0)}
       </span>
-      <span className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-md bg-white text-slate-950">
-        <Plus size={21} strokeWidth={3} />
+      <span className={`absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-md ${palette.button}`}>
+        <Plus size={22} strokeWidth={3} />
       </span>
     </button>
   );
