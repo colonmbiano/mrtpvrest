@@ -120,7 +120,7 @@ model Plan {
   id           String  @id @default(cuid())
   name         String  @unique // "BASIC" | "PRO" | "UNLIMITED"
   displayName  String // "Básico" | "Pro" | "Ilimitado"
-  price        Float // precio mensual en USD
+  price        Float // precio mensual en MXN
   trialDays    Int     @default(15)
   maxLocations Int     @default(1)
   maxEmployees Int     @default(5)

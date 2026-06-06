@@ -1,7 +1,7 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
-const { notifyOrderStatus, notifyIngredientShortage, sendWhatsApp } = require('../services/notifications.service');
+const { notifyOrderStatus, notifyIngredientShortage, sendOrderWhatsApp } = require('../services/notifications.service');
 const router = express.Router();
 
 // GET clave pública VAPID (para el frontend)
@@ -60,7 +60,7 @@ router.post('/custom', authenticate, requireTenantAccess, requireAdmin, async (r
     });
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
     const phone = order.customerPhone || order.user?.phone;
-    if (phone) await sendWhatsApp(phone, `*Restaurante Demo*\n${message}`);
+    if (phone) await sendOrderWhatsApp(order.restaurantId, phone, `*Restaurante Demo*\n${message}`);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
