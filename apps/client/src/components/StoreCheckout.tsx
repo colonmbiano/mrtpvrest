@@ -75,6 +75,46 @@ export default function StoreCheckout({
   const [success, setSuccess] = useState<any>(null);
   const [liveStatus, setLiveStatus] = useState<string>('PENDING');
 
+  // Registro rápido: recordamos los datos del cliente en el dispositivo para
+  // que no tenga que volver a escribirlos. Sin cuenta ni contraseña.
+  const PROFILE_KEY = `mrtpv:customer:${slug}`;
+  const [saveInfo, setSaveInfo] = useState(true);
+  const [savedName, setSavedName] = useState('');
+
+  // Al abrir el checkout, rellenamos con el perfil guardado (si existe).
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const raw = localStorage.getItem(PROFILE_KEY);
+      if (!raw) return;
+      const p = JSON.parse(raw);
+      setSavedName(p.name || '');
+      setCustomerName(prev => prev || p.name || '');
+      setCustomerPhone(prev => prev || p.phone || '');
+      setDeliveryAddress(prev => prev || p.address || '');
+      if (p.coords?.lat && p.coords?.lng) setCoords(prev => prev || p.coords);
+    } catch {}
+  }, [open, PROFILE_KEY]);
+
+  const persistProfile = () => {
+    try {
+      if (saveInfo) {
+        localStorage.setItem(PROFILE_KEY, JSON.stringify({
+          name: customerName.trim(), phone: customerPhone.trim(),
+          address: deliveryAddress.trim(), coords,
+        }));
+      } else {
+        localStorage.removeItem(PROFILE_KEY);
+      }
+    } catch {}
+  };
+
+  const forgetProfile = () => {
+    try { localStorage.removeItem(PROFILE_KEY); } catch {}
+    setSavedName(''); setSaveInfo(false);
+    setCustomerName(''); setCustomerPhone(''); setDeliveryAddress('');
+  };
+
   // Tipos de pedido permitidos por la sucursal
   const allowed: OrderType[] = useMemo(() => {
     const l = selectedLocation;
@@ -180,6 +220,9 @@ export default function StoreCheckout({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setError(data?.error || 'No se pudo enviar el pedido.'); setIsSubmitting(false); return; }
+
+      // Pedido aceptado: guardamos (o borramos) los datos del cliente.
+      persistProfile();
 
       // Pago en línea: crear checkout en la pasarela y redirigir.
       if (paymentMethod === 'ONLINE') {
@@ -313,6 +356,12 @@ export default function StoreCheckout({
 
             {/* Datos del cliente */}
             <div className="space-y-3">
+              {savedName && (
+                <div className="flex items-center justify-between rounded-2xl px-4 py-2.5" style={{ background: `${primary}14` }}>
+                  <span className="text-sm font-bold" style={{ color: primary }}>👋 Hola de nuevo, {savedName.split(' ')[0]}</span>
+                  <button type="button" onClick={forgetProfile} className="text-[11px] font-bold text-gray-500 hover:text-gray-800">No soy yo</button>
+                </div>
+              )}
               <input required placeholder="Tu nombre" className={field} value={customerName} onChange={e => setCustomerName(e.target.value)} />
               <input placeholder="Tu teléfono" className={field} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
               {isDelivery && (
@@ -330,6 +379,18 @@ export default function StoreCheckout({
               {orderType === 'DINE_IN' && (
                 <input required placeholder="Número de mesa" type="number" min="1" className={field} value={tableNumber} onChange={e => setTableNumber(e.target.value)} />
               )}
+
+              {/* Registro rápido: guardar datos para próximos pedidos */}
+              <label className="flex items-center gap-3 px-1 pt-1 cursor-pointer select-none">
+                <span
+                  onClick={() => setSaveInfo(v => !v)}
+                  className="relative w-11 h-6 rounded-full transition-all shrink-0"
+                  style={{ background: saveInfo ? primary : '#d1d5db' }}
+                >
+                  <span className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all" style={{ left: saveInfo ? '22px' : '2px' }} />
+                </span>
+                <span className="text-xs font-bold text-gray-500">Guardar mis datos para la próxima vez</span>
+              </label>
             </div>
 
             {/* Cliente frecuente (lealtad) */}
