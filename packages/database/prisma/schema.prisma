@@ -949,6 +949,16 @@ model RestaurantConfig {
   isOpen            Boolean @default(true)
   closedMessage     String?
 
+  // ─── HORARIO DE ATENCIÓN ───────────────────────────────────────────────
+  // scheduleEnabled: si true, la apertura se calcula con el reloj local
+  // (timezone) contra businessHours. isOpen sigue siendo el override "forzar
+  // cerrado": isOpen=false cierra la tienda sin importar el horario.
+  scheduleEnabled Boolean @default(false)
+  timezone        String  @default("America/Mexico_City")
+  // businessHours: JSON con una franja por día (0=Dom … 6=Sáb):
+  // [{ "day":1, "enabled":true, "open":"09:00", "close":"22:00" }, ...]
+  businessHours   String  @default("[]")
+
   // ─── ENVÍO POR DISTANCIA ───────────────────────────────────────────────
   // deliveryMode controla cómo se calcula el costo de envío:
   //   FLAT     → tarifa fija = deliveryFee (comportamiento histórico).
