@@ -79,10 +79,10 @@ export function PocketTheme({ data }: { data: any }) {
     ) : (
       <div
         className={`flex items-center justify-center ${className}`}
-        style={{ background: `linear-gradient(135deg, ${tint('22')}, ${tint('0D')})` }}
+        style={{ background: `linear-gradient(135deg, ${tint('3A')}, ${tint('14')})` }}
       >
         <span
-          className="font-syne font-extrabold opacity-80 select-none text-4xl"
+          className="font-syne font-extrabold opacity-90 select-none text-4xl"
           style={{ color: primary }}
         >
           {(product.name?.[0] || '🍴').toUpperCase()}
@@ -91,10 +91,18 @@ export function PocketTheme({ data }: { data: any }) {
     );
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] pb-32 font-sans text-gray-900">
+    <div
+      className="min-h-screen pb-32 font-sans text-gray-900"
+      // Fondo cálido con wash de marca arriba que desvanece a un beige neutro.
+      // Evita el look "todo blanco" sin sacrificar contraste del texto.
+      style={{ background: `linear-gradient(180deg, ${tint('26')} 0%, ${tint('0A')} 220px, #F4F1EE 460px)` }}
+    >
 
       {/* ───────────────────────── HEADER STICKY ───────────────────────── */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-xl shadow-[0_4px_24px_rgba(0,0,0,0.04)] rounded-b-[28px]">
+      <header
+        className="sticky top-0 z-40 backdrop-blur-xl shadow-[0_4px_24px_rgba(0,0,0,0.06)] rounded-b-[28px]"
+        style={{ background: `linear-gradient(180deg, ${tint('1F')}, rgba(255,255,255,0.96) 80%)` }}
+      >
         <div className="px-5 pt-6 pb-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] text-gray-400 font-black tracking-[0.18em] uppercase">Entregando desde</p>
@@ -167,7 +175,7 @@ export function PocketTheme({ data }: { data: any }) {
                   className="whitespace-nowrap px-5 py-2.5 rounded-full text-xs font-black tracking-wide transition-all"
                   style={
                     activeCat
-                      ? { background: '#111827', color: '#fff', transform: 'scale(1.05)', boxShadow: '0 8px 18px rgba(0,0,0,0.18)' }
+                      ? { background: primary, color: '#fff', transform: 'scale(1.05)', boxShadow: `0 8px 18px ${tint('66')}` }
                       : { background: '#fff', color: '#6b7280', border: '1px solid #f1f1f4' }
                   }
                 >
@@ -256,7 +264,10 @@ export function PocketTheme({ data }: { data: any }) {
             ref={(el) => (categoryRefs.current[category.id] = el)}
             className="mb-9 pt-2 scroll-mt-52"
           >
-            <h3 className="font-syne font-bold text-2xl text-gray-900 mb-5 px-1">{category.name}</h3>
+            <h3 className="font-syne font-bold text-2xl text-gray-900 mb-5 px-1 flex items-center gap-2.5">
+              <span className="inline-block w-1.5 h-6 rounded-full" style={{ background: primary }} />
+              {category.name}
+            </h3>
 
             <div className="flex flex-col gap-3.5">
               {(category.items || []).map((product: any) => {
@@ -291,7 +302,7 @@ export function PocketTheme({ data }: { data: any }) {
                         <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed pr-2">{product.description}</p>
                       )}
                       <div className="mt-2 flex items-center gap-2">
-                        <span className="font-syne font-bold text-gray-900 text-lg">{fmt(price)}</span>
+                        <span className="font-syne font-extrabold text-lg" style={{ color: primary }}>{fmt(price)}</span>
                         {product.isPromo && product.promoPrice && (
                           <span className="text-[10px] text-gray-300 line-through font-bold">{fmt(product.price)}</span>
                         )}
