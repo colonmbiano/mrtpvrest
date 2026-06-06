@@ -11,6 +11,7 @@ const engine = require('./engine');
 const orderSvc = require('./order');
 const nlu = require('./nlu');
 const promoGames = require('../promo-games.service');
+const { computeOpenState } = require('../../utils/storeHours');
 const m = require('./messages');
 
 const NLU_ENABLED = process.env.WHATSAPP_NLU_ENABLED === 'true';
@@ -64,10 +65,14 @@ async function processMessage({ restaurant, integration, message, io }) {
     orderSvc.hasOnlinePayment(prisma, restaurant.id),
   ]);
 
-  // Tienda cerrada → no tomamos pedidos nuevos.
-  if (config && config.isOpen === false) {
-    await provider.sendText(cfg, phone, m.storeClosed(config.closedMessage));
-    return;
+  // Tienda cerrada → no tomamos pedidos nuevos. Respeta el override manual y el
+  // horario automático; el mensaje dinámico indica cuándo volvemos a abrir.
+  if (config) {
+    const storeState = computeOpenState(config);
+    if (!storeState.isOpen) {
+      await provider.sendText(cfg, phone, m.storeClosed(storeState.message || config.closedMessage));
+      return;
+    }
   }
 
   // Cargar sesión existente (o arrancar nueva). Caduca por inactividad.

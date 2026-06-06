@@ -98,6 +98,8 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
       'pointsPerTen','pointsValuePesos','storefrontTheme',
       'centralWarehouseEnabled',
+      // Horario de atención (businessHours llega como JSON serializado)
+      'scheduleEnabled','timezone','businessHours',
       // Envío por distancia
       'deliveryMode','originLat','originLng','deliveryBaseFee','deliveryPerKm',
       'deliveryFreeRadiusKm','deliveryMaxKm',
