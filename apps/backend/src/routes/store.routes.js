@@ -22,6 +22,7 @@ const {
 } = require('../lib/payment-providers');
 // Cálculo de envío: fuente única compartida con el chatbot de WhatsApp.
 const { computeDeliveryFee } = require('../lib/delivery-fee');
+const { computeOpenState } = require('../utils/storeHours');
 const router = express.Router();
 
 // ── Anti-fraude: rate limit por kiosko ───────────────────────────────────
@@ -150,8 +151,16 @@ router.get('/info', async (req, res) => {
     primaryColor:    restaurant.accentColor || "#ff5c35",
 
     // Estado de la tienda — el storefront debe bloquear pedidos si está cerrada.
-    isOpen:        config?.isOpen ?? true,
-    closedMessage: config?.closedMessage || null,
+    // isOpen se calcula combinando el override manual y el horario automático.
+    // El mensaje dinámico (cierre por horario) tiene prioridad sobre el manual.
+    ...(() => {
+      const openState = computeOpenState(config);
+      return {
+        isOpen:        openState.isOpen,
+        closedMessage: openState.message || config?.closedMessage || null,
+        nextOpen:      openState.nextOpen,
+      };
+    })(),
 
     // ¿Se puede pagar en línea (tarjeta) en esta tienda?
     onlinePayment: onlinePaymentEnabled,
@@ -367,12 +376,16 @@ router.post('/orders', async (req, res) => {
     : null;
 
   // Tienda cerrada: bloquear pedidos online (kioskos operan presencialmente y
-  // no dependen de este flag). 423 Locked = recurso temporalmente no disponible.
-  if (rawSource !== 'KIOSK' && config && config.isOpen === false) {
-    return res.status(423).json({
-      error: config.closedMessage || 'La tienda está cerrada en este momento.',
-      code: 'STORE_CLOSED',
-    });
+  // no dependen de este flag). Considera override manual Y horario automático.
+  // 423 Locked = recurso temporalmente no disponible.
+  if (rawSource !== 'KIOSK' && config) {
+    const storeState = computeOpenState(config);
+    if (!storeState.isOpen) {
+      return res.status(423).json({
+        error: storeState.message || config.closedMessage || 'La tienda está cerrada en este momento.',
+        code: 'STORE_CLOSED',
+      });
+    }
   }
 
   // Validaciones básicas

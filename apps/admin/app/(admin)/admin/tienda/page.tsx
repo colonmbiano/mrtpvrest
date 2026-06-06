@@ -3,6 +3,35 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { getStoreUrl } from "@/lib/config";
 
+type BusinessHour = { day: number; enabled: boolean; open: string; close: string };
+
+// 0=Domingo … 6=Sábado (coincide con Date.getDay() y el backend).
+const WEEK_DAYS = [
+  { value: 0, label: "Domingo" },
+  { value: 1, label: "Lunes" },
+  { value: 2, label: "Martes" },
+  { value: 3, label: "Miércoles" },
+  { value: 4, label: "Jueves" },
+  { value: 5, label: "Viernes" },
+  { value: 6, label: "Sábado" },
+];
+
+const TIMEZONES = [
+  { value: "America/Mexico_City", label: "Ciudad de México (Centro)" },
+  { value: "America/Cancun", label: "Cancún / Quintana Roo (Este)" },
+  { value: "America/Monterrey", label: "Monterrey" },
+  { value: "America/Chihuahua", label: "Chihuahua (Pacífico)" },
+  { value: "America/Hermosillo", label: "Hermosillo (Sonora)" },
+  { value: "America/Tijuana", label: "Tijuana (Noroeste)" },
+  { value: "America/Bogota", label: "Bogotá / Lima" },
+  { value: "America/Argentina/Buenos_Aires", label: "Buenos Aires" },
+  { value: "America/Santiago", label: "Santiago" },
+  { value: "America/New_York", label: "Nueva York (Este EE.UU.)" },
+  { value: "Europe/Madrid", label: "Madrid" },
+];
+
+const DEFAULT_HOUR: Omit<BusinessHour, "day"> = { enabled: false, open: "09:00", close: "22:00" };
+
 export default function TiendaConfigPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -21,6 +50,10 @@ export default function TiendaConfigPage() {
     // Estado de la tienda
     isOpen: true,
     closedMessage: "",
+    // Horario de atención automático
+    scheduleEnabled: false,
+    timezone: "America/Mexico_City",
+    businessHours: [] as BusinessHour[],
     // Envío por distancia
     deliveryMode: "FLAT" as "FLAT" | "DISTANCE",
     originLat: null as number | null,
@@ -47,6 +80,22 @@ export default function TiendaConfigPage() {
     );
   };
 
+  // Devuelve la franja configurada para un día, o el default si no existe.
+  const getDayHour = (day: number): BusinessHour =>
+    config.businessHours.find(h => h.day === day) || { day, ...DEFAULT_HOUR };
+
+  // Aplica un cambio parcial a la franja de un día, manteniendo el array ordenado.
+  const setDayHour = (day: number, patch: Partial<BusinessHour>) => {
+    setConfig(p => {
+      const current = p.businessHours.find(h => h.day === day) || { day, ...DEFAULT_HOUR };
+      const others = p.businessHours.filter(h => h.day !== day);
+      return {
+        ...p,
+        businessHours: [...others, { ...current, ...patch }].sort((a, b) => a.day - b.day),
+      };
+    });
+  };
+
   const storeUrl = config.slug ? getStoreUrl(config.slug) : "";
 
   const copyStoreUrl = async () => {
@@ -69,6 +118,14 @@ export default function TiendaConfigPage() {
           closedMessage: d.closedMessage ?? "",
           deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : "FLAT",
           isOpen: d.isOpen ?? true,
+          scheduleEnabled: d.scheduleEnabled ?? false,
+          timezone: d.timezone || "America/Mexico_City",
+          businessHours: (() => {
+            try {
+              const parsed = JSON.parse(d.businessHours || "[]");
+              return Array.isArray(parsed) ? parsed : [];
+            } catch { return []; }
+          })(),
         }));
       })
       .catch(() => {})
@@ -82,6 +139,8 @@ export default function TiendaConfigPage() {
       await api.put("/api/admin/config", {
         ...rest,
         freeDeliveryFrom: config.freeDeliveryFrom > 0 ? config.freeDeliveryFrom : null,
+        // businessHours viaja como JSON serializado (mismo patrón que Banners).
+        businessHours: JSON.stringify(config.businessHours),
       });
       window.location.reload();
     } catch (err: any) {
@@ -130,6 +189,90 @@ export default function TiendaConfigPage() {
               <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Mensaje al cliente (tienda cerrada)</label>
               <input type="text" value={config.closedMessage} placeholder="Ej. Volvemos mañana a las 9:00 am" onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, closedMessage: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
             </div>
+          )}
+        </div>
+
+        {/* Horario de atención automático */}
+        <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 space-y-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-black uppercase tracking-tighter">Horario Automático</p>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">
+                {config.scheduleEnabled ? "La tienda abre y cierra sola según el horario" : "Desactivado — controlas la apertura manualmente"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setConfig(p => ({ ...p, scheduleEnabled: !p.scheduleEnabled }))}
+              className={`relative w-16 h-9 rounded-full transition-all flex-shrink-0 ${config.scheduleEnabled ? "bg-emerald-500" : "bg-gray-700"}`}
+              aria-pressed={config.scheduleEnabled}
+            >
+              <span className={`absolute top-1 w-7 h-7 bg-white rounded-full transition-all ${config.scheduleEnabled ? "left-8" : "left-1"}`} />
+            </button>
+          </div>
+
+          {config.scheduleEnabled && (
+            <>
+              {!config.isOpen && (
+                <p className="text-[11px] text-amber-400/90 font-bold bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-3">
+                  El interruptor «Estado de la Tienda» está en cerrado y manda sobre el horario: la tienda seguirá cerrada hasta que lo vuelvas a abrir.
+                </p>
+              )}
+
+              <div>
+                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Zona horaria</label>
+                <select
+                  value={config.timezone}
+                  onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, timezone: v })); }}
+                  className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold"
+                >
+                  {TIMEZONES.map(tz => (
+                    <option key={tz.value} value={tz.value}>{tz.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                {WEEK_DAYS.map(d => {
+                  const h = getDayHour(d.value);
+                  return (
+                    <div key={d.value} className="flex items-center gap-3 bg-black/40 border border-white/5 rounded-2xl px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setDayHour(d.value, { enabled: !h.enabled })}
+                        className={`relative w-12 h-7 rounded-full transition-all flex-shrink-0 ${h.enabled ? "bg-emerald-500" : "bg-gray-700"}`}
+                        aria-pressed={h.enabled}
+                      >
+                        <span className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all ${h.enabled ? "left-6" : "left-1"}`} />
+                      </button>
+                      <span className="text-xs font-black uppercase tracking-tighter w-24">{d.label}</span>
+                      {h.enabled ? (
+                        <div className="flex items-center gap-2 ml-auto">
+                          <input
+                            type="time"
+                            value={h.open}
+                            onChange={(e) => { const v = e.target.value; setDayHour(d.value, { open: v }); }}
+                            className="bg-black border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-orange-500 transition-all text-sm font-bold"
+                          />
+                          <span className="text-gray-600 font-black text-xs">a</span>
+                          <input
+                            type="time"
+                            value={h.close}
+                            onChange={(e) => { const v = e.target.value; setDayHour(d.value, { close: v }); }}
+                            className="bg-black border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-orange-500 transition-all text-sm font-bold"
+                          />
+                        </div>
+                      ) : (
+                        <span className="ml-auto text-[10px] text-gray-600 font-black uppercase tracking-widest">Cerrado</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-gray-500 font-bold leading-relaxed ml-2">
+                Tip: para un turno nocturno que cruza medianoche (ej. 18:00 → 02:00), pon la hora de cierre menor a la de apertura.
+              </p>
+            </>
           )}
         </div>
 
