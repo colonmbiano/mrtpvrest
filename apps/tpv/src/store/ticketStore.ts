@@ -158,8 +158,9 @@ const emptyTicket = (
  * no mezclar drafts entre dispositivos compartidos.
  */
 export const useTicketStore = create<TicketState>()(persist((_set, get) => {
-  const set = (fn: any) => {
-    _set((state: any) => {
+  type TicketPatch = Partial<TicketState>;
+  const set = (fn: TicketPatch | ((state: TicketState) => TicketPatch)) => {
+    _set((state: TicketState) => {
       const next = typeof fn === "function" ? fn(state) : fn;
       const nextTickets = next.tickets !== undefined ? next.tickets : state.tickets;
       const nextIndex = next.activeIndex !== undefined ? next.activeIndex : state.activeIndex;

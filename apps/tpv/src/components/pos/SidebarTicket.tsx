@@ -563,22 +563,22 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* HEADER DEL TICKET */}
-      <div className="p-4 pb-3 flex flex-col gap-3 shrink-0 bg-[#0a0a0c] border-b border-white/5">
+      <div className="flex shrink-0 flex-col gap-2.5 border-b border-white/10 bg-[#0a0a0c] p-3">
         <OrderTypeToggle
           active={ticket.type}
           onChange={(type) => updateTicket({ type })}
           allowedTypes={tpvConfig.allowedOrderTypes}
         />
-        <div className="flex justify-between items-center">
-          <h2 className="text-[10px] font-black text-zinc-500 tracking-[0.2em] uppercase">Orden en curso</h2>
-          <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">Orden en curso</h2>
+          <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-amber-400">
             ID: {String(ticket.id).slice(-4)}
           </span>
         </div>
 
         <div className="flex gap-2">
           {ticket.type !== "DINE_IN" ? (
-            <div className="flex-1 min-w-0 bg-[#121316] border border-white/5 rounded-xl h-11 flex items-center px-3 gap-2 focus-within:border-amber-500/50 transition-all">
+            <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[#121316] px-3 transition-all focus-within:border-amber-500/50">
               <User size={15} className="text-zinc-600 shrink-0" />
               <input
                 placeholder="Nombre del cliente..."
@@ -588,7 +588,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               />
             </div>
           ) : (
-            <div className="flex-1 min-w-0 h-11 flex items-center px-1 gap-2 text-zinc-500">
+            <div className="flex h-10 min-w-0 flex-1 items-center gap-2 px-1 text-zinc-400">
               <MapPin size={15} className="text-emerald-400/70 shrink-0" />
               <span className="text-[11px] font-black uppercase tracking-[0.18em] truncate">
                 {ticket.tableName || ticket.table || "Sin mesa"}
@@ -601,7 +601,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             </div>
           )}
           <button
-            className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border border-white/5 bg-[#121316] text-zinc-600 active:bg-red-500/10 active:text-red-500 active:border-red-500/20 transition-all active:scale-95"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#121316] text-zinc-500 transition-all active:scale-95 active:border-red-500/20 active:bg-red-500/10 active:text-red-500"
             onClick={clearActiveItems}
             aria-label="Limpiar ticket"
           >
@@ -612,7 +612,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         {/* BUG-24: campos requeridos para DELIVERY. */}
         {ticket.type === "DELIVERY" && (
           <div className="flex flex-col gap-2">
-            <div className="flex-1 bg-[#121316] border border-white/5 rounded-xl h-11 flex items-center px-3 gap-2 focus-within:border-amber-500/50 transition-all">
+            <div className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[#121316] px-3 transition-all focus-within:border-amber-500/50">
               <Home size={15} className="text-zinc-600 shrink-0" />
               <input
                 placeholder="Dirección..."
@@ -626,7 +626,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                 </span>
               )}
             </div>
-            <div className="flex-1 bg-[#121316] border border-white/5 rounded-xl h-11 flex items-center px-3 gap-2 focus-within:border-amber-500/50 transition-all">
+            <div className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[#121316] px-3 transition-all focus-within:border-amber-500/50">
               <Phone size={15} className="text-zinc-600 shrink-0" />
               <input
                 placeholder="Teléfono..."
@@ -647,7 +647,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
       {/* LISTA DE ITEMS — área scrollable que ocupa lo que sobre entre
           header y bloque de totales/acciones (siempre fijo abajo). */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 space-y-3 py-3 bg-[#0a0a0c] scrollbar-hide">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-[#0a0a0c] px-3 py-3 scrollbar-hide">
         {/* Historial de rondas anteriores si existe activeOrderId */}
         {previousItems.length > 0 && (
           <div className="space-y-4 mb-8">
@@ -688,9 +688,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         )}
 
         {ticket.items.length === 0 && previousItems.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center opacity-20 gap-6">
-            <ShoppingCart size={64} className="text-zinc-500" />
-            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-center text-zinc-500">
+          <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] text-zinc-500">
+              <ShoppingCart size={34} />
+            </div>
+            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-zinc-500">
               Ticket vacío
             </p>
           </div>
@@ -713,10 +715,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
       {/* FOOTER DEL TICKET — fijo al fondo. Incluye bloque de totales
           (e-commerce style) + CTA primario + acciones secundarias. */}
-      <div className="bg-[#121316] border-t border-white/5 mt-auto shrink-0 relative overflow-hidden">
+      <div className="relative mt-auto shrink-0 overflow-hidden border-t border-white/10 bg-[#121316]">
         {/* BLOQUE DE TOTALES — Subtotal, IVA (16%), Descuento, Total.
             Estilo e-commerce: rows alineadas con valores tabulares. */}
-        <div className="relative z-10 px-4 py-3 border-b border-white/5 flex flex-col gap-1.5 bg-[#0d0e11]">
+        <div className="relative z-10 flex flex-col gap-1.5 border-b border-white/10 bg-[#0d0e11] px-4 py-3">
           <div className="flex justify-between items-baseline text-[11px]">
             <span className="font-bold uppercase tracking-[0.15em] text-zinc-500">
               Subtotal
@@ -743,11 +745,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               </span>
             </div>
           )}
-          <div className="flex justify-between items-baseline pt-1.5 mt-0.5 border-t border-white/5">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">
+          <div className="mt-0.5 flex items-baseline justify-between border-t border-white/10 pt-1.5">
+            <span className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-300">
               Total
             </span>
-            <span className="text-lg font-black text-amber-500 mono tabular-nums leading-none">
+            <span className="mono text-2xl font-black leading-none tabular-nums text-amber-400">
               ${total.toFixed(2)}
             </span>
           </div>

@@ -100,7 +100,7 @@ export default function TopNavDropdown({
       <div className="relative z-50" ref={menuRef}>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-2 border border-border text-tx-pri active:scale-95 transition-all hover:border-brand/50"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#6b5641] bg-[#1e1b18] text-[#f8e8d0] shadow-[0_4px_12px_rgba(44,31,19,0.22)] transition-all active:scale-95 hover:border-[#ff8400]/60 hover:text-[#ffb84d]"
         >
           <Menu size={20} />
           {unreadNotifs > 0 && (

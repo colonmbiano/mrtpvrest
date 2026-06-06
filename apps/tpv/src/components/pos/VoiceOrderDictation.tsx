@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Mic, MicOff } from "lucide-react";
 import { toast } from "sonner";
+import { Capacitor } from "@capacitor/core";
+import { SpeechRecognition as NativeSpeech } from "@capacitor-community/speech-recognition";
 import api from "@/lib/api";
 import { hapticError, hapticLight, hapticSuccess } from "@/lib/haptics";
 import { useTicketStore, type CartItem, type Product } from "@/store/ticketStore";
@@ -22,11 +24,30 @@ export default function VoiceOrderDictation() {
   const [status, setStatus] = useState<Status>("idle");
   const [supported, setSupported] = useState<boolean | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const isNative = Capacitor.isNativePlatform();
+
   const addItemToActive = useTicketStore((s) => s.addItemToActive);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     let cancelled = false;
+
+    // En Android (WebView) la Web Speech API no existe; usamos el plugin nativo
+    // que delega en el servicio de reconocimiento del sistema. En escritorio/dev
+    // caemos al webkitSpeechRecognition del navegador.
+    if (isNative) {
+      NativeSpeech.available()
+        .then(({ available }) => {
+          if (!cancelled) setSupported(Boolean(available));
+        })
+        .catch(() => {
+          if (!cancelled) setSupported(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     queueMicrotask(() => {
       if (cancelled) return;
       const SR =
@@ -37,7 +58,7 @@ export default function VoiceOrderDictation() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isNative]);
 
   async function sendDictation(prompt: string) {
     setStatus("processing");
@@ -96,15 +117,51 @@ export default function VoiceOrderDictation() {
     }
   }
 
+  async function startNativeDictation() {
+    try {
+      const perm = await NativeSpeech.requestPermissions();
+      if (perm.speechRecognition !== "granted") {
+        hapticError();
+        toast.error("Permiso de microfono denegado");
+        return;
+      }
+
+      hapticLight();
+      setStatus("listening");
+      // partialResults:false → la promesa resuelve con el texto final al callar.
+      // popup:false para no abrir el diálogo de Google y mantener el flujo del TPV.
+      const { matches } = await NativeSpeech.start({
+        language: "es-MX",
+        maxResults: 1,
+        partialResults: false,
+        popup: false,
+      });
+      const text = String(matches?.[0] || "").trim();
+      if (text) await sendDictation(text);
+      else setStatus("idle");
+    } catch (err: any) {
+      setStatus("error");
+      hapticError();
+      toast.error(`Error de dictado: ${err?.message || "desconocido"}`);
+      setTimeout(() => setStatus("idle"), 900);
+    }
+  }
+
   function handleClick() {
     if (!supported) {
-      toast.error("Tu navegador no soporta dictado por voz");
+      toast.error("Dictado por voz no disponible en este dispositivo");
       hapticError();
       return;
     }
     if (status === "processing") return;
     if (status === "listening") {
-      recognitionRef.current?.stop();
+      if (isNative) NativeSpeech.stop().catch(() => {});
+      else recognitionRef.current?.stop();
+      return;
+    }
+
+    if (isNative) {
+      startNativeDictation();
       return;
     }
 
