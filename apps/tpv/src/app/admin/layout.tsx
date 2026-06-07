@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { useHydrated } from "@/hooks/useClientValue";
 import Link from "next/link";
-import { Printer, Monitor, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, Grid3x3, Palette, Layers, BookOpen, LogOut, TrendingUp } from "lucide-react";
+import { Printer, Monitor, MonitorPlay, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, Grid3x3, Palette, Layers, BookOpen, LogOut, TrendingUp } from "lucide-react";
 import api from "@/lib/api";
 
 const ADMIN_ROLES = ["OWNER", "ADMIN", "MANAGER"] as const;
@@ -87,6 +87,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: "/admin/usuarios",   label: "Personal",              icon: Users },
     { href: "/admin/pagos",      label: "Pagos",                 icon: CreditCard },
     { href: "/admin/apariencia", label: "Apariencia",            icon: Palette },
+    { href: "/admin/pantalla",   label: "Pantalla",              icon: MonitorPlay },
     { href: "/admin/seguridad",  label: "Seguridad",             icon: ShieldCheck },
   ];
 
