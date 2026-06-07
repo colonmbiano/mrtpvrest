@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Award, LogOut, WifiOff } from "lucide-react";
+import { AlertTriangle, Award, LogOut, RotateCw, WifiOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEmployeeSessionStore } from "@/store/useEmployeeSessionStore";
+import { useOfflineQueueStore } from "@/store/useOfflineQueueStore";
 import { useWaiterOrderStore } from "@/store/useWaiterOrderStore";
 
 export default function PerfilPage() {
@@ -12,6 +13,10 @@ export default function PerfilPage() {
   const logout = useEmployeeSessionStore((state) => state.logout);
   const ticketItems = useWaiterOrderStore((state) => state.ticketItems);
   const lastLocalChangeAt = useWaiterOrderStore((state) => state.lastLocalChangeAt);
+  const failedTransactions = useOfflineQueueStore((state) =>
+    state.queue.filter((transaction) => transaction.failedPermanently),
+  );
+  const retryFailed = useOfflineQueueStore((state) => state.retryFailed);
   const total = ticketItems.reduce((sum, item) => sum + item.total, 0);
   const employeeName =
     employee?.name ||
@@ -41,6 +46,35 @@ export default function PerfilPage() {
           </p>
         </article>
       </div>
+
+      {failedTransactions.length > 0 && (
+        <article className="mt-3 rounded-lg border border-[#ff6b6b] bg-[#121214] p-5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-1 shrink-0 text-[#ff6b6b]" size={28} />
+            <div className="min-w-0">
+              <p className="text-lg font-black text-[#ff6b6b]">
+                {failedTransactions.length} comanda{failedTransactions.length === 1 ? "" : "s"} sin enviar
+              </p>
+              <p className="mt-1 text-sm font-bold text-neutral-400">
+                El servidor rechazó {failedTransactions.length === 1 ? "esta comanda" : "estas comandas"} varias veces. Revisa sesion, sucursal y turno, luego reintenta.
+              </p>
+              {failedTransactions[0]?.lastError && (
+                <p className="mt-2 break-words text-sm font-bold text-neutral-500">
+                  Ultimo error: {failedTransactions[0].lastError}
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={retryFailed}
+            className="mt-4 flex min-h-[64px] w-full items-center justify-center gap-3 rounded-lg border border-[#ff6b6b] bg-[#18181b] px-5 text-lg font-black text-[#ff6b6b] active:scale-95 transition-all duration-150"
+          >
+            <RotateCw size={22} />
+            Reintentar comandas fallidas
+          </button>
+        </article>
+      )}
 
       <Link
         href="/setup"

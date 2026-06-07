@@ -21,7 +21,6 @@ export default function SetupPage() {
   const [step, setStep] = useState<Step>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [token, setToken] = useState("");
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const [showEmailDomains, setShowEmailDomains] = useState(false);
@@ -46,7 +45,6 @@ export default function SetupPage() {
     try {
       const loginResponse = await api.post("/api/auth/login", { email, password });
       const nextToken = loginResponse.data.accessToken as string;
-      setToken(nextToken);
       sessionStorage.setItem("tpv-access-token", nextToken);
       localStorage.setItem("accessToken", nextToken);
 
