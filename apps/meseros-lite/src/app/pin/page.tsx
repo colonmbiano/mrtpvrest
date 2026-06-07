@@ -146,14 +146,16 @@ export default function PinPage() {
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => router.replace("/setup")}
-          className="flex min-h-[64px] items-center justify-center gap-2 rounded-lg border border-neutral-800 bg-[#121214] px-4 text-base font-black text-neutral-300 active:scale-95 transition-all duration-150"
-        >
-          <ArrowLeft size={22} />
-          Cambiar restaurante o sucursal
-        </button>
+        {configured && (
+          <button
+            type="button"
+            onClick={() => router.replace("/setup")}
+            className="flex min-h-[64px] items-center justify-center gap-2 rounded-lg border border-neutral-800 bg-[#121214] px-4 text-base font-black text-neutral-300 active:scale-95 transition-all duration-150"
+          >
+            <ArrowLeft size={22} />
+            Cambiar restaurante o sucursal
+          </button>
+        )}
       </div>
     </section>
   );
