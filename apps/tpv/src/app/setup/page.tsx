@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from '@/lib/api';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, ArrowLeft } from 'lucide-react';
 import LoginStep from './steps/LoginStep';
 import LocationStep from './steps/LocationStep';
 import DeviceStep from './steps/DeviceStep';
@@ -212,6 +212,15 @@ export default function SetupPage() {
     }
   };
 
+  // Permite corregir un paso anterior sin reiniciar todo el wizard. No aplica
+  // en 'login' (primer paso) ni en 'saving' (vinculación en curso).
+  const goBack = () => {
+    setError('');
+    if (step === 'device') setStep('location');
+    else if (step === 'location') setStep('login');
+  };
+  const canGoBack = !loading && (step === 'location' || step === 'device');
+
   return (
     <div
       className="fixed inset-0 overflow-auto flex items-center justify-center px-4 py-[max(1rem,env(safe-area-inset-top))] sm:p-6"
@@ -245,6 +254,15 @@ export default function SetupPage() {
       )}
 
       <div className="w-full max-w-lg relative z-10 my-16 sm:my-10 landscape:max-w-4xl">
+        {canGoBack && (
+          <button
+            onClick={goBack}
+            className="mb-4 inline-flex items-center gap-2 text-sm font-bold transition-opacity hover:opacity-80"
+            style={{ color: 'var(--muted, var(--foreground))' }}
+          >
+            <ArrowLeft size={18} /> Atrás
+          </button>
+        )}
         <div
           className="rounded-2xl p-5 sm:p-8 lg:p-12 landscape:p-7"
           style={{ 
