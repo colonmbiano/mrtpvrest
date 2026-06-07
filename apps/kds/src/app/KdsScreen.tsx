@@ -11,7 +11,7 @@ import { io, type Socket } from "socket.io-client";
 import api, { getApiUrl } from "@/lib/api";
 import NumpadPIN from "@/components/NumpadPIN";
 import { startTcpListener, stopTcpListener, listenForData } from "@/lib/tcpListener";
-import { parseEscPos } from "@/lib/escpos-parser";
+import { parseEscPosTickets, type ParsedTicketItem } from "@/lib/escpos-parser";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────
 
@@ -31,6 +31,8 @@ interface TcpTicket {
   receivedAt: number;
   from: string;
   lines: string[];
+  items: ParsedTicketItem[];
+  headerLines: string[];
   isKitchen: boolean;
   isReceipt: boolean;
   orderNumber: string | null;
@@ -269,19 +271,24 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
         if (cancelled) return;
         setTcpListening(true);
         await listenForData((ev) => {
-          const parsed = parseEscPos(ev.text);
-          if (parsed.lines.length === 0) return;
-          const ticket: TcpTicket = {
-            id: `tcp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            receivedAt: Date.now(),
+          // Un payload puede traer varias comandas concatenadas — una tarjeta
+          // por comanda, en orden de llegada.
+          const parsedList = parseEscPosTickets(ev.text);
+          if (parsedList.length === 0) return;
+          const now = Date.now();
+          const newTickets: TcpTicket[] = parsedList.map((parsed, idx) => ({
+            id: `tcp-${now}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+            receivedAt: now,
             from: ev.from,
             lines: parsed.lines,
+            items: parsed.items,
+            headerLines: parsed.headerLines,
             isKitchen: parsed.isKitchen,
             isReceipt: parsed.isReceipt,
             orderNumber: parsed.orderNumber,
             tableLabel: parsed.tableLabel,
-          };
-          setTcpTickets((curr) => [ticket, ...curr].slice(0, 50));
+          }));
+          setTcpTickets((curr) => [...newTickets, ...curr].slice(0, 50));
         });
       } catch {
         // Plugin no disponible (web build) o port ocupado: el KDS sigue
@@ -1521,9 +1528,58 @@ function TcpTicketCard({ ticket, onDismiss }: { ticket: TcpTicket; onDismiss: ()
         </button>
       </div>
 
-      <pre className="text-[11px] leading-relaxed font-mono text-white/85 whitespace-pre-wrap break-words bg-black/20 rounded-xl p-3 max-h-[280px] overflow-y-auto scrollbar-hide">
+      {ticket.headerLines.length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-bold text-white/45 uppercase tracking-wide">
+          {ticket.headerLines.map((line, idx) => (
+            <span key={idx}>{line}</span>
+          ))}
+        </div>
+      )}
+
+      {ticket.items.length > 0 ? (
+        <div className="flex flex-col gap-2 max-h-[280px] overflow-y-auto scrollbar-hide">
+          {ticket.items.map((item, idx) => {
+            const prevGroup = idx > 0 ? ticket.items[idx - 1]?.group : undefined;
+            const showGroup = item.group && item.group !== prevGroup;
+            return (
+              <div key={idx} className="flex flex-col gap-1">
+                {showGroup && (
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/45 mt-1">
+                    {item.group}
+                  </p>
+                )}
+                <div className="flex items-start gap-3 rounded-xl bg-black/20 px-3 py-2">
+                  <span
+                    className="shrink-0 text-base font-black tabular-nums"
+                    style={{ color: tag.color }}
+                  >
+                    {item.quantity}×
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-black text-white leading-tight break-words">
+                      {item.name}
+                    </p>
+                    {item.modifiers.map((mod, mIdx) => (
+                      <p key={mIdx} className="text-[12px] font-semibold text-white/65 leading-tight">
+                        + {mod}
+                      </p>
+                    ))}
+                    {item.notes.map((note, nIdx) => (
+                      <p key={nIdx} className="text-[12px] font-bold text-[#ffb84d] leading-tight">
+                        {note}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <pre className="text-[11px] leading-relaxed font-mono text-white/85 whitespace-pre-wrap break-words bg-black/20 rounded-xl p-3 max-h-[280px] overflow-y-auto scrollbar-hide">
 {ticket.lines.join("\n")}
-      </pre>
+        </pre>
+      )}
 
       <div className="flex items-center justify-between text-[10px] font-bold text-white/40 uppercase tracking-widest">
         <span>{time}</span>
