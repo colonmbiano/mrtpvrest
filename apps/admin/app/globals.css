@@ -112,6 +112,68 @@
   --shadow-md: 0 4px 16px rgba(0,0,0,0.10);
 }
 
+/* WARMTECH mobile theme. Desktop keeps the canonical admin palette. */
+@media (max-width: 767px) {
+  :root,
+  [data-theme="dark"] {
+    --bg: #17120d;
+    --surf-1: #1f1810;
+    --surf-2: #2a2017;
+    --surf-3: #352a1f;
+    --bd-1: rgba(255,238,220,.09);
+    --bd-2: rgba(255,238,220,.16);
+    --tx: #f7ede1;
+    --tx-hi: #fffaf3;
+    --tx-mid: #dccab6;
+    --tx-mut: #a8957f;
+    --tx-dim: #7a6a59;
+    --brand-primary: #ff8a3d !important;
+    --brand-secondary: #ffb169 !important;
+    --iris-soft: rgba(255,138,61,.15);
+    --iris-glow: rgba(255,138,61,.40);
+    --ok: #4fbf8b;
+    --ok-soft: rgba(79,191,139,.16);
+    --warn: #f6b343;
+    --warn-soft: rgba(246,179,67,.16);
+    --err: #f06a4d;
+    --err-soft: rgba(240,106,77,.16);
+    --info: #62a0e0;
+    --info-soft: rgba(98,160,224,.16);
+    --shadow-sm: 0 1px 0 rgba(255,240,220,.04);
+    --shadow-md: 0 8px 24px rgba(0,0,0,.30);
+  }
+
+  [data-theme="light"] {
+    --bg: #f4ebdd;
+    --surf-1: #fffbf4;
+    --surf-2: #f3e9d9;
+    --surf-3: #ece0cd;
+    --bd-1: #e7d9c4;
+    --bd-2: #d8c6aa;
+    --tx: #241a11;
+    --tx-hi: #150d05;
+    --tx-mid: #4d3f30;
+    --tx-mut: #82705a;
+    --tx-dim: #a4917a;
+    --brand-primary: #c95a2f !important;
+    --brand-secondary: #e3794c !important;
+    --iris-soft: rgba(201,90,47,.10);
+    --iris-glow: rgba(201,90,47,.24);
+    --ok: #2e8c5b;
+    --ok-soft: rgba(46,140,91,.12);
+    --warn: #bd831b;
+    --warn-soft: rgba(189,131,27,.13);
+    --err: #c0432c;
+    --err-soft: rgba(192,67,44,.12);
+    --info: #2c6aa6;
+    --info-soft: rgba(44,106,166,.12);
+    --shadow-sm: 0 1px 2px rgba(74,48,24,.05);
+    --shadow-md: 0 6px 18px rgba(74,48,24,.07);
+  }
+
+  body { overscroll-behavior-y: none; }
+}
+
 /* ── BASE ── */
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -133,3 +195,22 @@ body {
   50%       { opacity: 0.4; }
 }
 .animate-pulse { animation: pulse-live 2s ease-in-out infinite; }
+
+@keyframes warmtech-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.warmtech-enter {
+  animation: warmtech-enter 320ms cubic-bezier(.22,.7,.3,1) both;
+}
+
+.warmtech-card {
+  background: var(--surf-1);
+  border: 1px solid var(--bd-1);
+  border-radius: 18px;
+  box-shadow: var(--shadow-md);
+}
+
+.warmtech-scrollbar { scrollbar-width: none; }
+.warmtech-scrollbar::-webkit-scrollbar { display: none; }

@@ -7,6 +7,7 @@ import { getUser } from "@/lib/auth";
 import { AccentInjector } from "@/components/AccentInjector";
 import FloatingVoiceAgent from "@/components/FloatingVoiceAgent";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
+import MobileAdminChrome from "@/components/mobile/MobileAdminChrome";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -25,7 +26,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen" style={{background:"var(--bg)"}}>
       <AccentInjector />
-      <Sidebar isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+      <div className="hidden md:block">
+        <Sidebar isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+      </div>
       {mobileNavOpen && (
         <div
           onClick={() => setMobileNavOpen(false)}
@@ -35,8 +38,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         />
       )}
       <div className="md:ml-64 min-h-screen flex flex-col">
+        <MobileAdminChrome />
         <div
-          className="md:hidden sticky top-0 z-20 flex items-center justify-between px-4 py-3"
+          className="hidden sticky top-0 z-20 items-center justify-between px-4 py-3"
           style={{ background: "var(--surf)", borderBottom: "1px solid var(--border)" }}
         >
           <button
@@ -62,13 +66,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </span>
           <div style={{ width: 40 }} aria-hidden="true" />
         </div>
-        <TrialBanner />
-        <main className="flex-1 p-4 md:p-8">
-          <OnboardingChecklist />
-          {children}
+        <div className="hidden md:block"><TrialBanner /></div>
+        <main className="flex-1 pb-24 md:p-8 md:pb-8">
+          <div className="hidden md:block"><OnboardingChecklist /></div>
+          <div className={pathname === "/admin" ? "" : "px-4 pt-4 md:p-0"}>
+            {children}
+          </div>
         </main>
       </div>
-      {!pathname?.startsWith("/admin/reportes/ia") && <FloatingVoiceAgent />}
+      <div className="hidden md:block">
+        {!pathname?.startsWith("/admin/reportes/ia") && <FloatingVoiceAgent />}
+      </div>
     </div>
   );
 }
