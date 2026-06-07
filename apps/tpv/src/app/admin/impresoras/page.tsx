@@ -165,7 +165,7 @@ export default function ImpresorasPage() {
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto min-h-screen font-sans">
+    <div className="p-8 max-w-6xl mx-auto min-h-[100dvh] font-sans">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10">
         <div className="flex items-start gap-4">

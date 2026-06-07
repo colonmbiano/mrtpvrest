@@ -93,13 +93,13 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const itemCount = activeTicket.items.reduce((acc, i) => acc + i.quantity, 0);
   const sidebarWidth = useClientValue(
     () => {
-      if (typeof window === "undefined") return 380;
+      if (typeof window === "undefined") return 320;
       const preset = window.localStorage.getItem("sidebarWidth");
-      if (preset === "S") return 320;
-      if (preset === "L") return 440;
-      return 380;
+      if (preset === "S") return 300;
+      if (preset === "L") return 400;
+      return 320;
     },
-    380,
+    320,
     subscribeToEvents("sidebar-width-changed", "storage"),
   );
 
@@ -632,7 +632,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     handleChargeFromDetail();
   };
 
-  if (!mounted) return <div className="h-screen w-full bg-surf-0" />;
+  if (!mounted) return <div className="h-[100dvh] w-full bg-surf-0" />;
 
   return (
     <div className="flex h-[100dvh] w-full bg-surf-0 overflow-hidden font-sans text-tx-pri">
@@ -877,12 +877,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       {/* LAYOUT PRINCIPAL — Grid 75/25 (col-span-3 catálogo, col-span-1 ticket).
           En móvil se colapsa a una sola columna y el toggle FAB alterna vista. */}
       <div
-        className="flex h-screen w-full flex-1 select-none overflow-hidden bg-[#ebe5dc] font-outfit md:grid"
+        className="flex h-full w-full flex-1 select-none overflow-hidden bg-surf-0 font-outfit md:grid"
         style={{ gridTemplateColumns: `minmax(0,1fr) ${sidebarWidth}px` }}
       >
         {/* CATALOGO — col-span-3 (75%) */}
         <div
-          className={`${mobileView === "menu" ? "flex" : "hidden"} relative min-h-0 min-w-0 w-full flex-col overflow-hidden border-r border-[#d8cbbb] bg-[#ebe5dc] md:flex`}
+          className={`${mobileView === "menu" ? "flex" : "hidden"} relative min-h-0 min-w-0 w-full flex-col overflow-hidden border-r border-bd bg-surf-0 md:flex`}
         >
           {/* FASE 6 · BANNER MODO PRÉSTAMO */}
           {isLoanMode && (
@@ -905,7 +905,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           )}
 
           {/* TOP BAR: busqueda rapida + cuentas frecuentes. */}
-          <header className="z-10 flex h-14 shrink-0 items-center gap-2 border-b border-[#d8cbbb] bg-[#f7f0e6] px-3 shadow-[0_1px_0_rgba(255,255,255,0.75)]">
+          <header className="z-10 flex h-14 shrink-0 items-center gap-2 border-b border-bd bg-surf-1 px-3">
             <div className="flex shrink-0 items-center gap-2">
               <TopNavDropdown
                 onOpenMenu={() => setShowMenu(true)}
@@ -920,13 +920,13 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
             <label className="relative min-w-[220px] flex-1">
               <Search
                 size={20}
-                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-tx-mut"
               />
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Buscar producto..."
-                className="h-11 w-full rounded-lg border-2 border-[#cfc2b2] bg-[#fff8ee] pl-11 pr-4 text-[16px] font-black text-slate-950 outline-none placeholder:text-slate-400 focus:border-[#ff8400]"
+                className="h-11 w-full rounded-lg border-2 border-bd bg-surf-2 pl-11 pr-4 text-[16px] font-black text-tx-pri outline-none placeholder:text-tx-mut focus:border-iris-500"
               />
             </label>
 
@@ -942,10 +942,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                     key={type}
                     type="button"
                     onClick={() => updateTicket({ type: type as typeof activeTicket.type })}
-                    className={`h-11 min-w-[94px] rounded-lg border-2 px-3 text-[11px] font-black uppercase focus:outline-none focus:ring-2 focus:ring-slate-950 ${
+                    className={`h-11 min-w-[94px] rounded-lg border-2 px-3 text-[11px] font-black uppercase focus:outline-none focus:ring-2 focus:ring-iris-500 ${
                       active
-                        ? "border-[#ff8400] bg-[#201915] text-[#ffb84d] shadow-[0_0_0_1px_rgba(255,132,0,0.12)]"
-                        : "border-[#cfc2b2] bg-[#fff8ee] text-slate-800 active:bg-[#f5eadc]"
+                        ? "border-iris-500 bg-iris-soft text-iris-500"
+                        : "border-bd bg-surf-2 text-tx-sec active:bg-surf-3"
                     }`}
                   >
                     {label}
@@ -997,7 +997,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       {/* MOBILE FAB: TOGGLE MENU/TICKET */}
       <button
         onClick={() => setMobileView(mobileView === "menu" ? "ticket" : "menu")}
-        className="fixed bottom-6 right-6 z-50 flex h-16 w-16 items-center justify-center rounded-lg bg-slate-950 text-white active:bg-slate-700 md:hidden"
+        className="fixed bottom-6 right-6 z-50 flex h-16 w-16 items-center justify-center rounded-lg bg-iris-500 text-iris-fg active:brightness-90 md:hidden"
         aria-label={mobileView === "menu" ? "Ver ticket" : "Ver menú"}
       >
         {mobileView === "menu" ? (

@@ -213,6 +213,7 @@ export default function LockedPage() {
           <NumpadPIN
             onSubmit={handlePINSubmit}
             disabled={isValidating}
+            autoSubmit
             onChange={(value) => {
               if (value && error) setError("");
             }}

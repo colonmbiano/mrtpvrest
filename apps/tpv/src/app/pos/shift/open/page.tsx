@@ -79,7 +79,7 @@ const ShiftOpenPage = () => {
 
   if (checking) {
     return (
-      <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-[#0a0a0c] flex items-center justify-center">
         <div className="text-amber-500 animate-pulse font-black uppercase tracking-widest">
           Verificando turno...
         </div>
@@ -88,7 +88,7 @@ const ShiftOpenPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0c] flex flex-col font-sans text-white overflow-hidden relative">
+    <div className="min-h-[100dvh] bg-[#0a0a0c] flex flex-col font-sans text-white overflow-hidden relative">
       {/* Glow Effects */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
         <div className="absolute -top-60 -left-60 w-[600px] h-[600px] bg-amber-500/5 blur-[120px] rounded-full" />
