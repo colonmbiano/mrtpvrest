@@ -88,17 +88,33 @@ los tres archivos muertos.
 ## ✅ Arreglado — Componente de PIN reutilizable
 
 **Problema:** la regla "solo dígitos, máx 6" (`replace(/\D/g, "").slice(0, 6)`)
-+ `inputMode="numeric"` estaba copiada en `EmployeeModal` y `DiscountModal`, con
-mensajes inconsistentes (label "4-6 dígitos" vs error "al menos 4 dígitos").
++ `inputMode="numeric"` estaba repetida en varios editores de PIN.
 
-**Solución:** nuevo `src/components/ui/PinInput.tsx` con variantes `masked`
-(PIN de autorización, type=password) e icono de candado. Lo usan `EmployeeModal`
-y `modals/DiscountModal`. Se alineó el mensaje de validación a "PIN de 4 a 6
-dígitos".
+**Solución:** nuevo `src/components/ui/PinInput.tsx`, un wrapper agnóstico de
+estilo (reenvía `className`/`style`/`placeholder` al `<input>`) con variante
+`masked`. Aplicado al único editor de PIN **vivo** que quedó tras limpiar el
+código muerto: el `EmployeeModal` inline de `app/admin/usuarios/page.tsx`.
 
-> Nota: `components/modals/TicketConfigModal.tsx` (que también reimplementaba el
-> PIN) resultó ser código muerto — el editor de tickets vivo es
-> `app/admin/tickets/page.tsx`. Queda como dead-code a eliminar (ver pendientes).
+## ✅ Arreglado — Sistema de modales muerto eliminado
+
+**Problema:** la app tenía dos arquitecturas de modal. Al verificar resultó que
+**toda** la basada en `ModalStack` + `ModalContext` estaba muerta: el único
+componente que montaba `<ModalStack>` era `TPVLayoutWrapper`, que no se usaba en
+ningún lado (pertenecía a la antigua página raíz, conservada como
+`page.tsx.bak`). Ninguna pantalla llamaba `openPayment`/`openDiscount`/etc. Los
+flujos vivos están inline en las páginas admin y en `components/pos/`.
+
+**Solución:** se eliminaron 14 archivos muertos:
+- `components/tpv/ModalStack.tsx`, `components/tpv/TPVLayoutWrapper.tsx`,
+  `contexts/ModalContext.tsx`
+- `components/modals/`: PaymentModal, DiscountModal, OrderDetailModal,
+  ProductModal, CategoryModal, EmployeeModal, ReportModal, ConfirmModal,
+  ChangeOrderTypeModal, TicketConfigModal
+- `app/page.tsx.bak` (backup obsoleto)
+- `ModalRoot` dejó de envolver en `<ModalProvider>`.
+
+`components/modals/CatalogSettingsSheet.tsx` se conserva (lo usa
+`pos/menu/layout`).
 
 ---
 
@@ -113,8 +129,8 @@ riesgo/alcance:
   localStorage (`uiScale`, `sidebarWidth`) y `tpv-display-config`
   (`gridSize`, `sound`, `showImages`, `fontSize`). Además `gridSize`/`fontSize`
   se solapan con `CatalogSettingsSheet` y el tab display de `TPVConfigModal`.
-- **Config de tickets/cocina duplicada**: `TicketConfigModal` ↔ tab Cocina de
-  `TPVConfigModal`. → una sola fuente.
+- **Config de tickets/cocina duplicada**: `app/admin/tickets/page.tsx` ↔ tab
+  Cocina de `TPVConfigModal`. → una sola fuente (necesita decisión).
 - **Ruteo de impresoras en 3-4 sitios**: `admin/impresoras` (directo),
   `admin/grupos-impresoras` (grupo), `PrinterCategoriesModal`, form de
   `TPVConfigModal`. Precedencia poco clara.
@@ -122,28 +138,23 @@ riesgo/alcance:
 - **Configurador inline duplicado**: `app/pos/menu/page.tsx` reimplementa la
   lógica de grupos/variantes/validación; convendría extraer un componente
   compartido. (Los duplicados muertos ya se eliminaron.)
-- **Dead code**: `components/modals/TicketConfigModal.tsx` y los dos
-  DiscountModal/PaymentModal paralelos (`components/modals/` vs
-  `components/pos/`) — revisar y eliminar los no usados.
 
 ### Arquitectura de modales
 
-- **Dos sistemas**: 10 modales usan `BaseModal` + `ModalContext` + `ModalStack`;
-  9 usan overlay propio fuera del stack (ProductConfigurator, VariantPicker,
-  CatalogSettingsSheet, TicketConfigModal, TPVConfigModal, ShiftModal,
-  IngredientShortageModal, DriverMovementsModal, PrinterCategoriesModal).
-  Resultado: sin stacking consistente, riesgo de z-index, escape inconsistente.
-- `TPVConfigModal` abre el form de impresora como **overlay anidado** dentro de
-  sí mismo.
+- Los modales restantes (`TPVConfigModal`, `ShiftModal`,
+  `IngredientShortageModal`, `DriverMovementsModal`, `PrinterCategoriesModal`,
+  y los `components/pos/` de pago/descuento) usan overlay propio en vez de un
+  `BaseModal` común. `TPVConfigModal` abre el form de impresora como **overlay
+  anidado** dentro de sí mismo. → unificar sobre `BaseModal`.
 
 ### Claridad
 
 - Botón "probar impresora" escondido dentro del form de edición.
 - Variantes vs Modificadores vs Complementos (3 sistemas en `admin/menu`) sin
   guía de uso; "3 sin costo" ambiguo.
-- "Cancelar" en `PaymentModal` se confunde con "cancelar la orden".
+- "Cancelar" en el modal de pago se confunde con "cancelar la orden".
 - Modo claro experimental con bugs conocidos sigue visible.
-- `CategoryModal` tiene campo `icon` en el modelo pero no en el formulario.
+- El editor de categoría tiene campo `icon` en el modelo pero no en el form.
 
 ### Flujo
 

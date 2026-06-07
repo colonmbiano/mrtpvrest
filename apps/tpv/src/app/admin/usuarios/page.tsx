@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import BackButton from "@/components/BackButton";
+import PinInput from "@/components/ui/PinInput";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 
 const ROLES = ["OWNER", "ADMIN", "MANAGER", "CASHIER", "WAITER", "KITCHEN", "COOK", "DELIVERY"];
@@ -516,16 +517,11 @@ function EmployeeModal({
             </Field>
 
             <Field label={isEdit ? "Cambiar PIN de acceso" : "PIN inicial (4-6 dígitos)"}>
-              <input
-                type="password"
-                inputMode="numeric"
-                pattern="\d*"
+              <PinInput
+                masked
                 value={form.pin}
-                onChange={(e) =>
-                  setForm({ ...form, pin: e.target.value.replace(/\D/g, "").slice(0, 6) })
-                }
+                onChange={(pin) => setForm({ ...form, pin })}
                 placeholder={isEdit ? "••••••" : "Ej. 2580"}
-                maxLength={6}
                 className="w-full h-14 min-h-[56px] px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-black tabular-nums text-lg outline-none focus:border-[#ffb84d]/50 transition-colors placeholder:text-white/30"
               />
             </Field>
