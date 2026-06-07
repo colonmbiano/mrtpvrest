@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Award, LogOut, RotateCw, WifiOff } from "lucide-react";
+import { AlertTriangle, Award, LogOut, Printer, RotateCw, WifiOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEmployeeSessionStore } from "@/store/useEmployeeSessionStore";
 import { useOfflineQueueStore } from "@/store/useOfflineQueueStore";
@@ -75,6 +75,14 @@ export default function PerfilPage() {
           </button>
         </article>
       )}
+
+      <Link
+        href="/impresion"
+        className="mt-3 flex min-h-[72px] items-center justify-center gap-3 rounded-lg border border-neutral-800 bg-[#121214] px-5 text-xl font-black text-neutral-200 active:scale-95 transition-all duration-150"
+      >
+        <Printer size={24} />
+        Impresión (admin)
+      </Link>
 
       <Link
         href="/setup"
