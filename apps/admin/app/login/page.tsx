@@ -1,19 +1,32 @@
 "use client";
+
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  AlertCircle, ArrowRight, BarChart3, Check, ChefHat, Clock3,
+  Eye, EyeOff, LockKeyhole, Mail, RefreshCw, ShieldCheck,
+  ShoppingBag, Sparkles, UsersRound,
+} from "lucide-react";
 import api from "@/lib/api";
 import { getApiUrl } from "@/lib/config";
 
+const highlights = [
+  { icon: ShoppingBag, value: "142", label: "Pedidos hoy" },
+  { icon: BarChart3, value: "+12.4%", label: "Ventas" },
+  { icon: Clock3, value: "14 min", label: "Preparación" },
+  { icon: UsersRound, value: "4", label: "En turno" },
+];
+
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail]           = useState("");
-  const [password, setPassword]     = useState("");
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState("");
-  const [showPass, setShowPass]     = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showPass, setShowPass] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
-  const [resending, setResending]   = useState(false);
+  const [resending, setResending] = useState(false);
   const [resendDone, setResendDone] = useState(false);
 
   const handleResend = async () => {
@@ -26,7 +39,9 @@ export default function LoginPage() {
       });
       setResendDone(true);
       setTimeout(() => setResendDone(false), 5000);
-    } catch { /* silencioso */ }
+    } catch {
+      // Keep the verification modal usable if the resend endpoint is unavailable.
+    }
     setResending(false);
   };
 
@@ -34,15 +49,14 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    // Defensa: descartar contexto stale para que el interceptor no inyecte
-    // un x-restaurant-id ajeno en la propia llamada de login.
     localStorage.removeItem("restaurantId");
     localStorage.removeItem("locationId");
+
     try {
       const { data } = await api.post("/api/auth/login", { email, password });
-      localStorage.setItem("accessToken",  data.accessToken);
+      localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("refreshToken", data.refreshToken);
-      localStorage.setItem("user",         JSON.stringify(data.user));
+      localStorage.setItem("user", JSON.stringify(data.user));
       if (data.user?.restaurantId) localStorage.setItem("restaurantId", data.user.restaurantId);
       document.cookie = `mb-role=${data.user.role}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
 
@@ -51,7 +65,6 @@ export default function LoginPage() {
         return;
       }
 
-      // Si el usuario no tiene restaurante asociado → forzar onboarding
       if (!data.user?.restaurantId) {
         router.push("/admin/configurar-negocio");
         return;
@@ -62,21 +75,16 @@ export default function LoginPage() {
         const tenantRes = await api.get("/api/tenant/me");
         tenant = tenantRes.data;
       } catch {
-        // Si no se puede resolver el tenant, enviamos a onboarding
         router.push("/admin/configurar-negocio");
         return;
       }
 
-      // Si el tenant no tiene restaurantes/sucursales → forzar onboarding
       if (!tenant?.restaurants || tenant.restaurants.length === 0) {
         router.push("/admin/configurar-negocio");
         return;
       }
 
-      // Guardar accentColor para ThemeProvider
-      if (tenant.accentColor) {
-        localStorage.setItem("mb-accent", tenant.accentColor);
-      }
+      if (tenant.accentColor) localStorage.setItem("mb-accent", tenant.accentColor);
 
       if (!tenant.emailVerifiedAt) {
         setPendingEmail(data.user.email);
@@ -92,177 +100,174 @@ export default function LoginPage() {
   }
 
   return (
-    <>
-      {/* Modal email pendiente */}
+    <main className="min-h-screen bg-[#17120d] font-sans text-[#f7ede1]">
       {pendingEmail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md transition-all">
-          <div className="w-full max-w-md bg-surf-1 border border-bd-2 rounded-3xl p-10 text-center shadow-[0_0_60px_rgba(0,0,0,0.5)] transform animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 mx-auto rounded-full bg-iris-500/10 border border-iris-500/20 flex items-center justify-center text-4xl mb-6 shadow-inner">
-              ✉️
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[#17120d]/90 p-5 backdrop-blur-md">
+          <section className="w-full max-w-md rounded-[28px] border border-[#e7d9c4] bg-[#fffaf4] p-7 text-center text-[#241a11] shadow-2xl sm:p-9">
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[#c95a2f]/10 text-[#c95a2f]">
+              <Mail size={28} />
             </div>
-            <h2 className="font-syne font-black text-2xl text-tx mb-2">
-              Verifica tu email
-            </h2>
-            <p className="text-sm text-tx-mut mb-8 leading-relaxed">
-              Enviamos un enlace a <strong className="text-tx">{pendingEmail}</strong>
+            <div className="mt-5 font-mono text-[10px] font-bold uppercase tracking-[.16em] text-[#c95a2f]">Un paso más</div>
+            <h2 className="mt-2 font-display text-2xl font-extrabold">Verifica tu correo</h2>
+            <p className="mt-3 text-sm leading-relaxed text-[#82705a]">
+              Enviamos un enlace de verificación a <strong className="text-[#241a11]">{pendingEmail}</strong>.
             </p>
             <button
-              onClick={handleResend} 
+              type="button"
+              onClick={handleResend}
               disabled={resending || resendDone}
-              className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm transition-all mb-4 ${
-                resendDone 
-                  ? "bg-emerald-500/10 text-emerald-500" 
-                  : "bg-gradient-to-r from-iris-600 to-iris-500 text-white hover:shadow-iris hover:scale-[1.02]"
-              } disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed`}
+              className="mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c95a2f] px-5 text-sm font-extrabold text-white transition hover:bg-[#a84624] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {resendDone ? "✓ Correo reenviado" : resending ? "Enviando..." : "Reenviar correo"}
+              {resendDone ? <><Check size={17} /> Correo reenviado</> : resending ? <><RefreshCw className="animate-spin" size={17} /> Enviando...</> : <><RefreshCw size={17} /> Reenviar correo</>}
             </button>
             <button
-              onClick={() => { setPendingEmail(""); localStorage.removeItem("accessToken"); document.cookie = "mb-role=; path=/; max-age=0"; }}
-              className="text-xs text-tx-mut hover:text-tx transition-colors underline underline-offset-4"
+              type="button"
+              onClick={() => {
+                setPendingEmail("");
+                localStorage.removeItem("accessToken");
+                document.cookie = "mb-role=; path=/; max-age=0";
+              }}
+              className="mt-4 min-h-11 text-xs font-bold text-[#82705a] underline decoration-[#d8c6aa] underline-offset-4 hover:text-[#241a11]"
             >
-              Volver al login
+              Volver al inicio de sesión
             </button>
-          </div>
+          </section>
         </div>
       )}
 
-      {/* Layout split */}
-      <div className="min-h-screen flex font-sans bg-bg">
-        {/* Panel izquierdo (Decorativo) - Oculto en móviles */}
-        <div className="hidden lg:flex lg:w-7/12 bg-surf-1 border-r border-bd-1 p-12 flex-col justify-between relative overflow-hidden">
-          {/* Orbe decorativo */}
-          <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-iris-500/10 rounded-full blur-[100px] pointer-events-none animate-pulse duration-10000" />
-          
-          <div className="relative z-10">
-            <Link href="/" className="inline-flex items-center gap-3 mb-16 hover:opacity-80 transition-opacity">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-iris-500 to-iris-700 flex items-center justify-center font-syne font-black text-xs text-white shadow-lg shadow-iris-500/20">
-                MR
-              </div>
-              <span className="font-syne font-black text-xl text-tx tracking-tight">
-                MRTPV<span className="text-primary">REST</span>
-              </span>
+      <div className="grid min-h-screen lg:grid-cols-[minmax(0,1.12fr)_minmax(430px,.88fr)]">
+        <section className="relative hidden overflow-hidden border-r border-white/10 p-10 lg:flex lg:flex-col xl:p-14">
+          <div className="flex items-center justify-between">
+            <Link href="/" className="inline-flex items-center gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-[14px] bg-[#e3794c] font-display text-sm font-extrabold text-white shadow-[0_8px_24px_rgba(201,90,47,.28)]">MR</span>
+              <span className="font-display text-xl font-extrabold tracking-[-.03em]">MRTPV<span className="text-[#ff8a3d]">REST</span></span>
             </Link>
-            
-            <h1 className="font-syne font-black text-5xl text-tx leading-[1.1] tracking-tight mb-6 max-w-lg">
-              Gestiona tu restaurante <em className="not-italic text-primary">sin complicaciones.</em>
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#4fbf8b]/25 bg-[#4fbf8b]/10 px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-[#75d2a6]">
+              <span className="h-2 w-2 rounded-full bg-[#4fbf8b]" /> Sistemas en línea
+            </span>
+          </div>
+
+          <div className="my-auto max-w-3xl py-12">
+            <div className="font-mono text-[11px] font-bold uppercase tracking-[.18em] text-[#ff8a3d]">Control total, menos ruido</div>
+            <h1 className="mt-5 max-w-2xl font-display text-5xl font-extrabold leading-[1.02] tracking-[-.055em] text-[#fffaf3] xl:text-6xl">
+              Tu restaurante funciona mejor cuando todo está conectado.
             </h1>
-            <p className="text-base text-tx-mut leading-relaxed max-w-md">
-              TPV, cocina, delivery y tienda online. Todo sincronizado en tiempo real para restaurantes en LATAM.
+            <p className="mt-6 max-w-xl text-base leading-7 text-[#a8957f]">
+              Ventas, pedidos, personal e inventario en una experiencia clara, rápida y hecha para operar todos los días.
             </p>
-          </div>
-          
-          <div className="relative z-10 grid grid-cols-3 gap-6 pt-8 border-t border-bd-1/50">
-            {[
-              { n: "+500", l: "Restaurantes activos" }, 
-              { n: "$29", l: "Desde por mes" }, 
-              { n: "15d", l: "Prueba gratis" }
-            ].map(s => (
-              <div key={s.n} className="group">
-                <div className="font-syne text-3xl font-black text-tx group-hover:text-primary transition-colors">{s.n}</div>
-                <div className="text-xs text-tx-mut mt-1 uppercase tracking-wider font-semibold">{s.l}</div>
-              </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Panel derecho (Formulario) - Full width en móviles */}
-        <div className="w-full lg:w-5/12 flex items-center justify-center p-6 sm:p-12 relative overflow-hidden">
-          {/* Orbe decorativo móvil */}
-          <div className="lg:hidden absolute top-[-20%] right-[-20%] w-[300px] h-[300px] bg-primary/10 rounded-full blur-[80px] pointer-events-none" />
-          
-          <div className="w-full max-w-[400px] relative z-10">
-            
-            {/* Logo solo en móviles */}
-            <div className="lg:hidden flex items-center gap-3 mb-10">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-iris-500 to-iris-700 flex items-center justify-center font-syne font-black text-xs text-white shadow-lg shadow-iris-500/20">
-                MR
-              </div>
-              <span className="font-syne font-black text-xl text-tx tracking-tight">
-                MRTPV<span className="text-primary">REST</span>
-              </span>
-            </div>
-
-            <div className="mb-10">
-              <h2 className="font-syne font-black text-3xl text-tx mb-2 tracking-tight">Bienvenido de nuevo</h2>
-              <p className="text-sm text-tx-mut">Ingresa a tu panel de administración para continuar</p>
-            </div>
-
-            {error && (
-              <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm font-bold flex items-center gap-2 animate-in slide-in-from-top-2">
-                <span className="text-lg">⚠</span> {error}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-bold text-tx-mut uppercase tracking-widest ml-1">Correo electrónico</label>
-                <input 
-                  type="email" 
-                  value={email} 
-                  onChange={e => setEmail(e.target.value)} 
-                  placeholder="tu@restaurante.com" 
-                  required 
-                  autoComplete="email" 
-                  className="w-full px-4 py-3.5 bg-surf-1 border border-bd-2 rounded-xl text-sm text-tx outline-none transition-all focus:ring-2 focus:ring-primary/50 focus:border-primary placeholder:text-tx-dim" 
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-bold text-tx-mut uppercase tracking-widest ml-1">Contraseña</label>
-                <div className="relative">
-                  <input 
-                    type={showPass ? "text" : "password"} 
-                    value={password} 
-                    onChange={e => setPassword(e.target.value)} 
-                    placeholder="••••••••" 
-                    required 
-                    autoComplete="current-password" 
-                    className="w-full pl-4 pr-12 py-3.5 bg-surf-1 border border-bd-2 rounded-xl text-sm text-tx outline-none transition-all focus:ring-2 focus:ring-primary/50 focus:border-primary placeholder:text-tx-dim" 
-                  />
-                  <button 
-                    type="button" 
-                    onClick={() => setShowPass(v => !v)} 
-                    tabIndex={-1}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-tx-mut hover:text-tx transition-colors rounded-lg hover:bg-surf-2"
-                  >
-                    {showPass ? "🙈" : "👁️"}
-                  </button>
+            <div className="mt-9 grid max-w-2xl grid-cols-4 gap-3">
+              {highlights.map(({ icon: Icon, value, label }) => (
+                <div key={label} className="rounded-[18px] border border-white/10 bg-[#1f1810] p-4 shadow-[0_14px_35px_rgba(0,0,0,.2)]">
+                  <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-[#ff8a3d]/10 text-[#ff8a3d]"><Icon size={16} /></span>
+                  <div className="mt-4 font-display text-xl font-extrabold text-[#fffaf3]">{value}</div>
+                  <div className="mt-1 text-[11px] text-[#a8957f]">{label}</div>
                 </div>
-              </div>
-              
-              <button 
-                type="submit" 
-                disabled={loading} 
-                className="w-full mt-2 py-4 rounded-xl bg-gradient-to-r from-primary to-[#ff7e5f] font-syne font-black text-sm text-white shadow-lg shadow-primary/25 transition-all hover:scale-[1.02] hover:shadow-primary/40 active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Verificando...
-                  </>
-                ) : (
-                  "Entrar al panel →"
-                )}
-              </button>
-            </form>
-
-            <div className="flex items-center gap-4 my-8">
-              <div className="flex-1 h-px bg-bd-1" />
-              <span className="text-[10px] text-tx-dim uppercase tracking-widest font-bold">¿nuevo aquí?</span>
-              <div className="flex-1 h-px bg-bd-1" />
+              ))}
             </div>
-            
-            <div className="text-center">
-              <Link href="/register" className="text-sm font-bold text-primary hover:text-[#ff7e5f] transition-colors hover:underline underline-offset-4">
-                Crear cuenta gratis — 15 días sin tarjeta
+
+            <div className="mt-4 flex max-w-2xl items-center gap-4 rounded-[20px] border border-[#ff8a3d]/20 bg-[#2a2017] p-4">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-[#c95a2f] text-white"><Sparkles size={20} /></span>
+              <div>
+                <div className="font-display text-sm font-extrabold text-[#fffaf3]">Mesero IA está listo</div>
+                <p className="mt-1 text-xs leading-relaxed text-[#a8957f]">Pregunta por ventas, productos, inventario y rendimiento de tu equipo.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-5 border-t border-white/10 pt-6 text-xs text-[#7a6a59]">
+            <span className="inline-flex items-center gap-2"><ShieldCheck size={15} /> Acceso protegido</span>
+            <span className="inline-flex items-center gap-2"><ChefHat size={15} /> Hecho para restaurantes</span>
+          </div>
+        </section>
+
+        <section className="flex min-h-screen items-center justify-center bg-[#f4ebdd] px-5 py-8 text-[#241a11] sm:px-10 lg:px-12">
+          <div className="w-full max-w-[440px]">
+            <Link href="/" className="mb-10 inline-flex items-center gap-3 lg:hidden">
+              <span className="grid h-11 w-11 place-items-center rounded-[14px] bg-[#c95a2f] font-display text-sm font-extrabold text-white">MR</span>
+              <span className="font-display text-xl font-extrabold tracking-[-.03em]">MRTPV<span className="text-[#c95a2f]">REST</span></span>
+            </Link>
+
+            <div className="rounded-[28px] border border-[#e7d9c4] bg-[#fffaf4] p-6 shadow-[0_24px_70px_rgba(74,48,24,.12)] sm:p-8">
+              <div className="font-mono text-[10px] font-bold uppercase tracking-[.16em] text-[#c95a2f]">Panel administrativo</div>
+              <h2 className="mt-3 font-display text-3xl font-extrabold tracking-[-.04em] text-[#150d05]">Bienvenido de nuevo</h2>
+              <p className="mt-2 text-sm text-[#82705a]">Ingresa para continuar con la operación de tu restaurante.</p>
+
+              {error && (
+                <div className="mt-6 flex items-start gap-3 rounded-xl border border-[#c0432c]/20 bg-[#c0432c]/10 p-3.5 text-sm font-semibold text-[#a73522]">
+                  <AlertCircle className="mt-0.5 shrink-0" size={17} /> {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+                <div>
+                  <label htmlFor="email" className="ml-1 block font-mono text-[10px] font-bold uppercase tracking-[.13em] text-[#82705a]">Correo electrónico</label>
+                  <div className="relative mt-2">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-[#a4917a]" size={18} />
+                    <input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="tu@restaurante.com"
+                      required
+                      autoComplete="email"
+                      className="min-h-[52px] w-full rounded-xl border border-[#d8c6aa] bg-white py-3.5 pl-12 pr-4 text-sm text-[#241a11] outline-none transition placeholder:text-[#a4917a] focus:border-[#c95a2f] focus:ring-4 focus:ring-[#c95a2f]/10"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="password" className="ml-1 block font-mono text-[10px] font-bold uppercase tracking-[.13em] text-[#82705a]">Contraseña</label>
+                  <div className="relative mt-2">
+                    <LockKeyhole className="absolute left-4 top-1/2 -translate-y-1/2 text-[#a4917a]" size={18} />
+                    <input
+                      id="password"
+                      type={showPass ? "text" : "password"}
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="••••••••"
+                      required
+                      autoComplete="current-password"
+                      className="min-h-[52px] w-full rounded-xl border border-[#d8c6aa] bg-white py-3.5 pl-12 pr-12 text-sm text-[#241a11] outline-none transition placeholder:text-[#a4917a] focus:border-[#c95a2f] focus:ring-4 focus:ring-[#c95a2f]/10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPass((visible) => !visible)}
+                      className="absolute right-2 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-lg text-[#82705a] hover:bg-[#f3e9d9] hover:text-[#241a11]"
+                      aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    >
+                      {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-[#c95a2f] px-5 text-sm font-extrabold text-white shadow-[0_10px_24px_rgba(201,90,47,.24)] transition hover:bg-[#a84624] active:scale-[.99] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? <><RefreshCw className="animate-spin" size={17} /> Verificando...</> : <>Entrar al panel <ArrowRight size={17} /></>}
+                </button>
+              </form>
+
+              <div className="my-7 flex items-center gap-4">
+                <div className="h-px flex-1 bg-[#e7d9c4]" />
+                <span className="font-mono text-[9px] font-bold uppercase tracking-[.14em] text-[#a4917a]">¿Primera vez?</span>
+                <div className="h-px flex-1 bg-[#e7d9c4]" />
+              </div>
+
+              <Link href="/register" className="flex min-h-12 items-center justify-center rounded-xl border border-[#d8c6aa] px-4 text-sm font-bold text-[#c95a2f] transition hover:border-[#c95a2f] hover:bg-[#c95a2f]/5">
+                Crear cuenta gratis · 15 días sin tarjeta
               </Link>
             </div>
+
+            <p className="mt-6 text-center text-[11px] leading-relaxed text-[#82705a]">
+              Al ingresar aceptas los términos de servicio y el aviso de privacidad de MRTPVREST.
+            </p>
           </div>
-        </div>
+        </section>
       </div>
-    </>
+    </main>
   );
 }
