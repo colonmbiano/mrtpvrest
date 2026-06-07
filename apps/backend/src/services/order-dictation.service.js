@@ -1,9 +1,15 @@
 const { prisma } = require('@mrtpvrest/database');
+const OpenAI = require('openai');
+const { resolveGroqKey } = require('./ai-key.service');
+const { GROQ_BASE_URL, GROQ_MODEL } = require('./groq-error');
 
 const QUANTITY_WORDS = new Map([
   ['un', 1],
   ['uno', 1],
   ['una', 1],
+  ['unos', 1],
+  ['unas', 1],
+  ['par', 2],
   ['dos', 2],
   ['tres', 3],
   ['cuatro', 4],
@@ -53,7 +59,7 @@ function normalize(value) {
   return String(value || '')
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -72,17 +78,50 @@ function tokenize(value) {
     .filter((token) => token && !STOP_WORDS.has(token));
 }
 
+function isQuantityToken(token) {
+  return /^\d+$/.test(token) || QUANTITY_WORDS.has(token);
+}
+
+/**
+ * Divide el dictado en segmentos, uno por producto. Estrategia:
+ *   1. Corte duro por puntuación (`. ; , \n`) — cuando el STT la incluye.
+ *   2. Dentro de cada parte, abre un nuevo segmento cada vez que aparece una
+ *      CANTIDAD nueva después de que ya hubo contenido (producto). Esto separa
+ *      "una hamburguesa dos cocas" y "una hamburguesa y una coca" sin depender
+ *      de comas (que el dictado de Android no agrega).
+ *
+ * No cortamos por el conector "y" suelto: así nombres como "Café y Té" o
+ * "Burritos y Gringas" siguen matcheando como un solo producto.
+ */
 function splitPrompt(prompt) {
-  const qtyWords = [...QUANTITY_WORDS.keys()].join('|');
-  const connectorBeforeQty = new RegExp(
-    `\\s+(?:y|mas|tambien|aparte)\\s+(?=(?:${qtyWords}|\\d+)\\b)`,
-    'gi'
-  );
-  return String(prompt || '')
-    .replace(connectorBeforeQty, ', ')
-    .split(/[.;,\n]+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
+  const rawParts = String(prompt || '').split(/[.;,\n]+/);
+  const segments = [];
+  // Conectores sueltos: se omiten (ni dividen ni cuentan como contenido). Así
+  // "una coca y unas papas" separa por la cantidad ("unas"), pero un nombre con
+  // conector como "Café y Té" o "Burritos y Gringas" sigue matcheando entero.
+  const CONNECTORS = new Set(['y', 'e', 'tambien', 'aparte', 'ademas']);
+
+  for (const raw of rawParts) {
+    const tokens = normalize(raw).split(' ').filter(Boolean);
+    let cur = [];
+    let hasContent = false;
+
+    for (const token of tokens) {
+      if (CONNECTORS.has(token)) continue;
+      if (isQuantityToken(token) && hasContent) {
+        segments.push(cur.join(' '));
+        cur = [token];
+        hasContent = false;
+        continue;
+      }
+      cur.push(token);
+      if (!isQuantityToken(token) && !STOP_WORDS.has(token)) hasContent = true;
+    }
+
+    if (cur.length) segments.push(cur.join(' '));
+  }
+
+  return segments.map((s) => s.trim()).filter(Boolean);
 }
 
 function parseQuantity(segment) {
@@ -166,6 +205,14 @@ function toProduct(item) {
   };
 }
 
+function computeNeedsReview(product) {
+  return (
+    Boolean(product.hasVariants && product.variants.length > 0) ||
+    Boolean(product.modifierGroups?.some((group) => group.required)) ||
+    Boolean(product.complements?.length)
+  );
+}
+
 async function loadCatalog(restaurantId) {
   return prisma.menuItem.findMany({
     where: { restaurantId, isAvailable: true },
@@ -179,7 +226,26 @@ async function loadCatalog(restaurantId) {
   });
 }
 
-async function runOrderDictation({ prompt, restaurantId }) {
+function emptyCatalogResult(prompt) {
+  return {
+    ok: false,
+    items: [],
+    unresolved: [String(prompt || '').trim()].filter(Boolean),
+    message: 'No hay productos disponibles en el menu.',
+    engine: 'rules',
+  };
+}
+
+function buildMessage(items) {
+  const count = items.reduce((sum, item) => sum + item.quantity, 0);
+  return items.length > 0
+    ? `${count} producto${count === 1 ? '' : 's'} agregado${count === 1 ? '' : 's'} al ticket.`
+    : 'No encontre productos del menu en el dictado.';
+}
+
+/* ── NIVEL 1 — Parser de reglas (gratis, sin IA) ─────────────────────────── */
+
+async function runOrderDictation({ prompt, restaurantId, catalog: preloaded }) {
   if (!prompt?.trim()) {
     const err = new Error('prompt requerido');
     err.code = 'BAD_REQUEST';
@@ -191,15 +257,8 @@ async function runOrderDictation({ prompt, restaurantId }) {
     throw err;
   }
 
-  const catalog = await loadCatalog(restaurantId);
-  if (catalog.length === 0) {
-    return {
-      ok: false,
-      items: [],
-      unresolved: [prompt.trim()],
-      message: 'No hay productos disponibles en el menu.',
-    };
-  }
+  const catalog = preloaded || (await loadCatalog(restaurantId));
+  if (catalog.length === 0) return emptyCatalogResult(prompt);
 
   const items = [];
   const unresolved = [];
@@ -221,35 +280,155 @@ async function runOrderDictation({ prompt, restaurantId }) {
     }
 
     const product = toProduct(best);
-    const needsReview =
-      Boolean(product.hasVariants && product.variants.length > 0) ||
-      Boolean(product.modifierGroups?.some((group) => group.required)) ||
-      Boolean(product.complements?.length);
-
     items.push({
       menuItemId: best.id,
       quantity: parseQuantity(segment),
       notes: extractNotes(segment),
       confidence: Math.min(1, Number((bestScore / 120).toFixed(2))),
-      needsReview,
+      needsReview: computeNeedsReview(product),
       product,
     });
   }
 
-  const count = items.reduce((sum, item) => sum + item.quantity, 0);
   return {
     ok: items.length > 0,
     items,
     unresolved,
-    message:
-      items.length > 0
-        ? `${count} producto${count === 1 ? '' : 's'} agregado${count === 1 ? '' : 's'} al ticket.`
-        : 'No encontre productos del menu en el dictado.',
+    message: buildMessage(items),
+    engine: 'rules',
   };
+}
+
+/* ── NIVEL 2 — Parser con IA (Groq Llama, solo BYOK del cliente) ──────────── */
+
+const AI_SYSTEM_PROMPT = `Eres un parser de pedidos para el punto de venta de un restaurante.
+Recibes un MENÚ numerado y el DICTADO de voz del cajero. Tu trabajo es identificar
+qué productos del menú pidió, con su cantidad y notas.
+
+Devuelve EXCLUSIVAMENTE un JSON válido con esta forma exacta:
+{"items":[{"n":<numero del menu>,"quantity":<entero>,"notes":"<texto>"}],"unresolved":["<frase no reconocida>"]}
+
+Reglas:
+- "n" debe ser el número del MENÚ que mejor corresponde, aunque lo digan con nombre
+  coloquial, abreviado o con errores de transcripción. NUNCA inventes un número fuera del menú.
+- "quantity" es entero >= 1 (por defecto 1).
+- "notes" sólo para indicaciones del platillo (ej. "sin cebolla", "extra queso", "bien dorado"); si no hay, usa "".
+- Si una parte del dictado no corresponde a ningún producto del menú, agrégala a "unresolved".
+- No incluyas explicaciones ni texto fuera del JSON.`;
+
+function buildMenuList(catalog) {
+  return catalog
+    .map((it, i) => {
+      const cat = it.category?.name ? ` [${it.category.name}]` : '';
+      return `${i + 1}. ${it.name}${cat}`;
+    })
+    .join('\n');
+}
+
+async function runOrderDictationAI({ prompt, restaurantId, apiKey, catalog: preloaded }) {
+  const catalog = preloaded || (await loadCatalog(restaurantId));
+  if (catalog.length === 0) return emptyCatalogResult(prompt);
+
+  const client = new OpenAI({ apiKey, baseURL: GROQ_BASE_URL });
+  const userMsg = `MENÚ:\n${buildMenuList(catalog)}\n\nDICTADO: "${String(prompt).trim()}"`;
+
+  const completion = await client.chat.completions.create({
+    model: GROQ_MODEL,
+    temperature: 0,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: AI_SYSTEM_PROMPT },
+      { role: 'user', content: userMsg },
+    ],
+  });
+
+  const raw = completion?.choices?.[0]?.message?.content || '{}';
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const err = new Error('Respuesta de IA no es JSON válido');
+    err.code = 'AI_BAD_JSON';
+    throw err;
+  }
+
+  const items = [];
+  const unresolved = Array.isArray(parsed?.unresolved)
+    ? parsed.unresolved.map((u) => String(u)).filter(Boolean)
+    : [];
+
+  for (const row of Array.isArray(parsed?.items) ? parsed.items : []) {
+    const n = Number(row?.n);
+    if (!Number.isInteger(n) || n < 1 || n > catalog.length) continue; // anti-alucinación
+    const best = catalog[n - 1];
+    const product = toProduct(best);
+    const quantity = Math.max(1, Math.min(99, Number(row?.quantity) || 1));
+    const notes = String(row?.notes || '').slice(0, 200);
+    items.push({
+      menuItemId: best.id,
+      quantity,
+      notes,
+      confidence: 0.95,
+      needsReview: computeNeedsReview(product),
+      product,
+    });
+  }
+
+  return {
+    ok: items.length > 0,
+    items,
+    unresolved,
+    message: buildMessage(items),
+    engine: 'ai',
+  };
+}
+
+/* ── Orquestador — IA si el cliente trae su key (BYOK), si no reglas ──────── */
+
+async function runOrderDictationSmart({ prompt, restaurantId }) {
+  if (!prompt?.trim()) {
+    const err = new Error('prompt requerido');
+    err.code = 'BAD_REQUEST';
+    throw err;
+  }
+  if (!restaurantId) {
+    const err = new Error('restaurantId requerido');
+    err.code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  // El modo IA sólo se activa si el restaurante registró su PROPIA Groq key
+  // (BYOK, free tier del cliente). Así el costo/cuota es por-tenant y la
+  // plataforma no paga IA al escalar. Sin key → parser de reglas (gratis).
+  let keyInfo = null;
+  try {
+    keyInfo = await resolveGroqKey({ restaurantId });
+  } catch {
+    keyInfo = null;
+  }
+
+  if (keyInfo?.source === 'customer' && keyInfo.apiKey) {
+    try {
+      const catalog = await loadCatalog(restaurantId);
+      if (catalog.length === 0) return emptyCatalogResult(prompt);
+      const ai = await runOrderDictationAI({ prompt, restaurantId, apiKey: keyInfo.apiKey, catalog });
+      if (ai.ok) return ai;
+      // IA no resolvió nada → intentar reglas sobre el mismo catálogo.
+      const rules = await runOrderDictation({ prompt, restaurantId, catalog });
+      return rules.ok ? rules : ai; // devolver el que tenga algo (o el de IA con su unresolved)
+    } catch (err) {
+      console.error('[order-dictation] IA falló, fallback a reglas:', err?.message || err);
+      // Fallback robusto: nunca rompemos el dictado por un fallo de IA.
+    }
+  }
+
+  return runOrderDictation({ prompt, restaurantId });
 }
 
 module.exports = {
   runOrderDictation,
+  runOrderDictationAI,
+  runOrderDictationSmart,
   normalize,
   splitPrompt,
   parseQuantity,

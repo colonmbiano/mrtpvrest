@@ -52,6 +52,24 @@ describe('order dictation service', () => {
     ]);
   });
 
+  it('separa varios productos por cantidad aunque no haya comas (dictado de voz)', () => {
+    expect(splitPrompt('una hamburguesa dos cocas')).toEqual([
+      'una hamburguesa',
+      'dos cocas',
+    ]);
+    expect(splitPrompt('una coca y unas papas')).toEqual([
+      'una coca',
+      'unas papas',
+    ]);
+    expect(parseQuantity('unas papas')).toBe(1);
+    expect(parseQuantity('par de cervezas')).toBe(2);
+  });
+
+  it('no parte un nombre que contiene un conector (Café y Té)', () => {
+    // Sin cantidad intermedia, "café y té" queda como un solo segmento.
+    expect(splitPrompt('un cafe y te')).toEqual(['un cafe te']);
+  });
+
   it('mapea productos reales, cantidades y notas al ticket', async () => {
     prisma.menuItem.findMany.mockResolvedValueOnce([
       item({ id: 'taco1', name: 'Taco al pastor', price: 22 }),
