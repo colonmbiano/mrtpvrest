@@ -18,7 +18,7 @@ import { useUIStore } from "@/store/useUIStore";
 import {
   COMPLEMENT_MODIFIER_PREFIX,
   VARIANT_MODIFIER_PREFIX,
-} from "@/components/pos/ModifierPickerModal";
+} from "@/lib/modifiers";
 
 type CategoryLite = {
   id: string;

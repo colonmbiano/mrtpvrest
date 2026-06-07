@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import BaseModal from "@/components/ui/BaseModal";
+import PinInput from "@/components/ui/PinInput";
 import type { EmployeeDraft } from "@/contexts/ModalContext";
 
 const EMPTY: EmployeeDraft = { name: "", role: "WAITER", pin: "", active: true };
@@ -40,7 +41,7 @@ export default function EmployeeModal({
 
   const submit = async () => {
     if (!draft.name.trim()) return toast.error("Nombre requerido");
-    if (!draft.pin || draft.pin.length < 4) return toast.error("PIN de al menos 4 dígitos");
+    if (!draft.pin || draft.pin.length < 4) return toast.error("PIN de 4 a 6 dígitos");
     setBusy(true);
     try {
       await onSave?.(draft);
@@ -87,8 +88,7 @@ export default function EmployeeModal({
             </select>
           </Field>
           <Field label="PIN (4-6 dígitos)">
-            <input value={draft.pin ?? ""} onChange={(e) => setDraft({ ...draft, pin: e.target.value.replace(/\D/g, "").slice(0, 6) })}
-              inputMode="numeric" className={INPUT} style={INPUT_STYLE} placeholder="••••" />
+            <PinInput value={draft.pin ?? ""} onChange={(pin) => setDraft({ ...draft, pin })} ariaLabel="PIN del empleado" />
           </Field>
         </div>
 

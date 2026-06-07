@@ -6,7 +6,7 @@ import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import DiscountModal from "@/components/pos/DiscountModal";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
-import { COMPLEMENT_MODIFIER_PREFIX, VARIANT_MODIFIER_PREFIX } from "@/components/pos/ModifierPickerModal";
+import { COMPLEMENT_MODIFIER_PREFIX, VARIANT_MODIFIER_PREFIX } from "@/lib/modifiers";
 import { useAuthStore } from "@/store/authStore";
 import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";

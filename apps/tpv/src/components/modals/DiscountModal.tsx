@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
-import { Percent, DollarSign, Lock } from "lucide-react";
+import { Percent, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import BaseModal from "@/components/ui/BaseModal";
+import PinInput from "@/components/ui/PinInput";
 
 type DiscountType = "percent" | "amount";
 
@@ -97,12 +98,7 @@ export default function DiscountModal({
 
         {verifyPin && (
           <Field label="PIN de autorización">
-            <div className="relative">
-              <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} />
-              <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                type="password" inputMode="numeric"
-                className={`${INPUT} pl-9`} style={INPUT_STYLE} placeholder="••••" />
-            </div>
+            <PinInput value={pin} onChange={setPin} masked ariaLabel="PIN de autorización" />
           </Field>
         )}
 
