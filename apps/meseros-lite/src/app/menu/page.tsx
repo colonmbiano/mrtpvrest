@@ -6,6 +6,8 @@ import { Check, Minus, Plus, RotateCw, Search, WifiOff, X } from "lucide-react";
 import type { OrderStatus } from "@mrtpvrest/types";
 import api from "@/lib/api";
 import { apiOrQueue } from "@/lib/offline";
+import { printKitchenTickets, type TicketItem } from "@/lib/printer";
+import { usePrinterStore } from "@/store/usePrinterStore";
 import { useWaiterOrderStore } from "@/store/useWaiterOrderStore";
 
 interface MenuCategory {
@@ -46,6 +48,10 @@ interface MenuComplement {
   isAvailable?: boolean;
 }
 
+interface PrinterGroupRef {
+  printerGroup?: { id: string } | null;
+}
+
 interface MenuItem {
   id: string;
   name: string;
@@ -59,6 +65,10 @@ interface MenuItem {
   variants?: MenuVariant[];
   complements?: MenuComplement[];
   modifierGroups?: MenuModifierGroup[];
+  // Enrutamiento a impresoras: override a nivel item, con fallback a la
+  // categoría. El backend ya los incluye en GET /api/menu/items.
+  printerGroups?: PrinterGroupRef[];
+  category?: { printerGroups?: PrinterGroupRef[] } | null;
 }
 
 type CatalogStatus = "idle" | "loading" | "ready" | "offline" | "error";
@@ -93,6 +103,14 @@ function writeCache<T>(key: string, value: T) {
   } catch {
     return;
   }
+}
+
+function printerGroupIdsOf(product: MenuItem | undefined): string[] {
+  if (!product) return [];
+  const pick = (refs?: PrinterGroupRef[]) =>
+    (refs ?? []).map((r) => r.printerGroup?.id).filter((id): id is string => Boolean(id));
+  const own = pick(product.printerGroups);
+  return own.length > 0 ? own : pick(product.category?.printerGroups);
 }
 
 function hasConfigurableOptions(product: MenuItem) {
@@ -252,6 +270,40 @@ export default function MenuPage() {
     setLastAddedName(itemName);
   };
 
+  // Imprime la comanda a cocina/barra desde la tablet si el admin activó
+  // auto-impresión y ya sincronizó impresoras. Nunca lanza; devuelve una nota
+  // para anexar al mensaje de guardado.
+  const maybePrintKitchen = async (orderNumber: string | null): Promise<string> => {
+    const { autoPrint, printers, kitchenConfig } = usePrinterStore.getState();
+    if (!autoPrint || printers.length === 0) return "";
+
+    const productById = new Map(products.map((product) => [product.id, product]));
+    const printItems: TicketItem[] = ticketItems.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      price: item.unitPrice,
+      notes: item.notes,
+      modifiers: item.modifiers.map((modifier) => ({ name: modifier.name, priceAdd: modifier.priceAdd })),
+      printerGroupIds: printerGroupIdsOf(productById.get(item.menuItemId)),
+    }));
+
+    const result = await printKitchenTickets(printers, {
+      orderNumber,
+      orderType: activeTableId ? "DINE_IN" : "TAKEOUT",
+      tableNumber: activeTableName ? activeTableName.replace(/^mesa\s+/i, "") : null,
+      items: printItems,
+      config: kitchenConfig ?? undefined,
+    });
+
+    if (result.ok === 0 && result.failed.length > 0) {
+      return ` Impresion fallo: ${result.failed[0]?.error ?? "sin detalle"}`;
+    }
+    if (result.failed.length > 0) {
+      return ` (${result.failed.length} impresora(s) fallaron)`;
+    }
+    return result.ok > 0 ? " Comanda impresa." : "";
+  };
+
   const handleSaveTicket = async () => {
     if (ticketItems.length === 0 || saving) return;
 
@@ -282,7 +334,7 @@ export default function MenuPage() {
     const tableLabel = activeTableName || (tableNumber ? `Mesa ${tableNumber}` : activeTableId);
 
     try {
-      const result = await apiOrQueue("order", "POST", "/api/orders/tpv", {
+      const result = await apiOrQueue<{ orderNumber?: string }>("order", "POST", "/api/orders/tpv", {
         orderType: activeTableId ? "DINE_IN" : "TAKEOUT",
         tableId: realTableId,
         tableNumber,
@@ -299,10 +351,18 @@ export default function MenuPage() {
         throw new Error(result.error || "No se pudo guardar la comanda.");
       }
 
+      // Auto-impresión local (LAN). Se hace ANTES de limpiar el ticket y
+      // funciona incluso si la orden quedó en cola (WiFi local arriba, sin
+      // internet) — la impresión real corre en la tablet, no en el backend.
+      const printNote = await maybePrintKitchen(result.data?.orderNumber ?? null);
+
       clearTicket();
       setLastAddedName(null);
-      setSaveMessage(result.queued ? "Comanda en cola. Se enviara al volver internet." : "Comanda guardada.");
-      window.setTimeout(() => router.replace("/mesas"), 450);
+      const baseMessage = result.queued
+        ? "Comanda en cola. Se enviara al volver internet."
+        : "Comanda guardada.";
+      setSaveMessage(baseMessage + printNote);
+      window.setTimeout(() => router.replace("/mesas"), 600);
     } catch (err: unknown) {
       const directMessage =
         err instanceof Error && err.message ? err.message : "";
