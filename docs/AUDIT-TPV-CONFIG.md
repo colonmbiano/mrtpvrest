@@ -43,6 +43,30 @@ consumidores ahora lo usan:
 
 ---
 
+## ✅ Arreglado — Claves de tenant consolidadas
+
+**Problema:** `activeRestaurantId` / `activeLocationId` eran duplicados exactos
+de `restaurantId` / `locationId`. El Hub escribía ambos juegos en paralelo con
+el mismo valor, y el fallback `restaurantId || activeRestaurantId` estaba
+copiado en 3 sitios (`lib/api.ts`, `centro/costos`, `centro/mermas`). Riesgo de
+divergencia silenciosa en consultas multi-tenant.
+
+**Solución:** nuevo `src/lib/tenant.ts` como acceso centralizado:
+
+- `getRestaurantId()` / `getLocationId()` / `getTenantIds()` leen las canónicas
+  con fallback a las legacy `active*` (compatibilidad con dispositivos sin
+  rotar). Único lugar donde vive el fallback.
+- `setTenant()` escribe solo las canónicas → no se vuelven a crear llaves
+  paralelas.
+- El Hub deja de escribir `activeRestaurantId` / `activeLocationId` (mantiene
+  `activeWorkspaceId` / `activeWorkspaceName`, que son flag/nombre de workspace,
+  no tenant).
+- `api.ts`, `centro/costos`, `centro/mermas`, `useNotifications` y `kiosk` leen
+  vía los getters. Las llaves legacy quedan solo como fallback de lectura y se
+  podrán eliminar cuando toda la flota haya rotado.
+
+---
+
 ## Pendiente — recomendaciones (no incluidas en este PR)
 
 Refactors mayores que requieren decisiones de diseño y se dejan fuera por
@@ -54,10 +78,6 @@ riesgo/alcance:
   localStorage (`uiScale`, `sidebarWidth`) y `tpv-display-config`
   (`gridSize`, `sound`, `showImages`, `fontSize`). Además `gridSize`/`fontSize`
   se solapan con `CatalogSettingsSheet` y el tab display de `TPVConfigModal`.
-- **Tenant con claves paralelas**: `restaurantId/locationId` vs
-  `activeRestaurantId/activeLocationId` (y `locationName` vs
-  `activeWorkspaceName`). `lib/api.ts` lee ambas como fallback y `hub/page.tsx`
-  escribe las dos. Riesgo de divergencia silenciosa. → consolidar a un par.
 - **Config de tickets/cocina duplicada**: `TicketConfigModal` ↔ tab Cocina de
   `TPVConfigModal`. → una sola fuente.
 - **Ruteo de impresoras en 3-4 sitios**: `admin/impresoras` (directo),
