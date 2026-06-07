@@ -176,10 +176,9 @@ riesgo/alcance:
 
 ### Flujo
 
-- Setup wizard sin botón "atrás"; rol de dispositivo permanente sin
-  confirmación (exige reinstalar para cambiar).
-- Zonas configurables en `admin/mesas` y `TPVConfigModal`, pero no se pueden
-  crear desde Mesas.
+- Rol de dispositivo permanente sin confirmación en el setup (exige reinstalar
+  para cambiar). → añadir diálogo de confirmación.
 - Sin confirmación/estado de carga en descuento, cobro y "agregar al ticket".
-- `ReportModal` acepta rangos de fecha inválidos.
-- Cambiar de tab pierde cambios no guardados en `TPVConfigModal`.
+
+> ✅ Hecho en este PR: el setup wizard ya tiene botón "Atrás" en los pasos
+> Sucursal y Dispositivo.
