@@ -116,6 +116,30 @@ flujos vivos están inline en las páginas admin y en `components/pos/`.
 `components/modals/CatalogSettingsSheet.tsx` se conserva (lo usa
 `pos/menu/layout`).
 
+## ✅ Arreglado — TPVConfigModal e IngredientShortageModal muertos
+
+Al borrar `ModalStack` quedaron sin importadores (eran rendereados solo por él):
+
+- `components/admin/TPVConfigModal.tsx` (~1000 líneas)
+- `components/admin/IngredientShortageModal.tsx`
+
+Se eliminaron. Esto resuelve de un solo golpe varios hallazgos de la auditoría
+porque vivían dentro de TPVConfigModal:
+
+- **Display config huérfana**: su pestaña "Pantalla" escribía
+  `tpv-display-config` (`gridSize`, `sound`, `showImages`, `fontSize`) que
+  **nadie leía** — el catálogo vivo usa `useCatalogPrefs` (density/viewMode) vía
+  `CatalogSettingsSheet`. El cajero cambiaba esos ajustes y no pasaba nada.
+- **Tickets/cocina duplicados**: el editor vivo es `app/admin/tickets/page.tsx`.
+- **Ruteo de impresoras** dentro de TPVConfigModal (capa redundante).
+- **Overlay anidado** (form de impresora dentro del modal).
+
+> ⚠️ Hueco abierto: `components/settings/DualScreenSettings.tsx` (config de
+> doble pantalla, feature viva) solo se montaba dentro de TPVConfigModal, así
+> que **ya era inalcanzable** en la app actual. El archivo se conserva sin
+> borrar; falta **surfacearlo en una página admin viva** (p.ej. una nueva
+> `admin/pantalla` o dentro de `admin/apariencia`). Decisión pendiente.
+
 ---
 
 ## Pendiente — recomendaciones (no incluidas en este PR)
@@ -123,17 +147,13 @@ flujos vivos están inline en las páginas admin y en `components/pos/`.
 Refactors mayores que requieren decisiones de diseño y se dejan fuera por
 riesgo/alcance:
 
-### Redundancias
+### Redundancias / huecos
 
-- **Display config repartida en 3 mecanismos**: `useThemeStore` (Zustand),
-  localStorage (`uiScale`, `sidebarWidth`) y `tpv-display-config`
-  (`gridSize`, `sound`, `showImages`, `fontSize`). Además `gridSize`/`fontSize`
-  se solapan con `CatalogSettingsSheet` y el tab display de `TPVConfigModal`.
-- **Config de tickets/cocina duplicada**: `app/admin/tickets/page.tsx` ↔ tab
-  Cocina de `TPVConfigModal`. → una sola fuente (necesita decisión).
-- **Ruteo de impresoras en 3-4 sitios**: `admin/impresoras` (directo),
-  `admin/grupos-impresoras` (grupo), `PrinterCategoriesModal`, form de
-  `TPVConfigModal`. Precedencia poco clara.
+- **Doble pantalla sin UI**: re-montar `DualScreenSettings` en una página admin
+  viva (ver arriba).
+- **Ruteo de impresoras en 3 sitios**: `admin/impresoras` (directo),
+  `admin/grupos-impresoras` (grupo) y `PrinterCategoriesModal`. Precedencia poco
+  clara → elegir modelo canónico.
 - **Dos sistemas de permisos** (legacy + "Phase 10") en `admin/usuarios`.
 - **Configurador inline duplicado**: `app/pos/menu/page.tsx` reimplementa la
   lógica de grupos/variantes/validación; convendría extraer un componente
@@ -141,11 +161,9 @@ riesgo/alcance:
 
 ### Arquitectura de modales
 
-- Los modales restantes (`TPVConfigModal`, `ShiftModal`,
-  `IngredientShortageModal`, `DriverMovementsModal`, `PrinterCategoriesModal`,
-  y los `components/pos/` de pago/descuento) usan overlay propio en vez de un
-  `BaseModal` común. `TPVConfigModal` abre el form de impresora como **overlay
-  anidado** dentro de sí mismo. → unificar sobre `BaseModal`.
+- Los modales restantes (`ShiftModal`, `DriverMovementsModal`,
+  `PrinterCategoriesModal`, y los `components/pos/` de pago/descuento) usan
+  overlay propio en vez de un `BaseModal` común. → unificar sobre `BaseModal`.
 
 ### Claridad
 
