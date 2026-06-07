@@ -40,7 +40,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
 
   return (
     <div
-      className="relative flex flex-col h-screen w-full bg-[#0a0a0c] text-white overflow-hidden"
+      className="relative flex flex-col h-[100dvh] w-full bg-[#0a0a0c] text-white overflow-hidden"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* Ambient diseño operativo glow */}

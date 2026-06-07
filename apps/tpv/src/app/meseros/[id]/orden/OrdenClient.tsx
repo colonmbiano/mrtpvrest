@@ -383,7 +383,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
       {/* PRODUCTS GRID */}
       <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
         {isLoading ? (
-          <div className="grid grid-cols-2 gap-3 pb-40">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 pb-40">
             {[...Array(6)].map((_, i) => (
               <div key={i} className="aspect-square bg-white/5 animate-pulse rounded-3xl" />
             ))}
@@ -391,7 +391,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         ) : filtered.length === 0 ? (
           <div className="text-center text-white/40 text-[13px] py-12">Sin productos</div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 pb-40">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 pb-40">
             {filtered.map((product) => (
               <ProductCard
                 key={product.id}
@@ -408,7 +408,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
       </div>
 
       {/* BOTTOM TICKET BAR */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/5 bg-[#0C0C0E]/95 backdrop-blur-xl flex flex-col gap-3 shadow-2xl">
+      <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 pb-[calc(1rem_+_env(safe-area-inset-bottom))] border-t border-white/5 bg-[#0C0C0E]/95 backdrop-blur-xl flex flex-col gap-3 shadow-2xl">
         <button
           onClick={() => cartCount > 0 && setShowSheet(true)}
           className="h-14 min-h-[56px] bg-white/5 border border-white/10 rounded-2xl flex items-center px-4 gap-3 active:scale-95 transition-all disabled:opacity-50"

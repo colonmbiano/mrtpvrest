@@ -195,7 +195,7 @@ export default function KioskPage() {
 
   if (screen === "forbidden") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 text-center bg-gray-950">
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-4 p-8 text-center bg-gray-950">
         <span className="text-6xl">🔒</span>
         <h1 className="text-2xl font-black text-white">Módulo Kiosko no activado</h1>
         <p className="text-gray-400 max-w-sm">
@@ -207,7 +207,7 @@ export default function KioskPage() {
 
   if (screen === "no-provider") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 text-center bg-gray-950">
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-4 p-8 text-center bg-gray-950">
         <span className="text-6xl">💳</span>
         <h1 className="text-2xl font-black text-white">Pasarela de pago no configurada</h1>
         <p className="text-gray-400 max-w-sm">
@@ -225,7 +225,7 @@ export default function KioskPage() {
 
   if (screen === "success") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-8 text-center bg-gray-950">
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-6 p-8 text-center bg-gray-950">
         <div className="w-24 h-24 rounded-full bg-green-500/20 flex items-center justify-center text-5xl">✅</div>
         <h1 className="text-3xl font-black text-white">¡Pedido confirmado!</h1>
         {orderId && <p className="text-gray-400 text-sm">Orden #{orderId.slice(-6).toUpperCase()}</p>}
@@ -242,7 +242,7 @@ export default function KioskPage() {
 
   if (screen === "error") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-8 text-center bg-gray-950">
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-6 p-8 text-center bg-gray-950">
         <div className="w-24 h-24 rounded-full bg-red-500/20 flex items-center justify-center text-5xl">❌</div>
         <h1 className="text-3xl font-black text-white">Error en el pago</h1>
         <p className="text-gray-300">El pago no pudo procesarse. Intenta nuevamente.</p>
@@ -261,7 +261,7 @@ export default function KioskPage() {
       : paymentProvider === "MERCADOPAGO" ? "pago digital"
       : "pasarela";
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-8 text-center bg-gray-950">
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-6 p-8 text-center bg-gray-950">
         <div className="w-24 h-24 rounded-full bg-blue-500/20 flex items-center justify-center text-5xl">📲</div>
         <h1 className="text-3xl font-black text-white">Escanea para pagar</h1>
         <p className="text-gray-300 max-w-sm">
@@ -290,7 +290,7 @@ export default function KioskPage() {
   if (screen === "cart") {
     const total = cartTotal(cart);
     return (
-      <div className="min-h-screen bg-gray-950 flex flex-col">
+      <div className="min-h-[100dvh] bg-gray-950 flex flex-col">
         <header className="flex items-center gap-4 px-6 py-4 border-b border-gray-800">
           <button
             onClick={() => setScreen("menu")}
@@ -380,7 +380,7 @@ export default function KioskPage() {
   // ─── Menu screen ──────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col">
+    <div className="min-h-[100dvh] bg-gray-950 flex flex-col">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-gray-800 sticky top-0 bg-gray-950 z-10">
         <h1 className="text-2xl font-black text-white" style={{ fontFamily: "Syne, sans-serif" }}>

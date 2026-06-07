@@ -82,7 +82,7 @@ export default function CentroLayout({ children }: { children: React.ReactNode }
   // Loaders y guards visuales — mantenemos estilo del /admin layout.
   if (!hydrated || !employee) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-[var(--bg)] text-white">
+      <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-[var(--bg)] text-white">
         <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-4" />
         <span className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">
           Verificando credenciales…
@@ -103,7 +103,7 @@ export default function CentroLayout({ children }: { children: React.ReactNode }
 
   if (moduleStatus === "loading") {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-[var(--bg)] text-white">
+      <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-[var(--bg)] text-white">
         <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-4" />
         <span className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">
           Verificando módulo…
@@ -143,7 +143,7 @@ export default function CentroLayout({ children }: { children: React.ReactNode }
   }
 
   return (
-    <div className="flex flex-col h-screen w-full select-none font-sans bg-[var(--bg)] text-[var(--text)]">
+    <div className="flex flex-col h-[100dvh] w-full select-none font-sans bg-[var(--bg)] text-[var(--text)]">
       {/* Top header — minimalista, con back al hub + avatar */}
       <header
         className="flex items-center justify-between px-4 md:px-6 py-3 border-b shrink-0"
@@ -220,7 +220,7 @@ export default function CentroLayout({ children }: { children: React.ReactNode }
 
 function Forbidden({ title, message, ctaHref }: { title: string; message: string; ctaHref: string }) {
   return (
-    <div className="h-screen w-full flex flex-col items-center justify-center bg-[var(--bg)] text-white px-6">
+    <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-[var(--bg)] text-white px-6">
       <div className="max-w-md text-center flex flex-col items-center gap-5">
         <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-amber-500/15 border border-amber-500/30">
           <AlertCircle size={26} className="text-amber-400" />

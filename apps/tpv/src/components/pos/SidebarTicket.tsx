@@ -344,7 +344,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       };
       clearActiveItems();
       if (ticket.type !== "DINE_IN") {
-        updateTicket({ name: "", address: "", phone: "" });
+        updateTicket({ name: "", address: "", phone: "", discount: 0 });
         clearActiveOrder();
         setPreviousItems([]);
       }
@@ -488,14 +488,12 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         tipAmount,
       };
 
-      // Limpieza post-pago
+      // Limpieza post-pago — reset completo para que la próxima venta
+      // arranque en limpio (items, orden activa, rondas, cliente y descuento).
       clearActiveItems();
       clearActiveOrder();
       setPreviousItems([]);
-      
-      if (ticket.type === "DELIVERY") {
-        useTicketStore.getState().updateTicket({ name: "", address: "", phone: "" });
-      }
+      updateTicket({ name: "", address: "", phone: "", discount: 0 });
       setShowPayment(false);
 
       // Impresión de comanda (solo si había items nuevos)
@@ -550,6 +548,18 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     setShowPayment(true);
   };
 
+  // Limpiar ticket = empezar de cero. Además de los items, suelta la orden
+  // activa (activeOrderId) y las rondas anteriores cargadas; si no, el
+  // subtotal "fantasma" y la orden del backend seguían pegados y la próxima
+  // venta se metía a la misma orden.
+  const handleClearTicket = () => {
+    clearActiveItems();
+    clearActiveOrder();
+    setPreviousItems([]);
+    updateTicket({ name: "", phone: "", address: "", discount: 0 });
+    hapticMedium();
+  };
+
   // Cobrable cuando hay items en la ronda nueva (ticket.items) O en el
   // historial cargado de una orden abierta (previousItems). Antes el botón
   // "Cobrar" solo miraba ticket.items, así que al cargar un ticket abierto
@@ -602,7 +612,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           )}
           <button
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#121316] text-zinc-500 transition-all active:scale-95 active:border-red-500/20 active:bg-red-500/10 active:text-red-500"
-            onClick={clearActiveItems}
+            onClick={handleClearTicket}
             aria-label="Limpiar ticket"
           >
             <Trash2 size={16} />

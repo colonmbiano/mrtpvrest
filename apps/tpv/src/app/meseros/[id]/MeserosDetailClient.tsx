@@ -263,7 +263,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
 
       {/* STICKY BOTTOM CTA */}
       {!isLoading && table && (
-        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 bg-[#0C0C0E]/95 border-t border-white/5 backdrop-blur-xl">
+        <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 pb-[calc(1rem_+_env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 sm:pb-[calc(1.5rem_+_env(safe-area-inset-bottom))] bg-[#0C0C0E]/95 border-t border-white/5 backdrop-blur-xl">
           <button
             type="button"
             onClick={handleAddProducts}

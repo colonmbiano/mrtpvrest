@@ -48,6 +48,9 @@ export default function OrderTypePage() {
       // No reseteamos tableId aquí: si el cajero ya tiene una mesa
       // asignada con orden activa (activeOrderStore), el picker la
       // mostrará como OCCUPIED y podrá re-entrar directamente.
+      // Venta nueva: arrancar el ticket en limpio (sin items/datos de la
+      // venta anterior). El activeOrder se resuelve al elegir mesa
+      // (ocupada → re-entra; libre → clear()).
       useTicketStore.getState().updateTicket({
         type: "DINE_IN",
         tableId: "",
@@ -55,11 +58,17 @@ export default function OrderTypePage() {
         table: "",
         numberOfGuests: null,
         activeSeat: null,
+        items: [],
+        name: "",
+        phone: "",
+        address: "",
+        discount: 0,
       });
       setPickingTable(true);
       return;
     }
-    // TAKEOUT / DELIVERY: limpiar contexto de mesa y active order
+    // TAKEOUT / DELIVERY: limpiar contexto de mesa, active order Y el ticket
+    // (items + datos del cliente) para que la venta nueva no herede la anterior.
     useActiveOrderStore.getState().clear();
     useTicketStore.getState().updateTicket({
       type,
@@ -68,6 +77,11 @@ export default function OrderTypePage() {
       table: "",
       numberOfGuests: null,
       activeSeat: null,
+      items: [],
+      name: "",
+      phone: "",
+      address: "",
+      discount: 0,
     });
     router.replace("/pos/menu");
   };
@@ -144,7 +158,7 @@ export default function OrderTypePage() {
   };
 
   return (
-    <div className="flex h-screen w-full bg-[#0a0a0c] overflow-auto">
+    <div className="flex h-[100dvh] w-full bg-[#0a0a0c] overflow-auto">
       <OrderTypeSelector
         onSelect={handlePickType}
         onClose={handleLogout}

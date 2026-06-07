@@ -116,7 +116,7 @@ export default function GuestCountModal({
           <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40 mb-3 px-1">
             Selección rápida
           </p>
-          <div className="grid grid-cols-6 gap-2">
+          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
             {Array.from({ length: gridMax }, (_, i) => i + 1).map((n) => {
               const active = n === guests;
               return (

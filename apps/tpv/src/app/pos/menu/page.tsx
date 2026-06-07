@@ -207,7 +207,7 @@ export default function CatalogPage() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#ebe5dc] text-slate-950">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surf-0 text-tx-pri">
       {viewMode === "drilldown" ? (
         !showCategoryOverview && (
           <DrilldownHeader
@@ -291,7 +291,7 @@ function CategoryBar({
   onSelect: (id: string) => void;
 }) {
   return (
-    <nav className="shrink-0 border-b border-[#d8cbbb] bg-[#f7f0e6] px-3 py-2">
+    <nav className="shrink-0 border-b border-bd bg-surf-1 px-3 py-2">
       <div className="flex h-[58px] gap-2 overflow-x-auto scrollbar-hide">
         <CategoryButton
           label="Todos"
@@ -323,17 +323,17 @@ function DrilldownHeader({
   onBack: () => void;
 }) {
   return (
-    <nav className="shrink-0 border-b border-[#d8cbbb] bg-[#f7f0e6] px-3 py-2">
+    <nav className="shrink-0 border-b border-bd bg-surf-1 px-3 py-2">
       <div className="flex h-[58px] items-center gap-3">
         <button
           type="button"
           onClick={onBack}
-          className="flex h-11 items-center gap-1.5 rounded-lg border-2 border-[#6b5641] bg-[#1e1b18] px-3 text-[#f8e8d0] active:bg-[#28221c] focus:outline-none focus:ring-2 focus:ring-[#ff8400]"
+          className="flex h-11 items-center gap-1.5 rounded-lg border-2 border-bd bg-surf-2 px-3 text-tx-pri active:bg-surf-3 focus:outline-none focus:ring-2 focus:ring-iris-500"
         >
           <ChevronLeft size={20} strokeWidth={3} />
           <span className="text-[13px] font-black uppercase">Categorías</span>
         </button>
-        <span className="min-w-0 flex-1 truncate text-[18px] font-black text-slate-950">
+        <span className="min-w-0 flex-1 truncate text-[18px] font-black text-tx-pri">
           {title}
         </span>
       </div>
@@ -352,42 +352,43 @@ function CategoryGrid({
   density: CatalogDensity;
   onSelect: (id: string) => void;
 }) {
-  const gridClass =
-    density === 3
-      ? "grid-cols-2 sm:grid-cols-3"
-      : density === 6
-        ? "grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
-        : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5";
+  // Columnas fluidas: el nº de tarjetas se calcula del ANCHO REAL disponible
+  // (catálogo junto al sidebar), no de breakpoints de viewport. La density
+  // (S/M/L) controla el ancho mínimo de tarjeta → más densidad = más columnas.
+  const minColWidth = density === 6 ? 120 : density === 3 ? 180 : 140;
   const rowHeight = density === 6 ? 108 : density === 3 ? 144 : 124;
 
   return (
     <div className="h-full overflow-y-auto overscroll-contain scrollbar-hide">
       <div
-        className={`grid gap-2.5 pb-4 ${gridClass}`}
-        style={{ gridAutoRows: `${rowHeight}px` }}
+        className="grid gap-2.5 pb-4"
+        style={{
+          gridTemplateColumns: `repeat(auto-fill, minmax(${minColWidth}px, 1fr))`,
+          gridAutoRows: `${rowHeight}px`,
+        }}
       >
         {categories.map((category) => {
           const tone = categoryTone(category.name);
           const palette = {
-            food: "bg-[#fff4e7] text-slate-950 border-orange-300 active:bg-[#ffe8cf]",
-            wings: "bg-[#fff0ee] text-slate-950 border-red-300 active:bg-[#ffe2df]",
-            snack: "bg-[#fff7e6] text-slate-950 border-amber-300 active:bg-[#ffedc6]",
-            drink: "bg-[#eef6ff] text-slate-950 border-blue-300 active:bg-[#dcecff]",
-            neutral: "bg-white text-slate-950 border-slate-300 active:bg-slate-100",
+            food: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
+            wings: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
+            snack: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
+            drink: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
+            neutral: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
           }[tone];
           const accent = {
             food: "bg-orange-500",
             wings: "bg-red-500",
             snack: "bg-amber-400",
             drink: "bg-blue-500",
-            neutral: "bg-slate-500",
+            neutral: "bg-emerald-500",
           }[tone];
           return (
             <button
               key={category.id}
               type="button"
               onClick={() => onSelect(category.id)}
-              className={`relative flex h-full flex-col justify-between overflow-hidden rounded-lg border-2 p-3 text-left shadow-sm ${palette} focus:outline-none focus:ring-2 focus:ring-slate-950`}
+              className={`relative flex h-full flex-col justify-between overflow-hidden rounded-lg border-2 p-3 text-left shadow-sm ${palette} focus:outline-none focus:ring-2 focus:ring-iris-500`}
               style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
             >
               <span aria-hidden className={`absolute inset-x-0 top-0 h-1.5 ${accent}`} />
@@ -419,18 +420,18 @@ function CategoryButton({
   onClick: () => void;
 }) {
   const palette = {
-    food: active ? "bg-orange-600 text-white border-orange-700" : "bg-[#251914] text-orange-100 border-orange-500/35 active:bg-[#321f16]",
-    wings: active ? "bg-red-600 text-white border-red-700" : "bg-[#251719] text-red-100 border-red-500/35 active:bg-[#321b1e]",
-    snack: active ? "bg-amber-500 text-black border-amber-600" : "bg-[#261f14] text-amber-100 border-amber-500/40 active:bg-[#342916]",
-    drink: active ? "bg-blue-600 text-white border-blue-700" : "bg-[#161f2b] text-blue-100 border-blue-400/35 active:bg-[#1b2838]",
-    neutral: active ? "bg-slate-950 text-white border-slate-950" : "bg-[#1e1b18] text-[#f8e8d0] border-[#6b5641] active:bg-[#28221c]",
+    food: active ? "bg-iris-500 text-iris-fg border-iris-500" : "bg-surf-1 text-tx-sec border-bd active:bg-surf-2",
+    wings: active ? "bg-iris-500 text-iris-fg border-iris-500" : "bg-surf-1 text-tx-sec border-bd active:bg-surf-2",
+    snack: active ? "bg-iris-500 text-iris-fg border-iris-500" : "bg-surf-1 text-tx-sec border-bd active:bg-surf-2",
+    drink: active ? "bg-iris-500 text-iris-fg border-iris-500" : "bg-surf-1 text-tx-sec border-bd active:bg-surf-2",
+    neutral: active ? "bg-iris-500 text-iris-fg border-iris-500" : "bg-surf-1 text-tx-sec border-bd active:bg-surf-2",
   }[tone];
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col justify-center rounded-lg border-2 px-3 text-left shadow-[0_4px_12px_rgba(44,31,19,0.18)] ${palette} focus:outline-none focus:ring-2 focus:ring-[#ff8400]`}
+      className={`flex flex-col justify-center rounded-lg border-2 px-3 text-left shadow-[0_4px_12px_rgba(0,0,0,0.35)] ${palette} focus:outline-none focus:ring-2 focus:ring-iris-500`}
       style={{ width: 116, minWidth: 116, height: 58 }}
     >
       <span className="block truncate text-[13px] font-black leading-tight">{label}</span>
@@ -452,19 +453,20 @@ function ProductGrid({
   onLongPress: (product: Product) => void;
   density: CatalogDensity;
 }) {
-  const gridClass =
-    density === 3
-      ? "grid-cols-2 sm:grid-cols-3"
-      : density === 6
-        ? "grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
-        : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5";
+  // Columnas fluidas: el nº de tarjetas se calcula del ANCHO REAL disponible
+  // (catálogo junto al sidebar), no de breakpoints de viewport. La density
+  // (S/M/L) controla el ancho mínimo de tarjeta → más densidad = más columnas.
+  const minColWidth = density === 6 ? 120 : density === 3 ? 180 : 140;
   const rowHeight = density === 6 ? 108 : density === 3 ? 144 : 124;
 
   return (
     <div className="h-full overflow-y-auto overscroll-contain scrollbar-hide">
       <div
-        className={`grid gap-2.5 pb-4 ${gridClass}`}
-        style={{ gridAutoRows: `${rowHeight}px` }}
+        className="grid gap-2.5 pb-4"
+        style={{
+          gridTemplateColumns: `repeat(auto-fill, minmax(${minColWidth}px, 1fr))`,
+          gridAutoRows: `${rowHeight}px`,
+        }}
       >
         {products.map((product) => (
           <ProductTile
@@ -492,29 +494,29 @@ function ProductTile({
   const tone = categoryTone(product.category || product.name);
   const palette = {
     food: {
-      card: "bg-[#fff4e7] text-slate-950 border-orange-300 active:bg-[#ffe8cf]",
+      card: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
       accent: "bg-orange-500",
       button: "bg-orange-500 text-black",
     },
     wings: {
-      card: "bg-[#fff0ee] text-slate-950 border-red-300 active:bg-[#ffe2df]",
+      card: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
       accent: "bg-red-500",
       button: "bg-red-500 text-white",
     },
     snack: {
-      card: "bg-[#fff7e6] text-slate-950 border-amber-300 active:bg-[#ffedc6]",
+      card: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
       accent: "bg-amber-400",
       button: "bg-amber-400 text-black",
     },
     drink: {
-      card: "bg-[#eef6ff] text-slate-950 border-blue-300 active:bg-[#dcecff]",
+      card: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
       accent: "bg-blue-500",
       button: "bg-blue-500 text-white",
     },
     neutral: {
-      card: "bg-white text-slate-950 border-slate-300 active:bg-slate-100",
-      accent: "bg-slate-500",
-      button: "bg-slate-950 text-white",
+      card: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
+      accent: "bg-emerald-500",
+      button: "bg-emerald-500 text-black",
     },
   }[tone];
   const price = Number(product.promoPrice || product.price || 0);
@@ -529,17 +531,17 @@ function ProductTile({
         onLongPress();
       }}
       disabled={isDisabled}
-      className={`product-card relative flex h-full flex-col overflow-hidden rounded-lg border-2 p-3 text-left shadow-sm ${palette.card} disabled:opacity-45 disabled:grayscale focus:outline-none focus:ring-2 focus:ring-slate-950`}
+      className={`product-card relative flex h-full flex-col overflow-hidden rounded-lg border-2 p-3 text-left shadow-sm ${palette.card} disabled:opacity-45 disabled:grayscale focus:outline-none focus:ring-2 focus:ring-iris-500`}
       style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
     >
       <span aria-hidden className={`absolute inset-x-0 top-0 h-1.5 ${palette.accent}`} />
       {quantity > 0 && (
-        <span className="absolute right-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-slate-950 px-2 text-[12px] font-black text-white">
+        <span className="absolute right-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-iris-500 px-2 text-[12px] font-black text-iris-fg">
           x{quantity}
         </span>
       )}
       {product.isAvailable === false && (
-        <span className="mb-2 inline-flex self-start rounded-md bg-slate-950 px-2 py-1 text-[10px] font-black uppercase text-white">
+        <span className="mb-2 inline-flex self-start rounded-md bg-surf-3 px-2 py-1 text-[10px] font-black uppercase text-tx-sec">
           Agotado
         </span>
       )}
@@ -630,24 +632,24 @@ function QuickModifierPanel({
   };
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border-2 border-slate-300 bg-white">
-      <header className="flex shrink-0 items-center gap-3 border-b border-slate-300 px-4 py-3">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border-2 border-bd bg-surf-1">
+      <header className="flex shrink-0 items-center gap-3 border-b border-bd px-4 py-3">
         <button
           type="button"
           onClick={onBack}
-          className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-200 text-slate-950 active:bg-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-950"
+          className="flex h-11 w-11 items-center justify-center rounded-lg bg-surf-2 text-tx-pri active:bg-surf-3 focus:outline-none focus:ring-2 focus:ring-iris-500"
           aria-label="Volver al catalogo"
         >
           <ChevronLeft size={23} strokeWidth={3} />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-black uppercase text-slate-500">Modificadores rapidos</p>
-          <h2 className="truncate text-[22px] font-black text-slate-950">{product.name}</h2>
+          <p className="text-[11px] font-black uppercase text-tx-mut">Modificadores rapidos</p>
+          <h2 className="truncate text-[22px] font-black text-tx-pri">{product.name}</h2>
         </div>
         <button
           type="button"
           onClick={onBack}
-          className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-950 text-white active:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-950"
+          className="flex h-11 w-11 items-center justify-center rounded-lg bg-surf-2 text-tx-pri active:bg-surf-3 focus:outline-none focus:ring-2 focus:ring-iris-500"
           aria-label="Cerrar modificadores"
         >
           <X size={21} strokeWidth={3} />
@@ -665,10 +667,10 @@ function QuickModifierPanel({
                     key={variant.id}
                     type="button"
                     onClick={() => setSelectedVariantId(variant.id)}
-                    className={`min-h-20 rounded-lg border-2 p-3 text-left focus:outline-none focus:ring-2 focus:ring-slate-950 ${
+                    className={`min-h-20 rounded-lg border-2 p-3 text-left focus:outline-none focus:ring-2 focus:ring-iris-500 ${
                       active
                         ? "border-green-700 bg-green-500 text-black"
-                        : "border-slate-300 bg-slate-100 text-slate-950 active:bg-slate-200"
+                        : "border-bd bg-surf-2 text-tx-pri active:bg-surf-3"
                     }`}
                   >
                     <span className="block text-[16px] font-black">{variant.name}</span>
@@ -701,13 +703,13 @@ function QuickModifierPanel({
                       key={modifier.id}
                       type="button"
                       onClick={() => toggle(group, modifier)}
-                      className={`flex min-h-16 items-center gap-3 rounded-lg border-2 px-3 text-left focus:outline-none focus:ring-2 focus:ring-slate-950 ${
+                      className={`flex min-h-16 items-center gap-3 rounded-lg border-2 px-3 text-left focus:outline-none focus:ring-2 focus:ring-iris-500 ${
                         active
                           ? "border-green-700 bg-green-500 text-black"
-                          : "border-slate-300 bg-slate-100 text-slate-950 active:bg-slate-200"
+                          : "border-bd bg-surf-2 text-tx-pri active:bg-surf-3"
                       }`}
                     >
-                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center ${group.multiSelect ? "rounded-md" : "rounded-full"} ${active ? "bg-black text-white" : "border-2 border-slate-400 bg-white"}`}>
+                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center ${group.multiSelect ? "rounded-md" : "rounded-full"} ${active ? "bg-black text-white" : "border-2 border-bd-strong bg-surf-1"}`}>
                         {active && <Check size={15} strokeWidth={3} />}
                       </span>
                       <span className="min-w-0 flex-1 text-[15px] font-black">{modifier.name}</span>
@@ -723,11 +725,11 @@ function QuickModifierPanel({
         })}
 
         <OptionSection title="Cantidad" helper="Antes de agregar">
-          <div className="inline-flex items-center gap-2 rounded-lg border-2 border-slate-300 bg-slate-100 p-2">
+          <div className="inline-flex items-center gap-2 rounded-lg border-2 border-bd bg-surf-2 p-2">
             <button
               type="button"
               onClick={() => setQuantity((value) => Math.max(1, value - 1))}
-              className="flex h-12 w-12 items-center justify-center rounded-md bg-white text-slate-950 active:bg-slate-200"
+              className="flex h-12 w-12 items-center justify-center rounded-md bg-surf-1 text-tx-pri active:bg-surf-3"
             >
               <Minus size={20} strokeWidth={3} />
             </button>
@@ -735,7 +737,7 @@ function QuickModifierPanel({
             <button
               type="button"
               onClick={() => setQuantity((value) => Math.min(99, value + 1))}
-              className="flex h-12 w-12 items-center justify-center rounded-md bg-white text-slate-950 active:bg-slate-200"
+              className="flex h-12 w-12 items-center justify-center rounded-md bg-surf-1 text-tx-pri active:bg-surf-3"
             >
               <Plus size={20} strokeWidth={3} />
             </button>
@@ -749,24 +751,24 @@ function QuickModifierPanel({
             placeholder="Sin cebolla, termino medio, alergia..."
             rows={2}
             maxLength={200}
-            className="w-full resize-none rounded-lg border-2 border-slate-300 bg-white px-3 py-3 text-[15px] font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-950"
+            className="w-full resize-none rounded-lg border-2 border-bd bg-surf-2 px-3 py-3 text-[15px] font-bold text-tx-pri outline-none placeholder:text-tx-mut focus:border-iris-500"
           />
         </OptionSection>
       </div>
 
-      <footer className="shrink-0 border-t border-slate-300 bg-slate-100 p-4">
-        {validationError && <p className="mb-2 text-[13px] font-black text-red-700">{validationError}</p>}
+      <footer className="shrink-0 border-t border-bd bg-surf-1 p-4">
+        {validationError && <p className="mb-2 text-[13px] font-black text-danger">{validationError}</p>}
         <div className="flex items-center gap-4">
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-black uppercase text-slate-500">Total configurado</p>
-            <p className="text-[15px] font-bold text-slate-700">${unitPrice.toFixed(2)} por unidad</p>
+            <p className="text-[11px] font-black uppercase text-tx-mut">Total configurado</p>
+            <p className="text-[15px] font-bold text-tx-sec">${unitPrice.toFixed(2)} por unidad</p>
           </div>
-          <span className="text-[28px] font-black tabular-nums text-slate-950">${totalPrice.toFixed(2)}</span>
+          <span className="text-[28px] font-black tabular-nums text-tx-pri">${totalPrice.toFixed(2)}</span>
           <button
             type="button"
             onClick={confirm}
             disabled={!!validationError}
-            className="h-16 min-w-[210px] rounded-lg bg-green-500 px-5 text-[15px] font-black uppercase text-black active:bg-green-600 disabled:opacity-40 disabled:grayscale focus:outline-none focus:ring-2 focus:ring-slate-950"
+            className="h-16 min-w-[210px] rounded-lg bg-green-500 px-5 text-[15px] font-black uppercase text-black active:bg-green-600 disabled:opacity-40 disabled:grayscale focus:outline-none focus:ring-2 focus:ring-iris-500"
           >
             Agregar
           </button>
@@ -788,8 +790,8 @@ function OptionSection({
   return (
     <section className="mb-5">
       <div className="mb-2 flex items-baseline justify-between gap-3">
-        <h3 className="text-[17px] font-black text-slate-950">{title}</h3>
-        <span className="text-[11px] font-black uppercase text-slate-500">{helper}</span>
+        <h3 className="text-[17px] font-black text-tx-pri">{title}</h3>
+        <span className="text-[11px] font-black uppercase text-tx-mut">{helper}</span>
       </div>
       {children}
     </section>
@@ -800,7 +802,7 @@ function ProductSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
       {Array.from({ length: 12 }).map((_, index) => (
-        <div key={index} className="h-[132px] rounded-lg border-2 border-slate-300 bg-slate-200" />
+        <div key={index} className="h-[132px] rounded-lg border-2 border-bd bg-surf-1 animate-pulse" />
       ))}
     </div>
   );
@@ -808,9 +810,9 @@ function ProductSkeleton() {
 
 function EmptyState({ query }: { query: string }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-slate-300 bg-white p-6 text-center">
-      <Search size={34} className="text-slate-400" />
-      <p className="text-[16px] font-black text-slate-700">
+    <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-bd bg-surf-1 p-6 text-center">
+      <Search size={34} className="text-tx-mut" />
+      <p className="text-[16px] font-black text-tx-sec">
         {query.trim() ? "Sin resultados para la busqueda" : "Sin productos en esta categoria"}
       </p>
     </div>

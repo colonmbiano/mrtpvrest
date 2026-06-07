@@ -9,6 +9,8 @@ interface NumpadPINProps {
   maxDigits?: number;
   submitLabel?: string;
   onChange?: (pin: string) => void;
+  /** Envía automáticamente al capturar el último dígito (sin botón Ingresar). */
+  autoSubmit?: boolean;
 }
 
 export default function NumpadPIN({
@@ -17,6 +19,7 @@ export default function NumpadPIN({
   maxDigits = 4,
   submitLabel = "Ingresar",
   onChange,
+  autoSubmit = false,
 }: NumpadPINProps) {
   const [pin, setPin] = useState("");
   const onChangeRef = useRef(onChange);
@@ -75,6 +78,13 @@ export default function NumpadPIN({
       updatePin("");
     }
   };
+
+  // Auto-envío: al capturar el último dígito se envía solo, sin pulsar Ingresar.
+  useEffect(() => {
+    if (!autoSubmit || disabled || pin.length !== maxDigits) return;
+    void handleSubmit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin, autoSubmit, disabled, maxDigits]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -202,14 +212,16 @@ export default function NumpadPIN({
         </button>
       </div>
 
-      <button
-        type="button"
-        onClick={() => void handleSubmit()}
-        disabled={!canSubmit}
-        className="min-h-[42px] w-full rounded-lg bg-[#ffb84d] px-4 text-sm font-black uppercase tracking-[0.2em] text-[#0a0a0c] transition-colors active:scale-[0.99] disabled:bg-white/10 disabled:text-white/30 disabled:active:scale-100 focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70 sm:min-h-[48px]"
-      >
-        {disabled ? "Validando" : submitLabel}
-      </button>
+      {!autoSubmit && (
+        <button
+          type="button"
+          onClick={() => void handleSubmit()}
+          disabled={!canSubmit}
+          className="min-h-[42px] w-full rounded-lg bg-[#ffb84d] px-4 text-sm font-black uppercase tracking-[0.2em] text-[#0a0a0c] transition-colors active:scale-[0.99] disabled:bg-white/10 disabled:text-white/30 disabled:active:scale-100 focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70 sm:min-h-[48px]"
+        >
+          {disabled ? "Validando" : submitLabel}
+        </button>
+      )}
     </div>
   );
 }

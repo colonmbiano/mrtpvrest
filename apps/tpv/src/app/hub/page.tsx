@@ -39,7 +39,7 @@ const fmtMoney = (n: number) =>
 // como en el estado pre-mounted del cliente.
 function HubLoader({ label = 'Verificando turno...' }: { label?: string }) {
   return (
-    <div className="min-h-screen w-full bg-[#0a0a0c] flex flex-col items-center justify-center gap-4">
+    <div className="min-h-[100dvh] w-full bg-[#0a0a0c] flex flex-col items-center justify-center gap-4">
       <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
       <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">
         {label}
@@ -187,7 +187,7 @@ function HubPageInner() {
 
   return (
     <div
-      className="relative min-h-screen w-full overflow-hidden bg-[#0a0a0c]"
+      className="relative min-h-[100dvh] w-full overflow-hidden bg-[#0a0a0c]"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* Ambient diseño operativo glows */}

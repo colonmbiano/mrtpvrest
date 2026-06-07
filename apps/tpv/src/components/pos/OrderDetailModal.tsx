@@ -148,7 +148,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         </div>
 
         {/* META */}
-        <div className="relative z-10 p-5 grid grid-cols-2 gap-3 border-b border-white/5 shrink-0">
+        <div className="relative z-10 p-5 grid grid-cols-1 sm:grid-cols-2 gap-3 border-b border-white/5 shrink-0">
           <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
             <div className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase mb-1">
               Cliente
