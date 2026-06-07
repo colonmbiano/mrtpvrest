@@ -1,0 +1,99 @@
+# Auditoría de Configuraciones del TPV
+
+Auditoría de las pantallas de configuración, modales, redundancias, claridad y
+flujo del TPV. Documenta los hallazgos y marca qué se arregló en este PR y qué
+queda como trabajo recomendado.
+
+## Resumen
+
+El TPV tiene buena cobertura funcional de configuración pero sufre de
+**fragmentación**: la misma configuración vive en varios lugares, conviven dos
+sistemas de modales, y la persistencia está repartida entre Zustand,
+localStorage directo y cookies sin una fuente de verdad única.
+
+---
+
+## ✅ Arreglado en este PR — Apariencia unificada
+
+**Problema:** los 4 controles de apariencia (tamaño de letra, ancho del panel
+ticket, paleta, modo nocturno) estaban implementados dos veces, y el mapeo
+`small/medium/large → px` estaba escrito tres veces:
+
+- `components/pos/ConfigMenu.tsx` (rail POS)
+- `app/admin/apariencia/page.tsx` (panel admin)
+- `components/tpv/ModalRoot.tsx` (boot)
+
+**Bugs derivados:**
+
+1. `/admin/apariencia` NO emitía `ui-scale-changed`, así que cambiar el tamaño
+   de letra desde el admin dejaba el picker del rail POS desincronizado hasta
+   recargar (el evento nativo `storage` no se dispara en la misma pestaña).
+2. `/pos/menu/layout.tsx` aplicaba un ancho de panel **distinto** al anunciado:
+   los pickers mostraban `320 / 380 / 440px` pero el panel aplicaba
+   `300 / 320 / 400px`. El usuario nunca obtenía el ancho prometido.
+
+**Solución:** se creó `src/lib/appearance.ts` como fuente única de verdad
+(tipos, defaults, labels, lectura/escritura + emisión de eventos). Todos los
+consumidores ahora lo usan:
+
+- `ConfigMenu.tsx`, `app/admin/apariencia/page.tsx` → pickers comparten lógica.
+- `ModalRoot.tsx` → aplica al boot y reacciona en caliente a `ui-scale-changed`.
+- `app/pos/menu/layout.tsx` → usa `sidebarPresetToPx`, ahora coincide con los
+  labels (320 / 380 / 440px).
+
+---
+
+## Pendiente — recomendaciones (no incluidas en este PR)
+
+Refactors mayores que requieren decisiones de diseño y se dejan fuera por
+riesgo/alcance:
+
+### Redundancias
+
+- **Display config repartida en 3 mecanismos**: `useThemeStore` (Zustand),
+  localStorage (`uiScale`, `sidebarWidth`) y `tpv-display-config`
+  (`gridSize`, `sound`, `showImages`, `fontSize`). Además `gridSize`/`fontSize`
+  se solapan con `CatalogSettingsSheet` y el tab display de `TPVConfigModal`.
+- **Tenant con claves paralelas**: `restaurantId/locationId` vs
+  `activeRestaurantId/activeLocationId` (y `locationName` vs
+  `activeWorkspaceName`). `lib/api.ts` lee ambas como fallback y `hub/page.tsx`
+  escribe las dos. Riesgo de divergencia silenciosa. → consolidar a un par.
+- **Config de tickets/cocina duplicada**: `TicketConfigModal` ↔ tab Cocina de
+  `TPVConfigModal`. → una sola fuente.
+- **Ruteo de impresoras en 3-4 sitios**: `admin/impresoras` (directo),
+  `admin/grupos-impresoras` (grupo), `PrinterCategoriesModal`, form de
+  `TPVConfigModal`. Precedencia poco clara.
+- **Dos sistemas de permisos** (legacy + "Phase 10") en `admin/usuarios`.
+- **VariantPickerModal vs ProductConfiguratorModal**: ambos seleccionan
+  variantes. → fusionar.
+- **PIN input** reimplementado en `EmployeeModal`, `DiscountModal`,
+  `TicketConfigModal` con reglas inconsistentes. → componente reutilizable.
+
+### Arquitectura de modales
+
+- **Dos sistemas**: 10 modales usan `BaseModal` + `ModalContext` + `ModalStack`;
+  9 usan overlay propio fuera del stack (ProductConfigurator, VariantPicker,
+  CatalogSettingsSheet, TicketConfigModal, TPVConfigModal, ShiftModal,
+  IngredientShortageModal, DriverMovementsModal, PrinterCategoriesModal).
+  Resultado: sin stacking consistente, riesgo de z-index, escape inconsistente.
+- `TPVConfigModal` abre el form de impresora como **overlay anidado** dentro de
+  sí mismo.
+
+### Claridad
+
+- Botón "probar impresora" escondido dentro del form de edición.
+- Variantes vs Modificadores vs Complementos (3 sistemas en `admin/menu`) sin
+  guía de uso; "3 sin costo" ambiguo.
+- "Cancelar" en `PaymentModal` se confunde con "cancelar la orden".
+- Modo claro experimental con bugs conocidos sigue visible.
+- `CategoryModal` tiene campo `icon` en el modelo pero no en el formulario.
+
+### Flujo
+
+- Setup wizard sin botón "atrás"; rol de dispositivo permanente sin
+  confirmación (exige reinstalar para cambiar).
+- Zonas configurables en `admin/mesas` y `TPVConfigModal`, pero no se pueden
+  crear desde Mesas.
+- Sin confirmación/estado de carga en descuento, cobro y "agregar al ticket".
+- `ReportModal` acepta rangos de fecha inválidos.
+- Cambiar de tab pierde cambios no guardados en `TPVConfigModal`.
