@@ -134,11 +134,10 @@ porque vivían dentro de TPVConfigModal:
 - **Ruteo de impresoras** dentro de TPVConfigModal (capa redundante).
 - **Overlay anidado** (form de impresora dentro del modal).
 
-> ⚠️ Hueco abierto: `components/settings/DualScreenSettings.tsx` (config de
-> doble pantalla, feature viva) solo se montaba dentro de TPVConfigModal, así
-> que **ya era inalcanzable** en la app actual. El archivo se conserva sin
-> borrar; falta **surfacearlo en una página admin viva** (p.ej. una nueva
-> `admin/pantalla` o dentro de `admin/apariencia`). Decisión pendiente.
+> ✅ Resuelto: `DualScreenSettings` (config de doble pantalla) solo se montaba
+> dentro de TPVConfigModal, así que era inalcanzable. Ahora vive en una ruta
+> admin viva: `app/admin/pantalla/page.tsx`, enlazada desde la grilla del panel
+> y el sidebar (`admin/page.tsx`, `admin/layout.tsx`).
 
 ---
 
@@ -149,8 +148,6 @@ riesgo/alcance:
 
 ### Redundancias / huecos
 
-- **Doble pantalla sin UI**: re-montar `DualScreenSettings` en una página admin
-  viva (ver arriba).
 - **Ruteo de impresoras en 3 sitios**: `admin/impresoras` (directo),
   `admin/grupos-impresoras` (grupo) y `PrinterCategoriesModal`. Precedencia poco
   clara → elegir modelo canónico.
