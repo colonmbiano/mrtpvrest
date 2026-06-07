@@ -119,15 +119,6 @@ function computeUnitExtra(
   }, 0);
 }
 
-function resolveVariantPrice(product: MenuItem, variant: MenuVariant | null) {
-  const basePrice = Number(product.promoPrice || product.price || 0);
-  if (!variant) return basePrice;
-  const variantPrice = Number(variant.price || 0);
-  if (variantPrice <= 0) return basePrice;
-  if (variantPrice < basePrice) return basePrice + variantPrice;
-  return variantPrice;
-}
-
 function resolveVariantSelectionPrice(product: MenuItem, variants: MenuVariant[]) {
   const basePrice = Number(product.promoPrice || product.price || 0);
   const fullPrice = variants
