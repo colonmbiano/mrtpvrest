@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, type ReactNode } from "react";
 import { Toaster } from "sonner";
-import { ModalProvider } from "@/contexts/ModalContext";
 import { usePOSStore } from "@/store/usePOSStore";
 import { useHardwareBack } from "@/hooks/useHardwareBack";
 import { usePromoSync } from "@/hooks/usePromoSync";
@@ -31,9 +30,7 @@ function useUiScale(): void {
 }
 
 /**
- * Lightweight root: provides ModalContext + Toaster app-wide.
- * Each page mounts its own <ModalStack handlers={...}/> with its
- * domain-specific callbacks.
+ * Lightweight root: aplica el tamaño de letra UI y monta el Toaster global.
  *
  * Aquí también se engancha el hardware Back button de Android (Capacitor)
  * a la navegación de Next.js, para que el personal no cierre la app por
@@ -47,7 +44,7 @@ export default function ModalRoot({ children }: { children: ReactNode }) {
   usePromoSync();
 
   return (
-    <ModalProvider>
+    <>
       {children}
       <Toaster
         position="bottom-right"
@@ -62,6 +59,6 @@ export default function ModalRoot({ children }: { children: ReactNode }) {
           },
         }}
       />
-    </ModalProvider>
+    </>
   );
 }
