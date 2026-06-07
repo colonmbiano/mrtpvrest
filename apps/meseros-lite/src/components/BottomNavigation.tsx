@@ -14,7 +14,13 @@ const tabs = [
 export default function BottomNavigation() {
   const pathname = usePathname();
   const pendingCount = useOfflineQueueStore(
-    (state) => state.queue.filter((transaction) => !transaction.synced).length,
+    (state) =>
+      state.queue.filter(
+        (transaction) => !transaction.synced && !transaction.failedPermanently,
+      ).length,
+  );
+  const failedCount = useOfflineQueueStore(
+    (state) => state.queue.filter((transaction) => transaction.failedPermanently).length,
   );
 
   return (
@@ -43,9 +49,18 @@ export default function BottomNavigation() {
           );
         })}
       </div>
-      {pendingCount > 0 && (
-        <div className="absolute right-3 top-[-34px] rounded-lg border border-[#ffb84d] bg-[#121214] px-3 py-2 text-xs font-black uppercase text-[#ffb84d]">
-          {pendingCount} pendiente{pendingCount === 1 ? "" : "s"}
+      {(pendingCount > 0 || failedCount > 0) && (
+        <div className="absolute right-3 top-[-34px] flex gap-2">
+          {pendingCount > 0 && (
+            <div className="rounded-lg border border-[#ffb84d] bg-[#121214] px-3 py-2 text-xs font-black uppercase text-[#ffb84d]">
+              {pendingCount} pendiente{pendingCount === 1 ? "" : "s"}
+            </div>
+          )}
+          {failedCount > 0 && (
+            <div className="rounded-lg border border-[#ff6b6b] bg-[#121214] px-3 py-2 text-xs font-black uppercase text-[#ff6b6b]">
+              {failedCount} fallida{failedCount === 1 ? "" : "s"}
+            </div>
+          )}
         </div>
       )}
     </nav>
