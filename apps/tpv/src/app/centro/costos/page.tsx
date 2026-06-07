@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Loader2, TrendingUp, TrendingDown, ChevronRight } from "lucide-react";
 import api from "@/lib/api";
+import { getLocationId } from "@/lib/tenant";
 
 interface IngredientLite {
   id: string;
@@ -54,9 +55,7 @@ export default function CentroCostosPage() {
     (async () => {
       try {
         // Para que /api/inventory/ingredients responda necesitamos location.
-        const locationId = typeof window !== "undefined"
-          ? localStorage.getItem("locationId") || localStorage.getItem("activeLocationId")
-          : null;
+        const locationId = getLocationId();
         if (!locationId) {
           setError("Selecciona una sucursal en el hub para ver costos por ingrediente.");
           return;

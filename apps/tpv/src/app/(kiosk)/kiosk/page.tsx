@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { getApiUrl } from "@/lib/config";
+import { getTenantIds } from "@/lib/tenant";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -84,8 +85,7 @@ export default function KioskPage() {
     try {
       setLoading(true);
       const baseUrl      = getApiUrl();
-      const restaurantId = typeof window !== "undefined" ? localStorage.getItem("restaurantId") : null;
-      const locationId   = typeof window !== "undefined" ? localStorage.getItem("locationId")   : null;
+      const { restaurantId, locationId } = getTenantIds();
       const headers: Record<string, string> = {};
       if (restaurantId) headers["x-restaurant-id"] = restaurantId;
       if (locationId)   headers["x-location-id"]   = locationId;
@@ -142,8 +142,7 @@ export default function KioskPage() {
     setOrdering(true);
     try {
       const baseUrl      = getApiUrl();
-      const restaurantId = typeof window !== "undefined" ? localStorage.getItem("restaurantId") : null;
-      const locationId   = typeof window !== "undefined" ? localStorage.getItem("locationId")   : null;
+      const { restaurantId, locationId } = getTenantIds();
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (restaurantId) headers["x-restaurant-id"] = restaurantId;
       if (locationId)   headers["x-location-id"]   = locationId;
