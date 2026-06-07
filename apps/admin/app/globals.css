@@ -214,3 +214,16 @@ body {
 
 .warmtech-scrollbar { scrollbar-width: none; }
 .warmtech-scrollbar::-webkit-scrollbar { display: none; }
+
+@media (min-width: 768px) {
+  .warmtech-shell {
+    --brand-primary: #e3794c;
+    --brand-secondary: #c95a2f;
+    --iris-soft: rgba(227,121,76,.13);
+    --iris-glow: rgba(201,90,47,.28);
+  }
+
+  .warmtech-shell .warmtech-card {
+    border-radius: 20px;
+  }
+}
