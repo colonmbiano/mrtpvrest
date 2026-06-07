@@ -67,6 +67,41 @@ divergencia silenciosa en consultas multi-tenant.
 
 ---
 
+## ✅ Arreglado — Configuradores de producto duplicados (código muerto)
+
+**Problema:** la auditoría reportó `VariantPickerModal` vs
+`ProductConfiguratorModal` como modales redundantes para seleccionar variantes.
+Al investigar resultó peor: el configurador **vivo** está inline en
+`app/pos/menu/page.tsx`, y había **tres** archivos muertos sin referencias que
+lo duplicaban:
+
+- `components/modals/VariantPickerModal.tsx` (100% sin uso)
+- `components/modals/ProductConfiguratorModal.tsx` (100% sin uso)
+- `components/pos/ModifierPickerModal.tsx` (componente default muerto; solo se
+  usaban sus dos constantes de prefijo)
+
+**Solución:** se movieron las dos constantes (`COMPLEMENT_MODIFIER_PREFIX`,
+`VARIANT_MODIFIER_PREFIX`) a `src/lib/modifiers.ts`, se actualizaron los dos
+importadores vivos (`pos/menu/page.tsx`, `SidebarTicket.tsx`) y se eliminaron
+los tres archivos muertos.
+
+## ✅ Arreglado — Componente de PIN reutilizable
+
+**Problema:** la regla "solo dígitos, máx 6" (`replace(/\D/g, "").slice(0, 6)`)
++ `inputMode="numeric"` estaba copiada en `EmployeeModal` y `DiscountModal`, con
+mensajes inconsistentes (label "4-6 dígitos" vs error "al menos 4 dígitos").
+
+**Solución:** nuevo `src/components/ui/PinInput.tsx` con variantes `masked`
+(PIN de autorización, type=password) e icono de candado. Lo usan `EmployeeModal`
+y `modals/DiscountModal`. Se alineó el mensaje de validación a "PIN de 4 a 6
+dígitos".
+
+> Nota: `components/modals/TicketConfigModal.tsx` (que también reimplementaba el
+> PIN) resultó ser código muerto — el editor de tickets vivo es
+> `app/admin/tickets/page.tsx`. Queda como dead-code a eliminar (ver pendientes).
+
+---
+
 ## Pendiente — recomendaciones (no incluidas en este PR)
 
 Refactors mayores que requieren decisiones de diseño y se dejan fuera por
@@ -84,10 +119,12 @@ riesgo/alcance:
   `admin/grupos-impresoras` (grupo), `PrinterCategoriesModal`, form de
   `TPVConfigModal`. Precedencia poco clara.
 - **Dos sistemas de permisos** (legacy + "Phase 10") en `admin/usuarios`.
-- **VariantPickerModal vs ProductConfiguratorModal**: ambos seleccionan
-  variantes. → fusionar.
-- **PIN input** reimplementado en `EmployeeModal`, `DiscountModal`,
-  `TicketConfigModal` con reglas inconsistentes. → componente reutilizable.
+- **Configurador inline duplicado**: `app/pos/menu/page.tsx` reimplementa la
+  lógica de grupos/variantes/validación; convendría extraer un componente
+  compartido. (Los duplicados muertos ya se eliminaron.)
+- **Dead code**: `components/modals/TicketConfigModal.tsx` y los dos
+  DiscountModal/PaymentModal paralelos (`components/modals/` vs
+  `components/pos/`) — revisar y eliminar los no usados.
 
 ### Arquitectura de modales
 
