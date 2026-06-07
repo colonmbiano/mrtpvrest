@@ -2,7 +2,7 @@ const express = require('express');
 const { scanMenuFromImages, scanInventoryFromImages, parseInventoryFile, isSpreadsheet, generateRecipeForId } = require('../services/ai.service');
 const { runAssistant } = require('../services/assistant.service');
 const { runVoiceAgent } = require('../services/voice-agent.service');
-const { runOrderDictation } = require('../services/order-dictation.service');
+const { runOrderDictationSmart } = require('../services/order-dictation.service');
 const { resolveGeminiKey } = require('../services/ai-key.service');
 const { authenticate, requireAdmin, requireRole, requireTenantAccess } = require('../middleware/auth.middleware');
 
@@ -140,9 +140,12 @@ router.post('/assistant', authenticate, requireTenantAccess, requireAdmin, async
 });
 
 // POST /api/ai/order-dictation
-// Dictado operativo del TPV: convierte texto reconocido por el navegador en
-// productos reales del menu. No usa LLM ni precios del cliente; solo arma un
-// borrador para que el cajero confirme en el ticket actual.
+// Dictado operativo del TPV: convierte el texto reconocido por voz en productos
+// reales del menu y arma un borrador para que el cajero confirme en el ticket.
+// Motor híbrido (runOrderDictationSmart): si el restaurante registró su propia
+// Groq key (BYOK) usa IA (Llama) para entender lenguaje natural y varios
+// productos; si no, cae al parser de reglas gratis. Nunca expone precios del
+// cliente a terceros más allá de los nombres del menú.
 router.post('/order-dictation', authenticate, requireTenantAccess, requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
@@ -151,7 +154,7 @@ router.post('/order-dictation', authenticate, requireTenantAccess, requireRole('
     const { prompt } = req.body || {};
     if (!prompt?.trim()) return res.status(400).json({ error: 'prompt requerido' });
 
-    const result = await runOrderDictation({ prompt, restaurantId });
+    const result = await runOrderDictationSmart({ prompt, restaurantId });
     res.json(result);
   } catch (error) {
     if (error?.code) return sendAiError(res, error);
