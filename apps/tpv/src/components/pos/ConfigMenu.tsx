@@ -3,29 +3,21 @@ import React, { useEffect } from "react";
 import { X, Palette, LogOut, Type, PanelRightClose } from "lucide-react";
 import { useAuthStore, type EmployeeRole } from "@/store/authStore";
 import { useClientValue, subscribeToEvents } from "@/hooks/useClientValue";
-
-type UiScale = "small" | "medium" | "large";
-
-const SCALE_LABELS: Record<UiScale, { label: string; size: string }> = {
-  small:  { label: "Chico",   size: "13 px" },
-  medium: { label: "Mediano", size: "16 px" },
-  large:  { label: "Grande",  size: "19 px" },
-};
-
-function readScale(): UiScale {
-  // Default "small" — tipografía
-  // compacta out-of-the-box, el cajero puede subirla si quiere desde acá.
-  if (typeof window === "undefined") return "small";
-  const v = localStorage.getItem("uiScale");
-  return v === "medium" || v === "large" ? v : "small";
-}
-
-function applyScale(scale: UiScale): void {
-  if (typeof document === "undefined") return;
-  document.documentElement.dataset.uiScale = scale;
-  const px = scale === "small" ? "13px" : scale === "large" ? "19px" : "16px";
-  document.documentElement.style.fontSize = px;
-}
+import {
+  type UiScale,
+  type SidebarWidthPreset,
+  UI_SCALE_LABELS,
+  UI_SCALE_CHANGED_EVENT,
+  SIDEBAR_WIDTH_LABELS,
+  SIDEBAR_WIDTH_CHANGED_EVENT,
+  DEFAULT_UI_SCALE,
+  DEFAULT_SIDEBAR_PRESET,
+  readUiScale,
+  applyUiScale,
+  setUiScale,
+  readSidebarPreset,
+  setSidebarPreset,
+} from "@/lib/appearance";
 
 const ROLE_LABEL: Record<EmployeeRole, string> = {
   OWNER: "Propietario",
@@ -198,21 +190,17 @@ export default ConfigMenu;
 
 function UiScalePicker() {
   // localStorage como fuente de verdad (SSR-safe vía useSyncExternalStore).
-  const scale = useClientValue(readScale, "small", subscribeToEvents("ui-scale-changed", "storage"));
+  const scale = useClientValue(
+    readUiScale,
+    DEFAULT_UI_SCALE,
+    subscribeToEvents(UI_SCALE_CHANGED_EVENT, "storage"),
+  );
 
   // Sincronización con el DOM (sistema externo) — sin setState, así que
   // no dispara set-state-in-effect.
   useEffect(() => {
-    applyScale(scale);
+    applyUiScale(scale);
   }, [scale]);
-
-  const choose = (s: UiScale) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("uiScale", s);
-      window.dispatchEvent(new Event("ui-scale-changed"));
-    }
-    applyScale(s);
-  };
 
   const options: UiScale[] = ["small", "medium", "large"];
   return (
@@ -224,12 +212,12 @@ function UiScalePicker() {
       <div className="grid grid-cols-3 gap-3">
         {options.map((s) => {
           const active = s === scale;
-          const meta = SCALE_LABELS[s];
+          const meta = UI_SCALE_LABELS[s];
           return (
             <button
               key={s}
               type="button"
-              onClick={() => choose(s)}
+              onClick={() => setUiScale(s)}
               className={`
                 flex flex-col items-center justify-center gap-1 min-h-[64px] py-3 rounded-2xl border transition-all active:scale-95
                 ${active ? "bg-[#1a1b1f] border-amber-500 text-white shadow-[0_0_15px_rgba(255,184,77,0.2)]" : "bg-[#121316] border-white/5 text-zinc-500"}
@@ -251,37 +239,15 @@ function UiScalePicker() {
 // Controla cuán ancho se muestra el panel del ticket en /pos/menu. En
 // tablets pequeñas (tablet principal 7") un sidebar de 380px deja muy poco espacio
 // para los productos; conviene bajarlo a 320. En tablets grandes 11" se
-// puede subir a 440 para ver más detalle del ticket. Persistimos el
-// preset (S/M/L) en localStorage y disparamos `sidebar-width-changed`
-// para que SidebarTicket aplique sin esperar reload.
-
-type SidebarWidthPreset = "S" | "M" | "L";
-
-const SIDEBAR_WIDTH_LABELS: Record<SidebarWidthPreset, { label: string; px: number }> = {
-  S: { label: "Estrecho", px: 320 },
-  M: { label: "Medio",    px: 380 },
-  L: { label: "Amplio",   px: 440 },
-};
-
-function readSidebarPreset(): SidebarWidthPreset {
-  if (typeof window === "undefined") return "M";
-  const v = localStorage.getItem("sidebarWidth");
-  return v === "S" || v === "L" ? v : "M";
-}
+// puede subir a 440 para ver más detalle del ticket. El preset (S/M/L) y su
+// persistencia + evento `sidebar-width-changed` viven en `@/lib/appearance`.
 
 function SidebarWidthPicker() {
   const preset = useClientValue(
     readSidebarPreset,
-    "M",
-    subscribeToEvents("sidebar-width-changed", "storage"),
+    DEFAULT_SIDEBAR_PRESET,
+    subscribeToEvents(SIDEBAR_WIDTH_CHANGED_EVENT, "storage"),
   );
-
-  const choose = (p: SidebarWidthPreset) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("sidebarWidth", p);
-      window.dispatchEvent(new Event("sidebar-width-changed"));
-    }
-  };
 
   const options: SidebarWidthPreset[] = ["S", "M", "L"];
   return (
@@ -298,7 +264,7 @@ function SidebarWidthPicker() {
             <button
               key={p}
               type="button"
-              onClick={() => choose(p)}
+              onClick={() => setSidebarPreset(p)}
               className={`
                 flex flex-col items-center justify-center gap-1 min-h-[64px] py-3 rounded-2xl border transition-all active:scale-95
                 ${active ? "bg-[#1a1b1f] border-amber-500 text-white shadow-[0_0_15px_rgba(255,184,77,0.2)]" : "bg-[#121316] border-white/5 text-zinc-500"}

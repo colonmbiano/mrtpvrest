@@ -10,6 +10,12 @@ import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { usePrinters, useReceiptIdentity, useKitchenConfig, useFullTicketConfig } from "@/hooks/usePrinters";
 import { subscribeToEvents, useClientValue, useHydrated } from "@/hooks/useClientValue";
+import {
+  DEFAULT_SIDEBAR_PRESET,
+  SIDEBAR_WIDTH_CHANGED_EVENT,
+  readSidebarPreset,
+  sidebarPresetToPx,
+} from "@/lib/appearance";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
@@ -92,15 +98,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
   const itemCount = activeTicket.items.reduce((acc, i) => acc + i.quantity, 0);
   const sidebarWidth = useClientValue(
-    () => {
-      if (typeof window === "undefined") return 320;
-      const preset = window.localStorage.getItem("sidebarWidth");
-      if (preset === "S") return 300;
-      if (preset === "L") return 400;
-      return 320;
-    },
-    320,
-    subscribeToEvents("sidebar-width-changed", "storage"),
+    () => sidebarPresetToPx(readSidebarPreset()),
+    sidebarPresetToPx(DEFAULT_SIDEBAR_PRESET),
+    subscribeToEvents(SIDEBAR_WIDTH_CHANGED_EVENT, "storage"),
   );
 
   const [openOrders, setOpenOrders] = useState<any[]>([]);

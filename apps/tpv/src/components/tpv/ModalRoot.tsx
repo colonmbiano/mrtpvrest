@@ -5,21 +5,28 @@ import { ModalProvider } from "@/contexts/ModalContext";
 import { usePOSStore } from "@/store/usePOSStore";
 import { useHardwareBack } from "@/hooks/useHardwareBack";
 import { usePromoSync } from "@/hooks/usePromoSync";
+import {
+  readUiScale,
+  applyUiScale,
+  UI_SCALE_CHANGED_EVENT,
+} from "@/lib/appearance";
 
 /**
- * Aplica el tamaño de letra UI persistido en localStorage al boot.
- * El usuario lo cambia desde ConfigMenu → Personalización → Tamaño.
+ * Aplica el tamaño de letra UI persistido en localStorage al boot y se
+ * mantiene en sync si cambia en caliente (ConfigMenu o /admin/apariencia
+ * emiten `ui-scale-changed`). Lógica centralizada en `@/lib/appearance`.
  */
 function useUiScale(): void {
   useEffect(() => {
     if (typeof document === "undefined") return;
-    const v = localStorage.getItem("uiScale");
-    // Default "small" — tipografía compacta
-    // out-of-the-box. El cajero puede subirla desde ConfigMenu.
-    const scale = v === "medium" || v === "large" ? v : "small";
-    document.documentElement.dataset.uiScale = scale;
-    document.documentElement.style.fontSize =
-      scale === "small" ? "13px" : scale === "large" ? "19px" : "16px";
+    const sync = () => applyUiScale(readUiScale());
+    sync();
+    window.addEventListener(UI_SCALE_CHANGED_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(UI_SCALE_CHANGED_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
   }, []);
 }
 
