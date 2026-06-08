@@ -14,7 +14,7 @@ import type { PrinterRecord, KitchenTicketConfig } from "@/lib/printer-tcp";
  * modal de detalle, vista de mesa) no la repitan.
  */
 type RawPrinter = PrinterRecord & {
-  printerGroups?: Array<{ printerGroup?: { id: string } }>;
+  printerGroups?: Array<{ printerGroup?: { id: string; name?: string } }>;
 };
 
 function normalize(list: RawPrinter[]): PrinterRecord[] {
@@ -23,6 +23,10 @@ function normalize(list: RawPrinter[]): PrinterRecord[] {
     printerGroupIds: (p.printerGroups ?? [])
       .map((m) => m.printerGroup?.id)
       .filter((id): id is string => Boolean(id)),
+    printerGroupRefs: (p.printerGroups ?? [])
+      .map((m) => m.printerGroup)
+      .filter((group): group is { id: string; name?: string } => Boolean(group?.id))
+      .map((group) => ({ id: group.id, name: group.name || "Estacion" })),
   }));
 }
 
@@ -103,6 +107,7 @@ type TicketConfigDTO = {
   kitchenShowModifiers?: boolean;
   kitchenShowNotes?: boolean;
   kitchenGroupBySeat?: boolean;
+  kitchenSeparateByGroup?: boolean;
   kitchenFontSize?: string;
 };
 
@@ -122,6 +127,7 @@ function mapToKitchenConfig(dto: TicketConfigDTO | null): KitchenTicketConfig | 
     showModifiers:    dto.kitchenShowModifiers,
     showNotes:        dto.kitchenShowNotes,
     groupBySeat:      dto.kitchenGroupBySeat,
+    separateByGroup:  dto.kitchenSeparateByGroup,
     fontSize:         fs,
   };
 }

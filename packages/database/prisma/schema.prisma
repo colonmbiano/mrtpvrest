@@ -703,6 +703,11 @@ model Order {
 
   notes String?
 
+  // Etiqueta editable de la cuenta abierta (p. ej. "Mesa terraza",
+  // "Cumpleaños Ana"). Independiente de customerName/tableName: permite al
+  // cajero nombrar el ticket sin tocar los datos del cliente o la mesa.
+  ticketName String?
+
   orderType        String    @default("DELIVERY")
   // tableNumber es el número plano legado (lo siguen enviando orders antiguos
   // y el flujo Quick Service). tableId es la nueva FK opcional al modelo Table
@@ -1039,6 +1044,7 @@ model TicketConfig {
   kitchenShowNotes       Boolean @default(true)
   // Agrupa items por COMENSAL N en DINE_IN con varios asientos. OFF = plano.
   kitchenGroupBySeat     Boolean @default(true)
+  kitchenSeparateByGroup Boolean @default(false)
   // "normal" | "large" | "xlarge" — controla doble/triple ancho de items.
   kitchenFontSize        String  @default("large")
   // Pie opcional ("Verificar antes de servir", número de turno, etc.).

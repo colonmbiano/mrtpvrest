@@ -1206,6 +1206,164 @@ const requireOrderMergeRole = requireRole(
 router.post('/:id/transfer-to/:targetId', authenticate, requireTenantAccess, requireOrderMergeRole, transferOrderHandler);
 router.post('/:id/merge/:targetId',       authenticate, requireTenantAccess, requireOrderMergeRole, transferOrderHandler);
 
+// Include estándar para devolver una orden hidratada al TPV (mismo shape que
+// GET /:id, sin el driver que ahí se anexa aparte). Lo comparten rename y split.
+const ORDER_DETAIL_INCLUDE = {
+  user: { select: { name: true, phone: true, email: true } },
+  items: {
+    include: {
+      modifiers: true,
+      menuItem: {
+        include: {
+          category: { include: { printerGroups: { include: { printerGroup: true } } } },
+          printerGroups: { include: { printerGroup: true } },
+        },
+      },
+    },
+  },
+  address: true,
+  table: true,
+  rounds: { orderBy: { roundNumber: 'asc' } },
+};
+
+// ── PATCH /:id/name — Renombrar (etiquetar) una cuenta abierta ─────────
+// Independiente de customerName/mesa: solo escribe Order.ticketName. Enviar
+// "" o null limpia la etiqueta. CASHIER+ ya que es operación cotidiana.
+router.patch(
+  '/:id/name',
+  authenticate,
+  requireTenantAccess,
+  requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'),
+  async (req, res) => {
+    try {
+      const restaurantId = req.user?.restaurantId || req.restaurantId;
+      const raw = req.body?.ticketName;
+      if (raw != null && typeof raw !== 'string') {
+        return res.status(400).json({ error: 'ticketName inválido' });
+      }
+      const ticketName = raw == null ? null : (String(raw).trim().slice(0, 60) || null);
+
+      const existing = await prisma.order.findFirst({ where: { id: req.params.id, restaurantId } });
+      if (!existing) return res.status(404).json({ error: 'Orden no encontrada' });
+
+      const updated = await prisma.order.update({
+        where: { id: req.params.id },
+        data: { ticketName },
+        include: ORDER_DETAIL_INCLUDE,
+      });
+
+      const io = req.app.get('io');
+      if (io && updated.locationId) {
+        io.to(`restaurant:${restaurantId}:location:${updated.locationId}:admins`)
+          .emit('order:updated', updated);
+      }
+
+      res.json(updated);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  },
+);
+
+// ── POST /:id/split — Dividir una cuenta abierta en dos ───────────────
+// Mueve los itemIds seleccionados a una NUEVA orden (hermana, misma mesa y
+// contexto) y deja el resto en la original. El descuento se queda en la
+// original (no se prorratea). No se permite mover todos los items. Mismo
+// rol que merge/transfer.
+async function splitOrderHandler(req, res) {
+  try {
+    const { id } = req.params;
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const itemIds = Array.isArray(req.body?.itemIds) ? req.body.itemIds.map(String) : [];
+    if (itemIds.length === 0) {
+      return res.status(400).json({ error: 'Selecciona al menos un producto' });
+    }
+
+    const source = await prisma.order.findFirst({
+      where: { id, restaurantId },
+      include: { items: true },
+    });
+    if (!source) return res.status(404).json({ error: 'Orden no encontrada' });
+    if (['DELIVERED', 'CANCELLED'].includes(source.status)) {
+      return res.status(400).json({ error: 'La orden está cerrada' });
+    }
+    if (source.paymentStatus === 'PAID') {
+      return res.status(400).json({ error: 'La orden ya está pagada' });
+    }
+
+    const sourceItemIds = new Set(source.items.map((i) => i.id));
+    const moving = [...new Set(itemIds)].filter((iid) => sourceItemIds.has(iid));
+    if (moving.length === 0) {
+      return res.status(400).json({ error: 'Los productos no pertenecen a esta orden' });
+    }
+    if (moving.length >= source.items.length) {
+      return res.status(400).json({ error: 'Deja al menos un producto en la cuenta original' });
+    }
+
+    const recalc = (tx, orderId, baseDiscount, baseDelivery) =>
+      tx.orderItem
+        .findMany({ where: { orderId }, select: { subtotal: true } })
+        .then((its) => {
+          const sub = its.reduce((s, i) => s + (i.subtotal || 0), 0);
+          const tot = sub - (baseDiscount || 0) + (baseDelivery || 0);
+          return tx.order.update({ where: { id: orderId }, data: { subtotal: sub, total: tot } });
+        });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const orderNumber =
+        'TPV-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 900 + 100);
+
+      const created = await tx.order.create({
+        data: {
+          restaurantId: source.restaurantId,
+          locationId: source.locationId,
+          orderNumber,
+          orderType: source.orderType,
+          status: source.status,
+          paymentMethod: source.paymentMethod,
+          paymentStatus: 'PENDING',
+          tableId: source.tableId,
+          tableNumber: source.tableNumber,
+          numberOfGuests: source.numberOfGuests,
+          customerName: source.customerName,
+          customerPhone: source.customerPhone,
+          source: source.source,
+          shiftId: source.shiftId,
+          ticketName: source.ticketName ? `${source.ticketName} (2)` : null,
+          subtotal: 0,
+          discount: 0,
+          deliveryFee: 0,
+          total: 0,
+        },
+      });
+
+      await tx.orderItem.updateMany({
+        where: { orderId: id, id: { in: moving } },
+        data: { orderId: created.id },
+      });
+
+      // Descuento/envío se quedan en la original; la nueva arranca limpia.
+      await recalc(tx, id, source.discount, source.deliveryFee);
+      await recalc(tx, created.id, 0, 0);
+
+      const [srcFull, createdFull] = await Promise.all([
+        tx.order.findUnique({ where: { id }, include: ORDER_DETAIL_INCLUDE }),
+        tx.order.findUnique({ where: { id: created.id }, include: ORDER_DETAIL_INCLUDE }),
+      ]);
+      return { source: srcFull, created: createdFull };
+    });
+
+    const io = req.app.get('io');
+    if (io && result.created?.locationId) {
+      const room = `restaurant:${restaurantId}:location:${result.created.locationId}:admins`;
+      io.to(room).emit('order:updated', result.source);
+      io.to(room).emit('order:created', result.created);
+    }
+
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+router.post('/:id/split', authenticate, requireTenantAccess, requireOrderMergeRole, splitOrderHandler);
+
 // ── PUT /:id/void-payment — Anular un cobro (solo ADMIN) ──────────────
 // Revierte un pago marcado como PAID: deja la orden como pendiente de cobro
 // y conserva una nota de auditoría con el nombre del admin que anuló.

@@ -5,14 +5,11 @@ import {
   BarChart3,
   Settings,
   Printer,
-  Monitor,
   Users,
   CreditCard,
-  ShieldCheck,
   ChevronRight,
   Grid3x3,
   Palette,
-  Layers,
   MonitorPlay,
 } from "lucide-react";
 
@@ -46,25 +43,11 @@ const SECTIONS = [
     accent: "#10b981",
   },
   {
-    href: "/admin/grupos-impresoras",
-    label: "Grupos de Impresoras",
-    desc: "Enrutamiento de impresoras — qué impresoras reciben cada categoría",
-    icon: Layers,
-    accent: "#fbbf24",
-  },
-  {
     href: "/admin/apariencia",
     label: "Apariencia",
     desc: "Tipografía, ancho del panel, paleta y modo",
     icon: Palette,
     accent: "#ec4899",
-  },
-  {
-    href: "/admin/tickets",
-    label: "Diseño de Tickets",
-    desc: "Encabezado, pie de página y formato",
-    icon: Monitor,
-    accent: "#a78bfa",
   },
   {
     href: "/admin/pantalla",
@@ -75,8 +58,8 @@ const SECTIONS = [
   },
   {
     href: "/admin/usuarios",
-    label: "Gestión de Personal",
-    desc: "Empleados, roles y PINs",
+    label: "Personal y Seguridad",
+    desc: "Empleados, roles, PINs y políticas de autorización",
     icon: Users,
     accent: "#f59e0b",
   },
@@ -86,13 +69,6 @@ const SECTIONS = [
     desc: "IVA, propina y métodos de pago",
     icon: CreditCard,
     accent: "#22d3ee",
-  },
-  {
-    href: "/admin/seguridad",
-    label: "Seguridad",
-    desc: "PINs, autorizaciones y bitácora",
-    icon: ShieldCheck,
-    accent: "#ef4444",
   },
 ];
 
