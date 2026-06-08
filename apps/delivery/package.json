@@ -12,10 +12,14 @@
     "apk:release": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleRelease && cd ..",
     "aab:release": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat bundleRelease && cd ..",
     "cap:open": "npx cap open android",
-    "cap:sync": "npx cap sync android"
+    "cap:sync": "npx cap sync android",
+    "build:ios": "cross-env CAPACITOR_BUILD=true next build && npx cap sync ios",
+    "ios:open": "npx cap open ios",
+    "ios:sync": "npx cap sync ios"
   },
   "dependencies": {
     "@capacitor/core": "^8.3.1",
+    "@capacitor/ios": "8.3.1",
     "axios": "^1.16.1",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.11.0",
