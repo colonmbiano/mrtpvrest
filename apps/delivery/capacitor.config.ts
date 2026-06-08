@@ -7,7 +7,15 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   server: {
     androidScheme: 'https',
+    iosScheme: 'https',
     cleartext: true
+  },
+  ios: {
+    // contentInset 'always' respeta el notch / Dynamic Island y la barra de
+    // estado en iPhones modernos. Mantener las navegaciones no limitadas a
+    // app-bound domains para poder hablar con el backend (Railway) y Mapbox.
+    contentInset: 'always',
+    limitsNavigationsToAppBoundDomains: false
   }
 };
 
