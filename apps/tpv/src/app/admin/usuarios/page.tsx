@@ -19,6 +19,7 @@ import api from "@/lib/api";
 import BackButton from "@/components/BackButton";
 import PinInput from "@/components/ui/PinInput";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
+import SeguridadPanel from "@/components/admin/SeguridadPanel";
 
 const ROLES = ["OWNER", "ADMIN", "MANAGER", "CASHIER", "WAITER", "KITCHEN", "COOK", "DELIVERY"];
 
@@ -106,7 +107,81 @@ const ROLE_STYLE: Record<string, { bg: string; text: string }> = {
   DELIVERY: { bg: "bg-cyan-500/10",    text: "text-cyan-400" },
 };
 
-export default function UsuariosAdmin() {
+export default function PersonalAdmin() {
+  const [tab, setTab] = useState<"empleados" | "seguridad">("empleados");
+
+  // Deep-link opcional (?tab=seguridad) sin useSearchParams (evita Suspense).
+  // Mismo patrón que el centro de impresión unificado (/admin/impresoras).
+  // Arranque diferido (queueMicrotask) para no llamar setState síncrono dentro
+  // del effect (set-state-in-effect).
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const t = new URLSearchParams(window.location.search).get("tab");
+      if (t === "seguridad") setTab("seguridad");
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const TABS: Array<{ key: "empleados" | "seguridad"; label: string; icon: React.ReactNode }> = [
+    { key: "empleados", label: "Empleados", icon: <Users size={16} /> },
+    { key: "seguridad", label: "Seguridad", icon: <ShieldCheck size={16} /> },
+  ];
+
+  return (
+    <div
+      className="relative min-h-full p-6 sm:p-10 bg-[#0C0C0E] text-white overflow-hidden"
+      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
+    >
+      {/* Glow */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full blur-[120px] opacity-30"
+        style={{ background: 'radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)' }}
+      />
+
+      <div className="relative z-10">
+        {/* HEADER */}
+        <div className="flex items-start gap-4 mb-8">
+          <BackButton ariaLabel="Volver al panel admin" />
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
+              Configuración
+            </span>
+            <h1 className="text-4xl font-black text-white tracking-tight leading-none">
+              Personal y Seguridad
+            </h1>
+            <p className="text-sm font-bold text-white/40">
+              Empleados, roles y PINs · políticas de autorización
+            </p>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="inline-flex items-center gap-1 p-1 mb-8 rounded-2xl bg-white/5 border border-white/10">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black tracking-tight transition-colors ${
+                tab === t.key
+                  ? "bg-[#ffb84d] text-[#0C0C0E]"
+                  : "text-white/55 active:bg-white/5"
+              }`}
+            >
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "empleados" ? <EmpleadosTab /> : <SeguridadPanel />}
+      </div>
+    </div>
+  );
+}
+
+function EmpleadosTab() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -160,26 +235,12 @@ export default function UsuariosAdmin() {
   };
 
   return (
-    <div
-      className="min-h-full p-6 sm:p-10 bg-[#0C0C0E]"
-      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
-    >
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-8 mb-12">
-        <div className="flex items-start gap-4">
-          <BackButton ariaLabel="Volver al panel admin" />
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
-              Configuración
-            </span>
-            <h1 className="text-4xl font-black text-white tracking-tight leading-none">
-              Gestión de Personal
-            </h1>
-            <p className="text-sm font-bold text-white/40">
-              {employees.length} usuarios registrados en la plataforma
-            </p>
-          </div>
-        </div>
+    <div>
+      {/* Acciones del tab */}
+      <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
+        <p className="text-sm font-bold text-white/40">
+          {employees.length} usuarios registrados en la plataforma
+        </p>
         <button
           onClick={() => setCreating(true)}
           className="h-14 min-h-[64px] px-8 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.2em] text-xs flex items-center gap-3 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.25)]"

@@ -11,7 +11,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
-import { useKitchenConfig } from "@/hooks/usePrinters";
+import { useKitchenConfig, usePrinters } from "@/hooks/usePrinters";
 import { useDualScreen } from "@/hooks/useDualScreen";
 import type { CartSnapshot } from "@/lib/dual-screen/channel";
 import { hapticMedium, hapticSuccess, hapticError } from "@/lib/haptics";
@@ -22,7 +22,6 @@ import {
   printKitchenTickets,
   printCustomerReceipt,
   printSplitReceipts,
-  type PrinterRecord,
   type TicketItem,
 } from "@/lib/printer-tcp";
 
@@ -186,45 +185,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // de cargar, el builder usa los defaults históricos.
   const { kitchenConfig } = useKitchenConfig();
 
-  // Cache de impresoras de la sucursal. Se carga una vez al montar y se
-  // refresca cuando llega evento `printers-changed` (ej. tras agregar
-  // una impresora desde admin). La lista vive en memoria del componente
-  // para que el handler de cobro la lea sin esperar fetch de red.
-  const [printers, setPrinters] = useState<PrinterRecord[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        // Backend devuelve printerGroups: [{ printerGroup: { id, name } }]
-        // y necesitamos derivar printerGroupIds: string[] que es lo que
-        // el dispatcher consume para enrutar comandas.
-        type RawPrinter = PrinterRecord & {
-          printerGroups?: Array<{ printerGroup?: { id: string } }>;
-        };
-        const { data } = await api.get<RawPrinter[]>("/api/printers");
-        if (!Array.isArray(data) || cancelled) {
-          if (!cancelled) setPrinters([]);
-          return;
-        }
-        const normalized: PrinterRecord[] = data.map((p) => ({
-          ...p,
-          printerGroupIds: (p.printerGroups ?? [])
-            .map((m) => m.printerGroup?.id)
-            .filter((id): id is string => Boolean(id)),
-        }));
-        setPrinters(normalized);
-      } catch {
-        if (!cancelled) setPrinters([]);
-      }
-    };
-    load();
-    const onRefresh = () => load();
-    window.addEventListener("printers-changed", onRefresh);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("printers-changed", onRefresh);
-    };
-  }, []);
+  const { printers } = usePrinters();
 
   // Convierte CartItem[] del store al shape genérico de printer-tcp.
   // Conserva seatNumber para el split por comensal en la impresión y
@@ -342,19 +303,36 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         tableNumber: ticket.tableName || ticket.table || null,
         customerName: ticket.name ?? null,
       };
+
+      try {
+        const printResult = await printKitchenTickets(printers, {
+          ...ticketContext,
+          items: printItems,
+          config: kitchenConfig ?? undefined,
+        });
+        if (printResult.failed.length > 0) {
+          toast.warning(
+            `Pedido guardado, pero la comanda no imprimio: ${
+              printResult.failed[0]?.error || "No hay una impresora disponible"
+            }`,
+          );
+        } else {
+          toast.success(
+            `Comanda impresa en ${printResult.ok} impresora${printResult.ok === 1 ? "" : "s"}`,
+          );
+        }
+      } catch (printError) {
+        const message =
+          printError instanceof Error ? printError.message : "Error de impresion";
+        toast.warning(`Pedido guardado, pero la comanda no imprimio: ${message}`);
+      }
+
       clearActiveItems();
       if (ticket.type !== "DINE_IN") {
         updateTicket({ name: "", address: "", phone: "", discount: 0 });
         clearActiveOrder();
         setPreviousItems([]);
       }
-      printKitchenTickets(printers, { ...ticketContext, items: printItems, config: kitchenConfig ?? undefined })
-        .then((res) => {
-          if (res.failed.length > 0) {
-            toast.warning(`Comanda: ${res.ok} ok / ${res.failed.length} fallaron`);
-          }
-        })
-        .catch(() => { /* tragar error silenciosamente */ });
     } catch (error: any) {
       toast.error("Error al enviar pedido: " + (error.response?.data?.error || error.message));
     }

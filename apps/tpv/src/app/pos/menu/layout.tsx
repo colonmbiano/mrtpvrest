@@ -538,6 +538,55 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     await handleReprintOrder(detailOrder);
   };
 
+  // Renombrar (etiquetar) la cuenta abierta. "" limpia la etiqueta.
+  const handleRenameFromDetail = useCallback(
+    async (name: string) => {
+      if (!detailOrder) return;
+      try {
+        const { data: updated } = await api.patch(
+          `/api/orders/${detailOrder.id}/name`,
+          { ticketName: name },
+        );
+        setDetailOrder(updated);
+        fetchOpenOrders();
+        toast.success(name.trim() ? `Cuenta renombrada: ${name.trim()}` : "Nombre de la cuenta eliminado");
+      } catch (err: any) {
+        toast.error(
+          "Error al renombrar: " +
+            (err?.response?.data?.error || err?.message || "fallo desconocido"),
+        );
+      }
+    },
+    [detailOrder, fetchOpenOrders],
+  );
+
+  // Dividir la cuenta: mueve los itemIds a un nuevo ticket abierto. La
+  // original conserva el resto. Tras dividir, el detalle muestra la cuenta
+  // original ya recalculada.
+  const handleSplitFromDetail = useCallback(
+    async (itemIds: string[]) => {
+      if (!detailOrder) return;
+      try {
+        const { data } = await api.post(
+          `/api/orders/${detailOrder.id}/split`,
+          { itemIds },
+        );
+        setDetailOrder(data?.source ?? null);
+        fetchOpenOrders();
+        const newNum =
+          data?.created?.orderNumber ||
+          String(data?.created?.id ?? "").slice(-6).toUpperCase();
+        toast.success(`Cuenta dividida · nuevo ticket #${newNum}`);
+      } catch (err: any) {
+        toast.error(
+          "Error al dividir: " +
+            (err?.response?.data?.error || err?.message || "fallo desconocido"),
+        );
+      }
+    },
+    [detailOrder, fetchOpenOrders],
+  );
+
   const handleReprintKitchenFromDetail = async () => {
     if (!detailOrder) return;
     await handleReprintKitchen(detailOrder);
@@ -603,7 +652,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const drawerOrders = openOrders.map((o: any) => ({
     id: o.id,
     orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
-    customerName: o.customerName || o.user?.name || "Público general",
+    customerName: o.ticketName || o.customerName || o.user?.name || "Público general",
     type: ORDER_TYPE_LABEL[o.orderType] || o.orderType || "ORDEN",
     status: o.status,
     total: Number(o.total ?? 0),
@@ -752,6 +801,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
             detailOrder.orderNumber ||
             String(detailOrder.id).slice(-6).toUpperCase()
           }
+          ticketName={detailOrder.ticketName || null}
           customerName={
             detailOrder.customerName || detailOrder.user?.name || null
           }
@@ -772,6 +822,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
             quantity: i.quantity ?? 1,
             subtotal: Number(i.subtotal ?? 0),
             notes: i.notes || null,
+            seatNumber: typeof i.seatNumber === "number" ? i.seatNumber : null,
           }))}
           onReprint={handleReprintFromDetail}
           onReprintKitchen={handleReprintKitchenFromDetail}
@@ -808,6 +859,20 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
             !["DELIVERED", "CANCELLED"].includes(detailOrder.status) &&
             detailOrder.paymentStatus !== "PAID"
               ? handleChangeTypeFromDetail
+              : undefined
+          }
+          onRename={
+            !isLoanMode &&
+            !["DELIVERED", "CANCELLED"].includes(detailOrder.status) &&
+            detailOrder.paymentStatus !== "PAID"
+              ? handleRenameFromDetail
+              : undefined
+          }
+          onSplit={
+            canEditOpenOrderItems &&
+            !["DELIVERED", "CANCELLED"].includes(detailOrder.status) &&
+            detailOrder.paymentStatus !== "PAID"
+              ? handleSplitFromDetail
               : undefined
           }
         />

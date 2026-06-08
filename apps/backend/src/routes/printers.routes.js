@@ -1,17 +1,26 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireRole, requireTenantAccess } = require('../middleware/auth.middleware');
 const { printTest, kickDrawer } = require('../services/printer.service');
 const router = express.Router();
 
 // ── Gate común ───────────────────────────────────────────────────────────────
 router.use(authenticate, requireTenantAccess);
 
+const requirePrinterRead = requireRole(
+  'CASHIER',
+  'WAITER',
+  'MANAGER',
+  'ADMIN',
+  'OWNER',
+  'SUPER_ADMIN',
+);
+
 // ────────────────────────────────────────────────────────────────────────────
 // Ticket Config — GET/PUT deben ir ANTES de /:id para que Express no matchee
 // "ticket-config" como un id.
 // ────────────────────────────────────────────────────────────────────────────
-router.get('/ticket-config', requireAdmin, async (req, res) => {
+router.get('/ticket-config', requirePrinterRead, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
     let cfg = await prisma.ticketConfig.findUnique({ where: { locationId: req.locationId } });
@@ -112,7 +121,7 @@ function normalizePrinterPayload(body) {
   return payload;
 }
 
-router.get('/', requireAdmin, async (req, res) => {
+router.get('/', requirePrinterRead, async (req, res) => {
   try {
     if (!req.locationId) {
       return res.status(400).json({

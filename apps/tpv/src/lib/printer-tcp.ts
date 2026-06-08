@@ -224,6 +224,7 @@ export interface PrinterRecord {
   // enrutamiento por groups y solo le llegan tickets si está en el
   // fallback legacy (type/stations match).
   printerGroupIds?: string[];
+  printerGroupRefs?: Array<{ id: string; name: string }>;
 }
 
 export interface TicketModifier {
@@ -262,6 +263,7 @@ export interface KitchenTicketConfig {
   showModifiers?: boolean;
   showNotes?: boolean;
   groupBySeat?: boolean;
+  separateByGroup?: boolean;
   fontSize?: "normal" | "large" | "xlarge";
 }
 
@@ -277,6 +279,7 @@ export interface KitchenTicketInput {
   /** Si true, marca el ticket como "PARCIAL" — se está reimprimiendo
    *  solo un subset de los items originales. */
   isPartial?: boolean;
+  assignmentName?: string | null;
   /** Configuración admin para mostrar/ocultar campos y ajustar tamaño. */
   config?: KitchenTicketConfig;
 }
@@ -331,6 +334,7 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     showModifiers:    input.config?.showModifiers    ?? true,
     showNotes:        input.config?.showNotes        ?? true,
     groupBySeat:      input.config?.groupBySeat      ?? true,
+    separateByGroup:  input.config?.separateByGroup  ?? false,
     fontSize:         input.config?.fontSize         ?? "large",
   };
 
@@ -360,6 +364,12 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
   if (cfg.header.trim()) {
     d += CMD.BOLD_ON + CMD.DOUBLE_ON;
     d += cfg.header.trim() + "\n";
+    d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
+  }
+
+  if (input.assignmentName?.trim()) {
+    d += CMD.BOLD_ON + CMD.DOUBLE_ON;
+    d += input.assignmentName.trim().toUpperCase() + "\n";
     d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
   }
 
@@ -533,6 +543,16 @@ async function dispatchToStations(
     return stations.includes(p.type as PrinterStation);
   });
 
+  if (targets.length === 0) {
+    return {
+      ok: 0,
+      failed: [{
+        name: "Impresoras",
+        error: `No hay impresoras ${stations.join("/")} activas con IP configurada`,
+      }],
+    };
+  }
+
   let ok = 0;
   const failed: Array<{ name: string; error: string }> = [];
   await Promise.all(
@@ -580,6 +600,59 @@ export async function printKitchenTickets(
   }
 
   // Mapa printerId → items[] que debe imprimir.
+  if (input.config?.separateByGroup) {
+    const jobs = new Map<
+      string,
+      { printer: PrinterRecord; assignmentName: string; items: TicketItem[] }
+    >();
+
+    for (const item of input.items) {
+      const groupIds = item.printerGroupIds ?? [];
+      for (const printer of printers) {
+        if (
+          !printer.isActive ||
+          printer.connectionType !== "NETWORK" ||
+          !printer.ip ||
+          printer.ip === "0.0.0.0"
+        ) {
+          continue;
+        }
+        for (const group of printer.printerGroupRefs ?? []) {
+          if (!groupIds.includes(group.id)) continue;
+          const key = `${printer.id}:${group.id}`;
+          const job = jobs.get(key) ?? {
+            printer,
+            assignmentName: group.name,
+            items: [],
+          };
+          job.items.push(item);
+          jobs.set(key, job);
+        }
+      }
+    }
+
+    if (jobs.size > 0) {
+      let okTotal = 0;
+      const failed: Array<{ name: string; error: string }> = [];
+      await Promise.all(
+        Array.from(jobs.values()).map(async ({ printer, assignmentName, items }) => {
+          const payload = buildKitchenTicket({ ...input, items, assignmentName });
+          try {
+            await sendRawTcp({ ip: printer.ip as string, port: printer.port }, payload);
+            okTotal += 1;
+          } catch (e) {
+            const err = e as { message?: string };
+            failed.push({
+              name: `${printer.name} - ${assignmentName}`,
+              error: err?.message || "fallo TCP",
+            });
+          }
+        }),
+      );
+      return { ok: okTotal, failed };
+    }
+  }
+
   const itemsByPrinter = new Map<string, TicketItem[]>();
   for (const item of input.items) {
     const groupIds = item.printerGroupIds ?? [];
