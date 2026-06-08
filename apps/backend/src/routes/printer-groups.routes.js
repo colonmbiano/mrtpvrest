@@ -304,4 +304,49 @@ router.post('/by-category/:categoryId', requireAdmin, async (req, res) => {
   }
 });
 
+// ── POST /api/printer-groups/migrate-legacy — Backfill paradigma único ───
+// Convierte el ruteo legacy (Printer.categories[]) en Printer Groups, para
+// que los grupos sean la ÚNICA fuente de verdad. Por cada impresora con
+// categorías legacy crea/actualiza un grupo "(Auto) <impresora>" con esa
+// impresora como miembro + sus categorías, y luego limpia el campo legacy.
+// Idempotente: correrlo de nuevo no duplica nada (la 2da vez no hay legacy).
+router.post('/migrate-legacy', requireAdmin, async (req, res) => {
+  try {
+    if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const printers = await prisma.printer.findMany({
+      where: { locationId: req.locationId },
+      select: { id: true, name: true, categories: true },
+    });
+    const pending = printers.filter((p) => Array.isArray(p.categories) && p.categories.length > 0);
+
+    let migrated = 0;
+    for (const printer of pending) {
+      const groupName = `(Auto) ${printer.name}`;
+      await prisma.$transaction(async (tx) => {
+        const group = await tx.printerGroup.upsert({
+          where: { locationId_name: { locationId: req.locationId, name: groupName } },
+          update: {},
+          create: { locationId: req.locationId, name: groupName },
+        });
+        await tx.printerGroupMember.createMany({
+          data: [{ printerGroupId: group.id, printerId: printer.id }],
+          skipDuplicates: true,
+        });
+        await tx.categoryPrinterGroup.createMany({
+          data: printer.categories.map((cid) => ({ printerGroupId: group.id, categoryId: cid })),
+          skipDuplicates: true,
+        });
+        // Vaciar el legacy: a partir de aquí el ruteo vive solo en el grupo.
+        await tx.printer.update({ where: { id: printer.id }, data: { categories: [] } });
+      });
+      migrated += 1;
+    }
+
+    res.json({ migrated, scanned: printers.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

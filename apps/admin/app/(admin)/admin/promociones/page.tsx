@@ -30,6 +30,8 @@ export default function PromocionesPage() {
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState<string | null>(null);
   const [togglingItem, setTogglingItem] = useState<string | null>(null);
+  const [savingLoc, setSavingLoc] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, { autoPromoThreshold: number; autoPromoDiscount: number }>>({});
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
 
@@ -42,7 +44,12 @@ export default function PromocionesPage() {
     setLoading(true);
     try {
       const { data } = await api.get("/api/admin/promos");
-      setLocations(data.locations || []);
+      const locs: Location[] = data.locations || [];
+      setLocations(locs);
+      setDrafts(Object.fromEntries(locs.map(l => [l.id, {
+        autoPromoThreshold: l.autoPromoThreshold,
+        autoPromoDiscount: l.autoPromoDiscount,
+      }])));
       setPromoItems(data.promoItems || []);
       setMenuItems(data.menuItems || data.promoItems || []);
     } catch {
@@ -82,6 +89,32 @@ export default function PromocionesPage() {
     } finally {
       setTogglingItem(null);
     }
+  };
+
+  const updateLocation = async (loc: Location, patch: Partial<Location>) => {
+    setSavingLoc(loc.id);
+    try {
+      await api.put(`/api/admin/locations/${loc.id}`, patch);
+      setLocations(prev => prev.map(l => l.id === loc.id ? { ...l, ...patch } : l));
+      showToast("✅ Configuración guardada");
+    } catch (e: any) {
+      showToast(e?.response?.data?.error || "Error al guardar", false);
+      fetchData(); // revertir al estado del servidor
+    } finally {
+      setSavingLoc(null);
+    }
+  };
+
+  const handleToggleLocation = (loc: Location) =>
+    updateLocation(loc, { autoPromoEnabled: !loc.autoPromoEnabled });
+
+  const handleSaveConfig = (loc: Location) => {
+    const d = drafts[loc.id];
+    if (!d) return;
+    updateLocation(loc, {
+      autoPromoThreshold: Math.max(1, d.autoPromoThreshold || 0),
+      autoPromoDiscount: Math.min(100, Math.max(1, d.autoPromoDiscount || 0)),
+    });
   };
 
   const enabledLocations = locations.filter(l => l.autoPromoEnabled);
@@ -144,7 +177,10 @@ export default function PromocionesPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {locations.map(loc => (
+            {locations.map(loc => {
+              const draft = drafts[loc.id] || { autoPromoThreshold: loc.autoPromoThreshold, autoPromoDiscount: loc.autoPromoDiscount };
+              const dirty = draft.autoPromoThreshold !== loc.autoPromoThreshold || draft.autoPromoDiscount !== loc.autoPromoDiscount;
+              return (
               <div key={loc.id} className={`bg-[#111] rounded-[1.75rem] p-5 border transition-all ${
                 loc.autoPromoEnabled ? "border-orange-500/30" : "border-gray-800"
               }`}>
@@ -160,35 +196,68 @@ export default function PromocionesPage() {
                       {loc.autoPromoEnabled ? "IA Activa" : "IA Inactiva"}
                     </div>
                   </div>
-                  {loc.autoPromoEnabled && (
-                    <button
-                      onClick={() => handleTrigger(loc.id)}
-                      disabled={triggering === loc.id}
-                      className="text-[10px] font-black uppercase tracking-widest text-orange-400 hover:text-orange-300 border border-orange-500/30 hover:border-orange-500/60 px-3 py-1.5 rounded-xl transition-all disabled:opacity-50"
-                    >
-                      {triggering === loc.id ? "..." : "Analizar"}
-                    </button>
-                  )}
+                  {/* Toggle de Promociones con IA */}
+                  <button
+                    onClick={() => handleToggleLocation(loc)}
+                    disabled={savingLoc === loc.id}
+                    className={`flex-shrink-0 relative w-11 h-6 rounded-full transition-all border ${
+                      loc.autoPromoEnabled ? "bg-orange-500 border-orange-500" : "bg-gray-800 border-gray-700"
+                    } disabled:opacity-50`}
+                    title={loc.autoPromoEnabled ? "Desactivar Promociones con IA" : "Activar Promociones con IA"}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${loc.autoPromoEnabled ? "translate-x-5" : "translate-x-0"}`} />
+                  </button>
                 </div>
-                {loc.autoPromoEnabled && (
-                  <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-800">
-                    <div>
-                      <p className="text-[9px] text-gray-600 uppercase tracking-wider font-bold">Umbral ventas/semana</p>
-                      <p className="text-lg font-black text-white mt-0.5">&lt;{loc.autoPromoThreshold}</p>
+                {loc.autoPromoEnabled ? (
+                  <div className="mt-3 pt-3 border-t border-gray-800 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[9px] text-gray-600 uppercase tracking-wider font-bold block mb-1">Umbral ventas/semana</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={draft.autoPromoThreshold}
+                          onChange={e => setDrafts(prev => ({ ...prev, [loc.id]: { ...draft, autoPromoThreshold: parseInt(e.target.value) || 0 } }))}
+                          className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-orange-500 transition-all text-sm font-black text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-gray-600 uppercase tracking-wider font-bold block mb-1">Descuento (%)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={draft.autoPromoDiscount}
+                          onChange={e => setDrafts(prev => ({ ...prev, [loc.id]: { ...draft, autoPromoDiscount: parseInt(e.target.value) || 0 } }))}
+                          className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-orange-500 transition-all text-sm font-black text-orange-400"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[9px] text-gray-600 uppercase tracking-wider font-bold">Descuento automático</p>
-                      <p className="text-lg font-black text-orange-400 mt-0.5">{loc.autoPromoDiscount}%</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSaveConfig(loc)}
+                        disabled={!dirty || savingLoc === loc.id}
+                        className="flex-1 text-[10px] font-black uppercase tracking-widest text-white bg-orange-500 hover:bg-orange-600 px-3 py-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {savingLoc === loc.id ? "Guardando..." : dirty ? "Guardar cambios" : "Guardado"}
+                      </button>
+                      <button
+                        onClick={() => handleTrigger(loc.id)}
+                        disabled={triggering === loc.id}
+                        className="text-[10px] font-black uppercase tracking-widest text-orange-400 hover:text-orange-300 border border-orange-500/30 hover:border-orange-500/60 px-3 py-2.5 rounded-xl transition-all disabled:opacity-50"
+                      >
+                        {triggering === loc.id ? "..." : "Analizar"}
+                      </button>
                     </div>
                   </div>
-                )}
-                {!loc.autoPromoEnabled && (
+                ) : (
                   <p className="text-[10px] text-gray-600 mt-2">
-                    Actívala desde <strong className="text-gray-500">Mi Marca → Sucursales → Editar</strong>
+                    Activa el switch para que la IA ajuste descuentos automáticamente en esta sucursal.
                   </p>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -320,7 +389,7 @@ export default function PromocionesPage() {
               {disabledLocations.length} {disabledLocations.length === 1 ? "sucursal sin" : "sucursales sin"} IA activada
             </p>
             <p className="text-xs text-gray-600 mt-0.5">
-              Ve a <strong className="text-orange-400">Mi Marca → Sucursales → Editar</strong> para activar el motor de promociones por sucursal.
+              Activa el <strong className="text-orange-400">switch de cada sucursal</strong> aquí arriba para encender el motor de promociones con IA.
             </p>
           </div>
         </div>

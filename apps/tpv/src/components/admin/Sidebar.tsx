@@ -26,7 +26,7 @@ const NAV = [
   { href: "/admin",                    icon: "📊",  label: "Dashboard",        section: "bo" },
   { href: "/admin/clientes",           icon: "🧑‍💼",  label: "Clientes",         section: "bo" },
   { href: "/admin/reportes",           icon: "📈",  label: "Reportes",         section: "bo" },
-  { href: "/admin/impresoras",         icon: "🖨️",  label: "Impresoras",       section: "bo" },
+  { href: "/admin/impresoras",         icon: "🖨️",  label: "Impresión",        section: "bo" },
   { href: "/admin/integraciones",       icon: "🔌",  label: "Integraciones",    section: "bo" },
 ];
 

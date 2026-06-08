@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { MapPin, Phone, MessageCircle } from 'lucide-react';
 import { MochiTheme } from '@/components/themes/MochiTheme';
 import { BentoTheme } from '@/components/themes/BentoTheme';
 import { PocketTheme } from '@/components/themes/PocketTheme';
@@ -7,6 +8,22 @@ import StorefrontClient from './StorefrontClient';
 import InstallPWABanner from '@/components/InstallPWABanner';
 
 const API = getApiUrl();
+
+// Sucursal pública (subconjunto de lo que devuelve GET /api/store/locations).
+type StoreLocation = {
+  id: string;
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+};
+
+// Normaliza un número a dígitos para construir el link de wa.me.
+function waLink(number?: string | null): string | null {
+  if (!number) return null;
+  const digits = number.replace(/\D/g, '');
+  if (!digits) return null;
+  return `https://wa.me/${digits}`;
+}
 
 type DeliveryConfig = {
   mode: 'FLAT' | 'DISTANCE';
@@ -119,6 +136,9 @@ export default async function StorefrontPage({
   // mensaje configurado. Así "activar/desactivar tienda" desde el admin tiene
   // efecto inmediato en el storefront sin depender del checkout de cada tema.
   if (store.isOpen === false) {
+    const activeLocations = (locations as StoreLocation[]) || [];
+    const wa = waLink(store.whatsappNumber);
+
     return (
       <div
         style={{ ['--color-primary' as string]: primary } as React.CSSProperties}
@@ -136,6 +156,47 @@ export default async function StorefrontPage({
           <p className="text-gray-500 font-bold leading-relaxed">
             {store.closedMessage || 'En este momento no estamos recibiendo pedidos. ¡Vuelve pronto!'}
           </p>
+
+          {/* Info de sucursal(es): nombre, dirección y teléfono. */}
+          {activeLocations.length > 0 && (
+            <div className="mt-8 pt-6 border-t border-gray-200 space-y-4 text-left">
+              {activeLocations.map((loc) => (
+                <div key={loc.id} className="space-y-1.5">
+                  {activeLocations.length > 1 && (
+                    <p className="text-sm font-black text-gray-700">{loc.name}</p>
+                  )}
+                  {loc.address && (
+                    <p className="flex items-start gap-2 text-sm font-bold text-gray-500 leading-snug">
+                      <MapPin className="w-4 h-4 mt-0.5 shrink-0" style={{ color: primary }} />
+                      <span>{loc.address}</span>
+                    </p>
+                  )}
+                  {loc.phone && (
+                    <a
+                      href={`tel:${loc.phone.replace(/\s+/g, '')}`}
+                      className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors"
+                    >
+                      <Phone className="w-4 h-4 shrink-0" style={{ color: primary }} />
+                      <span>{loc.phone}</span>
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Contacto por WhatsApp mientras la tienda está cerrada. */}
+          {wa && (
+            <a
+              href={wa}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-6 inline-flex items-center justify-center gap-2 w-full py-3.5 rounded-full bg-[#25D366] text-white font-black text-sm shadow-lg hover:brightness-105 active:scale-[0.98] transition"
+            >
+              <MessageCircle className="w-5 h-5" />
+              Escríbenos por WhatsApp
+            </a>
+          )}
         </div>
       </div>
     );

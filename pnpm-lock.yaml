@@ -488,6 +488,9 @@ importers:
       axios:
         specifier: ^1.16.1
         version: 1.16.1
+      capacitor-tcp-socket:
+        specifier: ^7.1.0
+        version: 7.1.0(@capacitor/core@8.3.1)
       lucide-react:
         specifier: ^1.11.0
         version: 1.11.0(react@19.2.6)
@@ -527,10 +530,10 @@ importers:
         version: 10.1.0
       eslint:
         specifier: ^9.21.0
-        version: 9.39.4(jiti@2.7.0)
+        version: 9.39.4(jiti@1.21.7)
       eslint-config-next:
         specifier: 16.2.5
-        version: 16.2.5(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)
+        version: 16.2.5(@typescript-eslint/parser@8.59.2(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
       postcss:
         specifier: 8.5.10
         version: 8.5.10
@@ -703,10 +706,10 @@ importers:
         version: 10.1.0
       eslint:
         specifier: ^9.21.0
-        version: 9.39.4(jiti@1.21.7)
+        version: 9.39.4(jiti@2.7.0)
       eslint-config-next:
         specifier: 16.2.5
-        version: 16.2.5(@typescript-eslint/parser@8.59.2(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
+        version: 16.2.5(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.39)
@@ -3170,6 +3173,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@unrs/resolver-binding-android-arm-eabi@1.11.1':
     resolution: {integrity: sha512-ppLRUgHVaGRWUx0R0Ut06Mjo9gBaBkg3v/8AxusGLhsIotbBLuRk51rAzqLC8gq6NyyAojEXglNjzf6R948DNw==}
