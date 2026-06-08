@@ -345,7 +345,10 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                         {order.driver && (
                           <>
                             <span className="text-white/20">·</span>
-                            <Bike size={10} className="text-white/60" />
+                            <span className="inline-flex items-center gap-1 text-blue-300 truncate">
+                              <Bike size={10} className="shrink-0" />
+                              <span className="truncate normal-case">{order.driver}</span>
+                            </span>
                           </>
                         )}
                       </div>

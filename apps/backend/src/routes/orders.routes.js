@@ -241,7 +241,24 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
         address: true,
       }
     });
-    res.json(orders);
+
+    // deliveryDriverId es un FK escalar sin relación Prisma, así que el nombre
+    // del repartidor se resuelve con una consulta batch y se adjunta como
+    // deliveryDriverName para que el TPV muestre "asignado a X".
+    const driverIds = [...new Set(orders.map(o => o.deliveryDriverId).filter(Boolean))];
+    let driverMap = {};
+    if (driverIds.length) {
+      const drivers = await prisma.user.findMany({
+        where: { id: { in: driverIds } },
+        select: { id: true, name: true },
+      });
+      driverMap = Object.fromEntries(drivers.map(d => [d.id, d.name]));
+    }
+
+    res.json(orders.map(o => ({
+      ...o,
+      deliveryDriverName: o.deliveryDriverId ? (driverMap[o.deliveryDriverId] || null) : null,
+    })));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1086,7 +1103,8 @@ router.patch('/:id/type', authenticate, requireTenantAccess, requireRole('ADMIN'
 
 // ── POST /:id/transfer-to/:targetId — Transferir todos los items
 // de una orden abierta a otra orden abierta. La orden origen se cierra
-// (CANCELLED) y, si era dine-in, libera la mesa. Solo admin/manager.
+// (CANCELLED) y, si era dine-in, libera la mesa. Disponible para roles
+// operativos de caja y supervisión; nunca para meseros en modo préstamo.
 //
 // /merge es alias del mismo handler. Diferencia conceptual:
 //   transfer → mover toda una cuenta a otra mesa
@@ -1177,8 +1195,16 @@ async function transferOrderHandler(req, res) {
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
 
-router.post('/:id/transfer-to/:targetId', authenticate, requireTenantAccess, requireAdmin, transferOrderHandler);
-router.post('/:id/merge/:targetId',       authenticate, requireTenantAccess, requireAdmin, transferOrderHandler);
+const requireOrderMergeRole = requireRole(
+  'ADMIN',
+  'SUPER_ADMIN',
+  'OWNER',
+  'MANAGER',
+  'CASHIER',
+);
+
+router.post('/:id/transfer-to/:targetId', authenticate, requireTenantAccess, requireOrderMergeRole, transferOrderHandler);
+router.post('/:id/merge/:targetId',       authenticate, requireTenantAccess, requireOrderMergeRole, transferOrderHandler);
 
 // ── PUT /:id/void-payment — Anular un cobro (solo ADMIN) ──────────────
 // Revierte un pago marcado como PAID: deja la orden como pendiente de cobro
