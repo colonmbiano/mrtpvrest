@@ -609,6 +609,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     total: Number(o.total ?? 0),
     time: timeAgo(o.createdAt),
     itemsCount: Array.isArray(o.items) ? o.items.length : 0,
+    driver: o.deliveryDriverName || undefined,
     needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
   }));
 
