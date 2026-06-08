@@ -8,6 +8,7 @@
 import axios from "axios";
 import { getApiUrl } from "@/lib/config";
 import { getTenantIds } from "@/lib/tenant";
+import { consumePendingOverride } from "@/lib/overrideTokens";
 
 const api = axios.create();
 
@@ -46,6 +47,16 @@ api.interceptors.request.use((config) => {
     if (restaurantId) config.headers["x-restaurant-id"] = restaurantId;
     if (locationId)   config.headers["x-location-id"]   = locationId;
     if (token)        config.headers["Authorization"]    = `Bearer ${token}`;
+
+    // RBAC · override token de supervisor. Si hay uno pendiente (recién
+    // emitido por verify-permission), lo adjuntamos a esta request mutante
+    // y lo consumimos (one-shot). verify-permission no lo necesita.
+    const method = String(config.method ?? "get").toLowerCase();
+    const isMutating = ["post", "put", "patch", "delete"].includes(method);
+    if (isMutating && !url.includes("/api/employees/verify-permission")) {
+      const overrideToken = consumePendingOverride();
+      if (overrideToken) config.headers["x-override-token"] = overrideToken;
+    }
   }
   return config;
 });
