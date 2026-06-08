@@ -13,6 +13,7 @@ import {
   Grid3x3,
   Palette,
   Layers,
+  MonitorPlay,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -64,6 +65,13 @@ const SECTIONS = [
     desc: "Encabezado, pie de página y formato",
     icon: Monitor,
     accent: "#a78bfa",
+  },
+  {
+    href: "/admin/pantalla",
+    label: "Pantalla de Cliente",
+    desc: "Doble pantalla: mensajes, publicidad y ventana de cliente",
+    icon: MonitorPlay,
+    accent: "#34d399",
   },
   {
     href: "/admin/usuarios",

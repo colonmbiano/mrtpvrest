@@ -27,11 +27,16 @@ export type UserRole =
   | "DELIVERY";
 
 export type Permission =
+  // ── Set canónico (RBAC real · Fase 10) ──
+  | "apply_discount" // aplicar descuentos/cortesías (absorbe el legacy canDiscount)
+  | "cancel_items" // anular productos ya enviados a cocina
+  | "reopen_table" // reabrir una cuenta ya cobrada
+  | "manage_users" // crear/editar empleados
+  | "open_cash_drawer" // abrir cajón / cobrar
+  // ── Legacy (aún referenciados por UI/ tests; sin enforcement de backend) ──
   | "void_item"
   | "void_order"
-  | "apply_discount"
   | "comp_item"
-  | "open_cash_drawer"
   | "process_refund"
   | "close_register"
   | "transfer_table";
@@ -119,7 +124,11 @@ export const useAuthStore = create<AuthState>()(
         if (!employee) return false;
         // Owners and Admins usually have all permissions
         if (employee.role === "OWNER" || employee.role === "ADMIN") return true;
-        return employee.permissions.includes(permission);
+        // `permissions` puede venir undefined en sesiones antiguas / payloads
+        // incompletos — degradar a "sin permiso" en vez de crashear.
+        return Array.isArray(employee.permissions)
+          ? employee.permissions.includes(permission)
+          : false;
       },
 
       loginWithPin: async (pin: string) => {

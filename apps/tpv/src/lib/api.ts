@@ -7,6 +7,8 @@
  */
 import axios from "axios";
 import { getApiUrl } from "@/lib/config";
+import { getTenantIds } from "@/lib/tenant";
+import { consumePendingOverride } from "@/lib/overrideTokens";
 
 const api = axios.create();
 
@@ -15,12 +17,10 @@ api.interceptors.request.use((config) => {
   config.baseURL = getApiUrl();
 
   if (typeof window !== "undefined") {
-    // BUG FIX: Sincronización robusta de headers.
-    // Intentamos leer primero las llaves estándar (restaurantId).
-    // Si no existen (ej: el usuario acaba de cambiar de sucursal en el Hub),
-    // caemos a las llaves 'active...' para no perder el contexto.
-    const restaurantId = localStorage.getItem("restaurantId") || localStorage.getItem("activeRestaurantId");
-    const locationId   = localStorage.getItem("locationId")   || localStorage.getItem("activeLocationId");
+    // Llaves de tenant centralizadas en lib/tenant.ts: lee las canónicas
+    // (restaurantId/locationId) con fallback a las legacy 'active...' para
+    // dispositivos que aún no han rotado tras la migración.
+    const { restaurantId, locationId } = getTenantIds();
 
     // Priorizar sessionStorage (más seguro), fallback a localStorage
     const token =
@@ -41,12 +41,22 @@ api.interceptors.request.use((config) => {
       (typeof window !== "undefined" && window.location.pathname.startsWith("/setup"));
 
     if (!restaurantId && !isTenantOptional) {
-      console.warn("[api] Petición sin restaurantId →", url, "(revisa Hub / activeRestaurantId)");
+      console.warn("[api] Petición sin restaurantId →", url, "(revisa selección de workspace en el Hub)");
     }
 
     if (restaurantId) config.headers["x-restaurant-id"] = restaurantId;
     if (locationId)   config.headers["x-location-id"]   = locationId;
     if (token)        config.headers["Authorization"]    = `Bearer ${token}`;
+
+    // RBAC · override token de supervisor. Si hay uno pendiente (recién
+    // emitido por verify-permission), lo adjuntamos a esta request mutante
+    // y lo consumimos (one-shot). verify-permission no lo necesita.
+    const method = String(config.method ?? "get").toLowerCase();
+    const isMutating = ["post", "put", "patch", "delete"].includes(method);
+    if (isMutating && !url.includes("/api/employees/verify-permission")) {
+      const overrideToken = consumePendingOverride();
+      if (overrideToken) config.headers["x-override-token"] = overrideToken;
+    }
   }
   return config;
 });

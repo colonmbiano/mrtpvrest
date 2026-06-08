@@ -10,6 +10,12 @@ import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { usePrinters, useReceiptIdentity, useKitchenConfig, useFullTicketConfig } from "@/hooks/usePrinters";
 import { subscribeToEvents, useClientValue, useHydrated } from "@/hooks/useClientValue";
+import {
+  DEFAULT_SIDEBAR_PRESET,
+  SIDEBAR_WIDTH_CHANGED_EVENT,
+  readSidebarPreset,
+  sidebarPresetToPx,
+} from "@/lib/appearance";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
@@ -39,6 +45,7 @@ import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import DeliveryAssignModal from "@/components/admin/DeliveryAssignModal";
 import ChangeOrderTypeModal from "@/components/pos/ChangeOrderTypeModal";
+import ManagerOverrideModal from "@/components/ManagerOverrideModal";
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
   DINE_IN: "MESA",
@@ -92,15 +99,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
   const itemCount = activeTicket.items.reduce((acc, i) => acc + i.quantity, 0);
   const sidebarWidth = useClientValue(
-    () => {
-      if (typeof window === "undefined") return 320;
-      const preset = window.localStorage.getItem("sidebarWidth");
-      if (preset === "S") return 300;
-      if (preset === "L") return 400;
-      return 320;
-    },
-    320,
-    subscribeToEvents("sidebar-width-changed", "storage"),
+    () => sidebarPresetToPx(readSidebarPreset()),
+    sidebarPresetToPx(DEFAULT_SIDEBAR_PRESET),
+    subscribeToEvents(SIDEBAR_WIDTH_CHANGED_EVENT, "storage"),
   );
 
   const [openOrders, setOpenOrders] = useState<any[]>([]);
@@ -110,6 +111,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [shiftOpen, setShiftOpen] = useState<boolean | null>(null);
   const [showShift, setShowShift] = useState(false);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
+  const [pendingCancelItemId, setPendingCancelItemId] = useState<string | null>(null);
   const [mergeSource, setMergeSource] = useState<any | null>(null);
   const [assigningOrder, setAssigningOrder] = useState<any | null>(null);
   const [changeTypeOrder, setChangeTypeOrder] = useState<any | null>(null);
@@ -167,24 +169,41 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     [fetchOpenOrders],
   );
 
-  const handleDeleteOrderItem = useCallback(
-    async (itemId: string) => {
-      if (!confirm("¿Eliminar este producto de la orden?")) return;
+  // Petición de borrado. Devuelve true si el backend exige autorización
+  // (403 PERMISSION_REQUIRED) para que el caller dispare el override.
+  const deleteOrderItemRequest = useCallback(
+    async (itemId: string): Promise<{ needsOverride: boolean }> => {
       setUpdatingItemId(itemId);
       try {
         const { data: updated } = await api.delete(`/api/orders/items/${itemId}`);
         setDetailOrder(updated);
         fetchOpenOrders();
+        return { needsOverride: false };
       } catch (err: any) {
+        if (err?.response?.data?.code === "PERMISSION_REQUIRED") {
+          return { needsOverride: true };
+        }
         toast.error(
           "Error al eliminar: " +
             (err?.response?.data?.error || err?.message || "fallo desconocido"),
         );
+        return { needsOverride: false };
       } finally {
         setUpdatingItemId(null);
       }
     },
     [fetchOpenOrders],
+  );
+
+  const handleDeleteOrderItem = useCallback(
+    async (itemId: string) => {
+      if (!confirm("¿Eliminar este producto de la orden?")) return;
+      const { needsOverride } = await deleteOrderItemRequest(itemId);
+      // Item ya enviado a cocina y sin permiso `cancel_items` → pedir
+      // autorización de supervisor; tras el PIN, reintenta con override token.
+      if (needsOverride) setPendingCancelItemId(itemId);
+    },
+    [deleteOrderItemRequest],
   );
 
   useEffect(() => {
@@ -749,6 +768,19 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         />
 
       )}
+
+      {/* RBAC · autorización para anular un item ya enviado a cocina. Tras el
+          PIN de supervisor, el override token se adjunta y se reintenta. */}
+      <ManagerOverrideModal
+        isOpen={!!pendingCancelItemId}
+        onClose={() => setPendingCancelItemId(null)}
+        permission="cancel_items"
+        onSuccess={async () => {
+          const itemId = pendingCancelItemId;
+          setPendingCancelItemId(null);
+          if (itemId) await deleteOrderItemRequest(itemId);
+        }}
+      />
 
       {mergeSource && (
         <MergeTableModal

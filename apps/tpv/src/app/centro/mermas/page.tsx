@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AlertTriangle, Loader2, Plus, Trash2, X } from "lucide-react";
 import api from "@/lib/api";
+import { getLocationId } from "@/lib/tenant";
 
 interface WasteRow {
   id: string;
@@ -191,8 +192,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
   useEffect(() => {
     (async () => {
       try {
-        const locationId =
-          localStorage.getItem("locationId") || localStorage.getItem("activeLocationId");
+        const locationId = getLocationId();
         if (!locationId) {
           setErr("Sucursal no identificada");
           return;

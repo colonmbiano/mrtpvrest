@@ -234,35 +234,114 @@ function buildCashierTicket(order, config) {
   return d;
 }
 
-// ── IMPRIMIR ORDEN (por estacion segun categoria) ─────────────────────────
+// ── ENRUTAMIENTO POR PRINTER GROUPS ───────────────────────────────────────
+// Fuente única de ruteo (espejo del dispatcher del TPV en printer-tcp.ts):
+// cada item se enruta al/los PrinterGroup de su override item-level o, si no
+// tiene, al default de su categoría. Una impresora recibe un item cuando es
+// miembro de alguno de esos grupos.
+//
+// Devuelve un Map<printerId, items[]> con los items que toca a cada impresora,
+// o `null` si NINGÚN item del pedido tiene ruta declarada / nada matchea —
+// señal para el fallback legacy ("cada impresora de cocina imprime todo").
+async function resolveKitchenRouting(order, kitchenPrinters) {
+  const items = order.items || [];
+  if (items.length === 0 || kitchenPrinters.length === 0) return null;
+
+  const catIds  = [...new Set(items.map(i => i.menuItem?.categoryId).filter(Boolean))];
+  const itemIds = [...new Set(items.map(i => i.menuItemId).filter(Boolean))];
+  const printerIds = kitchenPrinters.map(p => p.id);
+
+  const [catLinks, itemLinks, memberLinks] = await Promise.all([
+    catIds.length ? prisma.categoryPrinterGroup.findMany({
+      where: { categoryId: { in: catIds } },
+      select: { categoryId: true, printerGroupId: true },
+    }) : [],
+    itemIds.length ? prisma.menuItemPrinterGroup.findMany({
+      where: { menuItemId: { in: itemIds } },
+      select: { menuItemId: true, printerGroupId: true },
+    }) : [],
+    prisma.printerGroupMember.findMany({
+      where: { printerId: { in: printerIds } },
+      select: { printerId: true, printerGroupId: true },
+    }),
+  ]);
+
+  const addTo = (map, key, val) => {
+    let set = map.get(key);
+    if (!set) { set = new Set(); map.set(key, set); }
+    set.add(val);
+  };
+  const catGroups     = new Map(); // categoryId -> Set(groupId)
+  const itemGroups    = new Map(); // menuItemId -> Set(groupId)
+  const printerGroups = new Map(); // printerId  -> Set(groupId)
+  for (const l of catLinks)    addTo(catGroups, l.categoryId, l.printerGroupId);
+  for (const l of itemLinks)   addTo(itemGroups, l.menuItemId, l.printerGroupId);
+  for (const l of memberLinks) addTo(printerGroups, l.printerId, l.printerGroupId);
+
+  // Grupos efectivos de un item: override item-level gana sobre categoría.
+  const routeOf = (item) => {
+    const override = itemGroups.get(item.menuItemId);
+    if (override && override.size > 0) return override;
+    const def = catGroups.get(item.menuItem?.categoryId);
+    return def && def.size > 0 ? def : null;
+  };
+
+  if (!items.some(routeOf)) return null; // ningún item enrutado → fallback
+
+  const byPrinter = new Map(); // printerId -> items[]
+  for (const item of items) {
+    const groups = routeOf(item);
+    if (!groups) continue; // item sin ruta se ignora cuando hay groups activos
+    for (const printer of kitchenPrinters) {
+      const pg = printerGroups.get(printer.id);
+      if (!pg) continue;
+      let match = false;
+      for (const gid of groups) { if (pg.has(gid)) { match = true; break; } }
+      if (!match) continue;
+      const arr = byPrinter.get(printer.id) || [];
+      arr.push(item);
+      byPrinter.set(printer.id, arr);
+    }
+  }
+  return byPrinter.size > 0 ? byPrinter : null;
+}
+
+// ── IMPRIMIR ORDEN (enrutada por PrinterGroups) ───────────────────────────
 async function printOrderTicket(order) {
   try {
-    const printers = await prisma.printer.findMany({ where: { isActive: true } });
-    const config   = await prisma.ticketConfig.findFirst();
+    const printerWhere = { isActive: true };
+    if (order.locationId) printerWhere.locationId = order.locationId;
+    const printers = await prisma.printer.findMany({ where: printerWhere });
+    const config   = await prisma.ticketConfig.findFirst(
+      order.locationId ? { where: { locationId: order.locationId } } : undefined
+    );
     const items    = order.items || [];
 
-    // Agrupar items por impresora segun categoria
     const kitchenPrinters = printers.filter(p => p.type !== 'CASHIER');
     const cashierPrinter  = printers.find(p => p.type === 'CASHIER');
 
-    // Para cada impresora de cocina, filtrar items de sus categorias
-    for (const printer of kitchenPrinters) {
-      let printerCategories = [];
-      try { printerCategories = JSON.parse(printer.categories || '[]'); } catch {}
+    const routed = await resolveKitchenRouting(order, kitchenPrinters);
 
-      const printerItems = printerCategories.length > 0
-        ? items.filter(item => {
-            const catId = item.menuItem?.categoryId || item.categoryId;
-            return printerCategories.includes(catId);
-          })
-        : items;
-
-      if (printerItems.length === 0) continue;
-
-      const ticket = buildKitchenTicket(order, printerItems, printer.name);
-      await printToIp(printer.ip, printer.port, ticket).catch(e =>
-        console.error('Error imprimiendo en ' + printer.name + ':', e.message)
-      );
+    if (routed) {
+      // Cada impresora recibe SOLO los items que le enruta su(s) grupo(s).
+      for (const [printerId, printerItems] of routed.entries()) {
+        if (printerItems.length === 0) continue;
+        const printer = kitchenPrinters.find(p => p.id === printerId);
+        if (!printer) continue;
+        const ticket = buildKitchenTicket(order, printerItems, printer.name);
+        await printToIp(printer.ip, printer.port, ticket).catch(e =>
+          console.error('Error imprimiendo en ' + printer.name + ':', e.message)
+        );
+      }
+    } else if (items.length > 0) {
+      // Fallback legacy: sin rutas declaradas, cada impresora de cocina
+      // imprime todos los items (comportamiento histórico).
+      for (const printer of kitchenPrinters) {
+        const ticket = buildKitchenTicket(order, items, printer.name);
+        await printToIp(printer.ip, printer.port, ticket).catch(e =>
+          console.error('Error imprimiendo en ' + printer.name + ':', e.message)
+        );
+      }
     }
 
     // Ticket de cobro solo si es CASHIER
@@ -325,24 +404,16 @@ async function printOrderToStation(order, printerId) {
     if (!printer || !printer.isActive) return;
     const items = order.items || [];
 
-    let printerCategories = [];
-    try { printerCategories = JSON.parse(printer.categories || '[]'); } catch {}
+    // Items que los PrinterGroups enrutan a ESTA impresora. Si no tiene ruta
+    // declarada (o nada matchea), imprime todos — preserva el fallback
+    // histórico de "estación única".
+    const routed = await resolveKitchenRouting(order, [printer]);
+    const routedItems = routed?.get(printer.id);
+    const printerItems = routedItems && routedItems.length > 0 ? routedItems : items;
 
-    const printerItems = printerCategories.length > 0
-      ? items.filter(item => {
-          const catId = item.menuItem?.categoryId || item.categoryId;
-          return printerCategories.includes(catId);
-        })
-      : items;
-
-    if (printerItems.length === 0) {
-      // Si no hay items de esa categoria, imprime todos
-      const ticket = buildKitchenTicket(order, items, printer.name);
-      await printToIp(printer.ip, printer.port, ticket);
-    } else {
-      const ticket = buildKitchenTicket(order, printerItems, printer.name);
-      await printToIp(printer.ip, printer.port, ticket);
-    }
+    if (printerItems.length === 0) return;
+    const ticket = buildKitchenTicket(order, printerItems, printer.name);
+    await printToIp(printer.ip, printer.port, ticket);
   } catch (e) {
     console.error('Error en printOrderToStation:', e.message);
   }

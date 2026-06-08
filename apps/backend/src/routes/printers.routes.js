@@ -69,7 +69,6 @@ const PRINTER_ALLOWED_FIELDS = [
   'bluetoothAddress',
   'supportsCashDrawer',
   'isActive',
-  'categories',
   'stations',
 ];
 
@@ -97,10 +96,6 @@ function normalizePrinterPayload(body) {
   // Sanity: port es Int
   if (payload.port !== undefined && payload.port !== null) {
     payload.port = parseInt(payload.port, 10) || 9100;
-  }
-  // categories: garantizar array (el modelo es String[])
-  if (payload.categories !== undefined && !Array.isArray(payload.categories)) {
-    payload.categories = [];
   }
   // stations: array de estaciones que un KDS vigila. Sanitizamos para
   // evitar que un cliente meta valores arbitrarios y rompa el filtro

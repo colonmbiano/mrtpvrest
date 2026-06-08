@@ -3,8 +3,9 @@ const bcrypt  = require('bcryptjs');
 const crypto  = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { authenticate, requireTenantAccess, requirePermission } = require('../middleware/auth.middleware');
 const { requireModule, MODULES } = require('../lib/modules');
+const { mapPermissions, PERM_TO_FLAG, PERMISSION_FLAG_SELECT } = require('../lib/permissions');
 const router = express.Router();
 
 // Gate del módulo "employee_management". Aplica solo a CRUD admin
@@ -21,6 +22,18 @@ const pinLoginLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => `${req.ip}:${req.locationId || 'no-loc'}`,
   message: { error: 'Demasiados intentos de PIN. Espera 15 minutos.' },
+});
+
+// Rate-limit para autorizaciones de supervisor (override de permisos):
+// max 30 intentos / 15 min por IP+location. Más holgado que el login porque
+// un turno con muchos descuentos/anulaciones puede pedir varios overrides.
+const overrideLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `${req.ip}:${req.locationId || 'no-loc'}`,
+  message: { error: 'Demasiados intentos de autorización. Espera 15 minutos.' },
 });
 
 const ROLE_DEFAULTS = {
@@ -58,6 +71,7 @@ router.get('/me', authenticate, async (req, res) => {
         name: true,
         role: true,
         isActive: true,
+        ...PERMISSION_FLAG_SELECT,
         location: {
           select: {
             id: true,
@@ -72,7 +86,7 @@ router.get('/me', authenticate, async (req, res) => {
     }
     const { location, ...employee } = emp;
     return res.json({
-      employee,
+      employee: { ...employee, permissions: mapPermissions(employee) },
       restaurant: location.restaurant,
       location: { id: location.id, name: location.name },
     });
@@ -95,55 +109,30 @@ router.get('/sync', authenticate, requireTenantAccess, async (req, res) => {
         role: true,
         offlinePin: true, // SHA256 para validación local
         isActive: true,
-        canCharge: true,
-        canDiscount: true,
-        canModifyTickets: true,
-        canDeleteTickets: true,
-        canConfigSystem: true,
-        canTakeDelivery: true,
-        canTakeTakeout: true,
-        canManageShifts: true,
-        // Fase 10 · permisos granulares — incluidos en el sync para que
-        // el cache offline pueda evaluarlos sin pegarle al backend.
-        canCancelItems:    true,
-        canApplyDiscounts: true,
-        canReopenTables:   true,
-        canManageUsers:    true,
+        // Flags canónicos para evaluar permisos en el cache offline.
+        ...PERMISSION_FLAG_SELECT,
       }
     });
 
-    // Mapear permisos a formato de Permission[]
-    const formatted = employees.map(e => {
-      const perms = [];
-      if (e.canCharge) perms.push('open_cash_drawer');
-      if (e.canDiscount) perms.push('apply_discount');
-      if (e.canModifyTickets) perms.push('void_item');
-      if (e.canDeleteTickets) perms.push('void_order');
-      // Fase 10 · permisos granulares mapeados a strings consumibles por
-      // el authStore (Permission union type en TPV). Ojo: estos no
-      // reemplazan a los anteriores — son nuevos.
-      if (e.canCancelItems)    perms.push('cancel_items');
-      if (e.canApplyDiscounts) perms.push('apply_discount_v2');
-      if (e.canReopenTables)   perms.push('reopen_table');
-      if (e.canManageUsers)    perms.push('manage_users');
-
-      return {
-        id: e.id,
-        name: e.name,
-        role: e.role,
-        pin: e.offlinePin,
-        isActive: e.isActive,
-        permissions: perms,
-        lastSync: Date.now()
-      };
-    });
+    // Mapear permisos al set canónico (Permission union del TPV). Unificado:
+    // canApplyDiscounts||canDiscount → 'apply_discount'. Las columnas legacy
+    // sin operación ya no se traducen (quedan deprecadas).
+    const formatted = employees.map(e => ({
+      id: e.id,
+      name: e.name,
+      role: e.role,
+      pin: e.offlinePin,
+      isActive: e.isActive,
+      permissions: mapPermissions(e),
+      lastSync: Date.now()
+    }));
 
     res.json(formatted);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET todos los empleados (Filtrado por Sucursal)
-router.get('/', authenticate, requireTenantAccess, requireAdmin, gateEmployees, async (req, res) => {
+router.get('/', authenticate, requireTenantAccess, requirePermission('manage_users'), gateEmployees, async (req, res) => {
   try {
     // locationId es OPCIONAL: si se envía, filtramos por sucursal; si no,
     // retornamos todos los empleados del restaurante. Antes 400 cuando
@@ -186,7 +175,7 @@ router.get('/', authenticate, requireTenantAccess, requireAdmin, gateEmployees, 
 });
 
 // GET un empleado
-router.get('/:id', authenticate, requireTenantAccess, requireAdmin, gateEmployees, async (req, res) => {
+router.get('/:id', authenticate, requireTenantAccess, requirePermission('manage_users'), gateEmployees, async (req, res) => {
   try {
     const emp = await prisma.employee.findFirst({
       where: { id: req.params.id, locationId: req.locationId },
@@ -199,7 +188,7 @@ router.get('/:id', authenticate, requireTenantAccess, requireAdmin, gateEmployee
 });
 
 // POST crear empleado
-router.post('/', authenticate, requireTenantAccess, requireAdmin, gateEmployees, async (req, res) => {
+router.post('/', authenticate, requireTenantAccess, requirePermission('manage_users'), gateEmployees, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
@@ -256,7 +245,7 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, gateEmployees,
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // PUT actualizar empleado
-router.put('/:id', authenticate, requireTenantAccess, requireAdmin, gateEmployees, async (req, res) => {
+router.put('/:id', authenticate, requireTenantAccess, requirePermission('manage_users'), gateEmployees, async (req, res) => {
   try {
     const { name, phone, pin, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays, isActive,
       canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout, canManageShifts,
@@ -325,7 +314,7 @@ router.put('/:id', authenticate, requireTenantAccess, requireAdmin, gateEmployee
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // DELETE eliminar empleado
-router.delete('/:id', authenticate, requireTenantAccess, requireAdmin, gateEmployees, async (req, res) => {
+router.delete('/:id', authenticate, requireTenantAccess, requirePermission('manage_users'), gateEmployees, async (req, res) => {
   try {
     const emp = await prisma.employee.findFirst({
       where: { id: req.params.id, locationId: req.locationId }
@@ -433,9 +422,107 @@ router.post('/login', pinLoginLimiter, async (req, res) => {
     }).catch((e) => console.error('[audit] login log failed:', e?.message || e));
 
     // No devolvemos la relación anidada al cliente, solo el empleado plano.
+    // Incluimos `permissions` (set canónico) para que el authStore del TPV
+    // evalúe RBAC del usuario logueado sin depender solo de los flags crudos.
     const { location, ...employeePublic } = emp;
-    res.json({ employee: employeePublic, token });
+    res.json({
+      employee: { ...employeePublic, permissions: mapPermissions(employeePublic) },
+      token,
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/employees/verify-permission — autorización de supervisor (override).
+//
+// Reemplaza la validación client-side (cache offline, spoofeable) por una
+// validación real contra el backend. El empleado logueado solicita autorización
+// presentando el PIN de un supervisor (ADMIN/MANAGER/OWNER de su sucursal) que
+// SÍ tenga el permiso. Si es válido, devuelve un override token (JWT corto, 15
+// min) que el cliente adjunta como header `x-override-token` en la acción
+// gateada. El backend (requirePermission) lo valida y deja pasar la operación.
+router.post('/verify-permission', authenticate, requireTenantAccess, overrideLimiter, async (req, res) => {
+  try {
+    const { pin, permission } = req.body;
+    if (!pin || !permission) {
+      return res.status(400).json({ error: 'PIN y permiso requeridos' });
+    }
+    const flag = PERM_TO_FLAG[permission];
+    if (!flag) return res.status(400).json({ error: 'Permiso desconocido' });
+
+    const locationId = req.user?.locationId || req.locationId;
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    // Solo supervisores de la misma sucursal pueden autorizar.
+    const candidates = await prisma.employee.findMany({
+      where: {
+        locationId,
+        isActive: true,
+        role: { in: ['ADMIN', 'MANAGER', 'OWNER'] },
+      },
+      select: {
+        id: true, name: true, role: true, pin: true, offlinePin: true,
+        ...PERMISSION_FLAG_SELECT,
+      },
+    });
+
+    let supervisor = null;
+    const sha256Pin = crypto.createHash('sha256').update(pin).digest('hex');
+    for (const c of candidates) {
+      const ok = c.pin && c.pin.startsWith('$2')
+        ? await bcrypt.compare(pin, c.pin)
+        : (c.pin === pin || c.offlinePin === sha256Pin);
+      if (ok) { supervisor = c; break; }
+    }
+
+    if (!supervisor) {
+      return res.status(401).json({ error: 'PIN de supervisor incorrecto' });
+    }
+
+    // El supervisor debe TENER el permiso (OWNER/ADMIN tienen bypass total).
+    const privileged = ['OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(supervisor.role);
+    const hasPerm = privileged
+      || supervisor[flag]
+      || (flag === 'canApplyDiscounts' && supervisor.canDiscount);
+    if (!hasPerm) {
+      return res.status(403).json({ error: 'El supervisor no tiene este permiso' });
+    }
+
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign(
+      {
+        override: true,
+        permission,
+        supervisorId: supervisor.id,
+        tenantId: req.user?.tenantId ?? null,
+        locationId,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+
+    // Auditoría — quién autorizó qué y a quién (fire-and-forget).
+    prisma.accessLog.create({
+      data: {
+        tenantId: req.user?.tenantId ?? null,
+        restaurantId: req.user?.restaurantId ?? null,
+        locationId,
+        actorType: 'EMPLOYEE',
+        actorId: supervisor.id,
+        actorName: supervisor.name,
+        action: `OVERRIDE:${permission}`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || null,
+        userAgent: req.headers['user-agent']?.slice(0, 200) || null,
+      },
+    }).catch((e) => console.error('[audit] override log failed:', e?.message || e));
+
+    return res.json({
+      token,
+      supervisor: { id: supervisor.id, name: supervisor.name },
+      expiresIn: 900,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;
