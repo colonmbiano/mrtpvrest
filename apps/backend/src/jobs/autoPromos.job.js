@@ -1,7 +1,11 @@
 const { prisma } = require('@mrtpvrest/database');
 const cron = require('node-cron');
-const axios = require('axios');
-const { resolveGeminiKey } = require('../services/ai-key.service');
+
+// Antigüedad mínima vendiendo: un platillo debe tener al menos este tiempo en
+// el menú antes de ser elegible para una promoción automática. Evita que la IA
+// castigue con descuento a platillos recién creados que "venden poco" sólo
+// porque acaban de salir.
+const MIN_SELLING_DAYS = 30;
 
 /**
  * Motor de Promociones Automáticas con IA
@@ -36,6 +40,11 @@ async function runAutoPromos(options = null) {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+    // Fecha de corte para la antigüedad mínima: sólo platillos creados antes de
+    // esta fecha son elegibles para auto-promo.
+    const minAgeCutoff = new Date();
+    minAgeCutoff.setDate(minAgeCutoff.getDate() - MIN_SELLING_DAYS);
+
     const locationsByRestaurant = new Map();
     for (const location of locations) {
       const group = locationsByRestaurant.get(location.restaurantId) || {
@@ -50,7 +59,13 @@ async function runAutoPromos(options = null) {
       const locationIds = group.locations.map(location => location.id);
       const threshold = group.locations.reduce((sum, location) => sum + location.autoPromoThreshold, 0);
       const discount = Math.max(...group.locations.map(location => location.autoPromoDiscount));
-      console.log(`🤖 Analizando restaurante ${restaurantId} (${group.locations.length} sucursal(es), Threshold: ${threshold}, Discount: ${discount}%)`);
+      // Tope de platillos en promo: el máximo positivo configurado entre las
+      // sucursales del grupo. 0 (o ninguno) = sin tope.
+      const positiveCaps = group.locations
+        .map(location => location.autoPromoMaxItems || 0)
+        .filter(cap => cap > 0);
+      const maxItems = positiveCaps.length > 0 ? Math.max(...positiveCaps) : 0;
+      console.log(`🤖 Analizando restaurante ${restaurantId} (${group.locations.length} sucursal(es), Threshold: ${threshold}, Discount: ${discount}%, Tope: ${maxItems || 'sin tope'})`);
 
       // 2. Obtener las ventas de los últimos 7 días en las sucursales seleccionadas
       const recentOrders = await prisma.order.findMany({
@@ -72,8 +87,13 @@ async function runAutoPromos(options = null) {
       }
 
       // 4. Identificar platillos por debajo del umbral
-      const menuItems = group.restaurant.menuItems.filter(item => item.isAvailable);
-      const lowSellers = [];
+      // Sólo entran al análisis los platillos disponibles que ya llevan al
+      // menos MIN_SELLING_DAYS en el menú. Los más nuevos se ignoran por
+      // completo (ni promo ni se les toca) para no castigarlos antes de tiempo.
+      const menuItems = group.restaurant.menuItems.filter(
+        item => item.isAvailable && new Date(item.createdAt) <= minAgeCutoff
+      );
+      let lowSellers = [];
       const normalSellers = [];
 
       for (const item of menuItems) {
@@ -84,6 +104,16 @@ async function runAutoPromos(options = null) {
           // Si vendió más del umbral, se le quita la promoción si la tenía
           normalSellers.push(item);
         }
+      }
+
+      // Aplicar el tope: si hay límite, sólo se promocionan los N peores
+      // vendedores (menos ventas primero). El resto de low-sellers se trata
+      // como normal-seller para que se les retire cualquier promo previa.
+      if (maxItems > 0 && lowSellers.length > maxItems) {
+        lowSellers.sort((a, b) => (salesCount[a.id] || 0) - (salesCount[b.id] || 0));
+        const overflow = lowSellers.slice(maxItems);
+        lowSellers = lowSellers.slice(0, maxItems);
+        normalSellers.push(...overflow);
       }
 
       // 5. Quitar promo a los que ya venden bien
@@ -98,47 +128,19 @@ async function runAutoPromos(options = null) {
       }
 
       // 6. Aplicar promo a los que venden poco
+      // Nota: NO se toca el campo `description` del platillo — sólo se ajusta
+      // isPromo/promoPrice. El motor antes sobrescribía la descripción con
+      // texto de IA y nunca la restauraba, lo que destruía el menú original.
       for (const item of lowSellers) {
         const discountDec = discount / 100;
         const newPrice = Math.max(0, item.price - (item.price * discountDec));
         const finalPromoPrice = parseFloat(newPrice.toFixed(2));
-
-        let aiDescription = item.description;
-
-        // Usar Gemini via Axios para generar una descripción llamativa de promoción
-        if (!item.isPromo) {
-          try {
-            // Utilizamos resolveGeminiKey que internamente devuelve la key de plataforma (GOOGLE_AI_API_KEY)
-            const { apiKey } = resolveGeminiKey();
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
-            
-            const prompt = `Eres un experto en marketing de restaurantes. El platillo "${item.name}" (Descripción original: "${item.description || 'Sin descripción'}") no se está vendiendo bien. Hemos aplicado un descuento del ${discount}%. Escribe una frase corta (máximo 15 palabras) muy llamativa y apetitosa para promocionar este platillo hoy. No uses comillas.`;
-            
-            const response = await axios.post(geminiUrl, {
-              contents: [{
-                parts: [{ text: prompt }]
-              }],
-              generationConfig: {
-                temperature: 0.8,
-                maxOutputTokens: 60,
-              }
-            }, {
-              headers: { 'Content-Type': 'application/json' }
-            });
-
-            const aiText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-            if (aiText) aiDescription = aiText;
-          } catch (aiErr) {
-            console.error(`   - Error AI (Gemini) para ${item.name}: ${aiErr.response?.data?.error?.message || aiErr.message}`);
-          }
-        }
 
         await prisma.menuItem.update({
           where: { id: item.id },
           data: {
             isPromo: true,
             promoPrice: finalPromoPrice,
-            description: aiDescription
           }
         });
         console.log(`   + Promoción activada para: ${item.name} (Vendió ${salesCount[item.id] || 0}) -> Nuevo precio: $${finalPromoPrice}`);
