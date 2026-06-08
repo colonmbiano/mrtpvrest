@@ -148,9 +148,14 @@ riesgo/alcance:
 
 ### Redundancias / huecos
 
-- **Ruteo de impresoras en 3 sitios**: `admin/impresoras` (directo),
-  `admin/grupos-impresoras` (grupo) y `PrinterCategoriesModal`. Precedencia poco
-  clara → elegir modelo canónico.
+- ✅ **Ruteo de impresoras** — resuelto. PrinterGroups es ahora la fuente única.
+  Se eliminó el camino legacy `Printer.categories[]` (y su `PrinterCategoriesModal`):
+  el endpoint KDS, el dispatcher del TPV (`printer-tcp.ts`) y el servicio de
+  impresión del backend (`printer.service.js`) enrutan todos por
+  CategoryPrinterGroup / MenuItemPrinterGroup. Migración con backfill que pliega
+  las categorías legacy en grupos "Auto: <impresora>" y dropea la columna. El
+  ruteo se gestiona solo desde `admin/grupos-impresoras` (enlazado desde
+  `admin/impresoras`).
 - **Dos sistemas de permisos** (legacy + "Phase 10") en `admin/usuarios`.
 - **Configurador inline duplicado**: `app/pos/menu/page.tsx` reimplementa la
   lógica de grupos/variantes/validación; convendría extraer un componente

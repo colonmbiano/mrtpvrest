@@ -1,10 +1,10 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import api from "@/lib/api";
-import { Monitor, Printer as PrinterIcon, Network, Usb, Bluetooth, Trash2, Edit3, Plus, Tag } from "lucide-react";
+import { Monitor, Printer as PrinterIcon, Network, Usb, Bluetooth, Trash2, Edit3, Plus, Layers } from "lucide-react";
 import KDSConfigModal from "@/components/pos/KDSConfigModal";
-import PrinterCategoriesModal from "@/components/admin/PrinterCategoriesModal";
 import BackButton from "@/components/BackButton";
 import { printTestTicket, type PrinterStation } from "@/lib/printer-tcp";
 import { formatDisplayName } from "@/lib/formatDisplayName";
@@ -17,7 +17,6 @@ type Printer = {
   port?: number | null;
   type: string;
   isVirtual?: boolean;
-  categories?: string[];
 };
 
 const DEFAULT_FORM: Partial<Printer> = {
@@ -33,7 +32,6 @@ export default function ImpresorasPage() {
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isKDSModalOpen, setIsKDSModalOpen] = useState(false);
-  const [categoriesFor, setCategoriesFor] = useState<Printer | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -177,6 +175,12 @@ export default function ImpresorasPage() {
           </div>
         </div>
         <div className="flex gap-3">
+          <Link
+            href="/admin/grupos-impresoras"
+            className="flex items-center gap-2 bg-[#121316] border border-white/5 text-zinc-300 px-5 py-3 rounded-2xl font-bold transition-all hover:bg-[#1a1b1f] active:scale-95"
+          >
+            <Layers size={18} className="text-amber-500" /> Enrutamiento
+          </Link>
           <button
             onClick={() => {
               setForm({ name: "", connectionType: "NETWORK", ip: "", type: "KITCHEN" });
@@ -333,15 +337,6 @@ export default function ImpresorasPage() {
         initialData={form}
       />
 
-      {/* CATEGORÍAS POR IMPRESORA */}
-      {categoriesFor && (
-        <PrinterCategoriesModal
-          printer={categoriesFor}
-          onClose={() => setCategoriesFor(null)}
-          onSaved={() => { fetchPrinters(); }}
-        />
-      )}
-
       {/* GRID DISPOSITIVOS */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -401,15 +396,13 @@ export default function ImpresorasPage() {
                   >
                     {testingId === p.id ? "Conectando..." : isKDS ? "Refrescar Pantalla" : "Test de Impresión"}
                   </button>
-                  <button
-                    onClick={() => setCategoriesFor(p)}
+                  <Link
+                    href="/admin/grupos-impresoras"
                     className="w-full h-12 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 active:scale-95"
                   >
-                    <Tag size={14} />
-                    {p.categories?.length
-                      ? `${p.categories.length} categoría${p.categories.length !== 1 ? "s" : ""}`
-                      : "Asignar categorías"}
-                  </button>
+                    <Layers size={14} />
+                    Enrutamiento
+                  </Link>
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleEdit(p)}
