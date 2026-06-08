@@ -103,6 +103,14 @@ export function useNotifications() {
       orderNumber: order.orderNumber,
       total: Number(order.total ?? 0),
     });
+
+    // Señal para el auto-print (useAutoPrintOnline). Reutilizamos esta única
+    // conexión de socket en vez de abrir otra: emitimos un CustomEvent local
+    // con la orden cruda y dejamos que ese hook decida si imprime según el
+    // toggle de la sucursal y el `source` del pedido.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("tpv:order:new", { detail: order }));
+    }
   }, [addNotification]);
 
   const handleOrderKiosk = useCallback((data: any) => {
