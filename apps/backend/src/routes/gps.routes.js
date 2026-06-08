@@ -3,10 +3,17 @@ const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const router = express.Router();
 
-const ORIGIN = {
-  lat: parseFloat(process.env.RESTAURANT_LAT || '19.2826'),
-  lng: parseFloat(process.env.RESTAURANT_LNG || '-99.6557'),
-};
+// Origen para el cálculo de distancia. Se lee dinámicamente de process.env en
+// CADA uso: antes era una const capturada al cargar el módulo, por lo que el
+// PUT /origin (que muta process.env) era un no-op hasta reiniciar el proceso.
+// LIMITACIÓN: sigue siendo global al proceso, no por sucursal. El origen real
+// por-sucursal requiere agregar gpsLat/gpsLng al modelo Location (follow-up).
+function getOrigin() {
+  return {
+    lat: parseFloat(process.env.RESTAURANT_LAT || '19.2826'),
+    lng: parseFloat(process.env.RESTAURANT_LNG || '-99.6557'),
+  };
+}
 
 function distanceMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -68,13 +75,13 @@ router.post('/:driverId/route/start', authenticate, requireTenantAccess, async (
         driverId: driver.id,
         driverName: driver.name || 'Repartidor',
         orderId: orderId || null,
-        originLat: Number(lat) || ORIGIN.lat,
-        originLng: Number(lng) || ORIGIN.lng,
+        originLat: Number(lat) || getOrigin().lat,
+        originLng: Number(lng) || getOrigin().lng,
         trigger: trigger || 'MANUAL',
       },
     });
     res.json(route);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.post('/:driverId/route/end', authenticate, requireTenantAccess, async (req, res) => {
@@ -86,7 +93,7 @@ router.post('/:driverId/route/end', authenticate, requireTenantAccess, async (re
       data: { endAt: new Date() },
     });
     res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.post('/:driverId/location', authenticate, requireTenantAccess, async (req, res) => {
@@ -110,7 +117,8 @@ router.post('/:driverId/location', authenticate, requireTenantAccess, async (req
       });
       if (!order) return res.status(404).json({ error: 'Orden no encontrada para este repartidor' });
     }
-    const dist = distanceMeters(ORIGIN.lat, ORIGIN.lng, nLat, nLng);
+    const origin = getOrigin();
+    const dist = distanceMeters(origin.lat, origin.lng, nLat, nLng);
     const location = await prisma.driverLocation.create({
       data: {
         driverId: driver.id,
@@ -132,10 +140,10 @@ router.post('/:driverId/location', authenticate, requireTenantAccess, async (req
       });
     }
     res.json({ location, distFromOrigin: Math.round(dist) });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
-router.get('/live', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+router.get('/live', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN', 'CASHIER'), async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const drivers = await prisma.employee.findMany({
@@ -161,8 +169,8 @@ router.get('/live', authenticate, requireTenantAccess, requireRole('ADMIN', 'MAN
         online: last ? (Date.now() - new Date(last.createdAt).getTime()) < 3 * 60 * 1000 : false,
       };
     }));
-    res.json({ drivers: result, origin: ORIGIN });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    res.json({ drivers: result, origin: getOrigin() });
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.get('/:driverId/route/:routeId/points', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
@@ -179,7 +187,7 @@ router.get('/:driverId/route/:routeId/points', authenticate, requireTenantAccess
       orderBy: { createdAt: 'asc' },
     });
     res.json({ route, points });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.get('/:driverId/routes', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
@@ -192,16 +200,23 @@ router.get('/:driverId/routes', authenticate, requireTenantAccess, requireAdmin,
       take: 20,
     });
     res.json(routes);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/origin', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { lat, lng } = req.body;
-    process.env.RESTAURANT_LAT = String(lat);
-    process.env.RESTAURANT_LNG = String(lng);
-    res.json({ ok: true, lat, lng });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    const nLat = Number(req.body?.lat);
+    const nLng = Number(req.body?.lng);
+    if (!Number.isFinite(nLat) || !Number.isFinite(nLng) || Math.abs(nLat) > 90 || Math.abs(nLng) > 180) {
+      return res.status(400).json({ error: 'Coordenadas invalidas' });
+    }
+    // NOTA: persiste sólo en process.env (se pierde al reiniciar) y es global al
+    // proceso, no por sucursal. Para origen persistente y por-sucursal hay que
+    // mover esto a un campo en Location (gpsLat/gpsLng) — follow-up pendiente.
+    process.env.RESTAURANT_LAT = String(nLat);
+    process.env.RESTAURANT_LNG = String(nLng);
+    res.json({ ok: true, lat: nLat, lng: nLng });
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 module.exports = router;

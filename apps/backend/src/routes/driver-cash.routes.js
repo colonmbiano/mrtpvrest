@@ -1,6 +1,6 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const router = express.Router();
@@ -75,7 +75,7 @@ router.get('/:driverId/movements', authenticate, requireTenantAccess, async (req
     const expense = movements.filter(m => m.type === 'EXPENSE').reduce((s, m) => s + m.amount, 0);
     const returned = movements.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.amount, 0);
     res.json({ movements, summary: { income, expense, returned, balance: income - expense - returned } });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.single('photo'), async (req, res) => {
@@ -85,9 +85,23 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
     const { type, category, amount, description, orderId } = req.body;
     const numericAmount = Number(amount);
     if (!['INCOME', 'EXPENSE', 'RETURN'].includes(type)) return res.status(400).json({ error: 'type invalido' });
-    if (!Number.isFinite(numericAmount) || numericAmount < 0 || numericAmount > 50000) {
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 50000) {
       return res.status(400).json({ error: 'amount invalido' });
     }
+
+    // Idempotencia: evita que un doble-tap o reintento de red cree movimientos
+    // duplicados. Si ya existe un movimiento idéntico en los últimos 30s, lo
+    // devolvemos en vez de crear otro.
+    const dedupeFrom = new Date(Date.now() - 30 * 1000);
+    const duplicate = await prisma.driverCashMovement.findFirst({
+      where: {
+        driverId: driver.id,
+        type, category, amount: numericAmount,
+        orderId: orderId || null,
+        createdAt: { gte: dedupeFrom },
+      },
+    });
+    if (duplicate) return res.json(duplicate);
 
     if (orderId) {
       const order = await prisma.order.findFirst({
@@ -114,7 +128,7 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
       },
     });
     res.json(movement);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.post('/:driverId/collect', authenticate, requireTenantAccess, async (req, res) => {
@@ -123,7 +137,7 @@ router.post('/:driverId/collect', authenticate, requireTenantAccess, async (req,
     if (!driver) return;
     const { orderId, amount, orderNumber } = req.body;
     const numericAmount = Number(amount);
-    if (!Number.isFinite(numericAmount) || numericAmount < 0 || numericAmount > 50000) {
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 50000) {
       return res.status(400).json({ error: 'amount invalido' });
     }
     if (orderId) {
@@ -136,10 +150,21 @@ router.post('/:driverId/collect', authenticate, requireTenantAccess, async (req,
         select: { id: true },
       });
       if (!order) return res.status(404).json({ error: 'Orden no encontrada para este repartidor' });
+      // Idempotencia por orden: un solo cobro de entrega por pedido.
       const existing = await prisma.driverCashMovement.findFirst({
         where: { driverId: driver.id, orderId, category: 'DELIVERY', type: 'INCOME' },
       });
       if (existing) return res.json(existing);
+    } else {
+      // Sin orderId: dedup por ventana de 30s para frenar reintentos.
+      const dup = await prisma.driverCashMovement.findFirst({
+        where: {
+          driverId: driver.id, category: 'DELIVERY', type: 'INCOME',
+          amount: numericAmount, orderId: null,
+          createdAt: { gte: new Date(Date.now() - 30 * 1000) },
+        },
+      });
+      if (dup) return res.json(dup);
     }
     const movement = await prisma.driverCashMovement.create({
       data: {
@@ -152,7 +177,7 @@ router.post('/:driverId/collect', authenticate, requireTenantAccess, async (req,
       },
     });
     res.json(movement);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.post('/:driverId/cut', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
@@ -191,7 +216,7 @@ router.post('/:driverId/cut', authenticate, requireTenantAccess, requireAdmin, a
     });
 
     res.json(cut);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.get('/cuts', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
@@ -210,10 +235,10 @@ router.get('/cuts', authenticate, requireTenantAccess, requireAdmin, async (req,
       take: 50,
     });
     res.json(cuts);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
-router.get('/summary/today', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.get('/summary/today', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const from = new Date(); from.setHours(0, 0, 0, 0);
@@ -239,7 +264,7 @@ router.get('/summary/today', authenticate, requireTenantAccess, requireAdmin, as
       };
     });
     res.json(summary);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 module.exports = router;
