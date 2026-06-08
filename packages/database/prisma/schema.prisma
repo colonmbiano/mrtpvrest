@@ -1789,6 +1789,24 @@ model DriverRoute {
   trigger    String    @default("MANUAL") // MANUAL, ORDER_ASSIGNED
 }
 
+// Avisos del restaurante a los repartidores. driverId null = broadcast a todos
+// los repartidores del restaurante. readBy guarda los driverIds que ya leyeron.
+model DriverNotice {
+  id            String   @id @default(cuid())
+  restaurantId  String
+  locationId    String?
+  driverId      String?
+  title         String?
+  body          String
+  createdById   String?
+  createdByName String?
+  readBy        String[] @default([])
+  createdAt     DateTime @default(now())
+
+  @@index([restaurantId, createdAt])
+  @@map("driver_notices")
+}
+
 model KdsItemStatus {
   id          String    @id @default(cuid())
   orderId     String

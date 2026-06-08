@@ -22,6 +22,7 @@ interface HomeScreenProps {
   orders: Order[];
   isOnline: boolean;
   pendingSync?: number;
+  unreadNotices?: number;
   onSelectOrder: (order: Order) => void;
   onChat: (order: Order) => void;
   onDeliverOrder: (order: Order) => void;
@@ -133,7 +134,7 @@ function OrderCard({ order, onDetail, onChat, onDeliver, onNavigate }: {
 }
 
 export function HomeScreen({
-  driver, orders, isOnline, pendingSync = 0,
+  driver, orders, isOnline, pendingSync = 0, unreadNotices = 0,
   onSelectOrder, onChat, onDeliverOrder, onNavigate,
 }: HomeScreenProps) {
 
@@ -171,6 +172,26 @@ export function HomeScreen({
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {/* Avisos — campana con badge de no leídos */}
+          <button onClick={() => onNavigate('avisos')} style={{
+            ...S.iconBtn, position: 'relative', color: unreadNotices > 0 ? C.amber : C.textDim,
+            background: unreadNotices > 0 ? C.amberSoft : C.surf1,
+            border: `1px solid ${unreadNotices > 0 ? 'rgba(255,184,77,0.3)' : C.border}`,
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+            {unreadNotices > 0 && (
+              <span style={{
+                position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, padding: '0 4px',
+                borderRadius: 8, background: C.coral, color: '#fff', fontSize: 9, fontWeight: 800,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+              }}>
+                {unreadNotices > 9 ? '9+' : unreadNotices}
+              </span>
+            )}
+          </button>
           {[
             { icon: 'map', onClick: () => onNavigate('map'), color: C.textDim },
             { icon: 'stats', onClick: () => onNavigate('weekly'), color: C.textDim },

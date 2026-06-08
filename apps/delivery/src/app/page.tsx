@@ -21,11 +21,12 @@ import { DesempenoScreen } from '@/components/delivery/screens/DesempenoScreen';
 import { SetupScreen }     from '@/components/delivery/screens/SetupScreen';
 import { MapScreen }       from '@/components/delivery/screens/MapScreen';
 import { DispatchScreen }  from '@/components/delivery/screens/DispatchScreen';
+import { AvisosScreen }    from '@/components/delivery/screens/AvisosScreen';
 
 type Screen =
   | 'setup' | 'login' | 'home' | 'detail'
   | 'chat'  | 'weekly'| 'cobrar' | 'caja'
-  | 'gasto' | 'map'   | 'dispatch';
+  | 'gasto' | 'map'   | 'dispatch' | 'avisos';
 
 // ── Accept Order Modal ─────────────────────────────────────────
 const RING_R = 52;
@@ -146,6 +147,8 @@ export default function DeliveryApp() {
   const [orderDetail, setOrderDetail]   = useState<any>(null);
   const [prevOrderCount, setPrevOrderCount] = useState(0);
   const [incomingOrder, setIncomingOrder]   = useState<any>(null);
+  const [avisos, setAvisos]                 = useState<any[]>([]);
+  const [unreadNotices, setUnreadNotices]   = useState(0);
 
   const [locations, setLocations] = useState<any[]>([]);
   const [setupStep, setSetupStep] = useState<'auth' | 'location'>('auth');
@@ -211,6 +214,22 @@ export default function DeliveryApp() {
     } catch {}
   }, []);
 
+  const fetchAvisos = useCallback(async (d?: any) => {
+    const id = (d || driver)?.id;
+    if (!id) return;
+    try {
+      const { data } = await api.get(`/api/delivery/${id}/notices`);
+      setAvisos(data.notices || []);
+      setUnreadNotices(data.unread || 0);
+    } catch {}
+  }, [driver]);
+
+  const markNoticeRead = useCallback(async (noticeId: string) => {
+    setAvisos(prev => prev.map(n => n.id === noticeId ? { ...n, read: true } : n));
+    setUnreadNotices(prev => Math.max(0, prev - 1));
+    try { await api.post(`/api/delivery/notices/${noticeId}/read`); } catch {}
+  }, []);
+
   const fetchOrderDetail = useCallback(async (orderId: string) => {
     try {
       const { data } = await api.get(`/api/orders/${orderId}`);
@@ -222,6 +241,7 @@ export default function DeliveryApp() {
     if (!driver) return;
     fetchOrders();
     fetchHistory();
+    fetchAvisos();
 
     const socket = io(getApiUrl(), {
       // El token identifica al repartidor en el server (socket.data.user) y lo
@@ -248,6 +268,11 @@ export default function DeliveryApp() {
         fetchMessages(currentId);
       }
     });
+    // Aviso nuevo del restaurante (dirigido o broadcast).
+    socket.on('newNotice', () => {
+      audioRef.current?.play().catch(() => {});
+      fetchAvisos();
+    });
     return () => { socket.disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driver]);
@@ -255,6 +280,7 @@ export default function DeliveryApp() {
   useEffect(() => {
     if (screen === 'chat' && selectedOrder) fetchMessages(selectedOrder.id);
     if (screen === 'caja') fetchCash();
+    if (screen === 'avisos') fetchAvisos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, selectedOrder]);
 
@@ -389,6 +415,7 @@ export default function DeliveryApp() {
           driver={driver}
           orders={orders}
           isOnline={isOnline}
+          unreadNotices={unreadNotices}
           pendingSync={useOfflineStore.getState().queue.length}
           onSelectOrder={(order: any) => {
             setSelectedOrder(order);
@@ -469,6 +496,14 @@ export default function DeliveryApp() {
         <DispatchScreen
           onBack={() => setScreen('home')}
           locationId={typeof window !== 'undefined' ? (localStorage.getItem('locationId') || undefined) : undefined}
+        />
+      )}
+
+      {screen === 'avisos' && (
+        <AvisosScreen
+          avisos={avisos}
+          onBack={() => setScreen('home')}
+          onRead={markNoticeRead}
         />
       )}
 
