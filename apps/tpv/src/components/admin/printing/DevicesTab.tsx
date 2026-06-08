@@ -66,6 +66,10 @@ export default function DevicesTab() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
+  // Auto-impresión de pedidos online (toggle por sucursal en TpvRemoteConfig.extra).
+  // null = aún cargando; evita parpadeo del switch antes de conocer el valor real.
+  const [autoPrint, setAutoPrint] = useState<boolean | null>(null);
+  const [autoPrintSaving, setAutoPrintSaving] = useState(false);
 
   const fetchPrinters = async () => {
     setLoading(true);
@@ -84,6 +88,36 @@ export default function DevicesTab() {
     queueMicrotask(() => { if (!cancelled) fetchPrinters(); });
     return () => { cancelled = true; };
   }, []);
+
+  // Carga el estado actual del toggle de auto-impresión de la sucursal.
+  useEffect(() => {
+    let cancelled = false;
+    api.get("/api/tpv/config")
+      .then(({ data }) => {
+        if (cancelled) return;
+        const extra = (data?.extra && typeof data.extra === "object" ? data.extra : {}) as Record<string, unknown>;
+        setAutoPrint(Boolean(extra.autoPrintOnline));
+      })
+      .catch(() => { if (!cancelled) setAutoPrint(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const toggleAutoPrint = async () => {
+    if (autoPrint === null || autoPrintSaving) return;
+    const next = !autoPrint;
+    setAutoPrintSaving(true);
+    setAutoPrint(next); // optimista
+    try {
+      await api.put("/api/tpv/config", { autoPrintOnline: next });
+      toast.success(next ? "Auto-impresión de pedidos online activada" : "Auto-impresión desactivada");
+    } catch (err: unknown) {
+      setAutoPrint(!next); // revertir
+      const e = err as { response?: { data?: { error?: string } }; message?: string };
+      toast.error("Error: " + (e?.response?.data?.error || e?.message || "fallo"));
+    } finally {
+      setAutoPrintSaving(false);
+    }
+  };
 
   const openNew = (kds: boolean) => {
     setEditingId(null);
@@ -205,6 +239,29 @@ export default function DevicesTab() {
 
   return (
     <div>
+      {/* Auto-impresión de pedidos de la tienda online (toggle por sucursal) */}
+      <div className="mb-6 bg-[#121316] border border-white/5 rounded-[2rem] p-6 flex items-start gap-4">
+        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+          <PrinterIcon size={22} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-base font-black text-white tracking-tight">Auto-impresión de pedidos en línea</h3>
+          <p className="text-xs text-zinc-500 font-medium mt-1 leading-relaxed">
+            Al entrar un pedido de la tienda online, esta sucursal imprime sola la comanda de cocina y el ticket del cliente. Ideal para negocios de alto volumen; desactívalo si prefieres revisar cada pedido antes de imprimir. Requiere la tablet TPV encendida, con la app abierta y conectada a la misma red que las impresoras.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={toggleAutoPrint}
+          disabled={autoPrint === null || autoPrintSaving}
+          aria-label="Activar auto-impresión de pedidos en línea"
+          aria-pressed={Boolean(autoPrint)}
+          className={`shrink-0 mt-1 w-12 h-7 rounded-full relative transition-colors disabled:opacity-50 ${autoPrint ? "bg-amber-500" : "bg-zinc-700"}`}
+        >
+          <span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${autoPrint ? "right-1" : "left-1"}`} />
+        </button>
+      </div>
+
       <div className="flex justify-end gap-3 mb-6">
         <button
           onClick={() => openNew(true)}

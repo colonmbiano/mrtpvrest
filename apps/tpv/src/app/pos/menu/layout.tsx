@@ -33,6 +33,7 @@ import ShiftModal from "@/components/admin/ShiftModal";
 import { useThemeStore, type Palette } from "@/store/themeStore";
 import NotificationsPanel from "@/components/pos/NotificationsPanel";
 import { useNotifications, useNotifStore } from "@/hooks/useNotifications";
+import { useAutoPrintOnline } from "@/hooks/useAutoPrintOnline";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
 import MergeTableModal from "@/components/pos/MergeTableModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
@@ -77,6 +78,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   // Sistema de notificaciones en tiempo real vía Socket.io
   useNotifications();
+  // Auto-impresión de pedidos de la tienda online (comanda + ticket) si la
+  // sucursal tiene el toggle activo. Escucha el evento que emite useNotifications.
+  useAutoPrintOnline();
   const unreadCount = useNotifStore((s) => s.unreadCount);
 
   // Mantener la pantalla encendida mientras esté abierto el shell de
