@@ -16,18 +16,14 @@ const kdsWriteRoles = requireRole(
 
 // GET pedidos activos para una estación
 //
-// Enrutamiento (en este orden, fuentes que se UNEN — no se sobrescriben):
-//   1. PrinterGroup → categorías + items: el modelo moderno.
-//      Una categoría/item asignado a un grupo cuyo miembro sea una
-//      impresora con type=station entra al filtro de esta estación.
-//   2. Printer.categories[] (legacy): array Postgres de categoryIds en la
-//      propia impresora. Se respeta para que la pantalla "Asignar
-//      categorías" del modal por-impresora siga funcionando aunque no
-//      uses Printer Groups.
+// Enrutamiento — fuente única: PrinterGroup → categorías + items.
+//   Una categoría/item asignado a un grupo cuyo miembro sea una impresora
+//   con type=station entra al filtro de esta estación. El ruteo se gestiona
+//   desde /admin/grupos-impresoras (CategoryPrinterGroup / MenuItemPrinterGroup).
 //
-// Si NINGUNA fuente declara categorías ni items para esta estación,
-// fallback "central": muestra todos los items de las órdenes activas
-// (comportamiento KDS-único histórico).
+// Si NINGÚN grupo declara categorías ni items para esta estación, fallback
+// "central": muestra todos los items de las órdenes activas (comportamiento
+// KDS-único histórico).
 router.get('/orders/:station', async (req, res) => {
   try {
     const { station } = req.params;
@@ -36,25 +32,19 @@ router.get('/orders/:station', async (req, res) => {
     const printerWhere = { type: station, isActive: true };
     if (locationId) printerWhere.locationId = locationId;
 
-    // 1) PrinterGroups que contengan al menos una impresora de esta estación
+    // PrinterGroups que contengan al menos una impresora de esta estación.
     const groupWhere = {
       members: { some: { printer: printerWhere } },
     };
     if (locationId) groupWhere.locationId = locationId;
 
-    const [groups, legacyPrinters] = await Promise.all([
-      prisma.printerGroup.findMany({
-        where: groupWhere,
-        include: {
-          categories: { select: { categoryId: true } },
-          items:      { select: { menuItemId: true } },
-        },
-      }),
-      prisma.printer.findMany({
-        where: printerWhere,
-        select: { categories: true },
-      }),
-    ]);
+    const groups = await prisma.printerGroup.findMany({
+      where: groupWhere,
+      include: {
+        categories: { select: { categoryId: true } },
+        items:      { select: { menuItemId: true } },
+      },
+    });
 
     const catIdSet  = new Set();
     const itemIdSet = new Set();
@@ -62,14 +52,6 @@ router.get('/orders/:station', async (req, res) => {
     for (const g of groups) {
       for (const c of g.categories) catIdSet.add(c.categoryId);
       for (const it of g.items)     itemIdSet.add(it.menuItemId);
-    }
-    for (const p of legacyPrinters) {
-      // Postgres String[] → ya es array. Si por algún motivo viniera string
-      // (datos antiguos en JSON) lo intentamos parsear best-effort.
-      const arr = Array.isArray(p.categories)
-        ? p.categories
-        : (() => { try { return JSON.parse(p.categories || '[]'); } catch { return []; } })();
-      for (const id of arr) catIdSet.add(id);
     }
 
     const hasFilter = catIdSet.size > 0 || itemIdSet.size > 0;
