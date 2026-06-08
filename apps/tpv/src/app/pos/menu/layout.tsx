@@ -20,11 +20,12 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
 import api from "@/lib/api";
-import { apiOrQueue } from "@/lib/offline";
+import { apiOrQueue, syncOfflineQueue } from "@/lib/offline";
 import {
   printCustomerReceipt,
   printSplitReceipts,
   printEqualSplitReceipts,
+  openCashDrawer,
   type TicketItem,
   type ReceiptInput,
 } from "@/lib/printer-tcp";
@@ -539,6 +540,37 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     await handleReprintKitchen(detailOrder);
   };
 
+  // Menú de acciones rápidas (TopActionsDropdown) ───────────────────────────
+  // Abre el cajón de dinero mandando el pulso ESC/POS a la(s) impresora(s)
+  // CASHIER. Sin un cobro de por medio, es el "no-sale" clásico del POS.
+  const handleOpenCashDrawer = useCallback(async () => {
+    try {
+      const res = await openCashDrawer(printers);
+      if (res.ok > 0) {
+        toast.success("Cajón abierto");
+      } else {
+        toast.error(
+          "No se pudo abrir el cajón: " +
+            (res.failed[0]?.error || "sin impresora CASHIER activa"),
+        );
+      }
+    } catch (err: any) {
+      toast.error("Error al abrir cajón: " + (err?.message || "fallo desconocido"));
+    }
+  }, [printers]);
+
+  // Fuerza el flush de la cola offline y refresca los tickets abiertos.
+  const handleSyncNow = useCallback(async () => {
+    const t = toast.loading("Sincronizando…");
+    try {
+      await syncOfflineQueue();
+      await fetchOpenOrders();
+      toast.success("Sincronización completa", { id: t });
+    } catch (err: any) {
+      toast.error("Error al sincronizar: " + (err?.message || "fallo desconocido"), { id: t });
+    }
+  }, [fetchOpenOrders]);
+
   const handleCancelOrderFromDetail = useCallback(async () => {
     if (!detailOrder) return;
     if (!confirm(`¿Estás seguro de ELIMINAR el ticket #${detailOrder.orderNumber || detailOrder.id}? Esta acción no se puede deshacer.`)) return;
@@ -991,12 +1023,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
               <TopActionsDropdown
                 onClearTicket={() => useTicketStore.getState().clearActiveItems()}
                 hasItems={itemCount > 0}
-                onOpenDrawer={() => {}}
-                onReprintKitchen={() => {}}
-                onReprintReceipt={() => {}}
-                onSync={() => {}}
-                onSplitTicket={() => {}}
-                onMoveTicket={() => {}}
+                onOpenDrawer={handleOpenCashDrawer}
+                onSync={handleSyncNow}
                 onOpenCatalogSettings={() => setShowCatalogSettings(true)}
               />
             </div>

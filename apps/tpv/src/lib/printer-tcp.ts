@@ -44,6 +44,10 @@ export const CMD = {
   LF:           "\n",
   LINE:         "------------------------------\n",
   CUT:          GS  + "V" + "\x42" + "\x00",
+  // Pulso de apertura del cajón (ESC p m t1 t2) por el conector RJ11 de
+  // la impresora. m=0 → pin 2; t1/t2 mantenidos en rango ASCII (≤0x7F)
+  // para sobrevivir a normalizeThermalText, que descarta bytes >0x7F.
+  DRAWER_KICK:  ESC + "p" + "\x00" + "\x40" + "\x50",
 };
 
 const LINE_WIDTH = 32;
@@ -224,6 +228,9 @@ export interface PrinterRecord {
   // enrutamiento por groups y solo le llegan tickets si está en el
   // fallback legacy (type/stations match).
   printerGroupIds?: string[];
+  // Solo CASHIER: indica que esta impresora tiene un cajón de dinero
+  // conectado por RJ11 y por tanto puede recibir el pulso de apertura.
+  supportsCashDrawer?: boolean;
 }
 
 export interface TicketModifier {
@@ -643,6 +650,48 @@ export async function printCustomerReceipt(
 ): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
   const payload = buildCustomerReceipt(input);
   return dispatchToStations(printers, ["CASHIER"], payload);
+}
+
+/**
+ * Abre el cajón de dinero enviando el pulso ESC/POS (ESC p) a las
+ * impresoras CASHIER. El cajón no es un dispositivo de red propio: cuelga
+ * del conector RJ11 de la impresora térmica, así que «abrir cajón» es en
+ * realidad mandarle el pulso a esa impresora.
+ *
+ * Prioriza las impresoras CASHIER marcadas con `supportsCashDrawer`; si
+ * ninguna lo tiene configurado, cae a todas las CASHIER (el pulso es
+ * inofensivo para una impresora sin cajón). Devuelve el conteo ok/failed
+ * igual que las funciones de impresión para que el caller dé feedback.
+ */
+export async function openCashDrawer(
+  printers: PrinterRecord[]
+): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
+  const cashiers = printers.filter(
+    (p) =>
+      p.isActive &&
+      p.connectionType === "NETWORK" &&
+      p.ip &&
+      p.ip !== "0.0.0.0" &&
+      (p.type === "CASHIER" ||
+        (Array.isArray(p.stations) && p.stations.includes("CASHIER"))),
+  );
+  const withDrawer = cashiers.filter((p) => p.supportsCashDrawer);
+  const targets = withDrawer.length > 0 ? withDrawer : cashiers;
+
+  let ok = 0;
+  const failed: Array<{ name: string; error: string }> = [];
+  await Promise.all(
+    targets.map(async (p) => {
+      try {
+        await sendRawTcp({ ip: p.ip as string, port: p.port }, CMD.INIT + CMD.DRAWER_KICK);
+        ok += 1;
+      } catch (e) {
+        const err = e as { message?: string };
+        failed.push({ name: p.name, error: err?.message || "fallo TCP" });
+      }
+    }),
+  );
+  return { ok, failed };
 }
 
 // ── Split por comensal (Fase 3) ─────────────────────────────────────────────

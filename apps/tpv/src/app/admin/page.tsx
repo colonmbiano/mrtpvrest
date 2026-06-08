@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Grid3x3,
   Palette,
-  Layers,
   MonitorPlay,
 } from "lucide-react";
 
@@ -41,16 +40,9 @@ const SECTIONS = [
   {
     href: "/admin/impresoras",
     label: "Red e Impresoras",
-    desc: "Impresoras de tickets y estaciones KDS",
+    desc: "Dispositivos, enrutamiento de comandas y formato de tickets",
     icon: Printer,
     accent: "#10b981",
-  },
-  {
-    href: "/admin/grupos-impresoras",
-    label: "Grupos de Impresoras",
-    desc: "Enrutamiento de impresoras — qué impresoras reciben cada categoría",
-    icon: Layers,
-    accent: "#fbbf24",
   },
   {
     href: "/admin/apariencia",

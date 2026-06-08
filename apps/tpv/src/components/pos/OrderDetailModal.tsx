@@ -107,7 +107,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       />
 
       {/* MODAL */}
-      <div className="relative w-full max-w-[520px] max-h-[88vh] flex flex-col bg-[#0C0C0E] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-[520px] max-h-[92vh] flex flex-col bg-[#0C0C0E] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Ambient warm-tech glow */}
         <div
           aria-hidden
@@ -147,18 +147,18 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           </button>
         </div>
 
-        {/* META */}
-        <div className="relative z-10 p-5 grid grid-cols-1 sm:grid-cols-2 gap-3 border-b border-white/5 shrink-0">
-          <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
-            <div className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase mb-1">
+        {/* META — compacta para dejar el máximo de alto a los productos */}
+        <div className="relative z-10 px-5 py-3 grid grid-cols-2 gap-2 border-b border-white/5 shrink-0">
+          <div className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 min-w-0">
+            <div className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase mb-0.5">
               Cliente
             </div>
             <div className="text-[13px] font-bold text-white truncate">
               {customerName || "Público general"}
             </div>
           </div>
-          <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
-            <div className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase mb-1">
+          <div className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 min-w-0">
+            <div className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase mb-0.5">
               {tableName ? "Mesa" : "Apertura"}
             </div>
             <div className="text-[13px] font-bold text-white truncate">
@@ -166,17 +166,17 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             </div>
           </div>
           {status && (
-            <div className="col-span-2 p-3 rounded-2xl bg-white/5 border border-white/10">
-              <div className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase mb-1">
+            <div className="col-span-2 flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
+              <span className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase">
                 Estado
-              </div>
-              <div className="text-[13px] font-bold text-[#88D66C]">{status}</div>
+              </span>
+              <span className="text-[13px] font-bold text-[#88D66C]">{status}</span>
             </div>
           )}
         </div>
 
         {/* ITEMS */}
-        <div className="relative z-10 flex-1 overflow-y-auto p-5 space-y-3 scrollbar-hide">
+        <div className="relative z-10 flex-1 min-h-[160px] overflow-y-auto p-5 space-y-3 scrollbar-hide">
           {canEditItems && items.length > 0 && (
             <div className="flex items-center justify-between gap-2 mb-1">
               <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
