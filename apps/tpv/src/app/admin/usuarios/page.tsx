@@ -22,17 +22,13 @@ import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 
 const ROLES = ["OWNER", "ADMIN", "MANAGER", "CASHIER", "WAITER", "KITCHEN", "COOK", "DELIVERY"];
 
-// Permisos legacy (sistema general). Se mantienen por compatibilidad
-// hacia atrás — la sección diseño operativo del bottom de la modal es la nueva.
+// Permiso base de cobro (canónico → 'open_cash_drawer'). El resto del set
+// canónico vive en SPECIAL_PERMS. Las columnas legacy sin operación
+// (canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery,
+// canTakeTakeout, canManageShifts) quedan deprecadas: ya no se editan aquí.
+// `canDiscount` se unificó en `canApplyDiscounts` (sección especial).
 const PERM_KEYS = [
-  { key: "canCharge",        label: "Cobrar / Apertura Cajón" },
-  { key: "canDiscount",      label: "Aplicar Descuentos" },
-  { key: "canModifyTickets", label: "Modificar Comandas" },
-  { key: "canDeleteTickets", label: "Eliminar Registros" },
-  { key: "canConfigSystem",  label: "Configurar Sistema" },
-  { key: "canTakeDelivery",  label: "Atender Domicilios" },
-  { key: "canTakeTakeout",   label: "Atender Llevar" },
-  { key: "canManageShifts",  label: "Gestión de Turnos" },
+  { key: "canCharge", label: "Cobrar / Apertura Cajón" },
 ] as const;
 
 // FASE 10 · RBAC GRANULAR — Permisos operativos especiales.

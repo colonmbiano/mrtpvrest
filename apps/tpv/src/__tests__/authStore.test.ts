@@ -226,6 +226,37 @@ describe("useAuthStore (offline-first)", () => {
       const { result } = renderHook(() => useAuthStore());
       expect(result.current.hasPermission("void_item")).toBe(false);
     });
+
+    it("evalúa permisos canónicos granulares (cancel_items)", () => {
+      useAuthStore.setState({
+        employee: {
+          id: "e1",
+          name: "Cajero",
+          role: "CASHIER",
+          isActive: true,
+          permissions: ["apply_discount", "cancel_items"],
+        },
+      });
+      const { result } = renderHook(() => useAuthStore());
+      expect(result.current.hasPermission("cancel_items")).toBe(true);
+      expect(result.current.hasPermission("apply_discount")).toBe(true);
+      expect(result.current.hasPermission("reopen_table")).toBe(false);
+    });
+
+    it("no crashea si permissions viene undefined (sesión antigua)", () => {
+      useAuthStore.setState({
+        employee: {
+          id: "e1",
+          name: "Legacy",
+          role: "CASHIER",
+          isActive: true,
+          // @ts-expect-error — simula payload antiguo sin permissions[]
+          permissions: undefined,
+        },
+      });
+      const { result } = renderHook(() => useAuthStore());
+      expect(result.current.hasPermission("cancel_items")).toBe(false);
+    });
   });
 
   describe("logout", () => {

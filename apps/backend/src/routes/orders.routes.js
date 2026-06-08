@@ -180,7 +180,7 @@ async function discountInventory(prisma, orderItems, orderId, restaurantId, loca
 
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePermission, userHasPermission, hasValidOverride } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
 const { resolveVariantSelection, applyFreeModifiers } = require('../lib/money');
@@ -837,6 +837,21 @@ router.delete('/items/:itemId', authenticate, requireTenantAccess, requireRole('
       return res.status(400).json({ error: 'La orden ya fue pagada' });
     }
 
+    // RBAC · Anular un producto YA ENVIADO a cocina (pertenece a una ronda
+    // con comanda emitida) requiere `cancel_items`. Quitar un item recién
+    // agregado y aún no enviado (sin roundId) sigue libre — es parte de armar
+    // el ticket. OWNER/ADMIN tienen bypass; el resto necesita el permiso o un
+    // override de supervisor (header x-override-token).
+    if (orderItem.roundId &&
+        !userHasPermission(req, 'cancel_items') &&
+        !hasValidOverride(req, 'cancel_items')) {
+      return res.status(403).json({
+        error: 'No tienes autorización para anular productos ya enviados a cocina',
+        code: 'PERMISSION_REQUIRED',
+        requiredPermission: 'cancel_items',
+      });
+    }
+
     const updatedOrder = await prisma.$transaction(async (tx) => {
       await tx.orderItem.delete({ where: { id: req.params.itemId } });
 
@@ -1168,7 +1183,7 @@ router.post('/:id/merge/:targetId',       authenticate, requireTenantAccess, req
 // ── PUT /:id/void-payment — Anular un cobro (solo ADMIN) ──────────────
 // Revierte un pago marcado como PAID: deja la orden como pendiente de cobro
 // y conserva una nota de auditoría con el nombre del admin que anuló.
-router.put('/:id/void-payment', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.put('/:id/void-payment', authenticate, requireTenantAccess, requirePermission('reopen_table'), async (req, res) => {
   try {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.restaurantId;

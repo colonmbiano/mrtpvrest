@@ -5,6 +5,8 @@ import { Permission, useAuthStore } from '@/store/authStore';
 import useOfflineStore from '@/store/useOfflineStore';
 import NumpadPIN from './NumpadPIN';
 import { hashPin } from '@/lib/hash';
+import api from '@/lib/api';
+import { setPendingOverride } from '@/lib/overrideTokens';
 
 interface ManagerOverrideModalProps {
   isOpen: boolean;
@@ -27,17 +29,59 @@ export default function ManagerOverrideModal({
   if (!isOpen) return null;
 
   const handlePINSubmit = async (pin: string) => {
-    if (pin.length !== 4) return;
+    if (pin.length < 4) return;
 
     setValidating(true);
     setError('');
 
     try {
+      // 1) Validación REAL contra backend → emite override token que el
+      //    interceptor de `api` adjunta a la acción reintentada. Esto
+      //    reemplaza la validación client-side (cache offline spoofeable).
+      try {
+        const { data } = await api.post('/api/employees/verify-permission', {
+          pin,
+          permission,
+        });
+        if (data?.token) {
+          setPendingOverride(
+            permission,
+            data.token,
+            (data.expiresIn ?? 900) * 1000,
+          );
+          addToQueue({
+            id: `override-${Date.now()}`,
+            type: 'override',
+            data: { permission },
+            timestamp: Date.now(),
+            synced: false,
+            supervisor: data.supervisor?.id,
+          });
+          setValidating(false);
+          onClose();
+          await onSuccess();
+          return;
+        }
+      } catch (apiErr: any) {
+        // El backend respondió (401/403) → PIN o permiso inválido. No es
+        // problema de red, así que no caemos al fallback offline.
+        if (apiErr?.response) {
+          setError(apiErr.response?.data?.error || 'PIN incorrecto o sin permiso');
+          setValidating(false);
+          return;
+        }
+        // Sin response → red caída → intentamos validación offline.
+      }
+
+      // 2) Fallback OFFLINE: validar contra el cache local. Sin token de
+      //    backend; las acciones online-only no se ejecutarán offline de
+      //    todos modos, pero descuentos/flujos locales sí pueden continuar.
       const hash = await hashPin(pin);
       const supervisor = employees.find(
         (emp) =>
           emp.pin === hash &&
-          (emp.role === 'ADMIN' || emp.role === 'MANAGER') &&
+          (emp.role === 'ADMIN' || emp.role === 'MANAGER' || emp.role === 'OWNER') &&
+          Array.isArray(emp.permissions) &&
           emp.permissions.includes(permission)
       );
 
@@ -47,7 +91,6 @@ export default function ManagerOverrideModal({
         return;
       }
 
-      // Log override
       addToQueue({
         id: `override-${Date.now()}`,
         type: 'override',
