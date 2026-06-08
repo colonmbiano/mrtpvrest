@@ -150,41 +150,11 @@ function LocationsSection() {
                 />
               </div>
 
-              <div className="bg-black/50 p-5 rounded-3xl border border-orange-500/20">
-                <label className="flex items-center gap-3 cursor-pointer mb-4">
-                  <input
-                    type="checkbox"
-                    checked={form.autoPromoEnabled}
-                    onChange={e => setForm({ ...form, autoPromoEnabled: e.target.checked })}
-                    className="w-5 h-5 accent-orange-500 rounded"
-                  />
-                  <span className="text-sm font-black text-white uppercase tracking-widest">Promociones con IA</span>
-                </label>
-                {form.autoPromoEnabled && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Umbral (ventas min)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={form.autoPromoThreshold}
-                        onChange={e => setForm({ ...form, autoPromoThreshold: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-black border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-orange-500 transition-all text-sm font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Descuento (%)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={form.autoPromoDiscount}
-                        onChange={e => setForm({ ...form, autoPromoDiscount: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-black border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-orange-500 transition-all text-sm font-bold"
-                      />
-                    </div>
-                  </div>
-                )}
+              <div className="bg-black/50 p-4 rounded-3xl border border-orange-500/20 flex items-start gap-3">
+                <span className="text-lg">🤖</span>
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Las <strong className="text-orange-400">Promociones con IA</strong> (activación, umbral y % de descuento) ahora se configuran en la sección <strong className="text-orange-400">Promociones IA</strong>.
+                </p>
               </div>
 
               <div className="bg-black/50 p-5 rounded-3xl border border-white/10">

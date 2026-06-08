@@ -32,9 +32,16 @@ api.interceptors.request.use((config) => {
       url.includes("/api/locations/") ||
       isEmployeeLogin;
 
+    // Si el caller ya fijó un Authorization explícito (p. ej. el token admin
+    // temporal para sincronizar impresoras), NO lo sobrescribimos con el del
+    // mesero. Permite hacer llamadas admin sin tocar la sesión del turno.
+    const hasExplicitAuth = Boolean(config.headers.Authorization);
+
     if (!restaurantId) {
       if (tenantOptional) {
-        if (token && !isEmployeeLogin) config.headers.Authorization = `Bearer ${token}`;
+        if (token && !isEmployeeLogin && !hasExplicitAuth) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
         return config;
       }
       throw new Error("TENANT_REQUIRED: falta x-restaurant-id en este dispositivo.");
@@ -42,7 +49,9 @@ api.interceptors.request.use((config) => {
 
     config.headers["x-restaurant-id"] = restaurantId;
     if (locationId) config.headers["x-location-id"] = locationId;
-    if (token && !isEmployeeLogin) config.headers.Authorization = `Bearer ${token}`;
+    if (token && !isEmployeeLogin && !hasExplicitAuth) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
 
   return config;

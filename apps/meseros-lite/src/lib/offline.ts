@@ -38,11 +38,20 @@ export async function apiOrQueue<T = unknown>(
   const store = useOfflineQueueStore.getState();
   const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
 
+  // ID estable por transacción: se usa como `clientOrderId` (dedup a nivel DB,
+  // sobrevive reinicios del backend y multi-instancia) Y como header
+  // `Idempotency-Key`. Crítico: la MISMA clave viaja en el primer intento y en
+  // todos los reintentos de la cola, para que un ack perdido no duplique la
+  // comanda (server creó la orden, la red se cayó antes de la respuesta).
+  const transactionId = makeTransactionId(type);
+  const idempotentBody = { clientOrderId: transactionId, ...body };
+  const config = { headers: { "Idempotency-Key": transactionId } };
+
   if (isOffline) {
     store.addToQueue({
-      id: makeTransactionId(type),
+      id: transactionId,
       type,
-      data: { method, path, body },
+      data: { method, path, body: idempotentBody },
       timestamp: Date.now(),
       synced: false,
     });
@@ -51,14 +60,16 @@ export async function apiOrQueue<T = unknown>(
 
   try {
     const response =
-      method === "POST" ? await api.post<T>(path, body) : await api.put<T>(path, body);
+      method === "POST"
+        ? await api.post<T>(path, idempotentBody, config)
+        : await api.put<T>(path, idempotentBody, config);
     return { ok: true, queued: false, data: response.data };
   } catch (err: unknown) {
     if (isNetworkError(err)) {
       store.addToQueue({
-        id: makeTransactionId(type),
+        id: transactionId,
         type,
-        data: { method, path, body },
+        data: { method, path, body: idempotentBody },
         timestamp: Date.now(),
         synced: false,
         lastError: errorMessage(err),
