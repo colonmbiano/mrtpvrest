@@ -6,6 +6,11 @@ import {
   Search,
   Bike,
   ChevronRight,
+  CheckCircle2,
+  Circle,
+  ListChecks,
+  Merge,
+  Loader2,
 } from "lucide-react";
 
 export interface DrawerOrder {
@@ -34,6 +39,13 @@ interface OrdersDrawerProps {
   /** Fase 6: oculta el botón Cobrar cuando el usuario es WAITER en
    *  modo préstamo. Conserva ver detalle y reimprimir. */
   hideMoney?: boolean;
+  /** Habilita la selección múltiple para consolidar cuentas abiertas. */
+  canMergeOrders?: boolean;
+  /** El primer ticket es el destino; el resto se cierra tras mover sus items. */
+  onMergeOrders?: (
+    targetOrder: DrawerOrder,
+    sourceOrders: DrawerOrder[],
+  ) => Promise<void>;
 }
 
 const FILTERS = ["Todos", "Mesa", "Llevar", "Domicilio"] as const;
@@ -55,7 +67,7 @@ const STATUS_TONE: Record<string, { dot: string; ring: string; chip: string }> =
   CONFIRMED:    { dot: "bg-[#ffb84d]", ring: "border-[#ffb84d]/40", chip: "text-[#ffb84d]" },
   PENDING:      { dot: "bg-white/50",  ring: "border-white/15",     chip: "text-white/60" },
   OPEN:         { dot: "bg-white/50",  ring: "border-white/15",     chip: "text-white/60" },
-  OUT_FOR_DELIVERY: { dot: "bg-blue-400", ring: "border-blue-400/40", chip: "text-blue-300" },
+  ON_THE_WAY:   { dot: "bg-blue-400", ring: "border-blue-400/40", chip: "text-blue-300" },
 };
 
 const DEFAULT_TONE = { dot: "bg-white/50", ring: "border-white/15", chip: "text-white/60" };
@@ -66,9 +78,15 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   onClose,
   orders,
   onShowDetail,
+  canMergeOrders = false,
+  onMergeOrders,
 }) => {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("Todos");
   const [search, setSearch] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
 
   const visibleOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -88,6 +106,61 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
     [orders]
   );
 
+  const selectedOrders = useMemo(
+    () =>
+      selectedIds
+        .map((id) => orders.find((order) => order.id === id))
+        .filter((order): order is DrawerOrder => Boolean(order)),
+    [orders, selectedIds],
+  );
+
+  const selectedTotal = useMemo(
+    () => selectedOrders.reduce((sum, order) => sum + order.total, 0),
+    [selectedOrders],
+  );
+  const targetOrder = selectedOrders[0];
+
+  const resetSelection = () => {
+    setSelectionMode(false);
+    setSelectedIds([]);
+    setShowMergeConfirm(false);
+  };
+
+  const handleClose = () => {
+    resetSelection();
+    onClose();
+  };
+
+  const toggleSelectionMode = () => {
+    if (selectionMode) {
+      resetSelection();
+      return;
+    }
+    setSelectionMode(true);
+  };
+
+  const toggleOrder = (orderId: string) => {
+    setSelectedIds((current) =>
+      current.includes(orderId)
+        ? current.filter((id) => id !== orderId)
+        : [...current, orderId],
+    );
+  };
+
+  const confirmMerge = async () => {
+    const [destination, ...sources] = selectedOrders;
+    if (!onMergeOrders || !destination || sources.length === 0) return;
+    setIsMerging(true);
+    try {
+      await onMergeOrders(destination, sources);
+      resetSelection();
+    } catch {
+      // El caller muestra el error y refresca las órdenes disponibles.
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -98,7 +171,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
       {/* OVERLAY */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
-        onClick={onClose}
+        onClick={handleClose}
       />
 
       {/* DRAWER */}
@@ -134,15 +207,33 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
           </div>
           <div className="flex-1 flex flex-col min-w-0">
             <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
-              Tickets abiertos
+              {selectionMode ? "Seleccionar cuentas" : "Tickets abiertos"}
             </span>
             <span className="text-[16px] font-black text-white truncate leading-none">
-              {orders.length} en curso
-              {driverlessCount > 0 ? ` · ${driverlessCount} sin repartidor` : ""}
+              {selectionMode
+                ? `${selectedOrders.length} seleccionada${selectedOrders.length === 1 ? "" : "s"}`
+                : `${orders.length} en curso${
+                    driverlessCount > 0 ? ` · ${driverlessCount} sin repartidor` : ""
+                  }`}
             </span>
           </div>
+          {canMergeOrders && (
+            <button
+              type="button"
+              onClick={toggleSelectionMode}
+              aria-label={selectionMode ? "Cancelar selección" : "Seleccionar varios tickets"}
+              title={selectionMode ? "Cancelar selección" : "Seleccionar varios tickets"}
+              className={`w-12 h-12 min-h-[48px] rounded-2xl border flex items-center justify-center active:scale-95 transition-all shrink-0 ${
+                selectionMode
+                  ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E]"
+                  : "bg-white/5 border-white/10 text-white/70"
+              }`}
+            >
+              {selectionMode ? <X size={19} /> : <ListChecks size={19} />}
+            </button>
+          )}
           <button
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="Cerrar"
             className="w-12 h-12 min-h-[48px] rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/70 active:scale-95 transition-transform shrink-0"
           >
@@ -198,23 +289,55 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {visibleOrders.map((order) => {
                 const tone = toneFor(order.status);
+                const selectedIndex = selectedIds.indexOf(order.id);
+                const isSelected = selectedIndex >= 0;
                 return (
                   <button
                     key={order.id}
                     type="button"
-                    onClick={() => onShowDetail(order)}
-                    aria-label={`Abrir ticket de ${order.customerName} por $${order.total.toFixed(2)}`}
-                    className={`relative px-4 py-3 rounded-2xl border ${tone.ring} bg-white/5 backdrop-blur-md text-left flex items-center gap-3 active:scale-[0.98] transition-transform overflow-hidden min-h-[72px]`}
+                    onClick={() =>
+                      selectionMode ? toggleOrder(order.id) : onShowDetail(order)
+                    }
+                    aria-pressed={selectionMode ? isSelected : undefined}
+                    aria-label={
+                      selectionMode
+                        ? `${isSelected ? "Quitar" : "Seleccionar"} ticket de ${order.customerName}`
+                        : `Abrir ticket de ${order.customerName} por $${order.total.toFixed(2)}`
+                    }
+                    className={`relative px-4 py-3 rounded-2xl border bg-white/5 backdrop-blur-md text-left flex items-center gap-3 active:scale-[0.98] transition-all overflow-hidden min-h-[72px] ${
+                      isSelected
+                        ? "border-[#ffb84d] bg-[#ffb84d]/10 shadow-[inset_0_0_0_1px_rgba(255,184,77,0.25)]"
+                        : tone.ring
+                    }`}
                   >
-                    <span
-                      className={`shrink-0 w-2.5 h-2.5 rounded-full ${tone.dot}`}
-                      aria-label={order.status}
-                    />
+                    {selectionMode ? (
+                      isSelected ? (
+                        <CheckCircle2
+                          size={21}
+                          className="shrink-0 text-[#ffb84d]"
+                          strokeWidth={2.5}
+                        />
+                      ) : (
+                        <Circle size={21} className="shrink-0 text-white/30" />
+                      )
+                    ) : (
+                      <span
+                        className={`shrink-0 w-2.5 h-2.5 rounded-full ${tone.dot}`}
+                        aria-label={order.status}
+                      />
+                    )}
 
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-[15px] font-black text-white truncate leading-tight">
-                        {order.customerName}
-                      </h3>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3 className="text-[15px] font-black text-white truncate leading-tight">
+                          {order.customerName}
+                        </h3>
+                        {isSelected && (
+                          <span className="shrink-0 text-[8px] font-black uppercase tracking-[0.12em] text-[#ffb84d]">
+                            {selectedIndex === 0 ? "Cuenta final" : "Se juntará"}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-white/45">
                         <span className="text-[#ffb84d]">{order.type}</span>
                         <span className="text-white/20">·</span>
@@ -232,7 +355,9 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                       <span className="tabular-nums text-lg font-black tracking-tight text-white">
                         ${order.total.toFixed(2)}
                       </span>
-                      <ChevronRight size={16} className="text-white/40" />
+                      {!selectionMode && (
+                        <ChevronRight size={16} className="text-white/40" />
+                      )}
                     </div>
                   </button>
                 );
@@ -243,15 +368,99 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
 
         {/* FOOTER */}
         <div className="relative z-10 p-4 border-t border-white/5 bg-[#0C0C0E] shrink-0">
-          <button
-            type="button"
-            className="w-full min-h-[48px] h-12 rounded-2xl bg-white/5 border border-white/10 text-white/80 text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-transform"
-          >
-            Ver historial completo
-            <ChevronRight size={16} />
-          </button>
+          {selectionMode ? (
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">
+                  Total combinado
+                </div>
+                <div className="text-xl font-black tabular-nums text-white">
+                  ${selectedTotal.toFixed(2)}
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={selectedOrders.length < 2}
+                onClick={() => setShowMergeConfirm(true)}
+                className="min-h-[52px] h-[52px] px-5 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+              >
+                <Merge size={17} strokeWidth={2.5} />
+                Juntar {selectedOrders.length || ""}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="w-full min-h-[48px] h-12 rounded-2xl bg-white/5 border border-white/10 text-white/80 text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+            >
+              Ver historial completo
+              <ChevronRight size={16} />
+            </button>
+          )}
         </div>
       </aside>
+
+      {showMergeConfirm && targetOrder && selectedOrders.length >= 2 && (
+        <div className="absolute inset-0 z-[10] flex items-center justify-center p-5">
+          <div
+            className="absolute inset-0 bg-black/75 backdrop-blur-md"
+            onClick={() => !isMerging && setShowMergeConfirm(false)}
+          />
+          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#111114] p-5 shadow-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-[#ffb84d]/15 border border-[#ffb84d]/30 text-[#ffb84d] flex items-center justify-center mb-4">
+              <Merge size={21} />
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">
+              Confirmar unión
+            </p>
+            <h3 className="mt-1 text-xl font-black text-white">
+              Juntar {selectedOrders.length} tickets
+            </h3>
+            <p className="mt-2 text-[13px] font-semibold leading-relaxed text-white/55">
+              La cuenta final será #{targetOrder.orderNumber} de{" "}
+              <span className="text-white">{targetOrder.customerName}</span>.
+              Los otros {selectedOrders.length - 1} tickets se cerrarán después
+              de mover sus productos.
+            </p>
+            <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <span className="text-[11px] font-black uppercase tracking-[0.12em] text-white/45">
+                Nuevo total
+              </span>
+              <span className="text-xl font-black tabular-nums text-white">
+                ${selectedTotal.toFixed(2)}
+              </span>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                disabled={isMerging}
+                onClick={() => setShowMergeConfirm(false)}
+                className="h-12 flex-1 rounded-2xl border border-white/10 bg-white/5 text-[11px] font-black uppercase tracking-[0.12em] text-white/65 disabled:opacity-40"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                disabled={isMerging}
+                onClick={confirmMerge}
+                className="h-12 flex-[1.5] rounded-2xl bg-[#ffb84d] text-[11px] font-black uppercase tracking-[0.12em] text-[#0C0C0E] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60"
+              >
+                {isMerging ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Juntando
+                  </>
+                ) : (
+                  <>
+                    <Merge size={16} />
+                    Confirmar
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

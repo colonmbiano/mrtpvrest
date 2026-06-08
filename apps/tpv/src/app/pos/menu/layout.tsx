@@ -59,7 +59,11 @@ const ACTIVE_STATUSES = new Set([
   "PREPARING",
   "READY",
   "OPEN",
-  "OUT_FOR_DELIVERY",
+  // ON_THE_WAY = pedido asignado a repartidor y en camino. Es el valor real
+  // del enum OrderStatus (antes se listaba "OUT_FOR_DELIVERY", un nombre
+  // fantasma que nunca coincidía, por lo que el pedido asignado desaparecía
+  // de "Tickets abiertos"). Sigue abierto hasta DELIVERED/CANCELLED.
+  "ON_THE_WAY",
 ]);
 
 function timeAgo(iso: string): string {
@@ -608,6 +612,44 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
   }));
 
+  const canMergeOpenOrders = currentEmployee?.role
+    ? ["ADMIN", "SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"].includes(
+        currentEmployee.role,
+      )
+    : false;
+
+  const handleMergeOpenOrders = useCallback(
+    async (
+      targetOrder: { id: string; orderNumber: string },
+      sourceOrders: { id: string }[],
+    ) => {
+      let mergedCount = 0;
+      try {
+        for (const sourceOrder of sourceOrders) {
+          await api.post(`/api/orders/${sourceOrder.id}/merge/${targetOrder.id}`);
+          mergedCount += 1;
+        }
+        toast.success(
+          `${sourceOrders.length + 1} tickets unidos en #${targetOrder.orderNumber}`,
+        );
+      } catch (err: any) {
+        const detail =
+          err?.response?.data?.error || err?.message || "fallo desconocido";
+        toast.error(
+          mergedCount > 0
+            ? `${mergedCount} cuenta${mergedCount === 1 ? "" : "s"} unida${
+                mergedCount === 1 ? "" : "s"
+              }; no se pudo terminar: ${detail}`
+            : `No se pudieron juntar los tickets: ${detail}`,
+        );
+        throw err;
+      } finally {
+        await fetchOpenOrders();
+      }
+    },
+    [fetchOpenOrders],
+  );
+
   // VALIDACIÓN DE ROL
   // FASE 6: WAITER puede acceder en modo "préstamo de caja" (cuando la
   // tablet está configurada como CAJA). El layout oculta funciones de
@@ -697,6 +739,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         onConfirmPayment={handleOpenPaymentGuarded}
         onReprintOrder={handleReprintOrder}
         hideMoney={isLoanMode}
+        canMergeOrders={canMergeOpenOrders && !isLoanMode}
+        onMergeOrders={handleMergeOpenOrders}
       />
 
       {detailOrder && (

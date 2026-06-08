@@ -44,7 +44,9 @@ const addItemsSchema = z.object({
 const updateStatusSchema = z.object({
   status: z.enum([
     'OPEN', 'PENDING', 'PREPARING', 'CONFIRMED', 'READY',
-    'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'PAID',
+    // ON_THE_WAY es el valor real del enum OrderStatus; OUT_FOR_DELIVERY se
+    // conserva por tolerancia a nombres legacy.
+    'ON_THE_WAY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'PAID',
   ]),
 }).passthrough();
 
