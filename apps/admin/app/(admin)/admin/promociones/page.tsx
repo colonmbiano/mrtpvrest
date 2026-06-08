@@ -8,6 +8,13 @@ type Location = {
   autoPromoEnabled: boolean;
   autoPromoThreshold: number;
   autoPromoDiscount: number;
+  autoPromoMaxItems: number;
+};
+
+type ConfigDraft = {
+  autoPromoThreshold: number;
+  autoPromoDiscount: number;
+  autoPromoMaxItems: number;
 };
 
 type PromoItem = {
@@ -31,9 +38,11 @@ export default function PromocionesPage() {
   const [triggering, setTriggering] = useState<string | null>(null);
   const [togglingItem, setTogglingItem] = useState<string | null>(null);
   const [savingLoc, setSavingLoc] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, { autoPromoThreshold: number; autoPromoDiscount: number }>>({});
+  const [drafts, setDrafts] = useState<Record<string, ConfigDraft>>({});
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
+  const [configLoc, setConfigLoc] = useState<Location | null>(null);
+  const [clearing, setClearing] = useState(false);
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -49,6 +58,7 @@ export default function PromocionesPage() {
       setDrafts(Object.fromEntries(locs.map(l => [l.id, {
         autoPromoThreshold: l.autoPromoThreshold,
         autoPromoDiscount: l.autoPromoDiscount,
+        autoPromoMaxItems: l.autoPromoMaxItems ?? 0,
       }])));
       setPromoItems(data.promoItems || []);
       setMenuItems(data.menuItems || data.promoItems || []);
@@ -108,13 +118,29 @@ export default function PromocionesPage() {
   const handleToggleLocation = (loc: Location) =>
     updateLocation(loc, { autoPromoEnabled: !loc.autoPromoEnabled });
 
-  const handleSaveConfig = (loc: Location) => {
+  const handleSaveConfig = async (loc: Location) => {
     const d = drafts[loc.id];
     if (!d) return;
-    updateLocation(loc, {
+    await updateLocation(loc, {
       autoPromoThreshold: Math.max(1, d.autoPromoThreshold || 0),
       autoPromoDiscount: Math.min(100, Math.max(1, d.autoPromoDiscount || 0)),
+      autoPromoMaxItems: Math.max(0, d.autoPromoMaxItems || 0),
     });
+    setConfigLoc(null);
+  };
+
+  const handleClearAll = async () => {
+    if (!window.confirm("¿Quitar la promoción de TODOS los platillos del restaurante? Esto desactiva todas las promos vigentes.")) return;
+    setClearing(true);
+    try {
+      const { data } = await api.post("/api/admin/promos/clear");
+      showToast(`✅ ${data.cleared ?? 0} promociones quitadas`);
+      fetchData();
+    } catch (e: any) {
+      showToast(e?.response?.data?.error || "Error al quitar promociones", false);
+    } finally {
+      setClearing(false);
+    }
   };
 
   const enabledLocations = locations.filter(l => l.autoPromoEnabled);
@@ -153,17 +179,28 @@ export default function PromocionesPage() {
               Motor automático de descuentos con inteligencia artificial
             </p>
           </div>
-          <button
-            onClick={() => handleTrigger()}
-            disabled={triggering === "all" || enabledLocations.length === 0}
-            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-xs uppercase tracking-widest px-5 py-3.5 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/20"
-          >
-            {triggering === "all" ? (
-              <><div className="w-4 h-4 border-t-2 border-white rounded-full animate-spin" />Analizando...</>
-            ) : (
-              <><span className="text-base">🤖</span> Analizar Todas</>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {promoItems.length > 0 && (
+              <button
+                onClick={handleClearAll}
+                disabled={clearing}
+                className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-red-400 border border-red-500/30 font-black text-xs uppercase tracking-widest px-5 py-3.5 rounded-2xl transition-all active:scale-95"
+              >
+                {clearing ? "Quitando..." : "Quitar todas las promos"}
+              </button>
             )}
-          </button>
+            <button
+              onClick={() => handleTrigger()}
+              disabled={triggering === "all" || enabledLocations.length === 0}
+              className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-xs uppercase tracking-widest px-5 py-3.5 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/20"
+            >
+              {triggering === "all" ? (
+                <><div className="w-4 h-4 border-t-2 border-white rounded-full animate-spin" />Analizando...</>
+              ) : (
+                <><span className="text-base">🤖</span> Analizar Todas</>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -178,8 +215,6 @@ export default function PromocionesPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {locations.map(loc => {
-              const draft = drafts[loc.id] || { autoPromoThreshold: loc.autoPromoThreshold, autoPromoDiscount: loc.autoPromoDiscount };
-              const dirty = draft.autoPromoThreshold !== loc.autoPromoThreshold || draft.autoPromoDiscount !== loc.autoPromoDiscount;
               return (
               <div key={loc.id} className={`bg-[#111] rounded-[1.75rem] p-5 border transition-all ${
                 loc.autoPromoEnabled ? "border-orange-500/30" : "border-gray-800"
@@ -210,36 +245,26 @@ export default function PromocionesPage() {
                 </div>
                 {loc.autoPromoEnabled ? (
                   <div className="mt-3 pt-3 border-t border-gray-800 space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[9px] text-gray-600 uppercase tracking-wider font-bold block mb-1">Umbral ventas/semana</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={draft.autoPromoThreshold}
-                          onChange={e => setDrafts(prev => ({ ...prev, [loc.id]: { ...draft, autoPromoThreshold: parseInt(e.target.value) || 0 } }))}
-                          className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-orange-500 transition-all text-sm font-black text-white"
-                        />
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-black/40 rounded-xl py-2">
+                        <p className="text-sm font-black text-white">{loc.autoPromoThreshold}</p>
+                        <p className="text-[8px] text-gray-600 uppercase tracking-wider font-bold mt-0.5">Umbral/sem</p>
                       </div>
-                      <div>
-                        <label className="text-[9px] text-gray-600 uppercase tracking-wider font-bold block mb-1">Descuento (%)</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="100"
-                          value={draft.autoPromoDiscount}
-                          onChange={e => setDrafts(prev => ({ ...prev, [loc.id]: { ...draft, autoPromoDiscount: parseInt(e.target.value) || 0 } }))}
-                          className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-orange-500 transition-all text-sm font-black text-orange-400"
-                        />
+                      <div className="bg-black/40 rounded-xl py-2">
+                        <p className="text-sm font-black text-orange-400">{loc.autoPromoDiscount}%</p>
+                        <p className="text-[8px] text-gray-600 uppercase tracking-wider font-bold mt-0.5">Descuento</p>
+                      </div>
+                      <div className="bg-black/40 rounded-xl py-2">
+                        <p className="text-sm font-black text-blue-400">{loc.autoPromoMaxItems > 0 ? loc.autoPromoMaxItems : "∞"}</p>
+                        <p className="text-[8px] text-gray-600 uppercase tracking-wider font-bold mt-0.5">Tope</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleSaveConfig(loc)}
-                        disabled={!dirty || savingLoc === loc.id}
-                        className="flex-1 text-[10px] font-black uppercase tracking-widest text-white bg-orange-500 hover:bg-orange-600 px-3 py-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        onClick={() => setConfigLoc(loc)}
+                        className="flex-1 text-[10px] font-black uppercase tracking-widest text-white bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-2.5 rounded-xl transition-all"
                       >
-                        {savingLoc === loc.id ? "Guardando..." : dirty ? "Guardar cambios" : "Guardado"}
+                        ⚙ Configurar
                       </button>
                       <button
                         onClick={() => handleTrigger(loc.id)}
@@ -394,6 +419,82 @@ export default function PromocionesPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de configuración detallada por sucursal */}
+      {configLoc && (() => {
+        const loc = configLoc;
+        const draft = drafts[loc.id] || {
+          autoPromoThreshold: loc.autoPromoThreshold,
+          autoPromoDiscount: loc.autoPromoDiscount,
+          autoPromoMaxItems: loc.autoPromoMaxItems ?? 0,
+        };
+        const setField = (patch: Partial<ConfigDraft>) =>
+          setDrafts(prev => ({ ...prev, [loc.id]: { ...draft, ...patch } }));
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setConfigLoc(null)}>
+            <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-start justify-between mb-1">
+                <h3 className="text-xl font-black uppercase tracking-tighter">Configurar IA</h3>
+                <button onClick={() => setConfigLoc(null)} className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/5 text-gray-400 hover:text-white transition-all">✕</button>
+              </div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-orange-400 mb-6">{loc.name}</p>
+
+              <div className="space-y-5">
+                <div>
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1.5 block tracking-widest">Umbral ventas/semana</label>
+                  <input
+                    type="number" min="1"
+                    value={draft.autoPromoThreshold}
+                    onChange={e => setField({ autoPromoThreshold: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-black border border-white/10 rounded-2xl px-5 py-3.5 outline-none focus:border-orange-500 transition-all font-black text-sm text-white"
+                  />
+                  <p className="text-[10px] text-gray-600 mt-1.5 ml-1">Platillos que vendan menos de esto en la ventana entran en promo.</p>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1.5 block tracking-widest">Descuento (%)</label>
+                  <input
+                    type="number" min="1" max="100"
+                    value={draft.autoPromoDiscount}
+                    onChange={e => setField({ autoPromoDiscount: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-black border border-white/10 rounded-2xl px-5 py-3.5 outline-none focus:border-orange-500 transition-all font-black text-sm text-orange-400"
+                  />
+                  <p className="text-[10px] text-gray-600 mt-1.5 ml-1">Al guardar, se re-aplica de inmediato a las promos vigentes.</p>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1.5 block tracking-widest">Tope máximo de platillos</label>
+                  <input
+                    type="number" min="0"
+                    value={draft.autoPromoMaxItems}
+                    onChange={e => setField({ autoPromoMaxItems: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-black border border-white/10 rounded-2xl px-5 py-3.5 outline-none focus:border-orange-500 transition-all font-black text-sm text-blue-400"
+                  />
+                  <p className="text-[10px] text-gray-600 mt-1.5 ml-1">Máximo de platillos en promo a la vez. <strong className="text-gray-500">0 = sin tope</strong>. Evita que se active todo el menú.</p>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-7">
+                <button
+                  type="button"
+                  onClick={() => setConfigLoc(null)}
+                  className="flex-1 py-3.5 rounded-[1.5rem] font-black text-xs uppercase tracking-widest border border-gray-700 text-gray-400 hover:text-white transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveConfig(loc)}
+                  disabled={savingLoc === loc.id}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 py-3.5 rounded-[1.5rem] font-black text-xs uppercase tracking-widest text-white transition-all disabled:opacity-50"
+                >
+                  {savingLoc === loc.id ? "Guardando..." : "Guardar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

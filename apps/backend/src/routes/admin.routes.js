@@ -228,7 +228,7 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
 
 router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { name, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount, isCentralWarehouse, hasDelivery, hasTakeaway, hasTableMap } = req.body;
+    const { name, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount, autoPromoMaxItems, isCentralWarehouse, hasDelivery, hasTakeaway, hasTableMap } = req.body;
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const location = await prisma.location.findUnique({ where: { id: req.params.id } });
     if (!location || location.restaurantId !== restaurantId)
@@ -240,6 +240,7 @@ router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, as
       ...(autoPromoEnabled !== undefined && { autoPromoEnabled }),
       ...(autoPromoThreshold !== undefined && { autoPromoThreshold }),
       ...(autoPromoDiscount !== undefined && { autoPromoDiscount }),
+      ...(autoPromoMaxItems !== undefined && { autoPromoMaxItems: Math.max(0, parseInt(autoPromoMaxItems, 10) || 0) }),
       ...(isCentralWarehouse !== undefined && { isCentralWarehouse: Boolean(isCentralWarehouse) }),
       ...(hasDelivery !== undefined && { hasDelivery: Boolean(hasDelivery) }),
       ...(hasTakeaway !== undefined && { hasTakeaway: Boolean(hasTakeaway) }),
@@ -255,6 +256,24 @@ router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, as
       }
       return tx.location.update({ where: { id: req.params.id }, data });
     });
+
+    // Si cambió el descuento, re-aplicar el nuevo % a las promos vigentes para
+    // que el cambio sea visible de inmediato (antes sólo se reflejaba al volver
+    // a correr "Analizar"). isPromo/promoPrice son a nivel restaurante, así que
+    // se recalculan todos los platillos en promo usando el precio regular.
+    const newDiscount = Number(autoPromoDiscount);
+    if (autoPromoDiscount !== undefined && Number.isFinite(newDiscount) && newDiscount !== location.autoPromoDiscount) {
+      const promoItems = await prisma.menuItem.findMany({
+        where: { restaurantId, isPromo: true },
+        select: { id: true, price: true },
+      });
+      const factor = Math.min(100, Math.max(0, newDiscount)) / 100;
+      await Promise.all(promoItems.map(item => {
+        const promoPrice = parseFloat(Math.max(0, item.price * (1 - factor)).toFixed(2));
+        return prisma.menuItem.update({ where: { id: item.id }, data: { promoPrice } });
+      }));
+    }
+
     res.json(updated);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -574,6 +593,7 @@ router.get('/promos', authenticate, requireTenantAccess, requireAdmin, async (re
           autoPromoEnabled: true,
           autoPromoThreshold: true,
           autoPromoDiscount: true,
+          autoPromoMaxItems: true,
         }
       }),
       prisma.menuItem.findMany({
@@ -641,6 +661,24 @@ router.post('/promos/trigger', authenticate, requireTenantAccess, requireAdmin, 
     });
   } catch (e) {
     console.error('POST /admin/promos/trigger:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/promos/clear — Quita la promo de TODOS los platillos del restaurante
+router.post('/promos/clear', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const result = await prisma.menuItem.updateMany({
+      where: { restaurantId, isPromo: true },
+      data: { isPromo: false, promoPrice: null },
+    });
+
+    res.json({ ok: true, cleared: result.count });
+  } catch (e) {
+    console.error('POST /admin/promos/clear:', e);
     res.status(500).json({ error: e.message });
   }
 });

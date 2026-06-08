@@ -388,6 +388,7 @@ model Location {
   autoPromoEnabled   Boolean @default(false)
   autoPromoThreshold Int     @default(10) // Umbral: Ventas menores a X en los últimos 7 días
   autoPromoDiscount  Float   @default(15) // % de descuento automático
+  autoPromoMaxItems  Int     @default(0)  // Tope de platillos en promo a la vez (0 = sin tope)
 
   // Configuración de Ticket por sucursal
   ticketConfig TicketConfig?
