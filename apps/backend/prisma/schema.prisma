@@ -1043,7 +1043,6 @@ model Printer {
   supportsCashDrawer Boolean @default(false)
 
   isActive   Boolean  @default(true)
-  categories String[]
   // stations[] aplica solo a "impresoras" virtuales tipo KDS: lista de
   // estaciones que esa pantalla vigila (KITCHEN, BAR, GRILL, FRYER...).
   // Vacío = fallback al campo `type` single (impresoras térmicas

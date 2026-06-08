@@ -3,15 +3,16 @@
 /**
  * /admin/apariencia — controles de personalización visual del TPV
  * accesibles desde el Panel Central. Los mismos pickers que viven en
- * ConfigMenu (rail del POS) pero centralizados acá para que el admin
- * los encuentre sin entrar al flujo de cobro.
+ * ConfigMenu (rail del POS), reutilizando la lógica compartida de
+ * `@/lib/appearance` (fuente única de verdad) para que admin y rail no se
+ * desincronicen.
  *
- * Persistencia:
+ * Persistencia (toda vía `@/lib/appearance`):
  * - Tamaño de letra → `localStorage.uiScale` (small | medium | large).
- *   El root aplica `document.documentElement.style.fontSize` + atributo
- *   `data-ui-scale` (ver useUiScale en ModalRoot.tsx).
+ *   `setUiScale` aplica al DOM y emite `ui-scale-changed`; el root también
+ *   lo aplica al boot (ver useUiScale en ModalRoot.tsx).
  * - Ancho del panel ticket → `localStorage.sidebarWidth` (S | M | L).
- *   SidebarTicket escucha el evento `sidebar-width-changed` y se
+ *   `setSidebarPreset` emite `sidebar-width-changed` y SidebarTicket se
  *   reajusta sin reload.
  * - Paleta + modo (dark/light) → useThemeStore (persist middleware).
  *
@@ -25,50 +26,24 @@ import React, { useState } from "react";
 import { Type, PanelRightClose, Palette as PaletteIcon, Sun, Moon, Info } from "lucide-react";
 import BackButton from "@/components/BackButton";
 import { useThemeStore, type Palette as PaletteType } from "@/store/themeStore";
+import {
+  type UiScale,
+  type SidebarWidthPreset as SidebarPreset,
+  UI_SCALE_LABELS as UI_SCALE_META,
+  SIDEBAR_WIDTH_LABELS as SIDEBAR_META,
+  readUiScale,
+  setUiScale,
+  readSidebarPreset,
+  setSidebarPreset,
+} from "@/lib/appearance";
 
 // ── Tipos locales ──────────────────────────────────────────────────────────
-
-type UiScale = "small" | "medium" | "large";
-type SidebarPreset = "S" | "M" | "L";
-
-const UI_SCALE_META: Record<UiScale, { label: string; px: string }> = {
-  small:  { label: "Chico",   px: "13px" },
-  medium: { label: "Mediano", px: "16px" },
-  large:  { label: "Grande",  px: "19px" },
-};
-
-const SIDEBAR_META: Record<SidebarPreset, { label: string; px: number }> = {
-  S: { label: "Estrecho", px: 320 },
-  M: { label: "Medio",    px: 380 },
-  L: { label: "Amplio",   px: 440 },
-};
 
 const THEMES: Array<{ id: PaletteType; label: string; color: string }> = [
   { id: "amber",  label: "Miel",  color: "#ffb84d" },
   { id: "purple", label: "Cian",  color: "#3b82f6" },
   { id: "green",  label: "Lima",  color: "#10b981" },
 ];
-
-// ── Helpers persist ────────────────────────────────────────────────────────
-
-function readUiScale(): UiScale {
-  if (typeof window === "undefined") return "small";
-  const v = localStorage.getItem("uiScale");
-  return v === "medium" || v === "large" ? v : "small";
-}
-
-function applyUiScale(scale: UiScale) {
-  if (typeof document === "undefined") return;
-  document.documentElement.dataset.uiScale = scale;
-  document.documentElement.style.fontSize =
-    scale === "small" ? "13px" : scale === "large" ? "19px" : "16px";
-}
-
-function readSidebarPreset(): SidebarPreset {
-  if (typeof window === "undefined") return "M";
-  const v = localStorage.getItem("sidebarWidth");
-  return v === "S" || v === "L" ? v : "M";
-}
 
 // ── Page ──────────────────────────────────────────────────────────────────
 
@@ -81,21 +56,19 @@ export default function AparienciaPage() {
   // Inicializadores perezosos (SSR-safe: readX devuelve default sin
   // window). Esta página solo se monta en cliente — AdminLayout muestra
   // loader en servidor —, así que no hay mismatch de hidratación.
-  const [uiScale, setUiScale] = useState<UiScale>(readUiScale);
-  const [sidebarPreset, setSidebarPreset] = useState<SidebarPreset>(readSidebarPreset);
+  const [uiScale, setLocalUiScale] = useState<UiScale>(readUiScale);
+  const [sidebarPreset, setLocalSidebarPreset] = useState<SidebarPreset>(readSidebarPreset);
 
   const chooseUiScale = (s: UiScale) => {
+    setLocalUiScale(s);
+    // Persiste, aplica al DOM y emite `ui-scale-changed` para sincronizar el
+    // picker del rail POS sin recargar (antes este evento faltaba aquí).
     setUiScale(s);
-    if (typeof window !== "undefined") localStorage.setItem("uiScale", s);
-    applyUiScale(s);
   };
 
   const chooseSidebar = (p: SidebarPreset) => {
+    setLocalSidebarPreset(p);
     setSidebarPreset(p);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("sidebarWidth", p);
-      window.dispatchEvent(new Event("sidebar-width-changed"));
-    }
   };
 
   return (

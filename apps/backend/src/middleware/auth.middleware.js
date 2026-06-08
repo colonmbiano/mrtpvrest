@@ -1,7 +1,12 @@
 ﻿const jwt    = require('jsonwebtoken')
 const { prisma, runWithBypass } = require('@mrtpvrest/database')
 const { increment } = require('../lib/auth-metrics');
+const { PERM_TO_FLAG } = require('../lib/permissions');
 const log = require('../lib/logger')('auth');
+
+// Roles con bypass total de RBAC granular. Coincide con el bypass del TPV
+// (authStore.hasPermission): dueño/admin pueden todo sin permiso explícito.
+const PRIVILEGED_ROLES = ['OWNER', 'ADMIN', 'SUPER_ADMIN'];
 
 const authenticate = async (req, res, next) => {
   try {
@@ -76,6 +81,11 @@ const authenticate = async (req, res, next) => {
           canTakeDelivery: true,
           canTakeTakeout: true,
           canManageShifts: true,
+          // Fase 10 · permisos granulares — necesarios para `requirePermission`.
+          canCancelItems: true,
+          canApplyDiscounts: true,
+          canReopenTables: true,
+          canManageUsers: true,
           location: {
             select: {
               restaurantId: true,
@@ -168,10 +178,67 @@ const requireTenantAccess = (req, res, next) => {
   next();
 };
 
+// ── RBAC GRANULAR (Fase 10 · "RBAC real") ────────────────────────────────
+//
+// Evalúa si el actor del request tiene un permiso operativo. El permiso se
+// expresa con el string canónico del TPV (ej. 'cancel_items'), que se mapea
+// a la columna `canX` del Employee cargada en `req.user` por `authenticate`.
+//
+// Concede acceso si:
+//   1. El rol es privilegiado (OWNER/ADMIN/SUPER_ADMIN), o
+//   2. El empleado tiene el flag correspondiente en true (incluye el alias
+//      legacy canDiscount → apply_discount), o
+//   3. El request trae un override token válido (PIN de supervisor validado
+//      por el backend vía POST /api/employees/verify-permission) para ese
+//      mismo permiso y tenant.
+function userHasPermission(req, permission) {
+  if (PRIVILEGED_ROLES.includes(req.user?.role)) return true;
+  const flag = PERM_TO_FLAG[permission];
+  if (!flag) return false;
+  if (req.user?.[flag]) return true;
+  // Alias legacy: canDiscount también concede apply_discount.
+  if (flag === 'canApplyDiscounts' && req.user?.canDiscount) return true;
+  return false;
+}
+
+// Valida un override token (JWT corto firmado por el backend). El token debe
+// ser para el mismo permiso y el mismo tenant del actor — así un override de
+// otra sucursal/permiso no se reutiliza.
+function hasValidOverride(req, permission) {
+  const token = req.headers['x-override-token'];
+  if (!token || typeof token !== 'string') return false;
+  try {
+    const p = jwt.verify(token, process.env.JWT_SECRET);
+    return (
+      p.override === true &&
+      p.permission === permission &&
+      (!req.user?.tenantId || p.tenantId === req.user.tenantId)
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Middleware factory. Uso: requirePermission('cancel_items')
+const requirePermission = (permission) => (req, res, next) => {
+  if (userHasPermission(req, permission) || hasValidOverride(req, permission)) {
+    return next();
+  }
+  return res.status(403).json({
+    error: 'No tienes autorización para esta acción',
+    code: 'PERMISSION_REQUIRED',
+    requiredPermission: permission,
+  });
+};
+
 module.exports = {
   authenticate,
   requireAdmin,
   requireSuperAdmin,
   requireRole,
   requireTenantAccess,
+  requirePermission,
+  userHasPermission,
+  hasValidOverride,
+  PRIVILEGED_ROLES,
 };

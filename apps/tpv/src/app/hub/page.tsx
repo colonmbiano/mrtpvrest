@@ -9,6 +9,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { setTenant } from '@/lib/tenant';
 import { useAuthStore } from '@/store/authStore';
 
 interface Workspace {
@@ -85,16 +86,12 @@ function HubPageInner() {
   }, [menuOpen]);
 
   const selectWorkspace = async (w: Workspace) => {
-    // Sincronización UNIFICADA de llaves (TPV + API)
+    // Flag de "workspace seleccionado" + nombre para mostrar (no son tenant).
     localStorage.setItem('activeWorkspaceId', w.id);
-    localStorage.setItem('activeRestaurantId', w.restaurantId);
-    localStorage.setItem('activeLocationId', w.id);
     localStorage.setItem('activeWorkspaceName', `${w.restaurantName} · ${w.name}`);
 
-    // Llaves primarias que espera el interceptor de api.ts
-    localStorage.setItem('restaurantId', w.restaurantId);
-    localStorage.setItem('locationId', w.id);
-    localStorage.setItem('locationName', w.name);
+    // Identidad de tenant canónica (única vía de escritura — ver lib/tenant.ts).
+    setTenant({ restaurantId: w.restaurantId, locationId: w.id, locationName: w.name });
 
     try {
       const { data } = await api.get('/api/shifts/active');

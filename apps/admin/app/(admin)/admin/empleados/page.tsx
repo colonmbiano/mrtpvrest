@@ -10,31 +10,32 @@ const ROLES = [
   { value:"COOK",     label:"👨‍🍳 Cocinero",       color:"#ef4444" },
 ];
 
+// Set canónico de permisos operativos (RBAC real · Fase 10). Alineado con
+// ROLE_DEFAULTS del backend (employees.routes.js). Solo incluye permisos con
+// enforcement real; las columnas legacy sin operación quedan deprecadas.
 const ROLE_DEFAULTS: Record<string,any> = {
-  ADMIN:    { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:true,  canConfigSystem:true,  canTakeDelivery:true,  canTakeTakeout:true },
-  CASHIER:  { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true },
-  WAITER:   { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true },
-  DELIVERY: { canCharge:true,  canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:true,  canTakeTakeout:false },
-  COOK:     { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:false },
+  ADMIN:    { canCharge:true,  canApplyDiscounts:true,  canCancelItems:true,  canReopenTables:true,  canManageUsers:true  },
+  CASHIER:  { canCharge:true,  canApplyDiscounts:true,  canCancelItems:false, canReopenTables:false, canManageUsers:false },
+  WAITER:   { canCharge:false, canApplyDiscounts:false, canCancelItems:false, canReopenTables:false, canManageUsers:false },
+  DELIVERY: { canCharge:true,  canApplyDiscounts:false, canCancelItems:false, canReopenTables:false, canManageUsers:false },
+  COOK:     { canCharge:false, canApplyDiscounts:false, canCancelItems:false, canReopenTables:false, canManageUsers:false },
 };
 
 const DAYS = ["LUN","MAR","MIE","JUE","VIE","SAB","DOM"];
 const PERMS = [
-  { key:"canCharge",        label:"💵 Cobrar tickets" },
-  { key:"canDiscount",      label:"🏷️ Aplicar descuentos" },
-  { key:"canModifyTickets", label:"✏️ Modificar tickets" },
-  { key:"canDeleteTickets", label:"🗑️ Eliminar tickets" },
-  { key:"canConfigSystem",  label:"⚙️ Configurar sistema" },
-  { key:"canTakeDelivery",  label:"🛵 Tomar pedidos delivery" },
-  { key:"canTakeTakeout",   label:"🥡 Tomar pedidos para llevar" },
+  { key:"canCharge",         label:"💵 Cobrar / abrir cajón" },
+  { key:"canApplyDiscounts", label:"🏷️ Aplicar descuentos / cortesías" },
+  { key:"canCancelItems",    label:"🗑️ Anular productos enviados a cocina" },
+  { key:"canReopenTables",   label:"🔓 Reabrir cuentas cerradas" },
+  { key:"canManageUsers",    label:"👥 Gestionar empleados" },
 ];
 
 const emptyForm = {
   name:"", phone:"", pin:"", role:"WAITER", photo:null as string|null,
   tables:[] as string[], scheduleStart:"", scheduleEnd:"", scheduleDays:[] as string[],
   isActive:true,
-  canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false,
-  canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true,
+  canCharge:false, canApplyDiscounts:false, canCancelItems:false,
+  canReopenTables:false, canManageUsers:false,
 };
 
 export default function EmpleadosPage() {
@@ -96,10 +97,12 @@ export default function EmpleadosPage() {
         photo: emp.photo||null, tables: emp.tables||[],
         scheduleStart: emp.scheduleStart||"", scheduleEnd: emp.scheduleEnd||"",
         scheduleDays: emp.scheduleDays||[], isActive: emp.isActive,
-        canCharge: emp.canCharge, canDiscount: emp.canDiscount,
-        canModifyTickets: emp.canModifyTickets, canDeleteTickets: emp.canDeleteTickets,
-        canConfigSystem: emp.canConfigSystem, canTakeDelivery: emp.canTakeDelivery,
-        canTakeTakeout: emp.canTakeTakeout,
+        canCharge: emp.canCharge,
+        // Descuento unificado: prioriza el flag Fase 10, cae al legacy.
+        canApplyDiscounts: emp.canApplyDiscounts ?? emp.canDiscount,
+        canCancelItems: emp.canCancelItems,
+        canReopenTables: emp.canReopenTables,
+        canManageUsers: emp.canManageUsers,
       });
     } else {
       setForm({ ...emptyForm, ...ROLE_DEFAULTS.WAITER });

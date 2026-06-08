@@ -8,6 +8,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { create } from "zustand";
 import { io, Socket } from "socket.io-client";
 import { getApiUrl } from "@/lib/config";
+import { getTenantIds } from "@/lib/tenant";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -146,8 +147,7 @@ export function useNotifications() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const restaurantId = localStorage.getItem("restaurantId");
-    const locationId = localStorage.getItem("locationId");
+    const { restaurantId, locationId } = getTenantIds();
     if (!restaurantId) return;
 
     const baseUrl = getApiUrl();
