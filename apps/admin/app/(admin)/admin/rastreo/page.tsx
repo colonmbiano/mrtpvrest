@@ -16,6 +16,28 @@ export default function RastreoPage() {
   const [manualLat, setManualLat]     = useState("");
   const [manualLng, setManualLng]     = useState("");
 
+  // Compositor de avisos a repartidores
+  const [showNotice, setShowNotice]     = useState(false);
+  const [noticeTarget, setNoticeTarget] = useState<string>("all");
+  const [noticeTitle, setNoticeTitle]   = useState("");
+  const [noticeBody, setNoticeBody]     = useState("");
+  const [sendingNotice, setSendingNotice] = useState(false);
+
+  async function sendNotice() {
+    if (!noticeBody.trim()) { alert("Escribe un mensaje"); return; }
+    setSendingNotice(true);
+    try {
+      await api.post("/api/delivery/notices", {
+        driverId: noticeTarget === "all" ? undefined : noticeTarget,
+        title: noticeTitle.trim() || undefined,
+        body: noticeBody.trim(),
+      });
+      setShowNotice(false); setNoticeTitle(""); setNoticeBody(""); setNoticeTarget("all");
+      alert("✅ Aviso enviado");
+    } catch (err: any) { alert(err.response?.data?.error || "Error al enviar"); }
+    finally { setSendingNotice(false); }
+  }
+
   const mapRef     = useRef<any>(null);
   const leafletRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -197,6 +219,11 @@ export default function RastreoPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setShowNotice(true)}
+            className="px-3 py-2 rounded-xl text-xs font-bold"
+            style={{background:"rgba(245,166,35,0.1)",color:"var(--gold)",border:"1px solid rgba(245,166,35,0.3)"}}>
+            📢 Enviar aviso
+          </button>
           <button onClick={() => setShowOriginPanel(p => !p)}
             className="px-3 py-2 rounded-xl text-xs font-bold"
             style={{
@@ -384,6 +411,53 @@ export default function RastreoPage() {
           )}
         </div>
       </div>
+
+      {/* Modal — Enviar aviso a repartidores */}
+      {showNotice && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{background:"rgba(0,0,0,0.8)"}} onClick={() => !sendingNotice && setShowNotice(false)}>
+          <div className="w-full max-w-md rounded-2xl border p-6"
+            style={{background:"var(--surf)",borderColor:"var(--border)"}} onClick={e => e.stopPropagation()}>
+            <h3 className="font-syne font-black text-xl mb-1">📢 Enviar aviso</h3>
+            <p className="text-xs mb-4" style={{color:"var(--muted)"}}>
+              El repartidor lo recibe al instante en su app.
+            </p>
+
+            <label className="text-xs font-black uppercase tracking-wider mb-1 block" style={{color:"var(--muted)"}}>Destino</label>
+            <select value={noticeTarget} onChange={e => setNoticeTarget(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl text-sm outline-none mb-3"
+              style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}}>
+              <option value="all">Todos los repartidores</option>
+              {liveData?.drivers?.map((d: any) => (
+                <option key={d.driver.id} value={d.driver.id}>{d.driver.name}</option>
+              ))}
+            </select>
+
+            <label className="text-xs font-black uppercase tracking-wider mb-1 block" style={{color:"var(--muted)"}}>Título (opcional)</label>
+            <input value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)}
+              placeholder="Ej. Cambio de turno"
+              className="w-full px-3 py-2 rounded-xl text-sm outline-none mb-3"
+              style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+
+            <label className="text-xs font-black uppercase tracking-wider mb-1 block" style={{color:"var(--muted)"}}>Mensaje</label>
+            <textarea value={noticeBody} onChange={e => setNoticeBody(e.target.value)}
+              placeholder="Escribe el aviso aquí..." rows={4} maxLength={1000}
+              className="w-full px-3 py-2 rounded-xl text-sm outline-none mb-4 resize-none"
+              style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+
+            <div className="flex gap-3">
+              <button onClick={() => setShowNotice(false)} disabled={sendingNotice}
+                className="flex-1 py-3 rounded-xl font-bold border"
+                style={{borderColor:"var(--border)",color:"var(--muted)"}}>Cancelar</button>
+              <button onClick={sendNotice} disabled={sendingNotice || !noticeBody.trim()}
+                className="flex-1 py-3 rounded-xl font-syne font-black"
+                style={{background: noticeBody.trim() ? "var(--gold)" : "var(--surf2)", color: noticeBody.trim() ? "#000" : "var(--muted)"}}>
+                {sendingNotice ? "Enviando..." : "Enviar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

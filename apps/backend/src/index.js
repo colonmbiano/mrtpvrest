@@ -106,6 +106,8 @@ io.on('connection', (socket) => {
   const tokenUser = socket.data.user;
   if (tokenUser?.id && tokenUser?.role === 'DELIVERY') {
     socket.join(`driver:${tokenUser.id}`)
+    // Sala de broadcast para avisos a todos los repartidores del restaurante.
+    if (tokenUser.restaurantId) socket.join(`restaurant:${tokenUser.restaurantId}:drivers`)
   }
 
   socket.on('join:order',   (orderId) => {

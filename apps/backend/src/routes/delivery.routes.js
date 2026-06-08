@@ -308,4 +308,85 @@ router.put('/:driverId/orders/:orderId/deliver', authenticate, requireTenantAcce
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
+// ── AVISOS A REPARTIDORES ──────────────────────────────────────────────────
+
+// POST /api/delivery/notices — staff crea un aviso (driverId null = broadcast)
+router.post('/notices', authenticate, requireTenantAccess, requireRole(...STAFF_ROLES), async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { title, body, driverId, locationId } = req.body || {};
+    if (!body || typeof body !== 'string' || !body.trim()) {
+      return res.status(400).json({ error: 'El mensaje es requerido' });
+    }
+    // Si es dirigido a un repartidor, validar que pertenezca al restaurante.
+    if (driverId) {
+      const driver = await prisma.employee.findFirst({
+        where: { id: driverId, role: 'DELIVERY', isActive: true, ...(restaurantId ? { location: { restaurantId } } : {}) },
+        select: { id: true },
+      });
+      if (!driver) return res.status(404).json({ error: 'Repartidor no encontrado' });
+    }
+    const notice = await prisma.driverNotice.create({
+      data: {
+        restaurantId,
+        locationId: locationId || req.locationId || null,
+        driverId: driverId || null,
+        title: title ? String(title).slice(0, 120) : null,
+        body: body.trim().slice(0, 1000),
+        createdById: req.user?.id || null,
+        createdByName: req.user?.name || null,
+      },
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      const payload = { notice };
+      if (notice.driverId) io.to(`driver:${notice.driverId}`).emit('newNotice', payload);
+      else io.to(`restaurant:${restaurantId}:drivers`).emit('newNotice', payload);
+    }
+
+    res.json(notice);
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
+// GET /api/delivery/:driverId/notices — avisos visibles para el repartidor
+router.get('/:driverId/notices', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const notices = await prisma.driverNotice.findMany({
+      where: {
+        restaurantId,
+        OR: [{ driverId: driver.id }, { driverId: null }],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    const enriched = notices.map(n => ({ ...n, read: n.readBy.includes(driver.id) }));
+    res.json({ notices: enriched, unread: enriched.filter(n => !n.read).length });
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
+// POST /api/delivery/notices/:id/read — el repartidor marca un aviso como leído
+router.post('/notices/:id/read', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const driverId = req.user?.role === 'DELIVERY' ? req.user.id : (req.body?.driverId || null);
+    if (!driverId) return res.status(400).json({ error: 'driverId requerido' });
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const notice = await prisma.driverNotice.findFirst({
+      where: { id: req.params.id, restaurantId },
+    });
+    if (!notice) return res.status(404).json({ error: 'Aviso no encontrado' });
+    if (!notice.readBy.includes(driverId)) {
+      await prisma.driverNotice.update({
+        where: { id: notice.id },
+        data: { readBy: { push: driverId } },
+      });
+    }
+    res.json({ ok: true });
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
 module.exports = router;
