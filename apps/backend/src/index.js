@@ -100,6 +100,14 @@ io.on('connection', (socket) => {
     })
   }
 
+  // Sala personal del repartidor — derivada del token verificado (no spoofeable
+  // por query params). Permite empujarle en tiempo real asignaciones de pedido
+  // y respuestas del restaurante. Ver delivery.routes.js (/assign y /messages).
+  const tokenUser = socket.data.user;
+  if (tokenUser?.id && tokenUser?.role === 'DELIVERY') {
+    socket.join(`driver:${tokenUser.id}`)
+  }
+
   socket.on('join:order',   (orderId) => {
     if (canJoinRestaurant) socket.join('order:' + orderId)
   })

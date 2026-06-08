@@ -224,6 +224,9 @@ export default function DeliveryApp() {
     fetchHistory();
 
     const socket = io(getApiUrl(), {
+      // El token identifica al repartidor en el server (socket.data.user) y lo
+      // une a la sala driver:{id} para recibir asignaciones y mensajes en vivo.
+      auth: { token: localStorage.getItem('accessToken') },
       query: {
         restaurantId: localStorage.getItem('restaurantId'),
         locationId:   localStorage.getItem('locationId'),

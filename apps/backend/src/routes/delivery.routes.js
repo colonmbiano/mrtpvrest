@@ -126,7 +126,7 @@ router.post('/login', async (req, res) => {
       token,
       driver: { id: driver.id, name: driver.name, photo: driver.photo, phone: driver.phone },
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, res) => {
@@ -146,7 +146,7 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
       orderBy: { createdAt: 'desc' },
     });
     res.json(orders);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.get('/:driverId/history', authenticate, requireTenantAccess, async (req, res) => {
@@ -165,7 +165,7 @@ router.get('/:driverId/history', authenticate, requireTenantAccess, async (req, 
       orderBy: { createdAt: 'desc' },
     });
     res.json(orders);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_ROLES), async (req, res) => {
@@ -179,9 +179,18 @@ router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_RO
     const order = await prisma.order.update({
       where: { id: orderId, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
       data: { deliveryDriverId: driverId, status: 'ON_THE_WAY' },
+      include: { items: { include: { menuItem: true } }, user: true },
     });
+
+    // Notificar en tiempo real al repartidor (sala driver:{id}) y a los admins.
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`driver:${driverId}`).emit('orderAssigned', { order });
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
+    }
+
     res.json(order);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error('PUT /delivery/assign:', e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAccess, async (req, res) => {
@@ -192,6 +201,11 @@ router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAcces
     if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
 
     const { status, paymentMethod } = req.body;
+    // El repartidor solo puede mover el pedido a estados válidos de su flujo.
+    const ALLOWED_DRIVER_STATUSES = ['ON_THE_WAY', 'DELIVERED'];
+    if (!ALLOWED_DRIVER_STATUSES.includes(status)) {
+      return res.status(400).json({ error: 'Estado no permitido' });
+    }
     const data = { status };
     if (paymentMethod) data.paymentMethod = paymentMethod;
     if (status === 'DELIVERED') {
@@ -217,7 +231,7 @@ router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAcces
     }
 
     res.json(order);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.get('/orders/:orderId/messages', authenticate, requireTenantAccess, async (req, res) => {
@@ -229,7 +243,7 @@ router.get('/orders/:orderId/messages', authenticate, requireTenantAccess, async
       orderBy: { createdAt: 'asc' },
     });
     res.json(msgs);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.post('/orders/:orderId/messages', authenticate, requireTenantAccess, async (req, res) => {
@@ -245,11 +259,17 @@ router.post('/orders/:orderId/messages', authenticate, requireTenantAccess, asyn
 
     const io = req.app.get('io');
     if (io && msg.order) {
-      io.to(`restaurant:${msg.order.restaurantId}:location:${msg.order.locationId}:admins`).emit('newMessage', { orderId: msg.orderId, msg });
+      const payload = { orderId: msg.orderId, msg };
+      io.to(`restaurant:${msg.order.restaurantId}:location:${msg.order.locationId}:admins`).emit('newMessage', payload);
+      io.to(`order:${msg.orderId}`).emit('newMessage', payload);
+      // El restaurante respondió → empujar al repartidor asignado.
+      if (msg.order.deliveryDriverId) {
+        io.to(`driver:${msg.order.deliveryDriverId}`).emit('newMessage', payload);
+      }
     }
 
     res.json(msg);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error('POST /delivery/messages:', e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.get('/', authenticate, requireTenantAccess, requireRole(...STAFF_ROLES), async (req, res) => {
@@ -264,7 +284,7 @@ router.get('/', authenticate, requireTenantAccess, requireRole(...STAFF_ROLES), 
       orderBy: { name: 'asc' },
     });
     res.json(drivers);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/:driverId/orders/:orderId/deliver', authenticate, requireTenantAccess, async (req, res) => {
@@ -285,7 +305,7 @@ router.put('/:driverId/orders/:orderId/deliver', authenticate, requireTenantAcce
     });
     await ensureCashOnDeliveryMovement(order);
     res.json(order);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 module.exports = router;
