@@ -1765,10 +1765,11 @@ model DriverCashCut {
   id           String   @id @default(cuid())
   driverId     String
   driverName   String
+  totalFloat   Float    @default(0) // fondo de cambio asignado por el admin
   totalIncome  Float    @default(0)
   totalExpense Float    @default(0)
   totalReturn  Float    @default(0)
-  balance      Float    @default(0)
+  balance      Float    @default(0) // totalFloat + totalIncome - totalExpense - totalReturn
   movements    Int      @default(0)
   notes        String?
   createdAt    DateTime @default(now())

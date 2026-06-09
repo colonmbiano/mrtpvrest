@@ -13,6 +13,9 @@ export default function CajaRepartidoresPage() {
   const [cuttingId, setCuttingId] = useState<string|null>(null);
   const [cutNotes, setCutNotes] = useState("");
   const [showCutModal, setShowCutModal] = useState<any>(null);
+  const [showFloatModal, setShowFloatModal] = useState<any>(null);
+  const [floatAmount, setFloatAmount] = useState("");
+  const [floatBusy, setFloatBusy] = useState(false);
 
   async function fetchAll() {
     setLoading(true);
@@ -62,9 +65,22 @@ export default function CajaRepartidoresPage() {
     finally { setCuttingId(null); }
   }
 
+  async function doAssignFloat(driver: any) {
+    const n = Number(floatAmount);
+    if (!(n > 0)) return;
+    setFloatBusy(true);
+    try {
+      await api.post(`/api/driver-cash/${driver.id}/float`, { amount: n });
+      setShowFloatModal(null); setFloatAmount("");
+      fetchAll();
+      alert(`✅ Fondo de cambio asignado a ${driver.name}: $${n.toFixed(0)}`);
+    } catch (err: any) { alert(err.response?.data?.error || "Error"); }
+    finally { setFloatBusy(false); }
+  }
+
   const totalIncome  = summary.reduce((s, d) => s + d.income, 0);
   const totalExpense = summary.reduce((s, d) => s + d.expense, 0);
-  const totalBalance = summary.reduce((s, d) => s + (d.income - d.expense), 0);
+  const totalBalance = summary.reduce((s, d) => s + ((d.float || 0) + d.income - d.expense - (d.returned || 0)), 0);
 
   return (
     <div>
@@ -143,7 +159,11 @@ export default function CajaRepartidoresPage() {
                 <div className="text-xs" style={{color:"var(--muted)"}}>{d.deliveries} entregas</div>
               </div>
             </div>
-            <div className="grid grid-cols-3 divide-x border-t" style={{borderColor:"var(--border)"}}>
+            <div className="grid grid-cols-4 divide-x border-t" style={{borderColor:"var(--border)"}}>
+              <div className="p-3 text-center">
+                <div className="text-xs mb-0.5" style={{color:"var(--muted)"}}>Fondo</div>
+                <div className="font-black text-sm" style={{color:"#a78bfa"}}>${(d.float || 0).toFixed(0)}</div>
+              </div>
               <div className="p-3 text-center">
                 <div className="text-xs mb-0.5" style={{color:"var(--muted)"}}>Cobrado</div>
                 <div className="font-black text-sm" style={{color:"#22c55e"}}>${d.income.toFixed(0)}</div>
@@ -153,20 +173,25 @@ export default function CajaRepartidoresPage() {
                 <div className="font-black text-sm" style={{color:"#ef4444"}}>${d.expense.toFixed(0)}</div>
               </div>
               <div className="p-3 text-center">
-                <div className="text-xs mb-0.5" style={{color:"var(--muted)"}}>Balance</div>
-                <div className="font-black text-sm" style={{color:"var(--gold)"}}>${(d.income - d.expense).toFixed(0)}</div>
+                <div className="text-xs mb-0.5" style={{color:"var(--muted)"}}>En mano</div>
+                <div className="font-black text-sm" style={{color:"var(--gold)"}}>${((d.float || 0) + d.income - d.expense - (d.returned || 0)).toFixed(0)}</div>
               </div>
             </div>
             <div className="flex gap-2 p-3 border-t" style={{borderColor:"var(--border)"}}>
               <button onClick={async () => { setSelected(d); await fetchDriverMovements(d.driver.id); }}
                 className="flex-1 py-2 rounded-xl text-xs font-bold border"
                 style={{borderColor:"var(--border)",color:"var(--muted)"}}>
-                📋 Ver movimientos
+                📋 Movimientos
+              </button>
+              <button onClick={() => { setFloatAmount(""); setShowFloatModal(d.driver); }}
+                className="flex-1 py-2 rounded-xl text-xs font-bold"
+                style={{background:"rgba(167,139,250,0.1)",color:"#a78bfa",border:"1px solid rgba(167,139,250,0.2)"}}>
+                💵 Asignar cambio
               </button>
               <button onClick={() => setShowCutModal(d.driver)}
                 className="flex-1 py-2 rounded-xl text-xs font-bold"
                 style={{background:"rgba(245,166,35,0.1)",color:"var(--gold)",border:"1px solid rgba(245,166,35,0.2)"}}>
-                ✂️ Corte de caja
+                ✂️ Corte
               </button>
             </div>
           </div>
@@ -185,8 +210,8 @@ export default function CajaRepartidoresPage() {
           ) : movements.map((m: any) => (
             <div key={m.id} className="flex items-center gap-4 px-5 py-3 border-b" style={{borderColor:"var(--border)",background:"var(--surf)"}}>
               <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                style={{background: m.type==="INCOME" ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)"}}>
-                {m.category === "DELIVERY" ? "🛵" : m.category === "GASOLINE" ? "⛽" : m.category === "EMERGENCY_PURCHASE" ? "🛒" : "📝"}
+                style={{background: m.type==="FLOAT" ? "rgba(167,139,250,0.1)" : (m.type==="INCOME" ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)")}}>
+                {m.type === "FLOAT" ? "💵" : m.category === "DELIVERY" ? "🛵" : m.category === "GASOLINE" ? "⛽" : m.category === "EMERGENCY_PURCHASE" ? "🛒" : m.category === "RETIRO" ? "📤" : "📝"}
               </div>
               <div className="flex-1">
                 <div className="text-sm font-medium">{m.description || m.category}</div>
@@ -203,13 +228,17 @@ export default function CajaRepartidoresPage() {
                 </a>
               )}
               <div className="font-black text-lg flex-shrink-0"
-                style={{color: m.type==="INCOME" ? "#22c55e" : "#ef4444"}}>
-                {m.type === "INCOME" ? "+" : "-"}${m.amount.toFixed(0)}
+                style={{color: m.type==="FLOAT" ? "#a78bfa" : (m.type==="INCOME" ? "#22c55e" : "#ef4444")}}>
+                {(m.type==="INCOME" || m.type==="FLOAT") ? "+" : "-"}${m.amount.toFixed(0)}
               </div>
             </div>
           ))}
           {movSummary && (
-            <div className="grid grid-cols-3 divide-x border-t px-0" style={{borderColor:"var(--border)",background:"var(--surf2)"}}>
+            <div className="grid grid-cols-4 divide-x border-t px-0" style={{borderColor:"var(--border)",background:"var(--surf2)"}}>
+              <div className="p-4 text-center">
+                <div className="text-xs mb-1" style={{color:"var(--muted)"}}>Fondo</div>
+                <div className="font-black" style={{color:"#a78bfa"}}>${(movSummary.float||0).toFixed(0)}</div>
+              </div>
               <div className="p-4 text-center">
                 <div className="text-xs mb-1" style={{color:"var(--muted)"}}>Total cobrado</div>
                 <div className="font-black" style={{color:"#22c55e"}}>${(movSummary.income||0).toFixed(0)}</div>
@@ -219,7 +248,7 @@ export default function CajaRepartidoresPage() {
                 <div className="font-black" style={{color:"#ef4444"}}>${(movSummary.expense||0).toFixed(0)}</div>
               </div>
               <div className="p-4 text-center">
-                <div className="text-xs mb-1" style={{color:"var(--muted)"}}>Balance</div>
+                <div className="text-xs mb-1" style={{color:"var(--muted)"}}>En mano</div>
                 <div className="font-black" style={{color:"var(--gold)"}}>${(movSummary.balance||0).toFixed(0)}</div>
               </div>
             </div>
@@ -245,11 +274,41 @@ export default function CajaRepartidoresPage() {
               </div>
               <div className="text-right">
                 <div className="font-black" style={{color:"var(--gold)"}}>${cut.balance.toFixed(0)}</div>
+                {(cut.totalFloat > 0) && <div className="text-xs" style={{color:"#a78bfa"}}>fondo ${cut.totalFloat.toFixed(0)}</div>}
                 <div className="text-xs" style={{color:"#22c55e"}}>+${cut.totalIncome.toFixed(0)}</div>
                 <div className="text-xs" style={{color:"#ef4444"}}>-${cut.totalExpense.toFixed(0)}</div>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal asignar fondo de cambio */}
+      {showFloatModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:"rgba(0,0,0,0.85)"}}>
+          <div className="w-full max-w-sm rounded-2xl border p-6" style={{background:"var(--surf)",borderColor:"var(--border)"}}>
+            <h3 className="font-syne font-black text-xl mb-1">💵 Asignar cambio</h3>
+            <p className="text-sm mb-4" style={{color:"var(--muted)"}}>
+              Fondo de caja para <b>{showFloatModal.name}</b>. Suma a su efectivo en mano para dar cambio y cubrir compras; no cuenta como venta.
+            </p>
+            <div className="relative mb-4">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-2xl" style={{color:"#a78bfa"}}>$</span>
+              <input type="number" inputMode="decimal" autoFocus value={floatAmount}
+                onChange={e => setFloatAmount(e.target.value)} placeholder="0"
+                className="w-full h-16 rounded-xl outline-none pl-9 pr-4 font-black text-2xl"
+                style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { setShowFloatModal(null); setFloatAmount(""); }} disabled={floatBusy}
+                className="flex-1 py-3 rounded-xl font-bold border"
+                style={{borderColor:"var(--border)",color:"var(--muted)"}}>Cancelar</button>
+              <button onClick={() => doAssignFloat(showFloatModal)} disabled={floatBusy || !(Number(floatAmount) > 0)}
+                className="flex-1 py-3 rounded-xl font-syne font-black"
+                style={{background:"#a78bfa",color:"#000"}}>
+                {floatBusy ? "..." : "Asignar"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
