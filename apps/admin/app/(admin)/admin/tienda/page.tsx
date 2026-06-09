@@ -300,11 +300,12 @@ export default function TiendaConfigPage() {
 
           <div>
             <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-3 block tracking-widest">Estilo de Tienda Online</label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[
                 { id: "BRUTALIST", name: "Express", emoji: "⚡", desc: "Lista estilo app · Claro" },
                 { id: "KAWAII", name: "Boutique", emoji: "🌸", desc: "Grid suave · Claro" },
-                { id: "HALO", name: "Obsidiana", emoji: "🌑", desc: "Oscuro premium · Bento" }
+                { id: "HALO", name: "Obsidiana", emoji: "🌑", desc: "Oscuro premium · Bento" },
+                { id: "ANTOJO", name: "Antojo", emoji: "🛵", desc: "Delivery oscuro · Naranja" }
               ].map(t => (
                 <button
                   key={t.id}

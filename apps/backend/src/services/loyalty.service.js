@@ -1,4 +1,10 @@
 ﻿const prisma = require('@mrtpvrest/database').prisma
+const crypto = require('crypto')
+
+// Genera un código QR/identificador único para una cuenta de lealtad nueva.
+function genLoyaltyQr() {
+  return `LYL-${crypto.randomBytes(6).toString('hex').toUpperCase()}`
+}
 
 const TIERS = [
   { name: 'GOLD',   min: 1500 },
@@ -20,8 +26,15 @@ async function addLoyaltyPoints(userId, order) {
     const pointsEarned = Math.floor(base / 10) * pointsPerTen
     if (pointsEarned <= 0) return
     const key = { userId_restaurantId: { userId, restaurantId } }
-    const loyalty = await prisma.loyaltyAccount.findUnique({ where: key })
-    if (!loyalty) return
+    let loyalty = await prisma.loyaltyAccount.findUnique({ where: key })
+    // Si el cliente no tenía cuenta de lealtad, la creamos al vuelo. Antes esto
+    // hacía `return` y los puntos se perdían en silencio.
+    if (!loyalty) {
+      loyalty = await prisma.loyaltyAccount.create({
+        data: { userId, restaurantId, qrCode: genLoyaltyQr(), points: 0, totalEarned: 0, tier: 'BRONZE' },
+      }).catch(() => null)
+      if (!loyalty) return
+    }
     const newTotal = loyalty.totalEarned + pointsEarned
     const newTier  = getTier(newTotal)
     await prisma.$transaction([
@@ -46,4 +59,4 @@ async function addLoyaltyPoints(userId, order) {
   }
 }
 
-module.exports = { addLoyaltyPoints, getTier }
+module.exports = { addLoyaltyPoints, getTier, genLoyaltyQr }

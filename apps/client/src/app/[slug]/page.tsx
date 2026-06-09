@@ -3,6 +3,7 @@ import { MapPin, Phone, MessageCircle } from 'lucide-react';
 import { MochiTheme } from '@/components/themes/MochiTheme';
 import { BentoTheme } from '@/components/themes/BentoTheme';
 import { PocketTheme } from '@/components/themes/PocketTheme';
+import { WagbaTheme } from '@/components/themes/WagbaTheme';
 import { getApiUrl } from '@/lib/config';
 import StorefrontClient from './StorefrontClient';
 import InstallPWABanner from '@/components/InstallPWABanner';
@@ -62,11 +63,12 @@ type StoreInfo = {
 // El backend mapea el enum de la DB a alias (MOCHI→KAWAII, BENTO→HALO,
 // POCKET→BRUTALIST). Aquí normalizamos cualquier variante al nombre canónico
 // que usa el render de abajo. Sin esto el tema nunca coincide y cae a DEFAULT.
-function normalizeTheme(raw?: string | null): 'MOCHI' | 'BENTO' | 'POCKET' | 'DEFAULT' {
-  const map: Record<string, 'MOCHI' | 'BENTO' | 'POCKET' | 'DEFAULT'> = {
+function normalizeTheme(raw?: string | null): 'MOCHI' | 'BENTO' | 'POCKET' | 'WAGBA' | 'DEFAULT' {
+  const map: Record<string, 'MOCHI' | 'BENTO' | 'POCKET' | 'WAGBA' | 'DEFAULT'> = {
     MOCHI: 'MOCHI', KAWAII: 'MOCHI',
     BENTO: 'BENTO', HALO: 'BENTO',
     POCKET: 'POCKET', BRUTALIST: 'POCKET',
+    WAGBA: 'WAGBA', ANTOJO: 'WAGBA',
     DEFAULT: 'DEFAULT',
   };
   return map[(raw || '').toUpperCase()] || 'DEFAULT';
@@ -227,6 +229,7 @@ export default async function StorefrontPage({
       {theme === 'MOCHI' && <MochiTheme data={data} />}
       {theme === 'BENTO' && <BentoTheme data={data} />}
       {theme === 'POCKET' && <PocketTheme data={data} />}
+      {theme === 'WAGBA' && <WagbaTheme data={data} />}
 
       {/* Fallback to legacy client if no modern theme is selected or during transition */}
       {theme === 'DEFAULT' && (
