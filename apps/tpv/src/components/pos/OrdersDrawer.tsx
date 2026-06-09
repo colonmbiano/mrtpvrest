@@ -6,11 +6,13 @@ import {
   Search,
   Bike,
   ChevronRight,
+  ChevronLeft,
   CheckCircle2,
   Circle,
   ListChecks,
   Merge,
   Loader2,
+  History,
 } from "lucide-react";
 
 export interface DrawerOrder {
@@ -30,6 +32,10 @@ interface OrdersDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   orders: DrawerOrder[];
+  /** Pedidos ya cerrados (entregados/cancelados/pagados). Se muestran al
+   *  activar "Ver historial completo" para poder reimprimir cuenta o
+   *  comanda de pedidos pasados ante cualquier aclaración. */
+  historyOrders?: DrawerOrder[];
   /** Tap sobre el cuerpo del tile → modal de detalle (solo lectura). */
   onShowDetail: (order: DrawerOrder) => void;
   /** Botón primario "Cobrar" → flujo de pago. */
@@ -68,6 +74,8 @@ const STATUS_TONE: Record<string, { dot: string; ring: string; chip: string }> =
   PENDING:      { dot: "bg-white/50",  ring: "border-white/15",     chip: "text-white/60" },
   OPEN:         { dot: "bg-white/50",  ring: "border-white/15",     chip: "text-white/60" },
   ON_THE_WAY:   { dot: "bg-blue-400", ring: "border-blue-400/40", chip: "text-blue-300" },
+  DELIVERED:    { dot: "bg-[#88D66C]", ring: "border-white/10",     chip: "text-[#88D66C]" },
+  CANCELLED:    { dot: "bg-red-400",   ring: "border-white/10",     chip: "text-red-300" },
 };
 
 const DEFAULT_TONE = { dot: "bg-white/50", ring: "border-white/15", chip: "text-white/60" };
@@ -77,6 +85,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   isOpen,
   onClose,
   orders,
+  historyOrders = [],
   onShowDetail,
   canMergeOrders = false,
   onMergeOrders,
@@ -87,10 +96,15 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showMergeConfirm, setShowMergeConfirm] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
+  // Modo historial: muestra pedidos ya cerrados para reimprimir cuenta/comanda.
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Fuente activa de tiles: tickets abiertos o historial de cerrados.
+  const sourceOrders = showHistory ? historyOrders : orders;
 
   const visibleOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return orders
+    return sourceOrders
       .filter((o) => matchesFilter(o, activeFilter))
       .filter((o) => {
         if (!q) return true;
@@ -99,7 +113,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
           o.orderNumber?.toLowerCase().includes(q)
         );
       });
-  }, [orders, activeFilter, search]);
+  }, [sourceOrders, activeFilter, search]);
 
   const driverlessCount = useMemo(
     () => orders.filter((o) => o.needsDriver).length,
@@ -128,7 +142,16 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
 
   const handleClose = () => {
     resetSelection();
+    setShowHistory(false);
+    setSearch("");
     onClose();
+  };
+
+  const toggleHistory = () => {
+    resetSelection();
+    setSearch("");
+    setActiveFilter("Todos");
+    setShowHistory((v) => !v);
   };
 
   const toggleSelectionMode = () => {
@@ -203,21 +226,27 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
         {/* HEADER */}
         <div className="relative z-10 p-5 border-b border-white/5 flex items-center gap-4 shrink-0 bg-white/5 backdrop-blur-md">
           <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[#ffb84d]/15 text-[#ffb84d] border border-[#ffb84d]/30 shrink-0">
-            <Receipt size={22} />
+            {showHistory ? <History size={22} /> : <Receipt size={22} />}
           </div>
           <div className="flex-1 flex flex-col min-w-0">
             <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
-              {selectionMode ? "Seleccionar cuentas" : "Tickets abiertos"}
+              {showHistory
+                ? "Historial de pedidos"
+                : selectionMode
+                  ? "Seleccionar cuentas"
+                  : "Tickets abiertos"}
             </span>
             <span className="text-[16px] font-black text-white truncate leading-none">
-              {selectionMode
-                ? `${selectedOrders.length} seleccionada${selectedOrders.length === 1 ? "" : "s"}`
-                : `${orders.length} en curso${
-                    driverlessCount > 0 ? ` · ${driverlessCount} sin repartidor` : ""
-                  }`}
+              {showHistory
+                ? `${historyOrders.length} cerrado${historyOrders.length === 1 ? "" : "s"}`
+                : selectionMode
+                  ? `${selectedOrders.length} seleccionada${selectedOrders.length === 1 ? "" : "s"}`
+                  : `${orders.length} en curso${
+                      driverlessCount > 0 ? ` · ${driverlessCount} sin repartidor` : ""
+                    }`}
             </span>
           </div>
-          {canMergeOrders && (
+          {canMergeOrders && !showHistory && (
             <button
               type="button"
               onClick={toggleSelectionMode}
@@ -282,7 +311,11 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             <div className="h-full flex flex-col items-center justify-center opacity-40 gap-4 py-16">
               <Receipt size={48} className="text-white/30" />
               <p className="text-[12px] font-bold tracking-widest uppercase text-white/40">
-                {orders.length === 0 ? "No hay tickets activos" : "Sin coincidencias"}
+                {sourceOrders.length === 0
+                  ? showHistory
+                    ? "Sin pedidos en el historial"
+                    : "No hay tickets activos"
+                  : "Sin coincidencias"}
               </p>
             </div>
           ) : (
@@ -394,10 +427,20 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
           ) : (
             <button
               type="button"
+              onClick={toggleHistory}
               className="w-full min-h-[48px] h-12 rounded-2xl bg-white/5 border border-white/10 text-white/80 text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-transform"
             >
-              Ver historial completo
-              <ChevronRight size={16} />
+              {showHistory ? (
+                <>
+                  <ChevronLeft size={16} />
+                  Volver a tickets abiertos
+                </>
+              ) : (
+                <>
+                  <History size={16} />
+                  Ver historial completo
+                </>
+              )}
             </button>
           )}
         </div>
