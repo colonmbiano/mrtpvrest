@@ -198,7 +198,10 @@ export default function MesasPage() {
                     type="button"
                     onClick={() => {
                       setActiveTable(table.id, table.name);
-                      router.push("/menu");
+                      // Mesa con cuenta abierta → ver primero lo ya pedido
+                      // (items + total) y desde ahí "Agregar mas". Mesa libre
+                      // → directo a la comanda nueva.
+                      router.push(table.status === "open" ? "/cuenta" : "/menu");
                     }}
                     className={[
                       "min-h-[112px] rounded-lg border bg-[#121214] p-4 text-left",
