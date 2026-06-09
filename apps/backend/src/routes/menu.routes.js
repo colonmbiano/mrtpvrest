@@ -205,7 +205,7 @@ router.get('/items/:id', async (req, res) => {
         category: true,
         variants: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
         complements: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
-        modifierGroups: { include: { modifiers: true }, orderBy: { position: 'asc' } },
+        modifierGroups: { include: { modifiers: true } },
       },
     })
     if (!item) return res.status(404).json({ error: 'Platillo no encontrado' })
