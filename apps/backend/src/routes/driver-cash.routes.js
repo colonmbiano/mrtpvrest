@@ -71,10 +71,38 @@ router.get('/:driverId/movements', authenticate, requireTenantAccess, async (req
       where: { driverId: driver.id, createdAt: { gte: from, lte: to } },
       orderBy: { createdAt: 'desc' },
     });
+    const float = movements.filter(m => m.type === 'FLOAT').reduce((s, m) => s + m.amount, 0);
     const income = movements.filter(m => m.type === 'INCOME').reduce((s, m) => s + m.amount, 0);
     const expense = movements.filter(m => m.type === 'EXPENSE').reduce((s, m) => s + m.amount, 0);
     const returned = movements.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.amount, 0);
-    res.json({ movements, summary: { income, expense, returned, balance: income - expense - returned } });
+    res.json({ movements, summary: { float, income, expense, returned, balance: float + income - expense - returned } });
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
+// ── Asignar fondo de cambio (caja chica) — sólo admin ────────────────────
+// El repartidor no puede asignarse fondo a sí mismo: se registra como un
+// movimiento FLOAT que suma al efectivo en mano sin contar como "cobrado".
+router.post('/:driverId/float', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+    const { amount, description } = req.body;
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 50000) {
+      return res.status(400).json({ error: 'amount invalido' });
+    }
+    const movement = await prisma.driverCashMovement.create({
+      data: {
+        driverId: driver.id,
+        type: 'FLOAT',
+        category: 'CAMBIO',
+        amount: numericAmount,
+        description: description || 'Fondo de cambio asignado',
+      },
+    });
+    const io = req.app.get('io');
+    if (io) io.to(`driver:${driver.id}`).emit('cashUpdated', { driverId: driver.id });
+    res.json(movement);
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
@@ -201,10 +229,11 @@ router.post('/:driverId/shift-request', authenticate, requireTenantAccess, async
     const movements = await prisma.driverCashMovement.findMany({
       where: { driverId: driver.id, createdAt: { gte: from, lte: to } },
     });
+    const float = movements.filter(m => m.type === 'FLOAT').reduce((s, m) => s + m.amount, 0);
     const income = movements.filter(m => m.type === 'INCOME').reduce((s, m) => s + m.amount, 0);
     const expense = movements.filter(m => m.type === 'EXPENSE').reduce((s, m) => s + m.amount, 0);
     const returned = movements.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.amount, 0);
-    const balance = income - expense - returned;
+    const balance = float + income - expense - returned;
 
     const existing = await prisma.driverShiftRequest.findFirst({
       where: { driverId: driver.id, status: 'PENDING' },
@@ -256,6 +285,7 @@ router.post('/:driverId/cut', authenticate, requireTenantAccess, requireAdmin, a
       where: { driverId: driver.id, createdAt: { gt: from } },
     });
 
+    const float = movements.filter(m => m.type === 'FLOAT').reduce((s, m) => s + m.amount, 0);
     const income = movements.filter(m => m.type === 'INCOME').reduce((s, m) => s + m.amount, 0);
     const expense = movements.filter(m => m.type === 'EXPENSE').reduce((s, m) => s + m.amount, 0);
     const returned = movements.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.amount, 0);
@@ -264,10 +294,11 @@ router.post('/:driverId/cut', authenticate, requireTenantAccess, requireAdmin, a
       data: {
         driverId: driver.id,
         driverName: driver.name || 'Repartidor',
+        totalFloat: float,
         totalIncome: income,
         totalExpense: expense,
         totalReturn: returned,
-        balance: income - expense - returned,
+        balance: float + income - expense - returned,
         movements: movements.length,
         notes: notes || null,
       },
@@ -327,6 +358,7 @@ router.get('/summary/today', authenticate, requireTenantAccess, requireRole('ADM
       const dm = movements.filter(m => m.driverId === d.id);
       return {
         driver: { id: d.id, name: d.name, photo: d.photo },
+        float: dm.filter(m => m.type === 'FLOAT').reduce((s, m) => s + m.amount, 0),
         income: dm.filter(m => m.type === 'INCOME').reduce((s, m) => s + m.amount, 0),
         expense: dm.filter(m => m.type === 'EXPENSE').reduce((s, m) => s + m.amount, 0),
         returned: dm.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.amount, 0),

@@ -5,7 +5,7 @@ import { C, S } from '@/lib/tokens';
 
 interface Movement {
   id: string;
-  type: 'INCOME' | 'EXPENSE' | 'RETURN';
+  type: 'INCOME' | 'EXPENSE' | 'RETURN' | 'FLOAT';
   category?: string;
   description?: string;
   amount: number;
@@ -15,7 +15,7 @@ interface Movement {
 interface CajaScreenProps {
   driverId?: string;
   movements: Movement[];
-  summary: { balance?: number } | null;
+  summary: { balance?: number; float?: number; income?: number; expense?: number } | null;
   onBack: () => void;
   onGasto: () => void;
   // Registra un retiro de efectivo (movimiento RETURN) que baja el balance.
@@ -26,6 +26,9 @@ interface CajaScreenProps {
 
 export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCerrarTurno }: CajaScreenProps) {
   const balance = summary?.balance || 0;
+  const fondo = summary?.float || 0;
+  const cobrado = summary?.income || 0;
+  const gastos = summary?.expense || 0;
 
   const [retiroOpen, setRetiroOpen] = useState(false);
   const [retiroAmount, setRetiroAmount] = useState('');
@@ -89,7 +92,28 @@ export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCe
           <div style={{ fontFamily: C.fontDisplay, fontSize: 60, fontWeight: 700, color: C.green, letterSpacing: '-0.03em', lineHeight: 1 }}>
             ${balance.toFixed(0)}
           </div>
-          <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center', gap: 12 }}>
+
+          {/* Desglose: el efectivo en mano = fondo + cobrado − gastos − retiros */}
+          <div style={{
+            marginTop: 16, display: 'flex', justifyContent: 'center', gap: 0,
+            borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 14,
+          }}>
+            {[
+              { label: 'Fondo', value: fondo, color: C.iris },
+              { label: 'Cobrado', value: cobrado, color: C.green },
+              { label: 'Gastos', value: gastos, color: C.coral },
+            ].map((it, i) => (
+              <div key={it.label} style={{
+                flex: 1, textAlign: 'center',
+                borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+              }}>
+                <div style={{ fontSize: 8, fontWeight: 700, color: C.textMuted, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 3 }}>{it.label}</div>
+                <div style={{ fontFamily: C.fontDisplay, fontSize: 16, fontWeight: 700, color: it.color }}>${it.value.toFixed(0)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 18, display: 'flex', justifyContent: 'center', gap: 12 }}>
             <button onClick={() => { setRetiroAmount(balance > 0 ? String(balance.toFixed(0)) : ''); setRetiroOpen(true); }} style={{
               height: 38, paddingInline: 16, borderRadius: 10, cursor: 'pointer',
               border: '1px solid rgba(136,214,108,0.3)',
@@ -107,7 +131,12 @@ export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCe
 
         <div style={S.sectionLabel}>Historial del día</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {movements.map(m => (
+          {movements.map(m => {
+            const isFloat = m.type === 'FLOAT';
+            const positive = m.type === 'INCOME' || isFloat;
+            const tone = isFloat ? C.iris : positive ? C.green : C.coral;
+            const toneSoft = isFloat ? C.irisSoft : positive ? C.greenSoft : C.coralSoft;
+            return (
             <div key={m.id} style={{
               background: C.surf1, border: `1px solid ${C.border}`,
               borderRadius: 16, padding: '12px 16px',
@@ -116,11 +145,11 @@ export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCe
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 <div style={{
                   width: 38, height: 38, borderRadius: 12, flexShrink: 0,
-                  background: m.type === 'INCOME' ? C.greenSoft : C.coralSoft,
+                  background: toneSoft,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: m.type === 'INCOME' ? C.green : C.coral, fontSize: 16,
+                  color: tone, fontSize: 16,
                 }}>
-                  {m.type === 'INCOME' ? '↓' : '↑'}
+                  {isFloat ? '💵' : positive ? '↓' : '↑'}
                 </div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
@@ -132,13 +161,13 @@ export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCe
                 </div>
               </div>
               <div style={{
-                fontFamily: C.fontDisplay, fontSize: 17, fontWeight: 700,
-                color: m.type === 'INCOME' ? C.green : C.coral,
+                fontFamily: C.fontDisplay, fontSize: 17, fontWeight: 700, color: tone,
               }}>
-                {m.type === 'INCOME' ? '+' : '−'}${m.amount}
+                {positive ? '+' : '−'}${m.amount}
               </div>
             </div>
-          ))}
+            );
+          })}
           {movements.length === 0 && (
             <div style={{ padding: '32px', textAlign: 'center', fontSize: 10, color: C.textMuted, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
               No hay movimientos hoy

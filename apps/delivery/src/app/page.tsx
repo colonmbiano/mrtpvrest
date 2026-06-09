@@ -273,6 +273,8 @@ export default function DeliveryApp() {
       audioRef.current?.play().catch(() => {});
       fetchAvisos();
     });
+    // El admin asignó fondo de cambio / movió la caja: refrescar saldo.
+    socket.on('cashUpdated', () => fetchCash());
     return () => { socket.disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driver]);
