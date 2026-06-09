@@ -951,6 +951,8 @@ function CheckoutScreen({ accent, slug, info, locations, profileKey, onBack, onD
   const [tipPct, setTipPct] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [loyalty, setLoyalty] = useState<LoyaltyInfo | null>(null);
+  const [usePoints, setUsePoints] = useState(false);
 
   const selectedLocation = locations.find((l: any) => l.id === locationId) || locations[0] || null;
 
@@ -960,6 +962,14 @@ function CheckoutScreen({ accent, slug, info, locations, profileKey, onBack, onD
       if (raw) { const p = JSON.parse(raw); setName(p.name || ''); setPhone(p.phone || ''); setAddress(p.address || ''); if (p.coords?.lat) setCoords(p.coords); }
     } catch {}
   }, [profileKey]);
+
+  // Saldo de puntos del cliente logueado, para ofrecer el canje en el checkout.
+  useEffect(() => {
+    if (!getAuth(slug)) return;
+    let stop = false;
+    fetchMyLoyalty(slug).then(l => { if (!stop) setLoyalty(l); }).catch(() => {});
+    return () => { stop = true; };
+  }, [slug]);
 
   const allowed: OrderType[] = useMemo(() => {
     const l = selectedLocation; const a: OrderType[] = [];
@@ -976,7 +986,14 @@ function CheckoutScreen({ accent, slug, info, locations, profileKey, onBack, onD
   const deliveryFee = isDelivery ? (preview.outOfRange ? 0 : preview.fee) : 0;
   const tip = Math.round(total * (tipPct / 100));
   const discount = coupon?.discount || 0;
-  const grand = Math.max(0, total - discount + deliveryFee + tip);
+  // Canje de puntos → descuento (tope: lo cobrable de productos). El backend
+  // re-valida y es la fuente de verdad; aquí solo estimamos para mostrar.
+  const ppv = loyalty?.pointsValuePesos || 0;
+  const pointsAvail = loyalty?.points || 0;
+  const pointsDiscount = (usePoints && ppv > 0)
+    ? Math.round(Math.min(pointsAvail * ppv, Math.max(0, total - discount)) * 100) / 100
+    : 0;
+  const grand = Math.max(0, total - discount - pointsDiscount + deliveryFee + tip);
   const minOrderAmount = info.minOrderAmount || 0;
   const belowMin = minOrderAmount > 0 && total < minOrderAmount;
 
@@ -1021,6 +1038,7 @@ function CheckoutScreen({ accent, slug, info, locations, profileKey, onBack, onD
           locationId: locationId || selectedLocation?.id,
           paymentMethod: payment === 'ONLINE' ? 'CARD' : payment,
           tip, couponCode: coupon?.code || undefined,
+          redeemPoints: usePoints ? pointsAvail : 0,
           items: lines.map((l: any) => ({ menuItemId: l.menuItemId, variantId: l.variantId || undefined, modifierIds: l.modifierIds || [], quantity: l.quantity })),
         }),
       });
@@ -1147,6 +1165,23 @@ function CheckoutScreen({ accent, slug, info, locations, profileKey, onBack, onD
           {couponMsg && <p className="text-amber-400 text-xs font-bold mt-1.5">{couponMsg}</p>}
         </div>
 
+        {/* Canje de puntos */}
+        {loyalty && pointsAvail > 0 && ppv > 0 && (
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest mb-2.5" style={{ color: MUTED }}>Mis puntos</p>
+            <button onClick={() => setUsePoints(v => !v)} className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border-2 transition-all text-left" style={chip(usePoints)}>
+              <span className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: `${accent}20`, color: accent }}><Award className="w-4 h-4" /></span>
+              <span className="flex-1">
+                <span className="block text-sm font-semibold" style={{ color: usePoints ? accent : '#fff' }}>Usar mis {pointsAvail} puntos</span>
+                <span className="block text-[11px]" style={{ color: MUTED }}>Hasta −{fmt(Math.min(pointsAvail * ppv, Math.max(0, total - discount)))} en este pedido</span>
+              </span>
+              <span className="relative w-11 h-6 rounded-full shrink-0" style={{ background: usePoints ? accent : '#555' }}>
+                <span className="absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all" style={{ left: usePoints ? '22px' : '2px' }} />
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* Propina */}
         <div>
           <p className="text-xs font-bold uppercase tracking-widest mb-2.5" style={{ color: MUTED }}>Propina</p>
@@ -1162,6 +1197,7 @@ function CheckoutScreen({ accent, slug, info, locations, profileKey, onBack, onD
           <SumRow label="Subtotal" value={fmt(total)} />
           {isDelivery && <SumRow label={`Envío${preview.distanceKm != null ? ` · ${preview.distanceKm} km` : ''}`} value={preview.outOfRange ? 'Fuera de cobertura' : needsLoc ? 'Usa tu ubicación' : deliveryFee === 0 ? 'Gratis' : fmt(deliveryFee)} />}
           {discount > 0 && <SumRow label="Descuento" value={`−${fmt(discount)}`} green />}
+          {pointsDiscount > 0 && <SumRow label="Puntos canjeados" value={`−${fmt(pointsDiscount)}`} green />}
           {tip > 0 && <SumRow label="Propina" value={fmt(tip)} />}
           <div className="flex items-center justify-between pt-2" style={{ borderTop: `1px solid ${BORDER}` }}>
             <span className="font-bold">Total</span>
@@ -1428,7 +1464,7 @@ function PointsScreen({ accent, slug, auth, onLogin }: any) {
       </div>
 
       <div className="p-4 rounded-[18px] text-xs leading-relaxed" style={{ background: CARD, border: `1px solid ${BORDER}`, color: MUTED }}>
-        Ganas <span className="font-bold text-white">{data.pointsPerTen} {data.pointsPerTen === 1 ? 'punto' : 'puntos'}</span> por cada $10 de compra. Cada punto vale <span className="font-bold text-white">{fmt(data.pointsValuePesos)}</span>. El canje en tienda llegará pronto.
+        Ganas <span className="font-bold text-white">{data.pointsPerTen} {data.pointsPerTen === 1 ? 'punto' : 'puntos'}</span> por cada $10 de compra. Cada punto vale <span className="font-bold text-white">{fmt(data.pointsValuePesos)}</span>. Canjéalos como descuento al pagar tu próximo pedido.
       </div>
 
       {/* Movimientos */}
