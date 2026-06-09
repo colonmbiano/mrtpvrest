@@ -78,6 +78,14 @@ function OrderCard({ order, drivers, onStatusChange, onAssignDriver }: {
             {order.customerPhone && <><span>·</span><span>{order.customerPhone}</span></>}
             <span>·</span><span>{timeAgo(order.createdAt)}</span>
             <span>·</span><span>{SOURCE_LABELS[order.source] || order.source}</span>
+            {order.orderType === "DELIVERY" && (
+              <>
+                <span>·</span>
+                <span style={{ color: order.deliveryDriverName ? "var(--blue)" : "var(--red)" }}>
+                  🛵 {order.deliveryDriverName || "Sin asignar"}
+                </span>
+              </>
+            )}
           </div>
         </div>
         <div className="text-right flex-shrink-0">
@@ -200,6 +208,7 @@ export default function PedidosPage() {
   const [view, setView]           = useState<"kanban" | "list">("kanban");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
+  const [filterDriver, setFilterDriver] = useState("all");
   const [search, setSearch]       = useState("");
   const [lastUpdate, setLastUpdate] = useState(new Date());
 
@@ -270,6 +279,14 @@ export default function PedidosPage() {
   const filtered = orders.filter(o => {
     if (filterStatus !== "all" && o.status !== filterStatus) return false;
     if (filterSource !== "all" && o.source !== filterSource) return false;
+    if (filterDriver !== "all") {
+      if (filterDriver === "unassigned") {
+        // "Sin asignar" = pedidos a domicilio que aún no tienen repartidor.
+        if (!(o.orderType === "DELIVERY" && !o.deliveryDriverId)) return false;
+      } else if (o.deliveryDriverId !== filterDriver) {
+        return false;
+      }
+    }
     if (search) {
       const q = search.toLowerCase();
       return (
@@ -280,6 +297,19 @@ export default function PedidosPage() {
     }
     return true;
   });
+
+  // Resumen del repartidor filtrado: nº de pedidos + suma de totales del
+  // conjunto actualmente visible (respeta los demás filtros y la búsqueda).
+  const driverSummary = filterDriver !== "all"
+    ? {
+        name:
+          filterDriver === "unassigned"
+            ? "Sin asignar"
+            : drivers.find(d => d.id === filterDriver)?.name || "Repartidor",
+        count: filtered.length,
+        total: filtered.reduce((s, o) => s + (o.total || 0), 0),
+      }
+    : null;
 
   const active         = orders.filter(o => !["DELIVERED", "CANCELLED"].includes(o.status));
   const pending        = orders.filter(o => o.status === "PENDING").length;
@@ -398,9 +428,21 @@ export default function PedidosPage() {
             <option value="TPV">🖥️ TPV</option>
             <option value="WAITER">🧑‍🍽️ Mesero</option>
           </select>
-          {(filterStatus !== "all" || filterSource !== "all" || search) && (
+          <select
+            value={filterDriver}
+            onChange={e => setFilterDriver(e.target.value)}
+            className="px-3 py-2 rounded-xl text-sm outline-none"
+            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }}
+          >
+            <option value="all">🛵 Todos los repartidores</option>
+            <option value="unassigned">⚠ Sin asignar</option>
+            {drivers.map(d => (
+              <option key={d.id} value={d.id}>🛵 {d.name}</option>
+            ))}
+          </select>
+          {(filterStatus !== "all" || filterSource !== "all" || filterDriver !== "all" || search) && (
             <button
-              onClick={() => { setFilterStatus("all"); setFilterSource("all"); setSearch(""); }}
+              onClick={() => { setFilterStatus("all"); setFilterSource("all"); setFilterDriver("all"); setSearch(""); }}
               className="px-3 py-2 rounded-xl text-xs font-black transition-all"
               style={{ background: "rgba(239,68,68,0.08)", color: "var(--red)", border: "1px solid rgba(239,68,68,0.15)" }}
             >
@@ -408,6 +450,37 @@ export default function PedidosPage() {
             </button>
           )}
         </div>
+
+        {/* DRIVER SUMMARY */}
+        {driverSummary && (
+          <div
+            className="flex items-center justify-between gap-3 flex-wrap mb-5 px-4 py-3 rounded-2xl"
+            style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)" }}
+          >
+            <div className="flex items-center gap-2 text-sm" style={{ color: "var(--text)" }}>
+              <span className="text-lg">🛵</span>
+              <span className="font-syne font-black">{driverSummary.name}</span>
+            </div>
+            <div className="flex items-center gap-5">
+              <div className="text-right">
+                <div className="font-syne font-black text-lg" style={{ color: "var(--blue)" }}>
+                  {driverSummary.count}
+                </div>
+                <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>
+                  Pedidos
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-syne font-black text-lg" style={{ color: "var(--accent)" }}>
+                  ${driverSummary.total.toFixed(0)}
+                </div>
+                <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>
+                  Total
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* CONTENT */}
         {loading ? (
