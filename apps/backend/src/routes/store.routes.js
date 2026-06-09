@@ -14,6 +14,8 @@
  */
 
 const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { prisma } = require('@mrtpvrest/database');
 const {
   resolveProviderForRestaurant,
@@ -23,7 +25,29 @@ const {
 // Cálculo de envío: fuente única compartida con el chatbot de WhatsApp.
 const { computeDeliveryFee } = require('../lib/delivery-fee');
 const { computeOpenState } = require('../utils/storeHours');
+const { authenticate } = require('../middleware/auth.middleware');
+const { addLoyaltyPoints, genLoyaltyQr } = require('../services/loyalty.service');
 const router = express.Router();
+
+// Resuelve el cliente final autenticado a partir del header Authorization
+// (opcional). No bloquea si falta o es inválido — el storefront permite pedir
+// como invitado. Solo acepta usuarios role CUSTOMER de ESTE restaurante.
+async function resolveCustomerId(req, restaurantId) {
+  try {
+    const h = req.headers.authorization;
+    if (!h || !h.startsWith('Bearer ')) return null;
+    const payload = jwt.verify(h.split(' ')[1], process.env.JWT_SECRET);
+    const userId = payload.userId || payload.id;
+    if (!userId) return null;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, restaurantId: true, isActive: true },
+    });
+    if (!user || !user.isActive || user.role !== 'CUSTOMER') return null;
+    if (user.restaurantId !== restaurantId) return null;
+    return user.id;
+  } catch { return null; }
+}
 
 // ── Anti-fraude: rate limit por kiosko ───────────────────────────────────
 // Cache en memoria de pedidos PENDING por terminal. Si un mismo terminal
@@ -147,7 +171,7 @@ router.get('/info', async (req, res) => {
     location: location ? { id: location.id, name: location.name, address: location.address } : null,
     hasWebStore:    tenantConfig.hasWebStore,
     whatsappNumber: config?.whatsappNumber || tenantConfig.whatsappNumber,
-    storefrontTheme: (() => { const t = config?.storefrontTheme; const map = { MOCHI: "KAWAII", BENTO: "HALO", POCKET: "BRUTALIST" }; return map[t] || t || "KAWAII"; })(),
+    storefrontTheme: (() => { const t = config?.storefrontTheme; const map = { MOCHI: "KAWAII", BENTO: "HALO", POCKET: "BRUTALIST", WAGBA: "ANTOJO" }; return map[t] || t || "KAWAII"; })(),
     primaryColor:    restaurant.accentColor || "#ff5c35",
 
     // Estado de la tienda — el storefront debe bloquear pedidos si está cerrada.
@@ -433,6 +457,7 @@ router.post('/orders', async (req, res) => {
           include: {
             variants: true,
             modifierGroups: { include: { modifiers: true } },
+            complements: true,
           },
         });
         if (!menuItem) throw new Error(`Producto ${menuItemId} no disponible.`);
@@ -451,12 +476,23 @@ router.post('/orders', async (req, res) => {
           variantName = variant.name;
         }
 
+        // El cliente envía complementos dentro de modifierIds con prefijo
+        // "complement:" (mismo convenio que el TPV). Los separamos de los
+        // modificadores reales antes de validar.
+        const COMPLEMENT_PREFIX = 'complement:';
+        const rawRequestedIds = Array.isArray(modifierIds) ? modifierIds.filter(Boolean) : [];
+        const requestedComplementIds = rawRequestedIds
+          .filter(id => typeof id === 'string' && id.startsWith(COMPLEMENT_PREFIX))
+          .map(id => id.slice(COMPLEMENT_PREFIX.length));
+        const requestedModIds = rawRequestedIds.filter(
+          id => typeof id === 'string' && !id.startsWith(COMPLEMENT_PREFIX)
+        );
+
         // Modificadores con priceAdd — backend valida que pertenezcan al
         // menuItem y suma priceAdd al precio unitario del item.
         const allowedModifierIds = new Set(
           (menuItem.modifierGroups || []).flatMap(g => g.modifiers.map(m => m.id))
         );
-        const requestedModIds = Array.isArray(modifierIds) ? modifierIds.filter(Boolean) : [];
         const selectedModifiers = [];
         for (const mid of requestedModIds) {
           if (!allowedModifierIds.has(mid)) {
@@ -468,10 +504,34 @@ router.post('/orders', async (req, res) => {
           if (mod) selectedModifiers.push(mod);
         }
         const modifiersAdd = selectedModifiers.reduce((s, m) => s + Number(m.priceAdd || 0), 0);
-        const unitPrice = basePrice + modifiersAdd;
+
+        // Complementos (extras/acompañamientos). No existe OrderItemComplement:
+        // se cobran en el precio unitario y se anexan al campo notes, igual que
+        // hace el TPV. Validamos que pertenezcan al producto y estén disponibles.
+        const complementsById = new Map((menuItem.complements || []).map(c => [c.id, c]));
+        const selectedComplements = [];
+        for (const cid of requestedComplementIds) {
+          const complement = complementsById.get(cid);
+          if (!complement || complement.isAvailable === false) {
+            throw new Error(`Complemento ${cid} no pertenece a ${menuItem.name}.`);
+          }
+          selectedComplements.push(complement);
+        }
+        const complementsAdd = selectedComplements.reduce((s, c) => s + Number(c.price || 0), 0);
+
+        const unitPrice = basePrice + modifiersAdd + complementsAdd;
 
         const qty = Math.max(1, parseInt(quantity) || 1);
         const displayName = variantName ? `${menuItem.name} (${variantName})` : menuItem.name;
+
+        // Complementos al texto de notas (no hay tabla relacional para ellos).
+        const complementNote = selectedComplements.length > 0
+          ? `Complementos: ${selectedComplements.map(c => c.name).filter(Boolean).join(', ')}`
+          : '';
+        const finalNotes = [
+          typeof itemNotes === 'string' ? itemNotes.trim() : '',
+          complementNote,
+        ].filter(Boolean).join('\n') || null;
 
         return {
           menuItemId,
@@ -479,7 +539,7 @@ router.post('/orders', async (req, res) => {
           price: unitPrice,
           quantity: qty,
           subtotal: unitPrice * qty,
-          notes: itemNotes || null,
+          notes: finalNotes,
           // Modificadores como relación anidada — se persisten en OrderItemModifier
           ...(selectedModifiers.length > 0 && {
             modifiers: {
@@ -564,6 +624,11 @@ router.post('/orders', async (req, res) => {
       });
       loyaltyUserId = account?.userId || null;
     }
+    // Cliente final con sesión iniciada (correo+contraseña): asociamos el pedido
+    // a su cuenta para que aparezca en su historial y acumule puntos.
+    if (!loyaltyUserId) {
+      loyaltyUserId = await resolveCustomerId(req, restaurant.id);
+    }
     const orderNumberPrefix = source === 'KIOSK' ? 'KIOSK-' : 'WEB-';
     const orderNumber = orderNumberPrefix + Date.now().toString().slice(-6);
 
@@ -598,6 +663,12 @@ router.post('/orders', async (req, res) => {
         items: { include: { menuItem: { select: { name: true } } } },
       },
     });
+
+    // Lealtad: si el pedido está ligado a un cliente, acumulamos puntos sobre el
+    // subtotal (crea la cuenta si no existía). Best-effort: no bloquea la orden.
+    if (loyaltyUserId) {
+      addLoyaltyPoints(loyaltyUserId, order).catch(() => null);
+    }
 
     // Incrementar usedCount del cupón (best-effort, no bloquea)
     if (coupon) {
@@ -946,6 +1017,154 @@ router.post('/webhook/stripe', async (req, res) => {
     console.error('[store-webhook:stripe] error:', err.message);
     res.status(200).json({ received: true });
   }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  CLIENTE FINAL — registro/login (correo+contraseña), historial y lealtad
+// ════════════════════════════════════════════════════════════════════════════
+
+// Token largo (30d): el storefront no implementa refresh; prioriza comodidad.
+function signCustomerToken(user) {
+  return jwt.sign(
+    { userId: user.id, restaurantId: user.restaurantId, role: 'CUSTOMER', tenantId: user.tenantId || null },
+    process.env.JWT_SECRET,
+    { expiresIn: '30d' },
+  );
+}
+
+const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+
+// Guard: cliente final autenticado. Reusa `authenticate` y exige role CUSTOMER.
+function requireCustomer(req, res, next) {
+  if (req.user?.role !== 'CUSTOMER') return res.status(403).json({ error: 'Solo para clientes.' });
+  next();
+}
+
+// POST /api/store/customer/register  { name, email, password, phone }
+router.post('/customer/register', async (req, res) => {
+  const store = await resolveStore(req, res);
+  if (!store) return;
+  const { restaurant } = store;
+  try {
+    const name = String(req.body?.name || '').trim();
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    const phone = String(req.body?.phone || '').trim() || null;
+
+    if (!name) return res.status(400).json({ error: 'Tu nombre es requerido.' });
+    if (!isEmail(email)) return res.status(400).json({ error: 'Correo no válido.' });
+    if (password.length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+
+    const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (existing) return res.status(409).json({ error: 'Ese correo ya está registrado. Inicia sesión.' });
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: {
+        name, email, phone, passwordHash, role: 'CUSTOMER', isActive: true,
+        restaurantId: restaurant.id, tenantId: restaurant.tenantId || null,
+        loyalty: { create: { restaurantId: restaurant.id, qrCode: genLoyaltyQr() } },
+      },
+      select: { id: true, name: true, email: true, phone: true, restaurantId: true, tenantId: true },
+    });
+    res.status(201).json({ token: signCustomerToken(user), customer: { id: user.id, name: user.name, email: user.email, phone: user.phone } });
+  } catch (e) {
+    console.error('[store] customer register error:', e.message);
+    res.status(400).json({ error: 'No se pudo crear la cuenta.' });
+  }
+});
+
+// POST /api/store/customer/login  { email, password }
+router.post('/customer/login', async (req, res) => {
+  const store = await resolveStore(req, res);
+  if (!store) return;
+  const { restaurant } = store;
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    if (!email || !password) return res.status(400).json({ error: 'Correo y contraseña requeridos.' });
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, name: true, email: true, phone: true, role: true, restaurantId: true, tenantId: true, isActive: true, passwordHash: true },
+    });
+    if (!user || !user.isActive || user.role !== 'CUSTOMER' || user.restaurantId !== restaurant.id) {
+      return res.status(401).json({ error: 'Credenciales incorrectas.' });
+    }
+    const ok = await bcrypt.compare(password, user.passwordHash || '');
+    if (!ok) return res.status(401).json({ error: 'Credenciales incorrectas.' });
+
+    res.json({ token: signCustomerToken(user), customer: { id: user.id, name: user.name, email: user.email, phone: user.phone } });
+  } catch (e) {
+    console.error('[store] customer login error:', e.message);
+    res.status(500).json({ error: 'No se pudo iniciar sesión.' });
+  }
+});
+
+// GET /api/store/customer/me  → perfil + saldo de puntos
+router.get('/customer/me', authenticate, requireCustomer, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true, name: true, email: true, phone: true,
+        loyalty: { where: { restaurantId: req.user.restaurantId }, select: { points: true, tier: true, totalEarned: true, qrCode: true }, take: 1 },
+      },
+    });
+    const config = await prisma.restaurantConfig.findUnique({ where: { restaurantId: req.user.restaurantId }, select: { pointsValuePesos: true } });
+    const loyalty = user?.loyalty?.[0] || null;
+    res.json({
+      id: user.id, name: user.name, email: user.email, phone: user.phone,
+      loyalty: loyalty ? { ...loyalty, valuePesos: Math.round(loyalty.points * (config?.pointsValuePesos || 0) * 100) / 100 } : null,
+    });
+  } catch (e) { res.status(500).json({ error: 'Error al obtener el perfil.' }); }
+});
+
+// GET /api/store/customer/orders  → historial de compras del cliente
+router.get('/customer/orders', authenticate, requireCustomer, async (req, res) => {
+  try {
+    const orders = await prisma.order.findMany({
+      where: { userId: req.user.id, restaurantId: req.user.restaurantId },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+      select: {
+        id: true, orderNumber: true, status: true, orderType: true, total: true,
+        paymentStatus: true, pointsEarned: true, createdAt: true,
+        items: { select: { name: true, price: true, quantity: true } },
+      },
+    });
+    res.json(orders);
+  } catch (e) { res.status(500).json({ error: 'Error al obtener tus pedidos.' }); }
+});
+
+// GET /api/store/customer/loyalty  → puntos, tier y movimientos
+router.get('/customer/loyalty', authenticate, requireCustomer, async (req, res) => {
+  try {
+    const account = await prisma.loyaltyAccount.findUnique({
+      where: { userId_restaurantId: { userId: req.user.id, restaurantId: req.user.restaurantId } },
+      select: { id: true, points: true, tier: true, totalEarned: true, qrCode: true },
+    });
+    const config = await prisma.restaurantConfig.findUnique({ where: { restaurantId: req.user.restaurantId }, select: { pointsValuePesos: true, pointsPerTen: true } });
+    let transactions = [];
+    if (account) {
+      transactions = await prisma.loyaltyTransaction.findMany({
+        where: { accountId: account.id },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: { type: true, points: true, description: true, createdAt: true },
+      });
+    }
+    res.json({
+      points: account?.points || 0,
+      tier: account?.tier || 'BRONZE',
+      totalEarned: account?.totalEarned || 0,
+      qrCode: account?.qrCode || null,
+      valuePesos: Math.round((account?.points || 0) * (config?.pointsValuePesos || 0) * 100) / 100,
+      pointsValuePesos: config?.pointsValuePesos || 0,
+      pointsPerTen: config?.pointsPerTen || 1,
+      transactions,
+    });
+  } catch (e) { res.status(500).json({ error: 'Error al obtener tus puntos.' }); }
 });
 
 module.exports = router;
