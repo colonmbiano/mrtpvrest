@@ -398,10 +398,17 @@ router.post('/login', pinLoginLimiter, async (req, res) => {
     }
 
     const jwt = require('jsonwebtoken');
+    // Tablets POS (TPV cajero, TPV meseros, meseros-lite) operan toda la
+    // jornada sobre un dispositivo ya emparejado. El login con PIN no tiene
+    // refresh token (a diferencia del login admin), así que un token de 12h
+    // se traducía en "Sesión vencida" a mitad de turno: la app borraba la
+    // sesión y aparentaba "desvincularse", y al meter un pedido moría con 401.
+    // Alineamos la vida con el token de Device (30d): el PIN sigue
+    // re-autenticando en cualquier momento si hace falta.
     const token = jwt.sign(
       { id: emp.id, role: emp.role, tenantId, restaurantId, locationId },
       process.env.JWT_SECRET,
-      { expiresIn: '12h' }
+      { expiresIn: '30d' }
     );
 
     // BUG-13: registrar login en la bitácora de acceso. Fire-and-forget
