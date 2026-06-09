@@ -119,6 +119,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   );
 
   const [openOrders, setOpenOrders] = useState<any[]>([]);
+  // Pedidos ya cerrados (entregados/cancelados/pagados) para el historial
+  // del drawer: permite reimprimir cuenta o comanda de pedidos pasados.
+  const [closedOrders, setClosedOrders] = useState<any[]>([]);
   const [payOrder, setPayOrder] = useState<any | null>(null);
   const [detailOrder, setDetailOrder] = useState<any | null>(null);
   const [reprintKitchenOrder, setReprintKitchenOrder] = useState<any | null>(null);
@@ -152,6 +155,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       const { data } = await api.get("/api/orders/admin");
       const list = Array.isArray(data) ? data : [];
       setOpenOrders(list.filter((o: any) => ACTIVE_STATUSES.has(o.status)));
+      // El mismo endpoint devuelve los últimos pedidos de todos los estados;
+      // los no-activos alimentan el historial de reimpresión del drawer.
+      setClosedOrders(list.filter((o: any) => !ACTIVE_STATUSES.has(o.status)));
     } catch (err) {
       console.error("Error cargando órdenes abiertas:", err);
     }
@@ -716,7 +722,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     return () => { cancelled = true; };
   }, []);
 
-  const drawerOrders = openOrders.map((o: any) => ({
+  const toDrawerOrder = (o: any) => ({
     id: o.id,
     orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
     customerName: o.ticketName || o.customerName || o.user?.name || "Público general",
@@ -727,7 +733,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     itemsCount: Array.isArray(o.items) ? o.items.length : 0,
     driver: o.deliveryDriverName || undefined,
     needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
-  }));
+  });
+
+  const drawerOrders = openOrders.map(toDrawerOrder);
+  const historyDrawerOrders = closedOrders.map(toDrawerOrder);
 
   // Pedidos de la tienda en línea (source ONLINE/STORE) para la pestaña web.
   // Salen del mismo openOrders ya polleado, así que sobreviven a un reinicio
@@ -951,6 +960,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           useUIStore.getState().setIsOrdersOpen(false);
         }}
         orders={drawerOrders}
+        historyOrders={historyDrawerOrders}
         onShowDetail={handleShowDetail}
         onConfirmPayment={handleOpenPaymentGuarded}
         onReprintOrder={handleReprintOrder}
@@ -992,7 +1002,13 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           }))}
           onReprint={handleReprintFromDetail}
           onReprintKitchen={handleReprintKitchenFromDetail}
-          onCharge={isLoanMode ? undefined : handleChargeFromDetailGuarded}
+          onCharge={
+            isLoanMode ||
+            ["DELIVERED", "CANCELLED"].includes(detailOrder.status) ||
+            detailOrder.paymentStatus === "PAID"
+              ? undefined
+              : handleChargeFromDetailGuarded
+          }
           onCancelOrder={canEditOpenOrderItems ? handleCancelOrderFromDetail : undefined}
           onAssignDriver={handleAssignDriverFromDetail}
           onUpdateItem={
