@@ -180,6 +180,69 @@ router.post('/:driverId/collect', authenticate, requireTenantAccess, async (req,
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
+// ── Solicitar cierre de turno ────────────────────────────────────────────
+// El repartidor avisa al admin que quiere cerrar turno. No ejecuta el corte
+// (eso sigue siendo requireAdmin); sólo crea una solicitud PENDING que el admin
+// ve en /admin/caja-repartidores. Dedupe: una sola solicitud PENDING por driver.
+router.post('/:driverId/shift-request', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const emp = await prisma.employee.findUnique({
+      where: { id: driver.id },
+      select: { locationId: true },
+    });
+
+    // Balance de hoy (mismo cálculo que ve el repartidor en su pantalla de caja).
+    const from = new Date(); from.setHours(0, 0, 0, 0);
+    const to = new Date(); to.setHours(23, 59, 59, 999);
+    const movements = await prisma.driverCashMovement.findMany({
+      where: { driverId: driver.id, createdAt: { gte: from, lte: to } },
+    });
+    const income = movements.filter(m => m.type === 'INCOME').reduce((s, m) => s + m.amount, 0);
+    const expense = movements.filter(m => m.type === 'EXPENSE').reduce((s, m) => s + m.amount, 0);
+    const returned = movements.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.amount, 0);
+    const balance = income - expense - returned;
+
+    const existing = await prisma.driverShiftRequest.findFirst({
+      where: { driverId: driver.id, status: 'PENDING' },
+    });
+    const request = existing
+      ? await prisma.driverShiftRequest.update({ where: { id: existing.id }, data: { balance } })
+      : await prisma.driverShiftRequest.create({
+          data: {
+            restaurantId,
+            locationId: emp?.locationId || null,
+            driverId: driver.id,
+            driverName: driver.name || 'Repartidor',
+            balance,
+          },
+        });
+
+    const io = req.app.get('io');
+    if (io && restaurantId) {
+      io.to(`restaurant:${restaurantId}:admins`).emit('driverShiftRequest', { request });
+      io.to(`restaurant:${restaurantId}`).emit('driverShiftRequest', { request });
+    }
+
+    res.json(request);
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
+// ── Solicitudes de cierre pendientes (admin) ─────────────────────────────
+router.get('/shift-requests', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const requests = await prisma.driverShiftRequest.findMany({
+      where: { status: 'PENDING', ...(restaurantId ? { restaurantId } : {}) },
+      orderBy: { createdAt: 'asc' },
+    });
+    res.json(requests);
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
 router.post('/:driverId/cut', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const driver = await assertDriverAccess(req, res);
@@ -213,6 +276,13 @@ router.post('/:driverId/cut', authenticate, requireTenantAccess, requireAdmin, a
     await prisma.driverCashMovement.updateMany({
       where: { driverId: driver.id, createdAt: { gt: from } },
       data: { approved: true, approvedAt: new Date() },
+    });
+
+    // Resuelve cualquier solicitud de cierre pendiente del repartidor: el corte
+    // ya se hizo, así que el aviso desaparece del panel admin.
+    await prisma.driverShiftRequest.updateMany({
+      where: { driverId: driver.id, status: 'PENDING' },
+      data: { status: 'RESOLVED', resolvedAt: new Date() },
     });
 
     res.json(cut);

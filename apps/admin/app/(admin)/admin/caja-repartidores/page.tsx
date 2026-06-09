@@ -5,6 +5,7 @@ import api from "@/lib/api";
 export default function CajaRepartidoresPage() {
   const [summary, setSummary]   = useState<any[]>([]);
   const [cuts, setCuts]         = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [movements, setMovements] = useState<any[]>([]);
   const [movSummary, setMovSummary] = useState<any>(null);
@@ -16,12 +17,14 @@ export default function CajaRepartidoresPage() {
   async function fetchAll() {
     setLoading(true);
     try {
-      const [s, c] = await Promise.all([
+      const [s, c, r] = await Promise.all([
         api.get("/api/driver-cash/summary/today"),
         api.get("/api/driver-cash/cuts"),
+        api.get("/api/driver-cash/shift-requests"),
       ]);
       setSummary(s.data);
       setCuts(c.data);
+      setRequests(r.data);
     } catch {} finally { setLoading(false); }
   }
 
@@ -33,7 +36,20 @@ export default function CajaRepartidoresPage() {
     } catch {}
   }
 
-  useEffect(() => { fetchAll(); }, []);
+  async function fetchRequests() {
+    try {
+      const { data } = await api.get("/api/driver-cash/shift-requests");
+      setRequests(data);
+    } catch {}
+  }
+
+  useEffect(() => {
+    fetchAll();
+    // Sondeo ligero: el repartidor avisa el cierre desde su app y aquí aparece
+    // sin tener que refrescar la página manualmente.
+    const t = setInterval(fetchRequests, 20000);
+    return () => clearInterval(t);
+  }, []);
 
   async function doCut(driver: any) {
     setCuttingId(driver.id);
@@ -60,6 +76,37 @@ export default function CajaRepartidoresPage() {
         <button onClick={fetchAll} className="px-4 py-2 rounded-xl text-sm font-bold border"
           style={{borderColor:"var(--border)",color:"var(--muted)"}}>🔄 Actualizar</button>
       </div>
+
+      {/* Solicitudes de cierre de turno (repartidor → admin) */}
+      {requests.length > 0 && (
+        <div className="rounded-2xl border overflow-hidden mb-6" style={{borderColor:"rgba(245,166,35,0.4)",background:"rgba(245,166,35,0.06)"}}>
+          <div className="px-5 py-3 border-b font-syne font-bold flex items-center gap-2"
+            style={{borderColor:"rgba(245,166,35,0.2)",color:"var(--gold)"}}>
+            🔔 Solicitudes de cierre de turno
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{background:"var(--gold)",color:"#000"}}>{requests.length}</span>
+          </div>
+          {requests.map((r: any) => (
+            <div key={r.id} className="flex items-center gap-4 px-5 py-3 border-b" style={{borderColor:"rgba(245,166,35,0.15)"}}>
+              <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0" style={{background:"var(--surf2)"}}>🛵</div>
+              <div className="flex-1">
+                <div className="font-bold text-sm">{r.driverName}</div>
+                <div className="text-xs" style={{color:"var(--muted)"}}>
+                  Solicitó cerrar turno · {new Date(r.createdAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}
+                </div>
+              </div>
+              <div className="text-right mr-2">
+                <div className="text-xs" style={{color:"var(--muted)"}}>Efectivo en mano</div>
+                <div className="font-black" style={{color:"var(--gold)"}}>${(r.balance||0).toFixed(0)}</div>
+              </div>
+              <button onClick={() => setShowCutModal({ id: r.driverId, name: r.driverName })}
+                className="py-2 px-4 rounded-xl text-xs font-bold flex-shrink-0"
+                style={{background:"var(--gold)",color:"#000"}}>
+                ✂️ Hacer corte
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Resumen global */}
       <div className="grid grid-cols-3 gap-4 mb-6">

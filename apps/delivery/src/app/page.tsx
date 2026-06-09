@@ -362,6 +362,34 @@ export default function DeliveryApp() {
     } catch {}
   }
 
+  async function handleRetiro(amount: number) {
+    if (!driver || !(amount > 0)) return;
+    try {
+      const formData = new FormData();
+      formData.append('type', 'RETURN');
+      formData.append('category', 'RETIRO');
+      formData.append('amount', String(amount));
+      formData.append('description', 'Retiro de efectivo');
+      formData.append('driverId', driver.id);
+      await api.post(`/api/driver-cash/${driver.id}/movements`, formData);
+      fetchCash();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'No se pudo registrar el retiro');
+      throw err;
+    }
+  }
+
+  async function handleCerrarTurno(): Promise<boolean> {
+    if (!driver) return false;
+    try {
+      await api.post(`/api/driver-cash/${driver.id}/shift-request`);
+      return true;
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'No se pudo enviar el aviso. Revisa tu conexión.');
+      return false;
+    }
+  }
+
   async function sendMessage(text: string) {
     if (!text.trim() || !selectedOrder) return;
     const msgData = { orderId: selectedOrder.id, message: text, fromDriver: true };
@@ -457,6 +485,8 @@ export default function DeliveryApp() {
           summary={cashSummary}
           onBack={() => setScreen('home')}
           onGasto={() => setScreen('gasto')}
+          onRetiro={handleRetiro}
+          onCerrarTurno={handleCerrarTurno}
         />
       )}
 

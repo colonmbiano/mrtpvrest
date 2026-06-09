@@ -1769,6 +1769,25 @@ model DriverCashCut {
   createdAt    DateTime @default(now())
 }
 
+// Solicitud del repartidor para que el admin cierre su turno / haga el corte de
+// caja. El repartidor no puede auto-aprobar su efectivo (por eso /cut es requireAdmin),
+// así que sólo "avisa": crea una solicitud PENDING que el admin ve en
+// /admin/caja-repartidores. Al hacer el corte la solicitud se marca RESOLVED.
+model DriverShiftRequest {
+  id           String    @id @default(cuid())
+  restaurantId String
+  locationId   String?
+  driverId     String
+  driverName   String
+  balance      Float     @default(0) // snapshot del efectivo en mano al solicitar
+  status       String    @default("PENDING") // PENDING, RESOLVED
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([restaurantId, status, createdAt])
+  @@map("driver_shift_requests")
+}
+
 model DriverLocation {
   id        String   @id @default(cuid())
   driverId  String

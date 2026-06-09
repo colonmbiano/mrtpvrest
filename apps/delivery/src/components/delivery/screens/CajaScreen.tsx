@@ -1,11 +1,11 @@
 'use client';
 // handoff/screens/CajaScreen.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { C, S } from '@/lib/tokens';
 
 interface Movement {
   id: string;
-  type: 'INCOME' | 'EXPENSE';
+  type: 'INCOME' | 'EXPENSE' | 'RETURN';
   category?: string;
   description?: string;
   amount: number;
@@ -18,10 +18,41 @@ interface CajaScreenProps {
   summary: { balance?: number } | null;
   onBack: () => void;
   onGasto: () => void;
+  // Registra un retiro de efectivo (movimiento RETURN) que baja el balance.
+  onRetiro: (amount: number) => Promise<void> | void;
+  // Avisa al admin que el repartidor quiere cerrar turno. Devuelve true si se envió.
+  onCerrarTurno: () => Promise<boolean> | boolean;
 }
 
-export function CajaScreen({ movements, summary, onBack, onGasto }: CajaScreenProps) {
+export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCerrarTurno }: CajaScreenProps) {
   const balance = summary?.balance || 0;
+
+  const [retiroOpen, setRetiroOpen] = useState(false);
+  const [retiroAmount, setRetiroAmount] = useState('');
+  const [retiroBusy, setRetiroBusy] = useState(false);
+
+  const [cerrarOpen, setCerrarOpen] = useState(false);
+  const [cerrarBusy, setCerrarBusy] = useState(false);
+  const [cerrarSent, setCerrarSent] = useState(false);
+
+  async function confirmRetiro() {
+    const n = Number(retiroAmount);
+    if (!Number.isFinite(n) || n <= 0) return;
+    setRetiroBusy(true);
+    try {
+      await onRetiro(n);
+      setRetiroOpen(false);
+      setRetiroAmount('');
+    } finally { setRetiroBusy(false); }
+  }
+
+  async function confirmCerrar() {
+    setCerrarBusy(true);
+    try {
+      const ok = await onCerrarTurno();
+      if (ok) setCerrarSent(true);
+    } finally { setCerrarBusy(false); }
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.fontBody }}>
@@ -59,14 +90,18 @@ export function CajaScreen({ movements, summary, onBack, onGasto }: CajaScreenPr
             ${balance.toFixed(0)}
           </div>
           <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center', gap: 12 }}>
-            {[{ label: 'Solicitar retiro', color: C.green, bg: C.greenSoft }, { label: 'Cerrar turno', color: C.textDim, bg: C.surf1 }].map((b, i) => (
-              <button key={i} style={{
-                height: 38, paddingInline: 16, borderRadius: 10, cursor: 'pointer',
-                border: `1px solid ${i === 0 ? 'rgba(136,214,108,0.3)' : C.border}`,
-                background: b.bg, fontSize: 9, fontWeight: 700, color: b.color,
-                letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: C.fontBody,
-              }}>{b.label}</button>
-            ))}
+            <button onClick={() => { setRetiroAmount(balance > 0 ? String(balance.toFixed(0)) : ''); setRetiroOpen(true); }} style={{
+              height: 38, paddingInline: 16, borderRadius: 10, cursor: 'pointer',
+              border: '1px solid rgba(136,214,108,0.3)',
+              background: C.greenSoft, fontSize: 9, fontWeight: 700, color: C.green,
+              letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: C.fontBody,
+            }}>Solicitar retiro</button>
+            <button onClick={() => { setCerrarSent(false); setCerrarOpen(true); }} style={{
+              height: 38, paddingInline: 16, borderRadius: 10, cursor: 'pointer',
+              border: `1px solid ${C.border}`,
+              background: C.surf1, fontSize: 9, fontWeight: 700, color: C.textDim,
+              letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: C.fontBody,
+            }}>Cerrar turno</button>
           </div>
         </div>
 
@@ -111,6 +146,102 @@ export function CajaScreen({ movements, summary, onBack, onGasto }: CajaScreenPr
           )}
         </div>
       </div>
+
+      {/* Modal · Solicitar retiro (registra movimiento RETURN) */}
+      {retiroOpen && (
+        <div style={modalOverlay} onClick={() => !retiroBusy && setRetiroOpen(false)}>
+          <div style={modalCard} onClick={e => e.stopPropagation()}>
+            <div style={{ fontFamily: C.fontDisplay, fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 4 }}>Retiro de efectivo</div>
+            <div style={{ fontSize: 12, color: C.textDim, marginBottom: 18, lineHeight: 1.5 }}>
+              Registra el efectivo que entregas. Baja tu saldo en mano al instante.
+            </div>
+            <div style={{ position: 'relative', marginBottom: 18 }}>
+              <span style={{
+                position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+                fontFamily: C.fontDisplay, fontSize: 24, fontWeight: 700,
+                color: retiroAmount ? C.green : 'rgba(136,214,108,0.3)', pointerEvents: 'none',
+              }}>$</span>
+              <input type="number" inputMode="decimal" autoFocus value={retiroAmount}
+                onChange={e => setRetiroAmount(e.target.value)} placeholder="0"
+                style={{
+                  width: '100%', height: 60, background: C.bg,
+                  border: `1px solid ${retiroAmount ? 'rgba(136,214,108,0.4)' : C.border}`,
+                  borderRadius: 14, paddingLeft: 36, paddingRight: 16,
+                  fontFamily: C.fontDisplay, fontSize: 28, fontWeight: 700,
+                  color: C.text, outline: 'none', letterSpacing: '-0.02em', boxSizing: 'border-box',
+                }} />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setRetiroOpen(false)} disabled={retiroBusy} style={modalBtnGhost}>Cancelar</button>
+              <button onClick={confirmRetiro} disabled={retiroBusy || !(Number(retiroAmount) > 0)} style={{
+                ...modalBtnSolid,
+                background: Number(retiroAmount) > 0 ? C.green : C.greenSoft,
+                color: Number(retiroAmount) > 0 ? '#0A0A0A' : 'rgba(136,214,108,0.4)',
+              }}>{retiroBusy ? '...' : 'Registrar retiro'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal · Cerrar turno (avisa al admin) */}
+      {cerrarOpen && (
+        <div style={modalOverlay} onClick={() => !cerrarBusy && setCerrarOpen(false)}>
+          <div style={modalCard} onClick={e => e.stopPropagation()}>
+            {cerrarSent ? (
+              <>
+                <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 10 }}>
+                  <span style={{ color: C.green }}>✓</span>
+                </div>
+                <div style={{ fontFamily: C.fontDisplay, fontSize: 20, fontWeight: 700, color: C.text, textAlign: 'center', marginBottom: 6 }}>
+                  Solicitud enviada
+                </div>
+                <div style={{ fontSize: 12, color: C.textDim, textAlign: 'center', marginBottom: 18, lineHeight: 1.5 }}>
+                  El administrador recibió tu aviso y hará el corte de caja.
+                </div>
+                <button onClick={() => setCerrarOpen(false)} style={{ ...modalBtnSolid, background: C.green, color: '#0A0A0A' }}>
+                  Entendido
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontFamily: C.fontDisplay, fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 4 }}>Cerrar turno</div>
+                <div style={{ fontSize: 12, color: C.textDim, marginBottom: 18, lineHeight: 1.5 }}>
+                  Se enviará un aviso al administrador con tu efectivo en mano (<b style={{ color: C.green }}>${balance.toFixed(0)}</b>) para que haga el corte de caja.
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setCerrarOpen(false)} disabled={cerrarBusy} style={modalBtnGhost}>Cancelar</button>
+                  <button onClick={confirmCerrar} disabled={cerrarBusy} style={{ ...modalBtnSolid, background: C.amber, color: '#0A0A0A' }}>
+                    {cerrarBusy ? '...' : 'Enviar aviso'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const modalOverlay: React.CSSProperties = {
+  position: 'fixed', inset: 0, zIndex: 200,
+  background: 'rgba(9,9,11,0.88)', backdropFilter: 'blur(16px)',
+  display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 16,
+};
+
+const modalCard: React.CSSProperties = {
+  width: '100%', maxWidth: 420, background: C.surf1,
+  border: `1px solid ${C.border}`, borderRadius: 24, padding: 22,
+  marginBottom: 8, fontFamily: C.fontBody,
+};
+
+const modalBtnGhost: React.CSSProperties = {
+  flex: 1, height: 50, borderRadius: 14, cursor: 'pointer',
+  background: 'transparent', border: `1px solid ${C.border}`,
+  fontSize: 13, fontWeight: 700, color: C.textDim, fontFamily: C.fontBody,
+};
+
+const modalBtnSolid: React.CSSProperties = {
+  flex: 1.4, height: 50, borderRadius: 14, cursor: 'pointer', border: 'none',
+  fontSize: 13, fontWeight: 700, fontFamily: C.fontBody,
+};
