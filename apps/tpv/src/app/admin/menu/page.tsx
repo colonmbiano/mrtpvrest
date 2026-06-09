@@ -63,6 +63,7 @@ type MenuItem = {
   name: string;
   description?: string | null;
   imageUrl?: string | null;
+  imageFit?: string | null;
   price: number;
   categoryId: string;
   isAvailable: boolean;
@@ -85,6 +86,7 @@ type ProductForm = {
   price: string;
   categoryId: string;
   imageUrl: string;
+  imageFit: string;
   isAvailable: boolean;
   isPopular: boolean;
   isFavorite: boolean;
@@ -105,6 +107,7 @@ const emptyForm: ProductForm = {
   price: "",
   categoryId: "",
   imageUrl: "",
+  imageFit: "cover",
   isAvailable: true,
   isPopular: false,
   isFavorite: false,
@@ -231,6 +234,7 @@ export default function MenuEditorPage() {
         price: String(item.price ?? ""),
         categoryId: item.categoryId || categories[0]?.id || "",
         imageUrl: item.imageUrl || "",
+        imageFit: item.imageFit || "cover",
         isAvailable: item.isAvailable !== false,
         isPopular: !!item.isPopular,
         isFavorite: !!item.isFavorite,
@@ -668,7 +672,7 @@ export default function MenuEditorPage() {
                   <div className="space-y-3">
                     <div className="aspect-square overflow-hidden rounded-3xl border border-white/10 bg-[#0a0a0c]">
                       {imageFile || form.imageUrl ? (
-                        <img src={imageFile ? URL.createObjectURL(imageFile) : form.imageUrl} alt="" className="h-full w-full object-cover" />
+                        <img src={imageFile ? URL.createObjectURL(imageFile) : form.imageUrl} alt="" className={`h-full w-full ${form.imageFit === "contain" ? "object-contain" : "object-cover"}`} />
                       ) : (
                         <div className="flex h-full flex-col items-center justify-center gap-2 text-zinc-700">
                           <ImagePlus size={34} />
@@ -676,6 +680,23 @@ export default function MenuEditorPage() {
                         </div>
                       )}
                     </div>
+                    {(imageFile || form.imageUrl) && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {([["cover", "Rellenar"], ["contain", "Ajustar"]] as const).map(([val, label]) => {
+                          const active = form.imageFit === val;
+                          return (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => setForm((prev) => ({ ...prev, imageFit: val }))}
+                              className={`h-10 rounded-2xl border text-[11px] font-black uppercase tracking-[0.12em] transition-colors ${active ? "border-amber-500 bg-amber-500 text-black" : "border-white/10 bg-white/5 text-zinc-400"}`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 text-xs font-black uppercase tracking-[0.14em] text-zinc-300">
                       <ImagePlus size={16} />
                       Subir foto
@@ -833,7 +854,7 @@ function ProductsView(props: {
             <div className="flex items-center gap-3">
               <input type="checkbox" checked={selected} onChange={() => props.toggleSelect(item.id)} className="h-5 w-5 accent-amber-500" />
               <div className="h-16 w-16 overflow-hidden rounded-2xl bg-white/5">
-                {item.imageUrl ? <img src={item.imageUrl} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-xl">🍽</div>}
+                {item.imageUrl ? <img src={item.imageUrl} alt="" className={`h-full w-full ${item.imageFit === "contain" ? "object-contain" : "object-cover"}`} /> : <div className="flex h-full items-center justify-center text-xl">🍽</div>}
               </div>
             </div>
             <div className="min-w-0">

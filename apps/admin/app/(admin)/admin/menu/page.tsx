@@ -68,7 +68,7 @@ export default function MenuPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
+  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -235,7 +235,7 @@ export default function MenuPage() {
   function openForm(item?: any) {
     if (item) {
       setEditItem(item);
-      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", isPromo:item.isPromo||false, activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0 });
+      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0 });
       setImagePreview(item.imageUrl||"");
       api.get(`/api/menu/items/${item.id}`).then(r => {
         setComplements(r.data.complements || []);
@@ -245,7 +245,7 @@ export default function MenuPage() {
       }).catch(() => { setComplements([]); setVariants([]); });
     } else {
       setEditItem(null);
-      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", isPromo:false, activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
+      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
       setImagePreview("");
       setComplements([]);
       setVariants([]);
@@ -665,7 +665,7 @@ export default function MenuPage() {
                     <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
                       checked={sel} onChange={() => toggleSelect(item.id)} />
                     <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:"var(--surf2)"}}>
-                      {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={32} height={32} className="object-cover w-full h-full" /> : <span className="text-sm">🍔</span>}
+                      {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={32} height={32} className={`w-full h-full ${item.imageFit === "contain" ? "object-contain" : "object-cover"}`} /> : <span className="text-sm">🍔</span>}
                     </div>
                   </div>
                   <div className="col-span-3 font-syne font-bold text-sm truncate">{item.name}</div>
@@ -706,7 +706,7 @@ export default function MenuPage() {
                     <input type="checkbox" className="mt-1 rounded cursor-pointer accent-[var(--gold)] w-4 h-4 flex-shrink-0"
                       checked={sel} onChange={() => toggleSelect(item.id)} />
                     <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:"var(--surf2)"}}>
-                      {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={48} height={48} className="object-cover w-full h-full" /> : <span className="text-xl">🍔</span>}
+                      {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={48} height={48} className={`w-full h-full ${item.imageFit === "contain" ? "object-contain" : "object-cover"}`} /> : <span className="text-xl">🍔</span>}
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-syne font-black text-sm leading-tight truncate">{item.name}</h3>
@@ -827,9 +827,32 @@ export default function MenuPage() {
               <div>
                 <label className="block text-xs font-bold mb-2 uppercase tracking-wider" style={{color:"var(--muted)"}}>Imagen</label>
                 {imagePreview && (
-                  <div className="relative w-full h-40 rounded-xl overflow-hidden mb-2">
-                    <Image src={imagePreview} alt="preview" fill className="object-cover" />
-                  </div>
+                  <>
+                    <div className="relative w-full h-40 rounded-xl overflow-hidden mb-2" style={{background:"var(--surf2)"}}>
+                      <Image src={imagePreview} alt="preview" fill className={form.imageFit === "contain" ? "object-contain" : "object-cover"} />
+                    </div>
+                    <div className="flex gap-2 mb-2">
+                      {([["cover","Rellenar","Recorta para llenar la tarjeta"],["contain","Ajustar","Muestra la foto completa"]] as const).map(([val,label,hint]) => {
+                        const active = form.imageFit === val;
+                        return (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setForm(p => ({...p, imageFit: val}))}
+                            title={hint}
+                            className="flex-1 px-3 py-2 rounded-xl text-xs font-black border transition-all"
+                            style={{
+                              background: active ? "var(--gold)" : "transparent",
+                              color: active ? "#000" : "var(--muted)",
+                              borderColor: active ? "var(--gold)" : "var(--border)",
+                            }}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
                 <label className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer border w-full"
                   style={{borderColor:"var(--border)",color:"var(--muted)"}}>

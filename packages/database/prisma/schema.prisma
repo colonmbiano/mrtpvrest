@@ -555,6 +555,11 @@ model MenuItem {
   name            String
   description     String?
   imageUrl        String?
+  // Cómo encuadrar la foto en las tarjetas del menú/tienda:
+  // "cover" (default) rellena el recuadro y recorta lo que sobra,
+  // "contain" muestra la foto completa sin recortar (puede dejar
+  // bordes). Se configura por platillo desde /admin/menu.
+  imageFit        String   @default("cover")
   price           Float
   isAvailable     Boolean  @default(true)
   isPopular       Boolean  @default(false)

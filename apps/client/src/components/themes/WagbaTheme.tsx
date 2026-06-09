@@ -373,7 +373,7 @@ function ProductCard({ p, accent, isFav, onFav, onOpen }: any) {
         {p.isPromo && <span className="absolute top-2 left-2 z-10 text-[9px] font-bold px-2 py-1 rounded-full text-white" style={{ background: accent }}>OFERTA</span>}
         {p.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+          <img src={p.imageUrl} alt={p.name} className={`w-full h-full ${p.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
         ) : <div className="w-full h-full flex items-center justify-center text-3xl opacity-30">🍔</div>}
       </button>
       <button onClick={onFav} className="absolute top-4 right-4 z-10 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur" style={{ background: '#0A0A0Caa' }} aria-label="Favorito">
@@ -439,7 +439,7 @@ function HomeBody({ info, categories, banners, popular, accent, favs, onFav, onO
           </div>
           {popular[0].imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={popular[0].imageUrl} alt={popular[0].name} className="w-28 h-28 rounded-[18px] object-cover shrink-0" />
+            <img src={popular[0].imageUrl} alt={popular[0].name} className={`w-28 h-28 rounded-[18px] shrink-0 ${popular[0].imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
           )}
         </button>
       )}
@@ -480,7 +480,7 @@ function HomeBody({ info, categories, banners, popular, accent, favs, onFav, onO
                   <div className="w-16 h-16 rounded-[14px] overflow-hidden shrink-0" style={{ background: '#FFFFFF08' }}>
                     {p.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                      <img src={p.imageUrl} alt={p.name} className={`w-full h-full ${p.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
                     ) : <div className="w-full h-full flex items-center justify-center text-xl opacity-30">🍔</div>}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -757,7 +757,7 @@ function MealDetails({ product, accent, isFav, onFav, onBack, onAdded }: any) {
       <div className="relative w-full h-72">
         {product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+          <img src={product.imageUrl} alt={product.name} className={`w-full h-full ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
         ) : <div className="w-full h-full flex items-center justify-center text-6xl opacity-20" style={{ background: CARD }}>🍔</div>}
         <div className="absolute inset-x-0 bottom-0 h-24" style={{ background: `linear-gradient(to top, ${BG}, transparent)` }} />
         <button onClick={onBack} className="absolute top-5 left-4 w-10 h-10 rounded-full flex items-center justify-center backdrop-blur" style={{ background: '#0A0A0Caa' }}><ChevronLeft className="w-5 h-5" /></button>
@@ -883,7 +883,7 @@ function CartScreen({ accent, minOrderAmount = 0, onCheckout, onBrowse, onOpen, 
               <div className="w-16 h-16 rounded-[14px] overflow-hidden shrink-0" style={{ background: '#FFFFFF08' }}>
                 {src?.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={src.imageUrl} alt={l.name} className="w-full h-full object-cover" />
+                  <img src={src.imageUrl} alt={l.name} className={`w-full h-full ${src.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
                 ) : <div className="w-full h-full flex items-center justify-center text-xl opacity-30">🍔</div>}
               </div>
               <div className="flex-1 min-w-0">
