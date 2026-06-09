@@ -138,6 +138,21 @@ router.post('/', async (req, res) => {
       cashShiftId = openShift.id;
     }
 
+    // createdBy es FK a la tabla `users`, pero el TPV se autentica como
+    // Employee (req.user.id = id de empleado, que NO existe en users). Setear
+    // createdById con un id de empleado violaba la FK y devolvía 500 en CADA
+    // guardado desde caja. Solo lo seteamos si el id corresponde a un User
+    // real (caso admin web); para empleados del TPV queda null. La atribución
+    // de gastos en efectivo sigue siendo recuperable vía CashShift.openedBy.
+    let createdById = null;
+    if (userId) {
+      const u = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      });
+      if (u) createdById = u.id;
+    }
+
     // Transacción: OperatingExpense + (opcional) ShiftExpense + actualizar
     // cache de CashShift.totalExpenses.
     const result = await prisma.$transaction(async (tx) => {
@@ -152,7 +167,7 @@ router.post('/', async (req, res) => {
           occurredAt: occurredAt ? new Date(occurredAt) : new Date(),
           photoUrl: photoUrl || null,
           notes: notes || null,
-          createdById: userId,
+          createdById,
           cashShiftId,
         },
       });

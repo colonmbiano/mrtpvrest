@@ -569,6 +569,26 @@ async function dispatchToStations(
   return { ok, failed };
 }
 
+// Pulso de apertura de cajón (ESC p m t1 t2). El cajón monedero va conectado
+// al puerto RJ11 de la impresora de mostrador, así que el pulso se manda a la
+// impresora CASHIER. Mantenemos t1/t2 ≤ 0x7F porque normalizeThermalText()
+// descarta cualquier byte > 0x7F (se envía como utf8) — un 0xFA típico se
+// borraría y corrompería el comando. Disparamos pin 0 y pin 1 para cubrir
+// ambos cableados de cajón comunes (pin 2 / pin 5).
+const DRAWER_KICK =
+  ESC + "p" + "\x00" + "\x19" + "\x78" + ESC + "p" + "\x01" + "\x19" + "\x78";
+
+/**
+ * Abre el cajón monedero enviando el pulso ESC/POS a las impresoras CASHIER
+ * activas. No lanza; devuelve el mismo conteo ok/failed que dispatchToStations
+ * (failed con el motivo cuando no hay impresora CASHIER con IP configurada).
+ */
+export async function openCashDrawer(
+  printers: PrinterRecord[],
+): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
+  return dispatchToStations(printers, ["CASHIER"], DRAWER_KICK);
+}
+
 /**
  * Imprime comandas en cocina (KITCHEN + BAR).
  *

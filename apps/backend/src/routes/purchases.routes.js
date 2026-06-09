@@ -140,6 +140,20 @@ router.post('/', async (req, res) => {
     });
     if (!supplier) return res.status(400).json({ error: 'Supplier no pertenece a este restaurant' });
 
+    // PurchaseOrder.createdBy y StockMovement.user son FKs a la tabla `users`,
+    // pero el TPV se autentica como Employee (req.user.id = id de empleado, que
+    // NO existe en users). Setear estos campos con un id de empleado violaba la
+    // FK y devolvía 500 al recibir la compra desde caja. Resolvemos a un User
+    // real solo si existe (caso admin web); para empleados del TPV queda null.
+    let createdById = null;
+    if (userId) {
+      const u = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      });
+      if (u) createdById = u.id;
+    }
+
     // ── Transacción ──
     const result = await prisma.$transaction(async (tx) => {
       const poNumber = await nextPoNumber(tx, locationId);
@@ -156,7 +170,7 @@ router.post('/', async (req, res) => {
           totalAmount,
           notes: notes || null,
           receivedAt: occurredAt ? new Date(occurredAt) : new Date(),
-          createdById: userId,
+          createdById,
         },
       });
 
@@ -193,7 +207,7 @@ router.post('/', async (req, res) => {
             refId: po.id,
             balanceAfter: Number(updated.stock),
             unitCostAtMove: it.unitPrice,
-            userId,
+            userId: createdById,
             notes: `Compra ${poNumber} · ${supplier.name}`,
           },
         });

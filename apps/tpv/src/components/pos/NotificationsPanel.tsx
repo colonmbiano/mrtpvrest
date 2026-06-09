@@ -8,8 +8,8 @@ import { useNotifStore, type Notification, type NotifType } from "@/hooks/useNot
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function timeAgo(date: Date): string {
-  const ms = Date.now() - date.getTime();
+function timeAgo(ts: number): string {
+  const ms = Date.now() - ts;
   const s = Math.floor(ms / 1000);
   if (s < 60) return "ahora";
   const m = Math.floor(s / 60);
