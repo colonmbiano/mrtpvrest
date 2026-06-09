@@ -384,12 +384,15 @@ router.post('/orders', async (req, res) => {
     tip: rawTip,
     couponCode: rawCouponCode,
     loyaltyQrCode: rawLoyaltyQr,
+    redeemPoints: rawRedeemPoints,
   } = req.body;
   const deliveryLat = (rawLat != null && !Number.isNaN(Number(rawLat))) ? Number(rawLat) : null;
   const deliveryLng = (rawLng != null && !Number.isNaN(Number(rawLng))) ? Number(rawLng) : null;
   const tip = Math.max(0, Number(rawTip) || 0);
   const couponCode = typeof rawCouponCode === 'string' ? rawCouponCode.trim().toUpperCase() : '';
   const loyaltyQrCode = typeof rawLoyaltyQr === 'string' ? rawLoyaltyQr.trim() : '';
+  // Fase 2 lealtad: puntos que el cliente quiere canjear como descuento.
+  const redeemPoints = Math.max(0, Math.floor(Number(rawRedeemPoints) || 0));
 
   const VALID_ORDER_TYPES = ['DELIVERY', 'TAKEOUT', 'DINE_IN'];
   const resolvedOrderType = VALID_ORDER_TYPES.includes(orderType) ? orderType : 'DELIVERY';
@@ -611,11 +614,9 @@ router.post('/orders', async (req, res) => {
       }
     }
 
-    const total = Math.max(0, subtotal - discount + deliveryFee + tip);
-
-    // Loyalty: si el cliente proveyó qrCode, buscar y asociar la order al
-    // userId del LoyaltyAccount. Los puntos se otorgan en otro paso (al
-    // confirmar pago). No bloquea si el qr es inválido.
+    // Loyalty: asociar el pedido a la cuenta del cliente (por QR o por sesión).
+    // Los puntos GANADOS se otorgan tras crear el pedido; aquí resolvemos
+    // además el CANJE de puntos como descuento (Fase 2).
     let loyaltyUserId = null;
     if (loyaltyQrCode) {
       const account = await prisma.loyaltyAccount.findFirst({
@@ -624,11 +625,32 @@ router.post('/orders', async (req, res) => {
       });
       loyaltyUserId = account?.userId || null;
     }
-    // Cliente final con sesión iniciada (correo+contraseña): asociamos el pedido
-    // a su cuenta para que aparezca en su historial y acumule puntos.
     if (!loyaltyUserId) {
       loyaltyUserId = await resolveCustomerId(req, restaurant.id);
     }
+
+    // Canje de puntos → descuento. Solo para clientes identificados. Nunca deja
+    // los productos en negativo ni canjea más puntos de los que tiene la cuenta.
+    let redeemAccount = null;
+    let pointsUsed = 0;
+    let pointsDiscount = 0;
+    if (redeemPoints > 0 && loyaltyUserId) {
+      redeemAccount = await prisma.loyaltyAccount.findUnique({
+        where: { userId_restaurantId: { userId: loyaltyUserId, restaurantId: restaurant.id } },
+        select: { id: true, points: true },
+      });
+      const ppv = config?.pointsValuePesos || 0;
+      if (redeemAccount && ppv > 0) {
+        const maxDiscount = Math.max(0, subtotal - discount); // tope: lo cobrable de productos
+        const desired = Math.min(redeemPoints, redeemAccount.points);
+        pointsUsed = Math.min(desired, Math.floor(maxDiscount / ppv + 1e-9));
+        pointsDiscount = Math.round(pointsUsed * ppv * 100) / 100;
+      }
+    }
+    discount = Math.round((discount + pointsDiscount) * 100) / 100;
+
+    const total = Math.max(0, subtotal - discount + deliveryFee + tip);
+
     const orderNumberPrefix = source === 'KIOSK' ? 'KIOSK-' : 'WEB-';
     const orderNumber = orderNumberPrefix + Date.now().toString().slice(-6);
 
@@ -657,12 +679,23 @@ router.post('/orders', async (req, res) => {
         deliveryDistanceKm: resolvedOrderType === 'DELIVERY' ? deliveryDistanceKm : null,
         notes:           notes?.trim() || null,
         userId:          loyaltyUserId,
+        pointsUsed,
         items: { create: itemsData },
       },
       include: {
         items: { include: { menuItem: { select: { name: true } } } },
       },
     });
+
+    // Canje: descontar los puntos usados y registrar el movimiento REDEEMED.
+    if (pointsUsed > 0 && redeemAccount) {
+      prisma.$transaction([
+        prisma.loyaltyAccount.update({ where: { id: redeemAccount.id }, data: { points: { decrement: pointsUsed } } }),
+        prisma.loyaltyTransaction.create({
+          data: { accountId: redeemAccount.id, type: 'REDEEMED', points: -pointsUsed, description: `Canje en pedido ${order.orderNumber}`, orderId: order.id },
+        }),
+      ]).catch(() => null);
+    }
 
     // Lealtad: si el pedido está ligado a un cliente, acumulamos puntos sobre el
     // subtotal (crea la cuenta si no existía). Best-effort: no bloquea la orden.
@@ -700,6 +733,8 @@ router.post('/orders', async (req, res) => {
       status:      order.status,
       total:       order.total,
       discount,
+      pointsUsed,
+      pointsDiscount,
       tip:         order.tip,
       estimatedMinutes: order.estimatedMinutes || 30,
       couponWarnings,
