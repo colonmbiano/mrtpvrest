@@ -244,11 +244,13 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
 
     // deliveryDriverId es un FK escalar sin relación Prisma, así que el nombre
     // del repartidor se resuelve con una consulta batch y se adjunta como
-    // deliveryDriverName para que el TPV muestre "asignado a X".
+    // deliveryDriverName para que el TPV muestre "asignado a X". Los repartidores
+    // son Employee (no User): el TPV autentica como Employee, así que el id de
+    // deliveryDriverId apunta a la tabla Employee.
     const driverIds = [...new Set(orders.map(o => o.deliveryDriverId).filter(Boolean))];
     let driverMap = {};
     if (driverIds.length) {
-      const drivers = await prisma.user.findMany({
+      const drivers = await prisma.employee.findMany({
         where: { id: { in: driverIds } },
         select: { id: true, name: true },
       });
