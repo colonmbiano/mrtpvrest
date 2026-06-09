@@ -92,7 +92,7 @@ export default function MesasPage() {
           : "No se pudieron cargar las mesas reales. Configura la tablet o revisa sesion.";
       setError(
         message.toLowerCase().includes("token")
-          ? "Sesion vencida. Vuelve a configurar esta tablet."
+          ? "Sesion vencida. Vuelve a ingresar tu PIN (no hace falta reconfigurar la tablet)."
           : message,
       );
       setLoadState("error");

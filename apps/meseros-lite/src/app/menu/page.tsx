@@ -373,10 +373,17 @@ export default function MenuPage() {
         typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === "string"
           ? (err as { response: { data: { error: string } } }).response.data.error
           : directMessage || "No se pudo guardar la comanda. Revisa sesion, sucursal y turno.";
-      const friendlyMessage = message.toLowerCase().includes("token")
-        ? "Sesion vencida. Vuelve a configurar la tablet en Perfil / Configurar restaurante y sucursal."
+      const isTokenError = message.toLowerCase().includes("token");
+      const friendlyMessage = isTokenError
+        ? "Sesion vencida. Vuelve a ingresar tu PIN para continuar (no hace falta reconfigurar la tablet)."
         : message;
       setSaveError(friendlyMessage);
+      // Sesion expirada: el interceptor ya limpio el token; llevamos al mesero
+      // directo al PIN en vez de dejarlo atascado en /menu con el error. La
+      // comanda actual sigue en el ticket local hasta que reingrese.
+      if (isTokenError) {
+        window.setTimeout(() => router.replace("/pin"), 1200);
+      }
     } finally {
       setSaving(false);
     }
