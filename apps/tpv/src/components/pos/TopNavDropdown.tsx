@@ -8,7 +8,8 @@ import {
   BarChart3,
   Bell,
   Wallet,
-  Bike
+  Bike,
+  Globe
 } from "lucide-react";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useRouter, usePathname } from "next/navigation";
@@ -18,17 +19,22 @@ interface Props {
   onOpenMenu: () => void;
   onOpenOrders: () => void;
   onOpenNotifs: () => void;
+  onOpenWebOrders?: () => void;
   onOpenExpenses?: () => void;
   hasOpenOrders: boolean;
   unreadNotifs?: number;
+  /** Pedidos web PENDING (sin aceptar) — alimenta el badge de la pestaña. */
+  webOrdersCount?: number;
 }
 
 export default function TopNavDropdown({
   onOpenMenu,
   onOpenOrders,
   onOpenNotifs,
+  onOpenWebOrders,
   onOpenExpenses,
   unreadNotifs = 0,
+  webOrdersCount = 0,
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const { currentEmployee } = useTPVAuth();
@@ -57,12 +63,21 @@ export default function TopNavDropdown({
       active: getActive("/pos"),
       onClick: () => router.push("/pos/menu"),
     },
-    { 
-      id: "orders", 
-      icon: Receipt, 
+    {
+      id: "orders",
+      icon: Receipt,
       label: "Abiertos",
       active: false,
       onClick: onOpenOrders,
+    },
+    {
+      id: "weborders",
+      icon: Globe,
+      label: "Pedidos Web",
+      active: false,
+      onClick: () => onOpenWebOrders?.(),
+      badge: webOrdersCount,
+      hidden: !onOpenWebOrders,
     },
     { 
       id: "drivers", 
@@ -103,8 +118,12 @@ export default function TopNavDropdown({
           className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#6b5641] bg-[#1e1b18] text-[#f8e8d0] shadow-[0_4px_12px_rgba(44,31,19,0.22)] transition-all active:scale-95 hover:border-[#ff8400]/60 hover:text-[#ffb84d]"
         >
           <Menu size={20} />
-          {unreadNotifs > 0 && (
-            <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(255,184,77,0.6)]" />
+          {(unreadNotifs > 0 || webOrdersCount > 0) && (
+            <span
+              className={`absolute -top-1 -right-1 w-3 h-3 rounded-full shadow-[0_0_8px_rgba(255,184,77,0.6)] ${
+                webOrdersCount > 0 ? "bg-[#5e6ad2]" : "bg-amber-500"
+              }`}
+            />
           )}
         </button>
 
@@ -139,6 +158,11 @@ export default function TopNavDropdown({
               >
                 <item.icon size={18} />
                 <span className="text-sm font-bold">{item.label}</span>
+                {(item as any).badge > 0 && (
+                  <span className="ml-auto bg-[#5e6ad2] text-white px-1.5 py-0.5 rounded-md text-[10px] font-black min-w-[20px] text-center">
+                    {(item as any).badge}
+                  </span>
+                )}
               </button>
             ))}
 

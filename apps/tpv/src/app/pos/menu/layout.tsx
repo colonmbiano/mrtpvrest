@@ -19,12 +19,15 @@ import {
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
+import { useActiveOrderStore } from "@/store/activeOrderStore";
 import api from "@/lib/api";
-import { apiOrQueue } from "@/lib/offline";
+import { apiOrQueue, syncOfflineQueue } from "@/lib/offline";
+import useOfflineStore from "@/store/useOfflineStore";
 import {
   printCustomerReceipt,
   printSplitReceipts,
   printEqualSplitReceipts,
+  openCashDrawer,
   type TicketItem,
   type ReceiptInput,
 } from "@/lib/printer-tcp";
@@ -38,6 +41,7 @@ import { useUIStore } from "@/store/useUIStore";
 import ShiftModal from "@/components/admin/ShiftModal";
 import { useThemeStore, type Palette } from "@/store/themeStore";
 import NotificationsPanel from "@/components/pos/NotificationsPanel";
+import WebOrdersPanel from "@/components/pos/WebOrdersPanel";
 import { useNotifications, useNotifStore } from "@/hooks/useNotifications";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
 import MergeTableModal from "@/components/pos/MergeTableModal";
@@ -66,6 +70,10 @@ const ACTIVE_STATUSES = new Set([
   "ON_THE_WAY",
 ]);
 
+// Orígenes que cuentan como "pedido web" (tienda en línea). KIOSK queda fuera
+// porque tiene su propio flujo de notificación.
+const ONLINE_SOURCES = new Set(["ONLINE", "STORE"]);
+
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   const m = Math.max(0, Math.floor(ms / 60000));
@@ -82,6 +90,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [askingAdminPin, setAskingAdminPin] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [showWebOrders, setShowWebOrders] = useState(false);
+  const [acceptingWebId, setAcceptingWebId] = useState<string | null>(null);
   const [showExpenses, setShowExpenses] = useState(false);
   const [showCatalogSettings, setShowCatalogSettings] = useState(false);
   const [mobileView, setMobileView] = useState<"menu" | "ticket">("menu");
@@ -412,11 +422,27 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   };
 
   const handleShowDetail = async (o: any) => {
-    setDetailOrder(await fetchFullOrder(o));
+    // Apertura optimista: pintamos el modal de inmediato con lo que ya
+    // tenemos del listado (items, totales, header) para que el toque se
+    // sienta instantáneo. El detalle completo (modificadores y printerGroups
+    // para reimpresión) se hidrata en segundo plano y se fusiona encima.
+    setDetailOrder(o);
+    const full = await fetchFullOrder(o);
+    // Solo aplica la hidratación si el usuario sigue en el mismo ticket
+    // (no cerró el modal ni abrió otro mientras llegaba la respuesta).
+    setDetailOrder((cur: any) => (cur && cur.id === o.id ? full : cur));
   };
 
   const handleOpenPayment = async (o: any) => {
-    setPayOrder(await fetchFullOrder(o));
+    // El cobro necesita los datos completos (modificadores y printerGroups
+    // para enrutar la comanda a cocina), así que esperamos el detalle —
+    // sin apertura optimista, porque es una acción de dinero. Cerramos el
+    // drawer al mismo tiempo que abrimos el modal: el drawer es z-[120] y el
+    // PaymentModal z-[100], si quedara abierto taparía el cobro.
+    const full = await fetchFullOrder(o);
+    setShowOrders(false);
+    useUIStore.getState().setIsOrdersOpen(false);
+    setPayOrder(full);
   };
 
   // Mapea items raw del backend al shape de printer-tcp. Resuelve
@@ -531,6 +557,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     if (!detailOrder) return;
     setPayOrder(detailOrder);
     setDetailOrder(null);
+    // El drawer de "Tickets Abiertos" es z-[120] y el modal de pago es
+    // z-[100]: si lo dejamos abierto, queda encima y tapa el cobro. Lo
+    // cerramos para que el modal de pago sea la superficie superior.
+    setShowOrders(false);
+    useUIStore.getState().setIsOrdersOpen(false);
   };
 
   const handleReprintFromDetail = async () => {
@@ -559,6 +590,38 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     },
     [detailOrder, fetchOpenOrders],
   );
+
+  // Reabrir la orden abierta en el menú para agregar más productos (una
+  // ronda nueva sobre la misma cuenta). Hidrata el ticket + activeOrder y
+  // cierra los overlays; el menú queda detrás listo para sumar productos.
+  const handleAddProductsFromDetail = useCallback(() => {
+    if (!detailOrder) return;
+    const o = detailOrder;
+    const isDineIn = o.orderType === "DINE_IN";
+    const tableName = o.table?.name || (o.tableNumber != null ? String(o.tableNumber) : "");
+    useTicketStore.getState().updateTicket({
+      type: o.orderType || "TAKEOUT",
+      tableId: o.tableId || o.table?.id || "",
+      tableName,
+      table: tableName,
+      numberOfGuests: o.numberOfGuests ?? null,
+      activeSeat: isDineIn ? 1 : null,
+      items: [],
+      name: o.customerName || o.user?.name || "",
+      phone: o.customerPhone || "",
+      address: o.deliveryAddress || "",
+      discount: 0,
+    });
+    useActiveOrderStore.getState().setActiveOrder(
+      o.id,
+      o.tableId || o.table?.id || "",
+      o.orderNumber ?? null,
+    );
+    setDetailOrder(null);
+    setShowOrders(false);
+    useUIStore.getState().setIsOrdersOpen(false);
+    toast.success("Agrega los productos y pulsa Guardar para sumarlos a la cuenta");
+  }, [detailOrder]);
 
   // Dividir la cuenta: mueve los itemIds a un nuevo ticket abierto. La
   // original conserva el resto. Tras dividir, el detalle muestra la cuenta
@@ -609,6 +672,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     if (!detailOrder) return;
     setAssigningOrder(detailOrder);
     setDetailOrder(null);
+    // Mismo motivo que en el cobro: el drawer (z-[120]) tapaba el modal de
+    // asignación (z-50). Lo cerramos para que quede visible y operable.
+    setShowOrders(false);
+    useUIStore.getState().setIsOrdersOpen(false);
   }, [detailOrder]);
 
   const handleChangeTypeFromDetail = useCallback(() => {
@@ -661,6 +728,29 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     driver: o.deliveryDriverName || undefined,
     needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
   }));
+
+  // Pedidos de la tienda en línea (source ONLINE/STORE) para la pestaña web.
+  // Salen del mismo openOrders ya polleado, así que sobreviven a un reinicio
+  // del TPV (el backend es la fuente de verdad, no solo la notificación).
+  const webOrders = openOrders.filter((o: any) =>
+    ONLINE_SOURCES.has(String(o.source || "").toUpperCase()),
+  );
+  const webOrdersData = webOrders.map((o: any) => ({
+    id: o.id,
+    orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
+    customerName: o.customerName || o.user?.name || "Cliente",
+    customerPhone: o.customerPhone || null,
+    orderType: o.orderType || "TAKEOUT",
+    status: o.status,
+    total: Number(o.total ?? 0),
+    createdAt: o.createdAt,
+    itemsCount: Array.isArray(o.items) ? o.items.length : 0,
+    address: o.deliveryAddress || o.address?.street || null,
+  }));
+  // Solo los PENDING requieren acción del cajero → ese es el número del badge.
+  const pendingWebCount = webOrders.filter(
+    (o: any) => o.status === "PENDING",
+  ).length;
 
   const canMergeOpenOrders = currentEmployee?.role
     ? ["ADMIN", "SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"].includes(
@@ -741,6 +831,82 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       return;
     }
     handleChargeFromDetail();
+  };
+
+  // Abrir cajón monedero: dispara el pulso ESC/POS a la(s) impresora(s)
+  // CASHIER (el cajón va físicamente conectado a la de mostrador).
+  const handleOpenCashDrawer = useCallback(async () => {
+    const t = toast.loading("Abriendo cajón…");
+    try {
+      const res = await openCashDrawer(printers);
+      if (res.ok > 0) {
+        toast.success("Cajón abierto", { id: t });
+      } else {
+        toast.error(res.failed[0]?.error || "No se pudo abrir el cajón", {
+          id: t,
+        });
+      }
+    } catch (err: any) {
+      toast.error("Error al abrir cajón: " + (err?.message || "fallo"), {
+        id: t,
+      });
+    }
+  }, [printers]);
+
+  // Sincronizar ahora: fuerza el envío de la cola offline (también corre sola
+  // en intervalo) y reporta cuántas transacciones quedaban pendientes.
+  const handleSyncNow = useCallback(async () => {
+    const pending = useOfflineStore.getState().getUnsyncedTransactions().length;
+    if (pending === 0) {
+      toast.success("Todo sincronizado ✓");
+      return;
+    }
+    const t = toast.loading(
+      `Sincronizando ${pending} pendiente${pending === 1 ? "" : "s"}…`,
+    );
+    try {
+      await syncOfflineQueue();
+      const left = useOfflineStore.getState().getUnsyncedTransactions().length;
+      if (left === 0) {
+        toast.success("Sincronización completa ✓", { id: t });
+      } else {
+        toast.warning(`Quedan ${left} sin sincronizar`, { id: t });
+      }
+    } catch (err: any) {
+      toast.error("Error al sincronizar: " + (err?.message || "fallo"), {
+        id: t,
+      });
+    }
+  }, []);
+
+  // Aceptar un pedido web: PENDING → CONFIRMED. Tras confirmar, refrescamos el
+  // listado para que salga de "nuevos por aceptar" y el badge baje.
+  const handleAcceptWebOrder = useCallback(
+    async (id: string) => {
+      setAcceptingWebId(id);
+      try {
+        await api.put(`/api/orders/${id}/status`, { status: "CONFIRMED" });
+        toast.success("Pedido web aceptado");
+        fetchOpenOrders();
+      } catch (err: any) {
+        toast.error(
+          "Error al aceptar: " +
+            (err?.response?.data?.error || err?.message || "fallo desconocido"),
+        );
+      } finally {
+        setAcceptingWebId(null);
+      }
+    },
+    [fetchOpenOrders],
+  );
+
+  // Abre el detalle completo de un pedido web reusando el modal existente.
+  // Cierra el panel web para que el modal quede como superficie superior.
+  const handleShowWebDetail = (id: string) => {
+    const o = openOrders.find((x: any) => x.id === id);
+    if (!o) return;
+    setShowWebOrders(false);
+    handleShowDetail(o);
   };
 
   if (!mounted) return <div className="h-[100dvh] w-full bg-surf-0" />;
@@ -875,6 +1041,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
               ? handleSplitFromDetail
               : undefined
           }
+          onAddProducts={
+            !["DELIVERED", "CANCELLED"].includes(detailOrder.status) &&
+            detailOrder.paymentStatus !== "PAID"
+              ? handleAddProductsFromDetail
+              : undefined
+          }
         />
 
       )}
@@ -993,6 +1165,16 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         onClose={() => setShowNotifs(false)}
       />
 
+      <WebOrdersPanel
+        isOpen={showWebOrders}
+        onClose={() => setShowWebOrders(false)}
+        orders={webOrdersData}
+        hideMoney={isLoanMode}
+        acceptingId={acceptingWebId}
+        onAccept={handleAcceptWebOrder}
+        onShowDetail={handleShowWebDetail}
+      />
+
       {showCatalogSettings && (
         <CatalogSettingsSheet onClose={() => setShowCatalogSettings(false)} />
       )}
@@ -1053,9 +1235,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                 onOpenMenu={() => setShowMenu(true)}
                 onOpenOrders={() => setShowOrders(true)}
                 onOpenNotifs={() => setShowNotifs((v) => !v)}
+                onOpenWebOrders={() => setShowWebOrders(true)}
                 onOpenExpenses={isLoanMode ? undefined : () => setShowExpenses(true)}
                 hasOpenOrders={openOrders.length > 0}
                 unreadNotifs={unreadCount}
+                webOrdersCount={pendingWebCount}
               />
             </div>
 
@@ -1101,12 +1285,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
               <TopActionsDropdown
                 onClearTicket={() => useTicketStore.getState().clearActiveItems()}
                 hasItems={itemCount > 0}
-                onOpenDrawer={() => {}}
+                onOpenDrawer={handleOpenCashDrawer}
                 onReprintKitchen={() => {}}
                 onReprintReceipt={() => {}}
-                onSync={() => {}}
-                onSplitTicket={() => {}}
-                onMoveTicket={() => {}}
+                onSync={handleSyncNow}
                 onOpenCatalogSettings={() => setShowCatalogSettings(true)}
               />
             </div>

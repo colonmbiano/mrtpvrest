@@ -6,9 +6,14 @@
 "use client";
 import { useEffect, useRef, useCallback } from "react";
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { io, Socket } from "socket.io-client";
 import { getApiUrl } from "@/lib/config";
 import { getTenantIds } from "@/lib/tenant";
+import {
+  playNotificationSound,
+  primeNotificationSound,
+} from "@/lib/notificationSound";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -27,7 +32,9 @@ export interface Notification {
   body: string;
   orderNumber?: string;
   total?: number;
-  createdAt: Date;
+  /** Epoch ms. Número (no Date) para que sobreviva a la serialización del
+   *  persist de zustand sin romperse al rehidratar. */
+  createdAt: number;
   read: boolean;
 }
 
@@ -42,46 +49,60 @@ interface NotifState {
   clear: () => void;
 }
 
-export const useNotifStore = create<NotifState>((set, _get) => ({
-  notifications: [],
-  unreadCount: 0,
-
-  addNotification: (n) => {
-    const notif: Notification = {
-      ...n,
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      createdAt: new Date(),
-      read: false,
-    };
-    set((s) => ({
-      notifications: [notif, ...s.notifications].slice(0, 50), // máx 50
-      unreadCount: s.unreadCount + 1,
-    }));
-
-    // Sonido de notificación (si el navegador lo permite)
-    try {
-      const audio = new Audio("/notification.mp3");
-      audio.volume = 0.4;
-      audio.play().catch(() => {});
-    } catch {}
-  },
-
-  markAllRead: () =>
-    set((s) => ({
-      notifications: s.notifications.map((n) => ({ ...n, read: true })),
+// Persistido en localStorage para que las notificaciones (y el contador sin
+// leer) sobrevivan a recargas / reinicios de la terminal: un pedido web que
+// entró mientras el TPV estaba cerrado no se pierde de la bandeja.
+export const useNotifStore = create<NotifState>()(
+  persist(
+    (set, _get) => ({
+      notifications: [],
       unreadCount: 0,
-    })),
 
-  markRead: (id) =>
-    set((s) => ({
-      notifications: s.notifications.map((n) =>
-        n.id === id ? { ...n, read: true } : n
-      ),
-      unreadCount: Math.max(0, s.unreadCount - 1),
-    })),
+      addNotification: (n) => {
+        const notif: Notification = {
+          ...n,
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          createdAt: Date.now(),
+          read: false,
+        };
+        set((s) => ({
+          notifications: [notif, ...s.notifications].slice(0, 50), // máx 50
+          unreadCount: s.unreadCount + 1,
+        }));
 
-  clear: () => set({ notifications: [], unreadCount: 0 }),
-}));
+        // Timbre de notificación vía Web Audio (ver notificationSound.ts). El
+        // <audio src="/notification.mp3"> anterior daba 404 —el asset no existe
+        // en apps/tpv/public— así que ningún pedido web sonaba.
+        playNotificationSound();
+      },
+
+      markAllRead: () =>
+        set((s) => ({
+          notifications: s.notifications.map((n) => ({ ...n, read: true })),
+          unreadCount: 0,
+        })),
+
+      markRead: (id) =>
+        set((s) => ({
+          notifications: s.notifications.map((n) =>
+            n.id === id ? { ...n, read: true } : n
+          ),
+          unreadCount: Math.max(0, s.unreadCount - 1),
+        })),
+
+      clear: () => set({ notifications: [], unreadCount: 0 }),
+    }),
+    {
+      name: "tpv-notifications",
+      storage: createJSONStorage(() => localStorage),
+      // No persistimos las funciones, solo los datos.
+      partialize: (s) => ({
+        notifications: s.notifications,
+        unreadCount: s.unreadCount,
+      }),
+    },
+  ),
+);
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -146,6 +167,10 @@ export function useNotifications() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    // Desbloquea el audio en el primer gesto del cajero para sortear la
+    // política de autoplay; sin esto el primer pedido web no sonaría.
+    primeNotificationSound();
 
     const { restaurantId, locationId } = getTenantIds();
     if (!restaurantId) return;

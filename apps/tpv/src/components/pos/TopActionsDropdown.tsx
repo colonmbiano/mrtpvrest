@@ -1,11 +1,9 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { 
-  MoreVertical, 
-  Trash2, 
-  Printer, 
-  SplitSquareHorizontal, 
-  ArrowRightLeft, 
+import {
+  MoreVertical,
+  Trash2,
+  Printer,
   RefreshCw,
   Wallet,
   Receipt,
@@ -19,8 +17,6 @@ interface Props {
   onReprintKitchen?: () => void;
   onReprintReceipt?: () => void;
   onSync?: () => void;
-  onSplitTicket?: () => void;
-  onMoveTicket?: () => void;
   onOpenCatalogSettings?: () => void;
   hasItems: boolean;
 }
@@ -31,8 +27,6 @@ export default function TopActionsDropdown({
   onReprintKitchen,
   onReprintReceipt,
   onSync,
-  onSplitTicket,
-  onMoveTicket,
   onOpenCatalogSettings,
   hasItems
 }: Props) {
@@ -110,24 +104,6 @@ export default function TopActionsDropdown({
           </button>
 
           <div className="h-[1px] w-full bg-white/5 my-1" />
-
-          <button
-            onClick={() => handleAction(onSplitTicket)}
-            disabled={!hasItems}
-            className="flex items-center gap-3 px-3 py-3 rounded-xl text-zinc-300 hover:text-white hover:bg-white/5 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
-          >
-            <SplitSquareHorizontal size={16} />
-            <span className="text-xs font-bold">Dividir ticket</span>
-          </button>
-
-          <button
-            onClick={() => handleAction(onMoveTicket)}
-            disabled={!hasItems}
-            className="flex items-center gap-3 px-3 py-3 rounded-xl text-zinc-300 hover:text-white hover:bg-white/5 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
-          >
-            <ArrowRightLeft size={16} />
-            <span className="text-xs font-bold">Mover ticket</span>
-          </button>
 
           <button
             onClick={() => handleAction(onClearTicket)}
