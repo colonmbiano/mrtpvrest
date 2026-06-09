@@ -11,6 +11,30 @@ type Movement = {
   createdAt: string;
 };
 
+type DriverOrder = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  paymentMethod: string | null;
+  paymentStatus: string | null;
+  total: number;
+  deliveryFee: number | null;
+  tip: number | null;
+  cashCollected: boolean;
+  customer: string | null;
+  customerPhone: string | null;
+  deliveryAddress: string | null;
+  createdAt: string;
+};
+
+type OrdersSummary = {
+  count: number;
+  total: number;
+  deliveryFees: number;
+  tips: number;
+  byMethod: Record<string, number>;
+};
+
 type Props = {
   driver: { id: string; name: string } | null;
   onClose: () => void;
@@ -18,10 +42,22 @@ type Props = {
   accent: string;
 };
 
+const PAYMENT_LABELS: Record<string, string> = {
+  CASH: "Efectivo",
+  TRANSFER: "Transferencia",
+  CARD: "Tarjeta",
+  OTHER: "Otro",
+};
+
 export default function DriverMovementsModal({ driver, onClose, onRefresh, accent }: Props) {
+  const [tab, setTab] = useState<"movimientos" | "pedidos">("movimientos");
   const [movements, setMovements] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [orders, setOrders] = useState<DriverOrder[]>([]);
+  const [ordersSummary, setOrdersSummary] = useState<OrdersSummary | null>(null);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [ordersLoaded, setOrdersLoaded] = useState(false);
 
   // Form state
   const [type, setType] = useState<"INCOME" | "EXPENSE" | "RETURN">("EXPENSE");
@@ -50,6 +86,21 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
     }
   }
 
+  async function fetchOrders() {
+    if (!driver) return;
+    try {
+      setLoadingOrders(true);
+      const { data } = await api.get(`/api/driver-cash/${driver.id}/orders`);
+      setOrders(data.orders || []);
+      setOrdersSummary(data.summary || null);
+      setOrdersLoaded(true);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingOrders(false);
+    }
+  }
+
   useEffect(() => {
     if (!driver) return;
     let cancelled = false;
@@ -57,6 +108,14 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
     queueMicrotask(() => { if (!cancelled) fetchMovements(); });
     return () => { cancelled = true; };
   }, [driver]);
+
+  // Carga diferida de pedidos: solo al abrir la pestaña por primera vez.
+  useEffect(() => {
+    if (tab === "pedidos" && !ordersLoaded && !loadingOrders) {
+      fetchOrders();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   async function handleAddMovement(e: React.FormEvent) {
     e.preventDefault();
@@ -91,12 +150,36 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
       >
         <div className="p-6 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg)]">
           <div>
-            <h2 className="text-xl font-black text-white">💰 Movimientos de Caja</h2>
+            <h2 className="text-xl font-black text-white">💰 Caja del Repartidor</h2>
             <p className="text-xs font-bold" style={{ color: accent }}>{driver.name}</p>
           </div>
           <button onClick={onClose} className="text-[var(--muted)] hover:text-white text-2xl">✕</button>
         </div>
 
+        {/* Pestañas */}
+        <div className="flex border-b border-[var(--border)] bg-[var(--bg)] px-6">
+          {([
+            { key: "movimientos", label: "Movimientos" },
+            { key: "pedidos", label: "Pedidos del día" },
+          ] as const).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className="relative py-3 px-4 text-xs font-black uppercase tracking-widest transition-colors"
+              style={{ color: tab === t.key ? "#fff" : "var(--muted)" }}
+            >
+              {t.label}
+              {tab === t.key && (
+                <span
+                  className="absolute left-0 right-0 -bottom-px h-0.5 rounded-full"
+                  style={{ background: accent }}
+                />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {tab === "movimientos" && (
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
           {/* Formulario */}
           <form onSubmit={handleAddMovement} className="space-y-4 bg-[var(--surf2)] p-4 rounded-2xl border border-[var(--border)]">
@@ -200,6 +283,88 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
             )}
           </div>
         </div>
+        )}
+
+        {tab === "pedidos" && (
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {loadingOrders ? (
+            <p className="text-sm text-[var(--muted)] animate-pulse">Cargando pedidos...</p>
+          ) : (
+            <>
+              {/* Resumen */}
+              {ordersSummary && ordersSummary.count > 0 && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-2xl bg-[var(--surf2)] border border-[var(--border)]">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1">Pedidos</div>
+                    <div className="text-xl font-black text-white">{ordersSummary.count}</div>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-[var(--surf2)] border border-[var(--border)]">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1">Total vendido</div>
+                    <div className="text-xl font-black text-white">${ordersSummary.total.toFixed(0)}</div>
+                  </div>
+                  {Object.entries(ordersSummary.byMethod).map(([method, amount]) => (
+                    <div key={method} className="p-3 rounded-2xl bg-[var(--surf2)] border border-[var(--border)]">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1">
+                        {PAYMENT_LABELS[method] || method}
+                      </div>
+                      <div className="text-base font-black" style={{ color: method === "CASH" ? "#88D66C" : "#fff" }}>
+                        ${amount.toFixed(0)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Lista de pedidos */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-widest text-white/40 ml-1">Pedidos asignados hoy</h3>
+                {orders.length === 0 ? (
+                  <p className="text-sm text-[var(--muted)] italic">No hay pedidos asignados hoy.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {orders.map((o) => (
+                      <div
+                        key={o.id}
+                        className="p-3 rounded-xl bg-[var(--surf2)] border border-[var(--border)]"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-xs font-black text-white truncate">
+                              {o.customer || "Público General"}
+                            </div>
+                            <div className="text-[10px] text-[var(--muted)]">
+                              {o.orderNumber} · {new Date(o.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-sm font-black text-white">${o.total.toFixed(0)}</div>
+                            <div
+                              className="text-[10px] font-bold"
+                              style={{ color: o.paymentMethod === "CASH" ? "#88D66C" : "var(--muted)" }}
+                            >
+                              {PAYMENT_LABELS[o.paymentMethod || "OTHER"] || o.paymentMethod}
+                            </div>
+                          </div>
+                        </div>
+                        {(o.deliveryAddress || o.customerPhone) && (
+                          <div className="mt-1.5 text-[10px] text-[var(--muted)] truncate">
+                            {[o.customerPhone, o.deliveryAddress].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                        {o.paymentMethod === "CASH" && !o.cashCollected && (
+                          <div className="mt-1.5 inline-block text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            Efectivo sin liquidar
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+        )}
 
         <div className="p-4 border-t border-[var(--border)] bg-[var(--bg)] flex justify-end">
           <button
