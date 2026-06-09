@@ -3,14 +3,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowLeft, ChevronRight, AlarmClock, Banknote, Coins,
-  ShieldAlert, Lock, CreditCard, Wifi,
+  ArrowLeft, ChevronRight, AlarmClock, ShieldAlert, Lock,
+  CreditCard, Wifi, Wallet, Plus, Bike, Receipt, ShoppingBag,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+import PurchasesExpensesModal from '@/components/pos/PurchasesExpensesModal';
 
-const BILLS = [1000, 500, 200, 100, 50, 20];
-const COINS = [10, 5, 2, 1, 0.5];
+interface ShiftExpense {
+  id: string;
+  description: string;
+  amount: number;
+  category: string;
+  createdAt: string;
+}
 
 interface Shift {
   id: string;
@@ -21,11 +27,13 @@ interface Shift {
   totalCard: number;
   totalTransfer: number;
   totalSales: number;
+  totalExpenses: number;
   expectedCash: number | null;
+  expenses?: ShiftExpense[];
 }
 
 const fmtMoney = (n: number) =>
-  n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 });
+  Number(n || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 });
 
 function elapsed(opened: string) {
   const ms = Date.now() - new Date(opened).getTime();
@@ -34,15 +42,33 @@ function elapsed(opened: string) {
   return `${h}h ${m}m`;
 }
 
+// Un gasto del repartidor se reconoce porque el backend lo etiqueta con
+// category REPARTIDOR o el concepto empieza con "Repartidor".
+const isDriverExpense = (e: ShiftExpense) =>
+  e.category === 'REPARTIDOR' || /^repartidor/i.test(e.description || '');
+
 export default function CierreTurno() {
   const router = useRouter();
   const employee = useAuthStore((s) => s.employee);
   const [shift, setShift] = useState<Shift | null>(null);
-  const [billCount, setBillCount] = useState<Record<number, string>>({});
-  const [coinCount, setCoinCount] = useState<Record<number, string>>({});
+  const [countedTotal, setCountedTotal] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [showExpenses, setShowExpenses] = useState(false);
+
+  const loadShift = async () => {
+    try {
+      const { data } = await api.get('/api/shifts/current');
+      if (!data || !data.id) {
+        setError('No hay un turno abierto en esta caja');
+        return;
+      }
+      setShift(data);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'No pudimos cargar el turno');
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -62,25 +88,43 @@ export default function CierreTurno() {
     return () => { cancelled = true; };
   }, []);
 
-  const totalBills = useMemo(
-    () => BILLS.reduce((s, d) => s + (Number(billCount[d]) || 0) * d, 0),
-    [billCount]
+  // Carga del borrador (solo total + notas; ya no hay denominaciones).
+  useEffect(() => {
+    if (!shift) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const raw = localStorage.getItem(`cierre-draft-${shift.id}`);
+      if (raw) {
+        try {
+          const d = JSON.parse(raw);
+          if (typeof d.countedTotal === 'string') setCountedTotal(d.countedTotal);
+          if (typeof d.notes === 'string') setNotes(d.notes);
+        } catch {}
+      }
+    });
+    return () => { cancelled = true; };
+  }, [shift]);
+
+  const expenses = shift?.expenses ?? [];
+  const totalExpenses = useMemo(
+    () => (shift?.totalExpenses ?? expenses.reduce((s, e) => s + Number(e.amount || 0), 0)),
+    [shift?.totalExpenses, expenses],
   );
-  const totalCoins = useMemo(
-    () => COINS.reduce((s, d) => s + (Number(coinCount[d]) || 0) * d, 0),
-    [coinCount]
-  );
-  const totalDeclared = totalBills + totalCoins;
+
+  const counted = Number(countedTotal);
+  const countedValid = countedTotal.trim() !== '' && Number.isFinite(counted) && counted >= 0;
 
   const onSubmit = async () => {
-    if (!shift) return;
+    if (!shift || !countedValid) return;
     setSubmitting(true);
     setError('');
     try {
       await api.post(`/api/shifts/${shift.id}/close`, {
-        closingFloat: totalDeclared,
+        closingFloat: counted,
         notes: notes.trim() || null,
       });
+      localStorage.removeItem(`cierre-draft-${shift.id}`);
       router.replace('/hub');
     } catch (err: any) {
       setError(err?.response?.data?.error || 'No pudimos cerrar el turno');
@@ -90,30 +134,10 @@ export default function CierreTurno() {
 
   const onSaveDraft = () => {
     if (shift) {
-      localStorage.setItem(`cierre-draft-${shift.id}`, JSON.stringify({ billCount, coinCount, notes }));
+      localStorage.setItem(`cierre-draft-${shift.id}`, JSON.stringify({ countedTotal, notes }));
     }
     router.replace('/hub');
   };
-
-  useEffect(() => {
-    if (!shift) return;
-    let cancelled = false;
-    // Carga del borrador diferida a microtask (ver impresoras): el
-    // setState ya no corre sincrónicamente en el effect.
-    queueMicrotask(() => {
-      if (cancelled) return;
-      const raw = localStorage.getItem(`cierre-draft-${shift.id}`);
-      if (raw) {
-        try {
-          const d = JSON.parse(raw);
-          setBillCount(d.billCount || {});
-          setCoinCount(d.coinCount || {});
-          setNotes(d.notes || '');
-        } catch {}
-      }
-    });
-    return () => { cancelled = true; };
-  }, [shift]);
 
   const userInitial = (employee?.name || 'U').charAt(0).toUpperCase();
   const roleLabel =
@@ -126,7 +150,7 @@ export default function CierreTurno() {
       className="relative h-[100dvh] flex flex-col bg-[#0a0a0c] text-white overflow-hidden"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
-      {/* Ambient diseño operativo glows */}
+      {/* Ambient glows */}
       <div
         aria-hidden
         className="pointer-events-none absolute -top-60 -left-60 w-[700px] h-[700px] rounded-full blur-[120px] opacity-50"
@@ -183,14 +207,15 @@ export default function CierreTurno() {
 
       {/* CONTENT */}
       <div className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-6 p-6 md:p-8 overflow-auto">
-        {/* LEFT: form */}
+        {/* LEFT */}
         <div className="flex flex-col gap-5">
+          {/* TOTAL EN CAJA */}
           <div className="rounded-3xl p-6 md:p-8 flex flex-col gap-5 bg-white/5 backdrop-blur-md border border-white/10">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex flex-col">
-                <h2 className="text-base font-black text-white">Declaración de Efectivo</h2>
+                <h2 className="text-base font-black text-white">Total en caja</h2>
                 <p className="text-xs font-medium text-white/55">
-                  Cuenta el efectivo en tu caja y captura las cantidades por denominación.
+                  Cuenta todo el efectivo de la caja y captura el total que se queda.
                 </p>
               </div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#ffb84d]/15 border border-[#ffb84d]/40">
@@ -199,48 +224,79 @@ export default function CierreTurno() {
               </div>
             </div>
 
-            {/* BILLETES */}
-            <section className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <Banknote size={14} className="text-emerald-400" />
-                <span className="text-[11px] font-black tracking-[0.2em] text-white/55">BILLETES</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {BILLS.map((d) => (
-                  <DenomRow
-                    key={d}
-                    label={`$${d.toLocaleString()}`}
-                    color="#88D66C"
-                    value={billCount[d] || ''}
-                    onChange={(v) => setBillCount({ ...billCount, [d]: v })}
-                    subtotal={(Number(billCount[d]) || 0) * d}
-                  />
-                ))}
-              </div>
-            </section>
-
-            {/* MONEDAS */}
-            <section className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <Coins size={14} className="text-[#ffb84d]" />
-                <span className="text-[11px] font-black tracking-[0.2em] text-white/55">MONEDAS</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                {COINS.map((d) => (
-                  <DenomRow
-                    key={d}
-                    label={d < 1 ? `$${d.toFixed(2)}` : `$${d}`}
-                    color="#ffb84d"
-                    value={coinCount[d] || ''}
-                    onChange={(v) => setCoinCount({ ...coinCount, [d]: v })}
-                    subtotal={(Number(coinCount[d]) || 0) * d}
-                  />
-                ))}
-              </div>
-            </section>
+            <div className="relative">
+              <span className="absolute left-6 top-1/2 -translate-y-1/2 text-3xl font-black text-emerald-400">$</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                value={countedTotal}
+                onChange={(e) => setCountedTotal(e.target.value)}
+                placeholder="0.00"
+                autoFocus
+                className="w-full h-24 rounded-3xl bg-[#0a0a0c]/60 border border-white/10 pl-14 pr-6 text-5xl font-black text-emerald-400 outline-none tabular-nums focus:border-emerald-400/40 transition-colors"
+                style={{ fontFamily: 'inherit' }}
+              />
+            </div>
           </div>
 
-          {/* Notes */}
+          {/* GASTOS Y COMPRAS DEL TURNO */}
+          <div className="rounded-3xl p-6 flex flex-col gap-4 bg-white/5 backdrop-blur-md border border-white/10">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Receipt size={15} className="text-[#ffb84d]" />
+                <span className="text-[11px] font-black tracking-[0.2em] text-white/55">GASTOS Y COMPRAS DEL TURNO</span>
+              </div>
+              <button
+                onClick={() => setShowExpenses(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#ffb84d]/15 border border-[#ffb84d]/30 text-[#ffb84d] text-[11px] font-black active:scale-95 transition-transform"
+              >
+                <Plus size={14} strokeWidth={3} /> Registrar
+              </button>
+            </div>
+
+            {expenses.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
+                <ShoppingBag size={24} className="mx-auto text-white/25" />
+                <p className="mt-2 text-[12px] text-white/40">
+                  Sin gastos ni compras en este turno.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {expenses.map((e) => {
+                  const driver = isDriverExpense(e);
+                  return (
+                    <div
+                      key={e.id}
+                      className="flex items-center gap-3 rounded-2xl p-3 bg-white/5 border border-white/10"
+                    >
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${driver ? 'bg-sky-400/10 border border-sky-400/20' : 'bg-[#ffb84d]/10 border border-[#ffb84d]/20'}`}>
+                        {driver ? <Bike size={16} className="text-sky-300" /> : <Wallet size={16} className="text-[#ffb84d]" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-white truncate">{e.description}</p>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-white/35">
+                          {(e.category || 'OTRO').replace(/_/g, ' ')}
+                          {driver && <span className="text-sky-300"> · repartidor</span>}
+                        </p>
+                      </div>
+                      <span className="text-sm font-black tabular-nums text-[#ff8a5c] shrink-0">
+                        −{fmtMoney(e.amount)}
+                      </span>
+                    </div>
+                  );
+                })}
+                <div className="flex items-center justify-between pt-2 mt-1 border-t border-white/10">
+                  <span className="text-[11px] font-black tracking-[0.15em] text-white/40">TOTAL GASTOS</span>
+                  <span className="text-base font-black tabular-nums text-[#ff8a5c]">−{fmtMoney(totalExpenses)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* NOTAS */}
           <div className="rounded-3xl p-5 flex flex-col gap-2 bg-white/5 backdrop-blur-md border border-white/10">
             <label className="text-[11px] font-black tracking-[0.2em] text-white/55">
               NOTAS / OBSERVACIONES
@@ -256,51 +312,40 @@ export default function CierreTurno() {
           </div>
         </div>
 
-        {/* RIGHT: summary panel */}
+        {/* RIGHT: confirmación */}
         <aside className="flex flex-col rounded-3xl overflow-hidden bg-white/5 backdrop-blur-md border border-white/10 sticky top-4 self-start">
-          {/* Head */}
           <div className="flex flex-col gap-1.5 px-6 py-6 border-b border-white/10">
             <span className="text-[10px] font-black tracking-[0.25em] text-white/40">RESUMEN DEL CORTE</span>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium text-white/55">Total Declarado</span>
-              <div className="flex items-end gap-2">
-                <span className="text-4xl font-black text-emerald-400 tracking-tight tabular-nums">
-                  {fmtMoney(totalDeclared)}
-                </span>
-              </div>
-            </div>
+            <span className="text-sm font-medium text-white/55">Total que se queda en caja</span>
+            <span className="text-4xl font-black text-emerald-400 tracking-tight tabular-nums">
+              {fmtMoney(counted || 0)}
+            </span>
           </div>
 
-          {/* Body */}
           <div className="flex-1 flex flex-col gap-4 px-6 py-5 overflow-auto">
-            <div className="flex flex-col gap-2">
-              <Row label="Billetes" value={fmtMoney(totalBills)} />
-              <Row label="Monedas" value={fmtMoney(totalCoins)} />
-            </div>
+            <span className="text-[10px] font-black tracking-[0.2em] text-white/40">
+              INFORMATIVO · NO SE SUMA AL EFECTIVO
+            </span>
+            <SummaryCard
+              icon={<CreditCard size={14} className="text-[#ffb84d]" />}
+              label="Tarjeta"
+              value={fmtMoney(shift?.totalCard ?? 0)}
+            />
+            <SummaryCard
+              icon={<Wifi size={14} className="text-sky-400" />}
+              label="Transferencia"
+              value={fmtMoney(shift?.totalTransfer ?? 0)}
+            />
+            <SummaryCard
+              icon={<Receipt size={14} className="text-[#ff8a5c]" />}
+              label="Gastos del turno"
+              value={`−${fmtMoney(totalExpenses)}`}
+            />
 
-            <div className="h-px bg-white/10" />
-
-            <div className="flex flex-col gap-2.5">
-              <span className="text-[10px] font-black tracking-[0.2em] text-white/40">
-                INFORMATIVO · NO SE SUMA
-              </span>
-              <SummaryCard
-                icon={<CreditCard size={14} className="text-[#ffb84d]" />}
-                label="Tarjeta"
-                value={fmtMoney(shift?.totalCard ?? 0)}
-              />
-              <SummaryCard
-                icon={<Wifi size={14} className="text-sky-400" />}
-                label="Transferencia"
-                value={fmtMoney(shift?.totalTransfer ?? 0)}
-              />
-            </div>
-
-            {/* Info banner */}
             <div className="rounded-2xl p-4 flex items-start gap-2.5 bg-[#ffb84d]/8 border border-[#ffb84d]/30">
               <ShieldAlert size={16} className="text-[#ffb84d] flex-shrink-0 mt-0.5" />
               <p className="text-[11px] font-medium leading-relaxed text-amber-100">
-                Una vez confirmes, no podrás modificar la declaración. La conciliación la verá el supervisor.
+                Corte ciego: declaras el total sin ver el esperado. La conciliación la verá el supervisor.
               </p>
             </div>
 
@@ -314,11 +359,10 @@ export default function CierreTurno() {
             )}
           </div>
 
-          {/* Footer */}
           <div className="flex flex-col gap-2.5 px-5 py-5 border-t border-white/10">
             <button
               onClick={onSubmit}
-              disabled={!shift || submitting || totalDeclared <= 0}
+              disabled={!shift || submitting || !countedValid}
               className="w-full inline-flex items-center justify-center gap-2.5 rounded-2xl py-4 min-h-[56px] text-sm font-black tracking-tight text-[#0a0a0c] bg-[#ffb84d] active:scale-95 transition-transform disabled:opacity-40 shadow-[0_15px_40px_rgba(255,184,77,0.25)]"
             >
               <Lock size={16} strokeWidth={3} />
@@ -333,48 +377,13 @@ export default function CierreTurno() {
           </div>
         </aside>
       </div>
-    </div>
-  );
-}
 
-function DenomRow({ label, color, value, onChange, subtotal }:
-  { label: string; color: string; value: string; onChange: (v: string) => void; subtotal: number }) {
-  return (
-    <div className="flex flex-col gap-1.5 rounded-2xl p-3 bg-white/5 border border-white/10">
-      <div className="flex items-center justify-between">
-        <span
-          className="text-[11px] font-black px-2 py-0.5 rounded text-[#0a0a0c]"
-          style={{ background: color }}
-        >
-          {label}
-        </span>
-        <span className="text-[10px] text-white/30">×</span>
-      </div>
-      <input
-        type="number"
-        inputMode="numeric"
-        min={0}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="0"
-        className="w-full bg-transparent text-lg font-black text-white outline-none tabular-nums"
-        style={{ fontFamily: 'inherit' }}
+      {/* Modal de gastos/compras — al cerrar, refrescamos el turno para que
+          los nuevos movimientos aparezcan en el corte. */}
+      <PurchasesExpensesModal
+        isOpen={showExpenses}
+        onClose={() => { setShowExpenses(false); loadShift(); }}
       />
-      <span
-        className="text-[10px] font-bold tabular-nums"
-        style={{ color: subtotal > 0 ? '#88D66C' : 'rgba(255,255,255,0.3)' }}
-      >
-        {subtotal > 0 ? `$${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-      </span>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-xs font-medium text-white/55">{label}</span>
-      <span className="text-xs font-black tabular-nums text-white">{value}</span>
     </div>
   );
 }

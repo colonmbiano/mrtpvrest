@@ -42,7 +42,7 @@ async function assertDriverAccess(req, res) {
       isActive: true,
       ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { location: { restaurantId } } : {}),
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, locationId: true },
   });
   if (!driver) {
     res.status(404).json({ error: 'Repartidor no encontrado' });
@@ -76,6 +76,57 @@ router.get('/:driverId/movements', authenticate, requireTenantAccess, async (req
     const expense = movements.filter(m => m.type === 'EXPENSE').reduce((s, m) => s + m.amount, 0);
     const returned = movements.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.amount, 0);
     res.json({ movements, summary: { float, income, expense, returned, balance: float + income - expense - returned } });
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
+// ── Pedidos del día asignados al repartidor ──────────────────────────────
+// Lista pedido-por-pedido (folio, cliente, método de pago, total) leyendo
+// directamente de orders por deliveryDriverId + fecha. Complementa el resumen
+// de DriverCashMovement: aquí ves la venta real entregada aunque el cobro no
+// se haya registrado como movimiento. Mismo control de acceso que movimientos.
+router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+    const { date } = req.query;
+    const from = date ? new Date(new Date(date).setHours(0, 0, 0, 0)) : new Date(new Date().setHours(0, 0, 0, 0));
+    const to = date ? new Date(new Date(date).setHours(23, 59, 59, 999)) : new Date(new Date().setHours(23, 59, 59, 999));
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+
+    const orders = await prisma.order.findMany({
+      where: {
+        deliveryDriverId: driver.id,
+        createdAt: { gte: from, lte: to },
+        ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { restaurantId } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true, orderNumber: true, status: true,
+        paymentMethod: true, paymentStatus: true,
+        total: true, deliveryFee: true, tip: true, cashCollected: true,
+        customerName: true, ticketName: true, customerPhone: true,
+        deliveryAddress: true, createdAt: true,
+      },
+    });
+
+    // Desglose por método de pago para el cuadre (efectivo es lo que el
+    // repartidor debe entregar en caja).
+    const byMethod = orders.reduce((acc, o) => {
+      const k = o.paymentMethod || 'OTHER';
+      acc[k] = (acc[k] || 0) + (o.total || 0);
+      return acc;
+    }, {});
+
+    res.json({
+      orders: orders.map(o => ({ ...o, customer: o.customerName || o.ticketName || null })),
+      summary: {
+        count: orders.length,
+        total: orders.reduce((s, o) => s + (o.total || 0), 0),
+        deliveryFees: orders.reduce((s, o) => s + (o.deliveryFee || 0), 0),
+        tips: orders.reduce((s, o) => s + (o.tip || 0), 0),
+        byMethod,
+      },
+    });
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
@@ -144,16 +195,50 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
     }
 
     const photoUrl = req.file ? await uploadPhoto(req.file.buffer, 'driver-cash') : null;
-    const movement = await prisma.driverCashMovement.create({
-      data: {
-        driverId: driver.id,
-        type,
-        category,
-        amount: numericAmount,
-        description: description || null,
-        photoUrl,
-        orderId: orderId || null,
-      },
+
+    // Si es un GASTO del repartidor (gasolina, etc.), reflejarlo en el corte
+    // de caja: ese gasto se paga con efectivo que el cierre espera de vuelta
+    // en caja (la venta de delivery ya cuenta como totalCash), así que debe
+    // restar del efectivo esperado. Lo vinculamos al turno abierto de la
+    // sucursal del repartidor creando un ShiftExpense + incrementando el cache
+    // totalExpenses. El efectivo cobrado (INCOME) NO se toca: ya está contado
+    // vía la venta de la orden, sumarlo sería doble-conteo.
+    let openShift = null;
+    if (type === 'EXPENSE' && driver.locationId) {
+      openShift = await prisma.cashShift.findFirst({
+        where: { locationId: driver.locationId, isOpen: true },
+        orderBy: { openedAt: 'desc' },
+        select: { id: true },
+      });
+    }
+
+    const movement = await prisma.$transaction(async (tx) => {
+      const mov = await tx.driverCashMovement.create({
+        data: {
+          driverId: driver.id,
+          type,
+          category,
+          amount: numericAmount,
+          description: description || null,
+          photoUrl,
+          orderId: orderId || null,
+        },
+      });
+      if (openShift) {
+        await tx.shiftExpense.create({
+          data: {
+            shiftId: openShift.id,
+            description: `Repartidor ${driver.name}${description ? `: ${description}` : ''}`,
+            amount: numericAmount,
+            category: category || 'REPARTIDOR',
+          },
+        });
+        await tx.cashShift.update({
+          where: { id: openShift.id },
+          data: { totalExpenses: { increment: numericAmount } },
+        });
+      }
+      return mov;
     });
     res.json(movement);
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
