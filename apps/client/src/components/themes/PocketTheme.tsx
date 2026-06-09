@@ -75,7 +75,7 @@ export function PocketTheme({ data }: { data: any }) {
   const ProductImage = ({ product, className = '' }: { product: any; className?: string }) =>
     product.imageUrl ? (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={product.imageUrl} alt={product.name} className={`object-cover ${className}`} />
+      <img src={product.imageUrl} alt={product.name} className={`${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'} ${className}`} />
     ) : (
       <div
         className={`flex items-center justify-center ${className}`}

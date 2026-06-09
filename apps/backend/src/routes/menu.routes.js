@@ -232,7 +232,7 @@ router.get('/items/:id', async (req, res) => {
 
 router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { categoryId, name, description, imageUrl, price, preparationTime, isPopular, isPromo, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection } = req.body
+    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection } = req.body
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
 
     const category = await prisma.category.findUnique({ where: { id: categoryId, restaurantId: req.user?.restaurantId || req.restaurantId } });
@@ -244,6 +244,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
         name,
         description,
         imageUrl,
+        imageFit: imageFit === 'contain' ? 'contain' : 'cover',
         price: parseFloat(price),
         preparationTime: preparationTime || 15,
         isPopular: isPopular || false,
@@ -264,7 +265,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
 
 router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, categoryId, isPromo, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection } = req.body
+    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection } = req.body
     const item = await prisma.menuItem.update({
       where: {
         id: req.params.id,
@@ -278,6 +279,7 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
         ...(isPopular !== undefined && { isPopular }),
         ...(isFavorite !== undefined && { isFavorite: !!isFavorite }),
         ...(imageUrl !== undefined && { imageUrl }),
+        ...(imageFit !== undefined && { imageFit: imageFit === 'contain' ? 'contain' : 'cover' }),
         ...(categoryId !== undefined && { categoryId }),
         ...(isPromo !== undefined && { isPromo }),
         ...(activeDays !== undefined && { activeDays }),
@@ -773,7 +775,7 @@ router.get('/public/:slug/menu', async (req, res) => {
           orderBy: [{ isPromo: 'desc' }, { isPopular: 'desc' }, { name: 'asc' }],
           select: {
             id: true, name: true, description: true,
-            price: true, promoPrice: true, imageUrl: true,
+            price: true, promoPrice: true, imageUrl: true, imageFit: true,
             isPopular: true, isPromo: true, activeDays: true,
             complements: {
               where: { isAvailable: true },

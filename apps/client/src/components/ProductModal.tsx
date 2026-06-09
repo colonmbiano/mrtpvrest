@@ -12,7 +12,7 @@ type ModifierGroup = {
 };
 export type StoreProduct = {
   id: string; name: string; description?: string; price: number;
-  isPromo?: boolean; promoPrice?: number; imageUrl?: string | null;
+  isPromo?: boolean; promoPrice?: number; imageUrl?: string | null; imageFit?: string | null;
   variants?: Variant[]; modifierGroups?: ModifierGroup[]; complements?: Complement[];
 };
 
@@ -123,7 +123,7 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
 
         {product.imageUrl && (
           <div className="relative w-full h-44 shrink-0">
-            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+            <img src={product.imageUrl} alt={product.name} className={`w-full h-full ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
             <button onClick={onClose} className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center">✕</button>
           </div>
         )}
