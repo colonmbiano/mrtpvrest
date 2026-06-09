@@ -5,6 +5,7 @@ import { useCart } from '../lib/cartStore';
 
 type Variant = { id: string; name: string; price: number };
 type Modifier = { id: string; name: string; priceAdd: number };
+type Complement = { id: string; name: string; price: number };
 type ModifierGroup = {
   id: string; name: string; required?: boolean; multiSelect?: boolean;
   minSelection?: number; maxSelection?: number; modifiers: Modifier[];
@@ -12,8 +13,12 @@ type ModifierGroup = {
 export type StoreProduct = {
   id: string; name: string; description?: string; price: number;
   isPromo?: boolean; promoPrice?: number; imageUrl?: string | null;
-  variants?: Variant[]; modifierGroups?: ModifierGroup[];
+  variants?: Variant[]; modifierGroups?: ModifierGroup[]; complements?: Complement[];
 };
+
+// Los complementos viajan dentro de modifierIds con este prefijo; el backend
+// (store.routes.js) los separa, valida y cobra como extras del item.
+const COMPLEMENT_PREFIX = 'complement:';
 
 type ProductModalProps = {
   product: StoreProduct;
@@ -24,7 +29,9 @@ type ProductModalProps = {
 
 // ¿El producto necesita personalización (abrir modal) o se puede agregar directo?
 export function needsModal(p: StoreProduct) {
-  return (p.variants && p.variants.length > 0) || (p.modifierGroups && p.modifierGroups.length > 0);
+  return (p.variants && p.variants.length > 0)
+    || (p.modifierGroups && p.modifierGroups.length > 0)
+    || (p.complements && p.complements.length > 0);
 }
 
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
@@ -35,10 +42,12 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
 
   const variants = product.variants || [];
   const groups = product.modifierGroups || [];
+  const complements = product.complements || [];
   const basePromo = product.isPromo && product.promoPrice ? product.promoPrice : product.price;
 
   const [variantId, setVariantId] = useState<string | null>(variants[0]?.id ?? null);
   const [selected, setSelected] = useState<Record<string, string[]>>({}); // groupId -> modifierIds
+  const [selectedComplements, setSelectedComplements] = useState<string[]>([]); // complementIds
   const [qty, setQty] = useState(1);
   const [error, setError] = useState('');
 
@@ -49,8 +58,12 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
     const ids = Object.values(selected).flat();
     return ids.reduce((s, id) => s + (allMods.find(m => m.id === id)?.priceAdd || 0), 0);
   }, [selected, allMods]);
+  const complementsAdd = useMemo(
+    () => selectedComplements.reduce((s, id) => s + (complements.find(c => c.id === id)?.price || 0), 0),
+    [selectedComplements, complements],
+  );
 
-  const unitPrice = basePrice + modifiersAdd;
+  const unitPrice = basePrice + modifiersAdd + complementsAdd;
 
   const toggleMod = (g: ModifierGroup, modId: string) => {
     setError('');
@@ -66,6 +79,13 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
     });
   };
 
+  const toggleComplement = (id: string) => {
+    setError('');
+    setSelectedComplements(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
+    );
+  };
+
   const handleAdd = () => {
     // Validaciones de grupos requeridos / mínimos
     for (const g of groups) {
@@ -76,12 +96,17 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
       }
     }
     const modifierIds = Object.values(selected).flat();
+    // Complementos prefijados para que el backend los distinga de modificadores.
+    const complementPayloadIds = selectedComplements.map(id => `${COMPLEMENT_PREFIX}${id}`);
+    const payloadIds = [...modifierIds, ...complementPayloadIds];
     const variantName = variantId ? variants.find(v => v.id === variantId)?.name : null;
     const modNames = modifierIds.map(id => allMods.find(m => m.id === id)?.name).filter(Boolean);
-    const displayName = [product.name, variantName ? `(${variantName})` : '', modNames.length ? `· ${modNames.join(', ')}` : '']
+    const complementNames = selectedComplements.map(id => complements.find(c => c.id === id)?.name).filter(Boolean);
+    const extraNames = [...modNames, ...complementNames];
+    const displayName = [product.name, variantName ? `(${variantName})` : '', extraNames.length ? `· ${extraNames.join(', ')}` : '']
       .filter(Boolean).join(' ');
-    const key = `${product.id}|${variantId || ''}|${[...modifierIds].sort().join(',')}`;
-    add({ id: key, menuItemId: product.id, name: displayName, price: unitPrice, variantId, modifierIds, quantity: qty });
+    const key = `${product.id}|${variantId || ''}|${[...payloadIds].sort().join(',')}`;
+    add({ id: key, menuItemId: product.id, name: displayName, price: unitPrice, variantId, modifierIds: payloadIds, quantity: qty });
     onClose();
   };
 
@@ -164,6 +189,35 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
               </div>
             </div>
           ))}
+
+          {/* Extras / Acompañamientos (complementos) */}
+          {complements.length > 0 && (
+            <div className="mt-5">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] font-black uppercase tracking-widest" style={{ color: subText }}>Extras / Acompañamientos</p>
+                <span className="text-[10px] font-bold" style={{ color: subText }}>Opcional</span>
+              </div>
+              <div className="space-y-2">
+                {complements.map(c => {
+                  const on = selectedComplements.includes(c.id);
+                  return (
+                    <button key={c.id} onClick={() => toggleComplement(c.id)}
+                      className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 transition-all"
+                      style={{ borderColor: on ? accent : (dark ? '#FFFFFF14' : '#e5e7eb'), background: on ? `${accent}14` : 'transparent' }}>
+                      <span className="font-bold text-sm flex items-center gap-2">
+                        <span className="w-4 h-4 rounded-md border-2 flex items-center justify-center"
+                          style={{ borderColor: on ? accent : (dark ? '#FFFFFF40' : '#cbd5e1'), background: on ? accent : 'transparent' }}>
+                          {on && <span className="text-white text-[10px]">✓</span>}
+                        </span>
+                        {c.name}
+                      </span>
+                      {c.price > 0 && <span className="text-sm font-bold" style={{ color: subText }}>+{fmt(c.price)}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {error && <p className="text-red-500 text-xs font-bold mt-4">{error}</p>}
         </div>
