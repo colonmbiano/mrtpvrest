@@ -20,7 +20,10 @@ const orderTypeSchema = z.enum(['DINE_IN', 'TAKEOUT', 'DELIVERY']);
 const createOrderSchema = z.object({
   items:         z.array(cartItemSchema).min(1, 'Sin productos'),
   orderType:     orderTypeSchema.optional(),
-  tableNumber:   z.union([z.string(), z.number()]).optional(),
+  // nullable: meseros-lite/TPV envían tableNumber:null cuando la orden va por
+  // tableId real (sin número de mesa demo). `.optional()` solo cubría undefined,
+  // así que el null reventaba la validación → "Datos inválidos" al guardar por mesa.
+  tableNumber:   z.union([z.string(), z.number()]).optional().nullable(),
   tableId:       z.string().optional().nullable(),
   // Cuántos comensales se sentaron al iniciar la cuenta DINE_IN.
   numberOfGuests: z.coerce.number().int().positive().max(50).optional().nullable(),
