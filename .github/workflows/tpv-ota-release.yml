@@ -119,7 +119,7 @@ jobs:
             -F "appId=com.mrtpvrest.tpv" \
             -F "version=${{ steps.ver.outputs.version }}" \
             -F "channel=${{ steps.meta.outputs.channel }}" \
-            -F "notes=${{ steps.meta.outputs.notes }}" \
+            --form-string "notes=${{ steps.meta.outputs.notes }}" \
             -F "bundle=@/tmp/bundle.zip" \
             | tee /tmp/publish.json
           echo "::notice::Publicado v${{ steps.ver.outputs.version }} en canal ${{ steps.meta.outputs.channel }}"
