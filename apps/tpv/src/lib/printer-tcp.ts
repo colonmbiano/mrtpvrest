@@ -150,29 +150,56 @@ async function ensurePlugin(): Promise<void> {
 const DEFAULT_PORT = 9100;
 const SOCKET_TIMEOUT_MS = 6000;
 
+// Resiliencia de impresión (ver "comanda intermitente"):
+//
+// La impresión de PRUEBA siempre jala porque abre UNA conexión aislada y
+// manual. La comanda en cambio se dispara por código vía Promise.all (varias
+// impresoras KITCHEN/BAR) y puede solaparse con otra comanda/recibo. Las
+// térmicas en el puerto 9100 (raw/JetDirect) aceptan UNA sola sesión TCP a la
+// vez: una segunda conexión simultánea a la misma IP se rechaza o se queda
+// colgada hasta el timeout de 6s → la comanda se pierde de forma intermitente.
+// Además, un microcorte de Wi-Fi sin reintento = comanda perdida.
+//
+// Mitigación, contenida 100% aquí (no cambia call-sites ni UI):
+//   1. MUTEX POR IP — serializamos los envíos a una misma impresora para que
+//      nunca haya dos sockets abiertos a la vez. Impresoras DISTINTAS siguen
+//      en paralelo (cada IP tiene su propia cola), preservando el Promise.all.
+//   2. REINTENTOS con backoff — los fallos transitorios (printer ocupada por
+//      el socket anterior, hipo de Wi-Fi) se reintentan en vez de perderse.
+//   3. SETTLE tras desconectar — pausa breve antes de liberar la cola para
+//      darle tiempo a la impresora de cerrar su sesión antes del siguiente job.
+const PRINT_RETRIES = 3;
+const RETRY_BACKOFF_MS = [200, 500];
+const SETTLE_AFTER_PRINT_MS = 150;
+
+const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// Cola serializada por clave `ip:port`. Cada nuevo envío encadena tras el
+// anterior (haya tenido éxito o no) para garantizar exclusión por impresora.
+const ipLocks = new Map<string, Promise<void>>();
+
+function withIpLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = ipLocks.get(key) ?? Promise.resolve();
+  // `prev.then(fn, fn)` corre `fn` cuando el anterior termina, sin importar si
+  // resolvió o rechazó (no queremos que un fallo previo rompa la cadena).
+  const run = prev.then(fn, fn);
+  // El tail almacenado nunca rechaza, así la cola sobrevive a errores.
+  ipLocks.set(key, run.then(() => {}, () => {}));
+  return run;
+}
+
 export interface PrintTarget {
   ip: string;
   port?: number | null;
 }
 
-/**
- * Envía un payload ESC/POS al puerto raw de la impresora.
- * Resuelve cuando el escritura completa; rechaza con mensaje claro si
- * la conexión falla, hay timeout o el plugin no está disponible.
- */
-export async function sendRawTcp(target: PrintTarget, payload: string): Promise<void> {
-  const ip = (target.ip || "").trim();
-  const port = Number(target.port) || DEFAULT_PORT;
-  if (!ip || ip === "0.0.0.0") {
-    throw new Error("IP de impresora no configurada");
-  }
-
-  await ensurePlugin();
-  const plugin = getPluginSync();
-  if (!plugin) {
-    throw new Error("Plugin TCP no disponible (corre el APK; en web usa el TPV nativo).");
-  }
-
+/** Un único intento de conexión + envío + desconexión. */
+async function attemptSendRawTcp(
+  plugin: TCPSocketPlugin,
+  ip: string,
+  port: number,
+  payload: string,
+): Promise<void> {
   let clientId: number | null = null;
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error("Timeout (6s) — impresora no responde")), SOCKET_TIMEOUT_MS)
@@ -190,6 +217,50 @@ export async function sendRawTcp(target: PrintTarget, payload: string): Promise<
       try { await plugin.disconnect({ client: clientId }); } catch { /* noop */ }
     }
   }
+}
+
+/**
+ * Envía un payload ESC/POS al puerto raw de la impresora.
+ * Resuelve cuando la escritura completa; rechaza con mensaje claro si
+ * la conexión falla, hay timeout o el plugin no está disponible.
+ *
+ * Serializa por IP y reintenta para sobrevivir colisiones y transitorios
+ * (ver nota de resiliencia arriba).
+ */
+export async function sendRawTcp(target: PrintTarget, payload: string): Promise<void> {
+  const ip = (target.ip || "").trim();
+  const port = Number(target.port) || DEFAULT_PORT;
+  if (!ip || ip === "0.0.0.0") {
+    throw new Error("IP de impresora no configurada");
+  }
+
+  await ensurePlugin();
+  const plugin = getPluginSync();
+  if (!plugin) {
+    throw new Error("Plugin TCP no disponible (corre el APK; en web usa el TPV nativo).");
+  }
+
+  return withIpLock(`${ip}:${port}`, async () => {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < PRINT_RETRIES; attempt += 1) {
+      try {
+        await attemptSendRawTcp(plugin, ip, port, payload);
+        // Settle: dale tiempo a la impresora de liberar su sesión TCP antes
+        // de que el siguiente job en la cola intente conectarse.
+        await delay(SETTLE_AFTER_PRINT_MS);
+        return;
+      } catch (e) {
+        lastError = e;
+        // No esperamos tras el último intento.
+        if (attempt < PRINT_RETRIES - 1) {
+          await delay(RETRY_BACKOFF_MS[attempt] ?? 500);
+        }
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Fallo de impresión TCP tras reintentos");
+  });
 }
 
 /**
