@@ -94,7 +94,7 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const VALID_FIELDS = [
-      'phone','whatsappNumber','address','deliveryFee','freeDeliveryFrom',
+      'phone','whatsappNumber','address','countryCode','deliveryFee','freeDeliveryFrom',
       'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
       'pointsPerTen','pointsValuePesos','storefrontTheme',
       'centralWarehouseEnabled',

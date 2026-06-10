@@ -184,6 +184,7 @@ const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePer
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
 const { resolveVariantSelection, applyFreeModifiers } = require('../lib/money');
+const audit = require('../lib/audit-logger');
 const {
   createOrderSchema,
   addItemsSchema,
@@ -953,6 +954,51 @@ router.post('/:id/print-bill', authenticate, requireTenantAccess, requireRole('A
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Aplica/edita el descuento de un pedido ya guardado y recalcula el total.
+// Lo usa el TPV antes de imprimir la cuenta. Persiste en Order.discount y
+// audita DISCOUNT_APPLIED (quién, antes/después, motivo). Consistente con la
+// fórmula del resto del archivo: total = subtotal - discount + deliveryFee.
+router.put('/:id/discount', authenticate, requireTenantAccess, requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const { type, value, reason } = req.body || {};
+    const numValue = Number(value);
+    if (!['percent', 'fixed'].includes(type) || !Number.isFinite(numValue) || numValue < 0) {
+      return res.status(400).json({ error: 'Descuento inválido' });
+    }
+
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, restaurantId },
+      select: { id: true, subtotal: true, discount: true, deliveryFee: true, total: true, orderNumber: true, status: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (['DELIVERED', 'CANCELLED'].includes(order.status)) {
+      return res.status(409).json({ error: 'No se puede modificar un pedido cerrado' });
+    }
+
+    const subtotal = order.subtotal || 0;
+    const deliveryFee = order.deliveryFee || 0;
+    const rawDiscount = type === 'percent' ? subtotal * (numValue / 100) : numValue;
+    // Acotado a [0, subtotal] y redondeado a centavos.
+    const discount = Math.min(Math.max(0, Math.round(rawDiscount * 100) / 100), subtotal);
+    const total = Math.max(0, subtotal - discount + deliveryFee);
+
+    const updated = await prisma.order.update({
+      where: { id: order.id },
+      data: { discount, total },
+    });
+
+    audit.record(req, audit.AUDIT_EVENTS.DISCOUNT_APPLIED, {
+      resource: `order:${order.id}`,
+      reason: typeof reason === 'string' && reason.trim() ? reason.trim().slice(0, 200) : null,
+      before: { discount: order.discount, total: order.total },
+      after: { discount, total, type, value: numValue, orderNumber: order.orderNumber },
+    }).catch(() => {});
+
+    res.json(updated);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, res) => {
   try {
     const order = await prisma.order.update({
@@ -1010,6 +1056,19 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
     notifyOrderStatus(order, status).catch((err) =>
       console.error('[orders] notifyOrderStatus:', err.message)
     );
+
+    // Auditoría best-effort de la cancelación (acción sensible: quién y qué).
+    if (status === 'CANCELLED') {
+      audit.record(req, audit.AUDIT_EVENTS.ORDER_CANCEL, {
+        resource: `order:${order.id}`,
+        after: {
+          orderNumber: order.orderNumber,
+          orderType: order.orderType,
+          total: order.total,
+          tableId: order.tableId,
+        },
+      }).catch(() => {});
+    }
 
     res.json(order);
   } catch (e) { res.status(500).json({ error: e.message }); }

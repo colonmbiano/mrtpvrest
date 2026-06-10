@@ -142,10 +142,18 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
       include: {
         items: { include: { menuItem: true, modifiers: true } },
         user: true,
+        // País del restaurante → la app del repartidor arma el enlace de
+        // WhatsApp con la lada correcta (ver packages/config/phone.js).
+        restaurant: { select: { config: { select: { countryCode: true } } } },
       },
       orderBy: { createdAt: 'desc' },
     });
-    res.json(orders);
+    // Aplanar countryCode al nivel del pedido para simplificar el frontend.
+    const withCountry = orders.map(o => ({
+      ...o,
+      countryCode: o.restaurant?.config?.countryCode || 'MX',
+    }));
+    res.json(withCountry);
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 

@@ -1,7 +1,14 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import {
+  ChevronLeft, BookOpen, Truck, Bot, Plus, Trash2,
+  X, RotateCw, ScanLine, AlertTriangle, PackageOpen,
+} from "lucide-react";
 import api from "@/lib/api";
-import Link from "next/link";
+import {
+  WtScreen, PageHeader, WtCard, PrimaryBtn, Segmented, Toggle, Pill,
+  EmptyState, money,
+} from "@/components/warmtech";
 
 interface LocationRow { id: string; name: string; isCentralWarehouse?: boolean; }
 interface Supplier { id: string; name: string; }
@@ -39,12 +46,17 @@ const PAYMENT_METHODS = [
   { value: "TRANSFER", label: "Transferencia" },
 ];
 
-const money = (n: number) =>
-  "$" + Number(n || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const norm = (s: string) => s.trim().toLowerCase();
 
+const inputCls = "min-h-11 w-full rounded-xl px-3 text-sm text-tx outline-none transition-colors focus:border-primary";
+const inputStyle = { background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
+const cellCls = "rounded-lg px-3 py-2 text-sm text-tx outline-none transition-colors focus:border-primary";
+const cellStyle = { background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
+
+type TabKey = "compra" | "historial" | "bodega" | "reparto";
+
 export default function ComprasPage() {
-  const [tab, setTab] = useState<"compra" | "historial" | "bodega" | "reparto">("compra");
+  const [tab, setTab] = useState<TabKey>("compra");
   const [loading, setLoading] = useState(true);
 
   // Config + sucursales
@@ -282,422 +294,505 @@ export default function ComprasPage() {
     } finally { setSavingReparto(false); }
   }
 
-  const TABS: { value: typeof tab; label: string }[] = [
-    { value: "compra", label: "🧾 Registrar compra" },
-    { value: "historial", label: "📚 Historial" },
-    { value: "bodega", label: "🏬 Bodega" },
-    ...(centralEnabled ? [{ value: "reparto" as const, label: "🚚 Reparto" }] : []),
+  const TABS: { value: TabKey; label: string }[] = [
+    { value: "compra", label: "Compra" },
+    { value: "historial", label: "Historial" },
+    { value: "bodega", label: "Bodega" },
+    ...(centralEnabled ? [{ value: "reparto" as const, label: "Reparto" }] : []),
   ];
 
-  const inputCls =
-    "w-full bg-black border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm outline-none focus:border-orange-500 transition-colors";
-
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="font-syne text-3xl font-black text-white">Compras & Bodega</h1>
-          <p className="text-xs text-gray-500 uppercase font-bold tracking-widest mt-1">
-            Captura de compras, valor de inventario y reparto a sucursales
-          </p>
-        </div>
-        <Link href="/admin/inventario"
-          className="px-4 py-2 rounded-xl text-sm font-bold border border-white/10 text-gray-400">
-          ← Inventario
-        </Link>
-      </div>
+    <WtScreen>
+      <PageHeader
+        eyebrow="Inventario · Abastecimiento"
+        title="Compras & Bodega"
+        subtitle="Captura de compras, valor de inventario y reparto a sucursales"
+        actions={
+          <PrimaryBtn ghost full={false} icon={ChevronLeft} href="/admin/inventario">
+            Inventario
+          </PrimaryBtn>
+        }
+      />
+
+      {/* navegación en mobile */}
+      <a
+        href="/admin/inventario"
+        className="mb-3 inline-flex min-h-9 items-center gap-1 text-xs font-bold text-tx-mut md:hidden"
+      >
+        <ChevronLeft size={15} /> Inventario
+      </a>
 
       {/* ── Configuración Bodega Central ─────────────────────────────────── */}
-      <div className="rounded-2xl border p-5 mb-6" style={{ borderColor: "var(--border)", background: "var(--surf)" }}>
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <p className="text-sm font-black text-white">Modelo de Bodega Central</p>
-            <p className="text-xs text-gray-500 mt-1 max-w-xl">
+      <WtCard className="mb-4 p-4 md:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-sm font-extrabold text-tx-hi">Modelo de Bodega Central</p>
+            <p className="mt-1 max-w-xl text-xs text-tx-mut">
               Apagado: cada compra entra directo a la bodega de la sucursal.
               Encendido: las compras entran a la Bodega Central y luego se reparten a las sucursales.
             </p>
           </div>
-          <button
-            onClick={() => toggleCentral(!centralEnabled)}
-            disabled={savingCfg}
-            className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50"
-            style={{
-              background: centralEnabled ? "var(--gold)" : "var(--surf2)",
-              color: centralEnabled ? "#000" : "var(--muted)",
-              border: "1px solid " + (centralEnabled ? "var(--gold)" : "var(--border)"),
-            }}
-          >
-            {centralEnabled ? "Activado" : "Desactivado"}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Pill tone={centralEnabled ? "ok" : "neutral"}>{centralEnabled ? "Activado" : "Desactivado"}</Pill>
+            <Toggle checked={centralEnabled} onChange={(n) => !savingCfg && toggleCentral(n)} label="Bodega central" />
+          </div>
         </div>
         {centralEnabled && (
-          <div className="mt-4 pt-4 border-t flex items-center gap-3 flex-wrap" style={{ borderColor: "var(--border)" }}>
-            <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Sucursal que actúa como Bodega Central</span>
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t pt-4" style={{ borderColor: "var(--bd-1)" }}>
+            <span className="font-mono text-[10px] uppercase tracking-[.12em] text-tx-mut">Sucursal como Bodega Central</span>
             <select
               value={centralLoc?.id || ""}
               onChange={e => e.target.value && setAsCentral(e.target.value)}
               disabled={savingCfg}
-              className="bg-black border border-white/10 rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-orange-500"
+              className={cellCls}
+              style={cellStyle}
             >
               <option value="">— elegir —</option>
               {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
             {!centralLoc && (
-              <span className="text-xs text-red-400 font-bold">Falta asignar la Bodega Central</span>
+              <span className="flex items-center gap-1 text-xs font-bold text-err">
+                <AlertTriangle size={13} /> Falta asignar la Bodega Central
+              </span>
             )}
           </div>
         )}
-      </div>
+      </WtCard>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {TABS.map(t => (
-          <button key={t.value} onClick={() => setTab(t.value)}
-            className="px-4 py-2 rounded-xl text-sm font-bold"
-            style={{
-              background: tab === t.value ? "var(--gold)" : "var(--surf)",
-              color: tab === t.value ? "#000" : "var(--muted)",
-              border: "1px solid " + (tab === t.value ? "var(--gold)" : "var(--border)"),
-            }}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Segmented value={tab} onChange={setTab} options={TABS} className="mb-5 md:max-w-[520px]" />
 
-      {loading && <p className="text-gray-500 text-sm">Cargando…</p>}
+      {loading && <p className="text-sm text-tx-mut">Cargando…</p>}
 
       {/* ── TAB: Registrar compra ───────────────────────────────────────── */}
       {!loading && tab === "compra" && (
-        <div className="rounded-2xl border p-6" style={{ borderColor: "var(--border)", background: "var(--surf)" }}>
-          <div className="grid md:grid-cols-3 gap-4 mb-5">
-            <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1 block">Proveedor</label>
-              <select value={supplierId} onChange={e => setSupplierId(e.target.value)} className={inputCls}>
+        <WtCard className="p-4 md:p-6">
+          <div className="mb-5 grid gap-4 md:grid-cols-3">
+            <Field label="Proveedor">
+              <select value={supplierId} onChange={e => setSupplierId(e.target.value)} className={inputCls} style={inputStyle}>
                 <option value="">— selecciona —</option>
                 {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1 block">
-                Destino {centralEnabled && centralLoc && "(default: Bodega Central)"}
-              </label>
-              <select value={destLocationId} onChange={e => setDestLocationId(e.target.value)} className={inputCls}>
+            </Field>
+            <Field label={`Destino${centralEnabled && centralLoc ? " (default: Bodega Central)" : ""}`}>
+              <select value={destLocationId} onChange={e => setDestLocationId(e.target.value)} className={inputCls} style={inputStyle}>
                 <option value="">— selecciona —</option>
                 {locations.map(l => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}{l.isCentralWarehouse ? " · Bodega Central" : ""}
-                  </option>
+                  <option key={l.id} value={l.id}>{l.name}{l.isCentralWarehouse ? " · Bodega Central" : ""}</option>
                 ))}
               </select>
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1 block">Método de pago</label>
-              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className={inputCls}>
+            </Field>
+            <Field label="Método de pago">
+              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className={inputCls} style={inputStyle}>
                 {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
-            </div>
+            </Field>
           </div>
 
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Líneas de compra</p>
-            <label className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-2 cursor-pointer transition-all ${isScanning ? "bg-orange-200 text-black animate-pulse" : "bg-orange-500 text-white"}`}>
-              {isScanning ? "🤖 Procesando…" : "🤖 Escanear ticket (IA)"}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="font-mono text-[10px] uppercase tracking-[.14em] text-primary">Líneas de compra</p>
+            <label
+              className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-[10px] px-3 text-xs font-bold ${isScanning ? "animate-pulse" : ""}`}
+              style={{
+                background: isScanning ? "var(--warn-soft)" : "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))",
+                color: isScanning ? "var(--warn)" : "#fffaf4",
+              }}
+            >
+              {isScanning ? <Bot size={15} /> : <ScanLine size={15} />}
+              {isScanning ? "Procesando…" : "Escanear ticket (IA)"}
               {!isScanning && <input type="file" accept="image/*,application/pdf,.xlsx,.csv" multiple onChange={handleScan} className="hidden" />}
             </label>
           </div>
 
           <div className="space-y-2">
             {lines.map((l, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+              <div key={idx} className="grid grid-cols-12 items-center gap-2">
                 <select value={l.ingredientId} onChange={e => updateLine(idx, { ingredientId: e.target.value })}
-                  className={inputCls + " col-span-6"}>
+                  className={`${cellCls} col-span-12 sm:col-span-6`} style={cellStyle}>
                   <option value="">— ingrediente —</option>
                   {ingredients.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
                 <input type="number" step="0.001" min="0" placeholder="Cantidad" value={l.qty}
-                  onChange={e => updateLine(idx, { qty: e.target.value })} className={inputCls + " col-span-2"} />
+                  onChange={e => updateLine(idx, { qty: e.target.value })}
+                  className={`${cellCls} col-span-5 tabular-nums sm:col-span-2`} style={cellStyle} />
                 <input type="number" step="0.01" min="0" placeholder="$ unitario" value={l.unitPrice}
-                  onChange={e => updateLine(idx, { unitPrice: e.target.value })} className={inputCls + " col-span-2"} />
-                <span className="col-span-1 text-xs text-right" style={{ color: "var(--gold)" }}>
+                  onChange={e => updateLine(idx, { unitPrice: e.target.value })}
+                  className={`${cellCls} col-span-5 tabular-nums sm:col-span-2`} style={cellStyle} />
+                <span className="col-span-1 text-right font-mono text-xs tabular-nums text-primary sm:col-span-1">
                   {money((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))}
                 </span>
-                <button onClick={() => removeLine(idx)}
-                  className="col-span-1 text-red-500/70 hover:text-red-400 text-sm">🗑️</button>
+                <button onClick={() => removeLine(idx)} aria-label="Quitar línea"
+                  className="col-span-1 grid h-9 w-9 place-items-center justify-self-end rounded-lg"
+                  style={{ background: "var(--err-soft)", color: "var(--err)" }}>
+                  <Trash2 size={14} />
+                </button>
               </div>
             ))}
           </div>
 
           <button onClick={addLine}
-            className="mt-3 text-xs font-bold text-gray-500 hover:text-white border border-white/10 px-4 py-2 rounded-xl">
-            + Agregar línea
+            className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-[10px] px-3 text-xs font-bold text-tx"
+            style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+            <Plus size={14} strokeWidth={2} /> Agregar línea
           </button>
 
           <textarea value={purchaseNotes} onChange={e => setPurchaseNotes(e.target.value)}
             placeholder="Notas (opcional)" rows={2}
-            className={inputCls + " mt-4 resize-none"} />
+            className="mt-4 w-full resize-none rounded-xl px-3 py-2.5 text-sm text-tx outline-none focus:border-primary"
+            style={inputStyle} />
 
-          <div className="flex items-center justify-between mt-5 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
-            <p className="text-sm text-white font-bold">
-              Total: <span style={{ color: "var(--gold)" }} className="font-black">{money(purchaseTotal)}</span>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4" style={{ borderColor: "var(--bd-1)" }}>
+            <p className="text-sm font-bold text-tx">
+              Total: <span className="font-display font-extrabold text-primary">{money(purchaseTotal)}</span>
             </p>
-            <button onClick={submitPurchase} disabled={savingPurchase}
-              className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-black rounded-xl uppercase tracking-widest text-xs disabled:opacity-50">
+            <PrimaryBtn full={false} onClick={submitPurchase} disabled={savingPurchase}>
               {savingPurchase ? "Guardando…" : "Registrar compra"}
-            </button>
+            </PrimaryBtn>
           </div>
-        </div>
+        </WtCard>
       )}
 
       {/* ── TAB: Historial ──────────────────────────────────────────────── */}
       {!loading && tab === "historial" && (
-        <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--border)" }}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ background: "var(--surf2)", borderBottom: "1px solid var(--border)" }}>
-                {["Folio", "Fecha", "Proveedor", "Destino", "Pago", "Renglones", "Total"].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: "var(--muted)" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((po, i) => (
-                <tr key={po.id} style={{ borderBottom: "1px solid var(--border)", background: i % 2 ? "transparent" : "var(--surf)" }}>
-                  <td className="px-4 py-3 font-bold text-white">{po.poNumber}</td>
-                  <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{new Date(po.receivedAt || po.createdAt).toLocaleDateString("es-MX")}</td>
-                  <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{po.supplier?.name || "—"}</td>
-                  <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{po.location?.name || "—"}</td>
-                  <td className="px-4 py-3 text-xs" style={{ color: "var(--muted)" }}>{po.paymentMethod}</td>
-                  <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{po.items?.length ?? 0}</td>
-                  <td className="px-4 py-3 font-black" style={{ color: "var(--gold)" }}>{money(po.totalAmount)}</td>
-                </tr>
+        history.length === 0 ? (
+          <EmptyState icon={BookOpen} title="Sin compras registradas" hint="Las órdenes de compra aparecerán aquí." />
+        ) : (
+          <>
+            {/* Desktop: tabla */}
+            <WtCard className="hidden overflow-x-auto md:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--bd-1)" }}>
+                    {["Folio", "Fecha", "Proveedor", "Destino", "Pago", "Renglones", "Total"].map(h => (
+                      <th key={h} className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider text-tx-mut">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((po) => (
+                    <tr key={po.id} style={{ borderBottom: "1px solid var(--bd-1)" }}>
+                      <td className="px-4 py-3 font-bold text-tx-hi">{po.poNumber}</td>
+                      <td className="px-4 py-3 text-tx-mut">{new Date(po.receivedAt || po.createdAt).toLocaleDateString("es-MX")}</td>
+                      <td className="px-4 py-3 text-tx-mut">{po.supplier?.name || "—"}</td>
+                      <td className="px-4 py-3 text-tx-mut">{po.location?.name || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-tx-mut">{po.paymentMethod}</td>
+                      <td className="px-4 py-3 text-tx-mut">{po.items?.length ?? 0}</td>
+                      <td className="px-4 py-3 font-display font-extrabold text-primary">{money(po.totalAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </WtCard>
+            {/* Mobile: cards */}
+            <div className="space-y-3 md:hidden">
+              {history.map((po) => (
+                <WtCard key={po.id} className="p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="font-display text-sm font-extrabold text-tx-hi">{po.poNumber}</span>
+                    <span className="font-display text-base font-extrabold text-primary">{money(po.totalAmount)}</span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-tx-mut">
+                    {new Date(po.receivedAt || po.createdAt).toLocaleDateString("es-MX")} · {po.supplier?.name || "—"} · {po.location?.name || "—"}
+                  </div>
+                  <div className="mt-1 text-[11px] text-tx-mut">{po.paymentMethod} · {po.items?.length ?? 0} renglones</div>
+                </WtCard>
               ))}
-              {history.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-600 text-sm">Sin compras registradas</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          </>
+        )
       )}
 
       {/* ── TAB: Bodega ─────────────────────────────────────────────────── */}
       {!loading && tab === "bodega" && (
         <div>
-          <div className="flex items-center gap-3 mb-4 flex-wrap">
-            <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Sucursal</span>
-            <select value={whLocationId} onChange={e => setWhLocationId(e.target.value)}
-              className="bg-black border border-white/10 rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-orange-500">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-[.12em] text-tx-mut">Sucursal</span>
+            <select value={whLocationId} onChange={e => setWhLocationId(e.target.value)} className={cellCls} style={cellStyle}>
               {locations.map(l => (
                 <option key={l.id} value={l.id}>{l.name}{l.isCentralWarehouse ? " · Bodega Central" : ""}</option>
               ))}
             </select>
             {warehouse && (
-              <span className="ml-auto text-sm text-white font-bold">
+              <span className="ml-auto text-sm font-bold text-tx">
                 Valor de inventario:{" "}
-                <span style={{ color: "var(--gold)" }} className="font-black">{money(warehouse.totalValue)}</span>
-                <span className="text-gray-500 text-xs ml-2">({warehouse.count} ingredientes)</span>
+                <span className="font-display font-extrabold text-primary">{money(warehouse.totalValue)}</span>
+                <span className="ml-2 text-xs text-tx-mut">({warehouse.count} ingredientes)</span>
               </span>
             )}
           </div>
-          <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--border)" }}>
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ background: "var(--surf2)", borderBottom: "1px solid var(--border)" }}>
-                  {["Ingrediente", "Unidad", "Stock", "Mínimo", "Costo", "Valor"].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: "var(--muted)" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(warehouse?.ingredients || []).map((g, i) => (
-                  <tr key={g.id} style={{
-                    borderBottom: "1px solid var(--border)",
-                    background: g.lowStock ? "rgba(239,68,68,0.04)" : i % 2 ? "transparent" : "var(--surf)",
-                  }}>
-                    <td className="px-4 py-3 font-medium text-white">{g.lowStock && <span className="mr-1">⚠️</span>}{g.name}</td>
-                    <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{g.unit}</td>
-                    <td className="px-4 py-3 font-bold" style={{ color: g.lowStock ? "#ef4444" : "#22c55e" }}>{g.stock}</td>
-                    <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{g.minStock}</td>
-                    <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{money(g.cost)}</td>
-                    <td className="px-4 py-3 font-black" style={{ color: "var(--gold)" }}>{money(g.value)}</td>
-                  </tr>
+
+          {warehouse && warehouse.ingredients.length === 0 ? (
+            <EmptyState icon={PackageOpen} title="Bodega vacía" hint="No hay ingredientes con stock en esta sucursal." />
+          ) : (
+            <>
+              {/* Desktop: tabla */}
+              <WtCard className="hidden overflow-x-auto md:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--bd-1)" }}>
+                      {["Ingrediente", "Unidad", "Stock", "Mínimo", "Costo", "Valor"].map(h => (
+                        <th key={h} className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider text-tx-mut">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(warehouse?.ingredients || []).map((g) => (
+                      <tr key={g.id} style={{
+                        borderBottom: "1px solid var(--bd-1)",
+                        background: g.lowStock ? "var(--err-soft)" : undefined,
+                      }}>
+                        <td className="px-4 py-3 font-medium text-tx-hi">
+                          {g.lowStock && <AlertTriangle size={13} className="mr-1 inline text-err" />}{g.name}
+                        </td>
+                        <td className="px-4 py-3 text-tx-mut">{g.unit}</td>
+                        <td className="px-4 py-3 font-bold" style={{ color: g.lowStock ? "var(--err)" : "var(--ok)" }}>{g.stock}</td>
+                        <td className="px-4 py-3 text-tx-mut">{g.minStock}</td>
+                        <td className="px-4 py-3 text-tx-mut">{money(g.cost)}</td>
+                        <td className="px-4 py-3 font-display font-extrabold text-primary">{money(g.value)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </WtCard>
+              {/* Mobile: cards */}
+              <div className="space-y-3 md:hidden">
+                {(warehouse?.ingredients || []).map((g) => (
+                  <WtCard key={g.id} className="p-4" style={g.lowStock ? { borderColor: "var(--err)" } : undefined}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-1.5 font-semibold text-tx-hi">
+                        {g.lowStock && <AlertTriangle size={14} className="shrink-0 text-err" />}
+                        <span className="truncate">{g.name}</span>
+                      </span>
+                      <span className="font-display font-extrabold text-primary">{money(g.value)}</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-tx-mut">
+                      <span>Stock: <strong style={{ color: g.lowStock ? "var(--err)" : "var(--ok)" }}>{g.stock} {g.unit}</strong></span>
+                      <span>Mín: {g.minStock}</span>
+                      <span>Costo: {money(g.cost)}</span>
+                    </div>
+                  </WtCard>
                 ))}
-                {warehouse && warehouse.ingredients.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-600 text-sm">Bodega vacía</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
       {/* ── TAB: Reparto ────────────────────────────────────────────────── */}
       {!loading && tab === "reparto" && (
-        <div>
+        <div className="space-y-6">
           {!centralLoc && (
-            <div className="rounded-2xl border p-5 mb-6 text-sm text-red-400" style={{ borderColor: "var(--border)" }}>
-              Asigna primero la Bodega Central en la configuración de arriba.
-            </div>
+            <WtCard className="p-4 text-sm text-err">
+              <span className="flex items-center gap-2">
+                <AlertTriangle size={15} /> Asigna primero la Bodega Central en la configuración de arriba.
+              </span>
+            </WtCard>
           )}
-          <div className="rounded-2xl border p-6" style={{ borderColor: "var(--border)", background: "var(--surf)" }}>
-            <div className="flex items-center gap-3 mb-5 flex-wrap">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Repartir a</span>
-              <select value={repartoDest} onChange={e => loadSuggestion(e.target.value)}
-                className="bg-black border border-white/10 rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-orange-500">
+          <WtCard className="p-4 md:p-6">
+            <div className="mb-5 flex flex-wrap items-center gap-3">
+              <span className="font-mono text-[10px] uppercase tracking-[.12em] text-tx-mut">Repartir a</span>
+              <select value={repartoDest} onChange={e => loadSuggestion(e.target.value)} className={cellCls} style={cellStyle}>
                 <option value="">— sucursal destino —</option>
                 {branches.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
               {repartoDest && (
                 <button onClick={() => loadSuggestion(repartoDest)}
-                  className="px-3 py-2 rounded-xl text-xs font-black border border-white/10 text-gray-400 hover:text-white">
-                  ↻ Recalcular sugerencia
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] px-3 text-xs font-bold text-tx"
+                  style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                  <RotateCw size={14} /> Recalcular
                 </button>
               )}
             </div>
 
             {repartoDest && suggestion.length === 0 && (
-              <p className="text-center text-gray-600 py-6 text-sm">
+              <p className="py-6 text-center text-sm text-tx-mut">
                 Sin sugerencias: ninguna sucursal está bajo mínimo o la Bodega Central no tiene stock.
               </p>
             )}
 
             {suggestion.length > 0 && (
               <>
-                <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--border)" }}>
+                {/* Desktop: tabla */}
+                <div className="hidden overflow-x-auto rounded-2xl md:block" style={{ border: "1px solid var(--bd-1)" }}>
                   <table className="w-full text-sm">
                     <thead>
-                      <tr style={{ background: "var(--surf2)", borderBottom: "1px solid var(--border)" }}>
+                      <tr style={{ borderBottom: "1px solid var(--bd-1)", background: "var(--surf-2)" }}>
                         {["Ingrediente", "En sucursal", "Mínimo", "En central", "Repartir"].map(h => (
-                          <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: "var(--muted)" }}>{h}</th>
+                          <th key={h} className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider text-tx-mut">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {suggestion.map((s, i) => (
-                        <tr key={s.centralIngredientId} style={{ borderBottom: "1px solid var(--border)", background: i % 2 ? "transparent" : "var(--surf)" }}>
-                          <td className="px-4 py-3 font-medium text-white">{s.name}</td>
-                          <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{s.destStock} {s.unit}</td>
-                          <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{s.destMinStock}</td>
-                          <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{s.centralStock}</td>
+                      {suggestion.map((s) => (
+                        <tr key={s.centralIngredientId} style={{ borderBottom: "1px solid var(--bd-1)" }}>
+                          <td className="px-4 py-3 font-medium text-tx-hi">{s.name}</td>
+                          <td className="px-4 py-3 text-tx-mut">{s.destStock} {s.unit}</td>
+                          <td className="px-4 py-3 text-tx-mut">{s.destMinStock}</td>
+                          <td className="px-4 py-3 text-tx-mut">{s.centralStock}</td>
                           <td className="px-4 py-3">
                             <input type="number" step="0.001" min="0" max={s.centralStock}
                               value={repartoQty[s.centralIngredientId] ?? ""}
                               onChange={e => setRepartoQty(p => ({ ...p, [s.centralIngredientId]: e.target.value }))}
-                              className="w-28 bg-black border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm outline-none focus:border-orange-500" />
+                              className={`${cellCls} w-28 tabular-nums`} style={cellStyle} />
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                {/* Mobile: cards */}
+                <div className="space-y-3 md:hidden">
+                  {suggestion.map((s) => (
+                    <div key={s.centralIngredientId} className="rounded-2xl p-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                      <div className="mb-2 font-semibold text-tx-hi">{s.name}</div>
+                      <div className="mb-2 flex flex-wrap gap-x-3 text-[11px] text-tx-mut">
+                        <span>En sucursal: {s.destStock} {s.unit}</span>
+                        <span>Mín: {s.destMinStock}</span>
+                        <span>En central: {s.centralStock}</span>
+                      </div>
+                      <label className="flex items-center gap-2">
+                        <span className="text-[11px] text-tx-mut">Repartir</span>
+                        <input type="number" step="0.001" min="0" max={s.centralStock}
+                          value={repartoQty[s.centralIngredientId] ?? ""}
+                          onChange={e => setRepartoQty(p => ({ ...p, [s.centralIngredientId]: e.target.value }))}
+                          className={`${cellCls} flex-1 tabular-nums`} style={cellStyle} />
+                      </label>
+                    </div>
+                  ))}
+                </div>
 
                 <textarea value={repartoNotes} onChange={e => setRepartoNotes(e.target.value)}
                   placeholder="Notas del reparto (opcional)" rows={2}
-                  className={inputCls + " mt-4 resize-none"} />
+                  className="mt-4 w-full resize-none rounded-xl px-3 py-2.5 text-sm text-tx outline-none focus:border-primary"
+                  style={inputStyle} />
 
-                <div className="flex items-center justify-between mt-5 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
-                  <p className="text-sm text-white font-bold">
-                    Costo estimado: <span style={{ color: "var(--gold)" }} className="font-black">{money(repartoTotal)}</span>
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4" style={{ borderColor: "var(--bd-1)" }}>
+                  <p className="text-sm font-bold text-tx">
+                    Costo estimado: <span className="font-display font-extrabold text-primary">{money(repartoTotal)}</span>
                   </p>
-                  <button onClick={submitReparto} disabled={savingReparto}
-                    className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-black rounded-xl uppercase tracking-widest text-xs disabled:opacity-50">
+                  <PrimaryBtn full={false} onClick={submitReparto} disabled={savingReparto}>
                     {savingReparto ? "Guardando…" : "Confirmar reparto"}
-                  </button>
+                  </PrimaryBtn>
                 </div>
               </>
             )}
-          </div>
+          </WtCard>
 
-          <h3 className="text-sm font-black text-white uppercase tracking-widest mt-8 mb-3">Repartos recientes</h3>
-          <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--border)" }}>
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ background: "var(--surf2)", borderBottom: "1px solid var(--border)" }}>
-                  {["Fecha", "Desde", "Renglones", "Costo", "Por"].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: "var(--muted)" }}>{h}</th>
+          <div>
+            <h3 className="mb-3 font-display text-base font-extrabold text-tx-hi md:text-xl">Repartos recientes</h3>
+            {transfers.length === 0 ? (
+              <EmptyState icon={Truck} title="Sin repartos" hint="Los repartos a sucursales aparecerán aquí." />
+            ) : (
+              <>
+                {/* Desktop: tabla */}
+                <WtCard className="hidden overflow-x-auto md:block">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--bd-1)" }}>
+                        {["Fecha", "Desde", "Renglones", "Costo", "Por"].map(h => (
+                          <th key={h} className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider text-tx-mut">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transfers.map((t) => (
+                        <tr key={t.id} style={{ borderBottom: "1px solid var(--bd-1)" }}>
+                          <td className="px-4 py-3 text-tx-mut">{new Date(t.createdAt).toLocaleString("es-MX")}</td>
+                          <td className="px-4 py-3 text-tx-hi">{t.fromLocation?.name || "—"}</td>
+                          <td className="px-4 py-3 text-tx-mut">{t.items?.length ?? 0}</td>
+                          <td className="px-4 py-3 font-display font-extrabold text-primary">{money(t.totalCost)}</td>
+                          <td className="px-4 py-3 text-tx-mut">{t.createdBy?.name || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </WtCard>
+                {/* Mobile: cards */}
+                <div className="space-y-3 md:hidden">
+                  {transfers.map((t) => (
+                    <WtCard key={t.id} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-tx-hi">{t.fromLocation?.name || "—"}</span>
+                        <span className="font-display font-extrabold text-primary">{money(t.totalCost)}</span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-tx-mut">
+                        {new Date(t.createdAt).toLocaleString("es-MX")} · {t.items?.length ?? 0} renglones · {t.createdBy?.name || "—"}
+                      </div>
+                    </WtCard>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {transfers.map((t, i) => (
-                  <tr key={t.id} style={{ borderBottom: "1px solid var(--border)", background: i % 2 ? "transparent" : "var(--surf)" }}>
-                    <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{new Date(t.createdAt).toLocaleString("es-MX")}</td>
-                    <td className="px-4 py-3 text-white">{t.fromLocation?.name || "—"}</td>
-                    <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{t.items?.length ?? 0}</td>
-                    <td className="px-4 py-3 font-black" style={{ color: "var(--gold)" }}>{money(t.totalCost)}</td>
-                    <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{t.createdBy?.name || "—"}</td>
-                  </tr>
-                ))}
-                {transfers.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-600 text-sm">Sin repartos</td></tr>
-                )}
-              </tbody>
-            </table>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
 
       {/* ── Modal revisión IA ───────────────────────────────────────────── */}
       {scanOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 overflow-y-auto">
-          <div className="w-full max-w-3xl bg-[#111] border border-gray-800 rounded-3xl p-8 my-4">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-black text-white uppercase tracking-tighter">🤖 Revisión de ticket</h2>
-                <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest font-bold">Asocia cada renglón a un ingrediente existente</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,.85)" }}>
+          <WtCard className="my-4 w-full max-w-3xl p-5 md:p-7">
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="grid h-10 w-10 place-items-center rounded-xl text-primary" style={{ background: "var(--iris-soft)" }}>
+                  <Bot size={20} />
+                </span>
+                <div>
+                  <h2 className="font-display text-xl font-extrabold text-tx-hi">Revisión de ticket</h2>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-tx-mut">Asocia cada renglón a un ingrediente existente</p>
+                </div>
               </div>
-              <button onClick={() => { setScanOpen(false); setScanRows([]); }} className="text-gray-600 hover:text-white text-xl">✕</button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-white/10">
-                    {["Detectado", "Ingrediente", "Cantidad", "Costo total", ""].map(h => (
-                      <th key={h} className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-gray-500">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {scanRows.map((r, idx) => (
-                    <tr key={idx} className="border-b border-white/5">
-                      <td className="px-3 py-2 text-gray-300">{r.name || "—"}</td>
-                      <td className="px-3 py-2">
-                        <select value={r.matchedId}
-                          onChange={e => setScanRows(p => p.map((x, i) => i === idx ? { ...x, matchedId: e.target.value } : x))}
-                          className="bg-black border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm w-full outline-none focus:border-orange-500">
-                          <option value="">— omitir —</option>
-                          {ingredients.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                        </select>
-                      </td>
-                      <td className="px-3 py-2">
-                        <input type="number" step="0.001" min="0" value={r.quantityFound}
-                          onChange={e => setScanRows(p => p.map((x, i) => i === idx ? { ...x, quantityFound: e.target.value } : x))}
-                          className="bg-black border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm w-24 outline-none focus:border-orange-500" />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input type="number" step="0.01" min="0" value={r.totalCost}
-                          onChange={e => setScanRows(p => p.map((x, i) => i === idx ? { ...x, totalCost: e.target.value } : x))}
-                          className="bg-black border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm w-24 outline-none focus:border-orange-500" />
-                      </td>
-                      <td className="px-3 py-2">
-                        <button onClick={() => setScanRows(p => p.filter((_, i) => i !== idx))}
-                          className="text-red-500/60 hover:text-red-400 text-xs px-2 py-1 rounded-lg">🗑️</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {scanRows.length === 0 && <p className="text-center text-gray-600 py-6 text-sm">Sin renglones detectados.</p>}
-            <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-white/10">
-              <button onClick={() => { setScanOpen(false); setScanRows([]); }} className="px-5 py-2.5 text-gray-500 font-bold uppercase tracking-widest text-xs">Cancelar</button>
-              <button onClick={applyScan} disabled={scanRows.length === 0}
-                className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-black rounded-xl uppercase tracking-widest text-xs disabled:opacity-50">
-                Agregar a la compra
+              <button onClick={() => { setScanOpen(false); setScanRows([]); }} aria-label="Cerrar"
+                className="grid h-9 w-9 place-items-center rounded-lg text-tx-mut" style={{ background: "var(--surf-2)" }}>
+                <X size={16} />
               </button>
             </div>
-          </div>
+
+            {scanRows.length === 0 ? (
+              <p className="py-6 text-center text-sm text-tx-mut">Sin renglones detectados.</p>
+            ) : (
+              <div className="space-y-2">
+                {scanRows.map((r, idx) => (
+                  <div key={idx} className="grid items-center gap-2 rounded-xl p-2"
+                    style={{ background: "var(--surf-2)", gridTemplateColumns: "1fr 1fr 70px 80px 36px" }}>
+                    <span className="truncate text-xs text-tx-mut" title={r.name || "—"}>{r.name || "—"}</span>
+                    <select value={r.matchedId}
+                      onChange={e => setScanRows(p => p.map((x, i) => i === idx ? { ...x, matchedId: e.target.value } : x))}
+                      className={cellCls} style={cellStyle}>
+                      <option value="">— omitir —</option>
+                      {ingredients.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                    <input type="number" step="0.001" min="0" value={r.quantityFound}
+                      onChange={e => setScanRows(p => p.map((x, i) => i === idx ? { ...x, quantityFound: e.target.value } : x))}
+                      className={`${cellCls} tabular-nums`} style={cellStyle} />
+                    <input type="number" step="0.01" min="0" value={r.totalCost}
+                      onChange={e => setScanRows(p => p.map((x, i) => i === idx ? { ...x, totalCost: e.target.value } : x))}
+                      className={`${cellCls} tabular-nums`} style={cellStyle} />
+                    <button onClick={() => setScanRows(p => p.filter((_, i) => i !== idx))} aria-label="Quitar"
+                      className="grid h-9 w-9 place-items-center rounded-lg"
+                      style={{ background: "var(--err-soft)", color: "var(--err)" }}>
+                      <X size={14} strokeWidth={2.4} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-6 flex items-center justify-end gap-2 border-t pt-4" style={{ borderColor: "var(--bd-1)" }}>
+              <PrimaryBtn ghost full={false} onClick={() => { setScanOpen(false); setScanRows([]); }}>Cancelar</PrimaryBtn>
+              <PrimaryBtn full={false} onClick={applyScan} disabled={scanRows.length === 0}>Agregar a la compra</PrimaryBtn>
+            </div>
+          </WtCard>
         </div>
       )}
+    </WtScreen>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.12em] text-tx-mut">{label}</label>
+      {children}
     </div>
   );
 }

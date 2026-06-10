@@ -69,9 +69,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="hidden md:block"><TrialBanner /></div>
         <main className="flex-1 pb-24 md:p-8 md:pb-8">
           <div className="hidden md:block"><OnboardingChecklist /></div>
-          <div className={pathname === "/admin" ? "" : "px-4 pt-4 md:p-0"}>
-            {children}
-          </div>
+          {/* Cada pantalla controla su propio padding vía <WtScreen> (WarmTech). */}
+          {children}
         </main>
       </div>
       <div className="hidden md:block">

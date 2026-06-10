@@ -1,11 +1,20 @@
 "use client";
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import {
+  Bot, Plus, Search, X, FolderOpen, UtensilsCrossed, Pencil, Trash2,
+  Check, Power, ImagePlus, ChevronLeft, AlertTriangle, Shuffle,
+  Sparkles,
+} from "lucide-react";
 import api from "@/lib/api";
 import { getApiUrl } from "@/lib/config";
 import ModifierGroupsEditor from "@/components/admin/ModifierGroupsEditor";
 import { uploadMenuImage } from "@/lib/supabaseUpload";
 import { extractErrorMessage } from "@/lib/errors";
+import {
+  WtScreen, PageHeader, WtCard, SectionLabel, Pill, IconBadge, Toggle,
+  PrimaryBtn, EmptyState, money,
+} from "@/components/warmtech";
 
 // ── Componente para aplicar grupo de variantes ────────────────────────────
 function ApplyTemplateButton({ itemId, onApplied }: { itemId: string, onApplied: (v: any[]) => void }) {
@@ -31,30 +40,30 @@ function ApplyTemplateButton({ itemId, onApplied }: { itemId: string, onApplied:
     <div className="mb-3">
       {!open ? (
         <button type="button" onClick={() => setOpen(true)}
-          className="w-full py-2 rounded-xl text-xs font-bold border border-dashed transition-all"
-          style={{borderColor:"var(--gold)",color:"var(--gold)"}}>
-          🔀 Aplicar grupo de variantes
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed text-xs font-bold text-primary transition-all"
+          style={{ borderColor: "var(--brand-primary)" }}>
+          <Shuffle size={15} strokeWidth={2} /> Aplicar grupo de variantes
         </button>
       ) : (
-        <div className="rounded-xl border p-3" style={{background:"var(--surf2)",borderColor:"var(--border)"}}>
-          <p className="text-xs font-bold mb-2" style={{color:"var(--muted)"}}>Selecciona un grupo:</p>
+        <WtCard className="p-3">
+          <p className="mb-2 text-xs font-bold text-tx-mut">Selecciona un grupo:</p>
           {templates.length === 0 ? (
-            <p className="text-xs" style={{color:"var(--muted)"}}>Sin grupos creados. Ve a Menú → Variantes</p>
+            <p className="text-xs text-tx-mut">Sin grupos creados. Ve a Menú → Variantes</p>
           ) : (
             <div className="flex flex-col gap-1">
               {templates.map((t: any) => (
                 <button key={t.id} type="button" onClick={() => apply(t.id)} disabled={applying}
-                  className="flex items-center justify-between px-3 py-2 rounded-xl text-sm text-left transition-all"
-                  style={{background:"var(--surf)",border:"1px solid var(--border)"}}>
-                  <span className="font-bold">{t.name}</span>
-                  <span className="text-xs" style={{color:"var(--muted)"}}>{t.options?.length || 0} opciones</span>
+                  className="flex min-h-11 items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-all"
+                  style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>
+                  <span className="font-bold text-tx">{t.name}</span>
+                  <span className="text-xs text-tx-mut">{t.options?.length || 0} opciones</span>
                 </button>
               ))}
             </div>
           )}
           <button type="button" onClick={() => setOpen(false)}
-            className="mt-2 text-xs" style={{color:"var(--muted)"}}>Cancelar</button>
-        </div>
+            className="mt-2 text-xs text-tx-mut">Cancelar</button>
+        </WtCard>
       )}
     </div>
   );
@@ -176,16 +185,16 @@ export default function MenuPage() {
           const item = aiItems[i];
           setScanState(p => ({ ...p, currentFile: item.name, current: i + 1 }));
           const category = currentCats.find(c => c.name.toLowerCase() === (item.category || "").toLowerCase());
-          
+
           // El precio base ahora viene del primer base_options o es 0 si no hay
           const basePrice = item.base_options && item.base_options.length > 0 ? (item.base_options[0].price || 0) : 0;
-          
+
           try {
             const { data: createdItem } = await api.post("/api/menu/items", {
               name: item.name, description: item.description,
               price: basePrice, categoryId: category?.id || currentCats[0]?.id, isPopular: !!item.pantalla_principal
             });
-            
+
             // Importar base_options como variantes
             if (item.base_options && item.base_options.length > 0) {
               for (const v of item.base_options) {
@@ -194,7 +203,7 @@ export default function MenuPage() {
                 }).catch(e => console.error("Error creando variante IA", e));
               }
             }
-            
+
             // Importar allowed_modifiers buscando en global_modifiers
             if (item.allowed_modifiers && item.allowed_modifiers.length > 0 && aiGlobalModifiers) {
               for (const modId of item.allowed_modifiers) {
@@ -203,10 +212,10 @@ export default function MenuPage() {
                   try {
                     // Crea un ModifierGroup por cada ID permitido para este platillo
                     const { data: group } = await api.post(`/api/menu/items/${createdItem.id}/modifier-groups`, {
-                      name: modId.replace(/_/g, " ").toUpperCase(), 
+                      name: modId.replace(/_/g, " ").toUpperCase(),
                       required: false, multiSelect: true, minSelection: 0, maxSelection: 0, freeModifiersLimit: 0
                     });
-                    
+
                     for (const opt of globalModOptions) {
                       await api.post(`/api/menu/modifier-groups/${group.id}/modifiers`, {
                         name: opt.name, priceAdd: opt.price_extra || 0, isDefault: false
@@ -455,8 +464,8 @@ export default function MenuPage() {
     return (
       <div>
         {items.length > 0 && (
-          <div className="flex flex-col gap-1 mb-3">
-            <div className="grid grid-cols-12 gap-2 px-3 pb-1 text-xs font-black uppercase tracking-wider" style={{color:"var(--muted)"}}>
+          <div className="mb-3 flex flex-col gap-1">
+            <div className="grid grid-cols-12 gap-2 px-3 pb-1 font-mono text-[10px] uppercase tracking-[.14em] text-tx-dim">
               <span className="col-span-6">Nombre</span>
               <span className="col-span-3 text-right">Precio</span>
               <span className="col-span-3"></span>
@@ -464,42 +473,42 @@ export default function MenuPage() {
             {items.map((item: any) => (
               <div key={item.id}>
                 {editingId === item.id ? (
-                  <div className="grid grid-cols-12 gap-2 items-center p-2 rounded-xl"
-                    style={{background:"var(--surf2)",border:"1.5px solid var(--gold)"}}>
+                  <div className="grid grid-cols-12 items-center gap-2 rounded-xl p-2"
+                    style={{ background: "var(--surf-2)", border: "1.5px solid var(--brand-primary)" }}>
                     <input value={editForm.name}
                       onChange={e => onChangeForm((p: any) => ({...p, name: e.target.value}))}
-                      className="col-span-6 px-2 py-1.5 rounded-lg text-sm outline-none"
-                      style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--text)"}} />
+                      className="col-span-6 rounded-lg px-2 py-1.5 text-sm text-tx outline-none"
+                      style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }} />
                     <div className="col-span-3 flex items-center gap-1">
-                      <span className="text-xs" style={{color:"var(--muted)"}}>$</span>
+                      <span className="text-xs text-tx-mut">$</span>
                       <input value={editForm.price} type="number"
                         onChange={e => onChangeForm((p: any) => ({...p, price: e.target.value}))}
-                        className="w-full px-2 py-1.5 rounded-lg text-sm outline-none text-right"
-                        style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--text)"}} />
+                        className="w-full rounded-lg px-2 py-1.5 text-right text-sm text-tx outline-none"
+                        style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }} />
                     </div>
-                    <div className="col-span-3 flex gap-1 justify-end">
-                      <button type="button" onClick={() => onSaveEdit(item.id)}
-                        className="px-2 py-1.5 rounded-lg text-xs font-black"
-                        style={{background:"var(--gold)",color:"#000"}}>✓</button>
-                      <button type="button" onClick={onCancelEdit}
-                        className="px-2 py-1.5 rounded-lg text-xs"
-                        style={{background:"var(--surf)",color:"var(--muted)",border:"1px solid var(--border)"}}>✕</button>
+                    <div className="col-span-3 flex justify-end gap-1">
+                      <button type="button" onClick={() => onSaveEdit(item.id)} aria-label="Guardar"
+                        className="grid h-8 w-8 place-items-center rounded-lg text-white"
+                        style={{ background: "var(--brand-primary)" }}><Check size={14} strokeWidth={2.6} /></button>
+                      <button type="button" onClick={onCancelEdit} aria-label="Cancelar"
+                        className="grid h-8 w-8 place-items-center rounded-lg text-tx-mut"
+                        style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}><X size={14} /></button>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-12 gap-2 items-center px-3 py-2 rounded-xl group transition-all"
-                    style={{background:"var(--surf2)"}}>
-                    <span className="col-span-6 text-sm font-medium">{item.name}</span>
-                    <span className="col-span-3 text-sm font-bold text-right" style={{color:"var(--gold)"}}>
+                  <div className="group grid grid-cols-12 items-center gap-2 rounded-xl px-3 py-2 transition-all"
+                    style={{ background: "var(--surf-2)" }}>
+                    <span className="col-span-6 text-sm font-medium text-tx">{item.name}</span>
+                    <span className="col-span-3 text-right font-mono text-sm font-bold text-primary">
                       ${item.price > 0 ? item.price : '0.00'}
                     </span>
-                    <div className="col-span-3 flex gap-1 justify-end">
-                      <button type="button" onClick={() => onStartEdit(item)}
-                        className="px-2 py-1 rounded-lg text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                        style={{background:"rgba(245,166,35,0.15)",color:"var(--gold)"}}>✏️</button>
-                      <button type="button" onClick={() => onDelete(item.id)}
-                        className="px-2 py-1 rounded-lg text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                        style={{background:"rgba(239,68,68,0.1)",color:"#ef4444"}}>🗑️</button>
+                    <div className="col-span-3 flex justify-end gap-1">
+                      <button type="button" onClick={() => onStartEdit(item)} aria-label="Editar"
+                        className="grid h-8 w-8 place-items-center rounded-lg text-primary opacity-0 transition-opacity group-hover:opacity-100"
+                        style={{ background: "var(--iris-soft)" }}><Pencil size={13} /></button>
+                      <button type="button" onClick={() => onDelete(item.id)} aria-label="Eliminar"
+                        className="grid h-8 w-8 place-items-center rounded-lg opacity-0 transition-opacity group-hover:opacity-100"
+                        style={{ background: "var(--err-soft)", color: "var(--err)" }}><Trash2 size={13} /></button>
                     </div>
                   </div>
                 )}
@@ -542,79 +551,92 @@ export default function MenuPage() {
   const showItemsList = !showCategoriesGrid;
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-syne text-2xl sm:text-3xl font-black">Menú</h1>
-          <p className="text-xs text-gray-500 uppercase font-bold tracking-widest mt-1">Gestión de artículos y categorías</p>
-        </div>
-        <div className="flex gap-2 sm:gap-3 flex-wrap">
-          {/* BOTÓN IA ESCANEO */}
-          <label className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg ${scanState.active ? 'bg-orange-200 text-black cursor-not-allowed' : 'bg-orange-500 text-white shadow-orange-500/20 cursor-pointer'}`}>
-            🤖 <span className="whitespace-nowrap">Escaneo IA</span>
-            {!scanState.active && <input type="file" accept="image/*" multiple onChange={handleAIScan} className="hidden" />}
-          </label>
+    <WtScreen>
+      <PageHeader
+        eyebrow="Catálogo"
+        title="Menú"
+        subtitle="Gestión de artículos y categorías"
+        actions={
+          <>
+            <label className={`inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-[13px] px-4 text-[13px] font-bold text-white transition-transform active:scale-[.98] ${scanState.active ? "cursor-not-allowed opacity-60" : ""}`}
+              style={{ background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", boxShadow: "0 6px 18px var(--iris-glow)" }}>
+              <Bot size={16} strokeWidth={2} /> Escaneo IA
+              {!scanState.active && <input type="file" accept="image/*" multiple onChange={handleAIScan} className="hidden" />}
+            </label>
+            <PrimaryBtn full={false} ghost icon={Plus} onClick={() => openForm()}>
+              Nuevo platillo
+            </PrimaryBtn>
+          </>
+        }
+      />
 
-          <button onClick={() => openForm()}
-            className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-syne font-black bg-white text-black hover:bg-gray-200 transition-all whitespace-nowrap"
-          >
-            + Nuevo platillo
-          </button>
-        </div>
+      {/* Acciones (móvil) */}
+      <div className="mb-4 flex gap-2 md:hidden">
+        <label className={`flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-[13px] px-3 text-xs font-bold text-white transition-transform active:scale-[.98] ${scanState.active ? "cursor-not-allowed opacity-60" : ""}`}
+          style={{ background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", boxShadow: "0 6px 18px var(--iris-glow)" }}>
+          <Bot size={15} strokeWidth={2} /> Escaneo IA
+          {!scanState.active && <input type="file" accept="image/*" multiple onChange={handleAIScan} className="hidden" />}
+        </label>
+        <button type="button" onClick={() => openForm()}
+          className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[13px] px-3 text-xs font-bold text-tx"
+          style={{ background: "var(--surf-2)", border: "1px solid var(--bd-2)" }}>
+          <Plus size={15} strokeWidth={2.2} /> Nuevo platillo
+        </button>
       </div>
 
       {/* Barra de búsqueda + breadcrumb */}
-      <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <input value={search} onChange={e => { setSearch(e.target.value); if (e.target.value.trim()) setView("products"); }}
-          placeholder="Buscar platillos o categorías..."
-          className="px-4 py-2 rounded-xl text-sm outline-none flex-1 min-w-48"
-          style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--text)"}} />
+      <WtCard className="mb-4 flex flex-wrap items-center gap-2 p-3">
+        <div className="relative min-w-[160px] flex-1">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-tx-mut" />
+          <input value={search} onChange={e => { setSearch(e.target.value); if (e.target.value.trim()) setView("products"); }}
+            placeholder="Buscar platillos o categorías…"
+            className="min-h-11 w-full rounded-xl pl-9 pr-3 text-sm text-tx outline-none"
+            style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }} />
+        </div>
         {search.trim() && (
-          <button type="button" onClick={() => { setSearch(""); setView("categories"); setDrillCategoryId(null); }}
-            className="px-3 py-2 rounded-xl text-xs font-bold"
-            style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--muted)"}}>
-            ✕ Limpiar
-          </button>
+          <PrimaryBtn full={false} danger icon={X}
+            onClick={() => { setSearch(""); setView("categories"); setDrillCategoryId(null); }}>
+            Limpiar
+          </PrimaryBtn>
         )}
         {!search.trim() && view === "products" && (
-          <button type="button" onClick={() => { setView("categories"); setDrillCategoryId(null); setFilterCat("all"); }}
-            className="px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5"
-            style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--muted)"}}>
-            ← Categorías
-          </button>
+          <PrimaryBtn full={false} ghost icon={ChevronLeft}
+            onClick={() => { setView("categories"); setDrillCategoryId(null); setFilterCat("all"); }}>
+            Categorías
+          </PrimaryBtn>
         )}
-        <span className="text-xs font-bold" style={{color:"var(--muted)"}}>
+        <span className="px-1 text-xs font-bold text-tx-mut">
           {showCategoriesGrid
             ? `${filteredCats.length} categorías`
             : `${filtered.length} artículos${activeDrillCat ? ` en ${activeDrillCat.name}` : ""}`}
         </span>
-      </div>
+      </WtCard>
 
       {/* Grid de categorías (drill-down landing) */}
       {!loading && showCategoriesGrid && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {filteredCats.length === 0 ? (
-            <div className="col-span-full text-center py-20" style={{color:"var(--muted)"}}>
-              <p className="text-sm font-bold uppercase tracking-wider">Sin categorías</p>
+            <div className="col-span-full">
+              <EmptyState icon={FolderOpen} title="Sin categorías"
+                hint="Crea tu primera categoría al agregar un platillo." />
             </div>
           ) : (
             filteredCats.map((c) => {
               const count = itemCountByCat[c.id] || 0;
               return (
-                <button key={c.id} type="button"
+                <WtCard key={c.id}
                   onClick={() => { setDrillCategoryId(c.id); setView("products"); setFilterCat("all"); }}
-                  className="flex flex-col items-start gap-2 p-5 rounded-2xl border text-left transition-all active:scale-[0.98] hover:border-[var(--gold)]"
-                  style={{background:"var(--surf)",borderColor:"var(--border)"}}>
-                  <div className="flex items-center justify-between w-full">
-                    <span className="text-2xl">📂</span>
-                    <span className="text-xs font-black px-2 py-1 rounded-full" style={{background:"var(--surf2)",color:"var(--muted)"}}>{count}</span>
+                  className="flex flex-col items-start gap-2 p-4 md:p-5">
+                  <div className="flex w-full items-center justify-between">
+                    <IconBadge icon={FolderOpen} tone="ac" size={34} />
+                    <span className="rounded-full px-2 py-1 font-mono text-[10px] font-bold text-tx-mut"
+                      style={{ background: "var(--surf-2)" }}>{count}</span>
                   </div>
-                  <h3 className="font-syne font-black text-base leading-tight">{c.name}</h3>
-                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{color:"var(--muted)"}}>
+                  <h3 className="font-display text-base font-extrabold leading-tight text-tx-hi">{c.name}</h3>
+                  <span className="font-mono text-[10px] uppercase tracking-[.12em] text-tx-mut">
                     {count === 1 ? "1 producto" : `${count} productos`}
                   </span>
-                </button>
+                </WtCard>
               );
             })
           )}
@@ -622,14 +644,15 @@ export default function MenuPage() {
           {!search.trim() && (
             <button type="button"
               onClick={() => { setDrillCategoryId(null); setView("products"); setFilterCat("all"); }}
-              className="flex flex-col items-start gap-2 p-5 rounded-2xl border border-dashed text-left transition-all active:scale-[0.98] hover:border-[var(--gold)]"
-              style={{borderColor:"var(--border)"}}>
-              <div className="flex items-center justify-between w-full">
-                <span className="text-2xl">🍽️</span>
-                <span className="text-xs font-black px-2 py-1 rounded-full" style={{background:"var(--surf2)",color:"var(--muted)"}}>{items.length}</span>
+              className="flex flex-col items-start gap-2 rounded-[18px] border border-dashed p-4 text-left transition-all active:scale-[0.98] md:p-5"
+              style={{ borderColor: "var(--bd-2)" }}>
+              <div className="flex w-full items-center justify-between">
+                <IconBadge icon={UtensilsCrossed} tone="neutral" size={34} />
+                <span className="rounded-full px-2 py-1 font-mono text-[10px] font-bold text-tx-mut"
+                  style={{ background: "var(--surf-2)" }}>{items.length}</span>
               </div>
-              <h3 className="font-syne font-black text-base leading-tight">Ver todos los productos</h3>
-              <span className="text-[10px] font-bold uppercase tracking-widest" style={{color:"var(--muted)"}}>
+              <h3 className="font-display text-base font-extrabold leading-tight text-tx-hi">Ver todos los productos</h3>
+              <span className="font-mono text-[10px] uppercase tracking-[.12em] text-tx-mut">
                 Lista completa
               </span>
             </button>
@@ -638,200 +661,224 @@ export default function MenuPage() {
       )}
 
       {/* Lista compacta */}
-      {loading ? <div className="text-center py-20">Cargando...</div> : showItemsList && (
+      {loading ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-28 animate-pulse rounded-[18px] bg-surf-2" />)}
+        </div>
+      ) : showItemsList && (
         <>
-          {/* Tabla (desktop ≥ md) */}
-          <div className="hidden md:block rounded-2xl border overflow-hidden" style={{borderColor:"var(--border)"}}>
-            <div className="grid grid-cols-12 gap-3 px-4 py-3 text-xs font-black uppercase tracking-wider border-b"
-              style={{background:"var(--surf2)",borderColor:"var(--border)",color:"var(--muted)"}}>
-              <div className="col-span-1 flex items-center gap-2">
-                <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
-                  checked={filtered.length > 0 && selectedIds.size === filtered.length}
-                  onChange={toggleSelectAll} />
-              </div>
-              <span className="col-span-3">Nombre del artículo</span>
-              <span className="col-span-2">Categoría</span>
-              <span className="col-span-1 text-right">Precio</span>
-              <span className="col-span-2 text-center">Estado</span>
-              <span className="col-span-3 text-right">Acciones</span>
-            </div>
-
-            {filtered.map((item, idx) => {
-              const sel = selectedIds.has(item.id);
-              return (
-                <div key={item.id} className="grid grid-cols-12 gap-3 px-4 py-3 items-center border-b transition-all"
-                  style={{borderColor:"var(--border)", background: sel ? "rgba(245,166,35,0.05)" : idx % 2 === 0 ? "var(--surf)" : "transparent", opacity: item.isAvailable ? 1 : 0.5}}>
+          {filtered.length === 0 ? (
+            <EmptyState icon={UtensilsCrossed} title="Sin artículos"
+              hint={search.trim() ? "Prueba con otra búsqueda." : "Agrega tu primer platillo para empezar."}
+              action={<PrimaryBtn full={false} icon={Plus} onClick={() => openForm()}>Nuevo platillo</PrimaryBtn>} />
+          ) : (
+            <>
+              {/* Tabla (desktop ≥ md) */}
+              <WtCard className="hidden overflow-hidden p-0 md:block">
+                <div className="grid grid-cols-12 gap-3 px-4 py-3 font-mono text-[10px] uppercase tracking-[.14em] text-tx-dim"
+                  style={{ background: "var(--surf-2)", borderBottom: "1px solid var(--bd-1)" }}>
                   <div className="col-span-1 flex items-center gap-2">
-                    <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
-                      checked={sel} onChange={() => toggleSelect(item.id)} />
-                    <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:"var(--surf2)"}}>
-                      {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={32} height={32} className={`w-full h-full ${item.imageFit === "contain" ? "object-contain" : "object-cover"}`} /> : <span className="text-sm">🍔</span>}
-                    </div>
+                    <input type="checkbox" className="cursor-pointer rounded accent-[var(--brand-primary)]"
+                      checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                      onChange={toggleSelectAll} />
                   </div>
-                  <div className="col-span-3 font-syne font-bold text-sm truncate">{item.name}</div>
-                  <div className="col-span-2 text-xs font-medium text-[var(--muted)]">{item.category?.name || "—"}</div>
-                  <div className="col-span-1 text-right font-syne font-black text-sm text-[var(--gold)]">${item.price}</div>
-                  <div className="col-span-2 flex justify-center">
-                    <button onClick={() => toggleAvailable(item)} className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${item.isAvailable ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
-                      {item.isAvailable ? "● Activo" : "● Inactivo"}
-                    </button>
-                  </div>
-                  <div className="col-span-3 flex gap-2 justify-end">
-                    <button onClick={() => openForm(item)} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{borderColor:"var(--border)",color:"var(--muted)"}}>✏️ Editar</button>
-                    <button onClick={() => deleteItem(item)} className="px-2 py-1.5 rounded-lg text-xs bg-red-500/10 text-red-500 border border-red-500/20">🗑️</button>
-                  </div>
+                  <span className="col-span-3">Nombre del artículo</span>
+                  <span className="col-span-2">Categoría</span>
+                  <span className="col-span-1 text-right">Precio</span>
+                  <span className="col-span-2 text-center">Estado</span>
+                  <span className="col-span-3 text-right">Acciones</span>
                 </div>
-              );
-            })}
-          </div>
 
-          {/* Tarjetas (mobile < md) */}
-          <div className="md:hidden flex flex-col gap-2 pb-24">
-            {filtered.length > 0 && (
-              <div className="flex items-center gap-2 px-2 py-2">
-                <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)] w-4 h-4"
-                  checked={filtered.length > 0 && selectedIds.size === filtered.length}
-                  onChange={toggleSelectAll} />
-                <span className="text-xs font-bold uppercase tracking-wider" style={{color:"var(--muted)"}}>
-                  Seleccionar todos
-                </span>
-              </div>
-            )}
-            {filtered.map((item) => {
-              const sel = selectedIds.has(item.id);
-              return (
-                <div key={item.id} className="rounded-2xl border p-3 transition-all"
-                  style={{borderColor: sel ? "var(--gold)" : "var(--border)", background: sel ? "rgba(245,166,35,0.05)" : "var(--surf)", opacity: item.isAvailable ? 1 : 0.55}}>
-                  <div className="flex items-start gap-3">
-                    <input type="checkbox" className="mt-1 rounded cursor-pointer accent-[var(--gold)] w-4 h-4 flex-shrink-0"
-                      checked={sel} onChange={() => toggleSelect(item.id)} />
-                    <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:"var(--surf2)"}}>
-                      {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={48} height={48} className={`w-full h-full ${item.imageFit === "contain" ? "object-contain" : "object-cover"}`} /> : <span className="text-xl">🍔</span>}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-syne font-black text-sm leading-tight truncate">{item.name}</h3>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className="text-xs font-medium" style={{color:"var(--muted)"}}>{item.category?.name || "—"}</span>
-                        <span className="font-syne font-black text-sm text-[var(--gold)]">${item.price}</span>
+                {filtered.map((item, idx) => {
+                  const sel = selectedIds.has(item.id);
+                  return (
+                    <div key={item.id} className="grid grid-cols-12 items-center gap-3 px-4 py-3 transition-all"
+                      style={{ borderBottom: "1px solid var(--bd-1)", background: sel ? "var(--iris-soft)" : idx % 2 === 0 ? "transparent" : "var(--surf-1)", opacity: item.isAvailable ? 1 : 0.5 }}>
+                      <div className="col-span-1 flex items-center gap-2">
+                        <input type="checkbox" className="cursor-pointer rounded accent-[var(--brand-primary)]"
+                          checked={sel} onChange={() => toggleSelect(item.id)} />
+                        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg" style={{ background: "var(--surf-2)" }}>
+                          {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={32} height={32} className={`h-full w-full ${item.imageFit === "contain" ? "object-contain" : "object-cover"}`} /> : <UtensilsCrossed size={15} className="text-tx-mut" />}
+                        </div>
+                      </div>
+                      <div className="col-span-3 truncate font-display text-sm font-bold text-tx-hi">{item.name}</div>
+                      <div className="col-span-2 text-xs font-medium text-tx-mut">{item.category?.name || "—"}</div>
+                      <div className="col-span-1 text-right font-mono text-sm font-bold text-primary">${item.price}</div>
+                      <div className="col-span-2 flex justify-center">
+                        <button onClick={() => toggleAvailable(item)} aria-label={item.isAvailable ? "Desactivar" : "Activar"}>
+                          <Pill tone={item.isAvailable ? "ok" : "err"}>{item.isAvailable ? "Activo" : "Inactivo"}</Pill>
+                        </button>
+                      </div>
+                      <div className="col-span-3 flex justify-end gap-2">
+                        <button onClick={() => openForm(item)} className="flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-tx-mut" style={{ border: "1px solid var(--bd-1)" }}>
+                          <Pencil size={13} /> Editar
+                        </button>
+                        <button onClick={() => deleteItem(item)} aria-label="Eliminar" className="grid h-9 w-9 place-items-center rounded-lg" style={{ background: "var(--err-soft)", color: "var(--err)" }}>
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 mt-3 flex-wrap">
-                    <button onClick={() => toggleAvailable(item)} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${item.isAvailable ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
-                      {item.isAvailable ? "● Activo" : "● Inactivo"}
-                    </button>
-                    <button onClick={() => openForm(item)} className="ml-auto px-3 py-1.5 rounded-lg text-xs font-bold border" style={{borderColor:"var(--border)",color:"var(--muted)"}}>✏️ Editar</button>
-                    <button onClick={() => deleteItem(item)} className="px-3 py-1.5 rounded-lg text-xs bg-red-500/10 text-red-500 border border-red-500/20">🗑️</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </WtCard>
+
+              {/* Tarjetas (mobile < md) */}
+              <div className="flex flex-col gap-2 pb-2 md:hidden">
+                {filtered.length > 0 && (
+                  <button type="button" onClick={toggleSelectAll}
+                    className="flex items-center gap-2 px-2 py-2 text-left">
+                    <input type="checkbox" className="h-4 w-4 cursor-pointer rounded accent-[var(--brand-primary)]"
+                      checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                      onChange={toggleSelectAll} onClick={e => e.stopPropagation()} />
+                    <span className="font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">
+                      Seleccionar todos
+                    </span>
+                  </button>
+                )}
+                {filtered.map((item) => {
+                  const sel = selectedIds.has(item.id);
+                  return (
+                    <WtCard key={item.id} className="p-3"
+                      style={{ borderColor: sel ? "var(--brand-primary)" : undefined, background: sel ? "var(--iris-soft)" : undefined, opacity: item.isAvailable ? 1 : 0.55 }}>
+                      <div className="flex items-start gap-3">
+                        <input type="checkbox" className="mt-1 h-4 w-4 flex-shrink-0 cursor-pointer rounded accent-[var(--brand-primary)]"
+                          checked={sel} onChange={() => toggleSelect(item.id)} />
+                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl" style={{ background: "var(--surf-2)" }}>
+                          {item.imageUrl ? <Image src={item.imageUrl} alt={item.name} width={48} height={48} className={`h-full w-full ${item.imageFit === "contain" ? "object-contain" : "object-cover"}`} /> : <UtensilsCrossed size={20} className="text-tx-mut" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="truncate font-display text-sm font-extrabold leading-tight text-tx-hi">{item.name}</h3>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-medium text-tx-mut">{item.category?.name || "—"}</span>
+                            <span className="font-mono text-sm font-bold text-primary">${item.price}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <button onClick={() => toggleAvailable(item)} aria-label={item.isAvailable ? "Desactivar" : "Activar"}>
+                          <Pill tone={item.isAvailable ? "ok" : "err"}>{item.isAvailable ? "Activo" : "Inactivo"}</Pill>
+                        </button>
+                        <button onClick={() => openForm(item)} className="ml-auto flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-tx-mut" style={{ border: "1px solid var(--bd-1)" }}>
+                          <Pencil size={13} /> Editar
+                        </button>
+                        <button onClick={() => deleteItem(item)} aria-label="Eliminar" className="grid h-9 w-9 place-items-center rounded-lg" style={{ background: "var(--err-soft)", color: "var(--err)" }}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </WtCard>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </>
       )}
 
       {/* Overlay IA Escaneo */}
       {scanState.active && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.75)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.75)" }}>
           <style>{`
             @keyframes ai-scan-bar {
               0% { transform: translateX(-100%); }
               100% { transform: translateX(500%); }
             }
           `}</style>
-          <div className="rounded-2xl p-8 w-full max-w-sm mx-4 text-center flex flex-col items-center gap-5"
-            style={{ background: 'var(--surf)', border: '1px solid var(--border)' }}>
+          <WtCard className="flex w-full max-w-sm flex-col items-center gap-5 p-8 text-center">
             {scanState.error ? (
               <>
-                <div className="text-4xl">❌</div>
-                <h2 className="font-syne font-black text-xl">Error al escanear</h2>
-                <p className="text-sm px-2" style={{ color: 'var(--muted)' }}>{scanState.error}</p>
-                <button
-                  onClick={() => setScanState({ active: false, currentFile: '', current: 0, total: 0, error: null })}
-                  className="px-6 py-2.5 rounded-xl font-bold text-sm"
-                  style={{ background: 'var(--gold)', color: '#000' }}>
+                <span className="grid h-14 w-14 place-items-center rounded-2xl" style={{ background: "var(--err-soft)", color: "var(--err)" }}>
+                  <AlertTriangle size={28} strokeWidth={2} />
+                </span>
+                <h2 className="font-display text-xl font-extrabold text-tx-hi">Error al escanear</h2>
+                <p className="px-2 text-sm text-tx-mut">{scanState.error}</p>
+                <PrimaryBtn full={false} onClick={() => setScanState({ active: false, currentFile: '', current: 0, total: 0, error: null })}>
                   Cerrar
-                </button>
+                </PrimaryBtn>
               </>
             ) : (
               <>
-                <div className="text-5xl animate-bounce">🤖</div>
+                <span className="grid h-16 w-16 animate-bounce place-items-center rounded-2xl text-primary" style={{ background: "var(--iris-soft)" }}>
+                  <Sparkles size={32} strokeWidth={2} />
+                </span>
                 <div>
-                  <h2 className="font-syne font-black text-xl">Analizando con IA...</h2>
-                  <p className="text-sm mt-1" style={{ color: 'var(--muted)' }}>No cierres esta ventana</p>
+                  <h2 className="font-display text-xl font-extrabold text-tx-hi">Analizando con IA…</h2>
+                  <p className="mt-1 text-sm text-tx-mut">No cierres esta ventana</p>
                 </div>
-                <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'var(--surf2)' }}>
+                <div className="h-2 w-full overflow-hidden rounded-full" style={{ background: "var(--surf-2)" }}>
                   <div className="h-full w-1/3 rounded-full"
-                    style={{ background: 'var(--gold)', animation: 'ai-scan-bar 1.5s infinite ease-in-out' }} />
+                    style={{ background: "var(--brand-primary)", animation: "ai-scan-bar 1.5s infinite ease-in-out" }} />
                 </div>
-                <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                  Procesando:{' '}
-                  <span className="font-bold" style={{ color: 'var(--text)' }}>{scanState.currentFile}</span>
+                <p className="text-xs text-tx-mut">
+                  Procesando:{" "}
+                  <span className="font-bold text-tx">{scanState.currentFile}</span>
                   {scanState.total > 0 && ` (${scanState.current} de ${scanState.total})`}
                 </p>
                 <div className="flex gap-2">
                   {[0, 1, 2].map(i => (
-                    <div key={i} className="w-2.5 h-2.5 rounded-full animate-bounce"
-                      style={{ background: 'var(--gold)', animationDelay: `${i * 0.18}s` }} />
+                    <span key={i} className="h-2.5 w-2.5 animate-bounce rounded-full"
+                      style={{ background: "var(--brand-primary)", animationDelay: `${i * 0.18}s` }} />
                   ))}
                 </div>
               </>
             )}
-          </div>
+          </WtCard>
         </div>
       )}
 
       {/* Floating Bulk Action Bar */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-3 sm:bottom-6 left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-40 flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2.5 sm:py-3 rounded-2xl shadow-2xl border overflow-x-auto"
-          style={{background:"var(--surf)",borderColor:"var(--gold)",boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}>
-          <span className="text-xs font-black uppercase tracking-widest px-2 py-1 rounded-lg flex-shrink-0" style={{background:"rgba(245,166,35,0.15)",color:"var(--gold)"}}>
+        <div className="fixed bottom-3 left-3 right-3 z-40 flex items-center gap-2 overflow-x-auto rounded-2xl px-3 py-2.5 warmtech-scrollbar sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:gap-3 sm:px-5 sm:py-3"
+          style={{ background: "var(--surf-1)", border: "1px solid var(--brand-primary)", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+          <span className="flex-shrink-0 rounded-lg px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[.1em] text-primary" style={{ background: "var(--iris-soft)" }}>
             {selectedIds.size} <span className="hidden sm:inline">seleccionado{selectedIds.size !== 1 ? "s" : ""}</span>
           </span>
           <button onClick={() => bulkToggleAvailable(true)}
-            className="px-3 py-1.5 rounded-xl text-xs font-black text-green-400 border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 transition-all flex-shrink-0">
-            ● Activar
+            className="flex min-h-9 flex-shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-all"
+            style={{ background: "var(--ok-soft)", color: "var(--ok)" }}>
+            <Power size={13} strokeWidth={2.2} /> Activar
           </button>
           <button onClick={() => bulkToggleAvailable(false)}
-            className="px-3 py-1.5 rounded-xl text-xs font-black text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all flex-shrink-0">
-            ● Desactivar
+            className="flex min-h-9 flex-shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-all"
+            style={{ background: "var(--err-soft)", color: "var(--err)" }}>
+            <Power size={13} strokeWidth={2.2} /> Desactivar
           </button>
           <select onChange={e => { bulkChangeCategory(e.target.value); e.target.value = ""; }}
             defaultValue=""
-            className="px-3 py-1.5 rounded-xl text-xs font-black outline-none flex-shrink-0 max-w-[140px] sm:max-w-none"
-            style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}}>
+            className="min-h-9 max-w-[140px] flex-shrink-0 rounded-xl px-3 text-xs font-bold text-tx outline-none sm:max-w-none"
+            style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
             <option value="" disabled>Mover a categoría…</option>
             {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <button onClick={bulkDelete}
-            className="px-3 py-1.5 rounded-xl text-xs font-black text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all flex-shrink-0">
-            🗑️ <span className="hidden sm:inline">Eliminar</span>
+            className="flex min-h-9 flex-shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-all"
+            style={{ background: "var(--err-soft)", color: "var(--err)" }}>
+            <Trash2 size={13} /> <span className="hidden sm:inline">Eliminar</span>
           </button>
-          <button onClick={() => setSelectedIds(new Set())}
-            className="w-7 h-7 rounded-xl flex items-center justify-center text-sm transition-all flex-shrink-0"
-            style={{background:"var(--surf2)",color:"var(--muted)"}}>✕</button>
+          <button onClick={() => setSelectedIds(new Set())} aria-label="Cerrar selección"
+            className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl text-tx-mut transition-all"
+            style={{ background: "var(--surf-2)" }}><X size={15} /></button>
         </div>
       )}
 
       {/* Modal Formulario */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" style={{background:"rgba(0,0,0,0.8)"}}>
-          <div className="w-full max-w-lg rounded-2xl border my-4" style={{background:"var(--surf)",borderColor:"var(--border)"}}>
-            <div className="px-6 py-4 border-b flex items-center justify-between" style={{borderColor:"var(--border)"}}>
-              <h2 className="font-syne font-black text-xl">{editItem ? "Editar platillo" : "Nuevo platillo"}</h2>
-              <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-xl flex items-center justify-center"
-                style={{background:"var(--surf2)",color:"var(--muted)"}}>✕</button>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,0.8)" }}>
+          <WtCard className="my-4 w-full max-w-lg p-0">
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid var(--bd-1)" }}>
+              <h2 className="font-display text-xl font-extrabold text-tx-hi">{editItem ? "Editar platillo" : "Nuevo platillo"}</h2>
+              <button onClick={() => setShowForm(false)} aria-label="Cerrar" className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut"
+                style={{ background: "var(--surf-2)" }}><X size={16} /></button>
             </div>
-            <form onSubmit={saveItem} className="p-6 flex flex-col gap-4">
+            <form onSubmit={saveItem} className="flex flex-col gap-4 p-6">
               {/* Contenido del formulario */}
               <div>
-                <label className="block text-xs font-bold mb-2 uppercase tracking-wider" style={{color:"var(--muted)"}}>Imagen</label>
+                <label className="mb-2 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Imagen</label>
                 {imagePreview && (
                   <>
-                    <div className="relative w-full h-40 rounded-xl overflow-hidden mb-2" style={{background:"var(--surf2)"}}>
+                    <div className="relative mb-2 h-40 w-full overflow-hidden rounded-xl" style={{ background: "var(--surf-2)" }}>
                       <Image src={imagePreview} alt="preview" fill className={form.imageFit === "contain" ? "object-contain" : "object-cover"} />
                     </div>
-                    <div className="flex gap-2 mb-2">
+                    <div className="mb-2 flex gap-2">
                       {([["cover","Rellenar","Recorta para llenar la tarjeta"],["contain","Ajustar","Muestra la foto completa"]] as const).map(([val,label,hint]) => {
                         const active = form.imageFit === val;
                         return (
@@ -840,11 +887,11 @@ export default function MenuPage() {
                             type="button"
                             onClick={() => setForm(p => ({...p, imageFit: val}))}
                             title={hint}
-                            className="flex-1 px-3 py-2 rounded-xl text-xs font-black border transition-all"
+                            className="min-h-10 flex-1 rounded-xl px-3 text-xs font-bold transition-all"
                             style={{
-                              background: active ? "var(--gold)" : "transparent",
-                              color: active ? "#000" : "var(--muted)",
-                              borderColor: active ? "var(--gold)" : "var(--border)",
+                              background: active ? "var(--brand-primary)" : "transparent",
+                              color: active ? "#fffaf4" : "var(--tx-mut)",
+                              border: `1px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`,
                             }}
                           >
                             {label}
@@ -854,56 +901,56 @@ export default function MenuPage() {
                     </div>
                   </>
                 )}
-                <label className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer border w-full"
-                  style={{borderColor:"var(--border)",color:"var(--muted)"}}>
-                  📷 Subir foto
+                <label className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl text-xs font-bold text-tx-mut"
+                  style={{ border: "1px solid var(--bd-1)" }}>
+                  <ImagePlus size={15} /> Subir foto
                   <input type="file" accept="image/*" onChange={handleImageFile} className="hidden" />
                 </label>
                 <input value={form.imageUrl} onChange={e => { setForm(p=>({...p,imageUrl:e.target.value})); setImagePreview(e.target.value); setImageFile(null); }}
                   placeholder="o pega URL"
-                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none mt-2"
-                  style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+                  className="mt-2 min-h-11 w-full rounded-xl px-3 text-sm text-tx outline-none"
+                  style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>Nombre</label>
-                  <input placeholder="Hamburguesa" value={form.name} onChange={e => setForm(p => ({...p,name:e.target.value}))} required className="w-full px-4 py-2.5 rounded-xl text-sm" style={{background:"var(--surf2)",border:"1.5px solid var(--border)",color:"var(--text)"}} />
+                  <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Nombre</label>
+                  <input placeholder="Hamburguesa" value={form.name} onChange={e => setForm(p => ({...p,name:e.target.value}))} required className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>Precio Base</label>
-                  <input placeholder="89.00" value={form.price} onChange={e => setForm(p => ({...p,price:e.target.value}))} required type="number" className="w-full px-4 py-2.5 rounded-xl text-sm" style={{background:"var(--surf2)",border:"1.5px solid var(--border)",color:"var(--text)"}} />
+                  <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Precio Base</label>
+                  <input placeholder="89.00" value={form.price} onChange={e => setForm(p => ({...p,price:e.target.value}))} required type="number" className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>Categoría</label>
+                  <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Categoría</label>
                   <div className="flex gap-2">
                     <select
                       value={form.categoryId}
                       onChange={e => setForm(p=>({...p,categoryId:e.target.value}))}
                       required={!showNewCat}
-                      className="flex-1 px-4 py-2.5 rounded-xl text-sm"
-                      style={{background:"var(--surf2)",border:"1.5px solid var(--border)",color:"var(--text)"}}
+                      className="min-h-11 flex-1 rounded-xl px-4 text-sm text-tx outline-none"
+                      style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }}
                     >
-                      <option value="">Seleccionar...</option>
+                      <option value="">Seleccionar…</option>
                       {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                     <button
                       type="button"
                       onClick={() => { setShowNewCat(s => !s); setNewCatName(""); }}
-                      className="px-3 py-2.5 rounded-xl text-xs font-black border whitespace-nowrap transition-all"
+                      className="flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-bold transition-all"
                       style={{
-                        background: showNewCat ? "var(--gold)" : "transparent",
-                        color: showNewCat ? "#000" : "var(--gold)",
-                        borderColor: "var(--gold)",
+                        background: showNewCat ? "var(--brand-primary)" : "transparent",
+                        color: showNewCat ? "#fffaf4" : "var(--brand-primary)",
+                        border: "1px solid var(--brand-primary)",
                       }}
                       aria-label="Crear nueva categoría"
                     >
-                      {showNewCat ? "✕ Cerrar" : "+ Nueva"}
+                      {showNewCat ? <><X size={13} /> Cerrar</> : <><Plus size={13} /> Nueva</>}
                     </button>
                   </div>
 
                   {showNewCat && (
-                    <div className="mt-2 flex gap-2 p-2 rounded-xl" style={{background:"var(--surf2)",border:"1px dashed var(--gold)"}}>
+                    <div className="mt-2 flex gap-2 rounded-xl p-2" style={{ background: "var(--surf-2)", border: "1px dashed var(--brand-primary)" }}>
                       <input
                         autoFocus
                         value={newCatName}
@@ -913,17 +960,17 @@ export default function MenuPage() {
                           if (e.key === "Escape") { setShowNewCat(false); setNewCatName(""); }
                         }}
                         placeholder="Nombre de la nueva categoría"
-                        className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
-                        style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--text)"}}
+                        className="min-h-10 flex-1 rounded-lg px-3 text-sm text-tx outline-none"
+                        style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
                       />
                       <button
                         type="button"
                         onClick={createCategoryInline}
                         disabled={creatingCat || !newCatName.trim()}
-                        className="px-4 py-2 rounded-lg text-xs font-black transition-all disabled:opacity-50"
-                        style={{background:"var(--gold)",color:"#000"}}
+                        className="min-h-10 rounded-lg px-4 text-xs font-bold text-white transition-all disabled:opacity-50"
+                        style={{ background: "var(--brand-primary)" }}
                       >
-                        {creatingCat ? "..." : "Crear"}
+                        {creatingCat ? "…" : "Crear"}
                       </button>
                     </div>
                   )}
@@ -931,36 +978,36 @@ export default function MenuPage() {
 
                 {/* Seleccion multiple de variantes */}
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold mb-2 uppercase tracking-wider" style={{color:"var(--muted)"}}>
-                    Seleccion de Variantes
+                  <label className="mb-2 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">
+                    Selección de Variantes
                   </label>
                   <button
                     type="button"
                     onClick={() => setForm(p => ({ ...p, variantMultiSelect: !p.variantMultiSelect }))}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm text-left transition-all"
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-all"
                     style={{
-                      background: form.variantMultiSelect ? "rgba(245,166,35,0.12)" : "var(--surf2)",
-                      border: `1.5px solid ${form.variantMultiSelect ? "var(--gold)" : "var(--border)"}`,
+                      background: form.variantMultiSelect ? "var(--iris-soft)" : "var(--surf-2)",
+                      border: `1.5px solid ${form.variantMultiSelect ? "var(--brand-primary)" : "var(--bd-1)"}`,
                     }}
                   >
                     <div>
-                      <span className="font-bold">Permitir elegir varias</span>
-                      <p className="text-xs mt-0.5" style={{color:"var(--muted)"}}>Para sabores que se combinan (ej. 1kg de boneless con 3 sabores).</p>
+                      <span className="font-bold text-tx">Permitir elegir varias</span>
+                      <p className="mt-0.5 text-xs text-tx-mut">Para sabores que se combinan (ej. 1kg de boneless con 3 sabores).</p>
                     </div>
-                    <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
-                      style={{background: form.variantMultiSelect ? "var(--gold)" : "var(--surf)", border:`1px solid ${form.variantMultiSelect ? "var(--gold)" : "var(--border)"}`}}>
-                      {form.variantMultiSelect && <span className="text-black text-[10px] font-black leading-none">✓</span>}
-                    </div>
+                    <span className="grid h-5 w-5 flex-shrink-0 place-items-center rounded"
+                      style={{ background: form.variantMultiSelect ? "var(--brand-primary)" : "var(--surf-1)", border: `1px solid ${form.variantMultiSelect ? "var(--brand-primary)" : "var(--bd-1)"}` }}>
+                      {form.variantMultiSelect && <Check size={12} strokeWidth={3} className="text-white" />}
+                    </span>
                   </button>
                   {form.variantMultiSelect && (
-                    <div className="grid grid-cols-2 gap-2 mt-2">
+                    <div className="mt-2 grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>Minimo (0 = opcional)</label>
-                        <input type="number" min={0} value={form.variantMinSelection} onChange={e => setForm(p => ({ ...p, variantMinSelection: Math.max(0, parseInt(e.target.value,10) || 0) }))} className="w-full px-4 py-2.5 rounded-xl text-sm" style={{background:"var(--surf2)",border:"1.5px solid var(--border)",color:"var(--text)"}} />
+                        <label className="mb-1 block font-mono text-[9px] uppercase tracking-[.1em] text-tx-mut">Mínimo (0 = opcional)</label>
+                        <input type="number" min={0} value={form.variantMinSelection} onChange={e => setForm(p => ({ ...p, variantMinSelection: Math.max(0, parseInt(e.target.value,10) || 0) }))} className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>Maximo (0 = sin tope)</label>
-                        <input type="number" min={0} value={form.variantMaxSelection} onChange={e => setForm(p => ({ ...p, variantMaxSelection: Math.max(0, parseInt(e.target.value,10) || 0) }))} className="w-full px-4 py-2.5 rounded-xl text-sm" style={{background:"var(--surf2)",border:"1.5px solid var(--border)",color:"var(--text)"}} />
+                        <label className="mb-1 block font-mono text-[9px] uppercase tracking-[.1em] text-tx-mut">Máximo (0 = sin tope)</label>
+                        <input type="number" min={0} value={form.variantMaxSelection} onChange={e => setForm(p => ({ ...p, variantMaxSelection: Math.max(0, parseInt(e.target.value,10) || 0) }))} className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
                       </div>
                     </div>
                   )}
@@ -968,13 +1015,13 @@ export default function MenuPage() {
 
                 {/* Grupos de Variantes */}
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold mb-2 uppercase tracking-wider" style={{color:"var(--muted)"}}>
-                    Grupos de Variantes <span style={{color:"var(--muted)",fontWeight:400,textTransform:"none",letterSpacing:0}}>(Opcional)</span>
+                  <label className="mb-2 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">
+                    Grupos de Variantes <span className="font-sans normal-case tracking-normal text-tx-dim">(Opcional)</span>
                   </label>
                   {variantTemplates.length === 0 ? (
-                    <p className="text-xs px-1" style={{color:"var(--muted)"}}>
+                    <p className="px-1 text-xs text-tx-mut">
                       Sin grupos creados.{" "}
-                      <a href="/admin/menu/variantes" target="_blank" style={{color:"var(--gold)"}}>Crear grupos →</a>
+                      <a href="/admin/menu/variantes" target="_blank" className="font-bold text-primary">Crear grupos →</a>
                     </p>
                   ) : (
                     <div className="flex flex-col gap-1.5">
@@ -990,20 +1037,20 @@ export default function MenuPage() {
                                 ? p.variantTemplateIds.filter(id => id !== tpl.id)
                                 : [...p.variantTemplateIds, tpl.id],
                             }))}
-                            className="flex items-center justify-between px-3 py-2.5 rounded-xl text-sm text-left transition-all"
+                            className="flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-all"
                             style={{
-                              background: selected ? "rgba(245,166,35,0.12)" : "var(--surf2)",
-                              border: `1.5px solid ${selected ? "var(--gold)" : "var(--border)"}`,
+                              background: selected ? "var(--iris-soft)" : "var(--surf-2)",
+                              border: `1.5px solid ${selected ? "var(--brand-primary)" : "var(--bd-1)"}`,
                             }}
                           >
                             <div className="flex items-center gap-2">
-                              <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
-                                style={{background: selected ? "var(--gold)" : "var(--surf)", border:`1px solid ${selected ? "var(--gold)" : "var(--border)"}`}}>
-                                {selected && <span className="text-black text-[10px] font-black leading-none">✓</span>}
-                              </div>
-                              <span className="font-bold">{tpl.name}</span>
+                              <span className="grid h-5 w-5 flex-shrink-0 place-items-center rounded"
+                                style={{ background: selected ? "var(--brand-primary)" : "var(--surf-1)", border: `1px solid ${selected ? "var(--brand-primary)" : "var(--bd-1)"}` }}>
+                                {selected && <Check size={12} strokeWidth={3} className="text-white" />}
+                              </span>
+                              <span className="font-bold text-tx">{tpl.name}</span>
                             </div>
-                            <span className="text-xs" style={{color:"var(--muted)"}}>
+                            <span className="text-xs text-tx-mut">
                               {tpl.options?.length ?? 0} opciones
                             </span>
                           </button>
@@ -1016,8 +1063,8 @@ export default function MenuPage() {
                 {/* Modificadores (solo al editar item ya creado) */}
                 {editItem && (
                   <div className="col-span-2">
-                    <label className="block text-xs font-bold mb-2 uppercase tracking-wider" style={{color:"var(--muted)"}}>
-                      Modificadores <span style={{color:"var(--muted)",fontWeight:400,textTransform:"none",letterSpacing:0}}>(Sin costo o con extra)</span>
+                    <label className="mb-2 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">
+                      Modificadores <span className="font-sans normal-case tracking-normal text-tx-dim">(Sin costo o con extra)</span>
                     </label>
                     <ModifierGroupsEditor itemId={editItem.id} />
                   </div>
@@ -1026,18 +1073,11 @@ export default function MenuPage() {
                 {/* Promoción por día */}
                 <div className="col-span-2">
                   <div className="flex items-center justify-between py-1">
-                    <span className="text-xs font-bold uppercase tracking-wider" style={{color:"var(--muted)"}}>Promoción por día</span>
-                    <button
-                      type="button"
-                      onClick={() => setForm(p => ({ ...p, isPromo: !p.isPromo }))}
-                      className="relative w-11 h-6 rounded-full transition-all"
-                      style={{ background: form.isPromo ? '#ff5c35' : 'var(--surf2)', border: '1px solid var(--border)' }}>
-                      <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
-                        style={{ transform: form.isPromo ? 'translateX(20px)' : 'translateX(0)' }} />
-                    </button>
+                    <span className="font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Promoción por día</span>
+                    <Toggle checked={form.isPromo} onChange={() => setForm(p => ({ ...p, isPromo: !p.isPromo }))} label="Promoción por día" />
                   </div>
                   {form.isPromo && (
-                    <div className="mt-2 flex gap-1.5 flex-wrap">
+                    <div className="mt-2 flex flex-wrap gap-1.5">
                       {[
                         { key: 'MONDAY',    label: 'Lun' },
                         { key: 'TUESDAY',   label: 'Mar' },
@@ -1056,11 +1096,11 @@ export default function MenuPage() {
                                 ? p.activeDays.filter(d => d !== key)
                                 : [...p.activeDays, key]
                             }))}
-                            className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                            className="min-h-10 rounded-lg px-3 text-xs font-bold transition-all"
                             style={{
-                              background: active ? '#ff5c35' : 'var(--surf2)',
-                              color: active ? '#fff' : 'var(--muted)',
-                              border: `1px solid ${active ? '#ff5c35' : 'var(--border)'}`
+                              background: active ? "var(--brand-primary)" : "var(--surf-2)",
+                              color: active ? "#fffaf4" : "var(--tx-mut)",
+                              border: `1px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`
                             }}>
                             {label}
                           </button>
@@ -1071,72 +1111,76 @@ export default function MenuPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-4">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl font-bold text-sm border" style={{borderColor:"var(--border)",color:"var(--muted)"}}>Cancelar</button>
-                <button type="submit" disabled={saving || uploading} className="flex-1 py-2.5 rounded-xl font-syne font-black text-sm" style={{background:"var(--gold)",color:"#000"}}>Guardar</button>
+              <div className="mt-4 flex gap-3">
+                <PrimaryBtn ghost onClick={() => setShowForm(false)}>Cancelar</PrimaryBtn>
+                <PrimaryBtn type="submit" disabled={saving || uploading} icon={Check}>Guardar</PrimaryBtn>
               </div>
             </form>
-          </div>
+          </WtCard>
         </div>
       )}
 
       {/* Zona de peligro — Wipe del menú */}
       {!loading && (
-        <div className="mt-10 mb-6 rounded-2xl border p-4 sm:p-5" style={{borderColor:"rgba(239,68,68,0.3)",background:"rgba(239,68,68,0.04)"}}>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h3 className="font-syne font-black text-sm uppercase tracking-wider" style={{color:"#ef4444"}}>Zona de peligro</h3>
-              <p className="text-xs mt-1" style={{color:"var(--muted)"}}>
-                Borra todo el menú del restaurante (platillos, categorías y grupos de variantes). Útil para volver a generarlo con IA desde cero.
-              </p>
+        <SectionLabel>Zona de peligro</SectionLabel>
+      )}
+      {!loading && (
+        <WtCard className="mb-6 p-4 md:p-5" style={{ borderColor: "var(--err)", background: "var(--err-soft)" }}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <IconBadge icon={AlertTriangle} tone="err" size={34} />
+              <div>
+                <h3 className="font-display text-sm font-extrabold uppercase tracking-wider" style={{ color: "var(--err)" }}>Zona de peligro</h3>
+                <p className="mt-1 text-xs text-tx-mut">
+                  Borra todo el menú del restaurante (platillos, categorías y grupos de variantes). Útil para volver a generarlo con IA desde cero.
+                </p>
+              </div>
             </div>
             <button type="button" onClick={() => { setShowWipe(true); setWipeConfirm(""); }}
-              className="px-4 py-2 rounded-xl text-xs font-black border whitespace-nowrap transition-all"
-              style={{borderColor:"#ef4444",color:"#ef4444",background:"rgba(239,68,68,0.08)"}}>
-              🗑️ Borrar todo el menú
+              className="flex min-h-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-4 text-xs font-bold transition-all"
+              style={{ border: "1px solid var(--err)", color: "var(--err)" }}>
+              <Trash2 size={14} /> Borrar todo el menú
             </button>
           </div>
-        </div>
+        </WtCard>
       )}
 
       {/* Modal confirmación wipe */}
       {showWipe && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:"rgba(0,0,0,0.8)"}}>
-          <div className="w-full max-w-md rounded-2xl border" style={{background:"var(--surf)",borderColor:"#ef4444"}}>
-            <div className="p-5 sm:p-6 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.8)" }}>
+          <WtCard className="w-full max-w-md p-0" style={{ borderColor: "var(--err)" }}>
+            <div className="flex flex-col gap-4 p-5 sm:p-6">
               <div className="flex items-center gap-3">
-                <span className="text-3xl">⚠️</span>
-                <h2 className="font-syne font-black text-lg sm:text-xl" style={{color:"#ef4444"}}>Borrar todo el menú</h2>
+                <IconBadge icon={AlertTriangle} tone="err" size={40} />
+                <h2 className="font-display text-lg font-extrabold sm:text-xl" style={{ color: "var(--err)" }}>Borrar todo el menú</h2>
               </div>
-              <p className="text-sm" style={{color:"var(--muted)"}}>
-                Esta acción <strong style={{color:"var(--text)"}}>no se puede deshacer</strong>. Se eliminarán todos los platillos, categorías y grupos de variantes de este restaurante, junto con sus referencias en órdenes pasadas.
+              <p className="text-sm text-tx-mut">
+                Esta acción <strong className="text-tx">no se puede deshacer</strong>. Se eliminarán todos los platillos, categorías y grupos de variantes de este restaurante, junto con sus referencias en órdenes pasadas.
               </p>
-              <p className="text-xs" style={{color:"var(--muted)"}}>Escribe <strong style={{color:"#ef4444"}}>BORRAR</strong> para confirmar:</p>
+              <p className="text-xs text-tx-mut">Escribe <strong style={{ color: "var(--err)" }}>BORRAR</strong> para confirmar:</p>
               <input
                 autoFocus
                 value={wipeConfirm}
                 onChange={e => setWipeConfirm(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && wipeConfirm === 'BORRAR') wipeAllMenu(); if (e.key === 'Escape') setShowWipe(false); }}
                 placeholder="BORRAR"
-                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-                style={{background:"var(--surf2)",border:"1.5px solid var(--border)",color:"var(--text)"}}
+                className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none"
+                style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }}
               />
-              <div className="flex gap-3 mt-2">
-                <button type="button" onClick={() => { setShowWipe(false); setWipeConfirm(""); }}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-sm border"
-                  style={{borderColor:"var(--border)",color:"var(--muted)"}}>
+              <div className="mt-2 flex gap-3">
+                <PrimaryBtn ghost onClick={() => { setShowWipe(false); setWipeConfirm(""); }}>
                   Cancelar
-                </button>
+                </PrimaryBtn>
                 <button type="button" onClick={wipeAllMenu} disabled={wipeConfirm !== "BORRAR" || wiping}
-                  className="flex-1 py-2.5 rounded-xl font-syne font-black text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{background:"#ef4444",color:"#fff"}}>
-                  {wiping ? "Borrando..." : "Borrar todo"}
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[13px] px-4 text-[13px] font-bold text-white transition-transform active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{ background: "var(--err)" }}>
+                  {wiping ? "Borrando…" : "Borrar todo"}
                 </button>
               </div>
             </div>
-          </div>
+          </WtCard>
         </div>
       )}
-    </div>
+    </WtScreen>
   );
 }

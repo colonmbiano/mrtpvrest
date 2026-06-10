@@ -1,6 +1,14 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import {
+  Users, Plus, Trash2, X, Send,
+  Store, TrendingUp, Receipt, Wallet, Bike, Pencil, CheckCircle2, XCircle,
+} from "lucide-react";
 import api from "@/lib/api";
+import {
+  WtScreen, PageHeader, WtCard, SectionHead, StatTile, Pill, Segmented,
+  PrimaryBtn, Toggle,
+} from "@/components/warmtech";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 type Contact = {
@@ -38,7 +46,6 @@ type Report = {
   bySource: { source: string; revenue: number; orders: number }[];
 };
 
-const GREEN = "#25D366";
 type Tab = "reportes" | "contactos" | "campanas" | "juegos";
 
 const money = (n: number) =>
@@ -55,6 +62,21 @@ const SEGMENT_LABELS: Record<string, string> = {
 const emptyPrize = (): Prize => ({ label: "", type: "PERCENTAGE", value: 10, weight: 1, minOrderAmount: 0, expiresInDays: 7 });
 const emptyGame = (): Game => ({ id: "", name: "", enabled: true, trigger: "ON_COMMAND", maxPerContact: 1, prizes: [emptyPrize()] });
 
+const TAB_OPTIONS: { value: Tab; label: string }[] = [
+  { value: "reportes", label: "Reportes" },
+  { value: "contactos", label: "Clientes" },
+  { value: "campanas", label: "Campañas" },
+  { value: "juegos", label: "Juegos" },
+];
+
+// ── estilos compartidos para inputs/selects nativos ──────────────────────────
+const fieldStyle = { background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
+const inputCls = "min-h-11 w-full rounded-xl px-3 text-sm outline-none";
+const textareaCls = "w-full rounded-xl px-3 py-2.5 text-sm outline-none";
+function Label({ children }: { children: React.ReactNode }) {
+  return <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">{children}</label>;
+}
+
 export default function WhatsappPage() {
   const [tab, setTab] = useState<Tab>("reportes");
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
@@ -64,74 +86,47 @@ export default function WhatsappPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6 sm:p-8 font-sans text-white">
+    <WtScreen>
       {toast && (
         <div
-          className={`fixed top-6 right-6 z-50 px-5 py-3.5 rounded-2xl text-sm font-bold shadow-2xl ${
+          className="fixed right-4 top-4 z-50 flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold shadow-2xl md:right-6 md:top-6"
+          style={
             toast.ok
-              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-              : "bg-red-500/20 text-red-400 border border-red-500/30"
-          }`}
+              ? { background: "var(--ok-soft)", color: "var(--ok)", border: "1px solid var(--ok)" }
+              : { background: "var(--err-soft)", color: "var(--err)", border: "1px solid var(--err)" }
+          }
         >
+          {toast.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
           {toast.msg}
         </div>
       )}
 
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">
-          WhatsApp <span style={{ color: GREEN }}>Bot</span>
-        </h1>
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
-          Clientes, campañas, juegos y reportes del canal WhatsApp
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Canal WhatsApp"
+        title="WhatsApp Bot"
+        subtitle="Clientes, campañas, juegos y reportes del canal WhatsApp"
+      />
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-8 flex-wrap">
-        {([
-          ["reportes", "📊 Reportes"],
-          ["contactos", "👥 Clientes"],
-          ["campanas", "📢 Campañas"],
-          ["juegos", "🎮 Juegos"],
-        ] as [Tab, string][]).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className="px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all active:scale-95"
-            style={{
-              background: tab === key ? GREEN : "#161616",
-              color: tab === key ? "#06231a" : "#9ca3af",
-              border: `1px solid ${tab === key ? GREEN : "#262626"}`,
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Segmented value={tab} onChange={setTab} options={TAB_OPTIONS} className="mb-5 md:max-w-md" />
 
       {tab === "reportes" && <ReportsTab showToast={showToast} />}
       {tab === "contactos" && <ContactsTab showToast={showToast} />}
       {tab === "campanas" && <CampaignsTab showToast={showToast} />}
       {tab === "juegos" && <GamesTab showToast={showToast} />}
-    </div>
+    </WtScreen>
   );
 }
 
 // ── Reusables ────────────────────────────────────────────────────────────────
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`bg-[#111] border border-gray-800 rounded-[1.5rem] p-5 ${className}`}>{children}</div>;
-}
 function Spinner({ label }: { label: string }) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[30vh] gap-4">
-      <div className="w-10 h-10 border-t-2 rounded-full animate-spin" style={{ borderColor: GREEN }} />
-      <p className="text-[10px] font-black uppercase tracking-widest opacity-40">{label}</p>
+    <div className="flex min-h-[30vh] flex-col items-center justify-center gap-4">
+      <div className="h-10 w-10 animate-spin rounded-full border-t-2" style={{ borderColor: "var(--brand-primary)" }} />
+      <p className="font-mono text-[10px] uppercase tracking-widest text-tx-dim">{label}</p>
     </div>
   );
 }
-const inputCls = "w-full rounded-xl px-3 py-2.5 text-sm bg-[#0c0c0e] border border-gray-700 text-white outline-none focus:border-gray-500";
-const labelCls = "block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5";
 
 // ── Tab: Reportes ──────────────────────────────────────────────────────────────
 function ReportsTab({ showToast }: { showToast: (m: string, ok?: boolean) => void }) {
@@ -161,68 +156,60 @@ function ReportsTab({ showToast }: { showToast: (m: string, ok?: boolean) => voi
 
   const wa = data?.whatsapp;
   return (
-    <div className="space-y-6">
-      <div className="flex gap-3 items-end flex-wrap">
+    <div className="space-y-2">
+      <WtCard className="flex flex-wrap items-end gap-3 p-3">
         <div>
-          <label className={labelCls}>Desde</label>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
+          <Label>Desde</Label>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} style={fieldStyle} />
         </div>
         <div>
-          <label className={labelCls}>Hasta</label>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
+          <Label>Hasta</Label>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} style={fieldStyle} />
         </div>
-        <button onClick={load} className="px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest" style={{ background: GREEN, color: "#06231a" }}>
-          Aplicar
-        </button>
-      </div>
+        <PrimaryBtn full={false} onClick={load}>Aplicar</PrimaryBtn>
+      </WtCard>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat label="Ingresos" value={money(wa?.totalRevenue || 0)} />
-        <Stat label="Pedidos" value={String(wa?.totalOrders || 0)} />
-        <Stat label="Ticket prom." value={money(wa?.averageTicket || 0)} />
-        <Stat label="Envíos" value={money(wa?.deliveryFees || 0)} />
+      <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-4">
+        <StatTile icon={Wallet} value={money(wa?.totalRevenue || 0)} label="Ingresos" />
+        <StatTile icon={Receipt} value={String(wa?.totalOrders || 0)} label="Pedidos" />
+        <StatTile icon={TrendingUp} value={money(wa?.averageTicket || 0)} label="Ticket prom." />
+        <StatTile icon={Bike} value={money(wa?.deliveryFees || 0)} label="Envíos" />
       </div>
 
       <div>
-        <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-3">Por sucursal</h2>
+        <SectionHead title="Por sucursal" />
         {data?.byLocation.length ? (
           <div className="space-y-2">
             {data.byLocation.map((l) => (
-              <Card key={l.locationId || "none"} className="flex items-center justify-between !py-3.5">
-                <span className="font-bold text-sm">{l.locationName}</span>
-                <div className="text-right">
-                  <div className="font-black text-sm" style={{ color: GREEN }}>{money(l.revenue)}</div>
-                  <div className="text-[10px] text-gray-500">{l.orders} pedidos</div>
+              <WtCard key={l.locationId || "none"} className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-tx-hi">
+                  <Store size={15} className="text-tx-mut" /> {l.locationName}
                 </div>
-              </Card>
+                <div className="text-right">
+                  <div className="font-display text-sm font-extrabold text-primary">{money(l.revenue)}</div>
+                  <div className="text-[10px] text-tx-mut">{l.orders} pedidos</div>
+                </div>
+              </WtCard>
             ))}
           </div>
         ) : (
-          <p className="text-gray-600 text-sm">Aún no hay pedidos de WhatsApp en este periodo.</p>
+          <p className="text-sm text-tx-mut">Aún no hay pedidos de WhatsApp en este periodo.</p>
         )}
       </div>
 
       <div>
-        <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-3">WhatsApp vs. otros canales</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <SectionHead title="WhatsApp vs. otros canales" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {(data?.bySource || []).map((s) => (
-            <Card key={s.source}>
-              <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">{s.source}</div>
-              <div className="font-black text-lg mt-1">{money(s.revenue)}</div>
-              <div className="text-[10px] text-gray-500">{s.orders} pedidos</div>
-            </Card>
+            <WtCard key={s.source} className="p-4">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-tx-mut">{s.source}</div>
+              <div className="mt-1 font-display text-lg font-extrabold text-tx-hi">{money(s.revenue)}</div>
+              <div className="text-[10px] text-tx-mut">{s.orders} pedidos</div>
+            </WtCard>
           ))}
         </div>
       </div>
     </div>
-  );
-}
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">{label}</div>
-      <div className="font-black text-xl mt-1">{value}</div>
-    </Card>
   );
 }
 
@@ -249,22 +236,22 @@ function ContactsTab({ showToast }: { showToast: (m: string, ok?: boolean) => vo
   if (loading) return <Spinner label="Cargando clientes..." />;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
-        <Stat label="Total de clientes" value={String(stats.total)} />
-        <Stat label="Aceptan marketing" value={String(stats.optedIn)} />
+        <StatTile icon={Users} value={String(stats.total)} label="Total de clientes" />
+        <StatTile icon={CheckCircle2} value={String(stats.optedIn)} label="Aceptan marketing" />
       </div>
       {contacts.length === 0 ? (
-        <Card className="text-center !py-10">
-          <p className="text-gray-500 font-bold">Aún no tienes clientes registrados.</p>
-          <p className="text-gray-700 text-xs mt-1">Se irán creando solos cuando lleguen pedidos por WhatsApp.</p>
-        </Card>
+        <WtCard className="px-6 py-10 text-center">
+          <p className="font-bold text-tx">Aún no tienes clientes registrados.</p>
+          <p className="mt-1 text-xs text-tx-mut">Se irán creando solos cuando lleguen pedidos por WhatsApp.</p>
+        </WtCard>
       ) : (
-        <Card className="!p-0 overflow-hidden">
-          <div className="overflow-x-auto">
+        <WtCard className="overflow-hidden p-0">
+          <div className="overflow-x-auto warmtech-scrollbar">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-gray-800">
+                <tr className="text-left font-mono text-[10px] uppercase tracking-widest text-tx-mut" style={{ borderBottom: "1px solid var(--bd-1)" }}>
                   <th className="px-4 py-3">Cliente</th>
                   <th className="px-4 py-3">Teléfono</th>
                   <th className="px-4 py-3 text-center">Pedidos</th>
@@ -274,21 +261,21 @@ function ContactsTab({ showToast }: { showToast: (m: string, ok?: boolean) => vo
               </thead>
               <tbody>
                 {contacts.map((c) => (
-                  <tr key={c.id} className="border-b border-gray-900 hover:bg-white/5">
-                    <td className="px-4 py-3 font-bold">
+                  <tr key={c.id} style={{ borderBottom: "1px solid var(--bd-1)" }}>
+                    <td className="px-4 py-3 font-bold text-tx">
                       {c.name || "Cliente"}
-                      {!c.optIn && <span className="ml-2 text-[9px] text-red-400 uppercase">sin marketing</span>}
+                      {!c.optIn && <span className="ml-2 text-[9px] uppercase text-err">sin marketing</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-400">{c.phone}</td>
-                    <td className="px-4 py-3 text-center">{c.orderCount}</td>
-                    <td className="px-4 py-3 text-right font-bold" style={{ color: GREEN }}>{money(c.totalSpent)}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{fecha(c.lastOrderAt)}</td>
+                    <td className="px-4 py-3 text-tx-mut">{c.phone}</td>
+                    <td className="px-4 py-3 text-center text-tx">{c.orderCount}</td>
+                    <td className="px-4 py-3 text-right font-bold text-primary">{money(c.totalSpent)}</td>
+                    <td className="px-4 py-3 text-xs text-tx-mut">{fecha(c.lastOrderAt)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </Card>
+        </WtCard>
       )}
     </div>
   );
@@ -316,7 +303,7 @@ function CampaignsTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
     setSending(true);
     try {
       const { data } = await api.post("/api/whatsapp/marketing/campaigns", { segment, message });
-      showToast(`✅ Enviado a ${data.sent}/${data.total} contactos${data.failed ? ` (${data.failed} fallaron)` : ""}`);
+      showToast(`Enviado a ${data.sent}/${data.total} contactos${data.failed ? ` (${data.failed} fallaron)` : ""}`);
       setMessage("");
     } catch (e: any) {
       showToast(e?.response?.data?.error || "Error al enviar la campaña", false);
@@ -326,55 +313,53 @@ function CampaignsTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
   };
 
   return (
-    <div className="space-y-5 max-w-2xl">
-      <Card className="space-y-4">
+    <div className="max-w-2xl space-y-5">
+      <WtCard className="space-y-4 p-5">
         <div>
-          <label className={labelCls}>Segmento de clientes</label>
-          <select value={segment} onChange={(e) => setSegment(e.target.value)} className={inputCls}>
+          <Label>Segmento de clientes</Label>
+          <select value={segment} onChange={(e) => setSegment(e.target.value)} className={inputCls} style={fieldStyle}>
             {segments.map((s) => (
               <option key={s} value={s}>{SEGMENT_LABELS[s] || s}</option>
             ))}
           </select>
         </div>
         <div>
-          <label className={labelCls}>Mensaje</label>
+          <Label>Mensaje</Label>
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={5}
-            placeholder="Ej: ¡Hola {nombre}! 🍔 Hoy 2x1 en hamburguesas hasta las 8pm. Escríbenos para pedir."
-            className={inputCls}
+            placeholder="Ej: ¡Hola {nombre}! Hoy 2x1 en hamburguesas hasta las 8pm. Escríbenos para pedir."
+            className={textareaCls}
+            style={fieldStyle}
           />
-          <p className="text-[10px] text-gray-600 mt-1.5">
-            Usa <code className="text-gray-400">{"{nombre}"}</code> y se reemplaza por el nombre de cada cliente.
+          <p className="mt-1.5 text-[10px] text-tx-dim">
+            Usa <code className="text-tx-mut">{"{nombre}"}</code> y se reemplaza por el nombre de cada cliente.
           </p>
         </div>
-        <button
+        <PrimaryBtn
+          icon={Send}
           onClick={() => message.trim() && setConfirming(true)}
           disabled={sending || !message.trim()}
-          className="w-full py-3 rounded-2xl text-xs font-black uppercase tracking-widest disabled:opacity-40 active:scale-95 transition-all"
-          style={{ background: GREEN, color: "#06231a" }}
         >
           {sending ? "Enviando..." : "Enviar campaña"}
-        </button>
-      </Card>
+        </PrimaryBtn>
+      </WtCard>
 
       {confirming && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setConfirming(false)}>
-          <div className="bg-[#111] border border-gray-800 rounded-3xl p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-black text-lg mb-2">¿Enviar campaña?</h3>
-            <p className="text-sm text-gray-400 mb-5">
-              Se enviará el mensaje por WhatsApp a los clientes del segmento
-              <strong className="text-white"> {SEGMENT_LABELS[segment] || segment}</strong>. Esta acción no se puede deshacer.
-            </p>
-            <div className="flex gap-3">
-              <button onClick={() => setConfirming(false)} className="flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest bg-gray-800 text-gray-300">
-                Cancelar
-              </button>
-              <button onClick={send} className="flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest" style={{ background: GREEN, color: "#06231a" }}>
-                Sí, enviar
-              </button>
-            </div>
+          <div className="w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <WtCard className="p-6">
+              <h3 className="mb-2 font-display text-lg font-extrabold text-tx-hi">¿Enviar campaña?</h3>
+              <p className="mb-5 text-sm text-tx-mut">
+                Se enviará el mensaje por WhatsApp a los clientes del segmento
+                <strong className="text-tx"> {SEGMENT_LABELS[segment] || segment}</strong>. Esta acción no se puede deshacer.
+              </p>
+              <div className="flex gap-3">
+                <PrimaryBtn ghost onClick={() => setConfirming(false)}>Cancelar</PrimaryBtn>
+                <PrimaryBtn onClick={send}>Sí, enviar</PrimaryBtn>
+              </div>
+            </WtCard>
           </div>
         </div>
       )}
@@ -409,7 +394,7 @@ function GamesTab({ showToast }: { showToast: (m: string, ok?: boolean) => void 
     setSaving(true);
     try {
       await api.post("/api/whatsapp/marketing/games", editing);
-      showToast("🎮 Juego guardado");
+      showToast("Juego guardado");
       setEditing(null);
       load();
     } catch (e: any) {
@@ -436,42 +421,47 @@ function GamesTab({ showToast }: { showToast: (m: string, ok?: boolean) => void 
 
   return (
     <div className="space-y-4">
-      <button
-        onClick={() => setEditing(emptyGame())}
-        className="px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95"
-        style={{ background: GREEN, color: "#06231a" }}
-      >
-        + Nuevo juego
-      </button>
+      <PrimaryBtn full={false} icon={Plus} onClick={() => setEditing(emptyGame())}>
+        Nuevo juego
+      </PrimaryBtn>
 
       {games.length === 0 ? (
-        <Card className="text-center !py-10">
-          <p className="text-gray-500 font-bold">No tienes juegos promocionales.</p>
-          <p className="text-gray-700 text-xs mt-1">Crea uno para que tus clientes ganen cupones desde WhatsApp.</p>
-        </Card>
+        <WtCard className="px-6 py-10 text-center">
+          <p className="font-bold text-tx">No tienes juegos promocionales.</p>
+          <p className="mt-1 text-xs text-tx-mut">Crea uno para que tus clientes ganen cupones desde WhatsApp.</p>
+        </WtCard>
       ) : (
         games.map((g) => (
-          <Card key={g.id} className="flex items-center justify-between gap-3">
-            <div>
+          <WtCard key={g.id} className="flex items-center justify-between gap-3 p-4">
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-black">{g.name}</span>
-                <span
-                  className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full"
-                  style={{ background: g.enabled ? `${GREEN}22` : "#262626", color: g.enabled ? GREEN : "#6b7280" }}
-                >
+                <span className="truncate font-display font-extrabold text-tx-hi">{g.name}</span>
+                <Pill tone={g.enabled ? "ok" : "neutral"} live={g.enabled}>
                   {g.enabled ? "Activo" : "Inactivo"}
-                </span>
+                </Pill>
               </div>
-              <p className="text-[11px] text-gray-500 mt-1">
+              <p className="mt-1 text-[11px] text-tx-mut">
                 {g.prizes.length} premios · {g.trigger === "ON_ORDER" ? "Tras el pedido" : "Por comando «premio»"} ·
                 {g.maxPerContact > 0 ? ` ${g.maxPerContact} jugada(s)/cliente` : " ilimitado"}
               </p>
             </div>
-            <div className="flex gap-2 flex-shrink-0">
-              <button onClick={() => setEditing(g)} className="px-3 py-2 rounded-xl text-[11px] font-black uppercase bg-gray-800 text-gray-200">Editar</button>
-              <button onClick={() => remove(g.id)} className="px-3 py-2 rounded-xl text-[11px] font-black uppercase bg-red-500/15 text-red-400">Borrar</button>
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button" onClick={() => setEditing(g)} aria-label="Editar juego"
+                className="grid h-10 w-10 place-items-center rounded-xl text-tx-mid"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+              >
+                <Pencil size={15} />
+              </button>
+              <button
+                type="button" onClick={() => remove(g.id)} aria-label="Borrar juego"
+                className="grid h-10 w-10 place-items-center rounded-xl"
+                style={{ background: "var(--err-soft)", color: "var(--err)" }}
+              >
+                <Trash2 size={15} />
+              </button>
             </div>
-          </Card>
+          </WtCard>
         ))
       )}
     </div>
@@ -495,89 +485,94 @@ function GameEditor({
   const removePrize = (i: number) => setGame({ ...game, prizes: game.prizes.filter((_, idx) => idx !== i) });
 
   return (
-    <div className="space-y-5 max-w-2xl">
-      <Card className="space-y-4">
+    <div className="max-w-2xl space-y-5">
+      <WtCard className="space-y-4 p-5">
         <div>
-          <label className={labelCls}>Nombre del juego</label>
-          <input value={game.name} onChange={(e) => setGame({ ...game, name: e.target.value })} placeholder="Ruleta de la suerte" className={inputCls} />
+          <Label>Nombre del juego</Label>
+          <input value={game.name} onChange={(e) => setGame({ ...game, name: e.target.value })} placeholder="Ruleta de la suerte" className={inputCls} style={fieldStyle} />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className={labelCls}>¿Cuándo se juega?</label>
-            <select value={game.trigger} onChange={(e) => setGame({ ...game, trigger: e.target.value as Game["trigger"] })} className={inputCls}>
+            <Label>¿Cuándo se juega?</Label>
+            <select value={game.trigger} onChange={(e) => setGame({ ...game, trigger: e.target.value as Game["trigger"] })} className={inputCls} style={fieldStyle}>
               <option value="ON_COMMAND">Cuando escriben «premio»</option>
               <option value="ON_ORDER">Automático tras el pedido</option>
             </select>
           </div>
           <div>
-            <label className={labelCls}>Jugadas por cliente (0 = ilimitado)</label>
-            <input type="number" min={0} value={game.maxPerContact} onChange={(e) => setGame({ ...game, maxPerContact: parseInt(e.target.value, 10) || 0 })} className={inputCls} />
+            <Label>Jugadas por cliente (0 = ilimitado)</Label>
+            <input type="number" min={0} value={game.maxPerContact} onChange={(e) => setGame({ ...game, maxPerContact: parseInt(e.target.value, 10) || 0 })} className={inputCls} style={fieldStyle} />
           </div>
         </div>
 
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input type="checkbox" checked={game.enabled} onChange={(e) => setGame({ ...game, enabled: e.target.checked })} className="w-5 h-5 accent-green-500" />
-          <span className="text-sm font-bold">Juego activo</span>
-        </label>
-      </Card>
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-bold text-tx">Juego activo</span>
+          <Toggle checked={game.enabled} onChange={(v) => setGame({ ...game, enabled: v })} label="Juego activo" />
+        </div>
+      </WtCard>
 
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-black uppercase tracking-widest text-gray-500">Premios</h2>
-          <button onClick={addPrize} className="text-[11px] font-black uppercase tracking-widest" style={{ color: GREEN }}>+ Premio</button>
+        <div className="flex items-center justify-between">
+          <SectionHead title="Premios" action="+ Premio" onAction={addPrize} />
         </div>
-        <p className="text-[10px] text-gray-600 mb-3">
+        <p className="mb-3 text-[11px] text-tx-mut">
           El «peso» define la probabilidad relativa de cada premio. Usa tipo «Nada» con peso alto para que ganar sea ocasional.
         </p>
         <div className="space-y-3">
           {game.prizes.map((p, i) => (
-            <Card key={i} className="space-y-3">
-              <div className="flex gap-2 items-end">
+            <WtCard key={i} className="space-y-3 p-4">
+              <div className="flex items-end gap-2">
                 <div className="flex-1">
-                  <label className={labelCls}>Premio</label>
-                  <input value={p.label} onChange={(e) => setPrize(i, { label: e.target.value })} placeholder="10% de descuento" className={inputCls} />
+                  <Label>Premio</Label>
+                  <input value={p.label} onChange={(e) => setPrize(i, { label: e.target.value })} placeholder="10% de descuento" className={inputCls} style={fieldStyle} />
                 </div>
-                <button onClick={() => removePrize(i)} className="px-3 py-2.5 rounded-xl text-[11px] font-black uppercase bg-red-500/15 text-red-400">✕</button>
+                <button
+                  type="button" onClick={() => removePrize(i)} aria-label="Quitar premio"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
+                  style={{ background: "var(--err-soft)", color: "var(--err)" }}
+                >
+                  <X size={15} strokeWidth={2.4} />
+                </button>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <div>
-                  <label className={labelCls}>Tipo</label>
-                  <select value={p.type} onChange={(e) => setPrize(i, { type: e.target.value as Prize["type"] })} className={inputCls}>
+                  <Label>Tipo</Label>
+                  <select value={p.type} onChange={(e) => setPrize(i, { type: e.target.value as Prize["type"] })} className={inputCls} style={fieldStyle}>
                     <option value="PERCENTAGE">% descuento</option>
                     <option value="FIXED">$ descuento</option>
                     <option value="NONE">Nada (sigue)</option>
                   </select>
                 </div>
                 <div>
-                  <label className={labelCls}>Valor</label>
-                  <input type="number" min={0} value={p.value} disabled={p.type === "NONE"} onChange={(e) => setPrize(i, { value: Number(e.target.value) || 0 })} className={inputCls} />
+                  <Label>Valor</Label>
+                  <input type="number" min={0} value={p.value} disabled={p.type === "NONE"} onChange={(e) => setPrize(i, { value: Number(e.target.value) || 0 })} className={`${inputCls} disabled:opacity-50`} style={fieldStyle} />
                 </div>
                 <div>
-                  <label className={labelCls}>Peso</label>
-                  <input type="number" min={0} value={p.weight} onChange={(e) => setPrize(i, { weight: Number(e.target.value) || 0 })} className={inputCls} />
+                  <Label>Peso</Label>
+                  <input type="number" min={0} value={p.weight} onChange={(e) => setPrize(i, { weight: Number(e.target.value) || 0 })} className={inputCls} style={fieldStyle} />
                 </div>
                 <div>
-                  <label className={labelCls}>Vence (días)</label>
-                  <input type="number" min={1} value={p.expiresInDays} onChange={(e) => setPrize(i, { expiresInDays: parseInt(e.target.value, 10) || 7 })} className={inputCls} />
+                  <Label>Vence (días)</Label>
+                  <input type="number" min={1} value={p.expiresInDays} onChange={(e) => setPrize(i, { expiresInDays: parseInt(e.target.value, 10) || 7 })} className={inputCls} style={fieldStyle} />
                 </div>
               </div>
               {p.type !== "NONE" && (
                 <div>
-                  <label className={labelCls}>Compra mínima para usar el cupón</label>
-                  <input type="number" min={0} value={p.minOrderAmount} onChange={(e) => setPrize(i, { minOrderAmount: Number(e.target.value) || 0 })} className={inputCls} />
+                  <Label>Compra mínima para usar el cupón</Label>
+                  <input type="number" min={0} value={p.minOrderAmount} onChange={(e) => setPrize(i, { minOrderAmount: Number(e.target.value) || 0 })} className={inputCls} style={fieldStyle} />
                 </div>
               )}
-            </Card>
+            </WtCard>
           ))}
         </div>
       </div>
 
       <div className="flex gap-3">
-        <button onClick={onCancel} className="flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest bg-gray-800 text-gray-300">Cancelar</button>
-        <button onClick={onSave} disabled={saving} className="flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest disabled:opacity-40" style={{ background: GREEN, color: "#06231a" }}>
+        <PrimaryBtn ghost onClick={onCancel}>Cancelar</PrimaryBtn>
+        <PrimaryBtn onClick={onSave} disabled={saving}>
           {saving ? "Guardando..." : "Guardar juego"}
-        </button>
+        </PrimaryBtn>
       </div>
     </div>
   );

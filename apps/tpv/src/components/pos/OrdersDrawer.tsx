@@ -13,6 +13,7 @@ import {
   Merge,
   Loader2,
   History,
+  Printer,
 } from "lucide-react";
 
 export interface DrawerOrder {
@@ -87,6 +88,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   orders,
   historyOrders = [],
   onShowDetail,
+  onReprintOrder,
   canMergeOrders = false,
   onMergeOrders,
 }) => {
@@ -329,13 +331,19 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     key={order.id}
                     type="button"
                     onClick={() =>
-                      selectionMode ? toggleOrder(order.id) : onShowDetail(order)
+                      selectionMode
+                        ? toggleOrder(order.id)
+                        : showHistory
+                          ? onReprintOrder(order)
+                          : onShowDetail(order)
                     }
                     aria-pressed={selectionMode ? isSelected : undefined}
                     aria-label={
                       selectionMode
                         ? `${isSelected ? "Quitar" : "Seleccionar"} ticket de ${order.customerName}`
-                        : `Abrir ticket de ${order.customerName} por $${order.total.toFixed(2)}`
+                        : showHistory
+                          ? `Reimprimir cuenta de ${order.customerName} por $${order.total.toFixed(2)}`
+                          : `Abrir ticket de ${order.customerName} por $${order.total.toFixed(2)}`
                     }
                     className={`relative px-4 py-3 rounded-2xl border bg-white/5 backdrop-blur-md text-left flex items-center gap-3 active:scale-[0.98] transition-all overflow-hidden min-h-[72px] ${
                       isSelected
@@ -392,7 +400,11 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                         ${order.total.toFixed(2)}
                       </span>
                       {!selectionMode && (
-                        <ChevronRight size={16} className="text-white/40" />
+                        showHistory ? (
+                          <Printer size={16} className="text-[#ffb84d]" />
+                        ) : (
+                          <ChevronRight size={16} className="text-white/40" />
+                        )
                       )}
                     </div>
                   </button>

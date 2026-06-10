@@ -3,6 +3,7 @@ const webpush = require('web-push');
 const { prisma } = require('@mrtpvrest/database');
 const axios = require('axios');
 const { resolveConfig, sendText } = require('./whatsapp-bot/provider');
+const { toWhatsappNumber } = require('@mrtpvrest/config/phone');
 
 const vapidSubject = process.env.VAPID_EMAIL
   ? (process.env.VAPID_EMAIL.startsWith('mailto:') || process.env.VAPID_EMAIL.startsWith('https://')
@@ -50,11 +51,12 @@ async function sendPushToUser(userId, payload) {
 // ── Enviar WhatsApp (legacy / fallback de plataforma) ─────────────────────
 // Usa el token GLOBAL de la plataforma. Se mantiene como fallback para
 // restaurantes que aún no configuraron su propia integración WHATSAPP.
-async function sendWhatsApp(phone, message) {
+async function sendWhatsApp(phone, message, countryCode) {
   if (!phone || !WHAPI_TOKEN) return;
   try {
-    const clean = phone.replace(/\D/g, '');
-    const number = clean.startsWith('52') ? clean : '52' + clean;
+    // Lada según el país del restaurante (default MX). Ver packages/config/phone.js.
+    const number = toWhatsappNumber(phone, countryCode);
+    if (!number) return;
     await axios.post(`${WHAPI_URL}/messages/text`, {
       to: number + '@s.whatsapp.net',
       body: message,
@@ -69,7 +71,16 @@ async function sendWhatsApp(phone, message) {
 // habilitada, cae al token global de plataforma (sendWhatsApp). Best-effort.
 async function sendOrderWhatsApp(restaurantId, phone, message) {
   if (!phone) return;
+  // País del restaurante → lada correcta para el fallback de plataforma.
+  let countryCode = 'MX';
   try {
+    if (restaurantId) {
+      const cfg = await prisma.restaurantConfig.findUnique({
+        where: { restaurantId },
+        select: { countryCode: true },
+      });
+      if (cfg?.countryCode) countryCode = cfg.countryCode;
+    }
     const integration = restaurantId
       ? await prisma.integrationConfig.findFirst({
           where: { restaurantId, type: 'WHATSAPP', enabled: true },
@@ -86,7 +97,7 @@ async function sendOrderWhatsApp(restaurantId, phone, message) {
     console.error('sendOrderWhatsApp error:', e.message);
   }
   // Fallback: token global de plataforma.
-  await sendWhatsApp(phone, message);
+  await sendWhatsApp(phone, message, countryCode);
 }
 
 // ── Notificaciones por estado ─────────────────────────────────────────────

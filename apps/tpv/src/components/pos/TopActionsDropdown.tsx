@@ -8,6 +8,11 @@ import {
   Wallet,
   Receipt,
   SlidersHorizontal,
+  Repeat,
+  ArrowRightLeft,
+  SplitSquareHorizontal,
+  Banknote,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,7 +23,14 @@ interface Props {
   onReprintReceipt?: () => void;
   onSync?: () => void;
   onOpenCatalogSettings?: () => void;
+  onRenameOrder?: () => void;
+  onChangeOrderType?: () => void;
+  onMoveOrder?: () => void;
+  onSplitOrder?: () => void;
+  onDeleteOrder?: () => void;
+  onChargeOrder?: () => void;
   hasItems: boolean;
+  hasActiveOrder?: boolean;
 }
 
 export default function TopActionsDropdown({
@@ -28,7 +40,14 @@ export default function TopActionsDropdown({
   onReprintReceipt,
   onSync,
   onOpenCatalogSettings,
-  hasItems
+  onRenameOrder,
+  onChangeOrderType,
+  onMoveOrder,
+  onSplitOrder,
+  onDeleteOrder,
+  onChargeOrder,
+  hasItems,
+  hasActiveOrder = false,
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -52,6 +71,9 @@ export default function TopActionsDropdown({
     }
   };
 
+  const activeOrderActionClass =
+    "flex items-center gap-3 px-3 py-3 rounded-xl text-zinc-300 hover:text-white hover:bg-white/5 transition-all active:scale-95 disabled:opacity-35 disabled:active:scale-100";
+
   return (
     <div className="relative z-50" ref={menuRef}>
       <button
@@ -62,7 +84,7 @@ export default function TopActionsDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute top-12 right-0 w-56 bg-[#121316] border border-white/10 rounded-2xl shadow-2xl p-2 flex flex-col gap-1 overflow-hidden origin-top-right animate-in fade-in zoom-in-95 duration-200">
+        <div className="absolute top-12 right-0 max-h-[calc(100vh-5rem)] w-60 overflow-y-auto bg-[#121316] border border-white/10 rounded-2xl shadow-2xl p-2 flex flex-col gap-1 origin-top-right animate-in fade-in zoom-in-95 duration-200">
           <button
             onClick={() => handleAction(onOpenCatalogSettings)}
             className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-3 text-amber-300 transition-all active:scale-95 hover:bg-amber-500/15"
@@ -81,7 +103,8 @@ export default function TopActionsDropdown({
           
           <button
             onClick={() => handleAction(onReprintKitchen)}
-            className="flex items-center gap-3 px-3 py-3 rounded-xl text-zinc-300 hover:text-white hover:bg-white/5 transition-all active:scale-95"
+            disabled={!hasActiveOrder}
+            className={activeOrderActionClass}
           >
             <Printer size={16} />
             <span className="text-xs font-bold">Reimprimir pedido</span>
@@ -89,10 +112,56 @@ export default function TopActionsDropdown({
 
           <button
             onClick={() => handleAction(onReprintReceipt)}
-            className="flex items-center gap-3 px-3 py-3 rounded-xl text-zinc-300 hover:text-white hover:bg-white/5 transition-all active:scale-95"
+            disabled={!hasActiveOrder}
+            className={activeOrderActionClass}
           >
             <Receipt size={16} />
             <span className="text-xs font-bold">Reimprimir cuenta</span>
+          </button>
+
+          <button
+            onClick={() => handleAction(onRenameOrder)}
+            disabled={!hasActiveOrder}
+            className={activeOrderActionClass}
+          >
+            <Pencil size={16} />
+            <span className="text-xs font-bold">Renombrar ticket</span>
+          </button>
+
+          <button
+            onClick={() => handleAction(onChangeOrderType)}
+            disabled={!hasActiveOrder}
+            className={activeOrderActionClass}
+          >
+            <Repeat size={16} />
+            <span className="text-xs font-bold">Cambiar tipo</span>
+          </button>
+
+          <button
+            onClick={() => handleAction(onMoveOrder)}
+            disabled={!hasActiveOrder}
+            className={activeOrderActionClass}
+          >
+            <ArrowRightLeft size={16} />
+            <span className="text-xs font-bold">Mover mesa</span>
+          </button>
+
+          <button
+            onClick={() => handleAction(onSplitOrder)}
+            disabled={!hasActiveOrder}
+            className={activeOrderActionClass}
+          >
+            <SplitSquareHorizontal size={16} />
+            <span className="text-xs font-bold">Dividir ticket</span>
+          </button>
+
+          <button
+            onClick={() => handleAction(onChargeOrder)}
+            disabled={!hasActiveOrder}
+            className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-3 text-amber-300 transition-all active:scale-95 hover:bg-amber-500/15 disabled:opacity-35 disabled:active:scale-100"
+          >
+            <Banknote size={16} />
+            <span className="text-xs font-bold">Cobrar ahora</span>
           </button>
 
           <button
@@ -112,6 +181,15 @@ export default function TopActionsDropdown({
           >
             <Trash2 size={16} />
             <span className="text-xs font-bold">Despejar ticket</span>
+          </button>
+
+          <button
+            onClick={() => handleAction(onDeleteOrder)}
+            disabled={!hasActiveOrder}
+            className="flex items-center gap-3 px-3 py-3 rounded-xl text-red-500 hover:bg-red-500/10 transition-all active:scale-95 disabled:opacity-35 disabled:active:scale-100"
+          >
+            <Trash2 size={16} />
+            <span className="text-xs font-bold">Eliminar ticket</span>
           </button>
         </div>
       )}

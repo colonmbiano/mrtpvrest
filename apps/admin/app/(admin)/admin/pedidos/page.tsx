@@ -1,24 +1,57 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import {
+  ChevronDown, ChevronUp, Inbox, CheckCircle2, ChefHat, BellRing,
+  Bike, Home, MessageCircle, X, RotateCw, LayoutGrid, List, Search,
+  Flame, Store, MapPin, StickyNote,
+} from "lucide-react";
 import api from "@/lib/api";
+import {
+  WtScreen, PageHeader, WtCard, StatTile, Pill, Segmented, PrimaryBtn,
+  EmptyState, money, type Tone,
+} from "@/components/warmtech";
 
-const STATUSES = [
-  { key: "PENDING",    label: "Pendientes",  icon: "📥", color: "#f59e0b" },
-  { key: "CONFIRMED",  label: "Confirmados", icon: "✅", color: "#3b82f6" },
-  { key: "PREPARING",  label: "Preparando",  icon: "👨‍🍳", color: "#8b5cf6" },
-  { key: "READY",      label: "Listos",      icon: "🎉", color: "#06b6d4" },
-  { key: "ON_THE_WAY", label: "En camino",   icon: "🛵", color: "#f97316" },
-  { key: "DELIVERED",  label: "Entregados",  icon: "🏠", color: "#22c55e" },
+/* ── status model ────────────────────────────────────────────────── */
+type StatusKey =
+  | "PENDING" | "CONFIRMED" | "PREPARING" | "READY"
+  | "ON_THE_WAY" | "DELIVERED" | "CANCELLED";
+
+const STATUSES: { key: StatusKey; label: string; icon: typeof Inbox; tone: Tone }[] = [
+  { key: "PENDING",    label: "Pendientes",  icon: Inbox,        tone: "warn" },
+  { key: "CONFIRMED",  label: "Confirmados", icon: CheckCircle2, tone: "info" },
+  { key: "PREPARING",  label: "Preparando",  icon: ChefHat,      tone: "ac"   },
+  { key: "READY",      label: "Listos",      icon: BellRing,     tone: "info" },
+  { key: "ON_THE_WAY", label: "En camino",   icon: Bike,         tone: "ac"   },
+  { key: "DELIVERED",  label: "Entregados",  icon: Home,         tone: "ok"   },
 ];
 
-const NEXT_STATUS: Record<string, string> = {
+const STATUS_META: Record<string, { label: string; icon: typeof Inbox; tone: Tone }> =
+  Object.fromEntries(STATUSES.map((s) => [s.key, s]));
+
+const NEXT_STATUS: Record<string, StatusKey> = {
   PENDING: "CONFIRMED", CONFIRMED: "PREPARING",
   PREPARING: "READY", READY: "ON_THE_WAY", ON_THE_WAY: "DELIVERED",
 };
 
 const SOURCE_LABELS: Record<string, string> = {
-  ONLINE: "🌐 Online", TPV: "🖥️ TPV", WAITER: "🧑‍🍽️ Mesero",
+  ONLINE: "Online", TPV: "TPV", WAITER: "Mesero",
 };
+
+const TONE_FG: Record<Tone, string> = {
+  ac: "var(--brand-primary)", ok: "var(--ok)", warn: "var(--warn)",
+  err: "var(--err)", info: "var(--info)", neutral: "var(--tx-mut)",
+};
+
+interface OrderItem { id: string; name: string; quantity: number; price: number; notes?: string }
+interface Order {
+  id: string; orderNumber: string; status: StatusKey;
+  customerName?: string; customerPhone?: string; user?: { name?: string };
+  total?: number; source?: string; orderType?: string; paymentMethod?: string;
+  createdAt: string; updatedAt: string;
+  items?: OrderItem[]; deliveryAddress?: string; notes?: string;
+  deliveryDriverId?: string;
+}
+interface Driver { id: string; name: string; phone?: string }
 
 function timeAgo(date: string) {
   const diff = Math.floor((Date.now() - new Date(date).getTime()) / 60000);
@@ -27,196 +60,170 @@ function timeAgo(date: string) {
   return `${Math.floor(diff / 60)}h ${diff % 60}m`;
 }
 
+/* ── order card ──────────────────────────────────────────────────── */
 function OrderCard({ order, drivers, onStatusChange, onAssignDriver }: {
-  order: any; drivers: any[];
+  order: Order; drivers: Driver[];
   onStatusChange: (id: string, status: string) => void;
   onAssignDriver: (orderId: string, driverId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const statusInfo   = STATUSES.find(s => s.key === order.status);
-  const nextStatus   = NEXT_STATUS[order.status];
-  const nextInfo     = STATUSES.find(s => s.key === nextStatus);
-  const elapsed      = Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000);
-  const urgent       = elapsed > 30 && !["DELIVERED", "CANCELLED"].includes(order.status);
+  const meta = STATUS_META[order.status];
+  const nextStatus = NEXT_STATUS[order.status];
+  const nextMeta = nextStatus ? STATUS_META[nextStatus] : undefined;
+  const elapsed = Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000);
+  const urgent = elapsed > 30 && !["DELIVERED", "CANCELLED"].includes(order.status);
+  const Icon = meta?.icon ?? Inbox;
 
   return (
-    <div
-      className="rounded-2xl overflow-hidden transition-all"
-      style={{
-        background: "var(--surf)",
-        border: `1px solid ${urgent ? "rgba(239,68,68,0.4)" : "var(--border)"}`,
-        boxShadow: urgent ? "0 0 0 1px rgba(239,68,68,0.1)" : "none",
-      }}
+    <WtCard
+      className="overflow-hidden"
+      style={urgent ? { borderColor: "var(--err)", boxShadow: "0 0 0 1px var(--err-soft)" } : undefined}
     >
-      {/* TOP COLOR BAR */}
-      <div style={{ height: "2px", background: statusInfo?.color }} />
+      <div style={{ height: 2, background: TONE_FG[meta?.tone ?? "neutral"] }} />
 
-      {/* HEADER */}
-      <div className="px-4 pt-3 pb-2 flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <span className="font-syne font-black text-sm" style={{ color: "var(--text)" }}>
-              {order.orderNumber}
-            </span>
-            {urgent && (
-              <span
-                className="text-[10px] font-black px-2 py-0.5 rounded-full"
-                style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)" }}
-              >
-                ⚠ {elapsed}m
-              </span>
-            )}
-            <span
-              className="text-[10px] font-black px-2 py-0.5 rounded-full"
-              style={{ background: `${statusInfo?.color}15`, color: statusInfo?.color, border: `1px solid ${statusInfo?.color}25` }}
-            >
-              {statusInfo?.icon} {statusInfo?.label}
-            </span>
+      <div className="flex items-start gap-3 px-4 pb-2 pt-3">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="font-display text-sm font-extrabold text-tx-hi">{order.orderNumber}</span>
+            {urgent && <Pill tone="err" live>{elapsed}m</Pill>}
+            <Pill tone={meta?.tone ?? "neutral"}>
+              <Icon size={11} strokeWidth={2} /> {meta?.label ?? order.status}
+            </Pill>
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap text-[11px]" style={{ color: "var(--muted)" }}>
+          <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-tx-mut">
             <span>{order.customerName || order.user?.name || "Invitado"}</span>
             {order.customerPhone && <><span>·</span><span>{order.customerPhone}</span></>}
             <span>·</span><span>{timeAgo(order.createdAt)}</span>
-            <span>·</span><span>{SOURCE_LABELS[order.source] || order.source}</span>
-            {order.orderType === "DELIVERY" && (
-              <>
-                <span>·</span>
-                <span style={{ color: order.deliveryDriverName ? "var(--blue)" : "var(--red)" }}>
-                  🛵 {order.deliveryDriverName || "Sin asignar"}
-                </span>
-              </>
-            )}
+            <span>·</span><span>{SOURCE_LABELS[order.source ?? ""] || order.source}</span>
+            {order.orderType === "DELIVERY" && (() => {
+              const dn = drivers.find((d) => d.id === order.deliveryDriverId)?.name;
+              return (
+                <>
+                  <span>·</span>
+                  <span style={{ color: dn ? "var(--info)" : "var(--err)" }}>🛵 {dn || "Sin asignar"}</span>
+                </>
+              );
+            })()}
           </div>
         </div>
-        <div className="text-right flex-shrink-0">
-          <div className="font-syne font-black text-base" style={{ color: "var(--accent)" }}>
-            ${order.total?.toFixed(0)}
-          </div>
-          <div className="text-[10px]" style={{ color: "var(--muted)" }}>
-            {order.orderType === "DELIVERY" ? "🛵" : "🏪"}{" "}
+        <div className="shrink-0 text-right">
+          <div className="font-display text-base font-extrabold text-primary">{money(order.total ?? 0)}</div>
+          <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-tx-mut">
+            {order.orderType === "DELIVERY" ? <Bike size={11} /> : <Store size={11} />}
             {order.paymentMethod === "CASH_ON_DELIVERY" ? "Efectivo" : "MP"}
           </div>
         </div>
       </div>
 
-      {/* ITEMS PREVIEW */}
-      <div className="px-4 pb-2 text-[11px]" style={{ color: "var(--muted)" }}>
-        {order.items?.slice(0, 3).map((i: any) => `${i.quantity}x ${i.name}`).join(" · ")}
-        {order.items?.length > 3 && ` +${order.items.length - 3} más`}
+      <div className="px-4 pb-2 text-[11px] text-tx-mut">
+        {order.items?.slice(0, 3).map((i) => `${i.quantity}x ${i.name}`).join(" · ")}
+        {(order.items?.length ?? 0) > 3 && ` +${(order.items?.length ?? 0) - 3} más`}
       </div>
 
-      {/* EXPANDED */}
       {expanded && (
-        <div className="px-4 pb-3 pt-3 flex flex-col gap-2" style={{ borderTop: "1px solid var(--border)" }}>
-          {order.items?.map((item: any) => (
+        <div className="flex flex-col gap-2 px-4 pb-3 pt-3" style={{ borderTop: "1px solid var(--bd-1)" }}>
+          {order.items?.map((item) => (
             <div key={item.id} className="flex justify-between text-xs">
-              <span style={{ color: "var(--text)" }}>{item.quantity}x {item.name}{item.notes ? ` (${item.notes})` : ""}</span>
-              <span style={{ color: "var(--muted)" }}>${(item.price * item.quantity).toFixed(0)}</span>
+              <span className="text-tx">{item.quantity}x {item.name}{item.notes ? ` (${item.notes})` : ""}</span>
+              <span className="font-mono text-tx-mut">{money(item.price * item.quantity)}</span>
             </div>
           ))}
           {order.deliveryAddress && (
-            <div
-              className="text-xs mt-1 p-2 rounded-xl"
-              style={{ background: "var(--surf2)", color: "var(--muted)", border: "1px solid var(--border)" }}
-            >
-              📍 {order.deliveryAddress}
+            <div className="mt-1 flex items-start gap-2 rounded-xl p-2 text-xs text-tx-mut"
+              style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+              <MapPin size={13} className="mt-0.5 shrink-0" /> {order.deliveryAddress}
             </div>
           )}
           {order.notes && (
-            <div
-              className="text-xs p-2 rounded-xl"
-              style={{ background: "rgba(245,158,11,0.08)", color: "var(--yellow)", border: "1px solid rgba(245,158,11,0.15)" }}
-            >
-              📝 {order.notes}
+            <div className="flex items-start gap-2 rounded-xl p-2 text-xs"
+              style={{ background: "var(--warn-soft)", color: "var(--warn)" }}>
+              <StickyNote size={13} className="mt-0.5 shrink-0" /> {order.notes}
             </div>
           )}
           {order.orderType === "DELIVERY" && ["READY", "ON_THE_WAY"].includes(order.status) && (
             <div className="mt-1">
-              <div className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: "var(--muted)" }}>
-                Repartidor
-              </div>
+              <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Repartidor</div>
               <select
                 value={order.deliveryDriverId || ""}
-                onChange={e => { if (e.target.value) onAssignDriver(order.id, e.target.value); }}
-                className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }}
+                onChange={(e) => { if (e.target.value) onAssignDriver(order.id, e.target.value); }}
+                className="w-full rounded-xl px-3 py-2 text-xs outline-none"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
               >
                 <option value="">— Seleccionar repartidor —</option>
-                {drivers.map(d => (
-                  <option key={d.id} value={d.id}>{d.name} {d.phone ? `(${d.phone})` : ""}</option>
-                ))}
+                {drivers.map((d) => <option key={d.id} value={d.id}>{d.name} {d.phone ? `(${d.phone})` : ""}</option>)}
               </select>
-              {order.deliveryDriverId && (
-                <div className="text-[11px] mt-1 font-bold" style={{ color: "var(--green)" }}>
-                  ✓ {drivers.find(d => d.id === order.deliveryDriverId)?.name || "Asignado"}
-                </div>
-              )}
             </div>
           )}
         </div>
       )}
 
-      {/* ACTIONS */}
-      <div className="px-3 pb-3 flex gap-2">
+      <div className="flex gap-2 px-3 pb-3">
         <button
-          onClick={() => setExpanded(e => !e)}
-          className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black transition-all"
-          style={{ background: "var(--surf2)", color: "var(--muted)", border: "1px solid var(--border)" }}
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          aria-label={expanded ? "Contraer" : "Expandir"}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-tx-mut"
+          style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
         >
-          {expanded ? "▲" : "▼"}
+          {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
         </button>
 
         {order.customerPhone && (
           <a
             href={`https://wa.me/52${order.customerPhone.replace(/\D/g, "")}`}
             target="_blank" rel="noopener noreferrer"
-            className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-sm transition-all"
-            style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}
+            aria-label="WhatsApp"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
+            style={{ background: "var(--ok-soft)", color: "var(--ok)" }}
           >
-            💬
+            <MessageCircle size={16} />
           </a>
         )}
 
-        {nextStatus && (
+        {nextStatus && nextMeta && (
           <button
+            type="button"
             onClick={() => onStatusChange(order.id, nextStatus)}
-            className="flex-1 py-2 rounded-xl font-syne font-black text-xs transition-all active:scale-95"
-            style={{ background: nextInfo?.color, color: "#fff" }}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 font-display text-xs font-extrabold text-white transition-transform active:scale-95"
+            style={{ background: TONE_FG[nextMeta.tone] }}
           >
-            {nextInfo?.icon} {nextInfo?.label}
+            <nextMeta.icon size={14} strokeWidth={2.2} /> {nextMeta.label}
           </button>
         )}
 
         {order.status === "PENDING" && (
           <button
+            type="button"
             onClick={() => onStatusChange(order.id, "CANCELLED")}
-            className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black transition-all"
-            style={{ background: "rgba(239,68,68,0.08)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.15)" }}
+            aria-label="Cancelar pedido"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
+            style={{ background: "var(--err-soft)", color: "var(--err)" }}
           >
-            ✕
+            <X size={15} strokeWidth={2.4} />
           </button>
         )}
       </div>
-    </div>
+    </WtCard>
   );
 }
 
+/* ── page ────────────────────────────────────────────────────────── */
 export default function PedidosPage() {
-  const [orders, setOrders]       = useState<any[]>([]);
-  const [drivers, setDrivers]     = useState<any[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [view, setView]           = useState<"kanban" | "list">("kanban");
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<"kanban" | "list">("list");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
   const [filterDriver, setFilterDriver] = useState("all");
-  const [search, setSearch]       = useState("");
+  const [search, setSearch] = useState("");
   const [lastUpdate, setLastUpdate] = useState(new Date());
 
   const fetchData = useCallback(async () => {
     try {
       const [ordersRes, driversRes] = await Promise.all([
-        api.get("/api/orders/admin"),
-        api.get("/api/delivery"),
+        api.get<Order[]>("/api/orders/admin"),
+        api.get<Driver[]>("/api/delivery"),
       ]);
       setOrders(ordersRes.data);
       setDrivers(driversRes.data);
@@ -229,54 +236,50 @@ export default function PedidosPage() {
   }, []);
 
   useEffect(() => {
-    // Esperamos a que locationId esté disponible en localStorage antes de empezar.
-    // El Sidebar lo escribe asíncronamente; si ya está listo, arrancamos de inmediato.
     let interval: ReturnType<typeof setInterval>;
-
     const startPolling = () => {
       fetchData();
       interval = setInterval(fetchData, 8000);
     };
-
     const locationId = localStorage.getItem("locationId");
     if (locationId) {
       startPolling();
     } else {
       const handleReady = () => {
         startPolling();
-        window.removeEventListener('locationChanged', handleReady);
+        window.removeEventListener("locationChanged", handleReady);
       };
-      window.addEventListener('locationChanged', handleReady);
+      window.addEventListener("locationChanged", handleReady);
       return () => {
-        window.removeEventListener('locationChanged', handleReady);
+        window.removeEventListener("locationChanged", handleReady);
         clearInterval(interval);
       };
     }
-
     return () => clearInterval(interval);
   }, [fetchData]);
 
   async function changeStatus(orderId: string, status: string) {
     try {
       await api.put(`/api/orders/${orderId}/status`, { status });
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
-    } catch (e: any) {
-      alert(e?.response?.data?.error || "Error al cambiar estado");
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: status as StatusKey } : o)));
+    } catch (e) {
+      const err = e as { response?: { data?: { error?: string } } };
+      alert(err?.response?.data?.error || "Error al cambiar estado");
     }
   }
 
   async function assignDriver(orderId: string, driverId: string) {
     try {
       await api.put("/api/delivery/assign", { orderId, driverId });
-      setOrders(prev => prev.map(o =>
-        o.id === orderId ? { ...o, deliveryDriverId: driverId, status: "ON_THE_WAY" } : o
-      ));
-    } catch (e: any) {
-      alert(e?.response?.data?.error || "Error al asignar repartidor");
+      setOrders((prev) => prev.map((o) =>
+        o.id === orderId ? { ...o, deliveryDriverId: driverId, status: "ON_THE_WAY" } : o));
+    } catch (e) {
+      const err = e as { response?: { data?: { error?: string } } };
+      alert(err?.response?.data?.error || "Error al asignar repartidor");
     }
   }
 
-  const filtered = orders.filter(o => {
+  const filtered = useMemo(() => orders.filter((o) => {
     if (filterStatus !== "all" && o.status !== filterStatus) return false;
     if (filterSource !== "all" && o.source !== filterSource) return false;
     if (filterDriver !== "all") {
@@ -296,237 +299,164 @@ export default function PedidosPage() {
       );
     }
     return true;
-  });
+  }), [orders, filterStatus, filterSource, filterDriver, search]);
 
-  // Resumen del repartidor filtrado: nº de pedidos + suma de totales del
-  // conjunto actualmente visible (respeta los demás filtros y la búsqueda).
-  const driverSummary = filterDriver !== "all"
-    ? {
-        name:
-          filterDriver === "unassigned"
-            ? "Sin asignar"
-            : drivers.find(d => d.id === filterDriver)?.name || "Repartidor",
-        count: filtered.length,
-        total: filtered.reduce((s, o) => s + (o.total || 0), 0),
-      }
-    : null;
+  // Resumen del repartidor filtrado: nº de pedidos + total COBRADO (excluye
+  // cancelados, que no se cobran). Respeta los demás filtros y la búsqueda.
+  const driverSummary = useMemo(() => {
+    if (filterDriver === "all") return null;
+    const name = filterDriver === "unassigned"
+      ? "Sin asignar"
+      : drivers.find((d) => d.id === filterDriver)?.name || "Repartidor";
+    const billable = filtered.filter((o) => o.status !== "CANCELLED");
+    return {
+      name,
+      count: filtered.length,
+      total: billable.reduce((s, o) => s + (o.total || 0), 0),
+    };
+  }, [filterDriver, filtered, drivers]);
 
-  const active         = orders.filter(o => !["DELIVERED", "CANCELLED"].includes(o.status));
-  const pending        = orders.filter(o => o.status === "PENDING").length;
-  const todayDelivered = orders.filter(o =>
-    o.status === "DELIVERED" &&
-    new Date(o.updatedAt).toDateString() === new Date().toDateString()
-  );
-  const todayRevenue   = todayDelivered.reduce((s, o) => s + (o.total || 0), 0);
+  const active = orders.filter((o) => !["DELIVERED", "CANCELLED"].includes(o.status));
+  const pending = orders.filter((o) => o.status === "PENDING").length;
+  const todayDelivered = orders.filter((o) =>
+    o.status === "DELIVERED" && new Date(o.updatedAt).toDateString() === new Date().toDateString());
+  const todayRevenue = todayDelivered.reduce((s, o) => s + (o.total || 0), 0);
 
-  const STATS = [
-    { label: "Activos",        value: active.length,             color: "var(--accent)",  icon: "🔥" },
-    { label: "Pendientes",     value: pending,                   color: pending > 0 ? "var(--red)" : "var(--green)", icon: "📥" },
-    { label: "Hoy entregados", value: todayDelivered.length,     color: "var(--green)",   icon: "✅" },
-    { label: "Ingresos hoy",   value: `$${todayRevenue.toFixed(0)}`, color: "var(--blue)", icon: "💰" },
-  ];
+  const hasFilters = filterStatus !== "all" || filterSource !== "all" || filterDriver !== "all" || Boolean(search);
+  const updatedLabel = lastUpdate.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <div className="p-6 max-w-[1600px] mx-auto">
-
-        {/* HEADER */}
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-          <div>
-            <h1 className="font-syne font-black text-2xl" style={{ color: "var(--text)" }}>
-              Pedidos
-            </h1>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--green)" }} />
-              <span className="text-[11px]" style={{ color: "var(--muted)" }}>
-                Actualizado {lastUpdate.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* VIEW TOGGLE */}
-            <div
-              className="flex rounded-xl p-1"
-              style={{ background: "var(--surf)", border: "1px solid var(--border)" }}
-            >
-              {(["kanban", "list"] as const).map(v => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-black transition-all"
-                  style={{
-                    background: view === v ? "var(--accent)" : "transparent",
-                    color: view === v ? "#fff" : "var(--muted)",
-                  }}
-                >
-                  {v === "kanban" ? "⊞ Kanban" : "☰ Lista"}
-                </button>
-              ))}
-            </div>
+    <WtScreen>
+      <PageHeader
+        eyebrow="Operación en vivo"
+        title="Pedidos"
+        subtitle={`Actualizado ${updatedLabel}`}
+        actions={
+          <>
+            <Segmented
+              value={view}
+              onChange={setView}
+              options={[{ value: "list", label: "Lista" }, { value: "kanban", label: "Kanban" }] as const}
+              className="md:max-w-[220px]"
+            />
             <button
-              onClick={fetchData}
-              className="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
-              style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--muted)" }}
+              type="button" onClick={fetchData} aria-label="Refrescar"
+              className="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-tx-mut"
+              style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
             >
-              🔄
+              <RotateCw size={17} />
             </button>
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        {/* STATS */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-          {STATS.map(s => (
-            <div
-              key={s.label}
-              className="rounded-2xl p-4"
-              style={{ background: "var(--surf)", border: "1px solid var(--border)" }}
-            >
-              <div className="text-lg mb-2">{s.icon}</div>
-              <div className="font-syne font-black text-2xl mb-0.5" style={{ color: s.color }}>
-                {s.value}
-              </div>
-              <div className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>
-                {s.label}
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* mobile live indicator */}
+      <div className="mb-3 flex items-center gap-2 md:hidden">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: "var(--ok)" }} />
+        <span className="text-[11px] text-tx-mut">Actualizado {updatedLabel}</span>
+      </div>
 
-        {/* FILTERS */}
-        <div
-          className="flex gap-2 flex-wrap mb-5 p-3 rounded-2xl"
-          style={{ background: "var(--surf)", border: "1px solid var(--border)" }}
-        >
+      {/* stats */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatTile icon={Flame} value={active.length} label="Activos" />
+        <StatTile icon={Inbox} value={pending} label="Pendientes" />
+        <StatTile icon={CheckCircle2} value={todayDelivered.length} label="Hoy entregados" />
+        <StatTile icon={Home} value={money(todayRevenue)} label="Ingresos hoy" />
+      </div>
+
+      {/* filters */}
+      <WtCard className="mt-4 flex flex-wrap items-center gap-2 p-3">
+        <div className="relative min-w-[160px] flex-1">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-tx-mut" />
           <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar pedido, cliente..."
-            className="px-3 py-2 rounded-xl text-sm outline-none flex-1 min-w-[160px]"
-            style={{
-              background: "var(--surf2)",
-              border: "1px solid var(--border)",
-              color: "var(--text)",
-            }}
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar pedido, cliente…"
+            className="min-h-11 w-full rounded-xl pl-9 pr-3 text-sm outline-none"
+            style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
           />
-          <select
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-            className="px-3 py-2 rounded-xl text-sm outline-none"
-            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }}
-          >
-            <option value="all">Todos los estados</option>
-            {STATUSES.map(s => <option key={s.key} value={s.key}>{s.icon} {s.label}</option>)}
-          </select>
-          <select
-            value={filterSource}
-            onChange={e => setFilterSource(e.target.value)}
-            className="px-3 py-2 rounded-xl text-sm outline-none"
-            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }}
-          >
-            <option value="all">Todos los orígenes</option>
-            <option value="ONLINE">🌐 Online</option>
-            <option value="TPV">🖥️ TPV</option>
-            <option value="WAITER">🧑‍🍽️ Mesero</option>
-          </select>
-          <select
-            value={filterDriver}
-            onChange={e => setFilterDriver(e.target.value)}
-            className="px-3 py-2 rounded-xl text-sm outline-none"
-            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }}
-          >
-            <option value="all">🛵 Todos los repartidores</option>
-            <option value="unassigned">⚠ Sin asignar</option>
-            {drivers.map(d => (
-              <option key={d.id} value={d.id}>🛵 {d.name}</option>
-            ))}
-          </select>
-          {(filterStatus !== "all" || filterSource !== "all" || filterDriver !== "all" || search) && (
-            <button
-              onClick={() => { setFilterStatus("all"); setFilterSource("all"); setFilterDriver("all"); setSearch(""); }}
-              className="px-3 py-2 rounded-xl text-xs font-black transition-all"
-              style={{ background: "rgba(239,68,68,0.08)", color: "var(--red)", border: "1px solid rgba(239,68,68,0.15)" }}
-            >
-              ✕ Limpiar
-            </button>
-          )}
         </div>
+        <select
+          value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+          className="min-h-11 rounded-xl px-3 text-sm outline-none"
+          style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
+        >
+          <option value="all">Todos los estados</option>
+          {STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
+        <select
+          value={filterSource} onChange={(e) => setFilterSource(e.target.value)}
+          className="min-h-11 rounded-xl px-3 text-sm outline-none"
+          style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
+        >
+          <option value="all">Todos los orígenes</option>
+          <option value="ONLINE">Online</option>
+          <option value="TPV">TPV</option>
+          <option value="WAITER">Mesero</option>
+        </select>
+        <select
+          value={filterDriver} onChange={(e) => setFilterDriver(e.target.value)}
+          className="min-h-11 rounded-xl px-3 text-sm outline-none"
+          style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
+        >
+          <option value="all">Todos los repartidores</option>
+          <option value="unassigned">Sin asignar</option>
+          {drivers.map((d) => <option key={d.id} value={d.id}>🛵 {d.name}</option>)}
+        </select>
+        {hasFilters && (
+          <PrimaryBtn full={false} danger icon={X}
+            onClick={() => { setFilterStatus("all"); setFilterSource("all"); setFilterDriver("all"); setSearch(""); }}>
+            Limpiar
+          </PrimaryBtn>
+        )}
+      </WtCard>
 
-        {/* DRIVER SUMMARY */}
-        {driverSummary && (
-          <div
-            className="flex items-center justify-between gap-3 flex-wrap mb-5 px-4 py-3 rounded-2xl"
-            style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)" }}
-          >
-            <div className="flex items-center gap-2 text-sm" style={{ color: "var(--text)" }}>
-              <span className="text-lg">🛵</span>
-              <span className="font-syne font-black">{driverSummary.name}</span>
+      {/* Resumen del repartidor filtrado */}
+      {driverSummary && (
+        <WtCard className="mt-3 flex flex-wrap items-center justify-between gap-3 p-3">
+          <div className="flex items-center gap-2 text-sm" style={{ color: "var(--tx)" }}>
+            <span className="text-lg">🛵</span>
+            <span className="font-black">{driverSummary.name}</span>
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="text-right">
+              <div className="text-lg font-black" style={{ color: "var(--info)" }}>{driverSummary.count}</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--tx-mut)" }}>Pedidos</div>
             </div>
-            <div className="flex items-center gap-5">
-              <div className="text-right">
-                <div className="font-syne font-black text-lg" style={{ color: "var(--blue)" }}>
-                  {driverSummary.count}
-                </div>
-                <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>
-                  Pedidos
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-syne font-black text-lg" style={{ color: "var(--accent)" }}>
-                  ${driverSummary.total.toFixed(0)}
-                </div>
-                <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>
-                  Total
-                </div>
-              </div>
+            <div className="text-right">
+              <div className="text-lg font-black" style={{ color: "var(--brand-primary)" }}>${driverSummary.total.toFixed(0)}</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--tx-mut)" }}>Cobrado</div>
             </div>
           </div>
-        )}
+        </WtCard>
+      )}
 
-        {/* CONTENT */}
+      {/* content */}
+      <div className="mt-4">
         {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="text-4xl animate-bounce">🍔</div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-40 animate-pulse rounded-[18px] bg-surf-2" />)}
           </div>
         ) : view === "kanban" ? (
-          <div className="flex gap-4 overflow-x-auto pb-4" style={{ scrollbarWidth: "thin" }}>
-            {STATUSES.map(col => {
-              const colOrders = filtered.filter(o => o.status === col.key);
+          <div className="flex gap-4 overflow-x-auto pb-4 warmtech-scrollbar">
+            {STATUSES.map((col) => {
+              const colOrders = filtered.filter((o) => o.status === col.key);
+              const ColIcon = col.icon;
               return (
-                <div key={col.key} className="flex-shrink-0 flex flex-col gap-3" style={{ width: "290px" }}>
-                  {/* COL HEADER */}
-                  <div
-                    className="flex items-center justify-between px-3 py-2.5 rounded-xl"
-                    style={{
-                      background: `${col.color}10`,
-                      border: `1px solid ${col.color}25`,
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{col.icon}</span>
-                      <span className="font-syne font-black text-xs uppercase tracking-wider" style={{ color: col.color }}>
-                        {col.label}
-                      </span>
+                <div key={col.key} className="flex w-[290px] shrink-0 flex-col gap-3">
+                  <div className="flex items-center justify-between rounded-xl px-3 py-2.5"
+                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                    <div className="flex items-center gap-2" style={{ color: TONE_FG[col.tone] }}>
+                      <ColIcon size={15} strokeWidth={2} />
+                      <span className="font-display text-xs font-extrabold uppercase tracking-wider">{col.label}</span>
                     </div>
-                    <span
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white"
-                      style={{ background: col.color }}
-                    >
-                      {colOrders.length}
-                    </span>
+                    <span className="grid h-5 w-5 place-items-center rounded-full text-[10px] font-extrabold text-white"
+                      style={{ background: TONE_FG[col.tone] }}>{colOrders.length}</span>
                   </div>
-
                   {colOrders.length === 0 ? (
-                    <div
-                      className="text-center py-10 rounded-2xl text-xs"
-                      style={{
-                        border: "1px dashed var(--border)",
-                        color: "var(--muted)",
-                      }}
-                    >
-                      Sin pedidos
-                    </div>
+                    <div className="rounded-2xl py-10 text-center text-xs text-tx-mut"
+                      style={{ border: "1px dashed var(--bd-1)" }}>Sin pedidos</div>
                   ) : (
-                    colOrders.map(o => (
+                    colOrders.map((o) => (
                       <OrderCard key={o.id} order={o} drivers={drivers}
                         onStatusChange={changeStatus} onAssignDriver={assignDriver} />
                     ))
@@ -535,21 +465,18 @@ export default function PedidosPage() {
               );
             })}
           </div>
+        ) : filtered.length === 0 ? (
+          <EmptyState icon={Inbox} title="Sin pedidos que mostrar"
+            hint={hasFilters ? "Prueba quitar los filtros activos." : "Los nuevos pedidos aparecerán aquí en vivo."} />
         ) : (
-          <div className="flex flex-col gap-3">
-            {filtered.length === 0 ? (
-              <div className="text-center py-16 text-sm" style={{ color: "var(--muted)" }}>
-                Sin pedidos que mostrar
-              </div>
-            ) : (
-              filtered.map(o => (
-                <OrderCard key={o.id} order={o} drivers={drivers}
-                  onStatusChange={changeStatus} onAssignDriver={assignDriver} />
-              ))
-            )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((o) => (
+              <OrderCard key={o.id} order={o} drivers={drivers}
+                onStatusChange={changeStatus} onAssignDriver={assignDriver} />
+            ))}
           </div>
         )}
       </div>
-    </div>
+    </WtScreen>
   );
 }

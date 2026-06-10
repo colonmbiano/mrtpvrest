@@ -1,6 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
+import {
+  RotateCw, BellRing, Scissors, Bike, ListChecks, Banknote, X,
+  TrendingUp, TrendingDown, Fuel, ShoppingCart, ArrowUpRight, StickyNote,
+  CheckCircle2, Wallet, type LucideIcon,
+} from "lucide-react";
 import api from "@/lib/api";
+import {
+  WtScreen, PageHeader, WtCard, StatTile, Pill, IconBadge, Avatar,
+  PrimaryBtn, EmptyState,
+} from "@/components/warmtech";
 
 export default function CajaRepartidoresPage() {
   const [summary, setSummary]   = useState<any[]>([]);
@@ -10,7 +19,7 @@ export default function CajaRepartidoresPage() {
   const [movements, setMovements] = useState<any[]>([]);
   const [movSummary, setMovSummary] = useState<any>(null);
   const [loading, setLoading]   = useState(true);
-  const [cuttingId, setCuttingId] = useState<string|null>(null);
+  const [cuttingId, setCuttingId] = useState<string | null>(null);
   const [cutNotes, setCutNotes] = useState("");
   const [showCutModal, setShowCutModal] = useState<any>(null);
   const [showFloatModal, setShowFloatModal] = useState<any>(null);
@@ -60,7 +69,7 @@ export default function CajaRepartidoresPage() {
       await api.post(`/api/driver-cash/${driver.id}/cut`, { notes: cutNotes });
       setShowCutModal(null); setCutNotes("");
       fetchAll();
-      alert(`✅ Corte de caja realizado para ${driver.name}`);
+      alert(`Corte de caja realizado para ${driver.name}`);
     } catch (err: any) { alert(err.response?.data?.error || "Error"); }
     finally { setCuttingId(null); }
   }
@@ -73,7 +82,7 @@ export default function CajaRepartidoresPage() {
       await api.post(`/api/driver-cash/${driver.id}/float`, { amount: n });
       setShowFloatModal(null); setFloatAmount("");
       fetchAll();
-      alert(`✅ Fondo de cambio asignado a ${driver.name}: $${n.toFixed(0)}`);
+      alert(`Fondo de cambio asignado a ${driver.name}: $${n.toFixed(0)}`);
     } catch (err: any) { alert(err.response?.data?.error || "Error"); }
     finally { setFloatBusy(false); }
   }
@@ -82,260 +91,279 @@ export default function CajaRepartidoresPage() {
   const totalExpense = summary.reduce((s, d) => s + d.expense, 0);
   const totalBalance = summary.reduce((s, d) => s + ((d.float || 0) + d.income - d.expense - (d.returned || 0)), 0);
 
+  function initials(name: string) {
+    return (name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("") || "?";
+  }
+
+  function movementIcon(m: any): LucideIcon {
+    if (m.type === "FLOAT") return Banknote;
+    if (m.category === "DELIVERY") return Bike;
+    if (m.category === "GASOLINE") return Fuel;
+    if (m.category === "EMERGENCY_PURCHASE") return ShoppingCart;
+    if (m.category === "RETIRO") return ArrowUpRight;
+    return StickyNote;
+  }
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="font-syne text-3xl font-black">Caja Repartidores</h1>
-          <p className="text-sm mt-1" style={{color:"var(--muted)"}}>Control de efectivo en tiempo real</p>
-        </div>
-        <button onClick={fetchAll} className="px-4 py-2 rounded-xl text-sm font-bold border"
-          style={{borderColor:"var(--border)",color:"var(--muted)"}}>🔄 Actualizar</button>
+    <WtScreen>
+      <PageHeader
+        eyebrow="Caja & Turnos"
+        title="Caja Repartidores"
+        subtitle="Control de efectivo en tiempo real"
+        actions={
+          <PrimaryBtn ghost full={false} icon={RotateCw} onClick={fetchAll}>
+            Actualizar
+          </PrimaryBtn>
+        }
+      />
+
+      {/* mobile actions */}
+      <div className="mb-4 md:hidden">
+        <PrimaryBtn ghost icon={RotateCw} onClick={fetchAll}>Actualizar</PrimaryBtn>
       </div>
 
-      {/* Solicitudes de cierre de turno (repartidor → admin) */}
+      {/* solicitudes de cierre de turno (repartidor → admin) */}
       {requests.length > 0 && (
-        <div className="rounded-2xl border overflow-hidden mb-6" style={{borderColor:"rgba(245,166,35,0.4)",background:"rgba(245,166,35,0.06)"}}>
-          <div className="px-5 py-3 border-b font-syne font-bold flex items-center gap-2"
-            style={{borderColor:"rgba(245,166,35,0.2)",color:"var(--gold)"}}>
-            🔔 Solicitudes de cierre de turno
-            <span className="text-xs px-2 py-0.5 rounded-full" style={{background:"var(--gold)",color:"#000"}}>{requests.length}</span>
+        <WtCard className="mb-6 overflow-hidden" style={{ borderColor: "var(--warn)" }}>
+          <div className="flex items-center gap-2 px-5 py-3 font-display font-bold" style={{ borderBottom: "1px solid var(--bd-1)", background: "var(--warn-soft)", color: "var(--warn)" }}>
+            <BellRing size={16} /> Solicitudes de cierre de turno
+            <Pill tone="warn">{requests.length}</Pill>
           </div>
           {requests.map((r: any) => (
-            <div key={r.id} className="flex items-center gap-4 px-5 py-3 border-b" style={{borderColor:"rgba(245,166,35,0.15)"}}>
-              <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0" style={{background:"var(--surf2)"}}>🛵</div>
-              <div className="flex-1">
-                <div className="font-bold text-sm">{r.driverName}</div>
-                <div className="text-xs" style={{color:"var(--muted)"}}>
-                  Solicitó cerrar turno · {new Date(r.createdAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}
+            <div key={r.id} className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: "1px solid var(--bd-1)" }}>
+              <IconBadge icon={Bike} tone="warn" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-bold text-tx">{r.driverName}</div>
+                <div className="text-[11px] text-tx-mut">
+                  Solicitó cerrar turno · {new Date(r.createdAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
                 </div>
               </div>
-              <div className="text-right mr-2">
-                <div className="text-xs" style={{color:"var(--muted)"}}>Efectivo en mano</div>
-                <div className="font-black" style={{color:"var(--gold)"}}>${(r.balance||0).toFixed(0)}</div>
+              <div className="hidden text-right sm:block">
+                <div className="text-[10px] text-tx-mut">Efectivo en mano</div>
+                <div className="font-display font-extrabold text-primary">${(r.balance || 0).toFixed(0)}</div>
               </div>
-              <button onClick={() => setShowCutModal({ id: r.driverId, name: r.driverName })}
-                className="py-2 px-4 rounded-xl text-xs font-bold flex-shrink-0"
-                style={{background:"var(--gold)",color:"#000"}}>
-                ✂️ Hacer corte
-              </button>
+              <PrimaryBtn full={false} icon={Scissors} onClick={() => setShowCutModal({ id: r.driverId, name: r.driverName })}>
+                Hacer corte
+              </PrimaryBtn>
             </div>
           ))}
-        </div>
+        </WtCard>
       )}
 
-      {/* Resumen global */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="rounded-2xl p-5" style={{background:"var(--surf)",border:"1px solid var(--border)"}}>
-          <div className="text-xs font-bold mb-1" style={{color:"var(--muted)"}}>Total cobrado hoy</div>
-          <div className="text-3xl font-black" style={{color:"#22c55e"}}>${totalIncome.toFixed(0)}</div>
-        </div>
-        <div className="rounded-2xl p-5" style={{background:"var(--surf)",border:"1px solid var(--border)"}}>
-          <div className="text-xs font-bold mb-1" style={{color:"var(--muted)"}}>Total gastos</div>
-          <div className="text-3xl font-black" style={{color:"#ef4444"}}>${totalExpense.toFixed(0)}</div>
-        </div>
-        <div className="rounded-2xl p-5" style={{background:"var(--surf)",border:"2px solid var(--gold)"}}>
-          <div className="text-xs font-bold mb-1" style={{color:"var(--muted)"}}>Balance neto</div>
-          <div className="text-3xl font-black" style={{color:"var(--gold)"}}>${totalBalance.toFixed(0)}</div>
-        </div>
+      {/* resumen global */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatTile icon={TrendingUp} value={`$${totalIncome.toFixed(0)}`} label="Total cobrado hoy" />
+        <StatTile icon={TrendingDown} value={`$${totalExpense.toFixed(0)}`} label="Total gastos" />
+        <StatTile icon={Wallet} value={`$${totalBalance.toFixed(0)}`} label="Balance neto" />
       </div>
 
-      {/* Tarjetas por repartidor */}
-      <div className="grid gap-4 mb-8" style={{gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))"}}>
+      {/* tarjetas por repartidor */}
+      <div className="mt-6 grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))" }}>
         {loading ? (
-          <div className="text-center py-12 col-span-full" style={{color:"var(--muted)"}}>Cargando...</div>
+          Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-52 animate-pulse rounded-[18px] bg-surf-2" />)
         ) : summary.length === 0 ? (
-          <div className="text-center py-12 col-span-full" style={{color:"var(--muted)"}}>No hay repartidores activos hoy</div>
-        ) : summary.map((d: any) => (
-          <div key={d.driver.id} className="rounded-2xl border overflow-hidden"
-            style={{background:"var(--surf)",borderColor: selected?.driver?.id===d.driver.id ? "var(--gold)" : "var(--border)"}}>
-            <div className="p-4 flex items-center gap-3">
-              {d.driver.photo
-                ? <img src={d.driver.photo} alt="" className="w-12 h-12 rounded-full object-cover" />
-                : <div className="w-12 h-12 rounded-full flex items-center justify-center text-2xl" style={{background:"var(--surf2)"}}>🛵</div>
-              }
-              <div className="flex-1">
-                <div className="font-syne font-black">{d.driver.name}</div>
-                <div className="text-xs" style={{color:"var(--muted)"}}>{d.deliveries} entregas</div>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 divide-x border-t" style={{borderColor:"var(--border)"}}>
-              <div className="p-3 text-center">
-                <div className="text-xs mb-0.5" style={{color:"var(--muted)"}}>Fondo</div>
-                <div className="font-black text-sm" style={{color:"#a78bfa"}}>${(d.float || 0).toFixed(0)}</div>
-              </div>
-              <div className="p-3 text-center">
-                <div className="text-xs mb-0.5" style={{color:"var(--muted)"}}>Cobrado</div>
-                <div className="font-black text-sm" style={{color:"#22c55e"}}>${d.income.toFixed(0)}</div>
-              </div>
-              <div className="p-3 text-center">
-                <div className="text-xs mb-0.5" style={{color:"var(--muted)"}}>Gastos</div>
-                <div className="font-black text-sm" style={{color:"#ef4444"}}>${d.expense.toFixed(0)}</div>
-              </div>
-              <div className="p-3 text-center">
-                <div className="text-xs mb-0.5" style={{color:"var(--muted)"}}>En mano</div>
-                <div className="font-black text-sm" style={{color:"var(--gold)"}}>${((d.float || 0) + d.income - d.expense - (d.returned || 0)).toFixed(0)}</div>
-              </div>
-            </div>
-            <div className="flex gap-2 p-3 border-t" style={{borderColor:"var(--border)"}}>
-              <button onClick={async () => { setSelected(d); await fetchDriverMovements(d.driver.id); }}
-                className="flex-1 py-2 rounded-xl text-xs font-bold border"
-                style={{borderColor:"var(--border)",color:"var(--muted)"}}>
-                📋 Movimientos
-              </button>
-              <button onClick={() => { setFloatAmount(""); setShowFloatModal(d.driver); }}
-                className="flex-1 py-2 rounded-xl text-xs font-bold"
-                style={{background:"rgba(167,139,250,0.1)",color:"#a78bfa",border:"1px solid rgba(167,139,250,0.2)"}}>
-                💵 Asignar cambio
-              </button>
-              <button onClick={() => setShowCutModal(d.driver)}
-                className="flex-1 py-2 rounded-xl text-xs font-bold"
-                style={{background:"rgba(245,166,35,0.1)",color:"var(--gold)",border:"1px solid rgba(245,166,35,0.2)"}}>
-                ✂️ Corte
-              </button>
-            </div>
+          <div className="col-span-full">
+            <EmptyState icon={Bike} title="Sin repartidores activos" hint="No hay repartidores con movimientos de efectivo registrados hoy." />
           </div>
-        ))}
+        ) : summary.map((d: any) => {
+          const inHand = (d.float || 0) + d.income - d.expense - (d.returned || 0);
+          const isSel = selected?.driver?.id === d.driver.id;
+          return (
+            <WtCard key={d.driver.id} className="overflow-hidden" style={{ borderColor: isSel ? "var(--brand-primary)" : undefined }}>
+              <div className="flex items-center gap-3 p-4">
+                {d.driver.photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={d.driver.photo} alt="" className="h-12 w-12 rounded-xl object-cover" />
+                ) : (
+                  <Avatar initials={initials(d.driver.name)} size={48} />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-display font-extrabold text-tx-hi">{d.driver.name}</div>
+                  <div className="text-[11px] text-tx-mut">{d.deliveries} entregas</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4" style={{ borderTop: "1px solid var(--bd-1)" }}>
+                {[
+                  { label: "Fondo",   value: `$${(d.float || 0).toFixed(0)}`, color: "var(--info)" },
+                  { label: "Cobrado", value: `$${d.income.toFixed(0)}`,        color: "var(--ok)"   },
+                  { label: "Gastos",  value: `$${d.expense.toFixed(0)}`,       color: "var(--err)"  },
+                  { label: "En mano", value: `$${inHand.toFixed(0)}`,          color: "var(--brand-primary)" },
+                ].map((c, i) => (
+                  <div key={c.label} className="p-3 text-center" style={i > 0 ? { borderLeft: "1px solid var(--bd-1)" } : undefined}>
+                    <div className="mb-0.5 text-[10px] text-tx-mut">{c.label}</div>
+                    <div className="font-display text-sm font-extrabold" style={{ color: c.color }}>{c.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2 p-3" style={{ borderTop: "1px solid var(--bd-1)" }}>
+                <button
+                  type="button"
+                  onClick={async () => { setSelected(d); await fetchDriverMovements(d.driver.id); }}
+                  className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl text-xs font-bold text-tx-mut"
+                  style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                >
+                  <ListChecks size={14} /> Movimientos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setFloatAmount(""); setShowFloatModal(d.driver); }}
+                  aria-label="Asignar cambio"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl"
+                  style={{ background: "var(--info-soft)", color: "var(--info)" }}
+                >
+                  <Banknote size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCutModal(d.driver)}
+                  aria-label="Corte"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl"
+                  style={{ background: "var(--iris-soft)", color: "var(--brand-primary)" }}
+                >
+                  <Scissors size={15} />
+                </button>
+              </div>
+            </WtCard>
+          );
+        })}
       </div>
 
-      {/* Movimientos del repartidor seleccionado */}
+      {/* movimientos del repartidor seleccionado */}
       {selected && (
-        <div className="rounded-2xl border overflow-hidden mb-8" style={{borderColor:"var(--border)"}}>
-          <div className="px-5 py-3 border-b flex items-center justify-between" style={{background:"var(--surf2)",borderColor:"var(--border)"}}>
-            <h2 className="font-syne font-bold">Movimientos — {selected.driver.name}</h2>
-            <button onClick={() => setSelected(null)} className="text-xs" style={{color:"var(--muted)"}}>✕ Cerrar</button>
+        <WtCard className="mt-6 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3" style={{ background: "var(--surf-2)", borderBottom: "1px solid var(--bd-1)" }}>
+            <h2 className="font-display font-bold text-tx-hi">Movimientos — {selected.driver.name}</h2>
+            <button type="button" onClick={() => setSelected(null)} aria-label="Cerrar" className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut" style={{ background: "var(--surf-1)" }}>
+              <X size={15} />
+            </button>
           </div>
           {movements.length === 0 ? (
-            <div className="text-center py-8 text-sm" style={{color:"var(--muted)"}}>Sin movimientos hoy</div>
-          ) : movements.map((m: any) => (
-            <div key={m.id} className="flex items-center gap-4 px-5 py-3 border-b" style={{borderColor:"var(--border)",background:"var(--surf)"}}>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                style={{background: m.type==="FLOAT" ? "rgba(167,139,250,0.1)" : (m.type==="INCOME" ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)")}}>
-                {m.type === "FLOAT" ? "💵" : m.category === "DELIVERY" ? "🛵" : m.category === "GASOLINE" ? "⛽" : m.category === "EMERGENCY_PURCHASE" ? "🛒" : m.category === "RETIRO" ? "📤" : "📝"}
-              </div>
-              <div className="flex-1">
-                <div className="text-sm font-medium">{m.description || m.category}</div>
-                <div className="text-xs" style={{color:"var(--muted)"}}>
-                  {new Date(m.createdAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}
-                  {m.approved && <span className="ml-2 text-green-500">✓ Aprobado</span>}
+            <div className="py-8 text-center text-sm text-tx-mut">Sin movimientos hoy</div>
+          ) : movements.map((m: any) => {
+            const isCredit = m.type === "INCOME" || m.type === "FLOAT";
+            const tone = m.type === "FLOAT" ? "info" : m.type === "INCOME" ? "ok" : "err";
+            const color = m.type === "FLOAT" ? "var(--info)" : m.type === "INCOME" ? "var(--ok)" : "var(--err)";
+            return (
+              <div key={m.id} className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: "1px solid var(--bd-1)" }}>
+                <IconBadge icon={movementIcon(m)} tone={tone} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-tx">{m.description || m.category}</div>
+                  <div className="flex items-center gap-2 text-[11px] text-tx-mut">
+                    {new Date(m.createdAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                    {m.approved && <span className="inline-flex items-center gap-1" style={{ color: "var(--ok)" }}><CheckCircle2 size={11} /> Aprobado</span>}
+                  </div>
+                </div>
+                {m.photoUrl && (
+                  <a href={m.photoUrl} target="_blank" rel="noreferrer" className="h-12 w-12 shrink-0 overflow-hidden rounded-xl" style={{ border: "1px solid var(--bd-1)" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={m.photoUrl} alt="ticket" className="h-full w-full object-cover" />
+                  </a>
+                )}
+                <div className="shrink-0 font-display text-lg font-extrabold" style={{ color }}>
+                  {isCredit ? "+" : "-"}${m.amount.toFixed(0)}
                 </div>
               </div>
-              {m.photoUrl && (
-                <a href={m.photoUrl} target="_blank" rel="noreferrer"
-                  className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 border"
-                  style={{borderColor:"var(--border)"}}>
-                  <img src={m.photoUrl} alt="ticket" className="w-full h-full object-cover" />
-                </a>
-              )}
-              <div className="font-black text-lg flex-shrink-0"
-                style={{color: m.type==="FLOAT" ? "#a78bfa" : (m.type==="INCOME" ? "#22c55e" : "#ef4444")}}>
-                {(m.type==="INCOME" || m.type==="FLOAT") ? "+" : "-"}${m.amount.toFixed(0)}
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {movSummary && (
-            <div className="grid grid-cols-4 divide-x border-t px-0" style={{borderColor:"var(--border)",background:"var(--surf2)"}}>
-              <div className="p-4 text-center">
-                <div className="text-xs mb-1" style={{color:"var(--muted)"}}>Fondo</div>
-                <div className="font-black" style={{color:"#a78bfa"}}>${(movSummary.float||0).toFixed(0)}</div>
-              </div>
-              <div className="p-4 text-center">
-                <div className="text-xs mb-1" style={{color:"var(--muted)"}}>Total cobrado</div>
-                <div className="font-black" style={{color:"#22c55e"}}>${(movSummary.income||0).toFixed(0)}</div>
-              </div>
-              <div className="p-4 text-center">
-                <div className="text-xs mb-1" style={{color:"var(--muted)"}}>Total gastos</div>
-                <div className="font-black" style={{color:"#ef4444"}}>${(movSummary.expense||0).toFixed(0)}</div>
-              </div>
-              <div className="p-4 text-center">
-                <div className="text-xs mb-1" style={{color:"var(--muted)"}}>En mano</div>
-                <div className="font-black" style={{color:"var(--gold)"}}>${(movSummary.balance||0).toFixed(0)}</div>
-              </div>
+            <div className="grid grid-cols-4" style={{ borderTop: "1px solid var(--bd-1)", background: "var(--surf-2)" }}>
+              {[
+                { label: "Fondo",         value: `$${(movSummary.float || 0).toFixed(0)}`,   color: "var(--info)" },
+                { label: "Total cobrado", value: `$${(movSummary.income || 0).toFixed(0)}`,  color: "var(--ok)"   },
+                { label: "Total gastos",  value: `$${(movSummary.expense || 0).toFixed(0)}`, color: "var(--err)"  },
+                { label: "En mano",       value: `$${(movSummary.balance || 0).toFixed(0)}`, color: "var(--brand-primary)" },
+              ].map((c, i) => (
+                <div key={c.label} className="p-4 text-center" style={i > 0 ? { borderLeft: "1px solid var(--bd-1)" } : undefined}>
+                  <div className="mb-1 text-[11px] text-tx-mut">{c.label}</div>
+                  <div className="font-display font-extrabold" style={{ color: c.color }}>{c.value}</div>
+                </div>
+              ))}
             </div>
           )}
-        </div>
+        </WtCard>
       )}
 
-      {/* Historial de cortes */}
+      {/* historial de cortes */}
       {cuts.length > 0 && (
-        <div className="rounded-2xl border overflow-hidden" style={{borderColor:"var(--border)"}}>
-          <div className="px-5 py-3 border-b font-syne font-bold" style={{background:"var(--surf2)",borderColor:"var(--border)"}}>
+        <WtCard className="mt-6 overflow-hidden">
+          <div className="px-5 py-3 font-display font-bold text-tx-hi" style={{ background: "var(--surf-2)", borderBottom: "1px solid var(--bd-1)" }}>
             Historial de cortes
           </div>
-          {cuts.slice(0,10).map((cut: any) => (
-            <div key={cut.id} className="flex items-center gap-4 px-5 py-3 border-b" style={{background:"var(--surf)",borderColor:"var(--border)"}}>
-              <div className="flex-1">
-                <div className="font-bold text-sm">{cut.driverName}</div>
-                <div className="text-xs" style={{color:"var(--muted)"}}>
-                  {new Date(cut.createdAt).toLocaleDateString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
+          {cuts.slice(0, 10).map((cut: any) => (
+            <div key={cut.id} className="flex items-center gap-4 px-5 py-3" style={{ borderBottom: "1px solid var(--bd-1)" }}>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-bold text-tx">{cut.driverName}</div>
+                <div className="text-[11px] text-tx-mut">
+                  {new Date(cut.createdAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                   {" · "}{cut.movements} movimientos
                 </div>
-                {cut.notes && <div className="text-xs mt-0.5" style={{color:"var(--gold)"}}>{cut.notes}</div>}
+                {cut.notes && <div className="mt-0.5 text-[11px] text-primary">{cut.notes}</div>}
               </div>
-              <div className="text-right">
-                <div className="font-black" style={{color:"var(--gold)"}}>${cut.balance.toFixed(0)}</div>
-                {(cut.totalFloat > 0) && <div className="text-xs" style={{color:"#a78bfa"}}>fondo ${cut.totalFloat.toFixed(0)}</div>}
-                <div className="text-xs" style={{color:"#22c55e"}}>+${cut.totalIncome.toFixed(0)}</div>
-                <div className="text-xs" style={{color:"#ef4444"}}>-${cut.totalExpense.toFixed(0)}</div>
+              <div className="shrink-0 text-right">
+                <div className="font-display font-extrabold text-primary">${cut.balance.toFixed(0)}</div>
+                {cut.totalFloat > 0 && <div className="text-[11px]" style={{ color: "var(--info)" }}>fondo ${cut.totalFloat.toFixed(0)}</div>}
+                <div className="text-[11px]" style={{ color: "var(--ok)" }}>+${cut.totalIncome.toFixed(0)}</div>
+                <div className="text-[11px]" style={{ color: "var(--err)" }}>-${cut.totalExpense.toFixed(0)}</div>
               </div>
             </div>
           ))}
-        </div>
+        </WtCard>
       )}
 
-      {/* Modal asignar fondo de cambio */}
+      {/* modal asignar fondo de cambio */}
       {showFloatModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:"rgba(0,0,0,0.85)"}}>
-          <div className="w-full max-w-sm rounded-2xl border p-6" style={{background:"var(--surf)",borderColor:"var(--border)"}}>
-            <h3 className="font-syne font-black text-xl mb-1">💵 Asignar cambio</h3>
-            <p className="text-sm mb-4" style={{color:"var(--muted)"}}>
-              Fondo de caja para <b>{showFloatModal.name}</b>. Suma a su efectivo en mano para dar cambio y cubrir compras; no cuenta como venta.
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.8)" }}>
+          <WtCard className="w-full max-w-sm p-6">
+            <h3 className="mb-1 flex items-center gap-2 font-display text-xl font-extrabold text-tx-hi">
+              <Banknote size={20} style={{ color: "var(--info)" }} /> Asignar cambio
+            </h3>
+            <p className="mb-4 text-sm text-tx-mut">
+              Fondo de caja para <b className="text-tx">{showFloatModal.name}</b>. Suma a su efectivo en mano para dar cambio y cubrir compras; no cuenta como venta.
             </p>
             <div className="relative mb-4">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-2xl" style={{color:"#a78bfa"}}>$</span>
-              <input type="number" inputMode="decimal" autoFocus value={floatAmount}
-                onChange={e => setFloatAmount(e.target.value)} placeholder="0"
-                className="w-full h-16 rounded-xl outline-none pl-9 pr-4 font-black text-2xl"
-                style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-display text-2xl font-extrabold" style={{ color: "var(--info)" }}>$</span>
+              <input
+                type="number" inputMode="decimal" autoFocus value={floatAmount}
+                onChange={(e) => setFloatAmount(e.target.value)} placeholder="0"
+                className="h-16 w-full rounded-xl pl-9 pr-4 font-display text-2xl font-extrabold outline-none"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
+              />
             </div>
             <div className="flex gap-3">
-              <button onClick={() => { setShowFloatModal(null); setFloatAmount(""); }} disabled={floatBusy}
-                className="flex-1 py-3 rounded-xl font-bold border"
-                style={{borderColor:"var(--border)",color:"var(--muted)"}}>Cancelar</button>
-              <button onClick={() => doAssignFloat(showFloatModal)} disabled={floatBusy || !(Number(floatAmount) > 0)}
-                className="flex-1 py-3 rounded-xl font-syne font-black"
-                style={{background:"#a78bfa",color:"#000"}}>
+              <PrimaryBtn ghost disabled={floatBusy} onClick={() => { setShowFloatModal(null); setFloatAmount(""); }}>Cancelar</PrimaryBtn>
+              <PrimaryBtn disabled={floatBusy || !(Number(floatAmount) > 0)} onClick={() => doAssignFloat(showFloatModal)}>
                 {floatBusy ? "..." : "Asignar"}
-              </button>
+              </PrimaryBtn>
             </div>
-          </div>
+          </WtCard>
         </div>
       )}
 
-      {/* Modal corte de caja */}
+      {/* modal corte de caja */}
       {showCutModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:"rgba(0,0,0,0.85)"}}>
-          <div className="w-full max-w-sm rounded-2xl border p-6" style={{background:"var(--surf)",borderColor:"var(--border)"}}>
-            <h3 className="font-syne font-black text-xl mb-1">✂️ Corte de caja</h3>
-            <p className="text-sm mb-4" style={{color:"var(--muted)"}}>{showCutModal.name}</p>
-            <textarea value={cutNotes} onChange={e => setCutNotes(e.target.value)}
-              placeholder="Notas del corte (opcional)"
-              rows={3}
-              className="w-full px-4 py-3 rounded-xl text-sm outline-none resize-none mb-4"
-              style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.8)" }}>
+          <WtCard className="w-full max-w-sm p-6">
+            <h3 className="mb-1 flex items-center gap-2 font-display text-xl font-extrabold text-tx-hi">
+              <Scissors size={20} className="text-primary" /> Corte de caja
+            </h3>
+            <p className="mb-4 text-sm text-tx-mut">{showCutModal.name}</p>
+            <textarea
+              value={cutNotes} onChange={(e) => setCutNotes(e.target.value)}
+              placeholder="Notas del corte (opcional)" rows={3}
+              className="mb-4 w-full resize-none rounded-xl px-4 py-3 text-sm outline-none"
+              style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
+            />
             <div className="flex gap-3">
-              <button onClick={() => { setShowCutModal(null); setCutNotes(""); }}
-                className="flex-1 py-3 rounded-xl font-bold border"
-                style={{borderColor:"var(--border)",color:"var(--muted)"}}>Cancelar</button>
-              <button onClick={() => doCut(showCutModal)} disabled={cuttingId === showCutModal.id}
-                className="flex-1 py-3 rounded-xl font-syne font-black"
-                style={{background:"var(--gold)",color:"#000"}}>
+              <PrimaryBtn ghost onClick={() => { setShowCutModal(null); setCutNotes(""); }}>Cancelar</PrimaryBtn>
+              <PrimaryBtn disabled={cuttingId === showCutModal.id} onClick={() => doCut(showCutModal)}>
                 {cuttingId === showCutModal.id ? "..." : "Confirmar corte"}
-              </button>
+              </PrimaryBtn>
             </div>
-          </div>
+          </WtCard>
         </div>
       )}
-    </div>
+    </WtScreen>
   );
 }
