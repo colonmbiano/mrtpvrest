@@ -48,6 +48,7 @@ import MergeTableModal from "@/components/pos/MergeTableModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import ChangeOrderTypeModal from "@/components/pos/ChangeOrderTypeModal";
+import DiscountModal from "@/components/pos/DiscountModal";
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
   DINE_IN: "MESA",
@@ -123,6 +124,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [changeTypeOrder, setChangeTypeOrder] = useState<any | null>(null);
   const [moveOrder, setMoveOrder] = useState<any | null>(null);
   const [splitOrder, setSplitOrder] = useState<any | null>(null);
+  // Pedido en espera de imprimir cuenta: abre DiscountModal antes de imprimir.
+  const [discountPrintOrder, setDiscountPrintOrder] = useState<any | null>(null);
   const [shiftOpen, setShiftOpen] = useState<boolean | null>(null);
   const [showShift, setShowShift] = useState(false);
 
@@ -527,9 +530,32 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     if (order) await handleReprintKitchen(order);
   };
 
+  // "Imprimir cuenta": antes de imprimir abrimos el modal de descuento
+  // (editable, prellenado con el descuento vigente). Desde ahí se aplica y
+  // persiste el descuento (auditado) o se imprime sin cambios.
   const handleReprintActiveReceipt = async () => {
     const order = await getActiveOrderForAction();
-    if (order) await handleReprintOrder(order);
+    if (order) setDiscountPrintOrder(order);
+  };
+
+  const canApplyDiscount = !!currentEmployee?.permissions?.includes("apply_discount");
+
+  // Aplica el descuento al pedido en backend (audita DISCOUNT_APPLIED) y luego
+  // imprime la cuenta con el total ya actualizado.
+  const handleApplyDiscountAndPrint = async (type: "percent" | "fixed", value: number) => {
+    const order = discountPrintOrder;
+    if (!order) return;
+    try {
+      const { data } = await api.put(`/api/orders/${order.id}/discount`, { type, value });
+      await handleReprintOrder({ ...order, ...data });
+    } catch (err: any) {
+      toast.error(
+        "No se pudo aplicar el descuento: " +
+          (err?.response?.data?.error || err?.message || "error")
+      );
+    } finally {
+      setDiscountPrintOrder(null);
+    }
   };
 
   const handleRenameActiveOrder = async () => {
@@ -997,6 +1023,25 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
               typeof item.seatNumber === "number" ? item.seatNumber : null,
           }))}
           onConfirm={handleConfirmActiveSplit}
+        />
+      )}
+
+      {discountPrintOrder && (
+        <DiscountModal
+          isOpen={!!discountPrintOrder}
+          onClose={() => setDiscountPrintOrder(null)}
+          subtotal={Number(discountPrintOrder.subtotal ?? 0)}
+          requiresOverride={!canApplyDiscount}
+          initialType="fixed"
+          initialValue={Number(discountPrintOrder.discount ?? 0)}
+          primaryLabel="Aplicar e imprimir"
+          secondaryLabel="Imprimir sin cambios"
+          onSecondary={() => {
+            const order = discountPrintOrder;
+            setDiscountPrintOrder(null);
+            if (order) void handleReprintOrder(order);
+          }}
+          onApply={handleApplyDiscountAndPrint}
         />
       )}
 
