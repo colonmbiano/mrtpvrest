@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import Link from "next/link";
+import ImportTemplateModal from "@/components/ImportTemplateModal";
 
 // /admin/inventario/recetas · Editor de Recipe (escandallo final 1:1 con
 // MenuItem) usando los endpoints nuevos `/api/recipes`.
@@ -92,6 +93,7 @@ export default function RecetasPage() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -291,19 +293,64 @@ export default function RecetasPage() {
 
   return (
     <div>
+      <ImportTemplateModal mode="recetas" open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onDone={() => {
+          Promise.all([
+            api.get("/api/menu/items"),
+            api.get("/api/inventory/ingredients"),
+            api.get("/api/recipes/subrecipes"),
+          ]).then(([m, i, s]) => {
+            setMenuItems(m.data || []);
+            setIngredients(i.data || []);
+            setSubRecipes(s.data || []);
+          }).catch(() => {});
+        }} />
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <Link href="/admin/inventario" className="text-sm font-bold" style={{ color: "var(--muted)" }}>
           ← Inventario
         </Link>
         <h1 className="font-syne text-3xl font-black">Recetas</h1>
-        <Link
-          href="/admin/inventario/subrecetas"
-          className="ml-auto px-4 py-2 rounded-xl text-xs font-bold border"
-          style={{ borderColor: "var(--border)", color: "var(--text)" }}
-        >
-          📋 Sub-recetas →
-        </Link>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={async () => {
+              try {
+                const res = await api.get("/api/recipes/import/template/recetas", { responseType: "blob" });
+                const url = window.URL.createObjectURL(res.data);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "plantilla-recetas.xlsx";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+              } catch {
+                alert("No se pudo generar la plantilla. Inténtalo de nuevo.");
+              }
+            }}
+            title="Descarga un Excel con tu menú y recetas actuales para editarlo y volverlo a subir"
+            className="px-4 py-2 rounded-xl text-xs font-bold border"
+            style={{ borderColor: "var(--border)", color: "var(--text)" }}
+          >
+            📥 Plantilla recetas
+          </button>
+          <button
+            onClick={() => setImportOpen(true)}
+            title="Sube la plantilla de recetas editada"
+            className="px-4 py-2 rounded-xl text-xs font-bold border"
+            style={{ borderColor: "var(--border)", color: "var(--text)" }}
+          >
+            📤 Subir recetas
+          </button>
+          <Link
+            href="/admin/inventario/subrecetas"
+            className="px-4 py-2 rounded-xl text-xs font-bold border"
+            style={{ borderColor: "var(--border)", color: "var(--text)" }}
+          >
+            📋 Sub-recetas →
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-6" style={{ gridTemplateColumns: "minmax(280px, 1fr) 2fr" }}>
