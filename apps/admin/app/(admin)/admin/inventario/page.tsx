@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import api from "@/lib/api";
 import Link from "next/link";
+import ImportTemplateModal from "@/components/ImportTemplateModal";
 
 interface Supplier { id: string; name: string; phone?: string; }
 interface IngredientType { id: string; name: string; }
@@ -224,10 +225,33 @@ export default function InventarioPage() {
     setSelectedIds(new Set()); fetchAll(activeLocationId);
   }
 
+  const [importOpen, setImportOpen] = useState(false);
+
   const filtered = ingredients.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+
+  // Descarga una plantilla Excel pre-llenada (insumos o recetas) generada por
+  // el backend con los datos actuales del restaurante.
+  async function downloadTemplate(type: "insumos" | "recetas") {
+    try {
+      const res = await api.get(`/api/recipes/import/template/${type}`, { responseType: "blob" });
+      const url = window.URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `plantilla-${type}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert("No se pudo generar la plantilla. Revisa tu conexión e inténtalo de nuevo.");
+    }
+  }
 
   return (
     <div>
+      <ImportTemplateModal mode="insumos" open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onDone={() => fetchAll(activeLocationId)} />
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-syne text-3xl font-black text-white">Inventario</h1>
@@ -239,6 +263,17 @@ export default function InventarioPage() {
             {isScanning ? "🤖 Procesando..." : "🤖 Carga Inteligente (IA/Excel)"}
             {!isScanning && <input type="file" accept="image/*,application/pdf,.xlsx,.csv" multiple onChange={handleAIScan} className="hidden" />}
           </label>
+
+          <button onClick={() => downloadTemplate("insumos")}
+            title="Descarga un Excel con tus insumos actuales para editarlo y volverlo a subir"
+            className="px-4 py-2 rounded-xl text-sm font-bold border border-white/10 text-gray-400">
+            📥 Plantilla insumos
+          </button>
+          <button onClick={() => setImportOpen(true)}
+            title="Sube la plantilla de insumos editada"
+            className="px-4 py-2 rounded-xl text-sm font-bold border border-white/10 text-gray-400">
+            📤 Subir insumos
+          </button>
 
           <Link href="/admin/inventario/compras" className="px-4 py-2 rounded-xl text-sm font-bold border border-white/10 text-gray-400">🛒 Compras & Bodega</Link>
           <Link href="/admin/inventario/recetas" className="px-4 py-2 rounded-xl text-sm font-bold border border-white/10 text-gray-400">📋 Recetas</Link>
