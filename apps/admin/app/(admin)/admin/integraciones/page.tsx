@@ -1,13 +1,20 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import {
+  Plug, ShieldCheck, CheckCircle2, XCircle, KeyRound,
+} from "lucide-react";
 import api from "@/lib/api";
 import AiKeyCard from "@/components/AiKeyCard";
+import {
+  WtScreen, PageHeader, WtCard, SectionLabel, IconBadge, Toggle,
+  PrimaryBtn, Pill,
+} from "@/components/warmtech";
 
-function safeParseConfig(raw: any): Record<string, any> {
+function safeParseConfig(raw: unknown): Record<string, string> {
   if (!raw) return {};
-  if (typeof raw === "object" && !Array.isArray(raw)) return raw;
-  try { return JSON.parse(raw); } catch { return {}; }
+  if (typeof raw === "object" && !Array.isArray(raw)) return raw as Record<string, string>;
+  try { return JSON.parse(raw as string); } catch { return {}; }
 }
 
 // Etiquetas y ayudas amigables por campo (sobre todo para WhatsApp / Meta).
@@ -20,9 +27,18 @@ const FIELD_META: Record<string, { label: string; hint?: string; placeholder?: s
   wabaId:        { label: "WABA ID (opcional)", secret: false, placeholder: "Solo Meta — WhatsApp Business Account ID", hint: "Solo Meta y opcional." },
 };
 
+type IntegrationType = { label: string; icon?: string; fields: string[] };
+type ConfigForm = { enabled: boolean; mode: string; config: Record<string, string> };
+
+const inputStyle = {
+  background: "var(--surf-2)",
+  border: "1px solid var(--bd-1)",
+  color: "var(--tx)",
+} as const;
+
 export default function IntegrationsPage() {
-  const [integrations, setIntegrations] = useState<any[]>([]);
-  const [types, setTypes] = useState<any>({});
+  const [integrations, setIntegrations] = useState<Array<{ type: string; enabled?: boolean; mode?: string; config?: unknown }>>([]);
+  const [types, setTypes] = useState<Record<string, IntegrationType>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
@@ -39,7 +55,7 @@ export default function IntegrationsPage() {
   }
 
   // Estados locales para los formularios
-  const [configForms, setConfigForms] = useState<any>({});
+  const [configForms, setConfigForms] = useState<Record<string, ConfigForm>>({});
 
   const fetchData = async () => {
     try {
@@ -48,9 +64,9 @@ export default function IntegrationsPage() {
       setTypes(data.types);
 
       // Inicializar formularios con los datos existentes
-      const forms: any = {};
-      Object.keys(data.types).forEach(type => {
-        const existing = data.integrations.find((i: any) => i.type === type);
+      const forms: Record<string, ConfigForm> = {};
+      Object.keys(data.types).forEach((type) => {
+        const existing = data.integrations.find((i: { type: string }) => i.type === type);
         forms[type] = {
           enabled: existing?.enabled || false,
           mode: existing?.mode || "sandbox",
@@ -75,141 +91,158 @@ export default function IntegrationsPage() {
       await api.put(`/api/integrations/${type}`, configForms[type]);
       showToast(`Configuración de ${type} guardada con éxito.`);
       fetchData();
-    } catch (error) {
+    } catch {
       showToast("Error al guardar la configuración.", false);
     } finally {
       setSaving(null);
     }
   };
 
-  const updateField = (type: string, field: string, value: any) => {
-    setConfigForms((prev: any) => ({
-      ...prev,
-      [type]: {
-        ...prev[type],
-        config: { ...prev[type].config, [field]: value }
-      }
-    }));
+  const updateField = (type: string, field: string, value: string) => {
+    setConfigForms((prev) => {
+      const current = prev[type] ?? { enabled: false, mode: "sandbox", config: {} };
+      const next: ConfigForm = {
+        ...current,
+        config: { ...current.config, [field]: value },
+      };
+      return { ...prev, [type]: next };
+    });
   };
 
-  if (loading) return <div className="p-8 text-white font-syne">Cargando ecosistema de integraciones...</div>;
-
   return (
-    <div className="p-4 sm:p-8 bg-[#0a0a0a] min-h-screen text-white font-syne">
-      <div className="mb-8 sm:mb-12">
-        <h1 className="text-2xl sm:text-4xl font-black mb-2 uppercase tracking-tighter">Conexiones & APIs</h1>
-        <p className="text-xs sm:text-base text-gray-500">Configura tus pasarelas de pago y servicios externos sin código.</p>
-      </div>
+    <WtScreen>
+      <PageHeader
+        eyebrow="Ecosistema"
+        title="Conexiones & APIs"
+        subtitle="Configura tus pasarelas de pago y servicios externos sin código."
+      />
 
-      <AiKeyCard />
+      {loading ? (
+        <WtCard className="p-6 text-center text-sm text-tx-mut">
+          Cargando ecosistema de integraciones…
+        </WtCard>
+      ) : (
+        <>
+          <AiKeyCard />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8">
-        {Object.keys(types).map((key) => {
-          const typeInfo = types[key];
-          const form = configForms[key];
+          <SectionLabel>Integraciones disponibles</SectionLabel>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {Object.keys(types).map((key) => {
+              const typeInfo = types[key];
+              const form = configForms[key];
+              if (!typeInfo || !form) return null;
 
-          return (
-            <div key={key} className="bg-[#111] border border-gray-800 rounded-3xl sm:rounded-[2.5rem] p-5 sm:p-8 flex flex-col">
-              <div className="flex flex-wrap justify-between items-start gap-3 mb-5 sm:mb-8">
-                <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 bg-white/5 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">
-                    {typeInfo.icon}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-base sm:text-xl font-bold leading-tight break-words">{typeInfo.label}</h3>
-                    <span className={`text-[10px] font-black uppercase tracking-widest ${form.enabled ? 'text-green-500' : 'text-gray-600'}`}>
-                      {form.enabled ? '● Conectado' : '○ Desconectado'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-3 bg-black/40 p-1 rounded-xl border border-white/5">
-                  <button
-                    onClick={() => setConfigForms({...configForms, [key]: {...form, enabled: !form.enabled}})}
-                    className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black transition-all ${form.enabled ? 'bg-green-500 text-black' : 'text-gray-500'}`}
-                  >
-                    {form.enabled ? 'ACTIVO' : 'INACTIVO'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-4 flex-1">
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="text-[9px] font-black text-gray-500 uppercase ml-2 mb-1 block">Modo de Operación</label>
-                    <select
-                      value={form.mode}
-                      onChange={(e) => setConfigForms({...configForms, [key]: {...form, mode: e.target.value}})}
-                      className="w-full bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-orange-500 transition-all"
-                    >
-                      <option value="sandbox">Pruebas (Sandbox)</option>
-                      <option value="production">Producción (Live)</option>
-                    </select>
-                  </div>
-                </div>
-
-                {typeInfo.fields.map((field: string) => {
-                  const meta = FIELD_META[field];
-                  const label = meta?.label || field;
-                  return (
-                    <div key={field}>
-                      <label className="text-[9px] font-black text-gray-500 uppercase ml-2 mb-1 block">{label}</label>
-                      {field === "provider" ? (
-                        <select
-                          value={form.config.provider || "WHAPI"}
-                          onChange={(e) => updateField(key, "provider", e.target.value)}
-                          className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-orange-500 transition-all"
-                        >
-                          <option value="WHAPI">Whapi (gate.whapi.cloud)</option>
-                          <option value="META">WhatsApp Cloud API (Meta)</option>
-                        </select>
-                      ) : (
-                        <input
-                          type={meta?.secret === false ? "text" : "password"}
-                          placeholder={meta?.placeholder || `Ingresa tu ${field}`}
-                          value={form.config[field] || ""}
-                          onChange={(e) => updateField(key, field, e.target.value)}
-                          className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-xs font-mono outline-none focus:border-orange-500 transition-all"
-                        />
-                      )}
-                      {meta?.hint && (
-                        <p className="text-[10px] text-gray-600 ml-2 mt-1 leading-snug">{meta.hint}</p>
-                      )}
+              return (
+                <WtCard key={key} className="flex flex-col p-5">
+                  <div className="flex items-start gap-3">
+                    <IconBadge icon={Plug} tone={form.enabled ? "ok" : "neutral"} size={42} />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="break-words font-display text-base font-extrabold text-tx-hi">
+                        {typeInfo.label}
+                      </h3>
+                      <div className="mt-1">
+                        <Pill tone={form.enabled ? "ok" : "neutral"} live={form.enabled}>
+                          {form.enabled ? "Conectado" : "Desconectado"}
+                        </Pill>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+                    <Toggle
+                      checked={form.enabled}
+                      onChange={(next) => setConfigForms((p) => ({ ...p, [key]: { ...form, enabled: next } }))}
+                      label={`Activar ${typeInfo.label}`}
+                    />
+                  </div>
 
-              <button
-                onClick={() => handleSave(key)}
-                disabled={saving === key}
-                className="w-full mt-6 sm:mt-8 bg-white hover:bg-orange-500 hover:text-white text-black py-3 sm:py-4 rounded-2xl font-black text-xs transition-all uppercase tracking-widest shadow-xl active:scale-95"
-              >
-                {saving === key ? "Guardando..." : "Guardar Configuración"}
-              </button>
-            </div>
-          );
-        })}
-      </div>
+                  <div className="mt-5 flex flex-1 flex-col gap-4">
+                    <div>
+                      <label className="mb-1.5 ml-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
+                        Modo de operación
+                      </label>
+                      <select
+                        value={form.mode}
+                        onChange={(e) => setConfigForms((p) => ({ ...p, [key]: { ...form, mode: e.target.value } }))}
+                        className="min-h-11 w-full rounded-xl px-3 text-xs font-bold outline-none"
+                        style={inputStyle}
+                      >
+                        <option value="sandbox">Pruebas (Sandbox)</option>
+                        <option value="production">Producción (Live)</option>
+                      </select>
+                    </div>
 
-      <div className="mt-8 sm:mt-12 p-4 sm:p-6 bg-orange-500/5 border border-orange-500/10 rounded-2xl sm:rounded-3xl text-center">
-        <p className="text-[11px] sm:text-xs text-gray-500 leading-relaxed">
-          ⚠️ <span className="font-bold text-gray-400">Seguridad:</span> Tus credenciales se encriptan antes de guardarse. Nunca compartas tus llaves secretas con nadie.
-        </p>
-      </div>
+                    {typeInfo.fields.map((field) => {
+                      const meta = FIELD_META[field];
+                      const label = meta?.label || field;
+                      return (
+                        <div key={field}>
+                          <label className="mb-1.5 ml-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
+                            {label}
+                          </label>
+                          {field === "provider" ? (
+                            <select
+                              value={form.config.provider || "WHAPI"}
+                              onChange={(e) => updateField(key, "provider", e.target.value)}
+                              className="min-h-11 w-full rounded-xl px-3 text-xs font-bold outline-none"
+                              style={inputStyle}
+                            >
+                              <option value="WHAPI">Whapi (gate.whapi.cloud)</option>
+                              <option value="META">WhatsApp Cloud API (Meta)</option>
+                            </select>
+                          ) : (
+                            <input
+                              type={meta?.secret === false ? "text" : "password"}
+                              placeholder={meta?.placeholder || `Ingresa tu ${field}`}
+                              value={form.config[field] || ""}
+                              onChange={(e) => updateField(key, field, e.target.value)}
+                              className="min-h-11 w-full rounded-xl px-3 font-mono text-xs outline-none"
+                              style={inputStyle}
+                            />
+                          )}
+                          {meta?.hint && (
+                            <p className="ml-1 mt-1 text-[10px] leading-snug text-tx-dim">{meta.hint}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-6">
+                    <PrimaryBtn
+                      onClick={() => handleSave(key)}
+                      disabled={saving === key}
+                      icon={KeyRound}
+                    >
+                      {saving === key ? "Guardando…" : "Guardar configuración"}
+                    </PrimaryBtn>
+                  </div>
+                </WtCard>
+              );
+            })}
+          </div>
+
+          <WtCard className="mt-6 flex items-start gap-3 p-4">
+            <IconBadge icon={ShieldCheck} tone="ac" size={38} />
+            <p className="text-[11px] leading-relaxed text-tx-mut">
+              <span className="font-bold text-tx">Seguridad:</span> tus credenciales se
+              encriptan antes de guardarse. Nunca compartas tus llaves secretas con nadie.
+            </p>
+          </WtCard>
+        </>
+      )}
 
       {toast && (
-        <div style={{
-          position: "fixed", bottom: 28, right: 28, zIndex: 9999,
-          background: toast.ok ? "#166534" : "#7f1d1d",
-          border: `1px solid ${toast.ok ? "#22c55e" : "#ef4444"}`,
-          color: "#fff", borderRadius: 12, padding: "12px 20px",
-          fontSize: 13, fontFamily: "DM Sans, sans-serif", boxShadow: "0 4px 24px rgba(0,0,0,.5)",
-          transition: "opacity .2s",
-        }}>
-          {toast.ok ? "✓" : "✕"} {toast.msg}
+        <div
+          className="fixed bottom-24 right-5 z-[9999] flex items-center gap-2 rounded-xl px-4 py-3 text-[13px] font-medium md:bottom-7 md:right-7"
+          style={{
+            background: toast.ok ? "var(--ok-soft)" : "var(--err-soft)",
+            border: `1px solid ${toast.ok ? "var(--ok)" : "var(--err)"}`,
+            color: toast.ok ? "var(--ok)" : "var(--err)",
+            boxShadow: "0 4px 24px rgba(0,0,0,.4)",
+          }}
+        >
+          {toast.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+          {toast.msg}
         </div>
       )}
-    </div>
+    </WtScreen>
   );
 }

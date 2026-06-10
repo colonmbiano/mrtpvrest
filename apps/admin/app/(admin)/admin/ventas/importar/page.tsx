@@ -1,7 +1,13 @@
 "use client";
 import { useState, useRef, useCallback } from "react";
+import {
+  ChevronLeft, FileSpreadsheet, Loader2, AlertTriangle, Check, CheckCircle2,
+  X, ListChecks, FileText,
+} from "lucide-react";
 import api from "@/lib/api";
-import Link from "next/link";
+import {
+  WtScreen, PageHeader, WtCard, SectionLabel, PrimaryBtn,
+} from "@/components/warmtech";
 
 // /admin/ventas/importar · Importador de histórico de ventas desde Excel/CSV.
 //
@@ -86,33 +92,43 @@ export default function ImportarVentasPage() {
   }
 
   return (
-    <div>
-      <div className="flex items-center gap-4 mb-6 flex-wrap">
-        <Link href="/admin" className="text-sm font-bold" style={{ color: "var(--muted)" }}>
-          ← Admin
-        </Link>
-        <h1 className="font-syne text-3xl font-black">Importar histórico de ventas</h1>
-      </div>
+    <WtScreen>
+      <PageHeader
+        eyebrow="Datos & migración"
+        title="Importar histórico de ventas"
+        subtitle="Sube tu archivo Excel o CSV para cargar ventas pasadas."
+      />
+
+      {/* back link (móvil + desktop) */}
+      <a
+        href="/admin"
+        className="mb-4 inline-flex min-h-9 items-center gap-1 text-xs font-bold text-primary"
+      >
+        <ChevronLeft size={15} /> Admin
+      </a>
 
       {!result && (
-        <div className="space-y-6">
+        <div className="flex flex-col gap-4">
           {/* Drop zone */}
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
             onClick={() => inputRef.current?.click()}
-            className="rounded-3xl p-10 text-center cursor-pointer transition-all"
+            className="cursor-pointer rounded-[20px] p-8 text-center transition-all md:p-10"
             style={{
-              border: `2px dashed ${dragOver ? "var(--gold)" : "var(--border)"}`,
-              background: dragOver ? "rgba(245,166,35,0.05)" : "var(--surf)",
+              border: `2px dashed ${dragOver ? "var(--brand-primary)" : "var(--bd-1)"}`,
+              background: dragOver ? "var(--iris-soft)" : "var(--surf-1)",
             }}
           >
-            <div className="text-5xl mb-3">📊</div>
-            <p className="text-base font-bold mb-1">
+            <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl text-primary"
+              style={{ background: "var(--iris-soft)" }}>
+              <FileSpreadsheet size={28} strokeWidth={1.8} />
+            </span>
+            <p className="text-base font-bold text-tx-hi">
               {file ? file.name : "Arrastra tu archivo aquí o haz clic"}
             </p>
-            <p className="text-xs" style={{ color: "var(--muted)" }}>
+            <p className="mt-1 text-xs text-tx-mut">
               Excel (.xlsx) o CSV · max 25MB
             </p>
             <input
@@ -125,102 +141,113 @@ export default function ImportarVentasPage() {
           </div>
 
           {/* Instrucciones de columnas */}
-          <details className="rounded-2xl p-4" style={{ background: "var(--surf)", border: "1px solid var(--border)" }}>
-            <summary className="cursor-pointer text-sm font-bold">
-              📋 ¿Qué columnas debe tener mi archivo?
-            </summary>
-            <div className="mt-3 text-xs space-y-2" style={{ color: "var(--muted)" }}>
-              <p><strong style={{ color: "var(--text)" }}>Obligatorias:</strong></p>
-              <ul className="ml-4 list-disc space-y-1">
-                <li><code>fecha</code> / <code>date</code> — fecha de la venta (cualquier formato reconocible)</li>
-                <li><code>producto</code> / <code>plato</code> / <code>item</code> — nombre del plato (debe coincidir con un MenuItem ya creado)</li>
-              </ul>
-              <p><strong style={{ color: "var(--text)" }}>Opcionales:</strong></p>
-              <ul className="ml-4 list-disc space-y-1">
-                <li><code>cantidad</code> / <code>qty</code> — default 1</li>
-                <li><code>precio_unitario</code> o <code>total</code> — si solo hay total, se divide entre qty. Si no hay nada, se usa el precio actual del menú</li>
-                <li><code>metodo</code> / <code>payment</code> — Efectivo, Tarjeta, Transferencia (default Efectivo)</li>
-                <li><code>cliente</code>, <code>mesa</code>, <code>folio</code> — extra info. Si hay <code>folio</code>, varias filas con el mismo folio se agrupan en un Order.</li>
-              </ul>
-            </div>
-          </details>
+          <WtCard className="p-4">
+            <details>
+              <summary className="flex cursor-pointer items-center gap-2 text-sm font-bold text-tx">
+                <ListChecks size={16} className="text-primary" />
+                ¿Qué columnas debe tener mi archivo?
+              </summary>
+              <div className="mt-3 space-y-2 text-xs text-tx-mut">
+                <p><strong className="text-tx">Obligatorias:</strong></p>
+                <ul className="ml-4 list-disc space-y-1">
+                  <li><code>fecha</code> / <code>date</code> — fecha de la venta (cualquier formato reconocible)</li>
+                  <li><code>producto</code> / <code>plato</code> / <code>item</code> — nombre del plato (debe coincidir con un MenuItem ya creado)</li>
+                </ul>
+                <p><strong className="text-tx">Opcionales:</strong></p>
+                <ul className="ml-4 list-disc space-y-1">
+                  <li><code>cantidad</code> / <code>qty</code> — default 1</li>
+                  <li><code>precio_unitario</code> o <code>total</code> — si solo hay total, se divide entre qty. Si no hay nada, se usa el precio actual del menú</li>
+                  <li><code>metodo</code> / <code>payment</code> — Efectivo, Tarjeta, Transferencia (default Efectivo)</li>
+                  <li><code>cliente</code>, <code>mesa</code>, <code>folio</code> — extra info. Si hay <code>folio</code>, varias filas con el mismo folio se agrupan en un Order.</li>
+                </ul>
+              </div>
+            </details>
+          </WtCard>
 
           {loading && !preview && (
-            <div className="rounded-2xl p-6 text-center" style={{ background: "var(--surf)", border: "1px solid var(--border)" }}>
-              <div className="text-2xl mb-2">⏳</div>
-              <p className="text-sm font-bold">Analizando archivo…</p>
-            </div>
+            <WtCard className="p-6 text-center">
+              <Loader2 size={24} className="mx-auto mb-2 animate-spin text-primary" />
+              <p className="text-sm font-bold text-tx">Analizando archivo…</p>
+            </WtCard>
           )}
 
           {error && (
-            <div className="rounded-2xl p-4 text-sm" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444" }}>
-              ⚠️ {error}
+            <div className="flex items-center gap-2 rounded-2xl p-4 text-sm"
+              style={{ background: "var(--err-soft)", color: "var(--err)" }}>
+              <AlertTriangle size={16} className="shrink-0" /> {error}
             </div>
           )}
 
           {/* Preview */}
           {preview && (
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               {/* Columnas detectadas */}
-              <div className="rounded-2xl p-5" style={{ background: "var(--surf)", border: "1px solid var(--border)" }}>
-                <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: "var(--muted)" }}>
-                  Columnas detectadas
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <WtCard className="p-4 md:p-5">
+                <SectionLabel>Columnas detectadas</SectionLabel>
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                   {Object.entries(preview.detectedColumns).map(([key, val]) => (
-                    <div key={key} className="rounded-xl p-2 text-xs" style={{ background: val ? "rgba(16,185,129,0.1)" : "var(--surf2)" }}>
-                      <p className="font-bold" style={{ color: val ? "#10b981" : "var(--muted)" }}>
-                        {val ? "✓" : "—"} {COL_LABELS[key] || key}
+                    <div key={key} className="rounded-xl p-2 text-xs"
+                      style={{
+                        background: val ? "var(--ok-soft)" : "var(--surf-2)",
+                        border: "1px solid var(--bd-1)",
+                      }}>
+                      <p className="flex items-center gap-1 font-bold"
+                        style={{ color: val ? "var(--ok)" : "var(--tx-mut)" }}>
+                        {val ? <Check size={12} /> : <X size={12} />}
+                        {COL_LABELS[key] || key}
                       </p>
-                      {val && <p className="text-[10px] truncate mt-0.5" style={{ color: "var(--muted)" }}>{val}</p>}
+                      {val && <p className="mt-0.5 truncate text-[10px] text-tx-mut">{val}</p>}
                     </div>
                   ))}
                 </div>
-              </div>
+              </WtCard>
 
               {/* Resumen */}
               <div className="grid grid-cols-3 gap-3">
                 <Stat label="Filas leídas" value={preview.rowsRead} />
-                <Stat label="Ordenes a crear" value={preview.ordersToCreate || 0} accent="var(--gold)" />
+                <Stat label="Ordenes a crear" value={preview.ordersToCreate || 0} accent />
                 <Stat label="Items a crear" value={preview.itemsToCreate || 0} />
               </div>
 
               {/* Warnings */}
               {preview.warnings.length > 0 && (
-                <details className="rounded-2xl p-4" style={{ background: "rgba(245,166,35,0.05)", border: "1px solid rgba(245,166,35,0.3)" }}>
-                  <summary className="cursor-pointer text-sm font-bold" style={{ color: "var(--gold)" }}>
-                    ⚠️ {preview.warnings.length} fila(s) tendrán problemas — clic para ver
-                  </summary>
-                  <ul className="mt-3 text-xs space-y-1 max-h-48 overflow-y-auto">
-                    {preview.warnings.slice(0, 50).map((w, i) => (
-                      <li key={i} style={{ color: "var(--muted)" }}>• {w}</li>
-                    ))}
-                    {preview.warnings.length > 50 && (
-                      <li className="italic" style={{ color: "var(--muted)" }}>
-                        … y {preview.warnings.length - 50} más
-                      </li>
-                    )}
-                  </ul>
-                </details>
+                <WtCard className="p-4" style={{ borderColor: "var(--warn)" }}>
+                  <details>
+                    <summary className="flex cursor-pointer items-center gap-2 text-sm font-bold"
+                      style={{ color: "var(--warn)" }}>
+                      <AlertTriangle size={15} />
+                      {preview.warnings.length} fila(s) tendrán problemas — clic para ver
+                    </summary>
+                    <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto text-xs warmtech-scrollbar">
+                      {preview.warnings.slice(0, 50).map((w, i) => (
+                        <li key={i} className="text-tx-mut">• {w}</li>
+                      ))}
+                      {preview.warnings.length > 50 && (
+                        <li className="italic text-tx-mut">
+                          … y {preview.warnings.length - 50} más
+                        </li>
+                      )}
+                    </ul>
+                  </details>
+                </WtCard>
               )}
 
               {/* Sample */}
               {preview.sample && preview.sample.length > 0 && (
-                <div className="rounded-2xl p-5" style={{ background: "var(--surf)", border: "1px solid var(--border)" }}>
-                  <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: "var(--muted)" }}>
-                    Muestra (primeros 5)
-                  </h3>
+                <WtCard className="p-4 md:p-5">
+                  <SectionLabel>Muestra (primeros 5)</SectionLabel>
                   <div className="space-y-2">
                     {preview.sample.map((o, i) => (
-                      <div key={i} className="rounded-xl p-3 text-xs" style={{ background: "var(--surf2)" }}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-bold">{new Date(o.date).toLocaleDateString()} · {o.paymentMethod}</span>
-                          <span className="tabular-nums" style={{ color: "var(--muted)" }}>
+                      <div key={i} className="rounded-xl p-3 text-xs"
+                        style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <span className="font-bold text-tx">{new Date(o.date).toLocaleDateString()} · {o.paymentMethod}</span>
+                          <span className="tabular-nums text-tx-mut">
                             {o.customer || (o.tableName ? `Mesa ${o.tableName}` : "—")}
                           </span>
                         </div>
                         {o.items.map((it, j) => (
-                          <div key={j} className="flex justify-between" style={{ color: "var(--muted)" }}>
+                          <div key={j} className="flex justify-between text-tx-mut">
                             <span>{it.quantity}× {it.name}</span>
                             <span className="tabular-nums">${it.subtotal.toFixed(2)}</span>
                           </div>
@@ -228,26 +255,21 @@ export default function ImportarVentasPage() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </WtCard>
               )}
 
               {/* Acciones */}
               <div className="flex gap-3">
-                <button onClick={reset} className="px-5 py-3 rounded-xl text-sm font-bold" style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--muted)" }}>
+                <PrimaryBtn ghost icon={X} onClick={reset}>
                   Cancelar
-                </button>
-                <button
+                </PrimaryBtn>
+                <PrimaryBtn
+                  icon={Check}
                   onClick={confirmImport}
                   disabled={loading || (preview.ordersToCreate || 0) === 0}
-                  className="flex-1 py-3 rounded-xl text-sm font-syne font-black"
-                  style={{
-                    background: (preview.ordersToCreate || 0) > 0 ? "var(--gold)" : "var(--muted)",
-                    color: "#000",
-                    opacity: loading ? 0.6 : 1,
-                  }}
                 >
-                  {loading ? "Importando…" : `✓ Confirmar e importar ${preview.ordersToCreate} órdenes`}
-                </button>
+                  {loading ? "Importando…" : `Confirmar e importar ${preview.ordersToCreate} órdenes`}
+                </PrimaryBtn>
               </div>
             </div>
           )}
@@ -256,49 +278,56 @@ export default function ImportarVentasPage() {
 
       {/* Resultado final */}
       {result && (
-        <div className="space-y-4">
-          <div className="rounded-2xl p-6 text-center" style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)" }}>
-            <div className="text-5xl mb-3">✅</div>
-            <h2 className="text-2xl font-black mb-1" style={{ color: "#10b981" }}>
+        <div className="flex flex-col gap-4">
+          <WtCard className="p-6 text-center" style={{ borderColor: "var(--ok)" }}>
+            <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl"
+              style={{ background: "var(--ok-soft)", color: "var(--ok)" }}>
+              <CheckCircle2 size={30} strokeWidth={1.8} />
+            </span>
+            <h2 className="font-display text-2xl font-extrabold" style={{ color: "var(--ok)" }}>
               Importación completa
             </h2>
-            <p className="text-sm" style={{ color: "var(--muted)" }}>
+            <p className="mt-1 text-sm text-tx-mut">
               {result.ordersCreated} orden{result.ordersCreated === 1 ? "" : "es"} · {result.itemsCreated} item{result.itemsCreated === 1 ? "" : "s"} creados
             </p>
-          </div>
+          </WtCard>
 
           {result.warnings.length > 0 && (
-            <details className="rounded-2xl p-4" style={{ background: "rgba(245,166,35,0.05)", border: "1px solid rgba(245,166,35,0.3)" }}>
-              <summary className="cursor-pointer text-sm font-bold" style={{ color: "var(--gold)" }}>
-                ⚠️ {result.warnings.length} advertencia(s)
-              </summary>
-              <ul className="mt-3 text-xs space-y-1 max-h-48 overflow-y-auto">
-                {result.warnings.slice(0, 50).map((w, i) => (
-                  <li key={i} style={{ color: "var(--muted)" }}>• {w}</li>
-                ))}
-              </ul>
-            </details>
+            <WtCard className="p-4" style={{ borderColor: "var(--warn)" }}>
+              <details>
+                <summary className="flex cursor-pointer items-center gap-2 text-sm font-bold"
+                  style={{ color: "var(--warn)" }}>
+                  <AlertTriangle size={15} />
+                  {result.warnings.length} advertencia(s)
+                </summary>
+                <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto text-xs warmtech-scrollbar">
+                  {result.warnings.slice(0, 50).map((w, i) => (
+                    <li key={i} className="text-tx-mut">• {w}</li>
+                  ))}
+                </ul>
+              </details>
+            </WtCard>
           )}
 
           <div className="flex gap-3">
-            <button onClick={reset} className="flex-1 py-3 rounded-xl text-sm font-bold" style={{ background: "var(--gold)", color: "#000" }}>
+            <PrimaryBtn icon={FileSpreadsheet} onClick={reset}>
               Importar otro archivo
-            </button>
-            <Link href="/admin/reportes-ia" className="flex-1 py-3 rounded-xl text-sm font-bold text-center" style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }}>
-              Ver reportes →
-            </Link>
+            </PrimaryBtn>
+            <PrimaryBtn ghost icon={FileText} href="/admin/reportes-ia">
+              Ver reportes
+            </PrimaryBtn>
           </div>
         </div>
       )}
-    </div>
+    </WtScreen>
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: number; accent?: string }) {
+function Stat({ label, value, accent = false }: { label: string; value: number; accent?: boolean }) {
   return (
-    <div className="rounded-2xl p-4" style={{ background: "var(--surf)", border: "1px solid var(--border)", borderLeft: accent ? `4px solid ${accent}` : undefined }}>
-      <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--muted)" }}>{label}</p>
-      <p className="text-2xl font-black tabular-nums mt-1">{value}</p>
-    </div>
+    <WtCard className="p-3 md:p-4" style={accent ? { borderLeft: "4px solid var(--brand-primary)" } : undefined}>
+      <p className="font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">{label}</p>
+      <p className="mt-1 font-display text-2xl font-extrabold tabular-nums text-tx-hi">{value}</p>
+    </WtCard>
   );
 }

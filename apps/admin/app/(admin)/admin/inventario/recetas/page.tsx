@@ -1,8 +1,14 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import {
+  ChevronLeft, ChevronRight, Download, Upload, Save, Sparkles, Plus,
+  Layers, X, NotebookText, ClipboardList,
+} from "lucide-react";
 import api from "@/lib/api";
-import Link from "next/link";
 import ImportTemplateModal from "@/components/ImportTemplateModal";
+import {
+  WtScreen, PageHeader, WtCard, PrimaryBtn, EmptyState, money,
+} from "@/components/warmtech";
 
 // /admin/inventario/recetas · Editor de Recipe (escandallo final 1:1 con
 // MenuItem) usando los endpoints nuevos `/api/recipes`.
@@ -75,6 +81,9 @@ interface RecipeData {
     subRecipe?: { id: string; name: string; yieldUnit: BaseUnit };
   }>;
 }
+
+const cellCls = "rounded-lg px-3 py-2 text-sm text-tx outline-none transition-colors focus:border-primary";
+const cellStyle = { background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
 
 export default function RecetasPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -266,7 +275,7 @@ export default function RecetasPage() {
     setMsg(null);
     try {
       await api.post("/api/ai/generate-recipe", { menuItemId: selected.id });
-      
+
       // Recargar ingredientes y subrecetas (pudieron crearse nuevos)
       const [i, s] = await Promise.all([
         api.get("/api/inventory/ingredients"),
@@ -274,7 +283,7 @@ export default function RecetasPage() {
       ]);
       setIngredients(i.data || []);
       setSubRecipes(s.data || []);
-      
+
       // Recargar la receta del item
       await selectItem(selected);
       setMsg({ kind: "ok", text: "Receta generada con IA exitosamente." });
@@ -289,203 +298,169 @@ export default function RecetasPage() {
     }
   }
 
+  async function downloadTemplate() {
+    try {
+      const res = await api.get("/api/recipes/import/template/recetas", { responseType: "blob" });
+      const url = window.URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "plantilla-recetas.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert("No se pudo generar la plantilla. Inténtalo de nuevo.");
+    }
+  }
+
+  function reloadCatalogs() {
+    Promise.all([
+      api.get("/api/menu/items"),
+      api.get("/api/inventory/ingredients"),
+      api.get("/api/recipes/subrecipes"),
+    ]).then(([m, i, s]) => {
+      setMenuItems(m.data || []);
+      setIngredients(i.data || []);
+      setSubRecipes(s.data || []);
+    }).catch(() => {});
+  }
+
   const filtered = menuItems.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
 
+  const headerActions = (
+    <>
+      <PrimaryBtn ghost full={false} icon={Download} onClick={downloadTemplate}>
+        Plantilla
+      </PrimaryBtn>
+      <PrimaryBtn ghost full={false} icon={Upload} onClick={() => setImportOpen(true)}>
+        Subir
+      </PrimaryBtn>
+      <PrimaryBtn ghost full={false} icon={ChevronRight} href="/admin/inventario/subrecetas">
+        Sub-recetas
+      </PrimaryBtn>
+    </>
+  );
+
   return (
-    <div>
-      <ImportTemplateModal mode="recetas" open={importOpen}
+    <WtScreen>
+      <ImportTemplateModal
+        mode="recetas"
+        open={importOpen}
         onClose={() => setImportOpen(false)}
-        onDone={() => {
-          Promise.all([
-            api.get("/api/menu/items"),
-            api.get("/api/inventory/ingredients"),
-            api.get("/api/recipes/subrecipes"),
-          ]).then(([m, i, s]) => {
-            setMenuItems(m.data || []);
-            setIngredients(i.data || []);
-            setSubRecipes(s.data || []);
-          }).catch(() => {});
-        }} />
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <Link href="/admin/inventario" className="text-sm font-bold" style={{ color: "var(--muted)" }}>
-          ← Inventario
-        </Link>
-        <h1 className="font-syne text-3xl font-black">Recetas</h1>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={async () => {
-              try {
-                const res = await api.get("/api/recipes/import/template/recetas", { responseType: "blob" });
-                const url = window.URL.createObjectURL(res.data);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "plantilla-recetas.xlsx";
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-              } catch {
-                alert("No se pudo generar la plantilla. Inténtalo de nuevo.");
-              }
-            }}
-            title="Descarga un Excel con tu menú y recetas actuales para editarlo y volverlo a subir"
-            className="px-4 py-2 rounded-xl text-xs font-bold border"
-            style={{ borderColor: "var(--border)", color: "var(--text)" }}
-          >
-            📥 Plantilla recetas
-          </button>
-          <button
-            onClick={() => setImportOpen(true)}
-            title="Sube la plantilla de recetas editada"
-            className="px-4 py-2 rounded-xl text-xs font-bold border"
-            style={{ borderColor: "var(--border)", color: "var(--text)" }}
-          >
-            📤 Subir recetas
-          </button>
-          <Link
-            href="/admin/inventario/subrecetas"
-            className="px-4 py-2 rounded-xl text-xs font-bold border"
-            style={{ borderColor: "var(--border)", color: "var(--text)" }}
-          >
-            📋 Sub-recetas →
-          </Link>
-        </div>
+        onDone={reloadCatalogs}
+      />
+
+      <PageHeader
+        eyebrow="Inventario · Costeo"
+        title="Recetas"
+        subtitle="Escandallo de cada producto del menú (CMV y márgenes)"
+        actions={headerActions}
+      />
+
+      {/* navegación + acciones en mobile */}
+      <div className="mb-4 md:hidden">
+        <a
+          href="/admin/inventario"
+          className="mb-3 inline-flex min-h-9 items-center gap-1 text-xs font-bold text-tx-mut"
+        >
+          <ChevronLeft size={15} /> Inventario
+        </a>
+        <div className="flex flex-wrap gap-2">{headerActions}</div>
       </div>
 
-      <div className="grid gap-6" style={{ gridTemplateColumns: "minmax(280px, 1fr) 2fr" }}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(260px,1fr)_2fr]">
         {/* Panel izquierdo: lista de productos */}
-        <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--border)" }}>
-          <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border)", background: "var(--surf2)" }}>
+        <WtCard className="overflow-hidden">
+          <div className="border-b p-3" style={{ borderColor: "var(--bd-1)", background: "var(--surf-2)" }}>
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar producto..."
-              className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-              style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }}
+              placeholder="Buscar producto…"
+              className="min-h-11 w-full rounded-xl px-3 text-sm text-tx outline-none focus:border-primary"
+              style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
             />
           </div>
-          <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 280px)" }}>
+          <div className="max-h-[50vh] overflow-y-auto warmtech-scrollbar md:max-h-[calc(100vh-300px)]">
             {filtered.length === 0 ? (
-              <p className="text-sm text-center py-8" style={{ color: "var(--muted)" }}>
-                Sin productos
-              </p>
+              <p className="py-8 text-center text-sm text-tx-mut">Sin productos</p>
             ) : (
-              filtered.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => selectItem(item)}
-                  className="w-full px-4 py-3 flex items-center gap-3 text-left border-b transition-all"
-                  style={{
-                    borderColor: "var(--border)",
-                    background: selected?.id === item.id ? "rgba(245,166,35,0.1)" : "var(--surf)",
-                    borderLeft: selected?.id === item.id ? "3px solid var(--gold)" : "3px solid transparent",
-                  }}
-                >
-                  {item.imageUrl && (
-                    <img src={item.imageUrl} alt="" className="w-10 h-10 rounded-xl object-cover" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{item.name}</div>
-                    <div className="text-xs tabular-nums" style={{ color: "var(--muted)" }}>
-                      ${item.price?.toFixed(2)}
-                    </div>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Panel derecho: editor */}
-        <div
-          className="rounded-2xl border p-5 space-y-5"
-          style={{ background: "var(--surf)", borderColor: "var(--border)" }}
-        >
-          {!selected ? (
-            <div className="text-center py-20" style={{ color: "var(--muted)" }}>
-              <div className="text-4xl mb-3">📋</div>
-              <p>Selecciona un producto para editar su receta</p>
-            </div>
-          ) : loadingRecipe ? (
-            <div className="text-center py-20" style={{ color: "var(--muted)" }}>
-              <div className="text-2xl mb-3">⏳</div>
-              <p>Cargando receta…</p>
-            </div>
-          ) : (
-            <>
-              {/* Header del item seleccionado */}
-              <div className="flex items-start justify-between gap-4 pb-4 border-b" style={{ borderColor: "var(--border)" }}>
-                <div className="min-w-0">
-                  <h2 className="font-syne font-bold text-xl truncate">{selected.name}</h2>
-                  <p className="text-sm tabular-nums" style={{ color: "var(--muted)" }}>
-                    Precio venta: <strong style={{ color: "var(--text)" }}>${selected.price?.toFixed(2)}</strong>
-                  </p>
-                </div>
-                <div className="flex gap-2 shrink-0">
+              filtered.map((item) => {
+                const active = selected?.id === item.id;
+                return (
                   <button
-                    onClick={generateWithAI}
-                    disabled={generating || saving}
-                    className="px-4 py-2.5 rounded-xl text-sm font-bold border flex items-center gap-2"
-                    style={{ 
-                      borderColor: "var(--gold)", 
-                      color: "var(--gold)",
-                      opacity: generating || saving ? 0.5 : 1
+                    key={item.id}
+                    type="button"
+                    onClick={() => selectItem(item)}
+                    className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors"
+                    style={{
+                      borderBottom: "1px solid var(--bd-1)",
+                      background: active ? "var(--iris-soft)" : "transparent",
+                      borderLeft: `3px solid ${active ? "var(--brand-primary)" : "transparent"}`,
                     }}
                   >
-                    {generating ? "✨ Generando..." : "✨ Autogenerar con IA"}
+                    {item.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-xl object-cover" />
+                    ) : (
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-tx-mut" style={{ background: "var(--surf-2)" }}>
+                        <NotebookText size={16} strokeWidth={1.9} />
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13.5px] font-semibold text-tx">{item.name}</div>
+                      <div className="font-mono text-[11px] tabular-nums text-tx-mut">{money(item.price)}</div>
+                    </div>
                   </button>
-                  <button
-                    onClick={saveRecipe}
-                    disabled={saving || generating}
-                    className="px-5 py-2.5 rounded-xl text-sm font-syne font-black"
-                    style={{ background: saving || generating ? "var(--muted)" : "var(--gold)", color: "#000" }}
-                  >
-                    {saving ? "Guardando…" : "💾 Guardar"}
-                  </button>
+                );
+              })
+            )}
+          </div>
+        </WtCard>
+
+        {/* Panel derecho: editor */}
+        <WtCard className="p-4 md:p-5">
+          {!selected ? (
+            <EmptyState icon={ClipboardList} title="Selecciona un producto" hint="Elige un producto del menú para editar su receta." />
+          ) : loadingRecipe ? (
+            <div className="space-y-3">
+              <div className="h-10 animate-pulse rounded-xl bg-surf-2" />
+              <div className="h-24 animate-pulse rounded-xl bg-surf-2" />
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* Header del item seleccionado */}
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4" style={{ borderColor: "var(--bd-1)" }}>
+                <div className="min-w-0">
+                  <h2 className="truncate font-display text-xl font-extrabold text-tx-hi">{selected.name}</h2>
+                  <p className="text-sm text-tx-mut">
+                    Precio venta: <strong className="text-tx">{money(selected.price)}</strong>
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <PrimaryBtn ghost full={false} icon={Sparkles} onClick={generateWithAI} disabled={generating || saving}>
+                    {generating ? "Generando…" : "IA"}
+                  </PrimaryBtn>
+                  <PrimaryBtn full={false} icon={Save} onClick={saveRecipe} disabled={saving || generating}>
+                    {saving ? "Guardando…" : "Guardar"}
+                  </PrimaryBtn>
                 </div>
               </div>
 
-              {/* Message */}
-              {msg && (
-                <div
-                  className="rounded-xl px-3 py-2 text-xs font-bold"
-                  style={{
-                    background: msg.kind === "ok" ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
-                    color: msg.kind === "ok" ? "#10b981" : "#ef4444",
-                    border: `1px solid ${msg.kind === "ok" ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
-                  }}
-                >
-                  {msg.text}
-                </div>
-              )}
+              {msg && <Banner msg={msg} />}
 
               {/* Items de receta */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
-                    Items de la receta
-                  </h3>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Items de la receta</h3>
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => addItem("ingredient")}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold"
-                      style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }}
-                    >
-                      + Ingrediente
-                    </button>
-                    <button
-                      onClick={() => addItem("subrecipe")}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold"
-                      style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }}
-                    >
-                      + Sub-receta
-                    </button>
+                    <ChipBtn icon={Plus} onClick={() => addItem("ingredient")}>Ingrediente</ChipBtn>
+                    <ChipBtn icon={Layers} onClick={() => addItem("subrecipe")}>Sub-receta</ChipBtn>
                   </div>
                 </div>
 
                 {items.length === 0 ? (
-                  <p className="text-sm py-6 text-center" style={{ color: "var(--muted)" }}>
+                  <p className="py-6 text-center text-sm text-tx-mut">
                     Sin items. Agrega un ingrediente o sub-receta para empezar.
                   </p>
                 ) : (
@@ -495,71 +470,48 @@ export default function RecetasPage() {
                       return (
                         <div
                           key={idx}
-                          className="grid gap-2 items-center p-2 rounded-xl"
-                          style={{
-                            background: "var(--surf2)",
-                            gridTemplateColumns: "1fr 90px 50px 70px 32px",
-                          }}
+                          className="grid items-center gap-2 rounded-xl p-2"
+                          style={{ background: "var(--surf-2)", gridTemplateColumns: "1fr 84px 40px 66px 40px" }}
                         >
                           {isSubrecipe ? (
                             <select
                               value={it.subRecipeId || ""}
                               onChange={(e) => pickSubRecipe(idx, e.target.value)}
-                              className="px-3 py-2 rounded-lg text-sm outline-none"
-                              style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }}
+                              className={cellCls} style={cellStyle}
                             >
                               <option value="">Sub-receta…</option>
-                              {subRecipes.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  📋 {s.name}
-                                </option>
-                              ))}
+                              {subRecipes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                             </select>
                           ) : (
                             <select
                               value={it.ingredientId || ""}
                               onChange={(e) => pickIngredient(idx, e.target.value)}
-                              className="px-3 py-2 rounded-lg text-sm outline-none"
-                              style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }}
+                              className={cellCls} style={cellStyle}
                             >
                               <option value="">Ingrediente…</option>
                               {ingredients.map((i) => (
-                                <option key={i.id} value={i.id}>
-                                  {i.name} ({BASE_UNIT_LABEL[i.baseUnit]})
-                                </option>
+                                <option key={i.id} value={i.id}>{i.name} ({BASE_UNIT_LABEL[i.baseUnit]})</option>
                               ))}
                             </select>
                           )}
                           <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="Cant."
-                            value={it.quantity || ""}
+                            type="number" step="0.01" min="0" placeholder="Cant." value={it.quantity || ""}
                             onChange={(e) => updateItem(idx, { quantity: parseFloat(e.target.value) || 0 })}
-                            className="px-2 py-2 rounded-lg text-sm outline-none text-right tabular-nums"
-                            style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }}
+                            className={`${cellCls} text-right tabular-nums`} style={cellStyle}
                           />
-                          <span className="text-xs text-center" style={{ color: "var(--muted)" }}>
-                            {BASE_UNIT_LABEL[it.unit]}
-                          </span>
+                          <span className="text-center text-xs text-tx-mut">{BASE_UNIT_LABEL[it.unit]}</span>
                           <input
-                            type="number"
-                            step="1"
-                            min="0"
-                            placeholder="Merma %"
-                            value={it.wastagePercent || ""}
+                            type="number" step="1" min="0" placeholder="Merma" value={it.wastagePercent || ""}
                             onChange={(e) => updateItem(idx, { wastagePercent: parseFloat(e.target.value) || 0 })}
                             title="% de merma adicional"
-                            className="px-2 py-2 rounded-lg text-sm outline-none text-right tabular-nums"
-                            style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }}
+                            className={`${cellCls} text-right tabular-nums`} style={cellStyle}
                           />
                           <button
-                            onClick={() => removeItem(idx)}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center text-xs"
-                            style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}
+                            type="button" onClick={() => removeItem(idx)} aria-label="Quitar"
+                            className="grid h-9 w-9 place-items-center rounded-lg"
+                            style={{ background: "var(--err-soft)", color: "var(--err)" }}
                           >
-                            ✕
+                            <X size={15} strokeWidth={2.4} />
                           </button>
                         </div>
                       );
@@ -569,37 +521,16 @@ export default function RecetasPage() {
               </div>
 
               {/* Pricing canal */}
-              <div className="grid grid-cols-2 gap-3 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
-                <NumberField
-                  label="Precio delivery"
-                  value={priceDelivery}
-                  onChange={setPriceDelivery}
-                  prefix="$"
-                />
-                <NumberField
-                  label="Comisión plataforma %"
-                  value={platformCommissionPct}
-                  onChange={setPlatformCommissionPct}
-                  suffix="%"
-                />
-                <NumberField
-                  label="Merma extra de prep %"
-                  value={marginErrorPct}
-                  onChange={setMarginErrorPct}
-                  suffix="%"
-                />
-                <NumberField
-                  label="Margen meta %"
-                  value={targetMarginPct}
-                  onChange={setTargetMarginPct}
-                  suffix="%"
-                  placeholder="Default policy"
-                />
+              <div className="grid grid-cols-2 gap-3 border-t pt-4" style={{ borderColor: "var(--bd-1)" }}>
+                <NumberField label="Precio delivery" value={priceDelivery} onChange={setPriceDelivery} prefix="$" />
+                <NumberField label="Comisión plataforma %" value={platformCommissionPct} onChange={setPlatformCommissionPct} suffix="%" />
+                <NumberField label="Merma extra de prep %" value={marginErrorPct} onChange={setMarginErrorPct} suffix="%" />
+                <NumberField label="Margen meta %" value={targetMarginPct} onChange={setTargetMarginPct} suffix="%" placeholder="Default policy" />
               </div>
 
               {/* Resumen costos */}
-              <div className="pt-4 border-t space-y-2" style={{ borderColor: "var(--border)" }}>
-                <SummaryRow label="Costo total (CMV)" value={`$${totalCost.toFixed(2)}`} />
+              <div className="space-y-2 border-t pt-4" style={{ borderColor: "var(--bd-1)" }}>
+                <SummaryRow label="Costo total (CMV)" value={money(totalCost)} />
                 {marginDineIn != null && (
                   <SummaryRow
                     label="Margen mesa"
@@ -615,15 +546,51 @@ export default function RecetasPage() {
                   />
                 )}
               </div>
-            </>
+            </div>
           )}
-        </div>
+        </WtCard>
       </div>
-    </div>
+    </WtScreen>
   );
 }
 
 // Helpers de UI ────────────────────────────────────────────────────────────
+
+function Banner({ msg }: { msg: { kind: "ok" | "err"; text: string } }) {
+  const ok = msg.kind === "ok";
+  return (
+    <div
+      className="rounded-xl px-3 py-2 text-xs font-bold"
+      style={{
+        background: ok ? "var(--ok-soft)" : "var(--err-soft)",
+        color: ok ? "var(--ok)" : "var(--err)",
+      }}
+    >
+      {msg.text}
+    </div>
+  );
+}
+
+function ChipBtn({
+  icon: Icon,
+  onClick,
+  children,
+}: {
+  icon: typeof Plus;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] px-3 text-xs font-bold text-tx"
+      style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+    >
+      <Icon size={14} strokeWidth={2} /> {children}
+    </button>
+  );
+}
 
 function NumberField({
   label,
@@ -642,35 +609,25 @@ function NumberField({
 }) {
   return (
     <div>
-      <label className="text-xs font-bold uppercase tracking-wider block mb-1" style={{ color: "var(--muted)" }}>
-        {label}
-      </label>
+      <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.12em] text-tx-mut">{label}</label>
       <div className="relative">
         {prefix && (
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold" style={{ color: "var(--muted)" }}>
-            {prefix}
-          </span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-tx-mut">{prefix}</span>
         )}
         <input
-          type="number"
-          step="0.01"
-          min="0"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="w-full py-2 rounded-lg text-sm outline-none tabular-nums"
+          type="number" step="0.01" min="0" value={value}
+          onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+          className="min-h-11 w-full rounded-lg text-sm tabular-nums text-tx outline-none focus:border-primary"
           style={{
-            background: "var(--surf2)",
-            border: "1px solid var(--border)",
-            color: "var(--text)",
+            background: "var(--surf-2)",
+            border: "1px solid var(--bd-1)",
+            color: "var(--tx)",
             paddingLeft: prefix ? 24 : 12,
             paddingRight: suffix ? 28 : 12,
           }}
         />
         {suffix && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold" style={{ color: "var(--muted)" }}>
-            {suffix}
-          </span>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-tx-mut">{suffix}</span>
         )}
       </div>
     </div>
@@ -686,15 +643,14 @@ function SummaryRow({
   value: string;
   highlight?: "good" | "warn" | "bad";
 }) {
-  const color = highlight === "good" ? "#10b981" : highlight === "warn" ? "#f59e0b" : highlight === "bad" ? "#ef4444" : "var(--text)";
+  const color =
+    highlight === "good" ? "var(--ok)" :
+    highlight === "warn" ? "var(--warn)" :
+    highlight === "bad" ? "var(--err)" : "var(--tx-hi)";
   return (
     <div className="flex items-center justify-between">
-      <span className="text-sm font-medium" style={{ color: "var(--muted)" }}>
-        {label}
-      </span>
-      <span className="text-base font-black tabular-nums" style={{ color }}>
-        {value}
-      </span>
+      <span className="text-sm font-medium text-tx-mut">{label}</span>
+      <span className="font-display text-base font-extrabold tabular-nums" style={{ color }}>{value}</span>
     </div>
   );
 }

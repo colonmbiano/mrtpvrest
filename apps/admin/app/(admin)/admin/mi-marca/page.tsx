@@ -1,11 +1,38 @@
 "use client";
 import { useEffect, useState } from "react";
+import {
+  Store, Camera, ImageIcon, MapPin, Phone, Plus, Pencil, Trash2,
+  Bike, ShoppingBag, Utensils, Sparkles, X,
+} from "lucide-react";
 import api from "@/lib/api";
+import {
+  WtScreen, PageHeader, WtCard, SectionHead, SettingRow, PrimaryBtn,
+  Pill, IconBadge, EmptyState, type Tone,
+} from "@/components/warmtech";
 
 type Location = { id: string; name: string; slug: string; address?: string; phone?: string; autoPromoEnabled?: boolean; autoPromoThreshold?: number; autoPromoDiscount?: number; hasDelivery?: boolean; hasTakeaway?: boolean; hasTableMap?: boolean; };
 
 function slugify(text: string) {
-  return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+  return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+}
+
+/* ── reusable styled input ───────────────────────────────────────── */
+function WtInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className="min-h-12 w-full rounded-xl px-4 text-sm font-medium outline-none transition-colors focus:border-[var(--brand-primary)]"
+      style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
+    />
+  );
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-1.5 font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
+      {children}
+    </div>
+  );
 }
 
 function LocationsSection() {
@@ -59,139 +86,165 @@ function LocationsSection() {
     }
   };
 
+  const orderTypes: { key: "hasDelivery" | "hasTakeaway" | "hasTableMap"; label: string; icon: typeof Bike; tone: Tone }[] = [
+    { key: "hasDelivery", label: "Delivery", icon: Bike, tone: "ac" },
+    { key: "hasTakeaway", label: "Para llevar", icon: ShoppingBag, tone: "info" },
+    { key: "hasTableMap", label: "En mesa", icon: Utensils, tone: "ok" },
+  ];
+
   return (
-    <div className="mt-12">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-black uppercase tracking-tighter">Mis Sucursales</h2>
-          <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.2em]">Administra tus puntos de venta</p>
-        </div>
-        <button
-          onClick={openCreate}
-          className="bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase tracking-widest px-5 py-3 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/20"
-        >
-          + Nueva Sucursal
-        </button>
-      </div>
+    <section className="mt-2">
+      <SectionHead
+        title="Mis sucursales"
+        action="Nueva"
+        onAction={openCreate}
+      />
 
       {loading ? (
-        <div className="text-gray-500 text-xs uppercase tracking-widest">Cargando...</div>
-      ) : locations.length === 0 ? (
-        <div className="bg-[#111] border border-dashed border-gray-700 rounded-[2rem] p-10 text-center">
-          <p className="text-gray-500 text-sm font-bold">Sin sucursales registradas</p>
-          <p className="text-gray-700 text-xs mt-1">Crea tu primera sucursal para comenzar a operar</p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="h-32 animate-pulse rounded-[18px] bg-surf-2" />
+          ))}
         </div>
+      ) : locations.length === 0 ? (
+        <EmptyState
+          icon={Store}
+          title="Sin sucursales registradas"
+          hint="Crea tu primera sucursal para comenzar a operar."
+          action={<PrimaryBtn icon={Plus} full={false} onClick={openCreate}>Nueva sucursal</PrimaryBtn>}
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {locations.map(loc => (
-            <div key={loc.id} className="bg-[#111] border border-gray-800 rounded-[2rem] p-6 flex flex-col gap-2">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-black text-white text-base">{loc.name}</p>
-                  <p className="text-[10px] text-gray-600 font-mono mt-0.5">/{loc.slug}</p>
+            <WtCard key={loc.id} className="p-4 md:p-5">
+              <div className="flex items-start gap-3">
+                <IconBadge icon={Store} tone="ac" size={40} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-display text-base font-extrabold text-tx-hi">{loc.name}</p>
+                  <p className="mt-0.5 font-mono text-[10.5px] text-tx-dim">/{loc.slug}</p>
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => openEdit(loc)} className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-orange-400 transition-colors px-3 py-1.5 rounded-xl border border-gray-700 hover:border-orange-500/40">Editar</button>
-                  <button onClick={() => handleDelete(loc.id, loc.name)} className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-red-400 transition-colors px-3 py-1.5 rounded-xl border border-gray-700 hover:border-red-500/40">Eliminar</button>
+                <div className="flex shrink-0 gap-1.5">
+                  <button
+                    type="button" onClick={() => openEdit(loc)} aria-label="Editar sucursal"
+                    className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut transition-colors hover:text-primary"
+                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                  >
+                    <Pencil size={15} />
+                  </button>
+                  <button
+                    type="button" onClick={() => handleDelete(loc.id, loc.name)} aria-label="Eliminar sucursal"
+                    className="grid h-9 w-9 place-items-center rounded-xl"
+                    style={{ background: "var(--err-soft)", color: "var(--err)" }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
                 </div>
               </div>
-              {loc.address && <p className="text-xs text-gray-500">{loc.address}</p>}
-              {loc.phone && <p className="text-xs text-gray-600">{loc.phone}</p>}
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {[
-                  { on: loc.hasDelivery ?? true, label: "Delivery" },
-                  { on: loc.hasTakeaway ?? true, label: "Para llevar" },
-                  { on: loc.hasTableMap ?? true, label: "En mesa" },
-                ].map(t => (
-                  <span key={t.label} className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${t.on ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : "border-gray-800 text-gray-600 bg-black/40 line-through"}`}>{t.label}</span>
-                ))}
+
+              {(loc.address || loc.phone) && (
+                <div className="mt-3 space-y-1 text-[12px] text-tx-mut">
+                  {loc.address && <p className="flex items-center gap-1.5"><MapPin size={13} className="shrink-0 text-tx-dim" /> {loc.address}</p>}
+                  {loc.phone && <p className="flex items-center gap-1.5"><Phone size={13} className="shrink-0 text-tx-dim" /> {loc.phone}</p>}
+                </div>
+              )}
+
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {orderTypes.map(t => {
+                  const on = loc[t.key] ?? true;
+                  return on ? (
+                    <Pill key={t.key} tone={t.tone}>
+                      <t.icon size={11} strokeWidth={2} /> {t.label}
+                    </Pill>
+                  ) : (
+                    <span
+                      key={t.key}
+                      className="inline-flex items-center gap-1 rounded-full px-2 py-[3px] font-mono text-[10.5px] font-semibold text-tx-dim line-through"
+                      style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                    >
+                      <t.icon size={11} strokeWidth={2} /> {t.label}
+                    </span>
+                  );
+                })}
               </div>
-            </div>
+            </WtCard>
           ))}
         </div>
       )}
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 w-full max-w-md mx-4 shadow-2xl">
-            <h3 className="text-xl font-black uppercase tracking-tighter mb-6">
-              {editing ? "Editar Sucursal" : "Nueva Sucursal"}
-            </h3>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-0 backdrop-blur-sm md:items-center md:p-4">
+          <div
+            className="warmtech-card max-h-[92vh] w-full max-w-md overflow-y-auto warmtech-scrollbar rounded-b-none rounded-t-[26px] p-6 md:rounded-[26px]"
+          >
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <h3 className="font-display text-xl font-extrabold text-tx-hi">
+                {editing ? "Editar sucursal" : "Nueva sucursal"}
+              </h3>
+              <button
+                type="button" onClick={() => setShowModal(false)} aria-label="Cerrar"
+                className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Nombre *</label>
-                <input
-                  autoFocus
-                  type="text"
-                  value={form.name}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
-                  placeholder="Ej. Sucursal Centro"
-                  className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all font-bold text-sm"
-                />
+                <FieldLabel>Nombre *</FieldLabel>
+                <WtInput autoFocus type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ej. Sucursal Centro" />
               </div>
               <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Dirección</label>
-                <input
-                  type="text"
-                  value={form.address}
-                  onChange={e => setForm({ ...form, address: e.target.value })}
-                  placeholder="Ej. Av. Reforma 123"
-                  className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold"
-                />
+                <FieldLabel>Dirección</FieldLabel>
+                <WtInput type="text" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Ej. Av. Reforma 123" />
               </div>
               <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Teléfono</label>
-                <input
-                  type="text"
-                  value={form.phone}
-                  onChange={e => setForm({ ...form, phone: e.target.value })}
-                  placeholder="Ej. 55 1234 5678"
-                  className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold"
-                />
+                <FieldLabel>Teléfono</FieldLabel>
+                <WtInput type="text" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="Ej. 55 1234 5678" />
               </div>
 
-              <div className="bg-black/50 p-4 rounded-3xl border border-orange-500/20 flex items-start gap-3">
-                <span className="text-lg">🤖</span>
-                <p className="text-[11px] text-gray-400 leading-relaxed">
-                  Las <strong className="text-orange-400">Promociones con IA</strong> (activación, umbral y % de descuento) ahora se configuran en la sección <strong className="text-orange-400">Promociones IA</strong>.
+              <div className="flex items-start gap-3 rounded-2xl p-4" style={{ background: "var(--iris-soft)" }}>
+                <Sparkles size={18} className="mt-0.5 shrink-0 text-primary" />
+                <p className="text-[11.5px] leading-relaxed text-tx-mut">
+                  Las <strong className="text-primary">Promociones con IA</strong> (activación, umbral y % de descuento) ahora se configuran en la sección <strong className="text-primary">Promociones IA</strong>.
                 </p>
               </div>
 
-              <div className="bg-black/50 p-5 rounded-3xl border border-white/10">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Tipos de pedido en esta sucursal</p>
-                <div className="space-y-3">
+              <div className="rounded-2xl p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                <p className="mb-3 font-mono text-[10px] uppercase tracking-[.12em] text-tx-mut">Tipos de pedido en esta sucursal</p>
+                <div className="space-y-2.5">
                   {[
-                    { key: "hasDelivery" as const, label: "Delivery (envío a domicilio)" },
-                    { key: "hasTakeaway" as const, label: "Para llevar (takeaway)" },
-                    { key: "hasTableMap" as const, label: "En mesa (dine-in / mapa de mesas)" },
+                    { key: "hasDelivery" as const, label: "Delivery (envío a domicilio)", icon: Bike },
+                    { key: "hasTakeaway" as const, label: "Para llevar (takeaway)", icon: ShoppingBag },
+                    { key: "hasTableMap" as const, label: "En mesa (dine-in / mapa de mesas)", icon: Utensils },
                   ].map(opt => (
-                    <label key={opt.key} className="flex items-center gap-3 cursor-pointer">
+                    <label key={opt.key} className="flex min-h-11 cursor-pointer items-center gap-3">
                       <input
                         type="checkbox"
                         checked={form[opt.key]}
                         onChange={e => setForm({ ...form, [opt.key]: e.target.checked })}
-                        className="w-5 h-5 accent-orange-500 rounded"
+                        className="h-5 w-5 rounded"
+                        style={{ accentColor: "var(--brand-primary)" }}
                       />
-                      <span className="text-xs font-bold text-gray-200">{opt.label}</span>
+                      <opt.icon size={15} className="shrink-0 text-tx-mid" />
+                      <span className="text-[12.5px] font-semibold text-tx">{opt.label}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              {error && <p className="text-red-400 text-xs font-bold ml-2">{error}</p>}
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest border border-gray-700 text-gray-400 hover:border-gray-500 transition-all">
-                  Cancelar
-                </button>
-                <button type="submit" disabled={saving} className="flex-1 bg-orange-500 hover:bg-orange-600 py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest text-white shadow-xl shadow-orange-500/20 disabled:opacity-50 transition-all">
-                  {saving ? "Guardando..." : editing ? "Actualizar" : "Crear Sucursal"}
-                </button>
+              {error && <p className="text-xs font-bold text-err">{error}</p>}
+              <div className="flex gap-3 pt-1">
+                <PrimaryBtn ghost type="button" onClick={() => setShowModal(false)}>Cancelar</PrimaryBtn>
+                <PrimaryBtn type="submit" disabled={saving}>
+                  {saving ? "Guardando…" : editing ? "Actualizar" : "Crear sucursal"}
+                </PrimaryBtn>
               </div>
             </form>
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -244,66 +297,81 @@ export default function BrandConfigPage() {
     }
   }
 
-  if (loading) return (
-    <div className="p-8 text-white font-syne flex flex-col items-center justify-center min-h-[50vh]">
-      <div className="w-10 h-10 border-t-2 border-orange-500 rounded-full animate-spin mb-4"></div>
-      <p className="text-xs font-black uppercase tracking-widest opacity-50">Cargando...</p>
-    </div>
-  );
+  if (loading) {
+    return (
+      <WtScreen>
+        <PageHeader eyebrow="Identidad" title="Mi Marca" subtitle="Personaliza tu identidad visual" />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="h-64 animate-pulse rounded-[18px] bg-surf-2 md:col-span-1" />
+          <div className="h-40 animate-pulse rounded-[18px] bg-surf-2 md:col-span-2" />
+        </div>
+      </WtScreen>
+    );
+  }
 
   return (
-    <div className="max-w-5xl mx-auto p-8 font-syne text-white">
-      <div className="mb-12">
-        <h1 className="text-5xl font-black mb-2 uppercase tracking-tighter">Mi Marca</h1>
-        <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.2em]">Personaliza tu identidad visual</p>
-      </div>
+    <WtScreen>
+      <PageHeader eyebrow="Identidad" title="Mi Marca" subtitle="Personaliza tu identidad visual" />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Columna Izquierda: Logo */}
-        <div className="md:col-span-1">
-          <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 text-center flex flex-col items-center">
-            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-6">Logo Oficial</p>
-            <div className="relative group mb-6">
-              <div className="w-32 h-32 bg-black border border-white/10 rounded-3xl flex items-center justify-center overflow-hidden shadow-2xl transition-all group-hover:border-orange-500/50">
-                {config.logoUrl ? (
-                  <img src={config.logoUrl} className="w-full h-full object-contain" alt="Logo" />
-                ) : (
-                  <span className="text-4xl opacity-20">🍔</span>
-                )}
-                {uploading && <div className="absolute inset-0 bg-black/80 flex items-center justify-center animate-pulse text-[10px] font-black uppercase text-orange-500">Subiendo...</div>}
-              </div>
-              <label className="absolute -bottom-2 -right-2 bg-orange-500 text-white w-10 h-10 rounded-2xl flex items-center justify-center cursor-pointer shadow-xl hover:scale-110 transition-all border-4 border-black">
-                <span>📷</span>
-                <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-              </label>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {/* Logo */}
+        <WtCard className="flex flex-col items-center p-6 md:col-span-1 md:p-7">
+          <p className="mb-5 font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Logo oficial</p>
+          <div className="relative mb-5">
+            <div
+              className="grid h-32 w-32 place-items-center overflow-hidden rounded-3xl"
+              style={{ background: "var(--surf-2)", border: "1px solid var(--bd-2)" }}
+            >
+              {config.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={config.logoUrl} className="h-full w-full object-contain" alt="Logo del restaurante" />
+              ) : (
+                <ImageIcon size={40} className="text-tx-dim" />
+              )}
+              {uploading && (
+                <div className="absolute inset-0 grid animate-pulse place-items-center bg-black/80 font-mono text-[10px] font-bold uppercase text-primary">
+                  Subiendo…
+                </div>
+              )}
             </div>
-            <p className="text-[9px] text-gray-600 mt-2 italic text-center leading-relaxed">
-              Haz clic en la cámara para subir un logo PNG o JPG.
-            </p>
+            <label
+              className="absolute -bottom-2 -right-2 grid h-11 w-11 cursor-pointer place-items-center rounded-2xl text-white transition-transform hover:scale-110"
+              style={{ background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", boxShadow: "0 6px 18px var(--iris-glow)", border: "3px solid var(--surf-1)" }}
+            >
+              <Camera size={18} />
+              <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+            </label>
           </div>
-        </div>
+          <p className="text-center text-[11px] leading-relaxed text-tx-mut">
+            Toca la cámara para subir un logo PNG o JPG.
+          </p>
+        </WtCard>
 
-        {/* Columna Derecha: Datos */}
-        <div className="md:col-span-2 space-y-6">
-          <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 space-y-6">
+        {/* Datos del negocio */}
+        <div className="space-y-4 md:col-span-2">
+          <WtCard className="p-5 md:p-6">
+            <SectionHead title="Datos del negocio" />
             <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Nombre del Restaurante</label>
-              <input type="text" value={config.name} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, name: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all font-black text-lg" />
+              <FieldLabel>Nombre del restaurante</FieldLabel>
+              <input
+                type="text"
+                value={config.name}
+                onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, name: v })); }}
+                className="min-h-12 w-full rounded-xl px-4 font-display text-lg font-extrabold outline-none transition-colors focus:border-[var(--brand-primary)]"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx-hi)" }}
+              />
             </div>
-          </div>
+          </WtCard>
 
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || uploading}
-            className="w-full bg-orange-500 hover:bg-orange-600 py-5 rounded-[2rem] font-black text-white shadow-2xl shadow-orange-500/20 active:scale-95 transition-all uppercase tracking-widest disabled:opacity-50"
-          >
-            {saving ? "Guardando..." : "Actualizar Identidad"}
-          </button>
+          <PrimaryBtn icon={Store} onClick={handleSave} disabled={saving || uploading}>
+            {saving ? "Guardando…" : "Actualizar identidad"}
+          </PrimaryBtn>
         </div>
       </div>
 
-      <LocationsSection />
-    </div>
+      <div className="mt-8">
+        <LocationsSection />
+      </div>
+    </WtScreen>
   );
 }

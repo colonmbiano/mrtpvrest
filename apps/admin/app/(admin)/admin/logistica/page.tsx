@@ -1,6 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
+import {
+  Bike, Car, Truck, Play, Lock, AlertTriangle, Clock, Plus, MapPin,
+} from "lucide-react";
 import api from "@/lib/api";
+import {
+  WtScreen, PageHeader, WtCard, SectionHead, Pill, PrimaryBtn,
+  EmptyState,
+} from "@/components/warmtech";
 
 type VehicleType = "MOTO" | "CARRO" | "BICI";
 
@@ -31,11 +38,18 @@ type Ride = {
   employee?: { id: string; name: string; role: string } | null;
 };
 
-const VEHICLE_TYPES: { value: VehicleType; label: string; emoji: string }[] = [
-  { value: "MOTO",  label: "Moto",   emoji: "🏍️" },
-  { value: "CARRO", label: "Carro",  emoji: "🚗" },
-  { value: "BICI",  label: "Bici",   emoji: "🚲" },
+const VEHICLE_TYPES: { value: VehicleType; label: string; icon: typeof Bike }[] = [
+  { value: "MOTO",  label: "Moto",  icon: Bike  },
+  { value: "CARRO", label: "Carro", icon: Car   },
+  { value: "BICI",  label: "Bici",  icon: Bike  },
 ];
+
+const VEHICLE_ICON: Record<VehicleType, typeof Bike> = {
+  MOTO: Bike, CARRO: Car, BICI: Bike,
+};
+
+const inputCls = "min-h-12 w-full rounded-xl px-3 text-sm outline-none";
+const inputStyle = { background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
 
 export default function LogisticaPage() {
   // Gate state
@@ -159,227 +173,254 @@ export default function LogisticaPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loadingGate) {
     return (
-      <div className="p-8 text-gray-500">Cargando módulo de Logística…</div>
+      <WtScreen>
+        <div className="grid place-items-center py-24 text-sm text-tx-mut">
+          Cargando módulo de Logística…
+        </div>
+      </WtScreen>
     );
   }
 
   if (!hasDelivery) {
     return (
-      <div className="p-8 max-w-xl">
-        <h1 className="text-2xl font-black mb-2">Logística</h1>
-        <div className="rounded-2xl border border-amber-300 bg-amber-50 text-amber-900 p-5">
-          <p className="font-bold mb-1">Módulo no activado</p>
-          <p className="text-sm">
-            {gateError ||
-              "El módulo de Logística requiere que la opción hasDelivery esté activa en tu plan. Actívalo desde el panel SaaS."}
-          </p>
-        </div>
-      </div>
+      <WtScreen>
+        <PageHeader
+          eyebrow="Flota & repartos"
+          title="Logística & Flota"
+        />
+        <EmptyState
+          icon={Lock}
+          title="Módulo no activado"
+          hint={
+            gateError ||
+            "El módulo de Logística requiere que la opción hasDelivery esté activa en tu plan. Actívalo desde el panel SaaS."
+          }
+        />
+      </WtScreen>
     );
   }
 
+  const activeVehicles = vehicles.filter(v => v.isActive);
+
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto flex flex-col gap-8">
-      <header>
-        <h1 className="text-2xl md:text-3xl font-black">Logística & Flota</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Administra vehículos, turnos de repartidores y gastos operativos.
-        </p>
-      </header>
+    <WtScreen>
+      <PageHeader
+        eyebrow="Flota & repartos"
+        title="Logística & Flota"
+        subtitle="Administra vehículos, turnos de repartidores y gastos operativos."
+      />
 
-      {/* ── Iniciar turno ─────────────────────────────────────────────────── */}
-      <section className="rounded-3xl border border-gray-200 bg-white p-5 md:p-6 shadow-sm">
-        <h2 className="text-lg font-black mb-4">Iniciar turno (Ride)</h2>
+      <div className="flex flex-col gap-4 md:gap-6">
+        {/* ── Iniciar turno ─────────────────────────────────────────────── */}
+        <WtCard className="p-4 md:p-6">
+          <SectionHead title="Iniciar turno (Ride)" />
 
-        <form onSubmit={handleStartRide} className="grid gap-4 md:grid-cols-4">
-          <div className="md:col-span-1">
-            <label className="text-xs font-bold text-gray-500 mb-1 block">
-              Empleado
-            </label>
-            <select
-              value={employeeId}
-              onChange={e => setEmployeeId(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400"
-            >
-              <option value="">Selecciona…</option>
-              {employees.map(emp => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.name} {emp.role ? `· ${emp.role}` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
+          <form onSubmit={handleStartRide} className="grid gap-3 md:grid-cols-4">
+            <div className="md:col-span-1">
+              <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
+                Empleado
+              </label>
+              <select
+                value={employeeId}
+                onChange={e => setEmployeeId(e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+              >
+                <option value="">Selecciona…</option>
+                {employees.map(emp => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name} {emp.role ? `· ${emp.role}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="md:col-span-1">
-            <label className="text-xs font-bold text-gray-500 mb-1 block">
-              Vehículo
-            </label>
-            <select
-              value={vehicleId}
-              onChange={e => setVehicleId(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400"
-            >
-              <option value="">Selecciona…</option>
-              {vehicles
-                .filter(v => v.isActive)
-                .map(v => (
+            <div className="md:col-span-1">
+              <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
+                Vehículo
+              </label>
+              <select
+                value={vehicleId}
+                onChange={e => setVehicleId(e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+              >
+                <option value="">Selecciona…</option>
+                {activeVehicles.map(v => (
                   <option key={v.id} value={v.id}>
                     {v.name} · {v.type}
                     {v.plate ? ` · ${v.plate}` : ""}
                   </option>
                 ))}
-            </select>
-          </div>
+              </select>
+            </div>
 
-          <div className="md:col-span-1">
-            <label className="text-xs font-bold text-gray-500 mb-1 block">
-              Km inicial (opcional)
-            </label>
+            <div className="md:col-span-1">
+              <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
+                Km inicial (opcional)
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={startMileage}
+                onChange={e => setStartMileage(e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+                placeholder="p. ej. 12450"
+              />
+            </div>
+
+            <div className="flex items-end md:col-span-1">
+              <PrimaryBtn type="submit" icon={Play} disabled={savingRide}>
+                {savingRide ? "Guardando…" : "Iniciar turno"}
+              </PrimaryBtn>
+            </div>
+
+            {rideError && (
+              <p className="text-sm md:col-span-4" style={{ color: "var(--err)" }}>{rideError}</p>
+            )}
+
+            {activeVehicles.length === 0 && (
+              <p className="flex items-center gap-1.5 text-xs md:col-span-4" style={{ color: "var(--warn)" }}>
+                <AlertTriangle size={13} />
+                No tienes vehículos activos. Agrega uno abajo para poder iniciar un turno.
+              </p>
+            )}
+          </form>
+        </WtCard>
+
+        {/* ── Turnos activos ────────────────────────────────────────────── */}
+        <WtCard className="p-4 md:p-6">
+          <SectionHead title="Turnos activos" />
+
+          {openRides.length === 0 ? (
+            <p className="text-sm text-tx-mut">No hay turnos abiertos en este momento.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {openRides.map(r => {
+                const VIcon = r.vehicle?.type ? VEHICLE_ICON[r.vehicle.type] : Bike;
+                return (
+                  <div
+                    key={r.id}
+                    className="flex items-center justify-between gap-3 rounded-2xl px-4 py-3"
+                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-primary"
+                        style={{ background: "var(--iris-soft)" }}>
+                        <VIcon size={17} strokeWidth={1.9} />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-[13.5px] font-bold text-tx">
+                            {r.employee?.name || r.employeeId}
+                          </p>
+                          <Pill tone="ok" live>En turno</Pill>
+                        </div>
+                        <p className="mt-0.5 truncate text-[11px] text-tx-mut">
+                          {r.vehicle?.name} · {r.vehicle?.type}
+                          {r.startMileage != null ? ` · ${r.startMileage} km` : ""}
+                          {" · inicio "}
+                          {new Date(r.startTime).toLocaleString("es-MX", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            day: "2-digit",
+                            month: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <PrimaryBtn full={false} ghost icon={Clock} onClick={() => handleCloseRide(r.id)}>
+                      Cerrar turno
+                    </PrimaryBtn>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </WtCard>
+
+        {/* ── Vehículos ─────────────────────────────────────────────────── */}
+        <WtCard className="p-4 md:p-6">
+          <SectionHead title="Vehículos" />
+
+          <form
+            onSubmit={handleCreateVehicle}
+            className="mb-5 grid gap-3 md:grid-cols-4"
+          >
             <input
-              type="number"
-              min={0}
-              value={startMileage}
-              onChange={e => setStartMileage(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400"
-              placeholder="p. ej. 12450"
+              type="text"
+              value={vName}
+              onChange={e => setVName(e.target.value)}
+              placeholder="Nombre (ej. Moto A)"
+              className={`${inputCls} md:col-span-1`}
+              style={inputStyle}
+              required
             />
-          </div>
-
-          <div className="md:col-span-1 flex items-end">
-            <button
-              type="submit"
-              disabled={savingRide}
-              className="w-full px-4 py-2.5 rounded-xl bg-black text-white text-sm font-black uppercase tracking-wide disabled:opacity-50 active:scale-95 transition-transform"
+            <input
+              type="text"
+              value={vPlate}
+              onChange={e => setVPlate(e.target.value)}
+              placeholder="Placas (opcional)"
+              className={`${inputCls} md:col-span-1`}
+              style={inputStyle}
+            />
+            <select
+              value={vType}
+              onChange={e => setVType(e.target.value as VehicleType)}
+              className={`${inputCls} md:col-span-1`}
+              style={inputStyle}
             >
-              {savingRide ? "Guardando…" : "Iniciar turno"}
-            </button>
-          </div>
+              {VEHICLE_TYPES.map(t => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <div className="md:col-span-1">
+              <PrimaryBtn type="submit" icon={Plus} disabled={savingVehicle}>
+                {savingVehicle ? "Guardando…" : "Agregar"}
+              </PrimaryBtn>
+            </div>
+          </form>
 
-          {rideError && (
-            <p className="md:col-span-4 text-sm text-red-500 mt-1">{rideError}</p>
+          {vehicles.length === 0 ? (
+            <p className="text-sm text-tx-mut">Sin vehículos registrados.</p>
+          ) : (
+            <div className="grid gap-2 md:grid-cols-2">
+              {vehicles.map(v => {
+                const VIcon = VEHICLE_ICON[v.type];
+                return (
+                  <div
+                    key={v.id}
+                    className="flex items-center gap-3 rounded-2xl px-4 py-3"
+                    style={{
+                      background: v.isActive ? "var(--surf-2)" : "var(--surf-1)",
+                      border: "1px solid var(--bd-1)",
+                      opacity: v.isActive ? 1 : 0.55,
+                    }}
+                  >
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px]"
+                      style={{
+                        background: v.isActive ? "var(--iris-soft)" : "var(--surf-3)",
+                        color: v.isActive ? "var(--brand-primary)" : "var(--tx-mut)",
+                      }}>
+                      <VIcon size={17} strokeWidth={1.9} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13.5px] font-bold text-tx">{v.name}</p>
+                      <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-tx-mut">
+                        {v.plate ? <><MapPin size={11} /> {v.type} · {v.plate}</> : v.type}
+                      </p>
+                    </div>
+                    {!v.isActive && <Pill tone="neutral">Inactivo</Pill>}
+                  </div>
+                );
+              })}
+            </div>
           )}
-
-          {vehicles.filter(v => v.isActive).length === 0 && (
-            <p className="md:col-span-4 text-xs text-amber-600 mt-1">
-              No tienes vehículos activos. Agrega uno abajo para poder iniciar
-              un turno.
-            </p>
-          )}
-        </form>
-      </section>
-
-      {/* ── Turnos activos ───────────────────────────────────────────────── */}
-      <section className="rounded-3xl border border-gray-200 bg-white p-5 md:p-6 shadow-sm">
-        <h2 className="text-lg font-black mb-4">Turnos activos</h2>
-
-        {openRides.length === 0 ? (
-          <p className="text-sm text-gray-400">
-            No hay turnos abiertos en este momento.
-          </p>
-        ) : (
-          <div className="flex flex-col divide-y divide-gray-100">
-            {openRides.map(r => (
-              <div
-                key={r.id}
-                className="flex items-center justify-between py-3"
-              >
-                <div>
-                  <p className="font-bold text-sm">
-                    {r.employee?.name || r.employeeId}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {r.vehicle?.name} · {r.vehicle?.type}
-                    {r.startMileage != null ? ` · ${r.startMileage} km` : ""}
-                    {" · inicio "}
-                    {new Date(r.startTime).toLocaleString("es-MX", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      day: "2-digit",
-                      month: "2-digit",
-                    })}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleCloseRide(r.id)}
-                  className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold hover:bg-gray-50"
-                >
-                  Cerrar turno
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* ── Vehículos ────────────────────────────────────────────────────── */}
-      <section className="rounded-3xl border border-gray-200 bg-white p-5 md:p-6 shadow-sm">
-        <h2 className="text-lg font-black mb-4">Vehículos</h2>
-
-        <form
-          onSubmit={handleCreateVehicle}
-          className="grid gap-3 md:grid-cols-4 mb-5"
-        >
-          <input
-            type="text"
-            value={vName}
-            onChange={e => setVName(e.target.value)}
-            placeholder="Nombre (ej. Moto A)"
-            className="md:col-span-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400"
-            required
-          />
-          <input
-            type="text"
-            value={vPlate}
-            onChange={e => setVPlate(e.target.value)}
-            placeholder="Placas (opcional)"
-            className="md:col-span-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400"
-          />
-          <select
-            value={vType}
-            onChange={e => setVType(e.target.value as VehicleType)}
-            className="md:col-span-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400"
-          >
-            {VEHICLE_TYPES.map(t => (
-              <option key={t.value} value={t.value}>
-                {t.emoji} {t.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            disabled={savingVehicle}
-            className="md:col-span-1 px-4 py-2.5 rounded-xl bg-black text-white text-sm font-black uppercase tracking-wide disabled:opacity-50 active:scale-95 transition-transform"
-          >
-            {savingVehicle ? "Guardando…" : "Agregar"}
-          </button>
-        </form>
-
-        {vehicles.length === 0 ? (
-          <p className="text-sm text-gray-400">Sin vehículos registrados.</p>
-        ) : (
-          <div className="grid gap-2 md:grid-cols-2">
-            {vehicles.map(v => (
-              <div
-                key={v.id}
-                className={`flex items-center justify-between px-4 py-3 rounded-2xl border ${
-                  v.isActive
-                    ? "border-gray-200 bg-white"
-                    : "border-gray-100 bg-gray-50 text-gray-400"
-                }`}
-              >
-                <div>
-                  <p className="font-bold text-sm">{v.name}</p>
-                  <p className="text-xs text-gray-400">
-                    {v.type}
-                    {v.plate ? ` · ${v.plate}` : ""}
-                    {!v.isActive ? " · Inactivo" : ""}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
+        </WtCard>
+      </div>
+    </WtScreen>
   );
 }

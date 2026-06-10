@@ -1,6 +1,14 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import {
+  Sparkles, Bot, Trash2, Settings2, Zap, Store, Tag,
+  TrendingUp, Percent, Target, X, Lightbulb, Utensils,
+} from "lucide-react";
 import api from "@/lib/api";
+import {
+  WtScreen, PageHeader, WtCard, StatTile, SectionHead, Pill, Toggle,
+  PrimaryBtn, IconBadge, EmptyState, money,
+} from "@/components/warmtech";
 
 type Location = {
   id: string;
@@ -40,7 +48,6 @@ export default function PromocionesPage() {
   const [savingLoc, setSavingLoc] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, ConfigDraft>>({});
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<string>("all");
   const [configLoc, setConfigLoc] = useState<Location | null>(null);
   const [clearing, setClearing] = useState(false);
 
@@ -55,7 +62,7 @@ export default function PromocionesPage() {
       const { data } = await api.get("/api/admin/promos");
       const locs: Location[] = data.locations || [];
       setLocations(locs);
-      setDrafts(Object.fromEntries(locs.map(l => [l.id, {
+      setDrafts(Object.fromEntries(locs.map((l) => [l.id, {
         autoPromoThreshold: l.autoPromoThreshold,
         autoPromoDiscount: l.autoPromoDiscount,
         autoPromoMaxItems: l.autoPromoMaxItems ?? 0,
@@ -76,10 +83,11 @@ export default function PromocionesPage() {
     setTriggering(key);
     try {
       await api.post("/api/admin/promos/trigger", locationId ? { locationId } : {});
-      showToast("✅ Motor iniciado. Analizando ventas con IA...");
+      showToast("Motor iniciado. Analizando ventas con IA…");
       setTimeout(() => fetchData(), 3000);
-    } catch (e: any) {
-      showToast(e?.response?.data?.error || "Error al iniciar motor", false);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      showToast(err?.response?.data?.error || "Error al iniciar motor", false);
     } finally {
       setTriggering(null);
     }
@@ -92,10 +100,11 @@ export default function PromocionesPage() {
         isPromo: !item.isPromo,
         promoPrice: item.isPromo ? null : item.promoPrice,
       });
-      showToast(item.isPromo ? "Promo desactivada" : "🎉 Promo activada");
+      showToast(item.isPromo ? "Promo desactivada" : "Promo activada");
       fetchData();
-    } catch (e: any) {
-      showToast(e?.response?.data?.error || "Error al actualizar", false);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      showToast(err?.response?.data?.error || "Error al actualizar", false);
     } finally {
       setTogglingItem(null);
     }
@@ -105,10 +114,11 @@ export default function PromocionesPage() {
     setSavingLoc(loc.id);
     try {
       await api.put(`/api/admin/locations/${loc.id}`, patch);
-      setLocations(prev => prev.map(l => l.id === loc.id ? { ...l, ...patch } : l));
-      showToast("✅ Configuración guardada");
-    } catch (e: any) {
-      showToast(e?.response?.data?.error || "Error al guardar", false);
+      setLocations((prev) => prev.map((l) => (l.id === loc.id ? { ...l, ...patch } : l)));
+      showToast("Configuración guardada");
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      showToast(err?.response?.data?.error || "Error al guardar", false);
       fetchData(); // revertir al estado del servidor
     } finally {
       setSavingLoc(null);
@@ -134,290 +144,291 @@ export default function PromocionesPage() {
     setClearing(true);
     try {
       const { data } = await api.post("/api/admin/promos/clear");
-      showToast(`✅ ${data.cleared ?? 0} promociones quitadas`);
+      showToast(`${data.cleared ?? 0} promociones quitadas`);
       fetchData();
-    } catch (e: any) {
-      showToast(e?.response?.data?.error || "Error al quitar promociones", false);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      showToast(err?.response?.data?.error || "Error al quitar promociones", false);
     } finally {
       setClearing(false);
     }
   };
 
-  const enabledLocations = locations.filter(l => l.autoPromoEnabled);
-  const disabledLocations = locations.filter(l => !l.autoPromoEnabled);
+  const enabledLocations = locations.filter((l) => l.autoPromoEnabled);
+  const disabledLocations = locations.filter((l) => !l.autoPromoEnabled);
   const visibleItems = menuItems.length > 0 ? menuItems : promoItems;
   const discount = (price: number, promo: number) =>
     Math.round(((price - promo) / price) * 100);
 
-  if (loading) return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-      <div className="w-12 h-12 border-t-2 border-orange-500 rounded-full animate-spin" />
-      <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Cargando promociones...</p>
-    </div>
-  );
+  const soldTotal = promoItems.reduce((s, i) => s + (i.soldLast7Days || 0), 0);
+  const avgDiscount = promoItems.length > 0
+    ? Math.round(promoItems.reduce((s, i) => s + (i.price > 0 && i.promoPrice ? discount(i.price, i.promoPrice) : 0), 0) / promoItems.length)
+    : 0;
 
   return (
-    <div className="max-w-5xl mx-auto p-6 sm:p-8 font-sans text-white">
+    <WtScreen>
+      <PageHeader
+        eyebrow="Motor de descuentos"
+        title="Promociones IA"
+        subtitle="Descuentos automáticos impulsados por inteligencia artificial"
+        actions={
+          <>
+            {promoItems.length > 0 && (
+              <PrimaryBtn full={false} ghost danger icon={Trash2} onClick={handleClearAll}>
+                {clearing ? "Quitando…" : "Quitar todas"}
+              </PrimaryBtn>
+            )}
+            <PrimaryBtn
+              full={false}
+              icon={Bot}
+              onClick={() => handleTrigger()}
+              disabled={triggering === "all" || enabledLocations.length === 0}
+            >
+              {triggering === "all" ? "Analizando…" : "Analizar todas"}
+            </PrimaryBtn>
+          </>
+        }
+      />
 
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed top-6 right-6 z-50 px-5 py-3.5 rounded-2xl text-sm font-bold shadow-2xl transition-all animate-in slide-in-from-top-2 ${
-          toast.ok ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-red-500/20 text-red-400 border border-red-500/30"
-        }`}>
-          {toast.msg}
+      {/* AI hero banner */}
+      <WtCard
+        className="relative mb-4 overflow-hidden p-4 md:p-6"
+        style={{ borderColor: "var(--iris-soft)" }}
+      >
+        <div
+          className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full"
+          style={{ background: "var(--iris-glow)", filter: "blur(40px)" }}
+        />
+        <div className="relative flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-start gap-3">
+            <IconBadge icon={Sparkles} tone="ac" size={42} />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="font-display text-base font-extrabold text-tx-hi md:text-lg">
+                  Motor inteligente de promos
+                </h2>
+                <Pill tone="ac" live>IA</Pill>
+              </div>
+              <p className="mt-1 max-w-xl text-[12.5px] leading-relaxed text-tx-mid">
+                La IA detecta platillos con baja rotación y les aplica descuentos
+                automáticos según el umbral y tope que definas por sucursal.
+              </p>
+            </div>
+          </div>
+          <div className="shrink-0 md:hidden">
+            <PrimaryBtn
+              icon={Bot}
+              onClick={() => handleTrigger()}
+              disabled={triggering === "all" || enabledLocations.length === 0}
+            >
+              {triggering === "all" ? "Analizando…" : "Analizar todas"}
+            </PrimaryBtn>
+          </div>
+        </div>
+      </WtCard>
+
+      {/* stats */}
+      {promoItems.length > 0 && (
+        <div className="mb-2 grid grid-cols-3 gap-3">
+          <StatTile icon={Tag} value={promoItems.length} label="En promo ahora" />
+          <StatTile icon={TrendingUp} value={soldTotal.toLocaleString("es-MX")} label="Vendidos (7 días)" />
+          <StatTile icon={Percent} value={`${avgDiscount}%`} label="Descuento prom." />
         </div>
       )}
 
-      {/* Header */}
-      <div className="mb-10">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">
-              Promociones <span className="text-orange-500">IA</span>
-            </h1>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
-              Motor automático de descuentos con inteligencia artificial
-            </p>
-          </div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {promoItems.length > 0 && (
-              <button
-                onClick={handleClearAll}
-                disabled={clearing}
-                className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-red-400 border border-red-500/30 font-black text-xs uppercase tracking-widest px-5 py-3.5 rounded-2xl transition-all active:scale-95"
-              >
-                {clearing ? "Quitando..." : "Quitar todas las promos"}
-              </button>
-            )}
-            <button
-              onClick={() => handleTrigger()}
-              disabled={triggering === "all" || enabledLocations.length === 0}
-              className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-xs uppercase tracking-widest px-5 py-3.5 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/20"
-            >
-              {triggering === "all" ? (
-                <><div className="w-4 h-4 border-t-2 border-white rounded-full animate-spin" />Analizando...</>
-              ) : (
-                <><span className="text-base">🤖</span> Analizar Todas</>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Sucursales */}
-      <div className="mb-8">
-        <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-4">Configuración por Sucursal</h2>
-        {locations.length === 0 ? (
-          <div className="bg-[#111] border border-dashed border-gray-700 rounded-[2rem] p-8 text-center">
-            <p className="text-gray-500 text-sm font-bold">Sin sucursales</p>
-            <p className="text-gray-700 text-xs mt-1">Crea sucursales desde <strong className="text-gray-500">Mi Marca</strong></p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {locations.map(loc => {
-              return (
-              <div key={loc.id} className={`bg-[#111] rounded-[1.75rem] p-5 border transition-all ${
-                loc.autoPromoEnabled ? "border-orange-500/30" : "border-gray-800"
-              }`}>
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <p className="font-black text-sm">{loc.name}</p>
-                    <div className={`mt-1 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
-                      loc.autoPromoEnabled
-                        ? "bg-orange-500/15 text-orange-400"
-                        : "bg-gray-800 text-gray-500"
-                    }`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${loc.autoPromoEnabled ? "bg-orange-500 animate-pulse" : "bg-gray-600"}`} />
-                      {loc.autoPromoEnabled ? "IA Activa" : "IA Inactiva"}
-                    </div>
+      <SectionHead title="Configuración por sucursal" />
+      {loading && locations.length === 0 ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="h-44 animate-pulse rounded-[18px] bg-surf-2" />
+          ))}
+        </div>
+      ) : locations.length === 0 ? (
+        <EmptyState
+          icon={Store}
+          title="Sin sucursales"
+          hint="Crea sucursales desde Mi Marca para activar el motor de promociones."
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {locations.map((loc) => (
+            <WtCard
+              key={loc.id}
+              className="p-4"
+              style={loc.autoPromoEnabled ? { borderColor: "var(--brand-primary)" } : undefined}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate font-display text-sm font-extrabold text-tx-hi">{loc.name}</div>
+                  <div className="mt-1.5">
+                    <Pill tone={loc.autoPromoEnabled ? "ac" : "neutral"} live={loc.autoPromoEnabled}>
+                      {loc.autoPromoEnabled ? "IA activa" : "IA inactiva"}
+                    </Pill>
                   </div>
-                  {/* Toggle de Promociones con IA */}
-                  <button
-                    onClick={() => handleToggleLocation(loc)}
-                    disabled={savingLoc === loc.id}
-                    className={`flex-shrink-0 relative w-11 h-6 rounded-full transition-all border ${
-                      loc.autoPromoEnabled ? "bg-orange-500 border-orange-500" : "bg-gray-800 border-gray-700"
-                    } disabled:opacity-50`}
-                    title={loc.autoPromoEnabled ? "Desactivar Promociones con IA" : "Activar Promociones con IA"}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${loc.autoPromoEnabled ? "translate-x-5" : "translate-x-0"}`} />
-                  </button>
                 </div>
-                {loc.autoPromoEnabled ? (
-                  <div className="mt-3 pt-3 border-t border-gray-800 space-y-3">
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="bg-black/40 rounded-xl py-2">
-                        <p className="text-sm font-black text-white">{loc.autoPromoThreshold}</p>
-                        <p className="text-[8px] text-gray-600 uppercase tracking-wider font-bold mt-0.5">Umbral/sem</p>
-                      </div>
-                      <div className="bg-black/40 rounded-xl py-2">
-                        <p className="text-sm font-black text-orange-400">{loc.autoPromoDiscount}%</p>
-                        <p className="text-[8px] text-gray-600 uppercase tracking-wider font-bold mt-0.5">Descuento</p>
-                      </div>
-                      <div className="bg-black/40 rounded-xl py-2">
-                        <p className="text-sm font-black text-blue-400">{loc.autoPromoMaxItems > 0 ? loc.autoPromoMaxItems : "∞"}</p>
-                        <p className="text-[8px] text-gray-600 uppercase tracking-wider font-bold mt-0.5">Tope</p>
-                      </div>
+                <Toggle
+                  checked={loc.autoPromoEnabled}
+                  onChange={() => { if (savingLoc !== loc.id) handleToggleLocation(loc); }}
+                  label={loc.autoPromoEnabled ? "Desactivar promociones con IA" : "Activar promociones con IA"}
+                />
+              </div>
+
+              {loc.autoPromoEnabled ? (
+                <div className="mt-3 space-y-3 border-t pt-3" style={{ borderColor: "var(--bd-1)" }}>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-xl py-2" style={{ background: "var(--surf-2)" }}>
+                      <div className="font-display text-base font-extrabold text-tx-hi">{loc.autoPromoThreshold}</div>
+                      <div className="mt-0.5 font-mono text-[8.5px] uppercase tracking-wider text-tx-dim">Umbral/sem</div>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setConfigLoc(loc)}
-                        className="flex-1 text-[10px] font-black uppercase tracking-widest text-white bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-2.5 rounded-xl transition-all"
-                      >
-                        ⚙ Configurar
-                      </button>
-                      <button
-                        onClick={() => handleTrigger(loc.id)}
-                        disabled={triggering === loc.id}
-                        className="text-[10px] font-black uppercase tracking-widest text-orange-400 hover:text-orange-300 border border-orange-500/30 hover:border-orange-500/60 px-3 py-2.5 rounded-xl transition-all disabled:opacity-50"
-                      >
-                        {triggering === loc.id ? "..." : "Analizar"}
-                      </button>
+                    <div className="rounded-xl py-2" style={{ background: "var(--surf-2)" }}>
+                      <div className="font-display text-base font-extrabold text-primary">{loc.autoPromoDiscount}%</div>
+                      <div className="mt-0.5 font-mono text-[8.5px] uppercase tracking-wider text-tx-dim">Descuento</div>
+                    </div>
+                    <div className="rounded-xl py-2" style={{ background: "var(--surf-2)" }}>
+                      <div className="font-display text-base font-extrabold text-info">
+                        {loc.autoPromoMaxItems > 0 ? loc.autoPromoMaxItems : "∞"}
+                      </div>
+                      <div className="mt-0.5 font-mono text-[8.5px] uppercase tracking-wider text-tx-dim">Tope</div>
                     </div>
                   </div>
-                ) : (
-                  <p className="text-[10px] text-gray-600 mt-2">
-                    Activa el switch para que la IA ajuste descuentos automáticamente en esta sucursal.
-                  </p>
-                )}
-              </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Estadísticas rápidas */}
-      {promoItems.length > 0 && (
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-[#111] border border-gray-800 rounded-[1.75rem] p-5 text-center">
-            <p className="text-3xl font-black text-orange-400">{promoItems.length}</p>
-            <p className="text-[9px] text-gray-500 uppercase tracking-widest font-bold mt-1">En promo ahora</p>
-          </div>
-          <div className="bg-[#111] border border-gray-800 rounded-[1.75rem] p-5 text-center">
-            <p className="text-3xl font-black text-emerald-400">
-              {promoItems.reduce((s, i) => s + (i.soldLast7Days || 0), 0)}
-            </p>
-            <p className="text-[9px] text-gray-500 uppercase tracking-widest font-bold mt-1">Vendidos (7 días)</p>
-          </div>
-          <div className="bg-[#111] border border-gray-800 rounded-[1.75rem] p-5 text-center">
-            <p className="text-3xl font-black text-blue-400">
-              {promoItems.length > 0
-                ? Math.round(promoItems.reduce((s, i) => s + (i.price > 0 && i.promoPrice ? discount(i.price, i.promoPrice) : 0), 0) / promoItems.length)
-                : 0}%
-            </p>
-            <p className="text-[9px] text-gray-500 uppercase tracking-widest font-bold mt-1">Descuento promedio</p>
-          </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfigLoc(loc)}
+                      className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl text-xs font-bold text-tx"
+                      style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                    >
+                      <Settings2 size={15} /> Configurar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTrigger(loc.id)}
+                      disabled={triggering === loc.id}
+                      className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-bold text-primary disabled:opacity-50"
+                      style={{ background: "var(--iris-soft)" }}
+                    >
+                      <Zap size={15} /> {triggering === loc.id ? "…" : "Analizar"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-2 text-[11px] text-tx-mut">
+                  Activa el switch para que la IA ajuste descuentos automáticamente en esta sucursal.
+                </p>
+              )}
+            </WtCard>
+          ))}
         </div>
       )}
 
       {/* Items en promo */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xs font-black uppercase tracking-widest text-gray-500">
-            Platillos {visibleItems.length > 0 && `(${visibleItems.length})`}
-          </h2>
+      <SectionHead title={`Platillos${visibleItems.length > 0 ? ` (${visibleItems.length})` : ""}`} />
+      {loading && visibleItems.length === 0 ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-32 animate-pulse rounded-[18px] bg-surf-2" />
+          ))}
         </div>
-
-        {visibleItems.length === 0 ? (
-          <div className="bg-[#111] border border-dashed border-gray-700 rounded-[2rem] p-12 text-center">
-            <div className="text-5xl mb-4">🎯</div>
-            <p className="text-white font-black text-base mb-2">Sin platillos en promo actualmente</p>
-            <p className="text-gray-500 text-sm max-w-sm mx-auto leading-relaxed">
-              Activa el motor IA en tus sucursales y presiona <strong className="text-orange-400">Analizar Todas</strong> para que la IA identifique qué platillos necesitan un empujón.
-            </p>
-            {enabledLocations.length > 0 && (
-              <button
+      ) : visibleItems.length === 0 ? (
+        <EmptyState
+          icon={Target}
+          title="Sin platillos en promo"
+          hint="Activa el motor IA en tus sucursales y presiona Analizar todas para que la IA identifique qué platillos necesitan un empujón."
+          action={
+            enabledLocations.length > 0 ? (
+              <PrimaryBtn
+                full={false}
+                icon={Bot}
                 onClick={() => handleTrigger()}
                 disabled={triggering === "all"}
-                className="mt-6 bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase tracking-widest px-6 py-3.5 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/20"
               >
-                {triggering === "all" ? "Analizando..." : "🤖 Ejecutar Motor IA"}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {visibleItems.map(item => (
-              <div key={item.id} className={`bg-[#111] border rounded-[1.75rem] p-5 flex gap-4 ${
-                item.isPromo ? "border-orange-500/20" : "border-gray-800"
-              }`}>
-                {/* Imagen */}
-                <div className="w-16 h-16 rounded-2xl bg-gray-900 flex-shrink-0 overflow-hidden border border-gray-800">
-                  {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-2xl">🍽️</div>
-                  )}
+                {triggering === "all" ? "Analizando…" : "Ejecutar motor IA"}
+              </PrimaryBtn>
+            ) : undefined
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {visibleItems.map((item) => (
+            <WtCard
+              key={item.id}
+              className="flex gap-3 p-4"
+              style={item.isPromo ? { borderColor: "var(--iris-soft)" } : undefined}
+            >
+              {/* Imagen */}
+              <div
+                className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+              >
+                {item.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                ) : (
+                  <Utensils size={22} className="text-tx-dim" />
+                )}
+              </div>
+
+              {/* Info */}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate font-display text-sm font-extrabold text-tx-hi">{item.name}</div>
+                    <div className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-wider text-tx-dim">
+                      {item.category.name}
+                    </div>
+                  </div>
+                  <Toggle
+                    checked={item.isPromo}
+                    onChange={() => { if (togglingItem !== item.id) handleToggleItem(item); }}
+                    label={item.isPromo ? "Desactivar promo" : "Activar promo"}
+                  />
                 </div>
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-black text-sm leading-tight">{item.name}</p>
-                      <p className="text-[10px] text-gray-600 font-bold uppercase tracking-wider mt-0.5">{item.category.name}</p>
-                    </div>
-                    <button
-                      onClick={() => handleToggleItem(item)}
-                      disabled={togglingItem === item.id}
-                      className={`flex-shrink-0 relative w-10 h-5 rounded-full transition-all border ${
-                        item.isPromo
-                          ? "bg-orange-500 border-orange-500"
-                          : "bg-gray-800 border-gray-700"
-                      } disabled:opacity-50`}
-                      title={item.isPromo ? "Desactivar promo" : "Activar promo"}
+                {item.isPromo && item.promoPrice && (
+                  <div className="mt-2 flex items-center gap-2.5">
+                    <span className="text-xs text-tx-dim line-through">{money(item.price)}</span>
+                    <span className="font-display text-sm font-extrabold text-primary">{money(item.promoPrice)}</span>
+                    <Pill tone="ac">-{discount(item.price, item.promoPrice)}%</Pill>
+                  </div>
+                )}
+
+                <div className="mt-2 flex items-center gap-5 border-t pt-2" style={{ borderColor: "var(--bd-1)" }}>
+                  <div>
+                    <div className="font-mono text-[9px] uppercase tracking-wider text-tx-dim">Vendidos 7d</div>
+                    <div
+                      className="font-display text-sm font-extrabold"
+                      style={{ color: item.soldLast7Days < 5 ? "var(--err)" : "var(--ok)" }}
                     >
-                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${item.isPromo ? "translate-x-5" : "translate-x-0"}`} />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-3 mt-2.5">
-                    {item.isPromo && item.promoPrice && (
-                      <>
-                        <span className="text-gray-500 line-through text-xs">${item.price.toFixed(2)}</span>
-                        <span className="text-orange-400 font-black text-sm">${item.promoPrice.toFixed(2)}</span>
-                        <span className="bg-orange-500/15 text-orange-400 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">
-                          -{discount(item.price, item.promoPrice)}%
-                        </span>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-4 mt-2 pt-2 border-t border-gray-800/60">
-                    <div>
-                      <p className="text-[9px] text-gray-600 uppercase tracking-wider">Vendidos 7d</p>
-                      <p className={`text-sm font-black ${item.soldLast7Days < 5 ? "text-red-400" : "text-emerald-400"}`}>
-                        {item.soldLast7Days}
-                      </p>
+                      {item.soldLast7Days}
                     </div>
-                    <div>
-                      <p className="text-[9px] text-gray-600 uppercase tracking-wider">Actualizado</p>
-                      <p className="text-[10px] text-gray-500">
-                        {new Date(item.updatedAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}
-                      </p>
+                  </div>
+                  <div>
+                    <div className="font-mono text-[9px] uppercase tracking-wider text-tx-dim">Actualizado</div>
+                    <div className="text-[10.5px] text-tx-mut">
+                      {new Date(item.updatedAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}
                     </div>
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            </WtCard>
+          ))}
+        </div>
+      )}
 
       {/* Sucursales sin IA */}
       {disabledLocations.length > 0 && (
-        <div className="mt-8 bg-gray-900/40 border border-dashed border-gray-700 rounded-[2rem] p-6 flex items-center gap-4">
-          <span className="text-2xl">💡</span>
-          <div>
-            <p className="text-sm font-bold text-gray-300">
+        <WtCard className="mt-4 flex items-center gap-3 p-4">
+          <IconBadge icon={Lightbulb} tone="warn" size={38} />
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold text-tx">
               {disabledLocations.length} {disabledLocations.length === 1 ? "sucursal sin" : "sucursales sin"} IA activada
-            </p>
-            <p className="text-xs text-gray-600 mt-0.5">
-              Activa el <strong className="text-orange-400">switch de cada sucursal</strong> aquí arriba para encender el motor de promociones con IA.
-            </p>
+            </div>
+            <div className="mt-0.5 text-[11px] text-tx-mut">
+              Activa el switch de cada sucursal aquí arriba para encender el motor de promociones con IA.
+            </div>
           </div>
-        </div>
+        </WtCard>
       )}
 
       {/* Modal de configuración detallada por sucursal */}
@@ -429,72 +440,112 @@ export default function PromocionesPage() {
           autoPromoMaxItems: loc.autoPromoMaxItems ?? 0,
         };
         const setField = (patch: Partial<ConfigDraft>) =>
-          setDrafts(prev => ({ ...prev, [loc.id]: { ...draft, ...patch } }));
+          setDrafts((prev) => ({ ...prev, [loc.id]: { ...draft, ...patch } }));
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setConfigLoc(null)}>
-            <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-              <div className="flex items-start justify-between mb-1">
-                <h3 className="text-xl font-black uppercase tracking-tighter">Configurar IA</h3>
-                <button onClick={() => setConfigLoc(null)} className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/5 text-gray-400 hover:text-white transition-all">✕</button>
-              </div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-orange-400 mb-6">{loc.name}</p>
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,.8)", backdropFilter: "blur(4px)" }}
+            onClick={() => setConfigLoc(null)}
+          >
+            <WtCard className="w-full max-w-md p-6" onClick={undefined}>
+              <div onClick={(e) => e.stopPropagation()}>
+                <div className="mb-1 flex items-start justify-between">
+                  <h3 className="font-display text-xl font-extrabold text-tx-hi">Configurar IA</h3>
+                  <button
+                    type="button"
+                    onClick={() => setConfigLoc(null)}
+                    aria-label="Cerrar"
+                    className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut"
+                    style={{ background: "var(--surf-2)" }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="mb-5 font-mono text-[10px] uppercase tracking-[.16em] text-primary">{loc.name}</div>
 
-              <div className="space-y-5">
-                <div>
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1.5 block tracking-widest">Umbral ventas/semana</label>
-                  <input
-                    type="number" min="1"
-                    value={draft.autoPromoThreshold}
-                    onChange={e => setField({ autoPromoThreshold: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-black border border-white/10 rounded-2xl px-5 py-3.5 outline-none focus:border-orange-500 transition-all font-black text-sm text-white"
-                  />
-                  <p className="text-[10px] text-gray-600 mt-1.5 ml-1">Platillos que vendan menos de esto en la ventana entran en promo.</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
+                      Umbral ventas/semana
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={draft.autoPromoThreshold}
+                      onChange={(e) => setField({ autoPromoThreshold: parseInt(e.target.value) || 0 })}
+                      className="min-h-12 w-full rounded-xl px-4 font-display text-sm font-bold text-tx outline-none"
+                      style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                    />
+                    <p className="ml-1 mt-1.5 text-[11px] text-tx-mut">
+                      Platillos que vendan menos de esto en la ventana entran en promo.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
+                      Descuento (%)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={draft.autoPromoDiscount}
+                      onChange={(e) => setField({ autoPromoDiscount: parseInt(e.target.value) || 0 })}
+                      className="min-h-12 w-full rounded-xl px-4 font-display text-sm font-bold text-primary outline-none"
+                      style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                    />
+                    <p className="ml-1 mt-1.5 text-[11px] text-tx-mut">
+                      Al guardar, se re-aplica de inmediato a las promos vigentes.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
+                      Tope máximo de platillos
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={draft.autoPromoMaxItems}
+                      onChange={(e) => setField({ autoPromoMaxItems: parseInt(e.target.value) || 0 })}
+                      className="min-h-12 w-full rounded-xl px-4 font-display text-sm font-bold text-info outline-none"
+                      style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                    />
+                    <p className="ml-1 mt-1.5 text-[11px] text-tx-mut">
+                      Máximo de platillos en promo a la vez. 0 = sin tope. Evita que se active todo el menú.
+                    </p>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1.5 block tracking-widest">Descuento (%)</label>
-                  <input
-                    type="number" min="1" max="100"
-                    value={draft.autoPromoDiscount}
-                    onChange={e => setField({ autoPromoDiscount: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-black border border-white/10 rounded-2xl px-5 py-3.5 outline-none focus:border-orange-500 transition-all font-black text-sm text-orange-400"
-                  />
-                  <p className="text-[10px] text-gray-600 mt-1.5 ml-1">Al guardar, se re-aplica de inmediato a las promos vigentes.</p>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1 mb-1.5 block tracking-widest">Tope máximo de platillos</label>
-                  <input
-                    type="number" min="0"
-                    value={draft.autoPromoMaxItems}
-                    onChange={e => setField({ autoPromoMaxItems: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-black border border-white/10 rounded-2xl px-5 py-3.5 outline-none focus:border-orange-500 transition-all font-black text-sm text-blue-400"
-                  />
-                  <p className="text-[10px] text-gray-600 mt-1.5 ml-1">Máximo de platillos en promo a la vez. <strong className="text-gray-500">0 = sin tope</strong>. Evita que se active todo el menú.</p>
+                <div className="flex gap-3 pt-6">
+                  <PrimaryBtn ghost onClick={() => setConfigLoc(null)}>Cancelar</PrimaryBtn>
+                  <PrimaryBtn onClick={() => handleSaveConfig(loc)} disabled={savingLoc === loc.id}>
+                    {savingLoc === loc.id ? "Guardando…" : "Guardar"}
+                  </PrimaryBtn>
                 </div>
               </div>
-
-              <div className="flex gap-3 pt-7">
-                <button
-                  type="button"
-                  onClick={() => setConfigLoc(null)}
-                  className="flex-1 py-3.5 rounded-[1.5rem] font-black text-xs uppercase tracking-widest border border-gray-700 text-gray-400 hover:text-white transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSaveConfig(loc)}
-                  disabled={savingLoc === loc.id}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 py-3.5 rounded-[1.5rem] font-black text-xs uppercase tracking-widest text-white transition-all disabled:opacity-50"
-                >
-                  {savingLoc === loc.id ? "Guardando..." : "Guardar"}
-                </button>
-              </div>
-            </div>
+            </WtCard>
           </div>
         );
       })()}
-    </div>
+
+      {/* Toast */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed left-1/2 z-[60] -translate-x-1/2 rounded-full px-4 py-2.5 text-[13px] font-semibold"
+          style={{
+            bottom: 96,
+            color: toast.ok ? "var(--ok)" : "var(--err)",
+            background: toast.ok ? "var(--ok-soft)" : "var(--err-soft)",
+            border: `1px solid ${toast.ok ? "var(--ok)" : "var(--err)"}`,
+            boxShadow: "0 10px 30px rgba(0,0,0,.35)",
+          }}
+        >
+          {toast.msg}
+        </div>
+      )}
+    </WtScreen>
   );
 }
