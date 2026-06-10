@@ -2149,12 +2149,14 @@ model AccessLog {
 
   ipAddress String?
   userAgent String?
+  correlationId String?
 
   createdAt DateTime @default(now())
 
   @@index([tenantId, createdAt])
   @@index([action])
   @@index([restaurantId])
+  @@index([correlationId])
   @@map("access_logs")
 }
 
