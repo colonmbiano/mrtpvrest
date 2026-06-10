@@ -64,4 +64,38 @@ describe("OrdersDrawer multiselección", () => {
 
     expect(onMergeOrders).toHaveBeenCalledWith(orders[0], [orders[1]]);
   });
+
+  it("asigna un repartidor a los tickets seleccionados", async () => {
+    const user = userEvent.setup();
+    const onAssignDriver = jest.fn().mockResolvedValue(undefined);
+
+    render(
+      <OrdersDrawer
+        isOpen
+        onClose={jest.fn()}
+        orders={orders}
+        onShowDetail={jest.fn()}
+        onConfirmPayment={jest.fn()}
+        onReprintOrder={jest.fn()}
+        canAssignDriver
+        drivers={[{ id: "drv-1", name: "Pedro" }]}
+        onAssignDriver={onAssignDriver}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Seleccionar varios tickets" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Seleccionar ticket de Ana" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Seleccionar ticket de Luis" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Enviar a repartidor" }));
+    await user.click(screen.getByRole("button", { name: /Pedro/ }));
+
+    expect(onAssignDriver).toHaveBeenCalledWith(orders, "drv-1");
+  });
 });
