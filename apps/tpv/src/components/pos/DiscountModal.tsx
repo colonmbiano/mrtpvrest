@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Tag, X, Percent, DollarSign } from "lucide-react";
 import ManagerOverrideModal from "@/components/ManagerOverrideModal";
 
@@ -12,6 +12,14 @@ interface DiscountModalProps {
   requiresOverride: boolean;
   /** Aplica al ticket. type: percent → value es %; fixed → value es $. */
   onApply: (type: "percent" | "fixed", value: number) => void;
+  /** Prellenado editable: tipo/valor del descuento actual del pedido. */
+  initialType?: "percent" | "fixed";
+  initialValue?: number;
+  /** Etiqueta del botón primario (default "Aplicar descuento"). */
+  primaryLabel?: string;
+  /** Acción secundaria opcional (ej. "Imprimir sin cambios"). */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }
 
 /**
@@ -33,16 +41,33 @@ export default function DiscountModal({
   subtotal,
   requiresOverride,
   onApply,
+  initialType,
+  initialValue,
+  primaryLabel,
+  secondaryLabel,
+  onSecondary,
 }: DiscountModalProps) {
-  const [type, setType] = useState<"percent" | "fixed">("percent");
-  const [valueStr, setValueStr] = useState("");
+  const [type, setType] = useState<"percent" | "fixed">(initialType ?? "percent");
+  const [valueStr, setValueStr] = useState(
+    initialValue && initialValue > 0 ? String(initialValue) : ""
+  );
   const [showOverride, setShowOverride] = useState(false);
   const [error, setError] = useState("");
+
+  // Al abrir, prellenar con el descuento vigente del pedido (editable).
+  useEffect(() => {
+    if (isOpen) {
+      setType(initialType ?? "percent");
+      setValueStr(initialValue && initialValue > 0 ? String(initialValue) : "");
+      setError("");
+    }
+  }, [isOpen, initialType, initialValue]);
 
   if (!isOpen) return null;
 
   const value = parseFloat(valueStr);
-  const valid = Number.isFinite(value) && value > 0 &&
+  // value >= 0: permitir 0 para QUITAR un descuento existente (editable).
+  const valid = Number.isFinite(value) && value >= 0 &&
     (type === "percent" ? value <= 100 : value <= subtotal);
 
   const previewAmount = !valid ? 0 :
@@ -58,8 +83,8 @@ export default function DiscountModal({
   function handlePrimary() {
     if (!valid) {
       setError(type === "percent"
-        ? "Ingresa un porcentaje entre 1 y 100"
-        : "Ingresa un monto entre 1 y el subtotal");
+        ? "Ingresa un porcentaje entre 0 y 100"
+        : "Ingresa un monto entre 0 y el subtotal");
       return;
     }
     if (requiresOverride) {
@@ -194,22 +219,33 @@ export default function DiscountModal({
             )}
           </div>
 
-          <div className="p-5 border-t border-white/5 bg-white/[0.02] flex gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 min-h-[56px] h-14 rounded-2xl bg-white/5 border border-white/10 text-white/70 font-black uppercase tracking-[0.15em] text-[11px] active:scale-95 transition-transform"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              disabled={!valid}
-              onClick={handlePrimary}
-              className="flex-[2] min-h-[56px] h-14 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.15em] text-[12px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)] disabled:opacity-30 disabled:active:scale-100"
-            >
-              {requiresOverride ? "Solicitar PIN" : "Aplicar descuento"}
-            </button>
+          <div className="p-5 border-t border-white/5 bg-white/[0.02] flex flex-col gap-3 shrink-0">
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 min-h-[56px] h-14 rounded-2xl bg-white/5 border border-white/10 text-white/70 font-black uppercase tracking-[0.15em] text-[11px] active:scale-95 transition-transform"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!valid}
+                onClick={handlePrimary}
+                className="flex-[2] min-h-[56px] h-14 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.15em] text-[12px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)] disabled:opacity-30 disabled:active:scale-100"
+              >
+                {requiresOverride ? "Solicitar PIN" : (primaryLabel ?? "Aplicar descuento")}
+              </button>
+            </div>
+            {secondaryLabel && onSecondary && (
+              <button
+                type="button"
+                onClick={() => { onSecondary(); onClose(); }}
+                className="w-full min-h-[48px] h-12 rounded-2xl bg-transparent border border-white/10 text-white/50 font-black uppercase tracking-[0.15em] text-[11px] active:scale-95 transition-transform"
+              >
+                {secondaryLabel}
+              </button>
+            )}
           </div>
         </div>
       </div>
