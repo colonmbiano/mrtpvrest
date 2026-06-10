@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Permite importar la util compartida @mrtpvrest/config/phone (CommonJS) en el bundle.
+  transpilePackages: ["@mrtpvrest/config"],
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },
