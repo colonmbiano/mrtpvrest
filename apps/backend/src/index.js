@@ -13,6 +13,9 @@ const shiftsRoutes = require('./routes/shifts.routes');
 const tenantMiddleware = require('./middleware/tenant.middleware');
 const tenantContextMiddleware = require('./middleware/tenant-context.middleware');
 const idempotencyMiddleware = require('./middleware/idempotency.middleware');
+const correlationIdMiddleware = require('./middleware/correlation-id.middleware');
+const legacyErrorResponseMiddleware = require('./middleware/legacy-error-response.middleware');
+const errorMiddleware = require('./middleware/error.middleware');
 const jwt = require('jsonwebtoken');
 
 sentry.init();
@@ -46,7 +49,8 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-restaurant-id', 'x-location-id', 'x-restaurant-slug', 'x-location-slug', 'Idempotency-Key']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-restaurant-id', 'x-location-id', 'x-restaurant-slug', 'x-location-slug', 'Idempotency-Key', 'x-correlation-id'],
+  exposedHeaders: ['x-correlation-id']
 };
 
 // Socket.io
@@ -124,6 +128,12 @@ app.use(compression())
 // 1. Aplicamos CORS
 app.use(cors(corsOptions));
 
+// Correlación de requests: genera/propaga x-correlation-id y abre el scope
+// AsyncLocalStorage. Va lo más temprano posible para que TODO log y la
+// respuesta de error lleven el mismo id. tenantContextMiddleware lo preserva
+// más abajo al fusionar el contexto con el restaurantId resuelto.
+app.use(correlationIdMiddleware);
+
 // Webhook Stripe (B2B SaaS billing) — montado ANTES de express.json() porque
 // la verificación de firma (constructEvent) exige el body crudo exacto.
 app.use(
@@ -169,6 +179,11 @@ app.use(rateLimit({
     return skipRoutes.some(r => req.path.startsWith(r));
   }
 }))
+
+// Compatibilidad: sanea respuestas 5xx de handlers legacy que todavía hacen
+// res.status(500).json(...) directo, sin filtrar mensajes internos y añadiendo
+// correlationId. No toca 4xx ni respuestas exitosas. Ver migración a AppError.
+app.use(legacyErrorResponseMiddleware)
 
 // Rutas
 app.use('/api/auth',         require('./routes/auth.routes'))
@@ -248,52 +263,10 @@ app.use((req, res) => {
 app.use(sentry.errorHandler())
 
 // Middleware global de errores. Captura cualquier excepción no manejada,
-// la persiste en SystemLog para el panel super-admin y, si es CRITICAL,
-// dispara notifyAdmin(). Status 5xx se considera CRITICAL automáticamente
-// salvo que el handler haya seteado err.status explícito en 4xx.
-const { recordSystemLog } = require('./lib/system-log');
-app.use((err, req, res, next) => {
-  const status = err.status || err.statusCode || 500;
-  const isCritical = status >= 500;
-  const level = err.level || (isCritical ? 'CRITICAL' : 'ERROR');
-
-  console.error('[middleware-error]', err.stack || err.message)
-
-  // Best-effort persist; nunca bloquear la respuesta al cliente.
-  recordSystemLog({
-    level,
-    message: err.message || 'Error sin mensaje',
-    stack:   err.stack || null,
-    path:    req.originalUrl || req.path,
-    method:  req.method,
-    tenantId: req.user?.tenantId ?? req.tenant?.tenantId ?? null,
-    metadata: {
-      status,
-      ip: req.ip,
-      userId:   req.user?.id ?? null,
-      role:     req.user?.role ?? null,
-      restaurantId: req.user?.restaurantId ?? req.restaurantId ?? null,
-      locationId:   req.user?.locationId  ?? req.locationId  ?? null,
-      isDevice: Boolean(req.user?.isDevice),
-      // Sólo guardamos cuerpo en errores 5xx para depurar; 4xx no, suelen
-      // contener payloads válidos del cliente.
-      body: isCritical && req.body ? safePayload(req.body) : null,
-    },
-  }).catch(() => { /* swallowed para no romper el request */ });
-
-  res.status(status).json({
-    error: process.env.NODE_ENV === 'production' ? 'Error interno' : err.message,
-  })
-})
-
-function safePayload(b) {
-  try {
-    const s = JSON.stringify(b);
-    return s.length > 2000 ? s.slice(0, 2000) + '…' : JSON.parse(s);
-  } catch {
-    return null;
-  }
-}
+// responde con un envelope estándar (error/errorCode/correlationId) sin
+// filtrar mensajes internos en 5xx, la persiste en SystemLog para el panel
+// super-admin y enriquece el log con el correlationId del request.
+app.use(errorMiddleware)
 
 // ── Jobs ─────────────────────────────────────────────────────────────────────
 const { startTrialExpiryJob } = require('./jobs/trialExpiry.job')

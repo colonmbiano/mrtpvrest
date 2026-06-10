@@ -13,6 +13,9 @@ function legacyErrorResponseMiddleware(req, res, next) {
   const originalJson = res.json.bind(res);
 
   res.json = (body) => {
+    // Si la respuesta ya pasó por errorMiddleware (handler central), no la
+    // reprocesamos: ya fue saneada y registrada. Evita doble log/recordSystemLog.
+    if (res.__appErrorHandled) return originalJson(body);
     if (res.statusCode < 500) return originalJson(body);
 
     const internalMessage =

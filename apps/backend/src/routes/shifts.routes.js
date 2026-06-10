@@ -5,6 +5,7 @@ const { requireModule, MODULES } = require('../lib/modules');
 const { validateBody } = require('../lib/validate');
 const { openShiftSchema, closeShiftSchema } = require('../schemas/shifts.schema');
 const { summarizePayments, cashCutSummary } = require('../lib/money');
+const audit = require('../lib/audit-logger');
 const router = express.Router();
 
 // Gate: módulo "cash_shift" en plan.allowedModules. Si el plan no lo
@@ -117,6 +118,16 @@ router.post('/open', requireLocation, requireCanManageShifts, validateBody(openS
       },
       include: { expenses: true }
     });
+    // Auditoría best-effort: nunca bloquea ni rompe la apertura del turno.
+    audit.record(req, audit.AUDIT_EVENTS.SHIFT_OPEN, {
+      resource: `cashShift:${shift.id}`,
+      after: {
+        openingFloat: shift.openingFloat,
+        blindClose: shift.blindClose,
+        employeeName: shift.employeeName,
+        locationId: shift.locationId,
+      },
+    }).catch(() => {});
     res.json(shift);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -187,6 +198,18 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
       },
       include: { expenses: true }
     });
+    // Auditoría best-effort del cierre de caja (quién, cuánto, cuántas órdenes).
+    audit.record(req, audit.AUDIT_EVENTS.SHIFT_CLOSE, {
+      resource: `cashShift:${closed.id}`,
+      before: { openingFloat: shift.openingFloat },
+      after: {
+        closingFloat: closed.closingFloat,
+        expectedCash: closed.expectedCash,
+        totalSales: closed.totalSales,
+        totalExpenses: closed.totalExpenses,
+        ordersCount: closed.ordersCount,
+      },
+    }).catch(() => {});
     res.json(closed);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
