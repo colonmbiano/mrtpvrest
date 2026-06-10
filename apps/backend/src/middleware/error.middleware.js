@@ -57,6 +57,9 @@ function errorMiddleware(err, req, res, _next) {
   }).catch(() => {});
 
   if (res.headersSent) return;
+  // Marca para que legacyErrorResponseMiddleware NO reprocese esta respuesta
+  // (ya quedó registrada y saneada aquí). Evita doble log del mismo 5xx.
+  res.__appErrorHandled = true;
   res.status(statusCode).json({
     error: publicMessage,
     message: publicMessage,

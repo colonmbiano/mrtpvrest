@@ -184,6 +184,7 @@ const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePer
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
 const { resolveVariantSelection, applyFreeModifiers } = require('../lib/money');
+const audit = require('../lib/audit-logger');
 const {
   createOrderSchema,
   addItemsSchema,
@@ -1010,6 +1011,19 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
     notifyOrderStatus(order, status).catch((err) =>
       console.error('[orders] notifyOrderStatus:', err.message)
     );
+
+    // Auditoría best-effort de la cancelación (acción sensible: quién y qué).
+    if (status === 'CANCELLED') {
+      audit.record(req, audit.AUDIT_EVENTS.ORDER_CANCEL, {
+        resource: `order:${order.id}`,
+        after: {
+          orderNumber: order.orderNumber,
+          orderType: order.orderType,
+          total: order.total,
+          tableId: order.tableId,
+        },
+      }).catch(() => {});
+    }
 
     res.json(order);
   } catch (e) { res.status(500).json({ error: e.message }); }
