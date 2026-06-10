@@ -1,8 +1,17 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import {
+  AlertCircle,
+  Bike,
+  Loader2,
+  RefreshCw,
+  Users,
+  X,
+} from "lucide-react";
 import api from "@/lib/api";
 import DriverMovementsModal from "./DriverMovementsModal";
+import type { UserRole } from "@/store/authStore";
+import type { AxiosError } from "axios";
 
 // Panel ligero de rastreo para el TPV: lista de repartidores activos con
 // estado online, última actividad y ruta en curso. No incluye mapa (está en
@@ -30,6 +39,18 @@ type DriverRow = {
 type LiveResponse = {
   drivers: DriverRow[];
   origin: { lat: number; lng: number } | null;
+};
+
+type CashSummary = {
+  driver: { id: string; name: string; photo?: string | null };
+  income: number;
+  expense: number;
+  returned: number;
+  deliveries: number;
+};
+
+type ApiError = {
+  error?: string;
 };
 
 function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
@@ -61,39 +82,65 @@ type Props = {
   isOpen: boolean;
   onClose: () => void;
   accent: string;
+  currentRole?: UserRole;
 };
 
-export default function DriversPanel({ isOpen, onClose, accent }: Props) {
+const FINANCIAL_ROLES = new Set<UserRole>([
+  "ADMIN",
+  "OWNER",
+  "MANAGER",
+]);
+
+export default function DriversPanel({
+  isOpen,
+  onClose,
+  accent,
+  currentRole,
+}: Props) {
   const [data, setData] = useState<LiveResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<{ id: string; name: string } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const canViewFinancial = currentRole ? FINANCIAL_ROLES.has(currentRole) : false;
 
   async function fetchLive(silent = false) {
-    try {
-      if (!silent) setLoading(true);
-      const [gpsRes, cashRes] = await Promise.all([
-        api.get<LiveResponse>("/api/gps/live"),
-        api.get("/api/driver-cash/summary/today")
-      ]);
-
-      const cashMap = (cashRes.data || []).reduce((acc: any, item: any) => {
-        acc[item.driver.id] = { ...item, balance: item.income - item.expense - item.returned };
-        return acc;
-      }, {});
-
-      const mergedDrivers = gpsRes.data.drivers.map(d => ({
-        ...d,
-        cash: cashMap[d.driver.id]
-      }));
-
-      setData({ ...gpsRes.data, drivers: mergedDrivers });
+    if (!silent) {
+      setLoading(true);
       setError("");
-    } catch (e: any) {
+    }
+
+    try {
+      const gpsPromise = api.get<LiveResponse>("/api/gps/live");
+      const cashPromise = canViewFinancial
+        ? api.get<CashSummary[]>("/api/driver-cash/summary/today").catch(() => null)
+        : Promise.resolve(null);
+      const [gpsRes, cashRes] = await Promise.all([gpsPromise, cashPromise]);
+
+      const cashMap = (cashRes?.data || []).reduce(
+        (acc: Record<string, DriverRow["cash"]>, item: CashSummary) => {
+          acc[item.driver.id] = {
+            ...item,
+            balance: item.income - item.expense - item.returned,
+          };
+          return acc;
+        },
+        {},
+      );
+
+      setData({
+        ...gpsRes.data,
+        drivers: gpsRes.data.drivers.map((driver) => ({
+          ...driver,
+          cash: canViewFinancial ? cashMap[driver.driver.id] : undefined,
+        })),
+      });
+      setError("");
+    } catch (error: unknown) {
+      const e = error as AxiosError<ApiError>;
       const status = e?.response?.status;
       if (status === 403) {
-        setError("Tu rol no tiene acceso al rastreo de repartidores.");
+        setError("Tu rol no tiene acceso al estado de repartidores.");
       } else {
         setError(e?.response?.data?.error || "No se pudo cargar el rastreo");
       }
@@ -147,7 +194,10 @@ export default function DriversPanel({ isOpen, onClose, accent }: Props) {
           }}
         >
           <div className="min-w-0">
-            <h2 className="text-lg font-black text-white">🚴 Repartidores</h2>
+            <h2 className="text-lg font-black text-white flex items-center gap-2">
+              <Bike size={19} style={{ color: accent }} />
+              Repartidores
+            </h2>
             <p className="text-[11px] font-bold" style={{ color: "var(--muted)" }}>
               {drivers.length} activos · {onlineCount} online · {onRouteCount} en ruta
             </p>
@@ -164,20 +214,32 @@ export default function DriversPanel({ isOpen, onClose, accent }: Props) {
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
           {loading && (
-            <div className="p-6 text-sm" style={{ color: "var(--muted)" }}>
-              Cargando...
+            <div className="h-full min-h-48 flex flex-col items-center justify-center gap-3 p-6 text-sm" style={{ color: "var(--muted)" }}>
+              <Loader2 size={24} className="animate-spin" style={{ color: accent }} />
+              Cargando repartidores...
             </div>
           )}
 
           {!loading && error && (
-            <div className="m-4 p-4 rounded-xl text-sm bg-red-500/10 text-red-400 border border-red-500/20">
-              {error}
+            <div className="m-4 p-5 rounded-xl text-sm bg-red-500/10 text-red-400 border border-red-500/20 flex flex-col items-center text-center gap-3">
+              <AlertCircle size={28} />
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={() => fetchLive(false)}
+                className="min-h-[44px] px-4 rounded-xl border border-red-400/30 bg-red-400/10 font-black uppercase tracking-wider text-[11px] flex items-center gap-2 active:scale-95 transition-transform"
+              >
+                <RefreshCw size={15} />
+                Reintentar
+              </button>
             </div>
           )}
 
           {!loading && !error && drivers.length === 0 && (
-            <div className="p-8 text-center">
-              <p className="text-4xl mb-2">🛵</p>
+            <div className="min-h-48 p-8 text-center flex flex-col items-center justify-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+                <Users size={23} style={{ color: "var(--muted)" }} />
+              </div>
               <p className="text-sm" style={{ color: "var(--muted)" }}>
                 No hay repartidores registrados.
               </p>
@@ -194,9 +256,17 @@ export default function DriversPanel({ isOpen, onClose, accent }: Props) {
                 return (
                   <div
                     key={d.driver.id}
-                    className="px-5 py-4 flex items-start gap-3 hover:bg-white/5 cursor-pointer transition-colors"
+                    className={`px-5 py-4 flex items-start gap-3 transition-colors ${
+                      canViewFinancial
+                        ? "hover:bg-white/5 cursor-pointer"
+                        : "cursor-default"
+                    }`}
                     style={{ borderColor: "var(--border)" }}
-                    onClick={() => setSelectedDriver({ id: d.driver.id, name: d.driver.name })}
+                    onClick={() => {
+                      if (canViewFinancial) {
+                        setSelectedDriver({ id: d.driver.id, name: d.driver.name });
+                      }
+                    }}
                   >
                     <div
                       className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0 overflow-hidden"
@@ -219,7 +289,7 @@ export default function DriversPanel({ isOpen, onClose, accent }: Props) {
                         />
                       </div>
 
-                      {d.cash && (
+                      {canViewFinancial && d.cash && (
                         <div className="mt-2 flex gap-1.5 flex-wrap">
                           <div className="px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/20">
                             <div className="text-[9px] text-green-400 font-bold uppercase leading-none mb-0.5">Ingresos</div>
@@ -279,7 +349,7 @@ export default function DriversPanel({ isOpen, onClose, accent }: Props) {
           </button>
         </div>
 
-        {selectedDriver && (
+        {canViewFinancial && selectedDriver && (
           <DriverMovementsModal
             driver={selectedDriver}
             onClose={() => setSelectedDriver(null)}

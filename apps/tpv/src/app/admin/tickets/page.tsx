@@ -41,6 +41,7 @@ type TicketConfig = {
   kitchenShowModifiers: boolean;
   kitchenShowNotes: boolean;
   kitchenGroupBySeat: boolean;
+  kitchenSeparateByGroup: boolean;
   kitchenFontSize: "normal" | "large" | "xlarge";
 };
 
@@ -69,6 +70,7 @@ export default function TicketConfigPage() {
           kitchenShowModifiers: true,
           kitchenShowNotes: true,
           kitchenGroupBySeat: true,
+          kitchenSeparateByGroup: false,
           kitchenFontSize: "large",
           ...data,
         });
@@ -104,6 +106,7 @@ export default function TicketConfigPage() {
         kitchenShowModifiers: true,
         kitchenShowNotes: true,
         kitchenGroupBySeat: true,
+        kitchenSeparateByGroup: false,
         kitchenFontSize: "large",
       });
     } finally {
@@ -456,6 +459,7 @@ export default function TicketConfigPage() {
                 { key: "kitchenShowModifiers",   label: "Modificadores (+ Picante)" },
                 { key: "kitchenShowNotes",       label: "Notas (> sin queso)" },
                 { key: "kitchenGroupBySeat",     label: "Agrupar por COMENSAL en mesa" },
+                { key: "kitchenSeparateByGroup", label: "Ticket separado por asignación (Plancha / Freidora)" },
               ].map((opt) => (
                 <label key={opt.key} className="flex items-center gap-3 cursor-pointer">
                   <input

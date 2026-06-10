@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Trash2, ShoppingCart, User, UtensilsCrossed, MapPin, Phone, Home, Receipt, Save, Zap } from "lucide-react";
 import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
@@ -40,6 +41,7 @@ interface Props {
 const IVA_RATE = 0.16;
 
 export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanMode = false }: Props) {
+  const router = useRouter();
   const [showPayment, setShowPayment] = useState(false);
   const [showTables, setShowTables] = useState(false);
   const [showDiscount, setShowDiscount] = useState(false);
@@ -252,6 +254,27 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
   const handleSendToKitchen = async () => {
     if (ticket.items.length === 0) {
+      if (activeOrderId) {
+        // Cuenta existente sin productos nuevos: no hay ronda que agregar.
+        // Tratamos "Guardar" como "listo, sin cambios" y volvemos a la
+        // pantalla de tipo de pedido.
+        clearActiveItems();
+        clearActiveOrder();
+        setPreviousItems([]);
+        updateTicket({
+          tableId: "",
+          tableName: "",
+          table: "",
+          numberOfGuests: null,
+          activeSeat: null,
+          name: "",
+          address: "",
+          phone: "",
+          discount: 0,
+        });
+        router.replace("/pos/order-type");
+        return;
+      }
       toast.error("El ticket está vacío");
       hapticError();
       return;
@@ -328,11 +351,23 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       }
 
       clearActiveItems();
-      if (ticket.type !== "DINE_IN") {
-        updateTicket({ name: "", address: "", phone: "", discount: 0 });
-        clearActiveOrder();
-        setPreviousItems([]);
-      }
+      clearActiveOrder();
+      setPreviousItems([]);
+      updateTicket({
+        tableId: "",
+        tableName: "",
+        table: "",
+        numberOfGuests: null,
+        activeSeat: null,
+        name: "",
+        address: "",
+        phone: "",
+        discount: 0,
+      });
+
+      // Tras guardar, volver a la pantalla de tipo de pedido para arrancar la
+      // siguiente venta en limpio (en vez de quedarse en el ticket abierto).
+      router.replace("/pos/order-type");
     } catch (error: any) {
       toast.error("Error al enviar pedido: " + (error.response?.data?.error || error.message));
     }
@@ -748,8 +783,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               · Vacío:        [ Tickets Abiertos ]  ·  [ Cobrar ] (off)
               · Con producto: [ Guardar Orden ]     ·  [ Cobrar ] (verde) */}
           <div className="flex gap-2 h-12">
-            {/* BOTÓN IZQUIERDO (secundario) */}
-            {hasItems ? (
+            {/* BOTÓN IZQUIERDO (secundario) — "Guardar Orden" cuando hay
+                productos nuevos O una cuenta activa abierta (para que el
+                cajero pueda cerrar/volver aun sin agregar nada). */}
+            {hasItems || activeOrderId ? (
               <button
                 onClick={handleSendToKitchen}
                 disabled={processing}

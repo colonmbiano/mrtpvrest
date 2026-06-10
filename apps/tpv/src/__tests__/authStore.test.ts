@@ -141,6 +141,64 @@ describe("useAuthStore (offline-first)", () => {
       expect(result.current.pinAttempts).toBe(0);
       expect(result.current.isAuthenticated).toBe(true);
     });
+
+    it("debe usar el cache offline cuando el backend responde 5xx", async () => {
+      const localEmployee: TPVEmployee = {
+        id: "emp-local-502",
+        name: "Offline Cashier",
+        role: "CASHIER",
+        pin: "hash-1234",
+        isActive: true,
+        permissions: [],
+      };
+      useAuthStore.setState({ employees: [localEmployee] });
+      mockApi.post.mockRejectedValueOnce({
+        response: {
+          status: 502,
+          data: { error: "Application failed to respond" },
+        },
+      });
+
+      const { result } = renderHook(() => useAuthStore());
+      let res: { success: boolean; error?: string };
+      await act(async () => {
+        res = await result.current.loginWithPin("1234");
+      });
+
+      expect(res!.success).toBe(true);
+      expect(result.current.isAuthenticated).toBe(true);
+      expect(result.current.employee).toEqual(localEmployee);
+      expect(result.current.pinAttempts).toBe(0);
+    });
+
+    it("debe desbloquear localmente sin esperar la respuesta del backend", async () => {
+      const localEmployee: TPVEmployee = {
+        id: "emp-local-first",
+        name: "Local First",
+        role: "CASHIER",
+        pin: "hash-2468",
+        isActive: true,
+        permissions: [],
+      };
+      useAuthStore.setState({ employees: [localEmployee] });
+      mockApi.post.mockImplementationOnce(
+        () => new Promise(() => {}) as never,
+      );
+
+      const { result } = renderHook(() => useAuthStore());
+      let res: { success: boolean; error?: string };
+      await act(async () => {
+        res = await result.current.loginWithPin("2468");
+      });
+
+      expect(res!.success).toBe(true);
+      expect(result.current.isAuthenticated).toBe(true);
+      expect(result.current.employee).toEqual(localEmployee);
+      expect(result.current.loading).toBe(false);
+      expect(mockApi.post).toHaveBeenCalledWith("/api/employees/login", {
+        pin: "2468",
+      });
+    });
   });
 
   describe("loginWithPin (offline-first)", () => {

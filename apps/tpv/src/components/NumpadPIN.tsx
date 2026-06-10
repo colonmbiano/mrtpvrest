@@ -162,7 +162,7 @@ export default function NumpadPIN({
             disabled={disabled || pin.length >= maxDigits}
             className={digitClass}
             style={{
-              fontSize: "clamp(1.35rem, min(5.2vmin, 4dvh), 3rem)",
+              fontSize: "clamp(1.6rem, min(6vmin, 4.6dvh), 3.4rem)",
               minHeight: "clamp(44px, min(11vmin, 8.5dvh), 80px)",
             }}
           >

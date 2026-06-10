@@ -119,16 +119,28 @@ const KDS_CONFIG_KEY = "kds-display-config";
 interface KdsDisplayConfig {
   ticketSize: TicketSize;
   receiveMode: ReceiveMode;
+  delayedMinutes: number;
+  urgentMinutes: number;
 }
 
 function minutesElapsed(iso: string, now: number): number {
   return Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));
 }
 
-function urgencyOf(mins: number): { color: string; label: string; bg: string } {
-  if (mins >= 15) return { color: "#ef4444", label: "URGENTE",  bg: "rgba(239,68,68,0.15)" };
-  if (mins >= 8)  return { color: "#f59e0b", label: "DEMORADO", bg: "rgba(245,158,11,0.12)" };
+function urgencyOf(
+  mins: number,
+  delayedMinutes: number,
+  urgentMinutes: number,
+): { color: string; label: string; bg: string } {
+  if (mins >= urgentMinutes)  return { color: "#ef4444", label: "URGENTE",  bg: "rgba(239,68,68,0.15)" };
+  if (mins >= delayedMinutes) return { color: "#f59e0b", label: "DEMORADO", bg: "rgba(245,158,11,0.12)" };
   return { color: "#22c55e", label: "OK", bg: "rgba(34,197,94,0.10)" };
+}
+
+function validMinutes(value: unknown, fallback: number, max = 180): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= max
+    ? value
+    : fallback;
 }
 
 function readPendingLogs(): PendingTaskLog[] {
@@ -145,7 +157,12 @@ function writePendingLogs(logs: PendingTaskLog[]): void {
 }
 
 function readKdsDisplayConfig(): KdsDisplayConfig {
-  const fallback: KdsDisplayConfig = { ticketSize: "normal", receiveMode: "both" };
+  const fallback: KdsDisplayConfig = {
+    ticketSize: "normal",
+    receiveMode: "both",
+    delayedMinutes: 8,
+    urgentMinutes: 15,
+  };
   if (typeof window === "undefined") return fallback;
   try {
     const parsed = JSON.parse(localStorage.getItem(KDS_CONFIG_KEY) || "{}") as Partial<KdsDisplayConfig>;
@@ -157,7 +174,12 @@ function readKdsDisplayConfig(): KdsDisplayConfig {
       parsed.receiveMode === "socket" || parsed.receiveMode === "tcp" || parsed.receiveMode === "both"
         ? parsed.receiveMode
         : fallback.receiveMode;
-    return { ticketSize, receiveMode };
+    const delayedMinutes = validMinutes(parsed.delayedMinutes, fallback.delayedMinutes, 179);
+    const storedUrgentMinutes = validMinutes(parsed.urgentMinutes, fallback.urgentMinutes);
+    const urgentMinutes = storedUrgentMinutes > delayedMinutes
+      ? storedUrgentMinutes
+      : Math.min(180, delayedMinutes + 1);
+    return { ticketSize, receiveMode, delayedMinutes, urgentMinutes };
   } catch {
     return fallback;
   }
@@ -633,6 +655,8 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
             now={now}
             ticketSize={displayConfig.ticketSize}
             receiveMode={displayConfig.receiveMode}
+            delayedMinutes={displayConfig.delayedMinutes}
+            urgentMinutes={displayConfig.urgentMinutes}
             onToggleItem={toggleItem}
             onFinalize={finalizeOrder}
           />
@@ -766,53 +790,71 @@ function NetIndicator({ online, serverOk }: { online: boolean; serverOk: boolean
 }
 
 function ticketGridMin(size: TicketSize): number {
-  if (size === "compact") return 320;
-  if (size === "large") return 520;
-  return 400;
+  if (size === "compact") return 210;
+  if (size === "large") return 400;
+  return 280;
 }
 
 function ticketSizeStyles(size: TicketSize): {
   card: string;
   item: string;
   qty: string;
+  check: string;
+  icon: string;
+  meta: string;
+  action: string;
   orderNumber: string;
   itemName: string;
 } {
   if (size === "compact") {
     return {
-      card: "p-4 gap-3 min-h-[420px]",
-      item: "p-2.5 min-h-[64px]",
-      qty: "w-12 text-xl",
-      orderNumber: "text-xl",
-      itemName: "text-[16px]",
+      card: "p-3 gap-2.5",
+      item: "p-2 min-h-[52px] gap-2",
+      qty: "w-10 text-base",
+      check: "w-7 h-7 rounded-lg",
+      icon: "w-9 h-9 rounded-xl",
+      meta: "text-[10px] px-2 py-1",
+      action: "min-h-[48px] py-2.5 text-xs rounded-xl",
+      orderNumber: "text-lg",
+      itemName: "text-[14px]",
     };
   }
   if (size === "large") {
     return {
-      card: "p-6 gap-5 min-h-[620px]",
-      item: "p-4 min-h-[96px]",
-      qty: "w-16 text-3xl",
-      orderNumber: "text-3xl",
-      itemName: "text-[24px]",
+      card: "p-5 gap-4",
+      item: "p-3.5 min-h-[82px] gap-3",
+      qty: "w-14 text-2xl",
+      check: "w-10 h-10 rounded-xl",
+      icon: "w-12 h-12 rounded-2xl",
+      meta: "text-xs px-2.5 py-1.5",
+      action: "min-h-[60px] py-3.5 text-sm rounded-2xl",
+      orderNumber: "text-2xl",
+      itemName: "text-[21px]",
     };
   }
   return {
-    card: "p-5 gap-4 min-h-[520px]",
-    item: "p-3 min-h-[76px]",
-    qty: "w-14 text-2xl",
-    orderNumber: "text-2xl",
-    itemName: "text-[19px]",
+    card: "p-4 gap-3",
+    item: "p-2.5 min-h-[64px] gap-2.5",
+    qty: "w-12 text-xl",
+    check: "w-8 h-8 rounded-lg",
+    icon: "w-10 h-10 rounded-xl",
+    meta: "text-[11px] px-2 py-1",
+    action: "min-h-[52px] py-3 text-xs rounded-xl",
+    orderNumber: "text-xl",
+    itemName: "text-[17px]",
   };
 }
 
 function OrdersGrid({
-  loading, orders, now, ticketSize, receiveMode, onToggleItem, onFinalize,
+  loading, orders, now, ticketSize, receiveMode, delayedMinutes, urgentMinutes, onToggleItem, onFinalize,
 }: {
   loading: boolean;
   orders: KdsOrder[];
   now: number;
   ticketSize: TicketSize;
   receiveMode: ReceiveMode;
+  delayedMinutes: number;
+  urgentMinutes: number;
   onToggleItem: (orderId: string, itemId: string, done: boolean) => void;
   onFinalize: (orderId: string) => void;
 }) {
@@ -835,7 +877,7 @@ function OrdersGrid({
   }
   return (
     <div
-      className="grid gap-4"
+      className="grid gap-3 items-start"
       style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${ticketGridMin(ticketSize)}px, 1fr))` }}
     >
       {orders.map((order) => (
@@ -844,6 +886,8 @@ function OrdersGrid({
           order={order}
           now={now}
           ticketSize={ticketSize}
+          delayedMinutes={delayedMinutes}
+          urgentMinutes={urgentMinutes}
           onToggleItem={onToggleItem}
           onFinalize={onFinalize}
         />
@@ -853,16 +897,18 @@ function OrdersGrid({
 }
 
 function OrderCard({
-  order, now, ticketSize, onToggleItem, onFinalize,
+  order, now, ticketSize, delayedMinutes, urgentMinutes, onToggleItem, onFinalize,
 }: {
   order: KdsOrder;
   now: number;
   ticketSize: TicketSize;
+  delayedMinutes: number;
+  urgentMinutes: number;
   onToggleItem: (orderId: string, itemId: string, done: boolean) => void;
   onFinalize: (orderId: string) => void;
 }) {
   const mins = minutesElapsed(order.createdAt, now);
-  const u    = urgencyOf(mins);
+  const u    = urgencyOf(mins, delayedMinutes, urgentMinutes);
   const allDone = order.items.length > 0 && order.items.every((i) => i.done);
   const orderLabel = order.tableNumber
     ? order.customerName
@@ -876,13 +922,15 @@ function OrderCard({
     <article
       className={`rounded-3xl flex flex-col bg-[#16171a] border ${size.card}`}
       style={{
-        borderColor: allDone ? "rgba(136,214,108,0.4)" : "rgba(255,255,255,0.10)",
-        boxShadow:   allDone ? "0 0 30px rgba(136,214,108,0.15)" : "0 12px 30px rgba(0,0,0,0.35)",
+        borderColor: allDone ? "rgba(136,214,108,0.4)" : `${u.color}80`,
+        boxShadow: allDone
+          ? "0 0 30px rgba(136,214,108,0.15)"
+          : `0 12px 30px rgba(0,0,0,0.35), 0 0 24px ${u.bg}`,
       }}
     >
       <header className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
-          <span className="inline-flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0"
+          <span className={`inline-flex items-center justify-center flex-shrink-0 ${size.icon}`}
                 style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.85)" }}>
             {ORDER_TYPE_ICONS[order.orderType]}
           </span>
@@ -915,20 +963,20 @@ function OrderCard({
         )}
       </div>
 
-      <ul className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-2.5">
         {order.items.map((item) => (
           <li key={item.id}>
             <button
               type="button"
               onClick={() => onToggleItem(order.id, item.id, item.done)}
-              className={`w-full flex items-stretch gap-3 rounded-2xl text-left active:scale-[0.99] transition-transform ${size.item}`}
+              className={`w-full flex items-stretch rounded-xl text-left active:scale-[0.99] transition-transform ${size.item}`}
               style={{
                 background: item.done ? "rgba(136,214,108,0.11)" : "rgba(255,255,255,0.065)",
                 border:     item.done ? "1px solid rgba(136,214,108,0.34)" : "1px solid rgba(255,255,255,0.10)",
               }}
             >
               <span
-                className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 self-center"
+                className={`${size.check} flex items-center justify-center flex-shrink-0 self-center`}
                 style={{
                   background: item.done ? "#88D66C" : "transparent",
                   border:     item.done ? "none" : "2px solid rgba(255,255,255,0.36)",
@@ -950,10 +998,10 @@ function OrderCard({
                   {displayItemName(item)}
                 </span>
                 <span className="mt-2 flex flex-wrap gap-1.5">
-                  {item.course && <ItemMeta>{item.course}</ItemMeta>}
-                  {item.seatNumber && <ItemMeta>Comensal {item.seatNumber}</ItemMeta>}
+                  {item.course && <ItemMeta className={size.meta}>{item.course}</ItemMeta>}
+                  {item.seatNumber && <ItemMeta className={size.meta}>Comensal {item.seatNumber}</ItemMeta>}
                   {(item.modifiers || []).map((mod) => (
-                    <ItemMeta key={mod.id}>+ {mod.name}</ItemMeta>
+                    <ItemMeta key={mod.id} className={size.meta}>+ {mod.name}</ItemMeta>
                   ))}
                 </span>
                 {item.notes && (
@@ -970,7 +1018,7 @@ function OrderCard({
       <button
         type="button"
         onClick={() => onFinalize(order.id)}
-        className="mt-auto w-full min-h-[64px] py-4 rounded-2xl text-sm font-black tracking-wider uppercase active:scale-95 transition-transform"
+        className={`mt-auto w-full font-black tracking-wider uppercase active:scale-95 transition-transform ${size.action}`}
         style={{
           background: allDone ? "#88D66C" : "rgba(255,255,255,0.05)",
           color:      allDone ? "#0a0a0c" : "rgba(255,255,255,0.55)",
@@ -989,9 +1037,9 @@ function displayItemName(item: KdsOrderItem): string {
   return name && name !== "undefined" ? name : "Producto sin nombre";
 }
 
-function ItemMeta({ children }: { children: React.ReactNode }) {
+function ItemMeta({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <span className="inline-flex items-center px-2 py-1 rounded-lg bg-white/[0.07] border border-white/10 text-[10px] font-black uppercase tracking-[0.12em] text-white/[0.58]">
+    <span className={`inline-flex items-center rounded-lg bg-white/[0.07] border border-white/10 font-black uppercase tracking-[0.12em] text-white/[0.58] ${className}`}>
       {children}
     </span>
   );
@@ -1075,9 +1123,9 @@ function ConfigModal({
   onClose: () => void;
 }) {
   const sizeOptions: Array<{ value: TicketSize; title: string; body: string }> = [
-    { value: "compact", title: "Compacto", body: "Muestra mas pedidos por pantalla." },
-    { value: "normal", title: "Normal", body: "Balance entre lectura y densidad." },
-    { value: "large", title: "Grande", body: "Letras grandes para cocina a distancia." },
+    { value: "compact", title: "Compacto", body: "Hasta 4 tickets por fila en esta tablet." },
+    { value: "normal", title: "Normal", body: "Hasta 3 tickets por fila con lectura comoda." },
+    { value: "large", title: "Grande", body: "Hasta 2 tickets por fila para verlos a distancia." },
   ];
   const modeOptions: Array<{ value: ReceiveMode; title: string; body: string; icon: React.ReactNode }> = [
     {
@@ -1110,7 +1158,7 @@ function ConfigModal({
             </div>
             <div>
               <h3 className="text-xl font-black text-white tracking-tight">Configuracion KDS</h3>
-              <p className="text-xs font-bold text-white/40">Tamano de ticket y modo de recepcion</p>
+              <p className="text-xs font-bold text-white/40">Tiempos, tamano de ticket y modo de recepcion</p>
             </div>
           </div>
           <button
@@ -1124,6 +1172,33 @@ function ConfigModal({
         </div>
 
         <div className="p-6 flex flex-col gap-6 overflow-y-auto">
+          <section className="flex flex-col gap-3">
+            <div>
+              <h4 className="text-[11px] font-black uppercase tracking-[0.24em] text-white/45">Colores por tiempo</h4>
+              <p className="text-xs font-medium text-white/45 mt-1">
+                El ticket inicia verde, cambia a ambar al demorarse y a rojo cuando es urgente.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <ConfigTimeInput
+                label="Demorado"
+                color="#f59e0b"
+                value={config.delayedMinutes}
+                min={1}
+                max={config.urgentMinutes - 1}
+                onChange={(delayedMinutes) => onChange({ delayedMinutes })}
+              />
+              <ConfigTimeInput
+                label="Urgente"
+                color="#ef4444"
+                value={config.urgentMinutes}
+                min={config.delayedMinutes + 1}
+                max={180}
+                onChange={(urgentMinutes) => onChange({ urgentMinutes })}
+              />
+            </div>
+          </section>
+
           <section className="flex flex-col gap-3">
             <div>
               <h4 className="text-[11px] font-black uppercase tracking-[0.24em] text-white/45">Tamano del ticket</h4>
@@ -1176,6 +1251,62 @@ function ConfigModal({
             TCP local beneficia cuando el TPV debe imprimir directo a esta tablet dentro de la misma red, incluso si quieres evitar depender del canal de socket.
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfigTimeInput({
+  label, color, value, min, max, onChange,
+}: {
+  label: string;
+  color: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+}) {
+  const setClamped = (next: number) => {
+    if (!Number.isFinite(next)) return;
+    onChange(Math.max(min, Math.min(max, Math.round(next))));
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <span className="inline-flex items-center gap-2 text-sm font-black text-white">
+          <span className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+          {label}
+        </span>
+        <span className="text-[10px] font-black uppercase tracking-widest text-white/35">minutos</span>
+      </div>
+      <div className="grid grid-cols-[48px_1fr_48px] gap-2">
+        <button
+          type="button"
+          onClick={() => setClamped(value - 1)}
+          disabled={value <= min}
+          className="h-12 rounded-xl bg-white/5 border border-white/10 text-xl font-black text-white disabled:opacity-25 active:scale-95"
+        >
+          -
+        </button>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={min}
+          max={max}
+          value={value}
+          onChange={(event) => setClamped(Number(event.target.value))}
+          className="h-12 min-w-0 rounded-xl bg-black/20 border border-white/10 text-center text-xl font-black text-white outline-none focus:border-[#ffb84d]/60"
+          aria-label={`${label} en minutos`}
+        />
+        <button
+          type="button"
+          onClick={() => setClamped(value + 1)}
+          disabled={value >= max}
+          className="h-12 rounded-xl bg-white/5 border border-white/10 text-xl font-black text-white disabled:opacity-25 active:scale-95"
+        >
+          +
+        </button>
       </div>
     </div>
   );
