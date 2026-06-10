@@ -26,6 +26,12 @@ export interface DrawerOrder {
   needsDriver?: boolean;
 }
 
+export interface DriverOption {
+  id: string;
+  name: string;
+  isAvailable?: boolean;
+}
+
 interface OrdersDrawerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -45,6 +51,15 @@ interface OrdersDrawerProps {
   onMergeOrders?: (
     targetOrder: DrawerOrder,
     sourceOrders: DrawerOrder[],
+  ) => Promise<void>;
+  /** Habilita asignar repartidor a los tickets seleccionados. */
+  canAssignDriver?: boolean;
+  /** Repartidores activos para el selector de asignación. */
+  drivers?: DriverOption[];
+  /** Asigna el repartidor elegido a TODOS los tickets seleccionados. */
+  onAssignDriver?: (
+    orders: DrawerOrder[],
+    driverId: string,
   ) => Promise<void>;
 }
 
@@ -80,6 +95,9 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   onShowDetail,
   canMergeOrders = false,
   onMergeOrders,
+  canAssignDriver = false,
+  drivers = [],
+  onAssignDriver,
 }) => {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("Todos");
   const [search, setSearch] = useState("");
@@ -87,6 +105,11 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showMergeConfirm, setShowMergeConfirm] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
+  const [showDriverPicker, setShowDriverPicker] = useState(false);
+  const [assigningDriverId, setAssigningDriverId] = useState<string | null>(null);
+
+  // La selección múltiple sirve para juntar cuentas Y/O asignar repartidor.
+  const canSelect = canMergeOrders || canAssignDriver;
 
   const visibleOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -124,6 +147,8 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
     setSelectionMode(false);
     setSelectedIds([]);
     setShowMergeConfirm(false);
+    setShowDriverPicker(false);
+    setAssigningDriverId(null);
   };
 
   const handleClose = () => {
@@ -158,6 +183,18 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
       // El caller muestra el error y refresca las órdenes disponibles.
     } finally {
       setIsMerging(false);
+    }
+  };
+
+  const handleAssignDriver = async (driverId: string) => {
+    if (!onAssignDriver || selectedOrders.length === 0) return;
+    setAssigningDriverId(driverId);
+    try {
+      await onAssignDriver(selectedOrders, driverId);
+      resetSelection();
+    } catch {
+      // El caller muestra el error y refresca las órdenes disponibles.
+      setAssigningDriverId(null);
     }
   };
 
@@ -217,7 +254,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                   }`}
             </span>
           </div>
-          {canMergeOrders && (
+          {canSelect && (
             <button
               type="button"
               onClick={toggleSelectionMode}
@@ -332,7 +369,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                         <h3 className="text-[15px] font-black text-white truncate leading-tight">
                           {order.customerName}
                         </h3>
-                        {isSelected && (
+                        {isSelected && canMergeOrders && (
                           <span className="shrink-0 text-[8px] font-black uppercase tracking-[0.12em] text-[#ffb84d]">
                             {selectedIndex === 0 ? "Cuenta final" : "Se juntará"}
                           </span>
@@ -381,15 +418,29 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                   ${selectedTotal.toFixed(2)}
                 </div>
               </div>
-              <button
-                type="button"
-                disabled={selectedOrders.length < 2}
-                onClick={() => setShowMergeConfirm(true)}
-                className="min-h-[52px] h-[52px] px-5 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
-              >
-                <Merge size={17} strokeWidth={2.5} />
-                Juntar {selectedOrders.length || ""}
-              </button>
+              {canAssignDriver && (
+                <button
+                  type="button"
+                  disabled={selectedOrders.length < 1}
+                  onClick={() => setShowDriverPicker(true)}
+                  aria-label="Enviar a repartidor"
+                  className="min-h-[52px] h-[52px] px-5 rounded-2xl bg-blue-400/15 border border-blue-400/40 text-blue-200 text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                >
+                  <Bike size={17} strokeWidth={2.5} />
+                  Repartidor
+                </button>
+              )}
+              {canMergeOrders && (
+                <button
+                  type="button"
+                  disabled={selectedOrders.length < 2}
+                  onClick={() => setShowMergeConfirm(true)}
+                  className="min-h-[52px] h-[52px] px-5 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                >
+                  <Merge size={17} strokeWidth={2.5} />
+                  Juntar {selectedOrders.length || ""}
+                </button>
+              )}
             </div>
           ) : (
             <button
@@ -461,6 +512,78 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showDriverPicker && selectedOrders.length >= 1 && (
+        <div className="absolute inset-0 z-[10] flex items-center justify-center p-5">
+          <div
+            className="absolute inset-0 bg-black/75 backdrop-blur-md"
+            onClick={() => !assigningDriverId && setShowDriverPicker(false)}
+          />
+          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#111114] p-5 shadow-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-blue-400/15 border border-blue-400/30 text-blue-300 flex items-center justify-center mb-4">
+              <Bike size={21} />
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">
+              Enviar a repartidor
+            </p>
+            <h3 className="mt-1 text-xl font-black text-white">
+              {selectedOrders.length} ticket{selectedOrders.length === 1 ? "" : "s"} seleccionado
+              {selectedOrders.length === 1 ? "" : "s"}
+            </h3>
+            <p className="mt-2 text-[13px] font-semibold leading-relaxed text-white/55">
+              El repartidor que elijas recibirá{" "}
+              {selectedOrders.length === 1 ? "este pedido" : "estos pedidos"} y pasarán a{" "}
+              <span className="text-white">En camino</span>.
+            </p>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 max-h-[42vh] overflow-y-auto scrollbar-hide">
+              {drivers.length === 0 ? (
+                <p className="col-span-2 text-center text-[12px] font-bold text-amber-400/90 py-6">
+                  No hay repartidores activos.
+                </p>
+              ) : (
+                drivers.map((d) => {
+                  const busy = assigningDriverId === d.id;
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      disabled={Boolean(assigningDriverId)}
+                      onClick={() => handleAssignDriver(d.id)}
+                      className="min-h-[56px] px-3 py-2 rounded-2xl border bg-white/[0.03] border-white/10 text-left flex items-center gap-2 active:scale-95 transition-transform disabled:opacity-40 disabled:active:scale-100"
+                    >
+                      {busy ? (
+                        <Loader2 size={16} className="shrink-0 animate-spin text-blue-300" />
+                      ) : (
+                        <Bike size={15} className="shrink-0 text-blue-300" />
+                      )}
+                      <span className="min-w-0">
+                        <span className="block text-sm font-black text-white truncate">
+                          {d.name}
+                        </span>
+                        {d.isAvailable === false && (
+                          <span className="block text-[9px] font-bold text-amber-400/80 uppercase tracking-widest">
+                            Ocupado
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <button
+              type="button"
+              disabled={Boolean(assigningDriverId)}
+              onClick={() => setShowDriverPicker(false)}
+              className="mt-4 h-12 w-full rounded-2xl border border-white/10 bg-white/5 text-[11px] font-black uppercase tracking-[0.12em] text-white/65 disabled:opacity-40"
+            >
+              Cancelar
+            </button>
           </div>
         </div>
       )}

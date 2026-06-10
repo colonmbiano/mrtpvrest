@@ -119,6 +119,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   );
 
   const [openOrders, setOpenOrders] = useState<any[]>([]);
+  const [deliveryDrivers, setDeliveryDrivers] = useState<
+    { id: string; name: string; isAvailable?: boolean }[]
+  >([]);
   const [payOrder, setPayOrder] = useState<any | null>(null);
   const [reprintKitchenOrder, setReprintKitchenOrder] = useState<any | null>(null);
   const [changeTypeOrder, setChangeTypeOrder] = useState<any | null>(null);
@@ -153,6 +156,22 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       setOpenOrders(list.filter((o: any) => ACTIVE_STATUSES.has(o.status)));
     } catch (err) {
       console.error("Error cargando órdenes abiertas:", err);
+    }
+  }, []);
+
+  // Repartidores activos para asignar desde el drawer de tickets abiertos.
+  // GET /api/delivery devuelve los empleados DELIVERY activos de la sucursal.
+  const fetchDeliveryDrivers = useCallback(async () => {
+    try {
+      const { data } = await api.get("/api/delivery");
+      const list = Array.isArray(data) ? data : [];
+      setDeliveryDrivers(
+        list
+          .filter((d: any) => d.isActive !== false)
+          .map((d: any) => ({ id: d.id, name: d.name, isAvailable: d.isAvailable })),
+      );
+    } catch (err) {
+      console.error("Error cargando repartidores:", err);
     }
   }, []);
 
@@ -657,9 +676,13 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     if (!showOrders) return;
     let cancelled = false;
     // Arranque diferido (ver impresoras): evita set-state-in-effect.
-    queueMicrotask(() => { if (!cancelled) fetchOpenOrders(); });
+    queueMicrotask(() => {
+      if (cancelled) return;
+      fetchOpenOrders();
+      fetchDeliveryDrivers();
+    });
     return () => { cancelled = true; };
-  }, [showOrders, fetchOpenOrders]);
+  }, [showOrders, fetchOpenOrders, fetchDeliveryDrivers]);
 
   // Auto-abrir el drawer cuando llegamos desde el atajo "Tickets Abiertos"
   // del Panel de Operación (/pos/order-type → /pos/menu?orders=1). Se lee
@@ -753,6 +776,43 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       }
     },
     [fetchOpenOrders],
+  );
+
+  // Asigna un repartidor a TODOS los tickets seleccionados en el drawer.
+  // Reutiliza PUT /api/delivery/assign (un request por pedido), que además
+  // mueve cada orden a ON_THE_WAY y notifica al repartidor por socket.
+  const handleAssignDriverToOrders = useCallback(
+    async (
+      ordersToAssign: { id: string }[],
+      driverId: string,
+    ) => {
+      let assigned = 0;
+      try {
+        for (const order of ordersToAssign) {
+          await api.put("/api/delivery/assign", { orderId: order.id, driverId });
+          assigned += 1;
+        }
+        const driverName =
+          deliveryDrivers.find((d) => d.id === driverId)?.name || "repartidor";
+        toast.success(
+          `${assigned} pedido${assigned === 1 ? "" : "s"} enviado${
+            assigned === 1 ? "" : "s"
+          } a ${driverName}`,
+        );
+      } catch (err: any) {
+        const detail =
+          err?.response?.data?.error || err?.message || "fallo desconocido";
+        toast.error(
+          assigned > 0
+            ? `${assigned} asignado${assigned === 1 ? "" : "s"}; no se pudo terminar: ${detail}`
+            : `No se pudo asignar repartidor: ${detail}`,
+        );
+        throw err;
+      } finally {
+        await fetchOpenOrders();
+      }
+    },
+    [deliveryDrivers, fetchOpenOrders],
   );
 
   // VALIDACIÓN DE ROL
@@ -913,6 +973,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         hideMoney={isLoanMode}
         canMergeOrders={canMergeOpenOrders && !isLoanMode}
         onMergeOrders={handleMergeOpenOrders}
+        canAssignDriver={canMergeOpenOrders && !isLoanMode}
+        drivers={deliveryDrivers}
+        onAssignDriver={handleAssignDriverToOrders}
       />
 
       {reprintKitchenOrder && (
