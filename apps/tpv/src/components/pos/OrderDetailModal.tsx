@@ -21,6 +21,7 @@ import {
   Circle,
   Users,
   Package,
+  ShoppingCart,
 } from "lucide-react";
 
 export interface OrderDetailItem {
@@ -75,6 +76,9 @@ interface OrderDetailModalProps {
   /** Si se provee, habilita dividir la cuenta: recibe los itemIds que se
    *  mueven a un nuevo ticket. La cuenta original conserva el resto. */
   onSplit?: (itemIds: string[]) => Promise<void> | void;
+  /** Si se provee, reabre la orden en el menú para agregar más productos
+   *  (nueva ronda sobre la misma cuenta abierta). */
+  onAddProducts?: () => void;
 }
 
 const formatTime = (iso?: string | null) => {
@@ -120,6 +124,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   onChangeType,
   onRename,
   onSplit,
+  onAddProducts,
 }) => {
   const [editing, setEditing] = useState(false);
   const [noteDraft, setNoteDraft] = useState<{ id: string; value: string } | null>(null);
@@ -263,7 +268,8 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   const hasActions = !!(
     onReprint || onReprintKitchen || onCharge || onMergeOrTransfer ||
-    onChangeType || onCancelOrder || onSplit || (onAssignDriver && isDelivery)
+    onChangeType || onCancelOrder || onSplit || onAddProducts ||
+    (onAssignDriver && isDelivery)
   );
 
   const renderItemRow = (it: OrderDetailItem, idx: number) => {
@@ -682,6 +688,18 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         ) : (
           hasActions && (
             <div className="relative z-10 p-4 border-t border-white/5 bg-[#0C0C0E] flex flex-col gap-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              {/* AGREGAR PRODUCTOS — reabre la orden en el menú para sumar una ronda */}
+              {onAddProducts && (
+                <button
+                  type="button"
+                  onClick={onAddProducts}
+                  className="w-full min-h-[52px] h-13 py-3 rounded-xl bg-[#ffb84d]/15 border border-[#ffb84d]/40 text-[#ffb84d] font-black uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                >
+                  <ShoppingCart size={16} strokeWidth={2.5} />
+                  Agregar productos
+                </button>
+              )}
+
               {/* DUAL REPRINT (Fase 4) */}
               {(onReprint || onReprintKitchen) && (
                 <div className={`grid gap-2 ${onReprint && onReprintKitchen ? "grid-cols-2" : "grid-cols-1"}`}>

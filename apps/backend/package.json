@@ -14,6 +14,7 @@
    },
    "dependencies": {
       "@google/generative-ai": "^0.24.1",
+      "@mrtpvrest/config": "workspace:*",
       "@mrtpvrest/database": "workspace:*",
       "@prisma/client": "^7.8.0",
       "@supabase/supabase-js": "^2.45.0",

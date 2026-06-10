@@ -4,6 +4,7 @@
   "private": true,
   "exports": {
     "./tailwind": "./tailwind.config.base.js",
-    "./tsconfig": "./tsconfig.base.json"
+    "./tsconfig": "./tsconfig.base.json",
+    "./phone": "./phone.js"
   }
 }

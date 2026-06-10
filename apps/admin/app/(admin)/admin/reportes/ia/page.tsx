@@ -1,5 +1,9 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import {
+  Sparkles, Send, Download, Save, Share2, Plus, X, Bot, MessageSquare,
+  TrendingUp, TrendingDown, Activity, Bookmark,
+} from "lucide-react";
 import api from "@/lib/api";
 
 /* ── CSS injected once ─────────────────────────────────────── */
@@ -14,29 +18,38 @@ const CSS = `
 .ia-tp:nth-child(3) { animation-delay:.30s; }
 .ia-scroll::-webkit-scrollbar { width:4px; }
 .ia-scroll::-webkit-scrollbar-track { background:transparent; }
-.ia-scroll::-webkit-scrollbar-thumb { background:var(--border2); border-radius:4px; }
+.ia-scroll::-webkit-scrollbar-thumb { background:var(--bd-2); border-radius:4px; }
+
+/* Full-bleed break-out: the (admin) layout adds md:p-8 (32px) on desktop and
+   no padding on mobile. We cancel the desktop padding so the chat pane reaches
+   the viewport edges; on mobile there is nothing to cancel. */
+.ia-root { margin: 0; }
+@media (min-width: 768px) { .ia-root { margin: -32px; } }
 
 .ia-main-panel {
-  flex: 1; padding: 24px 28px 64px; overflow-y: auto; height: 100vh; overflow-x: hidden;
+  flex: 1; padding: 16px; overflow-y: auto; height: 100vh; overflow-x: hidden;
 }
+@media (min-width: 768px) { .ia-main-panel { padding: 24px 28px 64px; } }
+
 .ia-chat-panel {
   width: 380px; height: 100vh; position: sticky; top: 0;
   display: flex; flex-direction: column;
-  border-left: 1px solid var(--border); background: var(--surf3); flex-shrink: 0;
+  border-left: 1px solid var(--bd-1); background: var(--surf-3); flex-shrink: 0;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
   z-index: 40;
 }
 .ia-chat-panel.closed { display: none; }
 .ia-fab {
-  position: fixed; bottom: 24px; right: 24px; z-index: 30;
+  position: fixed; bottom: 88px; right: 18px; z-index: 30;
   width: 56px; height: 56px; border-radius: 28px;
-  background: linear-gradient(135deg, #9472ff, #7c3aed); 
-  color: #fff;
+  background: linear-gradient(140deg,var(--brand-secondary),var(--brand-primary));
+  color: #fffaf4;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 14px rgba(124,58,237,.35);
+  box-shadow: 0 6px 18px var(--iris-glow);
   cursor: pointer; border: none; outline: none;
   transition: transform 0.2s;
 }
+@media (min-width: 768px) { .ia-fab { bottom: 24px; right: 24px; } }
 .ia-fab:hover { transform: scale(1.05); }
 .ia-fab:active { transform: scale(0.95); }
 .ia-overlay {
@@ -45,7 +58,6 @@ const CSS = `
 }
 
 @media (max-width: 900px) {
-  .ia-main-panel { padding: 16px !important; }
   .ia-chat-panel {
     position: fixed !important; right: 0; top: 0; bottom: 0;
     width: 100% !important; max-width: 380px;
@@ -55,56 +67,66 @@ const CSS = `
   .ia-overlay.open { display: block; }
 }
 
+/* KPI strip: 2 cols on mobile, 4 on desktop. */
+@media (min-width: 768px) {
+  .ia-kpi { grid-template-columns: repeat(4,1fr) !important; }
+  .ia-kpi-cell { border-top: none !important; }
+  .ia-kpi-cell:not(:last-child) { border-right: 1px solid var(--bd-1) !important; }
+  .ia-kpi-cell:last-child { border-right: none !important; }
+  .ia-bottom { grid-template-columns: 1.2fr 1fr !important; }
+}
+
 @media print {
   .ia-chat-panel, .ia-overlay, .ia-fab, .ia-no-print { display: none !important; }
   .ia-main-panel { height: auto !important; overflow: visible !important; padding: 0 !important; }
 }
 `;
 
-/* ── Tokens ────────────────────────────────────────────────── */
+/* ── Tokens (WarmTech) ─────────────────────────────────────── */
 const V = {
-  iris3:  "#b89eff",
-  iris4:  "var(--brand-secondary)",
-  iris5:  "var(--brand-primary)",
-  irisS:  "rgba(124,58,237,.14)",
-  irisG:  "rgba(124,58,237,.35)",
-  ok:     "var(--green)",
-  okS:    "rgba(16,185,129,.14)",
-  warn:   "var(--amber)",
-  warnS:  "rgba(245,158,11,.14)",
-  err:    "var(--red)",
-  errS:   "rgba(239,68,68,.14)",
-  surf1:  "var(--surf)",
-  surf2:  "var(--surf2)",
-  surf3:  "var(--surf3)",
-  bd1:    "var(--border)",
-  bd2:    "var(--border2)",
-  tx:     "var(--text)",
-  txHi:   "#fff",
-  txMid:  "rgba(200,200,230,.75)",
-  txMut:  "var(--muted)",
-  txDim:  "var(--muted2)",
+  ac:     "var(--brand-primary)",
+  ac2:    "var(--brand-secondary)",
+  acS:    "var(--iris-soft)",
+  acG:    "var(--iris-glow)",
+  ok:     "var(--ok)",
+  okS:    "var(--ok-soft)",
+  warn:   "var(--warn)",
+  warnS:  "var(--warn-soft)",
+  err:    "var(--err)",
+  errS:   "var(--err-soft)",
+  surf1:  "var(--surf-1)",
+  surf2:  "var(--surf-2)",
+  surf3:  "var(--surf-3)",
+  bd1:    "var(--bd-1)",
+  bd2:    "var(--bd-2)",
+  tx:     "var(--tx)",
+  txHi:   "var(--tx-hi)",
+  txMid:  "var(--tx-mid)",
+  txMut:  "var(--tx-mut)",
+  txDim:  "var(--tx-dim)",
 };
 
 /* ── Tiny helpers ──────────────────────────────────────────── */
 const card = (extra: object = {}): object => ({
-  background: V.surf1, border: `1px solid ${V.bd1}`, borderRadius: 14, ...extra,
+  background: V.surf1, border: `1px solid ${V.bd1}`, borderRadius: 16, ...extra,
 });
 
 const btn = (primary?: boolean, ghost?: boolean): object => ({
-  padding: "9px 14px", borderRadius: 10,
+  display: "inline-flex", alignItems: "center", gap: 6,
+  padding: "9px 14px", borderRadius: 11,
   border: primary ? "none" : `1px solid ${V.bd1}`,
-  background: primary ? V.iris5 : ghost ? V.surf2 : V.surf1,
-  color: primary ? "#fff" : V.txMid,
-  fontSize: 12, fontWeight: primary ? 600 : 500,
+  background: primary ? `linear-gradient(140deg,${V.ac2},${V.ac})` : ghost ? V.surf2 : V.surf1,
+  color: primary ? "#fffaf4" : V.txMid,
+  fontSize: 12, fontWeight: primary ? 700 : 600,
   cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" as const,
-  boxShadow: primary ? `0 4px 14px ${V.irisG}` : "none",
+  boxShadow: primary ? `0 4px 14px ${V.acG}` : "none",
+  minHeight: 38,
 });
 
 const monoTag = (): object => ({
   fontFamily: "'DM Mono',monospace", background: V.surf2,
   padding: "2px 7px", borderRadius: 6,
-  color: V.iris3, fontSize: 11, letterSpacing: ".06em",
+  color: V.ac, fontSize: 11, letterSpacing: ".06em",
 });
 
 const delta = (up: boolean): object => ({
@@ -127,9 +149,9 @@ const CHIPS = [
 
 /* ── Insight card color tokens (styling, not data) ────────────── */
 const INSIGHT_COLORS = {
-  warn: { border: "rgba(245,158,11,.25)", bg: "rgba(245,158,11,.06)", icon: V.warn, iconBg: V.warnS, kind: V.warn },
-  ok:   { border: "rgba(16,185,129,.25)", bg: "rgba(16,185,129,.06)", icon: V.ok,   iconBg: V.okS,   kind: V.ok   },
-  info: { border: "rgba(124,58,237,.25)", bg: "rgba(124,58,237,.06)", icon: V.iris3, iconBg: V.irisS, kind: V.iris3 },
+  warn: { border: "var(--warn)", bg: V.warnS, icon: V.warn, iconBg: V.warnS, kind: V.warn },
+  ok:   { border: "var(--ok)",   bg: V.okS,   icon: V.ok,   iconBg: V.okS,   kind: V.ok   },
+  info: { border: "var(--brand-primary)", bg: V.acS, icon: V.ac, iconBg: V.acS, kind: V.ac },
 } as const;
 
 type Insight = {
@@ -224,8 +246,8 @@ export default function ReportesIAPage() {
       id,
       title: `Ventas por sucursal · ${PERIOD_LABEL[period]}`,
       tag: "LOCAL",
-      tagColor: V.iris3 as string,
-      tagBg: V.irisS as string,
+      tagColor: V.ac as string,
+      tagBg: V.acS as string,
       sub: `${sedes.length} ${sedes.length === 1 ? "sede" : "sedes"} · ${ordersTxt} · guardado ${new Date().toLocaleDateString("es-MX")}`,
     };
     persistSaved([next, ...savedLocal]);
@@ -269,7 +291,7 @@ export default function ReportesIAPage() {
           p.then(r => r.data).catch(() => fallback);
 
         const [s, loc, ins, sv, items, acts, dly] = await Promise.all([
-          safe<StatsResponse>(api.get(`/api/dashboard/stats?period=${period}`), null as any),
+          safe<StatsResponse>(api.get(`/api/dashboard/stats?period=${period}`), null as unknown as StatsResponse),
           safe<SedeRow[]>(api.get(`/api/dashboard/sales-by-location?period=${period}`), []),
           safe<Insight[]>(api.get(`/api/dashboard/insights?period=${period}`), []),
           safe<SavedReport[]>(api.get(`/api/reports/saved`), []),
@@ -277,7 +299,7 @@ export default function ReportesIAPage() {
             api.get(`/api/dashboard/top-items?period=${period}&limit=5`), []
           ),
           safe<SuggestedAction[]>(api.get(`/api/dashboard/suggested-actions?period=${period}`), []),
-          safe<SalesByDay>(api.get(`/api/dashboard/sales-by-day?days=${PERIOD_DAYS[period]}`), null as any),
+          safe<SalesByDay>(api.get(`/api/dashboard/sales-by-day?days=${PERIOD_DAYS[period]}`), null as unknown as SalesByDay),
         ]);
         if (cancel) return;
         setStats(s);
@@ -319,11 +341,11 @@ export default function ReportesIAPage() {
       apiHistoryRef.current = history;
 
       // Última respuesta del asistente: juntar todos los bloques `text`.
-      const last = [...history].reverse().find((m: any) => m.role === "assistant");
+      const last = [...history].reverse().find((m: { role: string }) => m.role === "assistant");
       let reply = "No recibí una respuesta.";
       const tools: string[] = [];
       if (last && Array.isArray(last.content)) {
-        const texts = last.content.filter((b: any) => b.type === "text").map((b: any) => b.text).filter(Boolean);
+        const texts = last.content.filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).filter(Boolean);
         if (texts.length) reply = texts.join("\n\n");
       } else if (typeof last?.content === "string") {
         reply = last.content;
@@ -341,13 +363,14 @@ export default function ReportesIAPage() {
         next[next.length - 1] = { role: "ai", text: reply, tools: tools.length ? tools : undefined };
         return next;
       });
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const data = err?.response?.data;
+    } catch (err: unknown) {
+      const e = err as { response?: { status?: number; data?: { error?: string; code?: string } }; message?: string };
+      const status = e?.response?.status;
+      const data = e?.response?.data;
       const needsKey = status === 402 || data?.code === "AI_KEY_REQUIRED";
       const msg = needsKey
         ? `⚠ ${data?.error || "Configura tu API key de Groq Cloud para activar el asistente."} → [Ir a Integraciones](/admin/integraciones)`
-        : `⚠ ${data?.error || err?.message || "No pude completar la consulta."}`;
+        : `⚠ ${data?.error || e?.message || "No pude completar la consulta."}`;
       setMsgs(m => {
         const next = [...m];
         next[next.length - 1] = { role: "ai", text: msg };
@@ -363,22 +386,21 @@ export default function ReportesIAPage() {
   return (
     <>
       <style>{CSS}</style>
-      {/* Break out of the parent p-8 so we can control our own layout */}
-      <div style={{ display: "flex", margin: -32, overflow: "hidden" }}>
+      <div className="ia-root" style={{ display: "flex", overflow: "hidden" }}>
 
         {/* ═══ MAIN ═══════════════════════════════════════════ */}
-        <div className="ia-scroll ia-main-panel" style={{
-          flex: 1, padding: "24px 28px 64px", overflowY: "auto",
-          height: "100vh", overflowX: "hidden",
-        }}>
+        <div className="ia-scroll ia-main-panel">
 
           {/* Topbar */}
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", paddingBottom: 20, marginBottom: 20, borderBottom: `1px solid ${V.bd1}`, gap: 20 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", paddingBottom: 20, marginBottom: 20, borderBottom: `1px solid ${V.bd1}`, gap: 20, flexWrap: "wrap" as const }}>
             <div>
-              <h1 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 30, color: V.txHi, letterSpacing: "-.02em", lineHeight: 1.1 }}>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, textTransform: "uppercase" as const, letterSpacing: ".16em", color: V.ac, marginBottom: 8 }}>
+                Inteligencia de negocio
+              </div>
+              <h1 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 30, color: V.txHi, letterSpacing: "-.03em", lineHeight: 1.1 }}>
                 Reportes · Asistente IA
               </h1>
-              <div style={{ fontSize: 13, color: V.txMut, marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
+              <div style={{ fontSize: 13, color: V.txMut, marginTop: 6, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
                 <span style={monoTag()}>{sedes.length} {sedes.length === 1 ? "sede" : "sedes"}</span>
                 <span style={{ color: V.txDim }}>·</span>
                 <span>Período <span style={{ fontFamily: "'DM Mono',monospace", color: V.txMid }}>{period}</span></span>
@@ -386,57 +408,53 @@ export default function ReportesIAPage() {
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
               {/* Period selector */}
-              <div style={{ display: "inline-flex", background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 10, padding: 3 }}>
+              <div style={{ display: "inline-flex", background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 12, padding: 3, flexWrap: "wrap" as const }}>
                 {(["HOY","7D","30D","90D","AÑO","HIST"] as const).map(p => (
                   <button key={p} onClick={() => setPeriod(p)} style={{
-                    padding: "6px 12px", borderRadius: 7,
+                    minHeight: 36, padding: "6px 12px", borderRadius: 9,
                     fontFamily: "'DM Mono',monospace", fontSize: 11,
-                    color: period === p ? V.txHi : V.txMut,
+                    color: period === p ? "#fffaf4" : V.txMut,
                     cursor: "pointer", border: "none",
-                    background: period === p ? V.surf1 : "transparent",
-                    boxShadow: period === p ? "0 1px 3px rgba(0,0,0,.3)" : "none",
-                    fontWeight: 500, letterSpacing: ".04em",
+                    background: period === p ? `linear-gradient(140deg,${V.ac2},${V.ac})` : "transparent",
+                    boxShadow: period === p ? `0 3px 10px ${V.acG}` : "none",
+                    fontWeight: 600, letterSpacing: ".04em",
                   }}>{p}</button>
                 ))}
               </div>
               <button onClick={handleExportPdf} style={btn(false, true)} title="Imprimir o guardar como PDF">
-                <span className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95" style={{ verticalAlign: -2, marginRight: 4 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                </span>
-                Exportar PDF
+                <Download size={13} /> Exportar PDF
               </button>
             </div>
           </div>
 
           {/* ── AI Hero ── */}
           <div style={{
-            background: `radial-gradient(ellipse at top left,rgba(124,58,237,.18),transparent 50%),radial-gradient(ellipse at bottom right,rgba(59,130,246,.10),transparent 50%),${V.surf1}`,
-            border: `1px solid rgba(124,58,237,.25)`, borderRadius: 20, padding: 24, marginBottom: 20,
+            ...card(),
+            background: `radial-gradient(ellipse at top left,${V.acG},transparent 55%),radial-gradient(ellipse at bottom right,${V.warnS},transparent 55%),${V.surf1}`,
+            border: `1px solid ${V.bd2}`, borderRadius: 20, padding: 24, marginBottom: 20,
             position: "relative", overflow: "hidden",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <div style={{
                 display: "inline-flex", alignItems: "center", gap: 6,
-                background: "rgba(124,58,237,.2)", color: "#dcd0ff",
+                background: V.acS, color: V.ac,
                 padding: "4px 10px", borderRadius: 999,
                 fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".12em",
               }}>
-                <span className="ia-spark" style={{ width: 6, height: 6, borderRadius: "50%", background: V.iris3, boxShadow: `0 0 8px ${V.iris3}`, display: "inline-block" }} />
-                Mesero · Asistente de datos
+                <span className="ia-spark" style={{ width: 6, height: 6, borderRadius: "50%", background: V.ac, boxShadow: `0 0 8px ${V.ac}`, display: "inline-block" }} />
+                MESERO · ASISTENTE DE DATOS
               </div>
             </div>
-            <h2 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 22, color: V.txHi, marginBottom: 6 }}>
+            <h2 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 22, color: V.txHi, marginBottom: 6, letterSpacing: "-.02em" }}>
               Pregúntale a Mesero lo que quieras saber
             </h2>
-            <p style={{ fontSize: 13, color: V.txMid, marginBottom: 18, maxWidth: 720 }}>
+            <p style={{ fontSize: 13, color: V.txMid, marginBottom: 18, maxWidth: 720, lineHeight: 1.5 }}>
               Obtén reportes personalizados en lenguaje natural. Mesero analiza tus ventas, inventario y equipo para darte respuestas claras con gráficos y acciones listas para ejecutar.
             </p>
             {/* Prompt box */}
             <div style={{
               position: "relative", background: V.surf2,
-              border: `1.5px solid rgba(124,58,237,.3)`, borderRadius: 14,
+              border: `1.5px solid ${V.bd2}`, borderRadius: 14,
               padding: "14px 16px", display: "flex", alignItems: "flex-end", gap: 10,
             }}>
               <textarea
@@ -449,41 +467,37 @@ export default function ReportesIAPage() {
                 }}
               />
               <button onClick={() => { if (prompt.trim()) { sendChat(prompt); setPrompt(""); } }} style={{
-                width: 38, height: 38, borderRadius: 10, background: V.iris5,
-                border: "none", color: "#fff", display: "grid", placeItems: "center",
-                cursor: "pointer", boxShadow: `0 4px 14px ${V.irisG}`,
+                width: 44, height: 44, borderRadius: 12, background: `linear-gradient(140deg,${V.ac2},${V.ac})`,
+                border: "none", color: "#fffaf4", display: "grid", placeItems: "center",
+                cursor: "pointer", boxShadow: `0 4px 14px ${V.acG}`, flexShrink: 0,
               }}>
-                <div className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                  </svg>
-                </div>
+                <Send size={16} />
               </button>
             </div>
             {/* Chips */}
             <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 8, marginTop: 14 }}>
               {CHIPS.map(c => (
                 <button key={c.text} onClick={() => setPrompt(c.q)} style={{
-                  background: V.surf2, border: `1px solid ${V.bd1}`,
+                  minHeight: 36, background: V.surf2, border: `1px solid ${V.bd1}`,
                   padding: "7px 12px", borderRadius: 999, fontSize: 12,
                   color: V.txMid, cursor: "pointer", display: "inline-flex",
                   alignItems: "center", gap: 6, fontFamily: "inherit",
                 }}>
-                  <span style={{ color: V.iris4 }}>{c.icon}</span> {c.text}
+                  <span style={{ color: V.ac }}>{c.icon}</span> {c.text}
                 </button>
               ))}
             </div>
           </div>
 
           {/* ── Insights ── */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 12, flexWrap: "wrap" as const }}>
             <div>
-              <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: V.txHi }}>Insights que encontré para ti</h3>
+              <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 16, color: V.txHi }}>Insights que encontré para ti</h3>
               <div style={{ fontSize: 12, color: V.txMut, marginTop: 2 }}>Detectados automáticamente en {PERIOD_LABEL[period].toLowerCase()}</div>
             </div>
             <button onClick={handleMoreInsights} style={btn(false, true)} title="Pedir más insights al asistente">Pedir más →</button>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: insights.length === 0 ? "1fr" : "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
+          <div className="ia-insights" style={{ display: "grid", gridTemplateColumns: insights.length === 0 ? "1fr" : "repeat(auto-fit,minmax(240px,1fr))", gap: 12, marginBottom: 20 }}>
             {insights.length === 0 && (
               <div style={{ ...card(), padding: "32px 20px", textAlign: "center", color: V.txMut, fontSize: 13 }}>
                 {loading ? "Analizando datos del período…" : "Aún no hay insights automáticos para este período."}
@@ -491,38 +505,43 @@ export default function ReportesIAPage() {
             )}
             {insights.map(ins => {
               const col = INSIGHT_COLORS[ins.variant] ?? INSIGHT_COLORS.info;
+              const Icon = ins.variant === "warn" ? TrendingDown : ins.variant === "ok" ? TrendingUp : Activity;
               return (
                 <div key={ins.title} style={{
                   ...card(),
                   borderColor: col.border,
                   background: `linear-gradient(180deg,${col.bg},transparent 60%),${V.surf1}`,
                   padding: 16,
+                  position: "relative", overflow: "hidden",
                 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 8, background: col.iconBg, color: col.icon, display: "grid", placeItems: "center", flexShrink: 0 }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/></svg>
+                  <div style={{ position: "absolute", top: -20, right: -20, width: 80, height: 80, borderRadius: "50%", background: col.iconBg, filter: "blur(30px)", opacity: .5 }} />
+                  <div style={{ position: "relative" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: col.iconBg, color: col.icon, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        <Icon size={15} strokeWidth={2} />
+                      </div>
+                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".14em", textTransform: "uppercase" as const, fontWeight: 700, color: col.kind }}>{ins.kind}</span>
                     </div>
-                    <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".14em", textTransform: "uppercase" as const, fontWeight: 700, color: col.kind }}>{ins.kind}</span>
-                  </div>
-                  <h4 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: V.txHi, marginBottom: 6, lineHeight: 1.25 }}>{ins.title}</h4>
-                  <p style={{ fontSize: 12, color: V.txMid, lineHeight: 1.5, marginBottom: 12 }}>{ins.body}</p>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button
-                      onClick={() => {
-                        const prompt = `Sobre este insight: "${ins.title}" (${ins.body}). Quiero ${ins.cta}. ¿Qué me sugieres hacer específicamente?`;
-                        sendChat(prompt);
-                        setIsChatOpen(true);
-                      }}
-                      style={{ ...btn(true), padding: "6px 10px", fontSize: 11 }}
-                    >
-                      {ins.cta}
-                    </button>
-                    <button 
-                      onClick={() => setInsights(prev => prev.filter(i => i.title !== ins.title))}
-                      style={{ ...btn(false), padding: "6px 10px", fontSize: 11 }}
-                    >
-                      Ignorar
-                    </button>
+                    <h4 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 15, color: V.txHi, marginBottom: 6, lineHeight: 1.25 }}>{ins.title}</h4>
+                    <p style={{ fontSize: 12, color: V.txMid, lineHeight: 1.5, marginBottom: 12 }}>{ins.body}</p>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        onClick={() => {
+                          const p = `Sobre este insight: "${ins.title}" (${ins.body}). Quiero ${ins.cta}. ¿Qué me sugieres hacer específicamente?`;
+                          sendChat(p);
+                          setIsChatOpen(true);
+                        }}
+                        style={{ ...btn(true), padding: "6px 10px", fontSize: 11, minHeight: 34 }}
+                      >
+                        {ins.cta}
+                      </button>
+                      <button
+                        onClick={() => setInsights(prev => prev.filter(i => i.title !== ins.title))}
+                        style={{ ...btn(false), padding: "6px 10px", fontSize: 11, minHeight: 34 }}
+                      >
+                        Ignorar
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -532,13 +551,15 @@ export default function ReportesIAPage() {
           {/* ── Report Card ── */}
           <div style={{ ...card(), overflow: "hidden", marginBottom: 16 }}>
             {/* Report head */}
-            <div style={{ padding: "18px 22px", borderBottom: `1px solid ${V.bd1}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+            <div style={{ padding: "18px 22px", borderBottom: `1px solid ${V.bd1}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" as const }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: V.irisS, color: V.iris3, padding: "2px 8px", borderRadius: 5, fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 600, letterSpacing: ".06em" }}>✨ DATOS EN VIVO</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: V.acS, color: V.ac, padding: "3px 8px", borderRadius: 6, fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".06em" }}>
+                    <Sparkles size={11} /> DATOS EN VIVO
+                  </span>
                   <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, letterSpacing: ".1em" }}>{PERIOD_LABEL[period].toUpperCase()}</span>
                 </div>
-                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, color: V.txHi }}>Ventas por sucursal · período {period}</div>
+                <div style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 18, color: V.txHi }}>Ventas por sucursal · período {period}</div>
                 <div style={{ fontSize: 12, color: V.txMut, marginTop: 2, display: "flex", alignItems: "center", gap: 8 }}>
                   <span>{sedes.length} {sedes.length === 1 ? "sede" : "sedes"}</span>
                   <span style={{ color: V.txDim }}>·</span>
@@ -546,31 +567,20 @@ export default function ReportesIAPage() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={handleSaveReport} style={{ ...btn(false, true), padding: "8px 10px" }} title="Guardar reporte" aria-label="Guardar reporte">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                    <polyline points="17 21 17 13 7 13 7 21"/>
-                    <polyline points="7 3 7 8 15 8"/>
-                  </svg>
+                <button onClick={handleSaveReport} style={{ ...btn(false, true), padding: "9px 10px" }} title="Guardar reporte" aria-label="Guardar reporte">
+                  <Save size={14} />
                 </button>
-                <button onClick={handleShareReport} style={{ ...btn(false, true), padding: "8px 10px" }} title="Copiar enlace al reporte" aria-label="Compartir">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                  </svg>
+                <button onClick={handleShareReport} style={{ ...btn(false, true), padding: "9px 10px" }} title="Copiar enlace al reporte" aria-label="Compartir">
+                  <Share2 size={14} />
                 </button>
-                <button onClick={handleExportPdf} style={{ ...btn(false, true), padding: "8px 10px" }} title="Descargar / imprimir como PDF" aria-label="Descargar">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
+                <button onClick={handleExportPdf} style={{ ...btn(false, true), padding: "9px 10px" }} title="Descargar / imprimir como PDF" aria-label="Descargar">
+                  <Download size={14} />
                 </button>
               </div>
             </div>
 
             {/* KPI strip — datos reales del período */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", borderBottom: `1px solid ${V.bd1}` }}>
+            <div className="ia-kpi" style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", borderBottom: `1px solid ${V.bd1}` }}>
               {(() => {
                 const fmt = (raw: number | undefined | null) => {
                   const n = Number(raw ?? 0);
@@ -593,12 +603,12 @@ export default function ReportesIAPage() {
                   { label: "Prep. activa",    value: stats ? `${stats.prepMinutes?.value ?? 0}`          : "—", sml: "min",                              up: true,                                  delta: "",                                              sub: stats ? `${stats.prepMinutes?.activeCount ?? 0} activos`         : "sin datos" },
                 ];
                 return rows.map((k, i) => (
-                  <div key={k.label} style={{ padding: "16px 22px", borderRight: i < 3 ? `1px solid ${V.bd1}` : "none" }}>
+                  <div key={k.label} className="ia-kpi-cell" style={{ padding: "16px 22px", borderRight: i % 2 === 0 ? `1px solid ${V.bd1}` : "none", borderTop: i >= 2 ? `1px solid ${V.bd1}` : "none" }}>
                     <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, letterSpacing: ".14em", textTransform: "uppercase" as const, marginBottom: 6 }}>{k.label}</div>
-                    <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 24, color: V.txHi, lineHeight: 1, letterSpacing: "-.02em" }}>
+                    <div style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 24, color: V.txHi, lineHeight: 1, letterSpacing: "-.02em" }}>
                       {k.value}<span style={{ fontSize: 13, color: V.txMut, fontWeight: 600 }}>{k.sml}</span>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, gap: 6 }}>
                       {k.delta ? <span style={delta(k.up)}>{k.delta}</span> : <span />}
                       <span style={{ fontSize: 11, color: V.txMut }}>{k.sub}</span>
                     </div>
@@ -610,12 +620,12 @@ export default function ReportesIAPage() {
             {/* Report body */}
             <div style={{ padding: 22 }}>
               {/* AI Summary — se genera bajo demanda desde el chat de Mesero */}
-              <div style={{ background: `linear-gradient(180deg,rgba(124,58,237,.05),transparent),${V.surf2}`, border: `1px solid rgba(124,58,237,.2)`, borderRadius: 12, padding: "16px 18px", marginBottom: 18 }}>
+              <div style={{ background: `linear-gradient(180deg,${V.acS},transparent),${V.surf2}`, border: `1px solid ${V.bd2}`, borderRadius: 14, padding: "16px 18px", marginBottom: 18 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                  <div style={{ width: 22, height: 22, borderRadius: 6, background: "rgba(124,58,237,.25)", color: "#dcd0ff", display: "grid", placeItems: "center" }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20 9l-5 4.87L16.18 22 12 18.27 7.82 22 9 13.87 4 9l5.91-.74z"/></svg>
+                  <div style={{ width: 24, height: 24, borderRadius: 7, background: V.acS, color: V.ac, display: "grid", placeItems: "center" }}>
+                    <Sparkles size={13} />
                   </div>
-                  <h5 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 13, color: V.txHi }}>Resumen ejecutivo · Mesero</h5>
+                  <h5 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 13, color: V.txHi }}>Resumen ejecutivo · Mesero</h5>
                 </div>
                 <p style={{ fontSize: 13, color: V.txMid, lineHeight: 1.6 }}>
                   {stats
@@ -627,11 +637,11 @@ export default function ReportesIAPage() {
 
               {/* Chart — evolución diaria real (datos de /api/dashboard/sales-by-day) */}
               <div style={{ marginBottom: 24 }}>
-                <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 3, height: 14, background: V.iris4, borderRadius: 2, display: "inline-block" }} />
+                <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 3, height: 14, background: V.ac, borderRadius: 2, display: "inline-block" }} />
                   Evolución diaria · ventas {daily ? `(últimos ${daily.days} días)` : ""}
                 </h3>
-                <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 12, padding: 16 }}>
+                <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 14, padding: 16 }}>
                   {(() => {
                     const series = daily?.series ?? [];
                     const hasData = series.some(p => (p.revenue ?? 0) > 0);
@@ -677,7 +687,7 @@ export default function ReportesIAPage() {
                       <>
                         <div style={{ display: "flex", gap: 14, fontSize: 11, color: V.txMid, marginBottom: 8, flexWrap: "wrap" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ width: 10, height: 10, borderRadius: 2, background: "#9472ff", display: "inline-block" }} /> Ventas del día
+                            <span style={{ width: 10, height: 10, borderRadius: 2, background: "var(--brand-primary)", display: "inline-block" }} /> Ventas del día
                           </div>
                           {weekendDots.length > 0 && (
                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -688,31 +698,31 @@ export default function ReportesIAPage() {
                         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: 220 }}>
                           <defs>
                             <linearGradient id="gIA" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#9472ff" stopOpacity=".3"/>
-                              <stop offset="100%" stopColor="#9472ff" stopOpacity="0"/>
+                              <stop offset="0%" stopColor="var(--brand-primary)" stopOpacity=".3"/>
+                              <stop offset="100%" stopColor="var(--brand-primary)" stopOpacity="0"/>
                             </linearGradient>
                           </defs>
                           <g stroke="rgba(255,255,255,.05)" strokeWidth="1">
                             {ticks.map(t => <line key={t} x1={PL} y1={yAt(t)} x2={W - PR} y2={yAt(t)}/>)}
                           </g>
-                          <g fontFamily="DM Mono" fontSize="10" fill="#6e6e92">
+                          <g fontFamily="DM Mono" fontSize="10" fill="#9a8f86">
                             {ticks.map(t => (
                               <text key={t} x={PL - 6} y={yAt(t) + 3} textAnchor="end">{fmtAxis(t)}</text>
                             ))}
                           </g>
                           <path d={areaPath} fill="url(#gIA)"/>
-                          <path d={linePath} stroke="#9472ff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-                          <g fill="#10b981">
+                          <path d={linePath} stroke="var(--brand-primary)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                          <g fill="var(--ok)">
                             {weekendDots.map(o => <circle key={o.p.date} cx={xAt(o.i)} cy={yAt(o.p.revenue || 0)} r="3.5"/>)}
                           </g>
                           {(peak.revenue || 0) > 0 && (
                             <g transform={`translate(${Math.min(W - 180, Math.max(PL, xAt(peakIdx) - 80))},${PT - 4})`}>
-                              <rect width="170" height="34" rx="7" fill="#15152a" stroke="rgba(124,58,237,.3)"/>
-                              <text x="10" y="14" fontFamily="DM Mono" fontSize="9" fill="#9494b8" letterSpacing=".1em">PICO · {peakLabel}</text>
-                              <text x="10" y="27" fontFamily="Syne" fontWeight="700" fontSize="11" fill="#fff">{fmtMoney(peak.revenue || 0)} · {peak.orders} pedidos</text>
+                              <rect width="170" height="34" rx="7" fill="var(--surf-1)" stroke="var(--bd-2)"/>
+                              <text x="10" y="14" fontFamily="DM Mono" fontSize="9" fill="#9a8f86" letterSpacing=".1em">PICO · {peakLabel}</text>
+                              <text x="10" y="27" fontFamily="Syne" fontWeight="700" fontSize="11" fill="var(--tx-hi)">{fmtMoney(peak.revenue || 0)} · {peak.orders} pedidos</text>
                             </g>
                           )}
-                          <g fontFamily="DM Mono" fontSize="9" fill="#6e6e92" textAnchor="middle">
+                          <g fontFamily="DM Mono" fontSize="9" fill="#9a8f86" textAnchor="middle">
                             {xLabels.map(l => <text key={l.label + l.xPx} x={l.xPx} y={H - 14}>{l.label}</text>)}
                           </g>
                         </svg>
@@ -724,12 +734,12 @@ export default function ReportesIAPage() {
 
               {/* Table */}
               <div style={{ marginBottom: 24 }}>
-                <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 3, height: 14, background: V.iris4, borderRadius: 2, display: "inline-block" }} />
+                <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 3, height: 14, background: V.ac, borderRadius: 2, display: "inline-block" }} />
                   Desempeño por sede
                 </h3>
-                <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 12, overflow: "hidden" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 14, overflow: "hidden", overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 640 }}>
                     <thead>
                       <tr>
                         {["Sede","Ventas","vs Mes ant.","Pedidos","Ticket prom.","Margen",""].map(h => (
@@ -752,10 +762,10 @@ export default function ReportesIAPage() {
                           const alert = s.delta <= -10;
                           const pct   = Math.min(100, Math.round((s.sales / maxSales) * 100));
                           return (
-                            <tr key={s.id} style={{ background: alert ? "rgba(239,68,68,.04)" : "transparent" }}>
+                            <tr key={s.id} style={{ background: alert ? V.errS : "transparent" }}>
                               <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}`, color: V.txMid }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: alert ? V.warn : up ? V.ok : V.iris4, flexShrink: 0 }} />
+                                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: alert ? V.warn : up ? V.ok : V.ac, flexShrink: 0 }} />
                                   <span style={{ color: V.txHi, fontWeight: 600 }}>{s.name}</span>
                                   {alert && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, background: V.warnS, color: V.warn, padding: "2px 6px", borderRadius: 4, letterSpacing: ".08em" }}>ATENCIÓN</span>}
                                 </div>
@@ -795,14 +805,14 @@ export default function ReportesIAPage() {
               </div>
 
               {/* Bottom 2-col */}
-              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 16 }}>
+              <div className="ia-bottom" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
                 {/* Top productos */}
                 <div>
-                  <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 3, height: 14, background: V.iris4, borderRadius: 2, display: "inline-block" }} />
+                  <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 3, height: 14, background: V.ac, borderRadius: 2, display: "inline-block" }} />
                     Top productos del período
                   </h3>
-                  <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 12, padding: "6px 16px" }}>
+                  <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 14, padding: "6px 16px" }}>
                     {topItems.length === 0 && (
                       <div style={{ padding: "28px 0", textAlign: "center", color: V.txMut, fontSize: 13 }}>
                         {loading ? "Cargando top productos…" : "Sin pedidos suficientes para el ranking"}
@@ -811,7 +821,7 @@ export default function ReportesIAPage() {
                     {topItems.map((p, i) => (
                       <div key={p.id ?? p.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: i < topItems.length - 1 ? `1px solid ${V.bd1}` : "none" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: V.txDim, width: 20 }}>
+                          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: V.ac, width: 24, fontWeight: 700 }}>
                             {String(i + 1).padStart(2, "0")}
                           </span>
                           <div>
@@ -831,25 +841,25 @@ export default function ReportesIAPage() {
 
                 {/* Acciones sugeridas */}
                 <div>
-                  <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 3, height: 14, background: V.iris4, borderRadius: 2, display: "inline-block" }} />
+                  <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 3, height: 14, background: V.ac, borderRadius: 2, display: "inline-block" }} />
                     Acciones sugeridas
                   </h3>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {actions.length === 0 && (
-                      <div style={{ background: V.surf2, border: `1px dashed ${V.bd1}`, borderRadius: 10, padding: "20px 14px", textAlign: "center", color: V.txMut, fontSize: 12 }}>
+                      <div style={{ background: V.surf2, border: `1px dashed ${V.bd1}`, borderRadius: 12, padding: "20px 14px", textAlign: "center", color: V.txMut, fontSize: 12 }}>
                         {loading ? "Analizando señales del periodo…" : "Sin acciones automáticas para este periodo. Cuando haya caídas de ventas, productos top o stock bajo, aparecerán aquí."}
                       </div>
                     )}
                     {actions.map(a => (
-                      <div key={a.n} style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 10, padding: "12px 14px", display: "flex", gap: 10, alignItems: "flex-start" }}>
-                        <div style={{ width: 22, height: 22, borderRadius: 6, background: V.irisS, color: V.iris3, display: "grid", placeItems: "center", flexShrink: 0, fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 11 }}>{a.n}</div>
+                      <div key={a.n} style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 12, padding: "12px 14px", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                        <div style={{ width: 22, height: 22, borderRadius: 6, background: V.acS, color: V.ac, display: "grid", placeItems: "center", flexShrink: 0, fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 700, fontSize: 11 }}>{a.n}</div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 13, color: V.tx, fontWeight: 600, marginBottom: 2 }}>{a.title}</div>
                           <div style={{ fontSize: 11, color: V.txMut, lineHeight: 1.5 }}>{a.sub}</div>
                           <button
                             onClick={() => { sendChat(a.prompt); setIsChatOpen(true); }}
-                            style={{ ...btn(true), marginTop: 8, padding: "5px 10px", fontSize: 11 }}
+                            style={{ ...btn(true), marginTop: 8, padding: "5px 10px", fontSize: 11, minHeight: 32 }}
                           >
                             {a.cta}
                           </button>
@@ -863,20 +873,23 @@ export default function ReportesIAPage() {
           </div>
 
           {/* ── Saved reports ── */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "24px 0 12px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "24px 0 12px", gap: 12, flexWrap: "wrap" as const }}>
             <div>
-              <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: V.txHi }}>Reportes guardados</h3>
+              <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 16, color: V.txHi }}>Reportes guardados</h3>
               <div style={{ fontSize: 12, color: V.txMut, marginTop: 2 }}>Reportes recurrentes y favoritos</div>
             </div>
-            <button onClick={handleNewSavedReport} style={btn(false, true)} title="Pedir al asistente que defina uno nuevo">+ Nuevo reporte</button>
+            <button onClick={handleNewSavedReport} style={btn(false, true)} title="Pedir al asistente que defina uno nuevo">
+              <Plus size={13} /> Nuevo reporte
+            </button>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
+          <div className="ia-saved" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 10 }}>
             {(() => {
               const all = [...savedLocal, ...saved];
               if (all.length === 0) {
                 return (
-                  <div style={{ gridColumn: "1 / -1", border: `1px dashed ${V.bd1}`, borderRadius: 12, padding: "28px 20px", textAlign: "center", color: V.txMut, fontSize: 13 }}>
-                    Aún no has guardado reportes. Usa el botón 💾 del reporte para guardar uno.
+                  <div style={{ gridColumn: "1 / -1", border: `1px dashed ${V.bd1}`, borderRadius: 14, padding: "28px 20px", textAlign: "center", color: V.txMut, fontSize: 13, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                    <Bookmark size={22} style={{ color: V.txDim }} />
+                    Aún no has guardado reportes. Usa el botón de guardar del reporte para guardar uno.
                   </div>
                 );
               }
@@ -884,9 +897,9 @@ export default function ReportesIAPage() {
                 const isLocal = String(s.id ?? "").startsWith("local-");
                 return (
                   <div key={s.id ?? s.title} style={{
-                    background: s.active ? `linear-gradient(90deg,rgba(124,58,237,.08),transparent)` : V.surf1,
-                    border: `1px solid ${s.active ? V.iris5 : V.bd1}`,
-                    borderRadius: 12, padding: "14px 16px",
+                    background: s.active ? `linear-gradient(90deg,${V.acS},transparent)` : V.surf1,
+                    border: `1px solid ${s.active ? V.ac : V.bd1}`,
+                    borderRadius: 14, padding: "14px 16px",
                     position: "relative",
                   }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, gap: 8 }}>
@@ -897,10 +910,10 @@ export default function ReportesIAPage() {
                     {isLocal && (
                       <button
                         onClick={() => handleDeleteSaved(String(s.id))}
-                        style={{ position: "absolute", top: 8, right: 8, background: "transparent", border: "none", color: V.txDim, cursor: "pointer", padding: 4, lineHeight: 1, fontSize: 14 }}
+                        style={{ position: "absolute", top: 8, right: 8, background: "transparent", border: "none", color: V.txDim, cursor: "pointer", padding: 4, lineHeight: 1, display: "grid", placeItems: "center" }}
                         title="Eliminar reporte guardado"
                         aria-label="Eliminar"
-                      >×</button>
+                      ><X size={14} /></button>
                     )}
                   </div>
                 );
@@ -914,31 +927,23 @@ export default function ReportesIAPage() {
         <div className={`ia-overlay ${isChatOpen ? "open" : ""}`} onClick={() => setIsChatOpen(false)} />
 
         {/* ═══ CHAT PANEL ════════════════════════════════════ */}
-        <div className={`ia-chat-panel ${isChatOpen ? "open" : "closed"}`} style={{
-          width: 380, height: "100vh", position: "sticky", top: 0,
-          display: "flex", flexDirection: "column",
-          borderLeft: `1px solid ${V.bd1}`, background: V.surf3, flexShrink: 0,
-        }}>
+        <div className={`ia-chat-panel ${isChatOpen ? "open" : "closed"}`}>
           {/* Chat header */}
           <div style={{ padding: "16px 18px", borderBottom: `1px solid ${V.bd1}`, display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: `linear-gradient(135deg,${V.iris4},${V.iris5})`, display: "grid", placeItems: "center", color: "#fff", position: "relative", flexShrink: 0 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20 9l-5 4.87L16.18 22 12 18.27 7.82 22 9 13.87 4 9l5.91-.74z"/></svg>
+            <div style={{ width: 36, height: 36, borderRadius: 11, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, display: "grid", placeItems: "center", color: "#fffaf4", position: "relative", flexShrink: 0 }}>
+              <Bot size={18} />
               <div style={{ position: "absolute", bottom: -2, right: -2, width: 10, height: 10, background: V.ok, borderRadius: "50%", border: `2px solid ${V.surf3}` }} />
             </div>
             <div>
-              <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14, color: V.txHi }}>Mesero</h3>
+              <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 14, color: V.txHi }}>Mesero</h3>
               <div style={{ fontSize: 10, color: V.ok, fontFamily: "'DM Mono',monospace", letterSpacing: ".08em", textTransform: "uppercase", fontWeight: 600 }}>● En línea · listo</div>
             </div>
             <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
-              <button onClick={() => setMsgs(INIT_MSGS)} style={{ width: 30, height: 30, borderRadius: 8, background: "transparent", border: "none", color: V.txMut, cursor: "pointer", display: "grid", placeItems: "center" }} title="Limpiar chat">
-                <div className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </div>
+              <button onClick={() => setMsgs(INIT_MSGS)} style={{ width: 32, height: 32, borderRadius: 9, background: "transparent", border: "none", color: V.txMut, cursor: "pointer", display: "grid", placeItems: "center" }} title="Limpiar chat" aria-label="Limpiar chat">
+                <Plus size={16} />
               </button>
-              <button onClick={() => setIsChatOpen(false)} style={{ width: 30, height: 30, borderRadius: 8, background: "transparent", border: "none", color: V.txHi, cursor: "pointer", display: "grid", placeItems: "center" }} title="Ocultar chat">
-                <div className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                </div>
+              <button onClick={() => setIsChatOpen(false)} style={{ width: 32, height: 32, borderRadius: 9, background: "transparent", border: "none", color: V.txHi, cursor: "pointer", display: "grid", placeItems: "center" }} title="Ocultar chat" aria-label="Ocultar chat">
+                <X size={16} />
               </button>
             </div>
           </div>
@@ -948,14 +953,14 @@ export default function ReportesIAPage() {
             {msgs.map((m, i) => (
               <div key={i} style={{ display: "flex", gap: 10, justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
                 {m.role === "ai" && (
-                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg,${V.iris4},${V.iris5})`, display: "grid", placeItems: "center", flexShrink: 0, color: "#fff", fontSize: 11, fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>M</div>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, display: "grid", placeItems: "center", flexShrink: 0, color: "#fffaf4", fontSize: 11, fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 700 }}>M</div>
                 )}
                 <div style={{ flex: "1 1 0", minWidth: 0 }}>
                   <div style={{
                     maxWidth: 270, padding: "10px 14px", borderRadius: 14, fontSize: 13, lineHeight: 1.55,
                     ...(m.role === "ai"
                       ? { background: V.surf1, color: V.txMid, border: `1px solid ${V.bd1}`, borderTopLeftRadius: 4 }
-                      : { background: V.iris5, color: "#fff", borderTopRightRadius: 4, marginLeft: "auto" }),
+                      : { background: `linear-gradient(140deg,${V.ac2},${V.ac})`, color: "#fffaf4", borderTopRightRadius: 4, marginLeft: "auto" }),
                   }}>
                     {m.text}
                   </div>
@@ -966,7 +971,7 @@ export default function ReportesIAPage() {
                           {i < msgs.length - 1
                             ? <span style={{ width: 10, height: 10, borderRadius: "50%", background: V.ok, display: "inline-block" }} />
                             : (ti === m.tools!.length - 1
-                              ? <span className="ia-spin" style={{ width: 10, height: 10, border: `1.5px solid ${V.iris4}`, borderRightColor: "transparent", borderRadius: "50%", display: "inline-block" }} />
+                              ? <span className="ia-spin" style={{ width: 10, height: 10, border: `1.5px solid ${V.ac}`, borderRightColor: "transparent", borderRadius: "50%", display: "inline-block" }} />
                               : <span style={{ width: 10, height: 10, borderRadius: "50%", background: V.ok, display: "inline-block" }} />)
                           }
                           {t}
@@ -976,16 +981,16 @@ export default function ReportesIAPage() {
                   )}
                 </div>
                 {m.role === "user" && (
-                  <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg,#10b981,#047857)", display: "grid", placeItems: "center", flexShrink: 0, color: "#fff", fontSize: 11, fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>D</div>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(140deg,${V.ok},#2f7d52)`, display: "grid", placeItems: "center", flexShrink: 0, color: "#fffaf4", fontSize: 11, fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 700 }}>D</div>
                 )}
               </div>
             ))}
             {/* Typing indicator if last message is user */}
             {msgs[msgs.length - 1]?.role === "user" && (
               <div style={{ display: "flex", gap: 10 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg,${V.iris4},${V.iris5})`, display: "grid", placeItems: "center", flexShrink: 0, color: "#fff" }}>M</div>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, display: "grid", placeItems: "center", flexShrink: 0, color: "#fffaf4" }}>M</div>
                 <div style={{ background: V.surf1, border: `1px solid ${V.bd1}`, borderRadius: 14, borderTopLeftRadius: 4, padding: "10px 14px", display: "flex", gap: 3 }}>
-                  {[0,1,2].map(k => <span key={k} className="ia-tp" style={{ width: 6, height: 6, borderRadius: "50%", background: V.iris4, display: "inline-block" }} />)}
+                  {[0,1,2].map(k => <span key={k} className="ia-tp" style={{ width: 6, height: 6, borderRadius: "50%", background: V.ac, display: "inline-block" }} />)}
                 </div>
               </div>
             )}
@@ -998,19 +1003,15 @@ export default function ReportesIAPage() {
                 <button key={c} onClick={() => setChatMsg(c)} style={{ background: V.surf2, border: `1px solid ${V.bd1}`, padding: "5px 10px", borderRadius: 999, fontSize: 11, color: V.txMid, cursor: "pointer", fontFamily: "inherit" }}>{c}</button>
               ))}
             </div>
-            <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 12, padding: "10px 10px 10px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 12, padding: "8px 8px 8px 14px", display: "flex", alignItems: "center", gap: 8 }}>
               <input
                 value={chatMsg} onChange={e => setChatMsg(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && sendChat(chatMsg)}
                 placeholder="Escribe o usa /reporte, /alerta, /predicción…"
                 style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: V.tx, fontSize: 13, fontFamily: "inherit" }}
               />
-              <button onClick={() => sendChat(chatMsg)} style={{ width: 32, height: 32, borderRadius: 8, background: V.iris5, border: "none", color: "#fff", cursor: "pointer", display: "grid", placeItems: "center" }}>
-                <div className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                  </svg>
-                </div>
+              <button onClick={() => sendChat(chatMsg)} aria-label="Enviar" style={{ width: 36, height: 36, borderRadius: 9, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, border: "none", color: "#fffaf4", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                <Send size={14} />
               </button>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, fontSize: 10, color: V.txDim, fontFamily: "'DM Mono',monospace", letterSpacing: ".04em" }}>
@@ -1027,10 +1028,8 @@ export default function ReportesIAPage() {
 
       {/* ═══ FAB BUTTON ════════════════════════════════════ */}
       {!isChatOpen && (
-        <button className="ia-fab" onClick={() => setIsChatOpen(true)} title="Abrir asistente IA">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
+        <button className="ia-fab" onClick={() => setIsChatOpen(true)} title="Abrir asistente IA" aria-label="Abrir asistente IA">
+          <MessageSquare size={24} />
         </button>
       )}
 

@@ -1,6 +1,13 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
+import {
+  MapPin, Megaphone, Home, RotateCw, X, Crosshair, Navigation,
+  Bike, Route as RouteIcon, Package, Circle,
+} from "lucide-react";
 import api from "@/lib/api";
+import {
+  WtScreen, PageHeader, WtCard, SectionLabel, Pill, PrimaryBtn, Avatar,
+} from "@/components/warmtech";
 
 export default function RastreoPage() {
   const [liveData, setLiveData]       = useState<any>(null);
@@ -33,7 +40,7 @@ export default function RastreoPage() {
         body: noticeBody.trim(),
       });
       setShowNotice(false); setNoticeTitle(""); setNoticeBody(""); setNoticeTarget("all");
-      alert("✅ Aviso enviado");
+      alert("Aviso enviado");
     } catch (err: any) { alert(err.response?.data?.error || "Error al enviar"); }
     finally { setSendingNotice(false); }
   }
@@ -86,7 +93,7 @@ export default function RastreoPage() {
           setManualLat(String(lat));
           setManualLng(String(lng));
           updateOriginMarker(lat, lng);
-          alert(`✅ Origen guardado: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+          alert(`Origen guardado: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
         } catch { alert("Error al guardar"); }
         finally { setSavingOrigin(false); }
       },
@@ -105,7 +112,7 @@ export default function RastreoPage() {
       setOrigin({ lat, lng });
       updateOriginMarker(lat, lng);
       if (mapRef.current) mapRef.current.setView([lat, lng], 15);
-      alert("✅ Origen actualizado");
+      alert("Origen actualizado");
     } catch { alert("Error al guardar"); }
     finally { setSavingOrigin(false); }
   }
@@ -205,259 +212,314 @@ export default function RastreoPage() {
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
   }
 
-  return (
-    <div className="flex flex-col h-screen overflow-hidden"
-      style={{marginLeft:"-2rem",marginRight:"-2rem",marginTop:"-2rem"}}>
+  const onlineCount = liveData?.drivers?.filter((d:any) => d.online).length || 0;
 
-      {/* Header */}
-      <div className="px-6 py-3 flex items-center justify-between border-b flex-shrink-0"
-        style={{background:"var(--surf)",borderColor:"var(--border)"}}>
-        <div>
-          <h1 className="font-syne text-xl font-black">📍 Rastreo GPS</h1>
-          <p className="text-xs" style={{color:"var(--muted)"}}>
-            {liveData?.drivers?.filter((d:any) => d.online).length || 0} en línea · actualiza cada 30s
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setShowNotice(true)}
-            className="px-3 py-2 rounded-xl text-xs font-bold"
-            style={{background:"rgba(245,166,35,0.1)",color:"var(--gold)",border:"1px solid rgba(245,166,35,0.3)"}}>
-            📢 Enviar aviso
+  return (
+    <WtScreen>
+      <PageHeader
+        eyebrow="Logística en vivo"
+        title="Rastreo GPS"
+        subtitle={`${onlineCount} en línea · actualiza cada 30s`}
+        actions={
+          <>
+            <PrimaryBtn full={false} ghost icon={Megaphone} onClick={() => setShowNotice(true)}>
+              Enviar aviso
+            </PrimaryBtn>
+            <PrimaryBtn
+              full={false}
+              ghost={!showOriginPanel}
+              icon={Home}
+              onClick={() => setShowOriginPanel(p => !p)}
+            >
+              Configurar origen
+            </PrimaryBtn>
+            <button
+              type="button" onClick={fetchLive} aria-label="Refrescar"
+              className="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-tx-mut"
+              style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
+            >
+              <RotateCw size={17} />
+            </button>
+          </>
+        }
+      />
+
+      {/* mobile live indicator + acciones */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 md:hidden">
+        <span className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: "var(--ok)" }} />
+          <span className="text-[11px] text-tx-mut">{onlineCount} en línea · cada 30s</span>
+        </span>
+        <div className="ml-auto flex gap-2">
+          <button
+            type="button" onClick={() => setShowNotice(true)} aria-label="Enviar aviso"
+            className="grid h-10 w-10 place-items-center rounded-xl"
+            style={{ background: "var(--iris-soft)", color: "var(--brand-primary)" }}
+          >
+            <Megaphone size={17} />
           </button>
-          <button onClick={() => setShowOriginPanel(p => !p)}
-            className="px-3 py-2 rounded-xl text-xs font-bold"
+          <button
+            type="button" onClick={() => setShowOriginPanel(p => !p)} aria-label="Configurar origen"
+            className="grid h-10 w-10 place-items-center rounded-xl"
             style={{
-              background: showOriginPanel ? "var(--gold)" : "rgba(245,166,35,0.1)",
-              color: showOriginPanel ? "#000" : "var(--gold)",
-              border:"1px solid rgba(245,166,35,0.3)"
-            }}>
-            🏠 Configurar origen
+              background: showOriginPanel ? "var(--brand-primary)" : "var(--iris-soft)",
+              color: showOriginPanel ? "#fffaf4" : "var(--brand-primary)",
+            }}
+          >
+            <Home size={17} />
           </button>
-          <button onClick={fetchLive} className="px-3 py-2 rounded-xl text-xs font-bold border"
-            style={{borderColor:"var(--border)",color:"var(--muted)"}}>🔄</button>
+          <button
+            type="button" onClick={fetchLive} aria-label="Refrescar"
+            className="grid h-10 w-10 place-items-center rounded-xl text-tx-mut"
+            style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
+          >
+            <RotateCw size={17} />
+          </button>
         </div>
       </div>
 
       {/* Panel configurar origen */}
       {showOriginPanel && (
-        <div className="px-6 py-4 border-b flex-shrink-0"
-          style={{background:"rgba(245,166,35,0.05)",borderColor:"rgba(245,166,35,0.2)"}}>
-          <div className="flex items-start gap-6 flex-wrap">
+        <WtCard className="mb-4 p-4 md:p-5">
+          <div className="flex flex-col gap-5 md:flex-row md:flex-wrap md:items-start">
             {/* Botón capturar ubicación actual */}
             <div>
-              <div className="text-xs font-black uppercase tracking-wider mb-2" style={{color:"var(--gold)"}}>
-                Desde este dispositivo (TPV)
-              </div>
-              <button onClick={captureCurrentLocation} disabled={savingOrigin}
-                className="px-5 py-3 rounded-xl text-sm font-bold flex items-center gap-2"
-                style={{background:"var(--gold)",color:"#000"}}>
-                {savingOrigin ? "Obteniendo..." : "📍 Usar mi ubicación actual"}
-              </button>
-              <p className="text-xs mt-1" style={{color:"var(--muted)"}}>
+              <SectionLabel>Desde este dispositivo (TPV)</SectionLabel>
+              <PrimaryBtn
+                full={false}
+                icon={Crosshair}
+                onClick={captureCurrentLocation}
+                disabled={savingOrigin}
+              >
+                {savingOrigin ? "Obteniendo…" : "Usar mi ubicación actual"}
+              </PrimaryBtn>
+              <p className="mt-2 text-[11px] text-tx-mut">
                 Abre desde el dispositivo del TPV para mayor precisión
               </p>
             </div>
 
             {/* O ingresar manualmente */}
-            <div className="flex-1" style={{minWidth:"280px"}}>
-              <div className="text-xs font-black uppercase tracking-wider mb-2" style={{color:"var(--muted)"}}>
-                O ingresar coordenadas manualmente
-              </div>
-              <div className="flex gap-2 items-end">
+            <div className="flex-1" style={{ minWidth: "280px" }}>
+              <SectionLabel>O ingresar coordenadas manualmente</SectionLabel>
+              <div className="flex items-end gap-2">
                 <div className="flex-1">
-                  <label className="text-xs mb-1 block" style={{color:"var(--muted)"}}>Latitud</label>
+                  <label className="mb-1 block text-[11px] text-tx-mut">Latitud</label>
                   <input value={manualLat} onChange={e => setManualLat(e.target.value)}
                     placeholder="19.2826"
-                    className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                    style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+                    className="min-h-11 w-full rounded-xl px-3 text-sm outline-none"
+                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
                 </div>
                 <div className="flex-1">
-                  <label className="text-xs mb-1 block" style={{color:"var(--muted)"}}>Longitud</label>
+                  <label className="mb-1 block text-[11px] text-tx-mut">Longitud</label>
                   <input value={manualLng} onChange={e => setManualLng(e.target.value)}
                     placeholder="-99.6557"
-                    className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                    style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+                    className="min-h-11 w-full rounded-xl px-3 text-sm outline-none"
+                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
                 </div>
-                <button onClick={saveManualOrigin} disabled={savingOrigin}
-                  className="px-4 py-2 rounded-xl text-sm font-bold"
-                  style={{background:"var(--surf2)",color:"var(--muted)",border:"1px solid var(--border)"}}>
-                  {savingOrigin ? "..." : "Guardar"}
-                </button>
+                <PrimaryBtn full={false} ghost onClick={saveManualOrigin} disabled={savingOrigin}>
+                  {savingOrigin ? "…" : "Guardar"}
+                </PrimaryBtn>
               </div>
             </div>
 
             {/* Origen actual */}
             {origin && (
-              <div className="rounded-xl px-4 py-3" style={{background:"var(--surf2)"}}>
-                <div className="text-xs font-bold mb-1" style={{color:"var(--muted)"}}>Origen actual</div>
-                <div className="font-mono text-xs">{origin.lat.toFixed(6)}</div>
-                <div className="font-mono text-xs">{origin.lng.toFixed(6)}</div>
-                <button onClick={() => { if(mapRef.current && origin) mapRef.current.setView([origin.lat, origin.lng], 17); }}
-                  className="text-xs mt-1" style={{color:"var(--gold)"}}>
+              <div className="rounded-xl px-4 py-3"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                <div className="mb-1 font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Origen actual</div>
+                <div className="font-mono text-xs text-tx">{origin.lat.toFixed(6)}</div>
+                <div className="font-mono text-xs text-tx">{origin.lng.toFixed(6)}</div>
+                <button
+                  type="button"
+                  onClick={() => { if (mapRef.current && origin) mapRef.current.setView([origin.lat, origin.lng], 17); }}
+                  className="mt-1.5 flex min-h-9 items-center gap-1 text-xs font-bold text-primary">
                   Ver en mapa →
                 </button>
               </div>
             )}
           </div>
-        </div>
+        </WtCard>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      {/* Layout principal: panel + mapa */}
+      <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
         {/* Panel izquierdo */}
-        <div className="w-72 flex-shrink-0 border-r flex flex-col overflow-hidden"
-          style={{borderColor:"var(--border)",background:"var(--surf)"}}>
-
-          <div className="p-3 border-b flex-shrink-0" style={{borderColor:"var(--border)"}}>
-            <div className="text-xs font-black uppercase tracking-wider mb-2" style={{color:"var(--muted)"}}>Repartidores</div>
+        <div className="flex flex-col gap-4">
+          {/* Repartidores */}
+          <WtCard className="p-3">
+            <SectionLabel>Repartidores</SectionLabel>
             {loading ? (
-              <div className="text-xs text-center py-4" style={{color:"var(--muted)"}}>Cargando...</div>
+              <div className="py-4 text-center text-xs text-tx-mut">Cargando…</div>
             ) : !liveData?.drivers?.length ? (
-              <div className="text-xs text-center py-4" style={{color:"var(--muted)"}}>Sin repartidores activos</div>
-            ) : liveData.drivers.map((d: any) => (
-              <button key={d.driver.id}
-                onClick={async () => {
-                  setSelected(d); setRoutePoints([]); setSelectedRoute(null);
-                  if (polyRef.current) { polyRef.current.remove(); polyRef.current = null; }
-                  await fetchRoutes(d.driver.id);
-                  if (d.location && mapRef.current) mapRef.current.setView([d.location.lat, d.location.lng], 15);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl mb-1 text-left"
-                style={{
-                  background: selected?.driver?.id===d.driver.id ? "rgba(245,166,35,0.1)" : "var(--surf2)",
-                  border:`1px solid ${selected?.driver?.id===d.driver.id ? "var(--gold)" : "var(--border)"}`
-                }}>
-                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background: d.online ? "#22c55e" : "#6b7280"}} />
-                {d.driver.photo
-                  ? <img src={d.driver.photo} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-                  : <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:"var(--surf)"}}>🛵</div>
-                }
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-bold truncate">{d.driver.name}</div>
-                  <div className="text-xs" style={{color:"var(--muted)"}}>
-                    {d.online ? "🟢 En línea" : "⚫ Sin señal"}
-                    {d.activeRoute ? " · Ruta activa" : ""}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
+              <div className="py-4 text-center text-xs text-tx-mut">Sin repartidores activos</div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {liveData.drivers.map((d: any) => {
+                  const isSel = selected?.driver?.id === d.driver.id;
+                  const initials = (d.driver.name || "?").split(" ").map((s: string) => s[0]).slice(0, 2).join("").toUpperCase();
+                  return (
+                    <button key={d.driver.id}
+                      onClick={async () => {
+                        setSelected(d); setRoutePoints([]); setSelectedRoute(null);
+                        if (polyRef.current) { polyRef.current.remove(); polyRef.current = null; }
+                        await fetchRoutes(d.driver.id);
+                        if (d.location && mapRef.current) mapRef.current.setView([d.location.lat, d.location.lng], 15);
+                      }}
+                      className="flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 text-left transition-colors"
+                      style={{
+                        background: isSel ? "var(--iris-soft)" : "var(--surf-2)",
+                        border: `1px solid ${isSel ? "var(--brand-primary)" : "var(--bd-1)"}`,
+                      }}>
+                      <Avatar initials={initials} size={36} gradient="linear-gradient(140deg,#5b9ddb,#3f6fb0)" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-bold text-tx">{d.driver.name}</div>
+                        <div className="mt-0.5">
+                          {d.online ? (
+                            <Pill tone="ok" live>{d.activeRoute ? "En ruta" : "En línea"}</Pill>
+                          ) : (
+                            <Pill tone="neutral">Sin señal</Pill>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </WtCard>
 
           {/* Rutas del repartidor seleccionado */}
           {selected && (
-            <div className="flex-1 overflow-y-auto p-3">
-              <div className="text-xs font-black uppercase tracking-wider mb-2" style={{color:"var(--muted)"}}>
-                Rutas — {selected.driver.name}
-              </div>
+            <WtCard className="p-3">
+              <SectionLabel>Rutas — {selected.driver.name}</SectionLabel>
               {routes.length === 0 ? (
-                <div className="text-xs text-center py-4" style={{color:"var(--muted)"}}>Sin rutas registradas</div>
-              ) : routes.map((route: any) => (
-                <button key={route.id}
-                  onClick={() => fetchRoutePoints(selected.driver.id, route.id)}
-                  className="w-full text-left px-3 py-2 rounded-xl mb-1 border"
-                  style={{
-                    background: selectedRoute?.id===route.id ? "rgba(245,166,35,0.1)" : "var(--surf2)",
-                    borderColor: selectedRoute?.id===route.id ? "var(--gold)" : "var(--border)"
-                  }}>
-                  <div className="flex items-center justify-between mb-0.5">
-                    <div className="text-xs font-bold">
-                      {route.trigger==="ORDER_ASSIGNED" ? "📦 Pedido" : "📍 Manual"}
-                    </div>
-                    <div className="text-xs" style={{color:"var(--muted)"}}>{formatDur(route.startAt, route.endAt)}</div>
-                  </div>
-                  <div className="text-xs" style={{color:"var(--muted)"}}>
-                    {new Date(route.startAt).toLocaleDateString('es-MX',{day:'numeric',month:'short'})}
-                    {" "}
-                    {new Date(route.startAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}
-                    {" · "}{route.points} pts
-                  </div>
-                  {!route.endAt && (
-                    <div className="text-xs font-bold mt-0.5" style={{color:"#22c55e"}}>● En curso</div>
-                  )}
-                </button>
-              ))}
-            </div>
+                <div className="py-4 text-center text-xs text-tx-mut">Sin rutas registradas</div>
+              ) : (
+                <div className="flex max-h-[340px] flex-col gap-1.5 overflow-y-auto warmtech-scrollbar">
+                  {routes.map((route: any) => {
+                    const isSel = selectedRoute?.id === route.id;
+                    return (
+                      <button key={route.id}
+                        onClick={() => fetchRoutePoints(selected.driver.id, route.id)}
+                        className="w-full rounded-2xl px-3 py-2.5 text-left transition-colors"
+                        style={{
+                          background: isSel ? "var(--iris-soft)" : "var(--surf-2)",
+                          border: `1px solid ${isSel ? "var(--brand-primary)" : "var(--bd-1)"}`,
+                        }}>
+                        <div className="mb-1 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 text-xs font-bold text-tx">
+                            {route.trigger === "ORDER_ASSIGNED"
+                              ? <><Package size={13} /> Pedido</>
+                              : <><MapPin size={13} /> Manual</>}
+                          </span>
+                          <span className="font-mono text-[11px] text-tx-mut">{formatDur(route.startAt, route.endAt)}</span>
+                        </div>
+                        <div className="text-[11px] text-tx-mut">
+                          {new Date(route.startAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                          {" "}
+                          {new Date(route.startAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                          {" · "}{route.points} pts
+                        </div>
+                        {!route.endAt && (
+                          <div className="mt-1">
+                            <Pill tone="ok" live>En curso</Pill>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </WtCard>
           )}
         </div>
 
-        {/* Mapa */}
-        <div className="flex-1 relative">
-          <div id="driver-map" className="w-full h-full" />
+        {/* Mapa — NO tocar lógica Leaflet, solo el contenedor */}
+        <WtCard className="relative overflow-hidden p-0">
+          <div id="driver-map" className="h-[520px] w-full lg:h-[640px]" />
           {!mapReady && (
-            <div className="absolute inset-0 flex items-center justify-center" style={{background:"var(--bg)"}}>
+            <div className="absolute inset-0 grid place-items-center" style={{ background: "var(--surf-1)" }}>
               <div className="text-center">
-                <div className="text-4xl mb-3 animate-pulse">🗺️</div>
-                <div className="text-sm" style={{color:"var(--muted)"}}>Cargando mapa...</div>
+                <MapPin size={34} className="mx-auto mb-3 animate-pulse text-tx-mut" />
+                <div className="text-sm text-tx-mut">Cargando mapa…</div>
               </div>
             </div>
           )}
           {selectedRoute && routePoints.length > 0 && (
-            <div className="absolute top-4 right-4 rounded-xl border p-3 text-xs z-10"
-              style={{background:"var(--surf)",borderColor:"var(--border)"}}>
-              <div className="font-bold mb-1">📍 {selectedRoute.trigger==="ORDER_ASSIGNED" ? "Ruta de pedido" : "Ruta manual"}</div>
-              <div style={{color:"var(--muted)"}}>
-                {new Date(selectedRoute.startAt).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
+            <div className="absolute right-4 top-4 z-[400] rounded-2xl p-3 text-xs"
+              style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", boxShadow: "0 8px 24px rgba(0,0,0,.25)" }}>
+              <div className="mb-1 flex items-center gap-1.5 font-bold text-tx">
+                <RouteIcon size={13} className="text-primary" />
+                {selectedRoute.trigger === "ORDER_ASSIGNED" ? "Ruta de pedido" : "Ruta manual"}
               </div>
-              <div style={{color:"var(--muted)"}}>{routePoints.length} puntos GPS</div>
-              <div style={{color:"var(--gold)"}}>{formatDur(selectedRoute.startAt, selectedRoute.endAt)}</div>
-              <div className="flex gap-3 mt-1">
-                <span style={{color:"#22c55e"}}>🟢 Inicio</span>
-                <span style={{color:"#ef4444"}}>🔴 Fin</span>
+              <div className="text-tx-mut">
+                {new Date(selectedRoute.startAt).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
               </div>
-              <button onClick={() => { if(polyRef.current && mapRef.current) mapRef.current.fitBounds(polyRef.current.getBounds(),{padding:[50,50]}); }}
-                className="mt-2 text-xs font-bold" style={{color:"var(--gold)"}}>
+              <div className="text-tx-mut">{routePoints.length} puntos GPS</div>
+              <div className="font-mono text-primary">{formatDur(selectedRoute.startAt, selectedRoute.endAt)}</div>
+              <div className="mt-1.5 flex gap-3">
+                <span className="flex items-center gap-1" style={{ color: "var(--ok)" }}><Circle size={9} fill="currentColor" /> Inicio</span>
+                <span className="flex items-center gap-1" style={{ color: "var(--err)" }}><Circle size={9} fill="currentColor" /> Fin</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => { if (polyRef.current && mapRef.current) mapRef.current.fitBounds(polyRef.current.getBounds(), { padding: [50, 50] }); }}
+                className="mt-2 flex min-h-9 items-center gap-1 text-xs font-bold text-primary">
                 Centrar ruta →
               </button>
             </div>
           )}
-        </div>
+        </WtCard>
       </div>
 
       {/* Modal — Enviar aviso a repartidores */}
       {showNotice && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-          style={{background:"rgba(0,0,0,0.8)"}} onClick={() => !sendingNotice && setShowNotice(false)}>
-          <div className="w-full max-w-md rounded-2xl border p-6"
-            style={{background:"var(--surf)",borderColor:"var(--border)"}} onClick={e => e.stopPropagation()}>
-            <h3 className="font-syne font-black text-xl mb-1">📢 Enviar aviso</h3>
-            <p className="text-xs mb-4" style={{color:"var(--muted)"}}>
-              El repartidor lo recibe al instante en su app.
-            </p>
+          style={{ background: "rgba(0,0,0,0.8)" }} onClick={() => !sendingNotice && setShowNotice(false)}>
+          <WtCard className="w-full max-w-md p-6">
+            <div onClick={e => e.stopPropagation()}>
+              <div className="mb-1 flex items-center gap-2">
+                <Megaphone size={20} className="text-primary" />
+                <h3 className="font-display text-xl font-extrabold text-tx-hi">Enviar aviso</h3>
+              </div>
+              <p className="mb-4 text-xs text-tx-mut">
+                El repartidor lo recibe al instante en su app.
+              </p>
 
-            <label className="text-xs font-black uppercase tracking-wider mb-1 block" style={{color:"var(--muted)"}}>Destino</label>
-            <select value={noticeTarget} onChange={e => setNoticeTarget(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl text-sm outline-none mb-3"
-              style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}}>
-              <option value="all">Todos los repartidores</option>
-              {liveData?.drivers?.map((d: any) => (
-                <option key={d.driver.id} value={d.driver.id}>{d.driver.name}</option>
-              ))}
-            </select>
+              <label className="mb-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Destino</label>
+              <select value={noticeTarget} onChange={e => setNoticeTarget(e.target.value)}
+                className="mb-3 min-h-11 w-full rounded-xl px-3 text-sm outline-none"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}>
+                <option value="all">Todos los repartidores</option>
+                {liveData?.drivers?.map((d: any) => (
+                  <option key={d.driver.id} value={d.driver.id}>{d.driver.name}</option>
+                ))}
+              </select>
 
-            <label className="text-xs font-black uppercase tracking-wider mb-1 block" style={{color:"var(--muted)"}}>Título (opcional)</label>
-            <input value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)}
-              placeholder="Ej. Cambio de turno"
-              className="w-full px-3 py-2 rounded-xl text-sm outline-none mb-3"
-              style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+              <label className="mb-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Título (opcional)</label>
+              <input value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)}
+                placeholder="Ej. Cambio de turno"
+                className="mb-3 min-h-11 w-full rounded-xl px-3 text-sm outline-none"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
 
-            <label className="text-xs font-black uppercase tracking-wider mb-1 block" style={{color:"var(--muted)"}}>Mensaje</label>
-            <textarea value={noticeBody} onChange={e => setNoticeBody(e.target.value)}
-              placeholder="Escribe el aviso aquí..." rows={4} maxLength={1000}
-              className="w-full px-3 py-2 rounded-xl text-sm outline-none mb-4 resize-none"
-              style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+              <label className="mb-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Mensaje</label>
+              <textarea value={noticeBody} onChange={e => setNoticeBody(e.target.value)}
+                placeholder="Escribe el aviso aquí…" rows={4} maxLength={1000}
+                className="mb-4 w-full resize-none rounded-xl px-3 py-2.5 text-sm outline-none"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
 
-            <div className="flex gap-3">
-              <button onClick={() => setShowNotice(false)} disabled={sendingNotice}
-                className="flex-1 py-3 rounded-xl font-bold border"
-                style={{borderColor:"var(--border)",color:"var(--muted)"}}>Cancelar</button>
-              <button onClick={sendNotice} disabled={sendingNotice || !noticeBody.trim()}
-                className="flex-1 py-3 rounded-xl font-syne font-black"
-                style={{background: noticeBody.trim() ? "var(--gold)" : "var(--surf2)", color: noticeBody.trim() ? "#000" : "var(--muted)"}}>
-                {sendingNotice ? "Enviando..." : "Enviar"}
-              </button>
+              <div className="flex gap-3">
+                <PrimaryBtn ghost onClick={() => setShowNotice(false)} disabled={sendingNotice}>
+                  Cancelar
+                </PrimaryBtn>
+                <PrimaryBtn icon={Navigation} onClick={sendNotice} disabled={sendingNotice || !noticeBody.trim()}>
+                  {sendingNotice ? "Enviando…" : "Enviar"}
+                </PrimaryBtn>
+              </div>
             </div>
-          </div>
+          </WtCard>
         </div>
       )}
-    </div>
+    </WtScreen>
   );
 }
