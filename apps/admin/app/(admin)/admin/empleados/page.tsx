@@ -1,42 +1,66 @@
 "use client";
 import { useEffect, useState } from "react";
+import {
+  Crown, Banknote, ChefHat, Bike, Soup, BarChart3, Plus, X, Clock,
+  History, Pencil, Trash2, Users, Tag, Ban, Unlock, ListChecks,
+  CheckCircle2, RotateCcw, type LucideIcon,
+} from "lucide-react";
 import api from "@/lib/api";
+import {
+  WtScreen, PageHeader, WtCard, SectionLabel, Pill, Chips,
+  PrimaryBtn, Toggle, Avatar, EmptyState, type Tone,
+} from "@/components/warmtech";
 
-const ROLES = [
-  { value:"ADMIN",    label:"👑 Administrador", color:"#f59e0b" },
-  { value:"CASHIER",  label:"💵 Cajero",         color:"#22c55e" },
-  { value:"WAITER",   label:"🧑‍🍳 Mesero",         color:"#3b82f6" },
-  { value:"DELIVERY", label:"🛵 Repartidor",     color:"#8b5cf6" },
-  { value:"COOK",     label:"👨‍🍳 Cocinero",       color:"#ef4444" },
+const ROLES: { value: string; label: string; short: string; icon: LucideIcon; tone: Tone }[] = [
+  { value: "ADMIN",    label: "Administrador", short: "Admin",       icon: Crown,   tone: "warn" },
+  { value: "CASHIER",  label: "Cajero",        short: "Cajero",      icon: Banknote, tone: "ok"  },
+  { value: "WAITER",   label: "Mesero",        short: "Mesero",      icon: Soup,    tone: "info" },
+  { value: "DELIVERY", label: "Repartidor",    short: "Repartidor",  icon: Bike,    tone: "ac"   },
+  { value: "COOK",     label: "Cocinero",      short: "Cocinero",    icon: ChefHat, tone: "err"  },
 ];
 
 // Set canónico de permisos operativos (RBAC real · Fase 10). Alineado con
 // ROLE_DEFAULTS del backend (employees.routes.js). Solo incluye permisos con
 // enforcement real; las columnas legacy sin operación quedan deprecadas.
-const ROLE_DEFAULTS: Record<string,any> = {
-  ADMIN:    { canCharge:true,  canApplyDiscounts:true,  canCancelItems:true,  canReopenTables:true,  canManageUsers:true  },
-  CASHIER:  { canCharge:true,  canApplyDiscounts:true,  canCancelItems:false, canReopenTables:false, canManageUsers:false },
-  WAITER:   { canCharge:false, canApplyDiscounts:false, canCancelItems:false, canReopenTables:false, canManageUsers:false },
-  DELIVERY: { canCharge:true,  canApplyDiscounts:false, canCancelItems:false, canReopenTables:false, canManageUsers:false },
-  COOK:     { canCharge:false, canApplyDiscounts:false, canCancelItems:false, canReopenTables:false, canManageUsers:false },
+const ROLE_DEFAULTS: Record<string, Record<string, boolean>> = {
+  ADMIN:    { canCharge: true,  canApplyDiscounts: true,  canCancelItems: true,  canReopenTables: true,  canManageUsers: true  },
+  CASHIER:  { canCharge: true,  canApplyDiscounts: true,  canCancelItems: false, canReopenTables: false, canManageUsers: false },
+  WAITER:   { canCharge: false, canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false },
+  DELIVERY: { canCharge: true,  canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false },
+  COOK:     { canCharge: false, canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false },
 };
 
-const DAYS = ["LUN","MAR","MIE","JUE","VIE","SAB","DOM"];
-const PERMS = [
-  { key:"canCharge",         label:"💵 Cobrar / abrir cajón" },
-  { key:"canApplyDiscounts", label:"🏷️ Aplicar descuentos / cortesías" },
-  { key:"canCancelItems",    label:"🗑️ Anular productos enviados a cocina" },
-  { key:"canReopenTables",   label:"🔓 Reabrir cuentas cerradas" },
-  { key:"canManageUsers",    label:"👥 Gestionar empleados" },
+const DAYS = ["LUN", "MAR", "MIE", "JUE", "VIE", "SAB", "DOM"];
+const PERMS: { key: string; label: string; icon: LucideIcon }[] = [
+  { key: "canCharge",         label: "Cobrar / abrir cajón",            icon: Banknote   },
+  { key: "canApplyDiscounts", label: "Aplicar descuentos / cortesías",  icon: Tag        },
+  { key: "canCancelItems",    label: "Anular productos enviados",        icon: Trash2     },
+  { key: "canReopenTables",   label: "Reabrir cuentas cerradas",         icon: Unlock     },
+  { key: "canManageUsers",    label: "Gestionar empleados",              icon: Users      },
 ];
 
 const emptyForm = {
-  name:"", phone:"", pin:"", role:"WAITER", photo:null as string|null,
-  tables:[] as string[], scheduleStart:"", scheduleEnd:"", scheduleDays:[] as string[],
-  isActive:true,
-  canCharge:false, canApplyDiscounts:false, canCancelItems:false,
-  canReopenTables:false, canManageUsers:false,
+  name: "", phone: "", pin: "", role: "WAITER", photo: null as string | null,
+  tables: [] as string[], scheduleStart: "", scheduleEnd: "", scheduleDays: [] as string[],
+  isActive: true,
+  canCharge: false, canApplyDiscounts: false, canCancelItems: false,
+  canReopenTables: false, canManageUsers: false,
 };
+
+function roleMeta(value: string) {
+  return ROLES.find((r) => r.value === value);
+}
+function initials(name: string) {
+  return (name || "?")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("") || "?";
+}
+
+const inputCls = "w-full rounded-xl px-3.5 py-2.5 text-sm outline-none";
+const inputStyle = { background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
 
 export default function EmpleadosPage() {
   const [employees, setEmployees]   = useState<any[]>([]);
@@ -50,7 +74,7 @@ export default function EmpleadosPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [shifts, setShifts]         = useState<any[]>([]);
   const [loadingShifts, setLoadingShifts] = useState(false);
-  const [activeTab, setActiveTab]   = useState<"list"|"detail">("list");
+  const [activeTab, setActiveTab]   = useState<"list" | "detail">("list");
 
   async function fetchEmployees() {
     try {
@@ -58,7 +82,7 @@ export default function EmpleadosPage() {
       const { data } = await api.get("/api/employees");
       setEmployees(data);
     } catch (err: any) {
-      console.error('Error cargando empleados:', err?.response?.data || err);
+      console.error("Error cargando empleados:", err?.response?.data || err);
     } finally { setLoading(false); }
   }
 
@@ -72,16 +96,16 @@ export default function EmpleadosPage() {
     } else {
       const handleReady = () => {
         fetchEmployees();
-        window.removeEventListener('locationChanged', handleReady);
+        window.removeEventListener("locationChanged", handleReady);
       };
-      window.addEventListener('locationChanged', handleReady);
-      return () => window.removeEventListener('locationChanged', handleReady);
+      window.addEventListener("locationChanged", handleReady);
+      return () => window.removeEventListener("locationChanged", handleReady);
     }
 
     // Escuchar cambios de sucursal
     const handleRefresh = () => fetchEmployees();
-    window.addEventListener('locationChanged', handleRefresh);
-    return () => window.removeEventListener('locationChanged', handleRefresh);
+    window.addEventListener("locationChanged", handleRefresh);
+    return () => window.removeEventListener("locationChanged", handleRefresh);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -93,10 +117,10 @@ export default function EmpleadosPage() {
         // bcrypt — pre-llenarlo provocaba que al "Guardar" sin tocar el campo
         // se mandara el hash como nuevo PIN, el regex /\d{4,6}/ del backend
         // lo rechazaba, y el cambio no surtía efecto. Vacío = no cambia.
-        name: emp.name, phone: emp.phone||"", pin: "", role: emp.role,
-        photo: emp.photo||null, tables: emp.tables||[],
-        scheduleStart: emp.scheduleStart||"", scheduleEnd: emp.scheduleEnd||"",
-        scheduleDays: emp.scheduleDays||[], isActive: emp.isActive,
+        name: emp.name, phone: emp.phone || "", pin: "", role: emp.role,
+        photo: emp.photo || null, tables: emp.tables || [],
+        scheduleStart: emp.scheduleStart || "", scheduleEnd: emp.scheduleEnd || "",
+        scheduleDays: emp.scheduleDays || [], isActive: emp.isActive,
         canCharge: emp.canCharge,
         // Descuento unificado: prioriza el flag Fase 10, cae al legacy.
         canApplyDiscounts: emp.canApplyDiscounts ?? emp.canDiscount,
@@ -115,7 +139,7 @@ export default function EmpleadosPage() {
 
     // Verificamos si hay sucursal seleccionada
     if (!localStorage.getItem("locationId")) {
-      alert("⚠️ Error: No hay una sucursal seleccionada en la barra lateral.");
+      alert("Error: No hay una sucursal seleccionada en la barra lateral.");
       return;
     }
 
@@ -129,22 +153,20 @@ export default function EmpleadosPage() {
     finally { setSaving(false); }
   }
 
-  // ... (Resto del componente igual) ...
-
   function toggleSelect(id: string) {
-    setSelectedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+    setSelectedIds((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
   function toggleSelectAll() {
     setSelectedIds(selectedIds.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map((e: any) => e.id)));
   }
   async function bulkToggleActive(isActive: boolean) {
-    await Promise.all([...selectedIds].map(id => api.put(`/api/employees/${id}`, { isActive }).catch(() => {})));
+    await Promise.all([...selectedIds].map((id) => api.put(`/api/employees/${id}`, { isActive }).catch(() => {})));
     setSelectedIds(new Set()); fetchEmployees();
   }
   async function bulkDelete() {
     if (!confirm(`¿Eliminar ${selectedIds.size} empleado(s)? Esta acción no se puede deshacer.`)) return;
     let hasError = false;
-    await Promise.all([...selectedIds].map(id => api.delete(`/api/employees/${id}`).catch((err) => {
+    await Promise.all([...selectedIds].map((id) => api.delete(`/api/employees/${id}`).catch((err) => {
       hasError = true;
       console.error(err);
     })));
@@ -160,7 +182,7 @@ export default function EmpleadosPage() {
     setEditEmp(null);
   }
 
-  async function deleteEmployee(id: string, role: string) {
+  async function deleteEmployee(id: string, _role: string) {
     if (!confirm("¿Eliminar empleado?")) return;
     try {
       await api.delete(`/api/employees/${id}`);
@@ -189,14 +211,14 @@ export default function EmpleadosPage() {
       ...p,
       scheduleDays: p.scheduleDays.includes(day)
         ? p.scheduleDays.filter((d: string) => d !== day)
-        : [...p.scheduleDays, day]
+        : [...p.scheduleDays, day],
     }));
   }
 
-  const filtered = filterRole === "ALL" ? employees : employees.filter(e => e.role === filterRole);
-  const onShift   = employees.filter(e => e.shifts?.length > 0);
+  const filtered = filterRole === "ALL" ? employees : employees.filter((e) => e.role === filterRole);
+  const onShift  = employees.filter((e) => e.shifts?.length > 0);
 
-  function formatDur(start: string, end: string|null) {
+  function formatDur(start: string, end: string | null) {
     if (!end) return "En turno";
     const ms = new Date(end).getTime() - new Date(start).getTime();
     const h = Math.floor(ms / 3600000);
@@ -204,41 +226,68 @@ export default function EmpleadosPage() {
     return `${h}h ${m}m`;
   }
 
+  const roleChips = [
+    { value: "ALL", label: `Todos (${employees.length})` },
+    ...ROLES.map((r) => ({ value: r.value, label: `${r.short} (${employees.filter((e) => e.role === r.value).length})` })),
+  ];
+
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="font-syne text-3xl font-black">Empleados</h1>
-          <p className="text-sm mt-1" style={{color:"var(--muted)"}}>
-            {employees.length} empleados · <span style={{color:"#22c55e"}}>{onShift.length} en turno ahora</span>
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={exportCSV}
-            className="px-4 py-2 rounded-xl text-sm font-bold border"
-            style={{borderColor:"var(--border)",color:"var(--muted)"}}>
-            📊 Exportar asistencia
-          </button>
-          <button onClick={() => openForm()}
-            className="px-4 py-2 rounded-xl text-sm font-syne font-black"
-            style={{background:"var(--gold)",color:"#000"}}>
-            + Nuevo empleado
-          </button>
-        </div>
+    <WtScreen>
+      <PageHeader
+        eyebrow="Personal"
+        title="Empleados"
+        subtitle={`${employees.length} empleados · ${onShift.length} en turno ahora`}
+        actions={
+          <>
+            <PrimaryBtn ghost full={false} icon={BarChart3} onClick={exportCSV}>
+              Exportar asistencia
+            </PrimaryBtn>
+            <PrimaryBtn full={false} icon={Plus} onClick={() => openForm()}>
+              Nuevo empleado
+            </PrimaryBtn>
+          </>
+        }
+      />
+
+      {/* mobile summary */}
+      <div className="mb-3 flex items-center gap-2 md:hidden">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: "var(--ok)" }} />
+        <span className="text-[11px] text-tx-mut">
+          {employees.length} empleados · {onShift.length} en turno
+        </span>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-4">
-        <button onClick={() => setActiveTab("list")}
-          className="px-4 py-2 rounded-xl text-sm font-bold"
-          style={{background: activeTab==="list" ? "var(--gold)" : "var(--surf)", color: activeTab==="list" ? "#000" : "var(--muted)"}}>
+      {/* mobile actions */}
+      <div className="mb-4 grid grid-cols-2 gap-2 md:hidden">
+        <PrimaryBtn ghost icon={BarChart3} onClick={exportCSV}>Asistencia</PrimaryBtn>
+        <PrimaryBtn icon={Plus} onClick={() => openForm()}>Nuevo</PrimaryBtn>
+      </div>
+
+      {/* tabs */}
+      <div className="mb-4 flex gap-2 overflow-x-auto warmtech-scrollbar">
+        <button
+          type="button"
+          onClick={() => setActiveTab("list")}
+          className="min-h-10 shrink-0 rounded-full px-4 text-xs font-bold transition-colors"
+          style={{
+            border: `1px solid ${activeTab === "list" ? "transparent" : "var(--bd-1)"}`,
+            color: activeTab === "list" ? "#fffaf4" : "var(--tx-mut)",
+            background: activeTab === "list" ? "var(--brand-primary)" : "var(--surf-1)",
+          }}
+        >
           Lista
         </button>
         {selectedEmp && (
-          <button onClick={() => setActiveTab("detail")}
-            className="px-4 py-2 rounded-xl text-sm font-bold"
-            style={{background: activeTab==="detail" ? "var(--gold)" : "var(--surf)", color: activeTab==="detail" ? "#000" : "var(--muted)"}}>
+          <button
+            type="button"
+            onClick={() => setActiveTab("detail")}
+            className="min-h-10 shrink-0 rounded-full px-4 text-xs font-bold transition-colors"
+            style={{
+              border: `1px solid ${activeTab === "detail" ? "transparent" : "var(--bd-1)"}`,
+              color: activeTab === "detail" ? "#fffaf4" : "var(--tx-mut)",
+              background: activeTab === "detail" ? "var(--brand-primary)" : "var(--surf-1)",
+            }}
+          >
             {selectedEmp.name}
           </button>
         )}
@@ -246,104 +295,141 @@ export default function EmpleadosPage() {
 
       {activeTab === "list" && (
         <>
-          {/* Filtro por rol */}
-          <div className="flex gap-2 mb-4 overflow-x-auto pb-1 items-center">
-            <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold flex-shrink-0 cursor-pointer"
-              style={{background:"var(--surf)",border:"1px solid var(--border)",color:"var(--muted)"}}>
-              <input type="checkbox" className="rounded cursor-pointer accent-[var(--gold)]"
-                checked={filtered.length > 0 && selectedIds.size === filtered.length}
-                onChange={toggleSelectAll} />
-              Seleccionar todo
-            </label>
-            <button onClick={() => setFilterRole("ALL")}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold flex-shrink-0"
-              style={{background: filterRole==="ALL" ? "var(--gold)" : "var(--surf)", color: filterRole==="ALL" ? "#000" : "var(--muted)", border:"1px solid var(--border)"}}>
-              Todos ({employees.length})
+          {/* filtro por rol + seleccionar todo */}
+          <div className="mb-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              aria-label="Seleccionar todo"
+              className="grid min-h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold"
+              style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx-mut)", display: "flex" }}
+            >
+              <ListChecks size={15} />
+              <span className="hidden sm:inline">
+                {filtered.length > 0 && selectedIds.size === filtered.length ? "Quitar" : "Todo"}
+              </span>
             </button>
-            {ROLES.map(r => {
-              const count = employees.filter(e => e.role === r.value).length;
-              return (
-                <button key={r.value} onClick={() => setFilterRole(r.value)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold flex-shrink-0"
-                  style={{background: filterRole===r.value ? r.color : "var(--surf)", color: filterRole===r.value ? "#000" : "var(--muted)", border:"1px solid var(--border)"}}>
-                  {r.label} ({count})
-                </button>
-              );
-            })}
+            <div className="min-w-0 flex-1">
+              <Chips options={roleChips} value={filterRole} onChange={setFilterRole} />
+            </div>
           </div>
 
-          {/* Grid empleados */}
+          {/* grid empleados */}
           {loading ? (
-            <div className="text-center py-12" style={{color:"var(--muted)"}}>Cargando...</div>
+            <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))" }}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-44 animate-pulse rounded-[18px] bg-surf-2" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="Sin empleados"
+              hint="Agrega tu primer empleado para empezar a gestionar tu equipo."
+              action={<PrimaryBtn full={false} icon={Plus} onClick={() => openForm()}>Nuevo empleado</PrimaryBtn>}
+            />
           ) : (
-            <div className="grid gap-4" style={{gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))"}}>
+            <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))" }}>
               {filtered.map((emp: any) => {
-                const role = ROLES.find(r => r.value === emp.role);
+                const role = roleMeta(emp.role);
+                const RoleIcon = role?.icon ?? Users;
                 const isOnShift = emp.shifts?.length > 0;
                 const sel = selectedIds.has(emp.id);
                 return (
-                  <div key={emp.id} className="rounded-2xl border overflow-hidden relative"
-                    style={{background:"var(--surf)", borderColor: sel ? "var(--gold)" : isOnShift ? "#22c55e" : "var(--border)",
-                      opacity: emp.isActive ? 1 : 0.5}}>
-                    <input type="checkbox" checked={sel} onChange={() => toggleSelect(emp.id)}
-                      className="absolute top-3 right-3 rounded cursor-pointer z-10 accent-[var(--gold)] w-4 h-4" />
-                    <div className="p-4 flex items-center gap-3">
+                  <WtCard
+                    key={emp.id}
+                    className="relative overflow-hidden"
+                    style={{
+                      borderColor: sel ? "var(--brand-primary)" : isOnShift ? "var(--ok)" : undefined,
+                      opacity: emp.isActive ? 1 : 0.55,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSelect(emp.id)}
+                      aria-label={sel ? "Deseleccionar" : "Seleccionar"}
+                      className="absolute right-3 top-3 z-10 grid h-6 w-6 place-items-center rounded-md"
+                      style={{
+                        background: sel ? "var(--brand-primary)" : "var(--surf-2)",
+                        border: `1px solid ${sel ? "transparent" : "var(--bd-1)"}`,
+                        color: "#fffaf4",
+                      }}
+                    >
+                      {sel && <CheckCircle2 size={14} />}
+                    </button>
+
+                    <div className="flex items-center gap-3 p-4">
                       {emp.photo ? (
-                        <img src={emp.photo} alt="" className="w-14 h-14 rounded-full object-cover border-2" style={{borderColor: role?.color || "var(--border)"}} />
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={emp.photo} alt="" className="h-12 w-12 rounded-xl object-cover" />
                       ) : (
-                        <div className="w-14 h-14 rounded-full flex items-center justify-center text-2xl border-2" style={{background:"var(--surf2)",borderColor: role?.color || "var(--border)"}}>
-                          {role?.label.split(" ")[0]}
-                        </div>
+                        <Avatar initials={initials(emp.name)} size={48} />
                       )}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-syne font-black truncate">{emp.name}</div>
-                        <div className="text-xs mt-0.5" style={{color: role?.color}}>{role?.label}</div>
-                        {emp.phone && <div className="text-xs" style={{color:"var(--muted)"}}>{emp.phone}</div>}
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        {isOnShift && (
-                          <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{background:"rgba(34,197,94,0.15)",color:"#22c55e"}}>En turno</span>
-                        )}
-                        {!emp.isActive && (
-                          <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{background:"rgba(239,68,68,0.1)",color:"#ef4444"}}>Inactivo</span>
-                        )}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-display font-extrabold text-tx-hi">{emp.name}</div>
+                        <div className="mt-0.5 flex items-center gap-1.5 text-[11px]" style={{ color: "var(--tx-mut)" }}>
+                          <RoleIcon size={12} style={{ color: `var(--${role?.tone === "ac" ? "brand-primary" : role?.tone})` }} />
+                          {role?.label}
+                        </div>
+                        {emp.phone && <div className="truncate text-[11px] text-tx-dim">{emp.phone}</div>}
                       </div>
                     </div>
 
-                    <div className="px-4 pb-3 flex flex-wrap gap-1">
-                      {PERMS.filter(p => emp[p.key]).map(p => (
-                        <span key={p.key} className="text-xs px-2 py-0.5 rounded-full"
-                          style={{background:"rgba(245,166,35,0.1)",color:"var(--gold)"}}>
-                          {p.label}
-                        </span>
-                      ))}
+                    <div className="flex flex-wrap gap-1.5 px-4">
+                      {isOnShift && <Pill tone="ok" live>En turno</Pill>}
+                      {!emp.isActive && <Pill tone="err">Inactivo</Pill>}
                     </div>
+
+                    {PERMS.some((p) => emp[p.key]) && (
+                      <div className="flex flex-wrap gap-1 px-4 pt-2">
+                        {PERMS.filter((p) => emp[p.key]).map((p) => (
+                          <span
+                            key={p.key}
+                            className="inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[10px] font-semibold"
+                            style={{ background: "var(--iris-soft)", color: "var(--brand-primary)" }}
+                          >
+                            <p.icon size={10} /> {p.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     {(emp.scheduleStart || emp.scheduleDays?.length > 0) && (
-                      <div className="px-4 pb-3 text-xs" style={{color:"var(--muted)"}}>
-                        🕐 {emp.scheduleStart || "?"} - {emp.scheduleEnd || "?"}
+                      <div className="flex items-center gap-1.5 px-4 pt-2 text-[11px] text-tx-mut">
+                        <Clock size={12} /> {emp.scheduleStart || "?"} - {emp.scheduleEnd || "?"}
                         {emp.scheduleDays?.length > 0 && ` · ${emp.scheduleDays.join(", ")}`}
                       </div>
                     )}
 
-                    <div className="flex gap-2 px-4 pb-4">
-                      <button onClick={() => viewDetail(emp)}
-                        className="flex-1 py-2 rounded-xl text-xs font-bold border"
-                        style={{borderColor:"var(--border)",color:"var(--muted)"}}>
-                        📋 Historial
+                    <div className="flex gap-2 p-4 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => viewDetail(emp)}
+                        className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl text-xs font-bold text-tx-mut"
+                        style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                      >
+                        <History size={14} /> Historial
                       </button>
-                      <button onClick={() => openForm(emp)}
-                        className="flex-1 py-2 rounded-xl text-xs font-bold border"
-                        style={{borderColor:"var(--border)",color:"var(--muted)"}}>
-                        Editar
+                      <button
+                        type="button"
+                        onClick={() => openForm(emp)}
+                        aria-label="Editar"
+                        className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-tx-mut"
+                        style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                      >
+                        <Pencil size={15} />
                       </button>
-                      <button onClick={() => deleteEmployee(emp.id, emp.role)}
-                        className="px-3 py-2 rounded-xl text-xs"
-                        style={{background:"rgba(239,68,68,0.1)",color:"#ef4444"}}>
-                        🗑️
+                      <button
+                        type="button"
+                        onClick={() => deleteEmployee(emp.id, emp.role)}
+                        aria-label="Eliminar"
+                        className="grid h-10 w-10 shrink-0 place-items-center rounded-xl"
+                        style={{ background: "var(--err-soft)", color: "var(--err)" }}
+                      >
+                        <Trash2 size={15} />
                       </button>
                     </div>
-                  </div>
+                  </WtCard>
                 );
               })}
             </div>
@@ -353,243 +439,298 @@ export default function EmpleadosPage() {
 
       {activeTab === "detail" && selectedEmp && (
         <div className="max-w-2xl">
-          <div className="rounded-2xl border p-6 mb-4" style={{background:"var(--surf)",borderColor:"var(--border)"}}>
-            <div className="flex items-center gap-4 mb-4">
+          <WtCard className="mb-4 p-6">
+            <div className="mb-4 flex items-center gap-4">
               {selectedEmp.photo ? (
-                <img src={selectedEmp.photo} alt="" className="w-20 h-20 rounded-full object-cover" />
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={selectedEmp.photo} alt="" className="h-20 w-20 rounded-2xl object-cover" />
               ) : (
-                <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl" style={{background:"var(--surf2)"}}>
-                  {ROLES.find(r => r.value === selectedEmp.role)?.label.split(" ")[0]}
-                </div>
+                <Avatar initials={initials(selectedEmp.name)} size={80} />
               )}
-              <div>
-                <h2 className="font-syne font-black text-2xl">{selectedEmp.name}</h2>
-                <p style={{color: ROLES.find(r => r.value === selectedEmp.role)?.color}}>
-                  {ROLES.find(r => r.value === selectedEmp.role)?.label}
-                </p>
-                {selectedEmp.phone && <p className="text-sm" style={{color:"var(--muted)"}}>{selectedEmp.phone}</p>}
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl font-extrabold text-tx-hi">{selectedEmp.name}</h2>
+                <div className="mt-1 flex items-center gap-1.5 text-sm" style={{ color: "var(--tx-mid)" }}>
+                  {(() => {
+                    const role = roleMeta(selectedEmp.role);
+                    const RoleIcon = role?.icon ?? Users;
+                    return <><RoleIcon size={14} /> {role?.label}</>;
+                  })()}
+                </div>
+                {selectedEmp.phone && <p className="text-sm text-tx-mut">{selectedEmp.phone}</p>}
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="rounded-xl p-3" style={{background:"var(--surf2)"}}>
-                <div className="text-xs font-bold mb-1" style={{color:"var(--muted)"}}>Turnos este mes</div>
-                <div className="text-2xl font-black" style={{color:"var(--gold)"}}>{shifts.filter(s => new Date(s.startAt) > new Date(Date.now() - 30*24*60*60*1000)).length}</div>
-              </div>
-              <div className="rounded-xl p-3" style={{background:"var(--surf2)"}}>
-                <div className="text-xs font-bold mb-1" style={{color:"var(--muted)"}}>Horas este mes</div>
-                <div className="text-2xl font-black" style={{color:"var(--gold)"}}>
-                  {shifts.filter(s => s.endAt && new Date(s.startAt) > new Date(Date.now() - 30*24*60*60*1000))
+            <div className="mb-4 grid grid-cols-2 gap-3">
+              <WtCard className="p-3" style={{ background: "var(--surf-2)" }}>
+                <div className="text-[11px] text-tx-mut">Turnos este mes</div>
+                <div className="mt-1 font-display text-2xl font-extrabold text-primary">
+                  {shifts.filter((s) => new Date(s.startAt) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)).length}
+                </div>
+              </WtCard>
+              <WtCard className="p-3" style={{ background: "var(--surf-2)" }}>
+                <div className="text-[11px] text-tx-mut">Horas este mes</div>
+                <div className="mt-1 font-display text-2xl font-extrabold text-primary">
+                  {shifts.filter((s) => s.endAt && new Date(s.startAt) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
                     .reduce((acc, s) => acc + (new Date(s.endAt).getTime() - new Date(s.startAt).getTime()) / 3600000, 0).toFixed(1)}h
                 </div>
-              </div>
+              </WtCard>
             </div>
 
-            <div className="text-xs font-black uppercase tracking-wider mb-2" style={{color:"var(--muted)"}}>Permisos</div>
+            <SectionLabel>Permisos</SectionLabel>
             <div className="flex flex-wrap gap-2">
-              {PERMS.map(p => (
-                <span key={p.key} className="text-xs px-3 py-1.5 rounded-full font-bold"
-                  style={{
-                    background: selectedEmp[p.key] ? "rgba(34,197,94,0.1)" : "var(--surf2)",
-                    color: selectedEmp[p.key] ? "#22c55e" : "var(--muted)",
-                    border: `1px solid ${selectedEmp[p.key] ? "rgba(34,197,94,0.2)" : "var(--border)"}`
-                  }}>
-                  {selectedEmp[p.key] ? "✓" : "✗"} {p.label}
-                </span>
-              ))}
+              {PERMS.map((p) => {
+                const on = selectedEmp[p.key];
+                return (
+                  <span
+                    key={p.key}
+                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
+                    style={{
+                      background: on ? "var(--ok-soft)" : "var(--surf-2)",
+                      color: on ? "var(--ok)" : "var(--tx-mut)",
+                      border: `1px solid ${on ? "transparent" : "var(--bd-1)"}`,
+                    }}
+                  >
+                    <p.icon size={12} /> {p.label}
+                  </span>
+                );
+              })}
             </div>
-          </div>
+          </WtCard>
 
-          <div className="rounded-2xl border overflow-hidden" style={{borderColor:"var(--border)"}}>
-            <div className="px-5 py-3 border-b font-syne font-bold" style={{borderColor:"var(--border)",background:"var(--surf2)"}}>
+          <WtCard className="overflow-hidden">
+            <div className="px-5 py-3 font-display font-bold text-tx-hi" style={{ background: "var(--surf-2)", borderBottom: "1px solid var(--bd-1)" }}>
               Historial de turnos
             </div>
             {loadingShifts ? (
-              <div className="text-center py-8" style={{color:"var(--muted)"}}>Cargando...</div>
+              <div className="py-8 text-center text-sm text-tx-mut">Cargando...</div>
             ) : shifts.length === 0 ? (
-              <div className="text-center py-8 text-sm" style={{color:"var(--muted)"}}>Sin turnos registrados</div>
+              <div className="py-8 text-center text-sm text-tx-mut">Sin turnos registrados</div>
             ) : shifts.map((shift: any) => (
-              <div key={shift.id} className="flex items-center justify-between px-5 py-3 border-b" style={{borderColor:"var(--border)"}}>
+              <div key={shift.id} className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid var(--bd-1)" }}>
                 <div>
-                  <div className="text-sm font-medium">{new Date(shift.startAt).toLocaleDateString('es-MX',{weekday:'short',day:'numeric',month:'short'})}</div>
-                  <div className="text-xs" style={{color:"var(--muted)"}}>
-                    {new Date(shift.startAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}
-                    {shift.endAt && ` → ${new Date(shift.endAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}`}
+                  <div className="text-sm font-medium text-tx">{new Date(shift.startAt).toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short" })}</div>
+                  <div className="text-[11px] text-tx-mut">
+                    {new Date(shift.startAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                    {shift.endAt && ` → ${new Date(shift.endAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}`}
                   </div>
                 </div>
-                <span className="text-sm font-bold px-3 py-1 rounded-full"
-                  style={{background: shift.endAt ? "var(--surf2)" : "rgba(34,197,94,0.1)", color: shift.endAt ? "var(--muted)" : "#22c55e"}}>
-                  {formatDur(shift.startAt, shift.endAt)}
-                </span>
+                {shift.endAt ? (
+                  <Pill tone="neutral">{formatDur(shift.startAt, shift.endAt)}</Pill>
+                ) : (
+                  <Pill tone="ok" live>En turno</Pill>
+                )}
               </div>
             ))}
-          </div>
+          </WtCard>
         </div>
       )}
 
-      {/* Floating Bulk Action Bar */}
+      {/* floating bulk action bar */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border"
-          style={{background:"var(--surf)",borderColor:"var(--gold)",boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}>
-          <span className="text-xs font-black uppercase tracking-widest px-2 py-1 rounded-lg" style={{background:"rgba(245,166,35,0.15)",color:"var(--gold)"}}>
-            {selectedIds.size} seleccionado{selectedIds.size !== 1 ? "s" : ""}
+        <div
+          className="fixed bottom-24 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-2xl px-4 py-3 md:bottom-6"
+          style={{ background: "var(--surf-1)", border: "1px solid var(--brand-primary)", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}
+        >
+          <span
+            className="rounded-lg px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest"
+            style={{ background: "var(--iris-soft)", color: "var(--brand-primary)" }}
+          >
+            {selectedIds.size} sel.
           </span>
-          <button onClick={() => bulkToggleActive(true)}
-            className="px-3 py-1.5 rounded-xl text-xs font-black text-green-400 border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 transition-all">
-            Activar
+          <button
+            type="button"
+            onClick={() => bulkToggleActive(true)}
+            className="inline-flex min-h-10 items-center gap-1 rounded-xl px-3 text-xs font-bold"
+            style={{ background: "var(--ok-soft)", color: "var(--ok)" }}
+          >
+            <CheckCircle2 size={14} /> Activar
           </button>
-          <button onClick={() => bulkToggleActive(false)}
-            className="px-3 py-1.5 rounded-xl text-xs font-black text-yellow-400 border border-yellow-500/30 bg-yellow-500/10 hover:bg-yellow-500/20 transition-all">
-            Desactivar
+          <button
+            type="button"
+            onClick={() => bulkToggleActive(false)}
+            className="inline-flex min-h-10 items-center gap-1 rounded-xl px-3 text-xs font-bold"
+            style={{ background: "var(--warn-soft)", color: "var(--warn)" }}
+          >
+            <Ban size={14} /> Desactivar
           </button>
-          <button onClick={bulkDelete}
-            className="px-3 py-1.5 rounded-xl text-xs font-black text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all">
-            🗑️ Eliminar
+          <button
+            type="button"
+            onClick={bulkDelete}
+            className="inline-flex min-h-10 items-center gap-1 rounded-xl px-3 text-xs font-bold"
+            style={{ background: "var(--err-soft)", color: "var(--err)" }}
+          >
+            <Trash2 size={14} /> Eliminar
           </button>
-          <button onClick={() => setSelectedIds(new Set())}
-            className="w-7 h-7 rounded-xl flex items-center justify-center text-sm transition-all"
-            style={{background:"var(--surf2)",color:"var(--muted)"}}>✕</button>
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            aria-label="Cerrar selección"
+            className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut"
+            style={{ background: "var(--surf-2)" }}
+          >
+            <X size={15} />
+          </button>
         </div>
       )}
 
+      {/* modal form */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{background:"rgba(0,0,0,0.85)"}}>
-          <div className="w-full max-w-2xl rounded-2xl border my-4" style={{background:"var(--surf)",borderColor:"var(--border)"}}>
-            <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0" style={{borderColor:"var(--border)"}}>
-              <h2 className="font-syne font-black text-xl">{editEmp ? "Editar" : "Nuevo"} empleado</h2>
-              <button onClick={closeForm} className="w-8 h-8 rounded-xl flex items-center justify-center"
-                style={{background:"var(--surf2)",color:"var(--muted)"}}>✕</button>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,0.8)" }}>
+          <WtCard className="my-4 w-full max-w-2xl">
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid var(--bd-1)" }}>
+              <h2 className="font-display text-xl font-extrabold text-tx-hi">{editEmp ? "Editar" : "Nuevo"} empleado</h2>
+              <button
+                type="button"
+                onClick={closeForm}
+                aria-label="Cerrar"
+                className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut"
+                style={{ background: "var(--surf-2)" }}
+              >
+                <X size={16} />
+              </button>
             </div>
-            <form onSubmit={saveEmployee} className="p-6 overflow-y-auto" style={{maxHeight:"80vh"}}>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="col-span-2">
-                  <label className="block text-xs font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>Nombre completo</label>
-                  <input value={form.name} onChange={e => setForm((p:any)=>({...p,name:e.target.value}))} required
-                    className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-                    style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+
+            <form onSubmit={saveEmployee} className="overflow-y-auto p-6" style={{ maxHeight: "78vh" }}>
+              <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Nombre completo</label>
+                  <input value={form.name} onChange={(e) => setForm((p: any) => ({ ...p, name: e.target.value }))} required className={inputCls} style={inputStyle} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>Teléfono</label>
-                  <input value={form.phone} onChange={e => setForm((p:any)=>({...p,phone:e.target.value}))}
-                    className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-                    style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+                  <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Teléfono</label>
+                  <input value={form.phone} onChange={(e) => setForm((p: any) => ({ ...p, phone: e.target.value }))} className={inputCls} style={inputStyle} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>
+                  <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
                     {editEmp ? "PIN nuevo (vacío = no cambia)" : "PIN (4-6 dígitos)"}
                   </label>
                   <input
                     value={form.pin}
-                    onChange={e => setForm((p:any)=>({...p,pin:e.target.value.replace(/\D/g, "").slice(0,6)}))}
+                    onChange={(e) => setForm((p: any) => ({ ...p, pin: e.target.value.replace(/\D/g, "").slice(0, 6) }))}
                     inputMode="numeric"
                     pattern="\d*"
                     {...(!editEmp && { required: true })}
                     maxLength={6}
                     placeholder={editEmp ? "Sin cambios" : "1234"}
-                    className="w-full px-4 py-2.5 rounded-xl text-sm outline-none font-mono tracking-widest"
-                    style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}}
+                    className={`${inputCls} font-mono tracking-widest`}
+                    style={inputStyle}
                   />
                 </div>
               </div>
 
               <div className="mb-4">
-                <label className="block text-xs font-bold mb-2 uppercase tracking-wider" style={{color:"var(--muted)"}}>Rol</label>
-                <div className="grid grid-cols-5 gap-2">
-                  {ROLES.map(r => (
-                    <button key={r.value} type="button" onClick={() => { const defs = ROLE_DEFAULTS[r.value] || ROLE_DEFAULTS.WAITER; setForm((p:any)=>({...p,role:r.value,...defs})) }}
-                      className="py-2 rounded-xl text-xs font-bold text-center"
-                      style={{background: form.role===r.value ? r.color : "var(--surf2)", color: form.role===r.value ? "#000" : "var(--muted)", border:`1px solid ${form.role===r.value ? r.color : "var(--border)"}`}}>
-                      {r.label}
-                    </button>
-                  ))}
+                <label className="mb-2 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Rol</label>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {ROLES.map((r) => {
+                    const RoleIcon = r.icon;
+                    const active = form.role === r.value;
+                    return (
+                      <button
+                        key={r.value}
+                        type="button"
+                        onClick={() => { const defs = ROLE_DEFAULTS[r.value] || ROLE_DEFAULTS.WAITER; setForm((p: any) => ({ ...p, role: r.value, ...defs })); }}
+                        className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-2 text-[11px] font-bold transition-colors"
+                        style={{
+                          background: active ? "var(--brand-primary)" : "var(--surf-2)",
+                          color: active ? "#fffaf4" : "var(--tx-mut)",
+                          border: `1px solid ${active ? "transparent" : "var(--bd-1)"}`,
+                        }}
+                      >
+                        <RoleIcon size={16} /> {r.short}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="mb-4">
-                <label className="block text-xs font-bold mb-2 uppercase tracking-wider" style={{color:"var(--muted)"}}>Horario</label>
-                <div className="flex gap-3 mb-2">
+                <label className="mb-2 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Horario</label>
+                <div className="mb-2 flex gap-3">
                   <div className="flex-1">
-                    <label className="text-xs mb-1 block" style={{color:"var(--muted)"}}>Entrada</label>
-                    <input type="time" value={form.scheduleStart} onChange={e => setForm((p:any)=>({...p,scheduleStart:e.target.value}))}
-                      className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                      style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+                    <label className="mb-1 block text-[11px] text-tx-mut">Entrada</label>
+                    <input type="time" value={form.scheduleStart} onChange={(e) => setForm((p: any) => ({ ...p, scheduleStart: e.target.value }))} className={inputCls} style={inputStyle} />
                   </div>
                   <div className="flex-1">
-                    <label className="text-xs mb-1 block" style={{color:"var(--muted)"}}>Salida</label>
-                    <input type="time" value={form.scheduleEnd} onChange={e => setForm((p:any)=>({...p,scheduleEnd:e.target.value}))}
-                      className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                      style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+                    <label className="mb-1 block text-[11px] text-tx-mut">Salida</label>
+                    <input type="time" value={form.scheduleEnd} onChange={(e) => setForm((p: any) => ({ ...p, scheduleEnd: e.target.value }))} className={inputCls} style={inputStyle} />
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  {DAYS.map(d => (
-                    <button key={d} type="button" onClick={() => toggleDay(d)}
-                      className="flex-1 py-1.5 rounded-xl text-xs font-bold"
-                      style={{background: form.scheduleDays.includes(d) ? "var(--gold)" : "var(--surf2)", color: form.scheduleDays.includes(d) ? "#000" : "var(--muted)"}}>
-                      {d}
-                    </button>
-                  ))}
+                <div className="flex gap-1.5">
+                  {DAYS.map((d) => {
+                    const active = form.scheduleDays.includes(d);
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => toggleDay(d)}
+                        className="min-h-10 flex-1 rounded-xl text-[11px] font-bold transition-colors"
+                        style={{
+                          background: active ? "var(--brand-primary)" : "var(--surf-2)",
+                          color: active ? "#fffaf4" : "var(--tx-mut)",
+                          border: `1px solid ${active ? "transparent" : "var(--bd-1)"}`,
+                        }}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {form.role === "WAITER" && (
                 <div className="mb-4">
-                  <label className="block text-xs font-bold mb-1 uppercase tracking-wider" style={{color:"var(--muted)"}}>Mesas asignadas (separadas por coma)</label>
-                  <input value={form.tables.join(",")} onChange={e => setForm((p:any)=>({...p,tables:e.target.value.split(",").map((t:string)=>t.trim()).filter(Boolean)}))}
+                  <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Mesas asignadas (separadas por coma)</label>
+                  <input
+                    value={form.tables.join(",")}
+                    onChange={(e) => setForm((p: any) => ({ ...p, tables: e.target.value.split(",").map((t: string) => t.trim()).filter(Boolean) }))}
                     placeholder="1,2,3,4"
-                    className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-                    style={{background:"var(--surf2)",border:"1px solid var(--border)",color:"var(--text)"}} />
+                    className={inputCls}
+                    style={inputStyle}
+                  />
                 </div>
               )}
 
               <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold uppercase tracking-wider" style={{color:"var(--muted)"}}>Permisos individuales</label>
-                  <button type="button" onClick={() => setForm((p:any)=>({...p,...ROLE_DEFAULTS[form.role]}))}
-                    className="text-xs px-2 py-1 rounded-lg"
-                    style={{background:"var(--surf2)",color:"var(--gold)"}}>
-                    Restaurar por rol
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Permisos individuales</label>
+                  <button
+                    type="button"
+                    onClick={() => setForm((p: any) => ({ ...p, ...ROLE_DEFAULTS[form.role] }))}
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-primary"
+                    style={{ background: "var(--surf-2)" }}
+                  >
+                    <RotateCcw size={12} /> Restaurar por rol
                   </button>
                 </div>
-                <div className="rounded-xl border divide-y" style={{borderColor:"var(--border)"}}>
-                  {PERMS.map(p => (
-                    <div key={p.key} className="flex items-center justify-between px-4 py-2.5">
-                      <span className="text-sm">{p.label}</span>
-                      <button type="button" onClick={() => setForm((prev:any)=>({...prev,[p.key]:!prev[p.key]}))}
-                        className="w-11 h-6 rounded-full transition-all relative flex-shrink-0"
-                        style={{background: form[p.key] ? "var(--gold)" : "var(--surf2)"}}>
-                        <div className="w-5 h-5 rounded-full absolute top-0.5 transition-all"
-                          style={{background:"white", left: form[p.key] ? "24px" : "2px"}} />
-                      </button>
+                <div className="overflow-hidden rounded-xl" style={{ border: "1px solid var(--bd-1)" }}>
+                  {PERMS.map((p, i) => (
+                    <div
+                      key={p.key}
+                      className="flex items-center justify-between px-4 py-2.5"
+                      style={i < PERMS.length - 1 ? { borderBottom: "1px solid var(--bd-1)" } : undefined}
+                    >
+                      <span className="flex items-center gap-2 text-[13.5px] text-tx">
+                        <p.icon size={15} className="text-tx-mut" /> {p.label}
+                      </span>
+                      <Toggle checked={!!form[p.key]} onChange={(next) => setForm((prev: any) => ({ ...prev, [p.key]: next }))} label={p.label} />
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="flex items-center justify-between mb-6">
-                <span className="text-sm font-medium">Empleado activo</span>
-                <button type="button" onClick={() => setForm((p:any)=>({...p,isActive:!p.isActive}))}
-                  className="w-11 h-6 rounded-full transition-all relative"
-                  style={{background: form.isActive ? "var(--gold)" : "var(--surf2)"}}>
-                  <div className="w-5 h-5 rounded-full absolute top-0.5 transition-all"
-                    style={{background:"white", left: form.isActive ? "24px" : "2px"}} />
-                </button>
+              <div className="mb-6 flex items-center justify-between rounded-xl px-4 py-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                <span className="text-sm font-medium text-tx">Empleado activo</span>
+                <Toggle checked={!!form.isActive} onChange={(next) => setForm((p: any) => ({ ...p, isActive: next }))} label="Empleado activo" />
               </div>
 
               <div className="flex gap-3">
-                <button type="button" onClick={closeForm}
-                  className="flex-1 py-3 rounded-xl font-bold border"
-                  style={{borderColor:"var(--border)",color:"var(--muted)"}}>Cancelar</button>
-                <button type="submit" disabled={saving}
-                  className="flex-1 py-3 rounded-xl font-syne font-black"
-                  style={{background: saving ? "var(--muted)" : "var(--gold)",color:"#000"}}>
-                  {saving ? "..." : "Guardar"}
-                </button>
+                <PrimaryBtn ghost onClick={closeForm}>Cancelar</PrimaryBtn>
+                <PrimaryBtn type="submit" disabled={saving}>{saving ? "..." : "Guardar"}</PrimaryBtn>
               </div>
             </form>
-          </div>
+          </WtCard>
         </div>
       )}
-    </div>
+    </WtScreen>
   );
 }

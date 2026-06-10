@@ -1,7 +1,16 @@
 "use client";
 import { useEffect, useState } from "react";
+import {
+  Store, Globe, Power, Clock, Phone, MessageCircle, MapPin, Palette,
+  Truck, Star, Link2, Copy, Check, ExternalLink, Crosshair, AlertTriangle,
+  Zap, Flower2, Moon, Bike,
+} from "lucide-react";
 import api from "@/lib/api";
 import { getStoreUrl } from "@/lib/config";
+import {
+  WtScreen, PageHeader, WtCard, SectionHead, Toggle, PrimaryBtn,
+  StatTile,
+} from "@/components/warmtech";
 
 type BusinessHour = { day: number; enabled: boolean; open: string; close: string };
 
@@ -57,6 +66,14 @@ const COUNTRIES = [
 ];
 
 const DEFAULT_HOUR: Omit<BusinessHour, "day"> = { enabled: false, open: "09:00", close: "22:00" };
+
+/* ── styled controls ─────────────────────────────────────────────── */
+const INPUT_CLS = "min-h-12 w-full rounded-xl px-4 text-sm font-medium outline-none transition-colors focus:border-[var(--brand-primary)]";
+const INPUT_STYLE = { background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <div className="mb-1.5 font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">{children}</div>;
+}
 
 export default function TiendaConfigPage() {
   const [loading, setLoading] = useState(true);
@@ -179,99 +196,144 @@ export default function TiendaConfigPage() {
     }
   }
 
-  if (loading) return (
-    <div className="p-8 text-white font-syne flex flex-col items-center justify-center min-h-[50vh]">
-      <div className="w-10 h-10 border-t-2 border-orange-500 rounded-full animate-spin mb-4"></div>
-      <p className="text-xs font-black uppercase tracking-widest opacity-50">Cargando...</p>
-    </div>
-  );
+  if (loading) {
+    return (
+      <WtScreen>
+        <PageHeader eyebrow="Tienda online" title="Tienda" subtitle="Configura tu tienda online y reglas de pedido" />
+        <div className="space-y-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-28 animate-pulse rounded-[18px] bg-surf-2" />
+          ))}
+        </div>
+      </WtScreen>
+    );
+  }
+
+  const THEMES = [
+    { id: "BRUTALIST", name: "Express", icon: Zap, desc: "Lista estilo app · Claro" },
+    { id: "KAWAII", name: "Boutique", icon: Flower2, desc: "Grid suave · Claro" },
+    { id: "HALO", name: "Obsidiana", icon: Moon, desc: "Oscuro premium · Bento" },
+    { id: "ANTOJO", name: "Antojo", icon: Bike, desc: "Delivery oscuro · Naranja" },
+  ];
 
   return (
-    <div className="max-w-5xl mx-auto p-8 font-syne text-white">
-      <div className="mb-12">
-        <h1 className="text-5xl font-black mb-2 uppercase tracking-tighter">Tienda</h1>
-        <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.2em]">Configura tu tienda online y reglas de pedido</p>
-      </div>
+    <WtScreen>
+      <PageHeader
+        eyebrow="Tienda online"
+        title="Tienda"
+        subtitle="Configura tu tienda online y reglas de pedido"
+        actions={<PrimaryBtn icon={Store} full={false} onClick={handleSave} disabled={saving}>{saving ? "Guardando…" : "Guardar tienda"}</PrimaryBtn>}
+      />
 
-      <div className="space-y-6">
+      {/* Card destacada de la tienda online: URL + estado */}
+      {storeUrl && (
+        <WtCard className="mb-4 p-5 md:p-6">
+          <SectionHead title="Tu tienda online" />
+          <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(storeUrl)}`}
+              alt="QR de la tienda"
+              width={130}
+              height={130}
+              className="shrink-0 rounded-2xl bg-white p-2"
+            />
+            <div className="w-full min-w-0 flex-1">
+              <div className="mb-3 flex items-center justify-between gap-3 rounded-xl px-3 py-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                <Link2 size={15} className="shrink-0 text-tx-mut" />
+                <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-primary">{storeUrl}</span>
+              </div>
+              {/* 2 stats: estado y tiempo estimado */}
+              <div className="mb-3 grid grid-cols-2 gap-3">
+                <StatTile
+                  icon={Power}
+                  value={<span style={{ color: config.isOpen ? "var(--ok)" : "var(--err)" }}>{config.isOpen ? "Abierta" : "Cerrada"}</span>}
+                  label={config.isOpen ? "Recibiendo pedidos" : "Pedidos bloqueados"}
+                />
+                <StatTile icon={Clock} value={`${config.estimatedDelivery} min`} label="Entrega estimada" />
+              </div>
+              <div className="flex gap-2">
+                <PrimaryBtn ghost icon={copied ? Check : Copy} onClick={copyStoreUrl}>{copied ? "¡Copiado!" : "Copiar enlace"}</PrimaryBtn>
+                <PrimaryBtn icon={ExternalLink} href={storeUrl}>Ver tienda</PrimaryBtn>
+              </div>
+            </div>
+          </div>
+        </WtCard>
+      )}
+
+      <div className="space-y-4">
         {/* Estado de la tienda */}
-        <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 space-y-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-black uppercase tracking-tighter">Estado de la Tienda</p>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">
+        <WtCard className="p-5 md:p-6">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <Power size={16} className="shrink-0 text-tx-mid" />
+                <p className="font-display text-base font-extrabold text-tx-hi">Estado de la tienda</p>
+              </div>
+              <p className="mt-1 text-[12px] text-tx-mut">
                 {config.isOpen ? "Abierta — recibiendo pedidos" : "Cerrada — pedidos bloqueados"}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setConfig(p => ({ ...p, isOpen: !p.isOpen }))}
-              className={`relative w-16 h-9 rounded-full transition-all flex-shrink-0 ${config.isOpen ? "bg-emerald-500" : "bg-gray-700"}`}
-              aria-pressed={config.isOpen}
-            >
-              <span className={`absolute top-1 w-7 h-7 bg-white rounded-full transition-all ${config.isOpen ? "left-8" : "left-1"}`} />
-            </button>
+            <Toggle checked={config.isOpen} onChange={(v) => setConfig(p => ({ ...p, isOpen: v }))} label="Estado de la tienda" />
           </div>
           {!config.isOpen && (
-            <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Mensaje al cliente (tienda cerrada)</label>
-              <input type="text" value={config.closedMessage} placeholder="Ej. Volvemos mañana a las 9:00 am" onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, closedMessage: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+            <div className="mt-4">
+              <FieldLabel>Mensaje al cliente (tienda cerrada)</FieldLabel>
+              <input type="text" value={config.closedMessage} placeholder="Ej. Volvemos mañana a las 9:00 am" onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, closedMessage: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
             </div>
           )}
-        </div>
+        </WtCard>
 
         {/* País / WhatsApp */}
-        <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 space-y-3">
-          <div>
-            <p className="text-sm font-black uppercase tracking-tighter">País</p>
-            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">
-              Define la lada que se antepone a los teléfonos en los enlaces de WhatsApp
-            </p>
+        <WtCard className="p-5 md:p-6">
+          <div className="mb-3 flex items-center gap-2">
+            <Globe size={16} className="shrink-0 text-tx-mid" />
+            <div className="min-w-0">
+              <p className="font-display text-base font-extrabold text-tx-hi">País</p>
+              <p className="mt-0.5 text-[12px] text-tx-mut">Define la lada que se antepone a los teléfonos en los enlaces de WhatsApp</p>
+            </div>
           </div>
           <select
             value={config.countryCode}
             onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, countryCode: v })); }}
-            className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold"
+            className={INPUT_CLS} style={INPUT_STYLE}
           >
             {COUNTRIES.map(c => (
               <option key={c.code} value={c.code}>{c.name}</option>
             ))}
           </select>
-        </div>
+        </WtCard>
 
         {/* Horario de atención automático */}
-        <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 space-y-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-black uppercase tracking-tighter">Horario Automático</p>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">
+        <WtCard className="p-5 md:p-6">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <Clock size={16} className="shrink-0 text-tx-mid" />
+                <p className="font-display text-base font-extrabold text-tx-hi">Horario automático</p>
+              </div>
+              <p className="mt-1 text-[12px] text-tx-mut">
                 {config.scheduleEnabled ? "La tienda abre y cierra sola según el horario" : "Desactivado — controlas la apertura manualmente"}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setConfig(p => ({ ...p, scheduleEnabled: !p.scheduleEnabled }))}
-              className={`relative w-16 h-9 rounded-full transition-all flex-shrink-0 ${config.scheduleEnabled ? "bg-emerald-500" : "bg-gray-700"}`}
-              aria-pressed={config.scheduleEnabled}
-            >
-              <span className={`absolute top-1 w-7 h-7 bg-white rounded-full transition-all ${config.scheduleEnabled ? "left-8" : "left-1"}`} />
-            </button>
+            <Toggle checked={config.scheduleEnabled} onChange={(v) => setConfig(p => ({ ...p, scheduleEnabled: v }))} label="Horario automático" />
           </div>
 
           {config.scheduleEnabled && (
-            <>
+            <div className="mt-4 space-y-4">
               {!config.isOpen && (
-                <p className="text-[11px] text-amber-400/90 font-bold bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-3">
-                  El interruptor «Estado de la Tienda» está en cerrado y manda sobre el horario: la tienda seguirá cerrada hasta que lo vuelvas a abrir.
+                <p className="flex items-start gap-2 rounded-2xl px-4 py-3 text-[11.5px] font-semibold" style={{ background: "var(--warn-soft)", color: "var(--warn)" }}>
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                  El interruptor «Estado de la tienda» está en cerrado y manda sobre el horario: la tienda seguirá cerrada hasta que lo vuelvas a abrir.
                 </p>
               )}
 
               <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Zona horaria</label>
+                <FieldLabel>Zona horaria</FieldLabel>
                 <select
                   value={config.timezone}
                   onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, timezone: v })); }}
-                  className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold"
+                  className={INPUT_CLS} style={INPUT_STYLE}
                 >
                   {TIMEZONES.map(tz => (
                     <option key={tz.value} value={tz.value}>{tz.label}</option>
@@ -283,256 +345,227 @@ export default function TiendaConfigPage() {
                 {WEEK_DAYS.map(d => {
                   const h = getDayHour(d.value);
                   return (
-                    <div key={d.value} className="flex items-center gap-3 bg-black/40 border border-white/5 rounded-2xl px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => setDayHour(d.value, { enabled: !h.enabled })}
-                        className={`relative w-12 h-7 rounded-full transition-all flex-shrink-0 ${h.enabled ? "bg-emerald-500" : "bg-gray-700"}`}
-                        aria-pressed={h.enabled}
-                      >
-                        <span className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all ${h.enabled ? "left-6" : "left-1"}`} />
-                      </button>
-                      <span className="text-xs font-black uppercase tracking-tighter w-24">{d.label}</span>
+                    <div key={d.value} className="flex items-center gap-3 rounded-2xl px-3 py-2.5" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                      <Toggle checked={h.enabled} onChange={(v) => setDayHour(d.value, { enabled: v })} label={`${d.label} abierto`} />
+                      <span className="w-20 shrink-0 text-[12.5px] font-bold text-tx">{d.label}</span>
                       {h.enabled ? (
-                        <div className="flex items-center gap-2 ml-auto">
+                        <div className="ml-auto flex items-center gap-2">
                           <input
                             type="time"
                             value={h.open}
                             onChange={(e) => { const v = e.target.value; setDayHour(d.value, { open: v }); }}
-                            className="bg-black border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-orange-500 transition-all text-sm font-bold"
+                            className="min-h-10 rounded-xl px-2 text-sm font-bold outline-none focus:border-[var(--brand-primary)]"
+                            style={INPUT_STYLE}
                           />
-                          <span className="text-gray-600 font-black text-xs">a</span>
+                          <span className="text-xs font-bold text-tx-dim">a</span>
                           <input
                             type="time"
                             value={h.close}
                             onChange={(e) => { const v = e.target.value; setDayHour(d.value, { close: v }); }}
-                            className="bg-black border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-orange-500 transition-all text-sm font-bold"
+                            className="min-h-10 rounded-xl px-2 text-sm font-bold outline-none focus:border-[var(--brand-primary)]"
+                            style={INPUT_STYLE}
                           />
                         </div>
                       ) : (
-                        <span className="ml-auto text-[10px] text-gray-600 font-black uppercase tracking-widest">Cerrado</span>
+                        <span className="ml-auto font-mono text-[10px] uppercase tracking-[.12em] text-tx-dim">Cerrado</span>
                       )}
                     </div>
                   );
                 })}
               </div>
-              <p className="text-[10px] text-gray-500 font-bold leading-relaxed ml-2">
+              <p className="text-[11px] leading-relaxed text-tx-mut">
                 Tip: para un turno nocturno que cruza medianoche (ej. 18:00 → 02:00), pon la hora de cierre menor a la de apertura.
               </p>
-            </>
+            </div>
           )}
-        </div>
+        </WtCard>
 
         {/* Contacto y tema */}
-        <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 space-y-6">
-          <div>
-            <p className="text-sm font-black uppercase tracking-tighter">Contacto Público</p>
-            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">Datos que verá el cliente en tu tienda</p>
+        <WtCard className="p-5 md:p-6">
+          <div className="mb-4">
+            <p className="font-display text-base font-extrabold text-tx-hi">Contacto público</p>
+            <p className="mt-0.5 text-[12px] text-tx-mut">Datos que verá el cliente en tu tienda</p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Teléfono</label>
-              <input type="text" value={config.phone} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, phone: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+              <FieldLabel><Phone size={11} className="mr-1 inline" /> Teléfono</FieldLabel>
+              <input type="text" value={config.phone} onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, phone: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
             </div>
             <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Mensajeria</label>
-              <input type="text" value={config.whatsappNumber} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, whatsappNumber: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+              <FieldLabel><MessageCircle size={11} className="mr-1 inline" /> Mensajería</FieldLabel>
+              <input type="text" value={config.whatsappNumber} onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, whatsappNumber: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
             </div>
           </div>
 
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Dirección Principal</label>
-            <input type="text" value={config.address} onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, address: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+          <div className="mt-4">
+            <FieldLabel><MapPin size={11} className="mr-1 inline" /> Dirección principal</FieldLabel>
+            <input type="text" value={config.address} onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, address: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
           </div>
 
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-3 block tracking-widest">Estilo de Tienda Online</label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { id: "BRUTALIST", name: "Express", emoji: "⚡", desc: "Lista estilo app · Claro" },
-                { id: "KAWAII", name: "Boutique", emoji: "🌸", desc: "Grid suave · Claro" },
-                { id: "HALO", name: "Obsidiana", emoji: "🌑", desc: "Oscuro premium · Bento" },
-                { id: "ANTOJO", name: "Antojo", emoji: "🛵", desc: "Delivery oscuro · Naranja" }
-              ].map(t => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setConfig(p => ({ ...p, storefrontTheme: t.id }))}
-                  className={`p-4 rounded-3xl border-2 transition-all text-left group ${
-                    config.storefrontTheme === t.id
-                      ? "border-orange-500 bg-orange-500/10"
-                      : "border-white/5 bg-black hover:border-white/20"
-                  }`}
-                >
-                  <span className="text-2xl mb-2 block">{t.emoji}</span>
-                  <p className="font-black text-sm uppercase tracking-tight">{t.name}</p>
-                  <p className="text-[10px] text-gray-500 font-bold group-hover:text-gray-400">{t.desc}</p>
-                </button>
-              ))}
+          <div className="mt-5">
+            <FieldLabel><Palette size={11} className="mr-1 inline" /> Estilo de tienda online</FieldLabel>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {THEMES.map(t => {
+                const active = config.storefrontTheme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setConfig(p => ({ ...p, storefrontTheme: t.id }))}
+                    className="flex min-h-[60px] items-start gap-3 rounded-2xl p-4 text-left transition-colors"
+                    style={{
+                      border: `2px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`,
+                      background: active ? "var(--iris-soft)" : "var(--surf-2)",
+                    }}
+                  >
+                    <t.icon size={20} className="mt-0.5 shrink-0" style={{ color: active ? "var(--brand-primary)" : "var(--tx-mut)" }} />
+                    <div className="min-w-0">
+                      <p className="font-display text-sm font-extrabold text-tx-hi">{t.name}</p>
+                      <p className="mt-0.5 text-[11px] text-tx-mut">{t.desc}</p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
-        </div>
+        </WtCard>
 
         {/* Envíos y reglas de la tienda online */}
-        <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 space-y-6">
-          <div>
-            <p className="text-sm font-black uppercase tracking-tighter">Envíos y Reglas de Pedido</p>
-            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">Reglas que verá el cliente al pedir</p>
+        <WtCard className="p-5 md:p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Truck size={16} className="shrink-0 text-tx-mid" />
+            <div className="min-w-0">
+              <p className="font-display text-base font-extrabold text-tx-hi">Envíos y reglas de pedido</p>
+              <p className="mt-0.5 text-[12px] text-tx-mut">Reglas que verá el cliente al pedir</p>
+            </div>
           </div>
 
           {/* Modo de cobro de envío */}
-          <div>
-            <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-3 block tracking-widest">Modo de cobro de envío</label>
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { id: "FLAT", name: "Tarifa fija", desc: "Un costo único para todos" },
-                { id: "DISTANCE", name: "Por distancia", desc: "Base + costo por km" },
-              ].map(m => (
+          <FieldLabel>Modo de cobro de envío</FieldLabel>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {[
+              { id: "FLAT", name: "Tarifa fija", desc: "Un costo único para todos" },
+              { id: "DISTANCE", name: "Por distancia", desc: "Base + costo por km" },
+            ].map(m => {
+              const active = config.deliveryMode === m.id;
+              return (
                 <button
                   key={m.id}
                   type="button"
                   onClick={() => setConfig(p => ({ ...p, deliveryMode: m.id as "FLAT" | "DISTANCE" }))}
-                  className={`p-4 rounded-3xl border-2 transition-all text-left ${
-                    config.deliveryMode === m.id ? "border-orange-500 bg-orange-500/10" : "border-white/5 bg-black hover:border-white/20"
-                  }`}
+                  className="rounded-2xl p-4 text-left transition-colors"
+                  style={{
+                    border: `2px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`,
+                    background: active ? "var(--iris-soft)" : "var(--surf-2)",
+                  }}
                 >
-                  <p className="font-black text-sm uppercase tracking-tight">{m.name}</p>
-                  <p className="text-[10px] text-gray-500 font-bold">{m.desc}</p>
+                  <p className="font-display text-sm font-extrabold text-tx-hi">{m.name}</p>
+                  <p className="mt-0.5 text-[11px] text-tx-mut">{m.desc}</p>
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
 
           {/* Campos comunes */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             {config.deliveryMode === "FLAT" && (
               <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Costo de envío ($)</label>
-                <input type="number" min="0" value={config.deliveryFee} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({...p, deliveryFee: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+                <FieldLabel>Costo de envío ($)</FieldLabel>
+                <input type="number" min="0" value={config.deliveryFee} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, deliveryFee: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
               </div>
             )}
             <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Compra mínima ($)</label>
-              <input type="number" min="0" value={config.minOrderAmount} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({...p, minOrderAmount: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+              <FieldLabel>Compra mínima ($)</FieldLabel>
+              <input type="number" min="0" value={config.minOrderAmount} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, minOrderAmount: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
             </div>
             <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Envío gratis desde ($)</label>
-              <input type="number" min="0" value={config.freeDeliveryFrom} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({...p, freeDeliveryFrom: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
-              <p className="text-[9px] text-gray-600 mt-1 ml-2">0 = sin envío gratis por monto</p>
+              <FieldLabel>Envío gratis desde ($)</FieldLabel>
+              <input type="number" min="0" value={config.freeDeliveryFrom} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, freeDeliveryFrom: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
+              <p className="ml-1 mt-1 text-[10px] text-tx-dim">0 = sin envío gratis por monto</p>
             </div>
             <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Tiempo estimado (min)</label>
-              <input type="number" min="0" value={config.estimatedDelivery} onChange={(e) => { const v = parseInt(e.target.value) || 0; setConfig(p => ({...p, estimatedDelivery: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+              <FieldLabel>Tiempo estimado (min)</FieldLabel>
+              <input type="number" min="0" value={config.estimatedDelivery} onChange={(e) => { const v = parseInt(e.target.value) || 0; setConfig(p => ({ ...p, estimatedDelivery: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
             </div>
           </div>
 
           {/* Configuración por distancia */}
           {config.deliveryMode === "DISTANCE" && (
-            <div className="bg-black/50 p-6 rounded-3xl border border-orange-500/20 space-y-5">
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-widest text-orange-400">Origen de la tienda</p>
-                  <p className="text-[10px] text-gray-500 font-bold mt-0.5">
+            <div className="mt-4 space-y-5 rounded-3xl p-5" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-mono text-[10px] uppercase tracking-[.12em] text-primary">Origen de la tienda</p>
+                  <p className="mt-0.5 text-[11px] text-tx-mut">
                     {config.originLat != null && config.originLng != null
                       ? `${config.originLat.toFixed(5)}, ${config.originLng.toFixed(5)}`
                       : "Sin ubicación — define el punto de salida"}
                   </p>
                 </div>
-                <button type="button" onClick={useMyLocation} className="text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl border border-orange-500/40 text-orange-400 hover:bg-orange-500/10 transition-all">
-                  {geoStatus === "loading" ? "Obteniendo..." : "📍 Usar mi ubicación"}
-                </button>
+                <PrimaryBtn ghost icon={Crosshair} full={false} onClick={useMyLocation}>
+                  {geoStatus === "loading" ? "Obteniendo…" : "Usar mi ubicación"}
+                </PrimaryBtn>
               </div>
-              {geoStatus === "error" && <p className="text-red-400 text-[10px] font-bold">No se pudo obtener la ubicación. Permite el acceso al GPS o ingrésala manualmente.</p>}
-              <div className="grid grid-cols-2 gap-4">
+              {geoStatus === "error" && <p className="text-[11px] font-bold text-err">No se pudo obtener la ubicación. Permite el acceso al GPS o ingrésala manualmente.</p>}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Latitud</label>
-                  <input type="number" step="any" value={config.originLat ?? ""} onChange={(e) => { const v = e.target.value === "" ? null : parseFloat(e.target.value); setConfig(p => ({...p, originLat: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+                  <FieldLabel>Latitud</FieldLabel>
+                  <input type="number" step="any" value={config.originLat ?? ""} onChange={(e) => { const v = e.target.value === "" ? null : parseFloat(e.target.value); setConfig(p => ({ ...p, originLat: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Longitud</label>
-                  <input type="number" step="any" value={config.originLng ?? ""} onChange={(e) => { const v = e.target.value === "" ? null : parseFloat(e.target.value); setConfig(p => ({...p, originLng: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+                  <FieldLabel>Longitud</FieldLabel>
+                  <input type="number" step="any" value={config.originLng ?? ""} onChange={(e) => { const v = e.target.value === "" ? null : parseFloat(e.target.value); setConfig(p => ({ ...p, originLng: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Tarifa base ($)</label>
-                  <input type="number" min="0" value={config.deliveryBaseFee} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({...p, deliveryBaseFee: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+                  <FieldLabel>Tarifa base ($)</FieldLabel>
+                  <input type="number" min="0" value={config.deliveryBaseFee} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, deliveryBaseFee: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Costo por km ($)</label>
-                  <input type="number" min="0" value={config.deliveryPerKm} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({...p, deliveryPerKm: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+                  <FieldLabel>Costo por km ($)</FieldLabel>
+                  <input type="number" min="0" value={config.deliveryPerKm} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, deliveryPerKm: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Radio gratis (km)</label>
-                  <input type="number" min="0" step="any" value={config.deliveryFreeRadiusKm ?? ""} placeholder="opcional" onChange={(e) => { const v = e.target.value === "" ? null : parseFloat(e.target.value); setConfig(p => ({...p, deliveryFreeRadiusKm: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
-                  <p className="text-[9px] text-gray-600 mt-1 ml-2">Dentro de este radio el envío es gratis</p>
+                  <FieldLabel>Radio gratis (km)</FieldLabel>
+                  <input type="number" min="0" step="any" value={config.deliveryFreeRadiusKm ?? ""} placeholder="opcional" onChange={(e) => { const v = e.target.value === "" ? null : parseFloat(e.target.value); setConfig(p => ({ ...p, deliveryFreeRadiusKm: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
+                  <p className="ml-1 mt-1 text-[10px] text-tx-dim">Dentro de este radio el envío es gratis</p>
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Distancia máxima (km)</label>
-                  <input type="number" min="0" step="any" value={config.deliveryMaxKm ?? ""} placeholder="opcional" onChange={(e) => { const v = e.target.value === "" ? null : parseFloat(e.target.value); setConfig(p => ({...p, deliveryMaxKm: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
-                  <p className="text-[9px] text-gray-600 mt-1 ml-2">Fuera de este radio no hay cobertura</p>
+                  <FieldLabel>Distancia máxima (km)</FieldLabel>
+                  <input type="number" min="0" step="any" value={config.deliveryMaxKm ?? ""} placeholder="opcional" onChange={(e) => { const v = e.target.value === "" ? null : parseFloat(e.target.value); setConfig(p => ({ ...p, deliveryMaxKm: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
+                  <p className="ml-1 mt-1 text-[10px] text-tx-dim">Fuera de este radio no hay cobertura</p>
                 </div>
               </div>
-              <p className="text-[10px] text-gray-500 font-bold leading-relaxed">
-                Fórmula: <span className="text-orange-400">tarifa base + (costo por km × distancia)</span>. La distancia se mide en línea recta desde el origen hasta la ubicación GPS del cliente en el checkout.
+              <p className="text-[11px] leading-relaxed text-tx-mut">
+                Fórmula: <span className="text-primary">tarifa base + (costo por km × distancia)</span>. La distancia se mide en línea recta desde el origen hasta la ubicación GPS del cliente en el checkout.
               </p>
             </div>
           )}
-        </div>
+        </WtCard>
 
         {/* Programa de puntos */}
-        <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 space-y-6">
-          <div>
-            <p className="text-sm font-black uppercase tracking-tighter">Programa de Puntos</p>
-            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">Lealtad de tus clientes</p>
+        <WtCard className="p-5 md:p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Star size={16} className="shrink-0 text-tx-mid" />
+            <div className="min-w-0">
+              <p className="font-display text-base font-extrabold text-tx-hi">Programa de puntos</p>
+              <p className="mt-0.5 text-[12px] text-tx-mut">Lealtad de tus clientes</p>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Puntos por cada $10</label>
-              <input type="number" min="0" value={config.pointsPerTen} onChange={(e) => { const v = parseInt(e.target.value) || 0; setConfig(p => ({...p, pointsPerTen: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+              <FieldLabel>Puntos por cada $10</FieldLabel>
+              <input type="number" min="0" value={config.pointsPerTen} onChange={(e) => { const v = parseInt(e.target.value) || 0; setConfig(p => ({ ...p, pointsPerTen: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
             </div>
             <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block tracking-widest">Valor del punto ($)</label>
-              <input type="number" min="0" step="any" value={config.pointsValuePesos} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({...p, pointsValuePesos: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
+              <FieldLabel>Valor del punto ($)</FieldLabel>
+              <input type="number" min="0" step="any" value={config.pointsValuePesos} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, pointsValuePesos: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
             </div>
           </div>
-        </div>
+        </WtCard>
 
-        {/* Enlace público de la tienda */}
-        {storeUrl && (
-          <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8">
-            <p className="text-sm font-black uppercase tracking-tighter mb-1">Tu Tienda Online</p>
-            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-6">Comparte este enlace o QR con tus clientes</p>
-            <div className="flex flex-col sm:flex-row gap-6 items-center">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(storeUrl)}`}
-                alt="QR de la tienda"
-                width={150}
-                height={150}
-                className="rounded-2xl bg-white p-2 shrink-0"
-              />
-              <div className="flex-1 w-full space-y-3">
-                <div className="bg-black border border-white/10 rounded-2xl px-5 py-4 font-mono text-sm text-orange-400 break-all">{storeUrl}</div>
-                <div className="flex gap-3">
-                  <button type="button" onClick={copyStoreUrl} className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest border border-gray-700 text-gray-300 hover:border-orange-500/50 hover:text-orange-400 transition-all">
-                    {copied ? "¡Copiado!" : "Copiar enlace"}
-                  </button>
-                  <a href={storeUrl} target="_blank" rel="noopener noreferrer" className="flex-1 text-center py-3 rounded-2xl font-black text-xs uppercase tracking-widest bg-orange-500 hover:bg-orange-600 text-white transition-all">
-                    Ver tienda
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full bg-orange-500 hover:bg-orange-600 py-5 rounded-[2rem] font-black text-white shadow-2xl shadow-orange-500/20 active:scale-95 transition-all uppercase tracking-widest disabled:opacity-50"
-        >
-          {saving ? "Guardando..." : "Guardar Tienda"}
-        </button>
+        <PrimaryBtn icon={Store} onClick={handleSave} disabled={saving}>
+          {saving ? "Guardando…" : "Guardar tienda"}
+        </PrimaryBtn>
       </div>
-    </div>
+    </WtScreen>
   );
 }
