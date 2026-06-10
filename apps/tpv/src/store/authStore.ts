@@ -144,12 +144,60 @@ export const useAuthStore = create<AuthState>()(
         }
 
         try {
-          // Estrategia: ONLINE primero (para conseguir un JWT real que las
-          // requests posteriores necesitan en Authorization header). Solo
-          // caemos a OFFLINE si hay error de red (sin respuesta del backend).
-          // Un 401/400 del backend NO dispara el fallback — es PIN incorrecto.
+          // La caja valida primero contra el cache local para que el acceso no
+          // dependa de Internet. Si hay red, el JWT se renueva en segundo plano.
+          const pinHash = await hashPin(pin);
+          const localMatch = state.employees.find(
+            (employee) => employee.pin === pinHash && employee.isActive,
+          );
           const isOnline = typeof navigator === "undefined" || navigator.onLine;
 
+          if (localMatch) {
+            set({
+              employee: localMatch,
+              isAuthenticated: true,
+              pinAttempts: 0,
+              lockedUntil: null,
+              loading: false,
+            });
+
+            if (typeof window !== "undefined") {
+              document.cookie = `tpv-session-active=true; path=/; SameSite=Lax`;
+              document.cookie = `tpv-role=${encodeURIComponent(localMatch.role)}; path=/; SameSite=Lax`;
+              localStorage.setItem("currentEmployeeId", localMatch.id);
+              localStorage.setItem("currentEmployeeName", localMatch.name);
+              localStorage.setItem("currentEmployeeRole", localMatch.role);
+            }
+
+            if (isOnline) {
+              void api
+                .post("/api/employees/login", { pin })
+                .then(({ data }) => {
+                  const token: string = data.token || data.accessToken;
+                  const employee: TPVEmployee = data.employee || data.user;
+                  if (!token || !employee) return;
+
+                  set({ employee, token });
+                  if (typeof window !== "undefined") {
+                    sessionStorage.setItem("tpv-access-token", token);
+                    localStorage.setItem("accessToken", token);
+                    localStorage.setItem("tpv-employee-token", token);
+                    localStorage.setItem("currentEmployeeId", employee.id);
+                    localStorage.setItem("currentEmployeeName", employee.name);
+                    localStorage.setItem("currentEmployeeRole", employee.role);
+                  }
+                })
+                .catch(() => {
+                  // El acceso local ya fue validado. La sesión online se
+                  // renovará en la siguiente sincronización disponible.
+                });
+            }
+
+            return { success: true };
+          }
+
+          // Un PIN ausente del cache puede ser de un empleado recién creado;
+          // en ese caso consultamos el backend cuando esté disponible.
           if (isOnline) {
             try {
               const { data } = await api.post("/api/employees/login", { pin });
@@ -200,43 +248,16 @@ export const useAuthStore = create<AuthState>()(
               // a offline (el server respondió, sólo mal formado).
               throw new Error("Respuesta incompleta");
             } catch (apiErr: any) {
-              // Si el backend respondió (4xx/5xx), no es problema de red →
-              // dejamos pasar al check offline solo si fue NETWORK error
-              // (axios sin response cuando timeout/DNS/etc.).
-              if (apiErr?.response) {
+              // Un 4xx confirma que el servidor rechazó el PIN. Los 5xx son
+              // indisponibilidad del backend y deben usar el cache offline;
+              // de lo contrario una caída del servicio cuenta como intentos
+              // fallidos y puede bloquear injustamente la terminal.
+              const status = Number(apiErr?.response?.status ?? 0);
+              if (status >= 400 && status < 500) {
                 throw new Error(apiErr.response?.data?.error || "PIN incorrecto");
               }
-              // Sin response → red caída, intentamos offline.
+              // Sin response o con 5xx → red/backend caído, intentamos offline.
             }
-          }
-
-          // OFFLINE fallback: solo cuando no hay red o falló la conexión.
-          // Sin token, las requests posteriores fallarán autenticación —
-          // el modo offline está pensado para operar contra IndexedDB local
-          // (orders queue) hasta recuperar conexión.
-          const pinHash = await hashPin(pin);
-          const offlineMatch = state.employees.find(
-            (e) => e.pin === pinHash && e.isActive
-          );
-
-          if (offlineMatch) {
-            set({
-              employee: offlineMatch,
-              isAuthenticated: true,
-              pinAttempts: 0,
-              lockedUntil: null,
-              loading: false,
-            });
-
-            if (typeof window !== "undefined") {
-              document.cookie = `tpv-session-active=true; path=/; SameSite=Lax`;
-              document.cookie = `tpv-role=${encodeURIComponent(offlineMatch.role)}; path=/; SameSite=Lax`;
-              localStorage.setItem("currentEmployeeId", offlineMatch.id);
-              localStorage.setItem("currentEmployeeName", offlineMatch.name);
-              localStorage.setItem("currentEmployeeRole", offlineMatch.role);
-            }
-
-            return { success: true };
           }
 
           throw new Error("PIN incorrecto");
