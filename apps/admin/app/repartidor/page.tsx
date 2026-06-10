@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import api from "@/lib/api";
+import { whatsappUrl } from "@/lib/phone";
 import GPSTracker from "@/components/delivery/GPSTracker";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -357,7 +358,7 @@ export default function DeliveryApp() {
                       <a href={`tel:${order.customerPhone}`}
                         className="text-xs flex items-center gap-1 px-2 py-1 rounded-lg"
                         style={{background:"rgba(34,197,94,0.1)",color:"#22c55e"}}>📞 Llamar</a>
-                      <a href={`https://wa.me/${order.customerPhone}`} target="_blank" rel="noreferrer"
+                      <a href={whatsappUrl(order.customerPhone, undefined, order.countryCode)} target="_blank" rel="noreferrer"
                         className="text-xs flex items-center gap-1 px-2 py-1 rounded-lg"
                         style={{background:"rgba(34,197,94,0.1)",color:"#22c55e"}}>💬 Mensaje</a>
                     </div>
@@ -442,7 +443,7 @@ export default function DeliveryApp() {
                 style={{background:"rgba(34,197,94,0.1)",color:"#22c55e",border:"1px solid rgba(34,197,94,0.2)"}}>
                 📞 {selectedOrder.customerPhone}
               </a>
-              <a href={`https://wa.me/${selectedOrder.customerPhone}`} target="_blank" rel="noreferrer"
+              <a href={whatsappUrl(selectedOrder.customerPhone, undefined, selectedOrder.countryCode)} target="_blank" rel="noreferrer"
                 className="flex-1 py-2 rounded-xl text-xs font-bold text-center"
                 style={{background:"rgba(37,211,102,0.1)",color:"#25d366",border:"1px solid rgba(37,211,102,0.2)"}}>
                 💬 Mensaje
