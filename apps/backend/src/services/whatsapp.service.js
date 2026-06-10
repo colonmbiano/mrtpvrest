@@ -1,24 +1,16 @@
 require('dotenv').config();
 const axios = require('axios');
+const { toWhatsappNumber } = require('@mrtpvrest/config/phone');
 
 const API_URL = process.env.WHATSAPP_API_URL || 'https://gate.whapi.cloud';
 const TOKEN   = process.env.WHATSAPP_TOKEN;
 
-function formatPhone(raw) {
-  const digits = String(raw).replace(/\D/g, '');
-  // Extraer siempre los ultimos 10 digitos y agregar 521
-  if (digits.length >= 10) {
-    const last10 = digits.slice(-10);
-    return '521' + last10;
-  }
-  return '521' + digits;
-}
-
-async function sendWhatsApp(rawPhone, event, order) {
+async function sendWhatsApp(rawPhone, event, order, countryCode) {
   if (!TOKEN) { console.warn('WhatsApp: TOKEN no configurado'); return; }
   if (!rawPhone) { console.warn('WhatsApp: telefono no disponible'); return; }
 
-  const phone = formatPhone(rawPhone);
+  // Lada según el país del restaurante (default MX). Ver packages/config/phone.js.
+  const phone = toWhatsappNumber(rawPhone, countryCode);
 
   const messages = {
     confirmacion: `🍔 *Restaurante Demo*

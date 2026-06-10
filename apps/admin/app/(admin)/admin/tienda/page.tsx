@@ -30,6 +30,32 @@ const TIMEZONES = [
   { value: "Europe/Madrid", label: "Madrid" },
 ];
 
+// País del restaurante (ISO 3166-1 alpha-2). Determina la lada que se antepone a
+// los teléfonos en los enlaces/notificaciones de WhatsApp. Debe mantenerse en
+// sintonía con el mapeo de packages/config/phone.js.
+const COUNTRIES = [
+  { code: "MX", name: "México (+52)" },
+  { code: "US", name: "Estados Unidos (+1)" },
+  { code: "CO", name: "Colombia (+57)" },
+  { code: "AR", name: "Argentina (+54)" },
+  { code: "CL", name: "Chile (+56)" },
+  { code: "PE", name: "Perú (+51)" },
+  { code: "EC", name: "Ecuador (+593)" },
+  { code: "GT", name: "Guatemala (+502)" },
+  { code: "SV", name: "El Salvador (+503)" },
+  { code: "HN", name: "Honduras (+504)" },
+  { code: "CR", name: "Costa Rica (+506)" },
+  { code: "PA", name: "Panamá (+507)" },
+  { code: "DO", name: "República Dominicana (+1)" },
+  { code: "BO", name: "Bolivia (+591)" },
+  { code: "PY", name: "Paraguay (+595)" },
+  { code: "UY", name: "Uruguay (+598)" },
+  { code: "VE", name: "Venezuela (+58)" },
+  { code: "BR", name: "Brasil (+55)" },
+  { code: "CA", name: "Canadá (+1)" },
+  { code: "ES", name: "España (+34)" },
+];
+
 const DEFAULT_HOUR: Omit<BusinessHour, "day"> = { enabled: false, open: "09:00", close: "22:00" };
 
 export default function TiendaConfigPage() {
@@ -42,6 +68,7 @@ export default function TiendaConfigPage() {
     phone: "",
     address: "",
     whatsappNumber: "",
+    countryCode: "MX",
     deliveryFee: 0,
     minOrderAmount: 0,
     freeDeliveryFrom: 0,
@@ -119,6 +146,7 @@ export default function TiendaConfigPage() {
           deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : "FLAT",
           isOpen: d.isOpen ?? true,
           scheduleEnabled: d.scheduleEnabled ?? false,
+          countryCode: d.countryCode || "MX",
           timezone: d.timezone || "America/Mexico_City",
           businessHours: (() => {
             try {
@@ -190,6 +218,25 @@ export default function TiendaConfigPage() {
               <input type="text" value={config.closedMessage} placeholder="Ej. Volvemos mañana a las 9:00 am" onChange={(e) => { const v = e.target.value; setConfig(p => ({...p, closedMessage: v})); }} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold" />
             </div>
           )}
+        </div>
+
+        {/* País / WhatsApp */}
+        <div className="bg-[#111] border border-gray-800 rounded-[2.5rem] p-8 space-y-3">
+          <div>
+            <p className="text-sm font-black uppercase tracking-tighter">País</p>
+            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">
+              Define la lada que se antepone a los teléfonos en los enlaces de WhatsApp
+            </p>
+          </div>
+          <select
+            value={config.countryCode}
+            onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, countryCode: v })); }}
+            className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-orange-500 transition-all text-sm font-bold"
+          >
+            {COUNTRIES.map(c => (
+              <option key={c.code} value={c.code}>{c.name}</option>
+            ))}
+          </select>
         </div>
 
         {/* Horario de atención automático */}

@@ -953,6 +953,11 @@ model RestaurantConfig {
   phone             String?
   whatsappNumber    String?
   address           String?
+
+  // País del restaurante (ISO 3166-1 alpha-2: "MX", "US", "CO", …). Determina la
+  // lada que se antepone a los teléfonos para los enlaces/notificaciones de
+  // WhatsApp. Ver packages/config/phone.js para el mapeo país→lada.
+  countryCode       String  @default("MX")
   deliveryFee       Float   @default(0)
   freeDeliveryFrom  Float?
   minOrderAmount    Float   @default(0)
