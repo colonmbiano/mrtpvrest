@@ -1,6 +1,6 @@
 'use strict';
 
-const { runWithTenant } = require('@mrtpvrest/database');
+const { getTenantContext, runWithTenant } = require('@mrtpvrest/database');
 
 // ───────────────────────────────────────────────────────────────────────────
 // tenantContextMiddleware
@@ -22,8 +22,12 @@ const { runWithTenant } = require('@mrtpvrest/database');
 // ───────────────────────────────────────────────────────────────────────────
 const tenantContextMiddleware = (req, res, next) => {
   const ctx = {
+    ...(getTenantContext() || {}),
     restaurantId: req.restaurantId || null,
     locationId: req.locationId || null,
+    tenantId: req.user?.tenantId || req.restaurant?.tenantId || null,
+    userId: req.user?.id || null,
+    role: req.user?.role || null,
   };
   runWithTenant(ctx, () => next());
 };
