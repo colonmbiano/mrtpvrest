@@ -324,7 +324,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-0 lg:p-6"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* BUG-28: backdrop NO cierra el modal. El cobro suele tener varios
@@ -336,7 +336,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         aria-hidden
       />
 
-      <div className="relative w-full max-w-5xl h-[88vh] max-h-[760px] bg-[#0C0C0E] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+      <div className="relative w-full h-full max-w-none rounded-none border-0 lg:w-full lg:max-w-5xl lg:h-[88vh] lg:max-h-[760px] lg:rounded-[2.5rem] lg:border bg-[#0C0C0E] border-white/10 shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
         {/* GLOWS */}
         <div
           aria-hidden
