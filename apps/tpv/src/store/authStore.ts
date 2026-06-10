@@ -153,46 +153,61 @@ export const useAuthStore = create<AuthState>()(
           const isOnline = typeof navigator === "undefined" || navigator.onLine;
 
           if (localMatch) {
-            set({
-              employee: localMatch,
-              isAuthenticated: true,
-              pinAttempts: 0,
-              lockedUntil: null,
-              loading: false,
-            });
-
-            if (typeof window !== "undefined") {
-              document.cookie = `tpv-session-active=true; path=/; SameSite=Lax`;
-              document.cookie = `tpv-role=${encodeURIComponent(localMatch.role)}; path=/; SameSite=Lax`;
-              localStorage.setItem("currentEmployeeId", localMatch.id);
-              localStorage.setItem("currentEmployeeName", localMatch.name);
-              localStorage.setItem("currentEmployeeRole", localMatch.role);
-            }
+            // Activa la sesión (estado + cookies + storages). Si llega `token`,
+            // lo persiste en los storages que lee el interceptor de api.ts para
+            // que TODA request posterior lleve Authorization.
+            const activateSession = (employee: TPVEmployee, token?: string) => {
+              set({
+                employee,
+                ...(token ? { token } : {}),
+                isAuthenticated: true,
+                pinAttempts: 0,
+                lockedUntil: null,
+                loading: false,
+              });
+              if (typeof window !== "undefined") {
+                document.cookie = `tpv-session-active=true; path=/; SameSite=Lax`;
+                document.cookie = `tpv-role=${encodeURIComponent(employee.role)}; path=/; SameSite=Lax`;
+                localStorage.setItem("currentEmployeeId", employee.id);
+                localStorage.setItem("currentEmployeeName", employee.name);
+                localStorage.setItem("currentEmployeeRole", employee.role);
+                if (token) {
+                  sessionStorage.setItem("tpv-access-token", token);
+                  localStorage.setItem("accessToken", token);
+                  localStorage.setItem("tpv-employee-token", token);
+                }
+              }
+            };
 
             if (isOnline) {
-              void api
-                .post("/api/employees/login", { pin })
-                .then(({ data }) => {
-                  const token: string = data.token || data.accessToken;
-                  const employee: TPVEmployee = data.employee || data.user;
-                  if (!token || !employee) return;
-
-                  set({ employee, token });
-                  if (typeof window !== "undefined") {
-                    sessionStorage.setItem("tpv-access-token", token);
-                    localStorage.setItem("accessToken", token);
-                    localStorage.setItem("tpv-employee-token", token);
-                    localStorage.setItem("currentEmployeeId", employee.id);
-                    localStorage.setItem("currentEmployeeName", employee.name);
-                    localStorage.setItem("currentEmployeeRole", employee.role);
-                  }
-                })
-                .catch(() => {
-                  // El acceso local ya fue validado. La sesión online se
-                  // renovará en la siguiente sincronización disponible.
-                });
+              // Con red: obtenemos el JWT ANTES de activar la sesión. Si no, el
+              // hub consulta /api/workspaces/me sin token → 401 "Token requerido".
+              try {
+                const { data } = await api.post("/api/employees/login", { pin });
+                const token: string = data.token || data.accessToken;
+                const employee: TPVEmployee = data.employee || data.user;
+                if (token && employee) {
+                  activateSession(employee, token);
+                  return { success: true };
+                }
+                // Red OK pero respuesta incompleta: sesión local degradada.
+                activateSession(localMatch);
+                return { success: true };
+              } catch (apiErr: any) {
+                const status = Number(apiErr?.response?.status ?? 0);
+                if (status >= 400 && status < 500) {
+                  // El servidor rechaza el PIN aunque el cache lo aceptara (PIN
+                  // cambiado en backend). Prevalece el servidor: no entra.
+                  throw new Error(apiErr.response?.data?.error || "PIN incorrecto");
+                }
+                // Red caída / 5xx → operamos offline con la validación local.
+                activateSession(localMatch);
+                return { success: true };
+              }
             }
 
+            // Sin red: sesión local inmediata (sin token), modo offline.
+            activateSession(localMatch);
             return { success: true };
           }
 
