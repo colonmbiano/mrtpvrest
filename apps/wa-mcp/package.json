@@ -1,0 +1,16 @@
+{
+  "name": "@mrtpvrest/wa-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Servidor MCP que expone el núcleo wa-orders como herramientas (ver menú, previsualizar y crear pedidos de WhatsApp en el TPV). Sin dependencias: implementa el transporte stdio de MCP (JSON-RPC por líneas).",
+  "bin": {
+    "wa-mcp": "src/server.js"
+  },
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
