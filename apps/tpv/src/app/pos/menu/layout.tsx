@@ -27,6 +27,7 @@ import {
   printCustomerReceipt,
   printSplitReceipts,
   printEqualSplitReceipts,
+  printKitchenTickets,
   openCashDrawer,
   type TicketItem,
   type ReceiptInput,
@@ -736,6 +737,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     status: o.status,
     total: Number(o.total ?? 0),
     time: timeAgo(o.createdAt),
+    createdAt: o.createdAt,
     itemsCount: Array.isArray(o.items) ? o.items.length : 0,
     driver: o.deliveryDriverName || undefined,
     needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
@@ -838,6 +840,54 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     },
     [deliveryDrivers, fetchOpenOrders],
   );
+
+  // Enviar (reimprimir) a cocina la comanda de los tickets seleccionados en
+  // el drawer, sin abrirlos. Best-effort por pedido; isReprint para que
+  // cocina no prepare doble. Reusa orderItemsToTicketItems (printerGroups).
+  const handleSendOrdersToKitchen = async (
+    ordersToSend: { id: string }[],
+  ) => {
+    const t = toast.loading(`Enviando ${ordersToSend.length} a cocina...`);
+    let sent = 0;
+    let failed = 0;
+    for (const o of ordersToSend) {
+      try {
+        const full = await fetchFullOrder(o);
+        const items = orderItemsToTicketItems(full.items || []);
+        if (items.length === 0) {
+          failed += 1;
+          continue;
+        }
+        const res = await printKitchenTickets(printers, {
+          orderNumber:
+            full.orderNumber || String(full.id).slice(-6).toUpperCase(),
+          orderType: full.orderType || null,
+          tableNumber: full.table?.name || full.tableNumber || null,
+          customerName: full.customerName || full.user?.name || null,
+          items,
+          isReprint: true,
+          config: kitchenConfig ?? undefined,
+        });
+        if (res.ok > 0) sent += 1;
+        else failed += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    if (failed === 0) {
+      toast.success(
+        `${sent} comanda${sent === 1 ? "" : "s"} enviada${
+          sent === 1 ? "" : "s"
+        } a cocina`,
+        { id: t },
+      );
+    } else {
+      toast.warning(
+        `${sent} enviada${sent === 1 ? "" : "s"} - ${failed} fallaron`,
+        { id: t },
+      );
+    }
+  };
 
   // VALIDACIÓN DE ROL
   // FASE 6: WAITER puede acceder en modo "préstamo de caja" (cuando la
@@ -1000,6 +1050,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         canAssignDriver={canMergeOpenOrders && !isLoanMode}
         drivers={deliveryDrivers}
         onAssignDriver={handleAssignDriverToOrders}
+        canSendToKitchen={true}
+        onSendToKitchen={handleSendOrdersToKitchen}
       />
 
       {reprintKitchenOrder && (

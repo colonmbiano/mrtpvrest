@@ -11,7 +11,10 @@ import {
   ListChecks,
   Merge,
   Loader2,
+  Clock,
+  ChefHat,
 } from "lucide-react";
+import { hapticMedium } from "@/lib/haptics";
 
 export interface DrawerOrder {
   id: string;
@@ -21,6 +24,8 @@ export interface DrawerOrder {
   status: string;
   total: number;
   time: string;
+  /** ISO de creacion para mostrar hora + fecha exactas en el tile. */
+  createdAt?: string;
   itemsCount: number;
   driver?: string;
   needsDriver?: boolean;
@@ -61,6 +66,11 @@ interface OrdersDrawerProps {
     orders: DrawerOrder[],
     driverId: string,
   ) => Promise<void>;
+  /** Habilita enviar (reimprimir) la comanda a cocina de los tickets
+   *  seleccionados, sin abrirlos. */
+  canSendToKitchen?: boolean;
+  /** Envia a cocina la comanda de TODOS los seleccionados. */
+  onSendToKitchen?: (orders: DrawerOrder[]) => Promise<void>;
 }
 
 const FILTERS = ["Todos", "Mesa", "Llevar", "Domicilio"] as const;
@@ -97,6 +107,19 @@ const STATUS_TONE: Record<string, { dot: string; ring: string; chip: string }> =
 const DEFAULT_TONE = { dot: "bg-white/50", ring: "border-white/15", chip: "text-white/60" };
 const toneFor = (status: string) => STATUS_TONE[status] ?? DEFAULT_TONE;
 
+// Hora + fecha exactas del ticket (es-MX). Devuelve guion si no hay ISO.
+const formatDateTime = (iso?: string): string => {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("es-MX", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   isOpen,
   onClose,
@@ -107,6 +130,8 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   canAssignDriver = false,
   drivers = [],
   onAssignDriver,
+  canSendToKitchen = false,
+  onSendToKitchen,
 }) => {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("Todos");
   const [sortKey, setSortKey] = useState<SortKey>("default");
@@ -117,9 +142,15 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   const [isMerging, setIsMerging] = useState(false);
   const [showDriverPicker, setShowDriverPicker] = useState(false);
   const [assigningDriverId, setAssigningDriverId] = useState<string | null>(null);
+  const [sendingKitchen, setSendingKitchen] = useState(false);
 
-  // La selección múltiple sirve para juntar cuentas Y/O asignar repartidor.
-  const canSelect = canMergeOrders || canAssignDriver;
+  // Refs para el "dejar presionado" (long-press) que entra a seleccion.
+  const longPressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFired = React.useRef(false);
+
+  // La seleccion multiple sirve para juntar cuentas, asignar repartidor
+  // o enviar a cocina.
+  const canSelect = canMergeOrders || canAssignDriver || canSendToKitchen;
 
   const visibleOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -215,6 +246,39 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
     } catch {
       // El caller muestra el error y refresca las órdenes disponibles.
       setAssigningDriverId(null);
+    }
+  };
+
+  const handleSendKitchen = async () => {
+    if (!onSendToKitchen || selectedOrders.length === 0) return;
+    setSendingKitchen(true);
+    try {
+      await onSendToKitchen(selectedOrders);
+      resetSelection();
+    } catch {
+      // El caller muestra el error.
+    } finally {
+      setSendingKitchen(false);
+    }
+  };
+
+  // Long-press (dejar presionado) para entrar a seleccion: mantener ~450ms
+  // activa el modo seleccion y marca ese ticket. El onClick posterior se
+  // ignora (longPressFired) para no abrir el detalle.
+  const startLongPress = (orderId: string) => {
+    longPressFired.current = false;
+    if (!canSelect || selectionMode) return;
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      hapticMedium();
+      setSelectionMode(true);
+      setSelectedIds([orderId]);
+    }, 450);
+  };
+  const cancelLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
     }
   };
 
@@ -378,9 +442,18 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                   <button
                     key={order.id}
                     type="button"
-                    onClick={() =>
-                      selectionMode ? toggleOrder(order.id) : onShowDetail(order)
-                    }
+                    onClick={() => {
+                      if (longPressFired.current) {
+                        longPressFired.current = false;
+                        return;
+                      }
+                      if (selectionMode) toggleOrder(order.id);
+                      else onShowDetail(order);
+                    }}
+                    onPointerDown={() => startLongPress(order.id)}
+                    onPointerUp={cancelLongPress}
+                    onPointerLeave={cancelLongPress}
+                    onPointerCancel={cancelLongPress}
                     aria-pressed={selectionMode ? isSelected : undefined}
                     aria-label={
                       selectionMode
@@ -435,6 +508,21 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                           </>
                         )}
                       </div>
+
+                      <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold tracking-[0.05em] text-white/35">
+                        <Clock size={11} className="shrink-0 text-white/30" />
+                        <span className="tabular-nums normal-case">
+                          {formatDateTime(order.createdAt)}
+                        </span>
+                        {order.itemsCount > 0 && (
+                          <>
+                            <span className="text-white/20">·</span>
+                            <span className="tabular-nums normal-case">
+                              {order.itemsCount} art.
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     <div className="shrink-0 flex items-center gap-2">
@@ -455,38 +543,56 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
         {/* FOOTER */}
         <div className="relative z-10 p-4 border-t border-white/5 bg-[#0C0C0E] shrink-0">
           {selectionMode ? (
-            <div className="flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-baseline justify-between">
+                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">
                   Total combinado
-                </div>
-                <div className="text-xl font-black tabular-nums text-white">
+                </span>
+                <span className="text-xl font-black tabular-nums text-white">
                   ${selectedTotal.toFixed(2)}
-                </div>
+                </span>
               </div>
-              {canAssignDriver && (
-                <button
-                  type="button"
-                  disabled={selectedOrders.length < 1}
-                  onClick={() => setShowDriverPicker(true)}
-                  aria-label="Enviar a repartidor"
-                  className="min-h-[52px] h-[52px] px-5 rounded-2xl bg-blue-400/15 border border-blue-400/40 text-blue-200 text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
-                >
-                  <Bike size={17} strokeWidth={2.5} />
-                  Repartidor
-                </button>
-              )}
-              {canMergeOrders && (
-                <button
-                  type="button"
-                  disabled={selectedOrders.length < 2}
-                  onClick={() => setShowMergeConfirm(true)}
-                  className="min-h-[52px] h-[52px] px-5 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
-                >
-                  <Merge size={17} strokeWidth={2.5} />
-                  Juntar {selectedOrders.length || ""}
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {canSendToKitchen && (
+                  <button
+                    type="button"
+                    disabled={selectedOrders.length < 1 || sendingKitchen}
+                    onClick={handleSendKitchen}
+                    aria-label="Enviar a cocina"
+                    className="flex-1 min-h-[52px] h-[52px] rounded-2xl bg-[#88D66C]/15 border border-[#88D66C]/40 text-[#88D66C] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                  >
+                    {sendingKitchen ? (
+                      <Loader2 size={17} className="animate-spin" />
+                    ) : (
+                      <ChefHat size={17} strokeWidth={2.5} />
+                    )}
+                    Cocina
+                  </button>
+                )}
+                {canAssignDriver && (
+                  <button
+                    type="button"
+                    disabled={selectedOrders.length < 1}
+                    onClick={() => setShowDriverPicker(true)}
+                    aria-label="Enviar a repartidor"
+                    className="flex-1 min-h-[52px] h-[52px] rounded-2xl bg-blue-400/15 border border-blue-400/40 text-blue-200 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                  >
+                    <Bike size={17} strokeWidth={2.5} />
+                    Repartidor
+                  </button>
+                )}
+                {canMergeOrders && (
+                  <button
+                    type="button"
+                    disabled={selectedOrders.length < 2}
+                    onClick={() => setShowMergeConfirm(true)}
+                    className="flex-1 min-h-[52px] h-[52px] rounded-2xl bg-[#ffb84d] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                  >
+                    <Merge size={17} strokeWidth={2.5} />
+                    Juntar {selectedOrders.length || ""}
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <button
