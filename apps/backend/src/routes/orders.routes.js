@@ -549,6 +549,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           restaurantId,
           locationId: req.locationId,
           shiftId: req.shiftId,
+          // Empleado del TPV que tomó el pedido (req.user.id = Employee.id en
+          // sesiones del TPV). Permite atribuir actividad a meseros/cajeros.
+          createdById: req.user?.id || null,
           orderNumber,
           clientOrderId: clientOrderId ? String(clientOrderId) : null,
           status: status || (isDineInTab ? 'OPEN' : 'CONFIRMED'),
@@ -1509,6 +1512,7 @@ async function splitOrderHandler(req, res) {
           customerPhone: source.customerPhone,
           source: source.source,
           shiftId: source.shiftId,
+          createdById: req.user?.id || null,
           ticketName: source.ticketName ? `${source.ticketName} (2)` : null,
           subtotal: 0,
           discount: 0,

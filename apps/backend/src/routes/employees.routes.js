@@ -6,6 +6,7 @@ const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requirePermission } = require('../middleware/auth.middleware');
 const { requireModule, MODULES } = require('../lib/modules');
 const { mapPermissions, PERM_TO_FLAG, PERMISSION_FLAG_SELECT } = require('../lib/permissions');
+const { localDayRange } = require('../utils/dayRange');
 const router = express.Router();
 
 // Gate del módulo "employee_management". Aplica solo a CRUD admin
@@ -185,6 +186,94 @@ router.get('/:id', authenticate, requireTenantAccess, requirePermission('manage_
     const { pin, offlinePin, ...rest } = emp;
     res.json({ ...rest, hasPin: Boolean(pin) });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /:id/activity?date=YYYY-MM-DD ────────────────────────────────────
+// Actividad del día de UN empleado, atribuida SEGÚN SU ROL:
+//   · DELIVERY            → entregas asignadas (order.deliveryDriverId)
+//   · WAITER/CASHIER/etc. → pedidos que tomó en el TPV (order.createdById)
+//   · CASHIER/ADMIN       → además, sus turnos de caja del día (CashShift)
+// Todos los rangos se calculan en hora de México (el servidor corre en UTC).
+// `createdById` empezó a guardarse desde el deploy de esta feature: pedidos
+// anteriores no tienen atribución de mesero (el front lo avisa).
+router.get('/:id/activity', authenticate, requireTenantAccess, requirePermission('manage_users'), gateEmployees, async (req, res) => {
+  try {
+    const emp = await prisma.employee.findFirst({
+      where: { id: req.params.id, locationId: req.locationId },
+      select: { id: true, name: true, role: true },
+    });
+    if (!emp) return res.status(404).json({ error: 'Empleado no encontrado en esta sucursal' });
+
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const { from, to } = localDayRange(req.query.date);
+    const isDelivery = emp.role === 'DELIVERY';
+    const attribution = isDelivery ? 'DELIVERY' : 'CREATED_BY';
+
+    // Pedidos atribuibles al empleado en el día.
+    const orders = await prisma.order.findMany({
+      where: {
+        ...(isDelivery ? { deliveryDriverId: emp.id } : { createdById: emp.id }),
+        createdAt: { gte: from, lte: to },
+        ...(restaurantId ? { restaurantId } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true, orderNumber: true, status: true, orderType: true,
+        paymentMethod: true, paymentStatus: true, total: true,
+        cashCollected: true, customerName: true, ticketName: true, createdAt: true,
+      },
+    });
+
+    // Resumen: las anuladas no suman a ventas ni al desglose por método.
+    const live = orders.filter(o => o.status !== 'CANCELLED');
+    const byMethod = live.reduce((acc, o) => {
+      const k = o.paymentMethod || 'OTHER';
+      acc[k] = (acc[k] || 0) + (o.total || 0);
+      return acc;
+    }, {});
+    const orderSummary = {
+      count: live.length,
+      cancelled: orders.length - live.length,
+      total: live.reduce((s, o) => s + (o.total || 0), 0),
+      byMethod,
+    };
+
+    // Turnos de caja del día en los que participó (sólo relevante para roles
+    // con caja, pero se devuelve siempre por simplicidad del front).
+    const cashShifts = await prisma.cashShift.findMany({
+      where: {
+        OR: [{ employeeId: emp.id }, { openedById: emp.id }, { closedById: emp.id }],
+        openedAt: { gte: from, lte: to },
+        ...(req.locationId ? { locationId: req.locationId } : {}),
+      },
+      orderBy: { openedAt: 'desc' },
+      select: {
+        id: true, isOpen: true, openedAt: true, closedAt: true,
+        openingFloat: true, closingFloat: true, expectedCash: true,
+        totalCash: true, totalCard: true, totalTransfer: true,
+        totalCourtesy: true, totalTips: true, totalExpenses: true,
+      },
+    });
+
+    // Historial de turnos laborales (asistencia). De paso da contenido a la
+    // sección "Historial de turnos" del detalle.
+    const shifts = await prisma.employeeShift.findMany({
+      where: { employeeId: emp.id },
+      orderBy: { startAt: 'desc' },
+      take: 30,
+    });
+
+    res.json({
+      employeeId: emp.id,
+      role: emp.role,
+      attribution,
+      date: { from, to },
+      orders: orders.map(o => ({ ...o, customer: o.customerName || o.ticketName || null })),
+      orderSummary,
+      cashShifts,
+      shifts,
+    });
+  } catch (e) { console.error('GET /api/employees/:id/activity failed:', e); res.status(500).json({ error: e.message }); }
 });
 
 // POST crear empleado
