@@ -36,15 +36,53 @@ export const CMD = {
   ALIGN_RIGHT:  ESC + "a" + "\x02",
   BOLD_ON:      ESC + "E" + "\x01",
   BOLD_OFF:     ESC + "E" + "\x00",
+  // Doble golpe (ESC G) — refuerza el negro del texto ("líneas más negras")
+  // sin agrandar el carácter. Se combina con BOLD para el modo "marcado".
+  DBLSTRIKE_ON:  ESC + "G" + "\x01",
+  DBLSTRIKE_OFF: ESC + "G" + "\x00",
   DOUBLE_ON:    GS  + "!" + "\x11",
   DOUBLE_OFF:   GS  + "!" + "\x00",
   // Tamaño triple (3x ancho, 3x alto). Algunas impresoras no soportan
   // más allá de DOUBLE — si no responde, el firmware lo ignora y queda igual.
   TRIPLE_ON:    GS  + "!" + "\x22",
+  // Fuentes internas: A = estándar (12x24), B = compacta (9x17, más chars
+  // por línea). ESC M n.
+  FONT_A:       ESC + "M" + "\x00",
+  FONT_B:       ESC + "M" + "\x01",
+  // Interlineado. ESC 2 = default del firmware; ESC 3 n = n puntos.
+  SPACING_TIGHT:  ESC + "3" + "\x12", // 18 dots
+  SPACING_NORMAL: ESC + "2",
+  SPACING_LOOSE:  ESC + "3" + "\x30", // 48 dots
   LF:           "\n",
   LINE:         "------------------------------\n",
   CUT:          GS  + "V" + "\x42" + "\x00",
 };
+
+// ── Resolución de tipografía (config admin → comandos ESC/POS) ────────────
+//
+// Compartido por recibo y comanda. La fuente B y el ancho de papel cambian
+// cuántos caracteres caben por línea, lo que importa para alinear importes.
+
+export type FontKey = "monospace" | "sans-serif" | "serif";
+export type SizeKey = "small" | "medium" | "large" | "xlarge";
+export type SpacingKey = "tight" | "normal" | "loose";
+export type WeightKey = "light" | "normal" | "bold";
+
+/** Caracteres por línea según fuente (A/B) y ancho de papel (58/80mm). */
+export function lineWidthFor(fontFamily?: string | null, paperWidth?: string | null): number {
+  const base = paperWidth === "58mm" ? 32 : 48; // Font A
+  // sans-serif → Font B (compacta) ≈ +33% de caracteres.
+  return fontFamily === "sans-serif" ? Math.round(base * 1.33) : base;
+}
+
+const fontCmd = (f?: string | null) => (f === "sans-serif" ? CMD.FONT_B : CMD.FONT_A);
+const spacingCmd = (s?: string | null) =>
+  s === "tight" ? CMD.SPACING_TIGHT : s === "loose" ? CMD.SPACING_LOOSE : CMD.SPACING_NORMAL;
+// Tamaño = SOLO alto (nibble bajo de GS !), el ancho queda 1x para no romper
+// la alineación por conteo de caracteres. "medium" (default histórico) y
+// "small" quedan en 1x → no cambia el look actual; large=2x alto, xlarge=3x.
+const sizeCmd = (s?: string | null) =>
+  s === "xlarge" ? GS + "!" + "\x02" : s === "large" ? GS + "!" + "\x01" : GS + "!" + "\x00";
 
 const LINE_WIDTH = 32;
 
@@ -61,8 +99,8 @@ function normalizeThermalText(value: string): string {
     .replace(/[^\x00-\x7F]/g, "");
 }
 
-export function row(left: string, right: string): string {
-  const max = LINE_WIDTH;
+export function row(left: string, right: string, width: number = LINE_WIDTH): string {
+  const max = width;
   const r = right ?? "";
   const space = max - left.length - r.length;
   return left + " ".repeat(Math.max(1, space)) + r + "\n";
@@ -336,6 +374,13 @@ export interface KitchenTicketConfig {
   groupBySeat?: boolean;
   separateByGroup?: boolean;
   fontSize?: "normal" | "large" | "xlarge";
+  // Tipografía de la comanda (espejo del recibo).
+  fontFamily?: string | null;
+  lineSpacing?: string | null;
+  lineWeight?: string | null;
+  paperWidth?: string | null;
+  // Tamaño del nombre del ticket (Mesa/cliente) — elemento principal.
+  ticketNameSize?: "normal" | "large" | "xlarge";
 }
 
 export interface KitchenTicketInput {
@@ -381,6 +426,13 @@ export interface ReceiptInput {
   address?: string | null;
   showPhone?: boolean;
   phone?: string | null;
+  // Tipografía (config admin). fontFamily decide Font A/B; fontSize el alto;
+  // lineSpacing el interlineado; lineWeight qué tan marcadas las líneas.
+  fontFamily?: string | null;
+  fontSize?: string | null;
+  lineSpacing?: string | null;
+  lineWeight?: string | null;
+  paperWidth?: string | null;
 }
 
 const fmtMoney = (n: number) =>
@@ -411,6 +463,11 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     groupBySeat:      input.config?.groupBySeat      ?? true,
     separateByGroup:  input.config?.separateByGroup  ?? false,
     fontSize:         input.config?.fontSize         ?? "large",
+    fontFamily:       input.config?.fontFamily       ?? "monospace",
+    lineSpacing:      input.config?.lineSpacing      ?? "normal",
+    lineWeight:       input.config?.lineWeight       ?? "bold",
+    paperWidth:       input.config?.paperWidth       ?? "80mm",
+    ticketNameSize:   input.config?.ticketNameSize   ?? "large",
   };
 
   // Resolución del tamaño de fuente para items. "normal" = ancho normal,
@@ -421,7 +478,19 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     cfg.fontSize === "xlarge" ? CMD.TRIPLE_ON : CMD.DOUBLE_ON;
   const itemSizeOff = cfg.fontSize === "normal" ? "" : CMD.DOUBLE_OFF;
 
-  let d = CMD.INIT + CMD.ALIGN_CENTER;
+  // Peso de las líneas. light = sin forzar negrita; bold = negrita + doble
+  // golpe (más negras). El tamaño de los items se mantiene aparte (itemSize).
+  const heavy = cfg.lineWeight === "bold";
+  const light = cfg.lineWeight === "light";
+  const itemBoldOn = light ? "" : CMD.BOLD_ON;
+  const itemBoldOff = light ? "" : CMD.BOLD_OFF;
+
+  let d =
+    CMD.INIT +
+    fontCmd(cfg.fontFamily) +
+    spacingCmd(cfg.lineSpacing) +
+    (heavy ? CMD.DBLSTRIKE_ON : "") +
+    CMD.ALIGN_CENTER;
 
   // Banner de anulación — máxima prioridad. Avisa a cocina que el/los
   // items ya NO van (cancelados). Doble ancho + negritas para que no se
@@ -459,14 +528,24 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
   }
 
+  // Nombre del ticket (Mesa / cliente) = elemento PRINCIPAL: grande y arriba,
+  // para que cocina identifique la cuenta de un vistazo. Tamaño configurable.
+  const nameSizeOn =
+    cfg.ticketNameSize === "normal" ? "" :
+    cfg.ticketNameSize === "xlarge" ? CMD.TRIPLE_ON : CMD.DOUBLE_ON;
+  const nameSizeOff = cfg.ticketNameSize === "normal" ? "" : CMD.DOUBLE_OFF;
+  if (cfg.showTableNumber && input.tableNumber) {
+    d += nameSizeOn + CMD.BOLD_ON + "Mesa " + input.tableNumber + "\n" + CMD.BOLD_OFF + nameSizeOff;
+  }
+  if (cfg.showCustomerName && input.customerName) {
+    d += nameSizeOn + CMD.BOLD_ON + input.customerName + "\n" + CMD.BOLD_OFF + nameSizeOff;
+  }
+
   if (cfg.showOrderNumber && input.orderNumber) d += "#" + input.orderNumber + "\n";
   if (cfg.showTime) d += time + "\n";
-
   if (cfg.showOrderType && input.orderType) {
     d += (ORDER_TYPE_LABEL[input.orderType] || input.orderType) + "\n";
   }
-  if (cfg.showTableNumber && input.tableNumber) d += "Mesa " + input.tableNumber + "\n";
-  if (cfg.showCustomerName && input.customerName) d += input.customerName + "\n";
 
   d += CMD.LINE;
   d += CMD.ALIGN_LEFT;
@@ -489,7 +568,7 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
   const shouldGroupBySeat = isDineIn && cfg.groupBySeat && seatBuckets.size >= 2;
 
   const renderItem = (item: TicketItem) => {
-    let s = itemSizeOn + CMD.BOLD_ON;
+    let s = itemSizeOn + itemBoldOn;
     s += `${item.quantity}x ${item.name}\n`;
     if (cfg.showModifiers && item.modifiers && item.modifiers.length > 0) {
       s += itemSizeOff;
@@ -501,7 +580,7 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
       s += `  > ${item.notes}\n`;
       s += itemSizeOn;
     }
-    s += itemSizeOff + CMD.BOLD_OFF;
+    s += itemSizeOff + itemBoldOff;
     return s;
   };
 
@@ -531,13 +610,24 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
   if (cfg.footer.trim()) {
     d += CMD.ALIGN_CENTER + cfg.footer.trim() + "\n" + CMD.ALIGN_LEFT;
   }
-  d += CMD.LF + CMD.LF + CMD.CUT;
+  d += (heavy ? CMD.DBLSTRIKE_OFF : "") + CMD.LF + CMD.LF + CMD.CUT;
   return d;
 }
 
 export function buildCustomerReceipt(input: ReceiptInput): string {
   const now = new Date().toLocaleString("es-MX");
-  let d = CMD.INIT + CMD.ALIGN_CENTER;
+  // Tipografía configurable (admin). lw = ancho real en caracteres según
+  // fuente/papel; heavy/light controlan qué tan marcadas van las líneas.
+  const lw = lineWidthFor(input.fontFamily, input.paperWidth);
+  const heavy = input.lineWeight === "bold";
+  const light = input.lineWeight === "light";
+  let d =
+    CMD.INIT +
+    fontCmd(input.fontFamily) +
+    spacingCmd(input.lineSpacing) +
+    sizeCmd(input.fontSize) +
+    (heavy ? CMD.BOLD_ON + CMD.DBLSTRIKE_ON : "") +
+    CMD.ALIGN_CENTER;
 
   // LOGO placeholder — requiere implementación de raster bit image en el
   // driver TCP para imprimir bitmaps reales desde URL. Por ahora el admin
@@ -570,7 +660,7 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   for (const item of input.items) {
     const lineTotal = (item.price * item.quantity)
       + (item.modifiers || []).reduce((s, m) => s + (m.priceAdd || 0), 0) * item.quantity;
-    d += row(`${item.quantity}x ${truncate(item.name, 18)}`, fmtMoney(lineTotal));
+    d += row(`${item.quantity}x ${truncate(item.name, lw - 10)}`, fmtMoney(lineTotal), lw);
     if (item.modifiers && item.modifiers.length > 0) {
       for (const m of item.modifiers) {
         const extra = m.priceAdd ? ` (+${fmtMoney(m.priceAdd)})` : "";
@@ -580,11 +670,12 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   }
 
   d += CMD.LINE;
-  d += row("Subtotal:", fmtMoney(input.subtotal));
-  if (input.discount && input.discount > 0) d += row("Descuento:", "-" + fmtMoney(input.discount));
-  if (input.tax && input.tax > 0)           d += row("Impuestos:", fmtMoney(input.tax));
-  if (input.tip && input.tip > 0)           d += row("Propina:",   fmtMoney(input.tip));
-  d += CMD.BOLD_ON + row("TOTAL:", fmtMoney(input.total)) + CMD.BOLD_OFF;
+  d += row("Subtotal:", fmtMoney(input.subtotal), lw);
+  if (input.discount && input.discount > 0) d += row("Descuento:", "-" + fmtMoney(input.discount), lw);
+  if (input.tax && input.tax > 0)           d += row("Impuestos:", fmtMoney(input.tax), lw);
+  if (input.tip && input.tip > 0)           d += row("Propina:",   fmtMoney(input.tip), lw);
+  // El TOTAL va en negrita salvo en modo "sencillo" (light).
+  d += (light ? "" : CMD.BOLD_ON) + row("TOTAL:", fmtMoney(input.total), lw) + (light ? "" : CMD.BOLD_OFF);
   d += CMD.LINE;
 
   if (input.paymentMethod) {
@@ -597,7 +688,7 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
     d += CMD.ALIGN_CENTER + CMD.LF + "¡Gracias por su compra!\n";
   }
 
-  d += CMD.LF + CMD.LF + CMD.CUT;
+  d += (heavy ? CMD.DBLSTRIKE_OFF + CMD.BOLD_OFF : "") + CMD.LF + CMD.LF + CMD.CUT;
   return d;
 }
 

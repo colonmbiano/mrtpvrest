@@ -1077,6 +1077,12 @@ model TicketConfig {
   fontSize    String  @default("medium") // "small" | "medium" | "large"
   compactMode Boolean @default(false)
 
+  // Tipografía del recibo (cliente) — /admin/tickets. lineSpacing = interlineado
+  // (ESC 3); lineWeight = qué tan marcadas van las líneas (light=normal,
+  // normal=énfasis en total, bold=negrita+doble golpe en todo).
+  lineSpacing String @default("normal") // "tight" | "normal" | "loose"
+  lineWeight  String @default("normal") // "light" | "normal" | "bold"
+
   showOrderNumber  Boolean @default(true)
   showCustomerData Boolean @default(true)
   showItemsPrice   Boolean @default(true)
@@ -1103,8 +1109,15 @@ model TicketConfig {
   // Agrupa items por COMENSAL N en DINE_IN con varios asientos. OFF = plano.
   kitchenGroupBySeat     Boolean @default(true)
   kitchenSeparateByGroup Boolean @default(false)
-  // "normal" | "large" | "xlarge" — controla doble/triple ancho de items.
+  // "normal" | "large" | "xlarge" — controla doble/triple alto de items.
   kitchenFontSize        String  @default("large")
+  // Tipografía de la comanda — espejo de la del recibo.
+  kitchenFontFamily      String  @default("monospace") // "monospace" | "sans-serif" | "serif"
+  kitchenLineSpacing     String  @default("normal")    // "tight" | "normal" | "loose"
+  kitchenLineWeight      String  @default("bold")      // "light" | "normal" | "bold"
+  // Tamaño del NOMBRE del ticket (Mesa N / cliente) en la comanda — se imprime
+  // arriba y prominente para que cocina identifique la cuenta de un vistazo.
+  kitchenTicketNameSize  String  @default("large")     // "normal" | "large" | "xlarge"
   // Pie opcional ("Verificar antes de servir", número de turno, etc.).
   kitchenFooter          String  @default("")
 

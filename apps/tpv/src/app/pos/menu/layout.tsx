@@ -310,6 +310,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         address: ticketConfig?.address,
         showPhone: ticketConfig?.showPhone,
         phone: ticketConfig?.phone,
+        fontFamily: ticketConfig?.fontFamily,
+        fontSize: ticketConfig?.fontSize,
+        lineSpacing: ticketConfig?.lineSpacing,
+        lineWeight: ticketConfig?.lineWeight,
+        paperWidth: ticketConfig?.paperWidth,
       };
 
       // Dispatch a CASHIER printers según el plan.
@@ -507,6 +512,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         address: ticketConfig?.address,
         showPhone: ticketConfig?.showPhone,
         phone: ticketConfig?.phone,
+        fontFamily: ticketConfig?.fontFamily,
+        fontSize: ticketConfig?.fontSize,
+        lineSpacing: ticketConfig?.lineSpacing,
+        lineWeight: ticketConfig?.lineWeight,
+        paperWidth: ticketConfig?.paperWidth,
       });
 
       if (res.ok > 0 && res.failed.length === 0) {
