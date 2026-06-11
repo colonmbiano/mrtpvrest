@@ -734,6 +734,11 @@ model Order {
   numberOfGuests   Int?
   source           String    @default("ONLINE")
   deliveryDriverId String?
+  // Empleado del TPV que tomó/creó el pedido (Employee.id). FK escalar sin
+  // relación Prisma, mismo patrón que deliveryDriverId: el nombre se resuelve
+  // con consulta batch. Permite atribuir a meseros/cajeros su actividad.
+  // Nullable: pedidos ONLINE y los previos a este campo no lo tienen.
+  createdById      String?
   deliveryAddress  String?
   // Coordenadas del cliente (GPS del navegador en el checkout) y distancia
   // calculada al origen de la tienda. Se usan para el envío por distancia y
@@ -770,6 +775,7 @@ model Order {
 
   @@index([tableId])
   @@index([customerId])
+  @@index([createdById])
   @@map("orders")
 }
 

@@ -8,8 +8,17 @@ import {
 import api from "@/lib/api";
 import {
   WtScreen, PageHeader, WtCard, SectionLabel, Pill, Chips,
-  PrimaryBtn, Toggle, Avatar, EmptyState, type Tone,
+  PrimaryBtn, Toggle, Avatar, EmptyState, money, type Tone,
 } from "@/components/warmtech";
+
+// Fecha de hoy en hora de México (YYYY-MM-DD), no en la zona del navegador.
+function mxToday() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date());
+}
+const PAY_LABELS: Record<string, string> = {
+  CASH: "Efectivo", CARD: "Tarjeta", TRANSFER: "Transferencia",
+  CASH_ON_DELIVERY: "Efectivo", MP: "Mercado Pago", OTHER: "Otro",
+};
 
 const ROLES: { value: string; label: string; short: string; icon: LucideIcon; tone: Tone }[] = [
   { value: "ADMIN",    label: "Administrador", short: "Admin",       icon: Crown,   tone: "warn" },
@@ -75,6 +84,9 @@ export default function EmpleadosPage() {
   const [shifts, setShifts]         = useState<any[]>([]);
   const [loadingShifts, setLoadingShifts] = useState(false);
   const [activeTab, setActiveTab]   = useState<"list" | "detail">("list");
+  const [activity, setActivity]     = useState<any>(null);
+  const [loadingActivity, setLoadingActivity] = useState(false);
+  const [activityDate, setActivityDate] = useState<string>(mxToday());
 
   async function fetchEmployees() {
     try {
@@ -195,11 +207,25 @@ export default function EmpleadosPage() {
   async function viewDetail(emp: any) {
     setSelectedEmp(emp);
     setActiveTab("detail");
+    const date = mxToday();
+    setActivityDate(date);
+    fetchActivity(emp.id, date);
+  }
+
+  async function fetchActivity(empId: string, date: string) {
+    setLoadingActivity(true);
     setLoadingShifts(true);
     try {
-      const { data } = await api.get(`/api/employees/${emp.id}/shifts`);
-      setShifts(data);
-    } catch {} finally { setLoadingShifts(false); }
+      const { data } = await api.get(`/api/employees/${empId}/activity`, { params: { date } });
+      setActivity(data);
+      setShifts(data.shifts || []);
+    } catch {
+      setActivity(null);
+      setShifts([]);
+    } finally {
+      setLoadingActivity(false);
+      setLoadingShifts(false);
+    }
   }
 
   function exportCSV() {
@@ -496,6 +522,131 @@ export default function EmpleadosPage() {
               })}
             </div>
           </WtCard>
+
+          {/* ── Actividad del día (según rol) ─────────────────────────── */}
+          {(() => {
+            const isDelivery = selectedEmp.role === "DELIVERY";
+            const sum = activity?.orderSummary;
+            const orders: any[] = activity?.orders ?? [];
+            const cashShifts: any[] = activity?.cashShifts ?? [];
+            const fmtTime = (d: string) =>
+              new Date(d).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" });
+            return (
+              <WtCard className="mb-4 overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3"
+                  style={{ background: "var(--surf-2)", borderBottom: "1px solid var(--bd-1)" }}>
+                  <span className="font-display font-bold text-tx-hi">
+                    {isDelivery ? "Entregas del día" : "Pedidos tomados"}
+                  </span>
+                  <input
+                    type="date" value={activityDate} max={mxToday()}
+                    onChange={(e) => { setActivityDate(e.target.value); fetchActivity(selectedEmp.id, e.target.value); }}
+                    className="rounded-xl px-3 py-1.5 text-xs outline-none"
+                    style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
+                  />
+                </div>
+
+                {loadingActivity ? (
+                  <div className="py-8 text-center text-sm text-tx-mut">Cargando actividad…</div>
+                ) : (
+                  <div className="p-4">
+                    {/* tiles resumen */}
+                    <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <WtCard className="p-3" style={{ background: "var(--surf-2)" }}>
+                        <div className="text-[11px] text-tx-mut">{isDelivery ? "Entregas" : "Pedidos"}</div>
+                        <div className="mt-1 font-display text-2xl font-extrabold text-primary">{sum?.count ?? 0}</div>
+                      </WtCard>
+                      <WtCard className="p-3" style={{ background: "var(--surf-2)" }}>
+                        <div className="text-[11px] text-tx-mut">Total vendido</div>
+                        <div className="mt-1 font-display text-2xl font-extrabold text-primary">{money(sum?.total ?? 0)}</div>
+                      </WtCard>
+                      {Boolean(sum?.cancelled) && (
+                        <WtCard className="p-3" style={{ background: "var(--surf-2)" }}>
+                          <div className="text-[11px] text-tx-mut">Anulados</div>
+                          <div className="mt-1 font-display text-2xl font-extrabold" style={{ color: "var(--err)" }}>{sum.cancelled}</div>
+                        </WtCard>
+                      )}
+                    </div>
+
+                    {/* desglose por método */}
+                    {sum && Object.keys(sum.byMethod || {}).length > 0 && (
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        {Object.entries(sum.byMethod as Record<string, number>).map(([k, v]) => (
+                          <span key={k} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
+                            style={{ background: "var(--surf-2)", color: "var(--tx-mid)", border: "1px solid var(--bd-1)" }}>
+                            {PAY_LABELS[k] || k}: <b className="text-tx-hi">{money(v)}</b>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* lista de pedidos */}
+                    {orders.length === 0 ? (
+                      <div className="rounded-2xl py-8 text-center text-xs text-tx-mut" style={{ border: "1px dashed var(--bd-1)" }}>
+                        {!isDelivery && (selectedEmp.role === "WAITER" || selectedEmp.role === "CASHIER")
+                          ? "Sin pedidos atribuidos este día. La atribución por empleado empezó a registrarse en esta versión: los pedidos anteriores no la tienen."
+                          : isDelivery
+                            ? "Sin entregas asignadas este día."
+                            : "Sin pedidos tomados este día."}
+                      </div>
+                    ) : (
+                      <div className="overflow-hidden rounded-2xl" style={{ border: "1px solid var(--bd-1)" }}>
+                        {orders.map((o, i) => {
+                          const cancelled = o.status === "CANCELLED";
+                          const cashDue = (o.paymentMethod === "CASH" || o.paymentMethod === "CASH_ON_DELIVERY") && !o.cashCollected && !cancelled;
+                          return (
+                            <div key={o.id} className="flex items-center justify-between gap-3 px-4 py-2.5"
+                              style={{ borderTop: i ? "1px solid var(--bd-1)" : undefined, opacity: cancelled ? 0.5 : 1 }}>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 text-sm font-medium text-tx">
+                                  <span className="font-mono text-[11px] text-tx-mut">{fmtTime(o.createdAt)}</span>
+                                  <span className="truncate">{o.customer || "Público general"}</span>
+                                  {cancelled && <Pill tone="err">Anulado</Pill>}
+                                  {cashDue && <Pill tone="warn">Efectivo pend.</Pill>}
+                                </div>
+                                <div className="text-[11px] text-tx-mut">
+                                  {o.orderNumber} · {PAY_LABELS[o.paymentMethod] || o.paymentMethod}
+                                </div>
+                              </div>
+                              <div className="shrink-0 font-display text-sm font-extrabold text-primary"
+                                style={cancelled ? { textDecoration: "line-through" } : undefined}>
+                                {money(o.total || 0)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* turnos de caja (cajero/admin) */}
+                    {cashShifts.length > 0 && (
+                      <div className="mt-4">
+                        <SectionLabel>Turnos de caja</SectionLabel>
+                        <div className="flex flex-col gap-2">
+                          {cashShifts.map((cs) => (
+                            <WtCard key={cs.id} className="p-3" style={{ background: "var(--surf-2)" }}>
+                              <div className="mb-1 flex items-center justify-between">
+                                <span className="text-xs font-semibold text-tx">
+                                  {fmtTime(cs.openedAt)}{cs.closedAt ? ` → ${fmtTime(cs.closedAt)}` : ""}
+                                </span>
+                                {cs.isOpen ? <Pill tone="ok" live>Abierto</Pill> : <Pill tone="neutral">Cerrado</Pill>}
+                              </div>
+                              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-tx-mut">
+                                <span>Efectivo <b className="text-tx-hi">{money(cs.totalCash || 0)}</b></span>
+                                <span>Tarjeta <b className="text-tx-hi">{money(cs.totalCard || 0)}</b></span>
+                                <span>Transfer. <b className="text-tx-hi">{money(cs.totalTransfer || 0)}</b></span>
+                                {Boolean(cs.totalExpenses) && <span>Gastos <b style={{ color: "var(--err)" }}>{money(cs.totalExpenses)}</b></span>}
+                              </div>
+                            </WtCard>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </WtCard>
+            );
+          })()}
 
           <WtCard className="overflow-hidden">
             <div className="px-5 py-3 font-display font-bold text-tx-hi" style={{ background: "var(--surf-2)", borderBottom: "1px solid var(--bd-1)" }}>
