@@ -1,6 +1,7 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
+const { localDayRange } = require('../utils/dayRange');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const router = express.Router();
@@ -65,8 +66,8 @@ router.get('/:driverId/movements', authenticate, requireTenantAccess, async (req
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
     const { date } = req.query;
-    const from = date ? new Date(date) : new Date(new Date().setHours(0, 0, 0, 0));
-    const to = date ? new Date(new Date(date).setHours(23, 59, 59, 999)) : new Date(new Date().setHours(23, 59, 59, 999));
+    // Día natural en hora de México (el servidor corre en UTC).
+    const { from, to } = localDayRange(date);
     const movements = await prisma.driverCashMovement.findMany({
       where: { driverId: driver.id, createdAt: { gte: from, lte: to } },
       orderBy: { createdAt: 'desc' },
@@ -89,8 +90,8 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
     const { date } = req.query;
-    const from = date ? new Date(new Date(date).setHours(0, 0, 0, 0)) : new Date(new Date().setHours(0, 0, 0, 0));
-    const to = date ? new Date(new Date(date).setHours(23, 59, 59, 999)) : new Date(new Date().setHours(23, 59, 59, 999));
+    // Día natural en hora de México (el servidor corre en UTC).
+    const { from, to } = localDayRange(date);
     const restaurantId = req.restaurantId || req.user?.restaurantId;
 
     const orders = await prisma.order.findMany({

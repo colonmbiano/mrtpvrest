@@ -1,6 +1,8 @@
 ﻿const express = require('express')
 const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
+const { localDayRange } = require('../utils/dayRange')
+const DAY_MS = 86_400_000
 const router  = express.Router()
 
 router.get('/dashboard', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
@@ -88,12 +90,13 @@ router.get('/top-products', authenticate, requireTenantAccess, requireAdmin, asy
     const limit  = Math.min(parseInt(req.query.limit) || 5, 20);
     const locationId = req.headers['x-location-id'] || req.query.locationId || undefined;
 
-    const from = new Date();
-    from.setHours(0, 0, 0, 0);
-    if (period === '7D')  from.setDate(from.getDate() - 6);
-    if (period === '30D') from.setDate(from.getDate() - 29);
+    // Día natural en hora de México (el servidor corre en UTC).
+    const todayFrom = localDayRange().from;
+    let from = todayFrom;
+    if (period === '7D')  from = new Date(todayFrom.getTime() - 6 * DAY_MS);
+    if (period === '30D') from = new Date(todayFrom.getTime() - 29 * DAY_MS);
     if (period === 'AÑO' || period === 'ANIO' || period === 'ANO') {
-      from.setMonth(0, 1);
+      from = localDayRange(`${new Date().getUTCFullYear()}-01-01`).from; // año en curso, 1-ene MX
     }
 
     const orderWhere = {
@@ -136,18 +139,15 @@ router.get('/by-day', authenticate, requireTenantAccess, requireAdmin, async (re
     const restaurantId = req.user?.restaurantId || req.restaurantId
     const { from: fromParam, to: toParam, days: daysParam, bucket: bucketParam } = req.query
 
+    // Rangos anclados a la medianoche de México (el servidor corre en UTC).
     let from, to
     if (fromParam) {
-      from = new Date(fromParam); from.setHours(0, 0, 0, 0)
+      from = localDayRange(fromParam).from
     } else {
       const days = parseInt(daysParam) || 30
-      from = new Date(); from.setDate(from.getDate() - days + 1); from.setHours(0, 0, 0, 0)
+      from = new Date(localDayRange().from.getTime() - (days - 1) * DAY_MS)
     }
-    if (toParam) {
-      to = new Date(toParam); to.setHours(23, 59, 59, 999)
-    } else {
-      to = new Date(); to.setHours(23, 59, 59, 999)
-    }
+    to = toParam ? localDayRange(toParam).to : localDayRange().to
 
     const rangeMs = to.getTime() - from.getTime()
     const rangeDays = Math.max(1, Math.ceil(rangeMs / 86_400_000))

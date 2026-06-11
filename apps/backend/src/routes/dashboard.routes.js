@@ -11,7 +11,9 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { localDayRange } = require('../utils/dayRange');
 
+const DAY_MS = 86_400_000;
 const router = express.Router();
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -38,28 +40,27 @@ function getLocationId(req) {
 // son DateTime, la agregación por día sólo se usa para gráficas).
 function getPeriodRange(periodRaw) {
   const period = String(periodRaw || 'HOY').toUpperCase();
-  const now = new Date();
-  const to = new Date(now);
+  const to = new Date();
 
-  const from = new Date(now);
-  from.setHours(0, 0, 0, 0);
+  // Anclamos el inicio del periodo a la medianoche de México (el servidor
+  // corre en UTC; antes `setHours(0,0,0,0)` partía el día a las 18:00 MX y
+  // las ventas de la tarde caían fuera del "HOY").
+  const todayFrom = localDayRange().from;
+  let from = todayFrom;
 
   if (period === '7D') {
-    from.setDate(from.getDate() - 6);
+    from = new Date(todayFrom.getTime() - 6 * DAY_MS);
   } else if (period === '30D') {
-    from.setDate(from.getDate() - 29);
+    from = new Date(todayFrom.getTime() - 29 * DAY_MS);
   } else if (period === '90D') {
-    from.setDate(from.getDate() - 89);
+    from = new Date(todayFrom.getTime() - 89 * DAY_MS);
   } else if (period === '1Y' || period === 'AÑO' || period === 'ANIO' || period === 'ANO') {
-    // ANTES: from.setMonth(0,1) — "año en curso" devolvía $0 cuando no
-    // había datos en enero (típico tras importar histórico). Ahora:
     // "AÑO" = últimos 365 días rolling — siempre captura datos recientes.
-    from.setDate(from.getDate() - 364);
+    from = new Date(todayFrom.getTime() - 364 * DAY_MS);
   } else if (period === 'HISTORICO' || period === 'HIST') {
     // "Histórico" = desde siempre. Usamos epoch para que el aggregate
     // tome todos los pedidos sin filtro inferior.
-    from.setFullYear(2000, 0, 1);
-    from.setHours(0, 0, 0, 0);
+    from = new Date(Date.UTC(2000, 0, 1));
   }
 
   // Periodo anterior: misma longitud justo antes de `from`

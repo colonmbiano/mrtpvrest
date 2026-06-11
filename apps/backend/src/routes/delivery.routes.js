@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
+const { localDayRange } = require('../utils/dayRange');
 const router = express.Router();
 
 const STAFF_ROLES = ['CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'];
@@ -161,12 +162,13 @@ router.get('/:driverId/history', authenticate, requireTenantAccess, async (req, 
   try {
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    // Día natural en hora de México (el servidor corre en UTC).
+    const { from, to } = localDayRange(req.query.date);
     const orders = await prisma.order.findMany({
       where: {
         deliveryDriverId: driver.id,
         status: 'DELIVERED',
-        createdAt: { gte: today },
+        createdAt: { gte: from, lte: to },
         ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId: req.restaurantId || req.user?.restaurantId } : {}),
       },
       include: { items: true },
