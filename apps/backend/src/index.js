@@ -194,6 +194,7 @@ app.use('/api/locations',  require('./routes/locations.routes'))
 app.use('/api/menu',         require('./routes/menu.routes'))
 app.use('/api/shifts',       shiftsRoutes);
 app.use('/api/orders',       require('./routes/orders.routes'))
+app.use('/api/customers',    require('./routes/customers.routes'))
 app.use('/api/loyalty',      require('./routes/loyalty.routes'))
 app.use('/api/kds',          require('./routes/kds.routes'))
 app.use('/api/integrations', require('./routes/integrations.routes'))
