@@ -19,6 +19,52 @@
     (s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "")
       .replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 
+  // ── Protocolo de "pedido estructurado" ─────────────────────────────────
+  // Si el agente de WhatsApp Business (o una respuesta rápida) resume el pedido
+  // con una PALABRA CLAVE, el bot toma SOLO ese bloque (resumen limpio) en vez
+  // de adivinar de la cháchara libre. Más preciso y seguimos 100% solo-lectura.
+  // El bloque puede venir del negocio (la IA contesta como negocio) o del
+  // cliente, por eso la detección no depende de la dirección del mensaje.
+  const SENTINEL = /\b(pedido\s*(listo|confirmado|final|completo)|order\s*ready|resumen\s*del?\s*pedido)\b/i;
+  const META_TIPO = /\b(tipo|entrega|modalidad)\b\s*[:\-]?\s*(.+)/i;
+  const META_DIR = /\b(direcci[oó]n|domicilio|dir|calle|ubicaci[oó]n)\b\s*[:\-]?\s*(.+)/i;
+  const META_TEL = /\b(tel(?:[eé]fono)?|cel(?:ular)?|whatsapp|wa|n[uú]mero)\b\s*[:\-]?\s*([\d][\d\s\-().]{7,})/i;
+  const DELIVERY_RE = /\b(domicili|entrega|reparto|env[ií]o|delivery|mandar|llevar a)\b/i;
+  const TAKEOUT_RE = /\b(para llevar|recoger|paso por|pickup|en sucursal|mostrador)\b/i;
+
+  // Convierte un bloque de texto del agente en {text, orderType, address, phone}.
+  // "text" son sólo las líneas de PRODUCTOS (sin las metalíneas tipo/dir/tel) que
+  // se mandan a parse-order; el resto pre-llena el formulario del panel.
+  function parseOrderBlock(full) {
+    const rawLines = String(full || "").split("\n").map((l) => l.trim()).filter(Boolean);
+    let orderType = null, address = "", phone = "";
+    const productLines = [];
+    for (const line of rawLines) {
+      if (SENTINEL.test(line) && norm(line).replace(/[^a-z ]/g, "").trim().split(" ").length <= 4) continue; // la línea-título
+      const mDir = line.match(META_DIR);
+      const mTel = line.match(META_TEL);
+      const mTipo = line.match(META_TIPO);
+      if (mTel) { phone = mTel[2].replace(/\D/g, ""); continue; }
+      if (mDir) { address = mDir[2].trim(); orderType = orderType || "DELIVERY"; continue; }
+      if (mTipo) {
+        if (DELIVERY_RE.test(mTipo[2])) orderType = "DELIVERY";
+        else if (TAKEOUT_RE.test(mTipo[2])) orderType = "TAKEOUT";
+        continue;
+      }
+      // Metalíneas sueltas de cliente/nombre: descartar de los productos.
+      if (/^\s*(cliente|nombre|total|subtotal|pago|notas?)\b/i.test(line)) continue;
+      // Línea de producto: viñeta, "N x algo", o "N algo".
+      const cleaned = line.replace(/^[•\-\*·▪►]\s*/, "").trim();
+      if (cleaned) productLines.push(cleaned);
+    }
+    // Inferir tipo desde el cuerpo si no vino explícito.
+    if (!orderType) {
+      if (address || DELIVERY_RE.test(full)) orderType = "DELIVERY";
+      else if (TAKEOUT_RE.test(full)) orderType = "TAKEOUT";
+    }
+    return { text: productLines.join(". "), orderType, address, phone, structured: true, count: productLines.length };
+  }
+
   // ── Leer el chat abierto ───────────────────────────────────────────────
   // Entrante/saliente se decide por el NOMBRE del remitente en
   // data-pre-plain-text ("[hora, fecha] Remitente: "): si coincide con el
@@ -38,14 +84,24 @@
         const m = pre.match(/\]\s*(.+?):\s*$/);
         const sender = m ? m[1].trim() : "";
         const incoming = !!custFirst && norm(sender).split(" ").includes(custFirst);
-        // El texto real es la última línea no vacía (descarta encabezados de
-        // cita/reenvío que WhatsApp incluye en el mismo copyable).
-        const lines = (c.innerText || "").split("\n").map((l) => l.trim()).filter(Boolean);
-        return { incoming, text: lines[lines.length - 1] || "" };
+        // full = mensaje completo (para bloques estructurados multilínea);
+        // last = última línea (descarta encabezados de cita/reenvío).
+        const full = (c.innerText || "").trim();
+        const lines = full.split("\n").map((l) => l.trim()).filter(Boolean);
+        return { incoming, full, text: lines[lines.length - 1] || "" };
       })
-      .filter((m) => m.text);
+      .filter((m) => m.full);
 
-    // Último "turno" del cliente: la racha de mensajes entrantes más reciente.
+    // 1) ¿Hay un bloque ESTRUCTURADO reciente (palabra clave)? Gana siempre:
+    //    es un resumen limpio del agente, no la cháchara del cliente.
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (SENTINEL.test(msgs[i].full)) {
+        const blk = parseOrderBlock(msgs[i].full);
+        if (blk.text) return { customerName, phone: blk.phone || "", orderType: blk.orderType, address: blk.address, text: blk.text, count: blk.count, structured: true };
+      }
+    }
+
+    // 2) Si no, el último "turno" del cliente: racha de mensajes entrantes.
     let trailing = [];
     for (let i = msgs.length - 1; i >= 0; i--) {
       if (msgs[i].incoming) trailing.unshift(msgs[i]);
@@ -53,7 +109,7 @@
     }
     if (trailing.length === 0) trailing = msgs.filter((m) => m.incoming).slice(-4);
 
-    return { customerName, phone: "", text: trailing.map((m) => m.text).join(". "), count: trailing.length };
+    return { customerName, phone: "", text: trailing.map((m) => m.text).join(". "), count: trailing.length, structured: false };
   }
 
   // Tras recargar la extensión, el content script viejo queda "huérfano":
@@ -128,7 +184,13 @@
     if (!chat || !chat.text) { out.innerHTML = `<div class="st" style="color:${AMBER}">Abre un chat con un pedido primero.</div>`; return; }
     state.chat = chat; state.parsed = null;
     lastReadName = norm(chat.customerName);
-    out.innerHTML = `<div class="muted">Cliente: ${esc(chat.customerName)} · ${chat.count} mensaje(s)</div><div class="st">Interpretando…</div>`;
+    // Pre-llenado desde un bloque estructurado del agente (tipo/dir/tel).
+    if (chat.structured) {
+      if (chat.orderType) state.orderType = chat.orderType;
+      if (chat.address) state.address = chat.address;
+    }
+    const badge = chat.structured ? `<div class="muted" style="color:${AMBER}">📋 Pedido estructurado del agente</div>` : "";
+    out.innerHTML = `${badge}<div class="muted">Cliente: ${esc(chat.customerName)} · ${chat.count} ${chat.structured ? "producto(s)" : "mensaje(s)"}</div><div class="st">Interpretando…</div>`;
     const r = await bg("parse", { text: chat.text });
     if (!r || !r.ok) {
       const msg = r?.stale ? "⚠ Extensión recargada — refresca WhatsApp (F5)." : "Error al interpretar.";
@@ -216,6 +278,7 @@
   const NOISE = /^(gracias|ok|okay|oka|ya|listo|s[ií]|va|vale|sip|hola|buenas|buenos|foto|sticker|audio|imagen|video|ubicaci|jaja|bn|buenas noches|👍|🙏|❤)/i;
   function looksOrder(p) {
     p = (p || "").trim();
+    if (SENTINEL.test(p)) return true; // bloque estructurado del agente → seguro
     if (p.length < 5) return false;
     if (NOISE.test(p)) return false;
     return PRODUCT.test(p) || QTY.test(p) || INTENT.test(p);
