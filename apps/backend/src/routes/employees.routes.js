@@ -175,6 +175,98 @@ router.get('/', authenticate, requireTenantAccess, requirePermission('manage_use
   }
 });
 
+// ── GET /export-activity?from=&to=&role=ALL|DELIVERY|WAITER|... ──────────
+// Exporta a CSV la actividad de TODOS los empleados de la sucursal (o de un
+// rol) en un rango de días, agrupado por empleado con subtotales y un total
+// general. Atribución por rol: DELIVERY→entregas (deliveryDriverId), resto→
+// pedidos tomados (createdById). DEBE ir antes de /:id para no matchear el
+// param con "export-activity".
+const ROLE_ES = { ADMIN: 'Admin', CASHIER: 'Cajero', WAITER: 'Mesero', DELIVERY: 'Repartidor', COOK: 'Cocinero' };
+router.get('/export-activity', authenticate, requireTenantAccess, requirePermission('manage_users'), gateEmployees, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const roleFilter = String(req.query.role || 'ALL').toUpperCase();
+    const fromStr = req.query.from;
+    const toStr = req.query.to || req.query.from;
+    const from = localDayRange(fromStr).from;
+    const to = localDayRange(toStr).to;
+    if (to < from) return res.status(400).json({ error: 'Rango de fechas inválido (to < from)' });
+
+    const empWhere = req.locationId ? { locationId: req.locationId } : { location: { restaurantId } };
+    if (roleFilter !== 'ALL') empWhere.role = roleFilter;
+    const employees = await prisma.employee.findMany({
+      where: empWhere,
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, role: true },
+    });
+
+    const deliveryIds = employees.filter(e => e.role === 'DELIVERY').map(e => e.id);
+    const otherIds = employees.filter(e => e.role !== 'DELIVERY').map(e => e.id);
+
+    const orders = (deliveryIds.length || otherIds.length) ? await prisma.order.findMany({
+      where: {
+        createdAt: { gte: from, lte: to },
+        ...(restaurantId ? { restaurantId } : {}),
+        OR: [
+          ...(deliveryIds.length ? [{ deliveryDriverId: { in: deliveryIds } }] : []),
+          ...(otherIds.length ? [{ createdById: { in: otherIds } }] : []),
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        orderNumber: true, status: true, orderType: true, paymentMethod: true,
+        total: true, cashCollected: true, customerName: true, ticketName: true,
+        createdAt: true, deliveryDriverId: true, createdById: true,
+      },
+    }) : [];
+
+    // Atribuir cada pedido al empleado según su rol (un pedido puede contar
+    // para el repartidor que lo entregó y para quien lo tomó: son actividades
+    // distintas de empleados distintos).
+    const empById = Object.fromEntries(employees.map(e => [e.id, e]));
+    const byEmp = Object.fromEntries(employees.map(e => [e.id, []]));
+    for (const o of orders) {
+      if (o.deliveryDriverId && byEmp[o.deliveryDriverId] && empById[o.deliveryDriverId].role === 'DELIVERY') {
+        byEmp[o.deliveryDriverId].push(o);
+      }
+      if (o.createdById && byEmp[o.createdById] && empById[o.createdById].role !== 'DELIVERY') {
+        byEmp[o.createdById].push(o);
+      }
+    }
+
+    const dFmt = new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const tFmt = new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: false });
+    const PAY = { CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', CASH_ON_DELIVERY: 'Efectivo', MP: 'Mercado Pago' };
+
+    const lines = [['Empleado', 'Rol', 'Fecha', 'Hora', 'Folio', 'Cliente', 'Tipo', 'Metodo', 'Estado', 'Total', 'Efectivo cobrado']];
+    let grand = 0, grandCount = 0;
+    for (const e of employees) {
+      const list = byEmp[e.id] || [];
+      const live = list.filter(o => o.status !== 'CANCELLED');
+      const sub = live.reduce((s, o) => s + (o.total || 0), 0);
+      const rolEs = ROLE_ES[e.role] || e.role;
+      for (const o of list) {
+        lines.push([
+          e.name, rolEs, dFmt.format(o.createdAt), tFmt.format(o.createdAt), o.orderNumber,
+          o.customerName || o.ticketName || 'Publico general', o.orderType || '',
+          PAY[o.paymentMethod] || o.paymentMethod || '', o.status, (o.total || 0).toFixed(2),
+          (o.paymentMethod === 'CASH' || o.paymentMethod === 'CASH_ON_DELIVERY') ? (o.cashCollected ? 'Si' : 'No') : '',
+        ]);
+      }
+      lines.push([e.name, rolEs, '', '', '', '', '', '', `SUBTOTAL (${live.length})`, sub.toFixed(2), '']);
+      lines.push([]);
+      grand += sub; grandCount += live.length;
+    }
+    lines.push(['', '', '', '', '', '', '', '', `TOTAL (${grandCount})`, grand.toFixed(2), '']);
+
+    const csv = '﻿' + lines.map(r => r.map(csvCell).join(',')).join('\r\n');
+    const scope = roleFilter === 'ALL' ? 'todos' : roleFilter.toLowerCase();
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="actividad_${scope}_${fromStr || ''}_${toStr || ''}.csv"`);
+    res.send(csv);
+  } catch (e) { console.error('GET /api/employees/export-activity failed:', e); res.status(500).json({ error: e.message }); }
+});
+
 // GET un empleado
 router.get('/:id', authenticate, requireTenantAccess, requirePermission('manage_users'), gateEmployees, async (req, res) => {
   try {

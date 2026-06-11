@@ -90,6 +90,9 @@ export default function EmpleadosPage() {
   const [exportFrom, setExportFrom] = useState<string>(mxToday());
   const [exportTo, setExportTo]     = useState<string>(mxToday());
   const [exporting, setExporting]   = useState(false);
+  const [listFrom, setListFrom]     = useState<string>(mxToday());
+  const [listTo, setListTo]         = useState<string>(mxToday());
+  const [exportingRole, setExportingRole] = useState(false);
 
   async function fetchEmployees() {
     try {
@@ -237,6 +240,26 @@ export default function EmpleadosPage() {
     } finally { setExporting(false); }
   }
 
+  async function exportRoleCSV() {
+    if (listTo < listFrom) { alert("La fecha 'hasta' no puede ser anterior a 'desde'."); return; }
+    setExportingRole(true);
+    try {
+      const res = await api.get(`/api/employees/export-activity`, {
+        params: { from: listFrom, to: listTo, ...(filterRole !== "ALL" ? { role: filterRole } : {}) },
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(new Blob([res.data], { type: "text/csv;charset=utf-8" }));
+      const scope = filterRole === "ALL" ? "todos" : filterRole.toLowerCase();
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `actividad_${scope}_${listFrom}_${listTo}.csv`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("No se pudo exportar la actividad del rol.");
+    } finally { setExportingRole(false); }
+  }
+
   async function fetchActivity(empId: string, date: string) {
     setLoadingActivity(true);
     setLoadingShifts(true);
@@ -363,6 +386,30 @@ export default function EmpleadosPage() {
             <div className="min-w-0 flex-1">
               <Chips options={roleChips} value={filterRole} onChange={setFilterRole} />
             </div>
+          </div>
+
+          {/* exportar actividad del rol filtrado (CSV) */}
+          <div className="mb-4 flex flex-wrap items-end gap-2 rounded-2xl p-3"
+            style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>
+            <div>
+              <div className="mb-1 font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">
+                Exportar {filterRole === "ALL" ? "todos" : (roleMeta(filterRole)?.short.toLowerCase() ?? filterRole)} · desde
+              </div>
+              <input type="date" value={listFrom} max={mxToday()}
+                onChange={(e) => setListFrom(e.target.value)}
+                className="rounded-xl px-3 py-1.5 text-xs outline-none"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
+            </div>
+            <div>
+              <div className="mb-1 font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">hasta</div>
+              <input type="date" value={listTo} max={mxToday()}
+                onChange={(e) => setListTo(e.target.value)}
+                className="rounded-xl px-3 py-1.5 text-xs outline-none"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
+            </div>
+            <PrimaryBtn full={false} icon={Download} onClick={exportRoleCSV} disabled={exportingRole}>
+              {exportingRole ? "Generando…" : "Exportar CSV"}
+            </PrimaryBtn>
           </div>
 
           {/* grid empleados */}
