@@ -396,7 +396,11 @@ router.post('/orders', async (req, res) => {
 
   const VALID_ORDER_TYPES = ['DELIVERY', 'TAKEOUT', 'DINE_IN'];
   const resolvedOrderType = VALID_ORDER_TYPES.includes(orderType) ? orderType : 'DELIVERY';
-  const VALID_SOURCES = ['ONLINE', 'KIOSK'];
+  // WHATSAPP: pedidos creados por el bridge de WhatsApp (packages/wa-orders).
+  // Se comportan como ONLINE (respetan tienda abierta/cerrada y mínimo de
+  // compra) y caen en el panel "Pedidos Web" del TPV como PENDING para que el
+  // cajero los confirme antes de mandarlos a cocina.
+  const VALID_SOURCES = ['ONLINE', 'KIOSK', 'WHATSAPP'];
   const source = VALID_SOURCES.includes(rawSource) ? rawSource : 'ONLINE';
   const tableNumber = resolvedOrderType === 'DINE_IN' && rawTableNumber
     ? (Math.max(1, Math.min(999, parseInt(rawTableNumber) || 0)) || null)

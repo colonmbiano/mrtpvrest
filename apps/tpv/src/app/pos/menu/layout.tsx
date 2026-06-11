@@ -70,8 +70,10 @@ const ACTIVE_STATUSES = new Set([
 ]);
 
 // Orígenes que cuentan como "pedido web" (tienda en línea). KIOSK queda fuera
-// porque tiene su propio flujo de notificación.
-const ONLINE_SOURCES = new Set(["ONLINE", "STORE"]);
+// porque tiene su propio flujo de notificación. WHATSAPP entra aquí para que los
+// pedidos creados por el bridge de WhatsApp (packages/wa-orders) aparezcan en el
+// panel "Pedidos Web" y el cajero los confirme antes de cocina.
+const ONLINE_SOURCES = new Set(["ONLINE", "STORE", "WHATSAPP"]);
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();

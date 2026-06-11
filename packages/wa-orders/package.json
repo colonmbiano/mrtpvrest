@@ -1,0 +1,17 @@
+{
+  "name": "@mrtpvrest/wa-orders",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Núcleo reutilizable: convierte texto de un pedido de WhatsApp en un borrador en el TPV (POST /api/store/orders, source=WHATSAPP). Lo consumen el bot (apps/wa-bridge) y el servidor MCP (apps/wa-mcp).",
+  "main": "src/index.js",
+  "bin": {
+    "wa-order": "src/cli.js"
+  },
+  "scripts": {
+    "order": "node src/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
