@@ -1375,6 +1375,76 @@ router.patch(
   },
 );
 
+// ── PATCH/PUT /:id/details — Editar datos del cliente de una cuenta abierta
+// Permite actualizar customerName / customerPhone / deliveryAddress sin tocar
+// los items ni reabrir la orden. Solo se escriben los campos PRESENTES en el
+// body (undefined = no cambia; null o "" = limpia). Bloquea órdenes
+// cerradas/canceladas. Se expone como PATCH (semántico) y PUT (para que el
+// TPV lo encole vía apiOrQueue, que solo soporta POST/PUT).
+async function updateOrderDetailsHandler(req, res) {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const body = req.body || {};
+
+    // Normaliza un string opcional: undefined no toca el campo, null/"" lo
+    // limpia, y cualquier otra cadena se recorta al límite indicado.
+    const normField = (val, max) => {
+      if (val === undefined) return undefined;
+      if (val === null) return null;
+      if (typeof val !== 'string') return undefined;
+      const trimmed = val.trim().slice(0, max);
+      return trimmed || null;
+    };
+
+    const data = {};
+    const customerName = normField(body.customerName, 120);
+    const customerPhone = normField(body.customerPhone, 30);
+    const deliveryAddress = normField(body.deliveryAddress, 250);
+    if (customerName !== undefined) data.customerName = customerName;
+    if (customerPhone !== undefined) data.customerPhone = customerPhone;
+    if (deliveryAddress !== undefined) data.deliveryAddress = deliveryAddress;
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ error: 'Sin datos para actualizar' });
+    }
+
+    const existing = await prisma.order.findFirst({ where: { id: req.params.id, restaurantId } });
+    if (!existing) return res.status(404).json({ error: 'Orden no encontrada' });
+    if (['DELIVERED', 'CANCELLED'].includes(existing.status)) {
+      return res.status(400).json({ error: 'No se pueden editar datos de una orden cerrada' });
+    }
+
+    const updated = await prisma.order.update({
+      where: { id: req.params.id },
+      data,
+      include: ORDER_DETAIL_INCLUDE,
+    });
+
+    const io = req.app.get('io');
+    if (io && updated.locationId) {
+      io.to(`restaurant:${restaurantId}:location:${updated.locationId}:admins`)
+        .emit('order:updated', updated);
+    }
+
+    res.json(updated);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+router.patch(
+  '/:id/details',
+  authenticate,
+  requireTenantAccess,
+  requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'),
+  updateOrderDetailsHandler,
+);
+router.put(
+  '/:id/details',
+  authenticate,
+  requireTenantAccess,
+  requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'),
+  updateOrderDetailsHandler,
+);
+
 // ── POST /:id/split — Dividir una cuenta abierta en dos ───────────────
 // Mueve los itemIds seleccionados a una NUEVA orden (hermana, misma mesa y
 // contexto) y deja el resto en la original. El descuento se queda en la

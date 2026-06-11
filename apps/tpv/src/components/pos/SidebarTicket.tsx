@@ -321,12 +321,39 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       };
     });
 
+  // Persiste en el backend los datos del cliente editados sobre una orden ya
+  // existente (nombre/teléfono/dirección). El POST /:id/items solo manda los
+  // productos, así que sin esto las ediciones se quedaban en el store local y
+  // se perdían al recargar el ticket. customerName/Phone se mandan siempre
+  // (hacen round-trip de lo cargado en DINE_IN); la dirección solo en DELIVERY.
+  const persistOrderDetails = (orderId: string) => {
+    const payload: Record<string, string | null> = {
+      customerName: ticket.name?.trim() ? ticket.name.trim() : null,
+      customerPhone: ticket.phone?.trim() ? ticket.phone.trim() : null,
+    };
+    if (ticket.type === "DELIVERY") {
+      payload.deliveryAddress = ticket.address?.trim() ? ticket.address.trim() : null;
+    }
+    return apiOrQueue("order", "PUT", `/api/orders/${orderId}/details`, payload);
+  };
+
   const handleSendToKitchen = async () => {
     if (ticket.items.length === 0) {
       if (activeOrderId) {
-        // Cuenta existente sin productos nuevos: no hay ronda que agregar.
-        // Tratamos "Guardar" como "listo, sin cambios" y volvemos a la
-        // pantalla de tipo de pedido.
+        // Cuenta existente sin productos nuevos: no hay ronda que agregar,
+        // pero el cajero pudo haber editado los datos del cliente. Los
+        // persistimos antes de cerrar para que "Guardar" sí los guarde.
+        const detailsRes = await persistOrderDetails(activeOrderId);
+        if (!detailsRes.ok) {
+          toast.error("No se pudieron guardar los datos: " + (detailsRes.error || ""));
+          hapticError();
+          return;
+        }
+        toast.success(
+          detailsRes.queued
+            ? "Datos en cola · se guardarán al volver la red"
+            : "Datos del ticket guardados",
+        );
         clearActiveItems();
         clearActiveOrder();
         setPreviousItems([]);
@@ -363,6 +390,14 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         order = res.data;
         // Sincronizar historial local
         if (!queued) setPreviousItems(order?.items || []);
+        // Persistir también cualquier edición de los datos del cliente sobre
+        // la orden ya existente (el POST de items no los incluye). Best-effort:
+        // los productos ya quedaron guardados, así que un fallo aquí solo se
+        // avisa sin abortar la ronda.
+        const detailsRes = await persistOrderDetails(activeOrderId);
+        if (!detailsRes.ok) {
+          toast.warning("Ronda guardada, pero no se pudieron actualizar los datos del cliente");
+        }
       } else {
         // Orden nueva (o el backend redirigirá si la mesa está OCCUPIED).
         const orderData = {
@@ -478,6 +513,13 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           } catch {
             // Si no se pudo hidratar, igual podemos encolar el cobro por id.
           }
+        }
+        // Persistir ediciones de datos del cliente sobre la orden existente
+        // antes de cobrar (best-effort: no bloquea la venta si falla).
+        try {
+          await persistOrderDetails(activeOrderId);
+        } catch {
+          /* no crítico para el cobro */
         }
       } else {
         // 2. Si no hay activeOrderId, creamos la orden completa normalmente
