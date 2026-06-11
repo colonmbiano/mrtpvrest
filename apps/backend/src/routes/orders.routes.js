@@ -232,6 +232,16 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
     const where = { restaurantId };
     if (req.locationId) where.locationId = req.locationId;
 
+    // Filtro opt-in `?scope=active`: el TPV ("Tickets abiertos") solo necesita
+    // los pedidos ABIERTOS. Sin esto devolvíamos los últimos 200 de CUALQUIER
+    // estado (mayormente cerrados) con todos sus items, y el TPV los descargaba
+    // solo para descartar ~el 90% en el cliente → el drawer tardaba en cargar.
+    // Las páginas admin siguen pidiendo el historial completo (sin el param).
+    const ACTIVE_ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'OPEN', 'ON_THE_WAY'];
+    if (req.query.scope === 'active' || req.query.status === 'active') {
+      where.status = { in: ACTIVE_ORDER_STATUSES };
+    }
+
     const orders = await prisma.order.findMany({
       where,
       orderBy: { createdAt: 'desc' },
