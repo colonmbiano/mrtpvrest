@@ -9,7 +9,7 @@ import DiscountModal from "@/components/pos/DiscountModal";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
 import { COMPLEMENT_MODIFIER_PREFIX, VARIANT_MODIFIER_PREFIX } from "@/lib/modifiers";
 import { useAuthStore } from "@/store/authStore";
-import { useTicketStore } from "@/store/ticketStore";
+import { useTicketStore, type CartItem } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { useKitchenConfig, usePrinters } from "@/hooks/usePrinters";
@@ -39,6 +39,15 @@ interface Props {
 // con IVA incluido) para que el cajero/contabilidad vea el componente
 // fiscal. No altera el cálculo del total que se cobra.
 const IVA_RATE = 0.16;
+
+// Un item es "configurable" (re-editable) si el producto tiene variantes,
+// grupos de modificadores o complementos disponibles. Solo en ese caso
+// mostramos el lápiz para reabrir el configurador; los productos planos ya
+// se ajustan con el stepper y la nota.
+const isConfigurableItem = (item: CartItem): boolean =>
+  (!!item.hasVariants && (item.variants?.some((v) => v.isAvailable !== false) ?? false)) ||
+  (item.modifierGroups?.some((g) => (g.modifiers?.length ?? 0) > 0) ?? false) ||
+  (item.complements?.some((c) => c.isAvailable !== false) ?? false);
 
 export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanMode = false }: Props) {
   const router = useRouter();
@@ -125,8 +134,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     clearActiveItems,
     updateTicket,
     setItemNotes,
+    setEditingIndex,
   } = useTicketStore();
-  
+
   const ticket = getActiveTicket();
   const hasItems = ticket.items.length > 0;
 
@@ -808,6 +818,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               onIncrease={() => changeItemQty(idx, 1)}
               onDecrease={() => changeItemQty(idx, -1)}
               onUpdateNotes={(n) => setItemNotes(idx, n)}
+              onEdit={isConfigurableItem(item) ? () => setEditingIndex(idx) : undefined}
             />
           ))
         )}

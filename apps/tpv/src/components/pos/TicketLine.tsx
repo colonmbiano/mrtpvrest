@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { X, Plus, Minus, MessageSquare, Check } from "lucide-react";
+import { X, Plus, Minus, MessageSquare, Check, Pencil } from "lucide-react";
 
 interface TicketLineProps {
   id?: string;
@@ -14,6 +14,9 @@ interface TicketLineProps {
   onDecrease?: () => void;
   onRemove?: () => void;
   onUpdateNotes?: (notes: string) => void;
+  // Reabre el configurador (variantes/modificadores/complementos) para
+  // editar este item. Solo se pasa cuando el producto tiene opciones.
+  onEdit?: () => void;
   currency?: string;
 }
 
@@ -28,6 +31,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
   onDecrease,
   onRemove,
   onUpdateNotes,
+  onEdit,
   currency = "$",
 }) => {
   const inc = () => (onIncrease ? onIncrease() : onUpdateQty?.(quantity + 1));
@@ -73,9 +77,25 @@ const TicketLine: React.FC<TicketLineProps> = ({
       {/* INFO PRODUCTO */}
       <div className="flex-1 min-w-0 flex flex-col gap-1">
         <div className="flex justify-between items-start gap-2">
-          <span className="text-sm font-black text-white leading-tight tracking-tight line-clamp-2">
-            {name}
-          </span>
+          {onEdit ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="group/edit flex min-w-0 flex-1 items-start gap-1.5 text-left active:scale-[0.99] transition-transform"
+            >
+              <span className="text-sm font-black text-white leading-tight tracking-tight line-clamp-2">
+                {name}
+              </span>
+              <Pencil
+                size={12}
+                className="mt-0.5 shrink-0 text-zinc-600 group-active/edit:text-amber-500 transition-colors"
+              />
+            </button>
+          ) : (
+            <span className="text-sm font-black text-white leading-tight tracking-tight line-clamp-2">
+              {name}
+            </span>
+          )}
           {onRemove && (
             <button
               onClick={onRemove}
