@@ -276,6 +276,75 @@ router.get('/:id/activity', authenticate, requireTenantAccess, requirePermission
   } catch (e) { console.error('GET /api/employees/:id/activity failed:', e); res.status(500).json({ error: e.message }); }
 });
 
+// ── GET /:id/activity-export?from=YYYY-MM-DD&to=YYYY-MM-DD ────────────────
+// Exporta a CSV la actividad (pedidos atribuidos según rol) de un empleado en
+// un rango de días. Mismas reglas de atribución que /activity. Rango en hora
+// de México. `to` opcional (default = from → un solo día).
+function csvCell(v) {
+  const s = v == null ? '' : String(v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+router.get('/:id/activity-export', authenticate, requireTenantAccess, requirePermission('manage_users'), gateEmployees, async (req, res) => {
+  try {
+    const emp = await prisma.employee.findFirst({
+      where: { id: req.params.id, locationId: req.locationId },
+      select: { id: true, name: true, role: true },
+    });
+    if (!emp) return res.status(404).json({ error: 'Empleado no encontrado en esta sucursal' });
+
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const fromStr = req.query.from;
+    const toStr = req.query.to || req.query.from;
+    const from = localDayRange(fromStr).from;
+    const to = localDayRange(toStr).to;
+    if (to < from) return res.status(400).json({ error: 'Rango de fechas inválido (to < from)' });
+
+    const isDelivery = emp.role === 'DELIVERY';
+    const orders = await prisma.order.findMany({
+      where: {
+        ...(isDelivery ? { deliveryDriverId: emp.id } : { createdById: emp.id }),
+        createdAt: { gte: from, lte: to },
+        ...(restaurantId ? { restaurantId } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        orderNumber: true, status: true, orderType: true,
+        paymentMethod: true, paymentStatus: true, total: true,
+        cashCollected: true, customerName: true, ticketName: true, createdAt: true,
+      },
+    });
+
+    const dFmt = new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const tFmt = new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: false });
+    const PAY = { CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', CASH_ON_DELIVERY: 'Efectivo', MP: 'Mercado Pago' };
+
+    const header = ['Fecha', 'Hora', 'Folio', 'Cliente', 'Tipo', 'Metodo', 'Estado', 'Total', 'Efectivo cobrado'];
+    const rows = orders.map(o => ([
+      dFmt.format(o.createdAt),
+      tFmt.format(o.createdAt),
+      o.orderNumber,
+      o.customerName || o.ticketName || 'Publico general',
+      o.orderType || '',
+      PAY[o.paymentMethod] || o.paymentMethod || '',
+      o.status,
+      (o.total || 0).toFixed(2),
+      (o.paymentMethod === 'CASH' || o.paymentMethod === 'CASH_ON_DELIVERY') ? (o.cashCollected ? 'Si' : 'No') : '',
+    ]));
+
+    const live = orders.filter(o => o.status !== 'CANCELLED');
+    const totalSum = live.reduce((s, o) => s + (o.total || 0), 0);
+    rows.push([]);
+    rows.push(['', '', '', '', '', '', `TOTAL (${live.length})`, totalSum.toFixed(2), '']);
+
+    // BOM para que Excel respete los acentos (UTF-8); CRLF entre filas.
+    const csv = '﻿' + [header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+    const safeName = (emp.name || 'empleado').trim().replace(/\s+/g, '_');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="actividad_${safeName}_${fromStr || ''}_${toStr || ''}.csv"`);
+    res.send(csv);
+  } catch (e) { console.error('GET /api/employees/:id/activity-export failed:', e); res.status(500).json({ error: e.message }); }
+});
+
 // POST crear empleado
 router.post('/', authenticate, requireTenantAccess, requirePermission('manage_users'), gateEmployees, async (req, res) => {
   try {
