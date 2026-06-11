@@ -7,12 +7,20 @@ const router  = express.Router()
 
 router.get('/dashboard', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { from, to } = req.query;
-    const where = { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId, status: { not: 'CANCELLED' } };
-    if (from || to) {
+    const { from, to, days } = req.query;
+    const where = { restaurantId: req.user?.restaurantId || req.restaurantId, status: { not: 'CANCELLED' } };
+    // Rango en hora de México (servidor en UTC). Preferimos `days` (lo resuelve
+    // el server) sobre from/to del cliente para no depender de su zona horaria.
+    if (days) {
+      const n = Math.max(1, Math.min(parseInt(days) || 7, 366));
+      where.createdAt = {
+        gte: new Date(localDayRange().from.getTime() - (n - 1) * DAY_MS),
+        lte: localDayRange().to,
+      };
+    } else if (from || to) {
       where.createdAt = {};
-      if (from) where.createdAt.gte = new Date(from);
-      if (to)   where.createdAt.lte = new Date(to);
+      if (from) where.createdAt.gte = localDayRange(String(from)).from;
+      if (to)   where.createdAt.lte = localDayRange(String(to)).to;
     }
 
     const [summary, topItems, recentOrders] = await Promise.all([

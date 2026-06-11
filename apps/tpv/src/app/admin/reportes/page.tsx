@@ -52,12 +52,12 @@ export default function ReportesPage() {
       setLoading(true);
       setError('');
 
+      // El backend resuelve el rango en hora de México a partir de `days`
+      // (antes calculábamos from/to aquí con la zona del dispositivo).
       const days = periodToDays(period);
-      const from = new Date(); from.setDate(from.getDate() - days + 1); from.setHours(0,0,0,0);
-      const to = new Date();
 
       Promise.all([
-        api.get('/api/reports/dashboard', { params: { from: from.toISOString(), to: to.toISOString() } }),
+        api.get('/api/reports/dashboard', { params: { days } }),
         api.get('/api/reports/by-day',    { params: { days } }),
         api.get('/api/reports/top-products', { params: { period, limit: 6 } }),
       ]).then(([dash, daily, top]) => {

@@ -310,8 +310,8 @@ router.post('/:driverId/shift-request', authenticate, requireTenantAccess, async
     });
 
     // Balance de hoy (mismo cálculo que ve el repartidor en su pantalla de caja).
-    const from = new Date(); from.setHours(0, 0, 0, 0);
-    const to = new Date(); to.setHours(23, 59, 59, 999);
+    // Día natural en hora de México (el servidor corre en UTC).
+    const { from, to } = localDayRange();
     const movements = await prisma.driverCashMovement.findMany({
       where: { driverId: driver.id, createdAt: { gte: from, lte: to } },
     });
@@ -428,7 +428,7 @@ router.get('/cuts', authenticate, requireTenantAccess, requireAdmin, async (req,
 router.get('/summary/today', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
-    const from = new Date(); from.setHours(0, 0, 0, 0);
+    const { from } = localDayRange(); // medianoche de México (servidor en UTC)
     const drivers = await prisma.employee.findMany({
       where: {
         role: 'DELIVERY',

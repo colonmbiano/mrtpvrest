@@ -175,14 +175,10 @@ router.get('/sales-by-day', authenticate, requireTenantAccess, requireAdmin, asy
     const locationId = getLocationId(req);
     const days = Math.max(1, Math.min(parseInt(req.query.days) || 7, 90));
 
-    const from = new Date();
-    from.setHours(0, 0, 0, 0);
-    from.setDate(from.getDate() - days + 1);
-
-    const prevFrom = new Date(from);
-    prevFrom.setDate(prevFrom.getDate() - days);
-    const prevTo = new Date(from);
-    prevTo.setMilliseconds(prevTo.getMilliseconds() - 1);
+    // Ventana anclada a la medianoche de México (el servidor corre en UTC).
+    const from = new Date(localDayRange().from.getTime() - (days - 1) * DAY_MS);
+    const prevFrom = new Date(from.getTime() - days * DAY_MS);
+    const prevTo = new Date(from.getTime() - 1);
 
     const baseWhere = {
       restaurantId,
@@ -201,14 +197,15 @@ router.get('/sales-by-day', authenticate, requireTenantAccess, requireAdmin, asy
       }),
     ]);
 
+    // Key del bucket = fecha natural en México (no UTC), si no los pedidos de
+    // la noche caen en el día siguiente del gráfico.
+    const mxKey = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date(d));
     const map = {};
     for (let i = 0; i < days; i++) {
-      const d = new Date(from);
-      d.setDate(d.getDate() + i);
-      map[d.toISOString().split('T')[0]] = { revenue: 0, orders: 0 };
+      map[mxKey(new Date(from.getTime() + i * DAY_MS))] = { revenue: 0, orders: 0 };
     }
     for (const o of orders) {
-      const key = new Date(o.createdAt).toISOString().split('T')[0];
+      const key = mxKey(o.createdAt);
       if (map[key]) {
         map[key].revenue += o.total || 0;
         map[key].orders += 1;
