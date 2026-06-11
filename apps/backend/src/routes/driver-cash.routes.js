@@ -455,4 +455,47 @@ router.get('/summary/today', authenticate, requireTenantAccess, requireRole('ADM
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
+// GET /api/driver-cash/pending-collection
+// Pedidos ENTREGADOS pero sin cobrar (paidAt = null): efectivo que el
+// repartidor aún trae o entregas "por cobrar". Quedan abiertos hasta que la
+// caja confirme el cobro (PUT /api/orders/:id/confirm-cash).
+router.get('/pending-collection', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const orders = await prisma.order.findMany({
+      where: {
+        status: 'DELIVERED',
+        paidAt: null,
+        ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { restaurantId } : {}),
+      },
+      select: {
+        id: true, orderNumber: true, total: true, paymentMethod: true,
+        customerName: true, deliveryAddress: true, deliveryDriverId: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 100,
+    });
+
+    // Order no tiene relación nombrada al repartidor (solo deliveryDriverId),
+    // así que resolvemos los nombres en una sola consulta.
+    const driverIds = [...new Set(orders.map(o => o.deliveryDriverId).filter(Boolean))];
+    const drivers = driverIds.length
+      ? await prisma.employee.findMany({ where: { id: { in: driverIds } }, select: { id: true, name: true } })
+      : [];
+    const driverName = Object.fromEntries(drivers.map(d => [d.id, d.name]));
+
+    res.json(orders.map(o => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      total: o.total,
+      paymentMethod: o.paymentMethod,
+      customerName: o.customerName,
+      deliveryAddress: o.deliveryAddress,
+      driverName: o.deliveryDriverId ? (driverName[o.deliveryDriverId] || null) : null,
+      updatedAt: o.updatedAt,
+    })));
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
 module.exports = router;
