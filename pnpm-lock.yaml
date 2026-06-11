@@ -262,6 +262,9 @@ importers:
       '@capacitor/core':
         specifier: ^8.3.1
         version: 8.3.1
+      '@capgo/capacitor-updater':
+        specifier: ^8.0.0
+        version: 8.45.11(@capacitor/core@8.3.1)
       axios:
         specifier: ^1.16.1
         version: 1.16.1
@@ -314,6 +317,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.0.0
         version: 19.2.3(@types/react@19.2.14)
+      archiver:
+        specifier: ^7.0.1
+        version: 7.0.1
       cross-env:
         specifier: ^10.1.0
         version: 10.1.0

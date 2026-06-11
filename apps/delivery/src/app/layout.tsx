@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import SyncIndicator from "@/components/SyncIndicator";
+import OtaUpdater from "@/components/OtaUpdater";
 
 // MIGRACIÓN: las fuentes se cargan con <link> en runtime (igual que TPV/KDS)
 // en lugar de next/font/google. Razón: next/font descarga al BUILD time y
@@ -34,6 +35,7 @@ export default function RootLayout({
           <div className="absolute -bottom-[10%] -right-[10%] w-[80%] h-[80%] halo-glow-success opacity-30" />
         </div>
 
+        <OtaUpdater />
         <SyncIndicator />
         <main className="relative z-0">
           {children}
