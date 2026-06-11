@@ -234,6 +234,10 @@ router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAcces
 
     const io = req.app.get('io');
     if (io) {
+      // Emitimos SOLO al room de la sucursal del pedido para no cruzar avisos
+      // entre sucursales: la entrega únicamente la ve la caja de esa ubicación.
+      // El TPV se une a este room vía `join:location:admin` con su locationId
+      // (ver useNotifications.ts), así que la notificación llega a su caja.
       io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
       io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
     }

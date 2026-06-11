@@ -774,11 +774,24 @@ router.post('/orders', async (req, res) => {
     // restaurantId.
     const io = req.app.get('io');
     if (io) {
-      io.to(`restaurant:${restaurant.id}`).emit('order:new', order);
+      // Cocina/KDS: SIEMPRE al canal general del restaurante como respaldo de
+      // impresora (si la impresora LAN falla, la orden sigue visible en la
+      // pantalla KDS y nadie pierde el pedido). El KDS refresca con fetchOrders
+      // filtrado por sucursal, así que esto NO muestra pedidos de otra sucursal
+      // en pantalla: solo dispara un refresco.
       io.to(`restaurant:${restaurant.id}:kitchen`).emit('order:new', order);
+
       if (resolvedLocationId) {
+        // Caja: SOLO la sucursal del pedido. Así la notificación NO cruza a las
+        // cajas de otras sucursales y, de paso, la caja la recibe una sola vez
+        // (antes el room general + el de sucursal la duplicaban).
         io.to(`restaurant:${restaurant.id}:location:${resolvedLocationId}:admins`).emit('order:new', order);
         io.to(`restaurant:${restaurant.id}:location:${resolvedLocationId}:kitchen`).emit('order:new', order);
+      } else {
+        // Pedido sin sucursal resuelta: no hay ubicación a la cual dirigirlo, así
+        // que emitimos al room general como red de seguridad para que ninguna
+        // caja pierda el pedido (caso raro; no hay sucursal que "cruzar").
+        io.to(`restaurant:${restaurant.id}`).emit('order:new', order);
       }
     }
 
