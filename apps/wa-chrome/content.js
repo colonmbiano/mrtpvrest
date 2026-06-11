@@ -15,33 +15,45 @@
   const AMBER = "#FFB84D";
   const BG = "#0C0C0E";
 
+  const norm = (s) =>
+    (s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "")
+      .replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+
   // ── Leer el chat abierto ───────────────────────────────────────────────
+  // Entrante/saliente se decide por el NOMBRE del remitente en
+  // data-pre-plain-text ("[hora, fecha] Remitente: "): si coincide con el
+  // nombre del chat (el cliente) es entrante; si es el negocio, saliente.
+  // (El data-id ya no trae el formato fromMe_jid, por eso no se usa.)
   function readOpenChat() {
     const main = document.querySelector("#main");
     if (!main) return null;
     const nameEl = main.querySelector('header span[dir="auto"]');
     const customerName = nameEl ? nameEl.textContent.trim() : "";
+    const custFirst = norm(customerName).split(" ")[0];
 
     const copyables = [...main.querySelectorAll(".copyable-text[data-pre-plain-text]")];
     const msgs = copyables
       .map((c) => {
-        const idEl = c.closest("[data-id]");
-        const dataId = idEl ? idEl.getAttribute("data-id") || "" : "";
-        const out = dataId.startsWith("true_");
-        const jid = dataId.split("_")[1] || "";
-        return { out, jid, text: (c.innerText || "").trim() };
+        const pre = c.getAttribute("data-pre-plain-text") || "";
+        const m = pre.match(/\]\s*(.+?):\s*$/);
+        const sender = m ? m[1].trim() : "";
+        const incoming = !!custFirst && norm(sender).split(" ").includes(custFirst);
+        // El texto real es la última línea no vacía (descarta encabezados de
+        // cita/reenvío que WhatsApp incluye en el mismo copyable).
+        const lines = (c.innerText || "").split("\n").map((l) => l.trim()).filter(Boolean);
+        return { incoming, text: lines[lines.length - 1] || "" };
       })
       .filter((m) => m.text);
 
-    // Último "turno" del cliente: entrantes después del último saliente.
-    let lastOut = -1;
-    msgs.forEach((m, i) => { if (m.out) lastOut = i; });
-    let incoming = msgs.slice(lastOut + 1).filter((m) => !m.out);
-    if (incoming.length === 0) incoming = msgs.filter((m) => !m.out).slice(-8);
+    // Último "turno" del cliente: la racha de mensajes entrantes más reciente.
+    let trailing = [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].incoming) trailing.unshift(msgs[i]);
+      else if (trailing.length) break;
+    }
+    if (trailing.length === 0) trailing = msgs.filter((m) => m.incoming).slice(-4);
 
-    const jid = incoming[0]?.jid || "";
-    const phone = jid.endsWith("@c.us") ? jid.split("@")[0] : "";
-    return { customerName, phone, text: incoming.map((m) => m.text).join("\n"), count: incoming.length };
+    return { customerName, phone: "", text: trailing.map((m) => m.text).join("\n"), count: trailing.length };
   }
 
   const bg = (type, payload) =>
@@ -104,7 +116,7 @@
         <div class="st" style="color:${AMBER}">No se reconoció ningún producto. Revisa el chat o ajústalo manualmente en el TPV.</div>`;
       return;
     }
-    const list = items.map((i) => `<div class="it"><span>${i.quantity || 1}× ${esc(i.name || i.menuItemId)}</span></div>`).join("");
+    const list = items.map((i) => `<div class="it"><span>${i.quantity || 1}× ${esc(i.product?.name || i.name || i.menuItemId)}</span></div>`).join("");
     out.innerHTML = `
       <div class="muted">Cliente: ${esc(state.chat.customerName)}${state.chat.phone ? " · +" + state.chat.phone : ""}</div>
       <div style="margin:8px 0">${list}</div>
