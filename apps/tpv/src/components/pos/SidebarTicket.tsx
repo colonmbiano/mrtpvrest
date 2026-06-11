@@ -121,15 +121,25 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   }, [activeOrderId]);
 
   const removePreviousItem = async (item: any) => {
-    if (!confirm(`¿Quitar "${item.menuItem?.name || item.name}" del ticket?`)) return;
+    const label = item.menuItem?.name || item.name || "este producto";
+    if (!confirm(`¿Anular "${label}"? Se quitará de la cuenta y se imprimirá un ticket de anulación en cocina.`)) return;
     try {
       await api.delete(`/api/orders/items/${item.id}`);
-      await reloadPreviousItems();
-      hapticSuccess();
     } catch (err: any) {
       hapticError();
-      toast.error(err?.response?.data?.error || "No se pudo quitar el producto");
+      const code = err?.response?.data?.code;
+      const msg =
+        code === "PERMISSION_REQUIRED"
+          ? "No tienes permiso para anular productos ya enviados a cocina. Pide autorización a un gerente."
+          : err?.response?.data?.error || "No se pudo quitar el producto";
+      toast.error(msg);
+      return;
     }
+    // Ticket de anulación a cocina (best-effort): el producto ya no va.
+    await printVoidTicket(item);
+    await reloadPreviousItems();
+    hapticSuccess();
+    toast.success(`"${label}" anulado`);
   };
 
   const changePreviousItemQty = async (item: any, delta: number) => {
@@ -374,6 +384,44 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         variants: variantIds.map((variantId) => ({ variantId })),
       };
     });
+
+  // Imprime el ticket de cocina de ANULACIÓN para un producto que se quita de
+  // una orden ya enviada — avisa a cocina que ese platillo ya no va. Best-effort:
+  // si falla la impresión solo se avisa. Resuelve la estación igual que el envío
+  // normal (override del item → default de la categoría → fallback KITCHEN/BAR).
+  const printVoidTicket = async (item: any) => {
+    const itemOverride = (item.menuItem?.printerGroups ?? [])
+      .map((m: any) => m.printerGroup?.id)
+      .filter((id: unknown): id is string => Boolean(id));
+    const categoryDefault = (item.menuItem?.category?.printerGroups ?? [])
+      .map((m: any) => m.printerGroup?.id)
+      .filter((id: unknown): id is string => Boolean(id));
+    const voidItem: TicketItem = {
+      name: item.menuItem?.name || item.name || "Producto",
+      quantity: item.quantity ?? 1,
+      price: item.price ?? 0,
+      notes: item.notes || null,
+      seatNumber: item.seatNumber ?? null,
+      printerGroupIds: itemOverride.length > 0 ? itemOverride : categoryDefault,
+      modifiers: (item.modifiers || []).map((m: any) => ({
+        name: m.modifier?.name || m.name || "",
+        priceAdd: Number(m.modifier?.priceAdd ?? m.priceAdd ?? 0),
+      })),
+    };
+    try {
+      await printKitchenTickets(printers, {
+        orderNumber: activeOrderNumber ?? (activeOrderId ? String(activeOrderId).slice(-6) : null),
+        orderType: ticket.type ?? null,
+        tableNumber: ticket.tableName || ticket.table || null,
+        customerName: ticket.name ?? null,
+        items: [voidItem],
+        isCancel: true,
+        config: kitchenConfig ?? undefined,
+      });
+    } catch {
+      toast.warning("Artículo anulado, pero no se pudo imprimir el ticket de anulación");
+    }
+  };
 
   // Persiste en el backend los datos del cliente editados sobre una orden ya
   // existente (nombre/teléfono/dirección). El POST /:id/items solo manda los
@@ -866,7 +914,8 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             </div>
             {/* Rondas anteriores: editables (nota, cantidad, quitar) mientras la
                 orden no esté pagada/cerrada. El backend valida ese estado y el
-                rol; si rechaza, mostramos el motivo en un toast. */}
+                rol; si rechaza, mostramos el motivo en un toast. Al quitar una
+                línea ya enviada se imprime un ticket de anulación en cocina. */}
             <div className="space-y-4">
               {previousItems.map((item, idx) => (
                 <TicketLine
