@@ -54,7 +54,7 @@ export default function MergeTableModal({
     (async () => {
       setLoading(true);
       try {
-        const { data } = await api.get("/api/orders/admin");
+        const { data } = await api.get("/api/orders/admin?scope=active");
         const list = (Array.isArray(data) ? data : [])
           .filter((o: any) => ACTIVE.includes(o.status) && o.id !== source.id)
           .map((o: any) => ({

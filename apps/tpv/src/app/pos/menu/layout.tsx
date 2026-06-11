@@ -151,7 +151,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   const fetchOpenOrders = useCallback(async () => {
     try {
-      const { data } = await api.get("/api/orders/admin");
+      // scope=active → el backend ya filtra a pedidos abiertos (payload chico).
+      // Mantenemos el filtro cliente como red de seguridad.
+      const { data } = await api.get("/api/orders/admin?scope=active");
       const list = Array.isArray(data) ? data : [];
       setOpenOrders(list.filter((o: any) => ACTIVE_STATUSES.has(o.status)));
     } catch (err) {
