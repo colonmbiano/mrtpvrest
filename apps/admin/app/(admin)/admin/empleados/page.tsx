@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Crown, Banknote, ChefHat, Bike, Soup, BarChart3, Plus, X, Clock,
   History, Pencil, Trash2, Users, Tag, Ban, Unlock, ListChecks,
-  CheckCircle2, RotateCcw, type LucideIcon,
+  CheckCircle2, RotateCcw, Download, type LucideIcon,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
@@ -87,6 +87,9 @@ export default function EmpleadosPage() {
   const [activity, setActivity]     = useState<any>(null);
   const [loadingActivity, setLoadingActivity] = useState(false);
   const [activityDate, setActivityDate] = useState<string>(mxToday());
+  const [exportFrom, setExportFrom] = useState<string>(mxToday());
+  const [exportTo, setExportTo]     = useState<string>(mxToday());
+  const [exporting, setExporting]   = useState(false);
 
   async function fetchEmployees() {
     try {
@@ -209,7 +212,29 @@ export default function EmpleadosPage() {
     setActiveTab("detail");
     const date = mxToday();
     setActivityDate(date);
+    setExportFrom(date);
+    setExportTo(date);
     fetchActivity(emp.id, date);
+  }
+
+  async function exportActivityCSV() {
+    if (!selectedEmp) return;
+    const from = exportFrom, to = exportTo;
+    if (to < from) { alert("La fecha 'hasta' no puede ser anterior a 'desde'."); return; }
+    setExporting(true);
+    try {
+      const res = await api.get(`/api/employees/${selectedEmp.id}/activity-export`, {
+        params: { from, to }, responseType: "blob",
+      });
+      const url = URL.createObjectURL(new Blob([res.data], { type: "text/csv;charset=utf-8" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `actividad_${(selectedEmp.name || "empleado").trim().replace(/\s+/g, "_")}_${from}_${to}.csv`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("No se pudo exportar la actividad.");
+    } finally { setExporting(false); }
   }
 
   async function fetchActivity(empId: string, date: string) {
@@ -642,6 +667,28 @@ export default function EmpleadosPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* exportar a CSV por rango de fechas */}
+                    <div className="mt-4 flex flex-wrap items-end gap-2 rounded-2xl p-3"
+                      style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                      <div className="min-w-0">
+                        <div className="mb-1 font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Exportar CSV · desde</div>
+                        <input type="date" value={exportFrom} max={mxToday()}
+                          onChange={(e) => setExportFrom(e.target.value)}
+                          className="rounded-xl px-3 py-1.5 text-xs outline-none"
+                          style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="mb-1 font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">hasta</div>
+                        <input type="date" value={exportTo} max={mxToday()}
+                          onChange={(e) => setExportTo(e.target.value)}
+                          className="rounded-xl px-3 py-1.5 text-xs outline-none"
+                          style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
+                      </div>
+                      <PrimaryBtn full={false} icon={Download} onClick={exportActivityCSV} disabled={exporting}>
+                        {exporting ? "Generando…" : "Exportar"}
+                      </PrimaryBtn>
+                    </div>
                   </div>
                 )}
               </WtCard>
