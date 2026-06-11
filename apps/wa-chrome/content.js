@@ -104,19 +104,39 @@
 
   const out = panel.querySelector("#mbwa-out");
   let state = { chat: null, parsed: null, orderType: "TAKEOUT", address: "" };
+  // Chat marcado por el vigilante que esperamos que el cajero abra: al detectar
+  // que ese chat quedó abierto, lo leemos solo (cierra el hueco manual).
+  let pendingAutoRead = null;   // nombre normalizado del chat a auto-leer
+  let lastReadName = null;      // evita re-leer el mismo chat en loop
 
   panel.querySelector("#mbwa-x").onclick = () => panel.remove();
 
-  panel.querySelector("#mbwa-read").onclick = async () => {
+  async function doRead() {
     const chat = readOpenChat();
     if (!chat || !chat.text) { out.innerHTML = `<div class="st" style="color:${AMBER}">Abre un chat con un pedido primero.</div>`; return; }
     state.chat = chat; state.parsed = null;
+    lastReadName = norm(chat.customerName);
     out.innerHTML = `<div class="muted">Cliente: ${esc(chat.customerName)} · ${chat.count} mensaje(s)</div><div class="st">Interpretando…</div>`;
     const r = await bg("parse", { text: chat.text });
     if (!r || !r.ok) { out.innerHTML += `<div class="st" style="color:#f88">Error al interpretar.</div>`; return; }
     state.parsed = r.data;
     renderParsed();
-  };
+  }
+
+  panel.querySelector("#mbwa-read").onclick = doRead;
+
+  // Auto-lectura: si el cajero abrió el chat que el vigilante marcó, parsea solo.
+  function autoReadTick() {
+    if (!pendingAutoRead) return;
+    const nameEl = document.querySelector('#main header span[dir="auto"]');
+    const open = nameEl ? norm(nameEl.textContent) : "";
+    if (!open) return;
+    if (open === pendingAutoRead && open !== lastReadName) {
+      pendingAutoRead = null;
+      doRead();
+    }
+  }
+  setInterval(autoReadTick, 1000);
 
   function renderParsed() {
     const items = state.parsed?.items || [];
@@ -204,13 +224,16 @@
   }
 
   // WhatsApp no abre chats con clicks programáticos (exige gesto real), así que
-  // resaltamos el chat en la lista para que el operador le dé clic.
-  function openChat(r) {
+  // resaltamos el chat en la lista para que el operador le dé clic. Además
+  // dejamos "armado" ese nombre: en cuanto el cajero lo abra, autoReadTick lo
+  // parsea solo (no hace falta volver a apretar "Leer pedido").
+  function openChat(r, name) {
     r.scrollIntoView({ block: "center" });
     const prev = r.style.boxShadow;
     r.style.boxShadow = "inset 0 0 0 2px " + AMBER;
     r.style.borderRadius = "10px";
     setTimeout(() => { r.style.boxShadow = prev; }, 3000);
+    if (name) { pendingAutoRead = norm(name); lastReadName = null; }
   }
 
   function scanNew() {
@@ -227,7 +250,7 @@
     box.innerHTML = cands.map((c, i) =>
       `<div class="card"><div class="nm">🆕 ${esc(c.name)}</div><div class="pv">${esc(c.preview)}</div>
        <button class="b2" data-i="${i}" style="margin-top:0">📍 Localizar chat</button></div>`).join("");
-    box.querySelectorAll("button[data-i]").forEach((b) => { b.onclick = () => openChat(cands[+b.dataset.i].r); });
+    box.querySelectorAll("button[data-i]").forEach((b) => { b.onclick = () => { const c = cands[+b.dataset.i]; openChat(c.r, c.name); }; });
   }
 
   panel.querySelector("#mbwa-watch").onchange = scanNew;
