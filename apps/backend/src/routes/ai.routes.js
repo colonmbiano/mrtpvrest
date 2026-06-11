@@ -154,7 +154,13 @@ router.post('/order-dictation', authenticate, requireTenantAccess, requireRole('
     const { prompt } = req.body || {};
     if (!prompt?.trim()) return res.status(400).json({ error: 'prompt requerido' });
 
-    const result = await runOrderDictationSmart({ prompt, restaurantId });
+    // Modelo grande (70b): acierta mucho mejor el matching contra el menú que el
+    // 8b. La latencia extra es mínima (Groq es rápido) y vale la precisión.
+    const result = await runOrderDictationSmart({
+      prompt,
+      restaurantId,
+      model: process.env.ORDER_PARSE_MODEL || 'llama-3.3-70b-versatile',
+    });
     res.json(result);
   } catch (error) {
     if (error?.code) return sendAiError(res, error);

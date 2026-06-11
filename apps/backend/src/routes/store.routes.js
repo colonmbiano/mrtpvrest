@@ -326,7 +326,7 @@ router.post('/parse-order', async (req, res) => {
     const result = await runOrderDictationSmart({
       prompt: text,
       restaurantId: restaurant.id,
-      model: process.env.WA_PARSE_MODEL || 'llama-3.3-70b-versatile',
+      model: process.env.WA_PARSE_MODEL || process.env.ORDER_PARSE_MODEL || 'llama-3.3-70b-versatile',
     });
     return res.json({
       ok: !!result.ok,
