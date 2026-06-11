@@ -321,7 +321,13 @@ router.post('/parse-order', async (req, res) => {
   }
 
   try {
-    const result = await runOrderDictationSmart({ prompt: text, restaurantId: restaurant.id });
+    // Modelo grande (70b) para pedidos escritos de WhatsApp: acierta mucho mejor
+    // el matching contra el menú que el 8b del dictado por voz.
+    const result = await runOrderDictationSmart({
+      prompt: text,
+      restaurantId: restaurant.id,
+      model: process.env.WA_PARSE_MODEL || 'llama-3.3-70b-versatile',
+    });
     return res.json({
       ok: !!result.ok,
       items: Array.isArray(result.items) ? result.items : [],
