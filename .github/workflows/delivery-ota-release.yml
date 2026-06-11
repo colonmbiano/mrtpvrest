@@ -1,0 +1,126 @@
+name: Delivery OTA Release
+
+# Auto-publica un nuevo bundle live-update de la app de delivery (Capacitor)
+# cada vez que se pushean cambios a apps/delivery/ en master. También se puede
+# lanzar manualmente (workflow_dispatch).
+#
+# Versionado:
+#   - MAJOR.MINOR vienen de apps/delivery/package.json
+#   - PATCH = cuenta de commits del repo que tocaron apps/delivery/
+#   Resultado monotónico (ej. 0.1.42) sin necesidad de commit-back.
+#   Coincide con el versionName que calcula apps/delivery/android/app/build.gradle,
+#   así el OTA siempre supera al builtin del APK tras un nuevo push.
+#
+# Secrets requeridos:
+#   OTA_PUBLISH_TOKEN o OTA_BUILD_SECRET. OTA_PUBLISH_TOKEN es preferido.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/delivery/**'
+      - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Canal de release
+        type: choice
+        options: [production, beta, dev]
+        default: production
+      notes:
+        description: Notas del release (opcional)
+        required: false
+
+concurrency:
+  group: delivery-ota-release-${{ github.event.inputs.channel || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build + publish OTA bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout (full history para git rev-list)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+          run_install: false
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Compute version (major.minor desde package.json + patch=commits)
+        id: ver
+        run: |
+          MAJOR_MINOR=$(node -p "require('./apps/delivery/package.json').version.split('.').slice(0,2).join('.')")
+          PATCH=$(git rev-list --count HEAD -- apps/delivery/)
+          VERSION="${MAJOR_MINOR}.${PATCH}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "::notice::Delivery OTA version=$VERSION"
+
+      - name: Build Delivery (Next static export para Capacitor)
+        env:
+          CAPACITOR_BUILD: 'true'
+          NEXT_PUBLIC_API_URL: https://api.mrtpvrest.com
+        run: pnpm --filter @mrtpvrest/delivery build
+
+      - name: Zip out/
+        run: |
+          cd apps/delivery
+          zip -qr /tmp/bundle.zip out/
+          ls -lh /tmp/bundle.zip
+
+      - name: Resolver canal y notas
+        id: meta
+        run: |
+          CHANNEL="${{ github.event.inputs.channel }}"
+          [ -z "$CHANNEL" ] && CHANNEL="production"
+          NOTES="${{ github.event.inputs.notes }}"
+          if [ -z "$NOTES" ]; then
+            # En push automático, usa el subject del commit como notes.
+            NOTES=$(git log -1 --pretty=%s)
+          fi
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
+
+      - name: Publish a /api/ota/publish
+        env:
+          OTA_PUBLISH_TOKEN: ${{ secrets.OTA_PUBLISH_TOKEN }}
+          OTA_BUILD_SECRET: ${{ secrets.OTA_BUILD_SECRET }}
+        run: |
+          set -o pipefail
+          HEADER_NAME=""
+          HEADER_VALUE=""
+          if [ -n "$OTA_PUBLISH_TOKEN" ]; then
+            HEADER_NAME="Authorization"
+            HEADER_VALUE="Bearer $OTA_PUBLISH_TOKEN"
+          elif [ -n "$OTA_BUILD_SECRET" ]; then
+            HEADER_NAME="X-OTA-Build-Token"
+            HEADER_VALUE="$OTA_BUILD_SECRET"
+          else
+            echo "::error::Falta OTA_PUBLISH_TOKEN u OTA_BUILD_SECRET en Settings → Secrets → Actions."
+            exit 1
+          fi
+          curl -fsSL -X POST https://api.mrtpvrest.com/api/ota/publish \
+            -H "$HEADER_NAME: $HEADER_VALUE" \
+            -F "appId=com.mrtpvrest.delivery" \
+            -F "version=${{ steps.ver.outputs.version }}" \
+            -F "channel=${{ steps.meta.outputs.channel }}" \
+            --form-string "notes=${{ steps.meta.outputs.notes }}" \
+            -F "bundle=@/tmp/bundle.zip" \
+            | tee /tmp/publish.json
+          echo "::notice::Publicado v${{ steps.ver.outputs.version }} en canal ${{ steps.meta.outputs.channel }}"
