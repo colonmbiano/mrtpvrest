@@ -80,15 +80,24 @@
     #mbwa .seg.on{background:${AMBER};color:${BG}}
     #mbwa input{width:100%;box-sizing:border-box;margin-top:6px;padding:8px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#fff;font-size:12px}
     #mbwa .st{font-size:12px;margin-top:8px;min-height:16px}
-    #mbwa .x{margin-left:auto;cursor:pointer;color:rgba(255,255,255,.5);font-size:16px;line-height:1}`;
+    #mbwa #mbwa-watchlbl{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:10px;color:rgba(255,255,255,.6);cursor:pointer}
+    #mbwa .x{cursor:pointer;color:rgba(255,255,255,.5);font-size:16px;line-height:1;padding-left:8px}
+    #mbwa .card{background:rgba(255,184,77,.1);border:1px solid rgba(255,184,77,.3);border-radius:12px;padding:8px 10px;margin-bottom:8px}
+    #mbwa .card .nm{font-size:12px;font-weight:700}
+    #mbwa .card .pv{font-size:11px;color:rgba(255,255,255,.6);margin:2px 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #mbwa .card button{padding:6px;font-size:11px}`;
   document.documentElement.appendChild(style);
 
   const panel = document.createElement("div");
   panel.id = "mbwa";
   panel.innerHTML = `
-    <div class="hd"><span class="dot"></span><b>Pedido → TPV</b><span class="x" id="mbwa-x">×</span></div>
+    <div class="hd"><span class="dot"></span><b>Pedido → TPV</b>
+      <label id="mbwa-watchlbl" title="Vigilar nuevos pedidos">
+        <input type="checkbox" id="mbwa-watch" checked> vigilar</label>
+      <span class="x" id="mbwa-x">×</span></div>
     <div class="bd">
-      <button class="b1" id="mbwa-read">📦 Leer pedido del chat</button>
+      <div id="mbwa-new"></div>
+      <button class="b1" id="mbwa-read">📦 Leer pedido del chat abierto</button>
       <div id="mbwa-out"></div>
     </div>`;
   document.body.appendChild(panel);
@@ -157,6 +166,63 @@
       st.textContent = "No se pudo crear: " + (r?.data?.error || r?.error || "error");
     }
   }
+
+  // ── Vigilante de nuevos pedidos ────────────────────────────────────────
+  // Revisa los chats NO LEÍDOS y marca los que parecen pedido (cantidades o
+  // productos; descarta "gracias/ok/foto/…"). Solo IDENTIFICA y avisa: al abrir,
+  // el cajero usa "Leer pedido del chat abierto" para el parseo exacto (texto
+  // completo) y crea. Así no depende del preview truncado de la lista.
+  const ORDER_HINTS = /\d|alit|bonel|hamburg|burger|taco|burrit|gringa|papa|refresc|coca|agua|promo|orden|kilo|combo|pizza|quiero|me da|mandam|para llevar|domicili|pedido|antoj|nugget|costill|boneless/i;
+  const NOISE = /^(gracias|ok|okay|oka|ya|listo|s[ií]|va|vale|sip|hola|buenas|buenos|foto|sticker|audio|imagen|video|ubicaci|jaja|👍|🙏|❤)/i;
+
+  function unreadRows() {
+    const pane = document.querySelector("#pane-side");
+    if (!pane) return [];
+    return [...pane.querySelectorAll('[role="row"]')].filter((r) => {
+      const t = r.innerText || "";
+      return /no le[ií]d/i.test(t) || !!r.querySelector('[aria-label*="no le"]');
+    });
+  }
+
+  function rowInfo(r) {
+    const nameEl = r.querySelector("span[title]");
+    const name = nameEl ? nameEl.getAttribute("title") : "";
+    const lines = (r.innerText || "").split("\n").map((s) => s.trim()).filter(Boolean)
+      .filter((l) => !/no le[ií]d/i.test(l) && !/^\d{1,2}:\d{2}/.test(l)
+        && !/^(ayer|lunes|martes|mi.rcoles|jueves|viernes|s.bado|domingo)$/i.test(l));
+    return { name, preview: lines[lines.length - 1] || "" };
+  }
+
+  // WhatsApp no abre chats con clicks programáticos (exige gesto real), así que
+  // resaltamos el chat en la lista para que el operador le dé clic.
+  function openChat(r) {
+    r.scrollIntoView({ block: "center" });
+    const prev = r.style.boxShadow;
+    r.style.boxShadow = "inset 0 0 0 2px " + AMBER;
+    r.style.borderRadius = "10px";
+    setTimeout(() => { r.style.boxShadow = prev; }, 3000);
+  }
+
+  function scanNew() {
+    const box = panel.querySelector("#mbwa-new");
+    if (!box) return;
+    if (!panel.querySelector("#mbwa-watch")?.checked) { box.innerHTML = ""; return; }
+    const cands = [];
+    for (const r of unreadRows()) {
+      const { name, preview } = rowInfo(r);
+      if (!name || !preview || NOISE.test(preview) || !ORDER_HINTS.test(preview)) continue;
+      cands.push({ name, preview, r });
+    }
+    if (cands.length === 0) { box.innerHTML = ""; return; }
+    box.innerHTML = cands.map((c, i) =>
+      `<div class="card"><div class="nm">🆕 ${esc(c.name)}</div><div class="pv">${esc(c.preview)}</div>
+       <button class="b2" data-i="${i}" style="margin-top:0">📍 Localizar chat</button></div>`).join("");
+    box.querySelectorAll("button[data-i]").forEach((b) => { b.onclick = () => openChat(cands[+b.dataset.i].r); });
+  }
+
+  panel.querySelector("#mbwa-watch").onchange = scanNew;
+  setInterval(scanNew, 7000);
+  setTimeout(scanNew, 1500);
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 })();
