@@ -182,6 +182,24 @@ router.get('/', authenticate, requireTenantAccess, requirePermission('manage_use
 // pedidos tomados (createdById). DEBE ir antes de /:id para no matchear el
 // param con "export-activity".
 const ROLE_ES = { ADMIN: 'Admin', CASHIER: 'Cajero', WAITER: 'Mesero', DELIVERY: 'Repartidor', COOK: 'Cocinero' };
+
+// Sección "Turnos de caja" del CSV: header + builder de fila + acumulador.
+const CASH_HEADER = ['Empleado', 'Rol', 'Apertura', 'Cierre', 'Estado', 'Efectivo', 'Tarjeta', 'Transferencia', 'Cortesias', 'Propinas', 'Gastos', 'Fondo inicial', 'Efectivo esperado'];
+function cashRow(s, name, rolEs, dFmt, tFmt) {
+  const fmtDT = (d) => d ? `${dFmt.format(d)} ${tFmt.format(d)}` : '';
+  return [
+    name, rolEs, fmtDT(s.openedAt), fmtDT(s.closedAt), s.isOpen ? 'Abierto' : 'Cerrado',
+    (s.totalCash || 0).toFixed(2), (s.totalCard || 0).toFixed(2), (s.totalTransfer || 0).toFixed(2),
+    (s.totalCourtesy || 0).toFixed(2), (s.totalTips || 0).toFixed(2), (s.totalExpenses || 0).toFixed(2),
+    (s.openingFloat || 0).toFixed(2), s.expectedCash != null ? s.expectedCash.toFixed(2) : '',
+  ];
+}
+const CASH_SELECT = {
+  employeeId: true, isOpen: true, openedAt: true, closedAt: true, openingFloat: true,
+  expectedCash: true, totalCash: true, totalCard: true, totalTransfer: true,
+  totalCourtesy: true, totalTips: true, totalExpenses: true,
+};
+
 router.get('/export-activity', authenticate, requireTenantAccess, requirePermission('manage_users'), gateEmployees, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
@@ -258,6 +276,31 @@ router.get('/export-activity', authenticate, requireTenantAccess, requirePermiss
       grand += sub; grandCount += live.length;
     }
     lines.push(['', '', '', '', '', '', '', '', `TOTAL (${grandCount})`, grand.toFixed(2), '']);
+
+    // Sección de turnos de caja (cajeros/admin) de los empleados en alcance.
+    const empIds = employees.map(e => e.id);
+    const cashShifts = empIds.length ? await prisma.cashShift.findMany({
+      where: {
+        employeeId: { in: empIds },
+        openedAt: { gte: from, lte: to },
+        ...(req.locationId ? { locationId: req.locationId } : {}),
+      },
+      orderBy: [{ employeeId: 'asc' }, { openedAt: 'asc' }],
+      select: CASH_SELECT,
+    }) : [];
+    if (cashShifts.length) {
+      lines.push([]);
+      lines.push(['TURNOS DE CAJA']);
+      lines.push(CASH_HEADER);
+      const tot = { cash: 0, card: 0, tr: 0, co: 0, tip: 0, ex: 0 };
+      for (const s of cashShifts) {
+        const e = empById[s.employeeId] || {};
+        lines.push(cashRow(s, e.name || '', ROLE_ES[e.role] || e.role || '', dFmt, tFmt));
+        tot.cash += s.totalCash || 0; tot.card += s.totalCard || 0; tot.tr += s.totalTransfer || 0;
+        tot.co += s.totalCourtesy || 0; tot.tip += s.totalTips || 0; tot.ex += s.totalExpenses || 0;
+      }
+      lines.push(['TOTAL CAJA', '', '', '', '', tot.cash.toFixed(2), tot.card.toFixed(2), tot.tr.toFixed(2), tot.co.toFixed(2), tot.tip.toFixed(2), tot.ex.toFixed(2), '', '']);
+    }
 
     const csv = '﻿' + lines.map(r => r.map(csvCell).join(',')).join('\r\n');
     const scope = roleFilter === 'ALL' ? 'todos' : roleFilter.toLowerCase();
@@ -427,6 +470,24 @@ router.get('/:id/activity-export', authenticate, requireTenantAccess, requirePer
     const totalSum = live.reduce((s, o) => s + (o.total || 0), 0);
     rows.push([]);
     rows.push(['', '', '', '', '', '', `TOTAL (${live.length})`, totalSum.toFixed(2), '']);
+
+    // Sección de turnos de caja del empleado (relevante para cajero/admin).
+    const cashShifts = await prisma.cashShift.findMany({
+      where: {
+        OR: [{ employeeId: emp.id }, { openedById: emp.id }, { closedById: emp.id }],
+        openedAt: { gte: from, lte: to },
+        ...(req.locationId ? { locationId: req.locationId } : {}),
+      },
+      orderBy: { openedAt: 'asc' },
+      select: CASH_SELECT,
+    });
+    if (cashShifts.length) {
+      const rolEs = ROLE_ES[emp.role] || emp.role || '';
+      rows.push([]);
+      rows.push(['TURNOS DE CAJA']);
+      rows.push(CASH_HEADER);
+      for (const s of cashShifts) rows.push(cashRow(s, emp.name, rolEs, dFmt, tFmt));
+    }
 
     // BOM para que Excel respete los acentos (UTF-8); CRLF entre filas.
     const csv = '﻿' + [header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
