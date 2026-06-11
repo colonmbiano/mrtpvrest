@@ -311,9 +311,16 @@ Devuelve EXCLUSIVAMENTE un JSON válido con esta forma exacta:
 Reglas:
 - "n" debe ser el número del MENÚ que mejor corresponde, aunque lo digan con nombre
   coloquial, abreviado o con errores de transcripción. NUNCA inventes un número fuera del menú.
+- Las MARCAS y nombres coloquiales de bebida (coca, coca-cola, sprite, fanta, manzanita,
+  sidral, boing, jarrito, soda, agua, michelada, caguama, etc.) corresponden al producto
+  GENÉRICO del menú más cercano (ej. "Refrescos", "Agua", "Cerveza", "Micheladas"). Si hay
+  varias presentaciones del mismo genérico, elige la más común (lata/600ml/menor tamaño)
+  salvo que el cliente especifique envase o litraje.
+- Prefiere asignar el producto genérico más razonable antes que dejarlo sin resolver: sólo
+  usa "unresolved" cuando de verdad NO exista nada parecido en el menú. Palabras que claramente
+  no son comida/bebida (colonias, direcciones, saludos) sí van a "unresolved".
 - "quantity" es entero >= 1 (por defecto 1).
 - "notes" sólo para indicaciones del platillo (ej. "sin cebolla", "extra queso", "bien dorado"); si no hay, usa "".
-- Si una parte del dictado no corresponde a ningún producto del menú, agrégala a "unresolved".
 - No incluyas explicaciones ni texto fuera del JSON.`;
 
 function buildMenuList(catalog) {
