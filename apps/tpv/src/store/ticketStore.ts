@@ -79,6 +79,10 @@ export type CartItem = Product & {
   notes?: string;
   variantId?: string | null;
   variantName?: string | null;
+  // Nombre base del producto SIN el sufijo de variante. Permite reabrir el
+  // configurador para editar el item sin duplicar el sufijo "(Grande)" en
+  // el nombre. Si falta, se usa `name` como fallback.
+  baseName?: string;
   originalPrice?: number | null;
   modifiers?: ModifierSelection[];
   // Comensal al que pertenece (solo DINE_IN). null/undefined = compartido.
@@ -113,6 +117,10 @@ interface TicketState {
   tickets: TicketData[];
   activeIndex: number;
   quantitiesByProduct: Record<string, number>;
+  // Índice del item de la ronda actual que se está re-editando en el
+  // configurador (QuickModifierPanel). null = no se está editando nada,
+  // el configurador opera en modo "agregar". No se persiste.
+  editingIndex: number | null;
 
   /* Computed */
   getActiveTicket: () => TicketData;
@@ -129,6 +137,10 @@ interface TicketState {
   removeItem: (index: number) => void;
   clearActiveItems: () => void;
   setItemNotes: (index: number, notes: string) => void;
+  // Edición de un item ya agregado: reabre el configurador con sus
+  // modificadores actuales y reemplaza la línea al confirmar.
+  setEditingIndex: (index: number | null) => void;
+  replaceItemInActive: (index: number, item: CartItem) => void;
 }
 
 const emptyTicket = (
@@ -180,6 +192,7 @@ export const useTicketStore = create<TicketState>()(persist((_set, get) => {
     tickets: [emptyTicket(1, "T1")],
     activeIndex: 0,
     quantitiesByProduct: {},
+    editingIndex: null,
 
   getActiveTicket: () => {
     const { tickets, activeIndex } = get();
@@ -198,17 +211,18 @@ export const useTicketStore = create<TicketState>()(persist((_set, get) => {
   closeTicket: (index: number) => {
     const { tickets, activeIndex } = get();
     if (tickets.length === 1) {
-      set({ tickets: [emptyTicket(Date.now(), "T1")], activeIndex: 0 });
+      set({ tickets: [emptyTicket(Date.now(), "T1")], activeIndex: 0, editingIndex: null });
       return;
     }
     const next = tickets.filter((_, i) => i !== index);
     set({
       tickets: next,
       activeIndex: Math.min(activeIndex, next.length - 1),
+      editingIndex: null,
     });
   },
 
-  setActiveIndex: (index) => set({ activeIndex: index }),
+  setActiveIndex: (index) => set({ activeIndex: index, editingIndex: null }),
 
   updateTicket: (patch) => {
     set((state) => ({
@@ -219,7 +233,7 @@ export const useTicketStore = create<TicketState>()(persist((_set, get) => {
   },
 
   clearTickets: () => {
-    set({ tickets: [emptyTicket(Date.now(), "T1")], activeIndex: 0 });
+    set({ tickets: [emptyTicket(Date.now(), "T1")], activeIndex: 0, editingIndex: null });
   },
 
   addItemToActive: (item) => {
@@ -282,6 +296,9 @@ export const useTicketStore = create<TicketState>()(persist((_set, get) => {
         if (i !== state.activeIndex) return t;
         return { ...t, items: t.items.filter((_, idx) => idx !== index) };
       }),
+      // Al borrar una línea los índices se recorren; cancelamos cualquier
+      // edición en curso para no editar el item equivocado.
+      editingIndex: null,
     }));
   },
 
@@ -290,6 +307,7 @@ export const useTicketStore = create<TicketState>()(persist((_set, get) => {
       tickets: state.tickets.map((t, i) =>
         i === state.activeIndex ? { ...t, items: [] } : t
       ),
+      editingIndex: null,
     }));
   },
 
@@ -305,6 +323,22 @@ export const useTicketStore = create<TicketState>()(persist((_set, get) => {
           ),
         };
       }),
+    }));
+  },
+
+  setEditingIndex: (index) => set({ editingIndex: index }),
+
+  replaceItemInActive: (index, item) => {
+    set((state) => ({
+      tickets: state.tickets.map((t, i) => {
+        if (i !== state.activeIndex) return t;
+        if (index < 0 || index >= t.items.length) return t;
+        return {
+          ...t,
+          items: t.items.map((ci, idx) => (idx === index ? item : ci)),
+        };
+      }),
+      editingIndex: null,
     }));
   },
 };
