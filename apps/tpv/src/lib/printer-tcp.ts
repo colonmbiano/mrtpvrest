@@ -347,6 +347,10 @@ export interface KitchenTicketInput {
   /** Si true, prepende un banner "*** REIMPRESION ***" al ticket para
    *  que cocina identifique la duplicación y no prepare 2 veces. */
   isReprint?: boolean;
+  /** Si true, marca el ticket como "ARTICULO ANULADO" — el/los items ya
+   *  no van a prepararse (o hay que descartarlos si ya se hicieron). Tiene
+   *  prioridad visual sobre isReprint. */
+  isCancel?: boolean;
   /** Si true, marca el ticket como "PARCIAL" — se está reimprimiendo
    *  solo un subset de los items originales. */
   isPartial?: boolean;
@@ -419,10 +423,21 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
 
   let d = CMD.INIT + CMD.ALIGN_CENTER;
 
+  // Banner de anulación — máxima prioridad. Avisa a cocina que el/los
+  // items ya NO van (cancelados). Doble ancho + negritas para que no se
+  // confunda con una comanda normal.
+  if (input.isCancel) {
+    d += CMD.BOLD_ON + CMD.DOUBLE_ON;
+    d += "*** ARTICULO ANULADO ***\n";
+    d += "*** NO PREPARAR ***\n";
+    d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
+    d += CMD.LINE;
+  }
+
   // Banner de reimpresión — bien visible para que el cocinero NO prepare
   // los items dos veces. Va antes del header normal y usa el modo doble
   // ancho para asegurar legibilidad incluso en quemadores con poco contraste.
-  if (input.isReprint) {
+  if (input.isReprint && !input.isCancel) {
     d += CMD.BOLD_ON + CMD.DOUBLE_ON;
     d += "*** REIMPRESION ***\n";
     d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
