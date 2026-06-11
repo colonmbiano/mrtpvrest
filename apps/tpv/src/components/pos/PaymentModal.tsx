@@ -12,6 +12,7 @@ import {
   Plus,
   X,
   Bike,
+  Delete,
 } from "lucide-react";
 import api from "@/lib/api";
 
@@ -115,9 +116,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 }) => {
   const [tab, setTab] = useState<Tab>("TOTAL");
   const [splitMode, setSplitMode] = useState<SplitMode>("EQUAL");
-  const [method, setMethod] = useState<string>("CARD");
+  // Default CASH: efectivo es el método más frecuente en piso; abrir en
+  // tarjeta obligaba un tap extra en cada cobro (gap vs Loyverse).
+  const [method, setMethod] = useState<string>("CASH");
   const [tipPercent, setTipPercent] = useState<number>(0);
   const [cashReceived, setCashReceived] = useState<number>(total);
+  // Buffer de tecleo manual del efectivo recibido. "" = usando el monto
+  // sugerido/auto (= grandTotal). Se resetea junto con cashReceived.
+  const [cashEntry, setCashEntry] = useState<string>("");
   const [equalParts, setEqualParts] = useState<number>(2);
 
   // BUG-24: asignación de repartidor inline cuando es DELIVERY.
@@ -185,7 +191,10 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const [prevCashKey, setPrevCashKey] = useState({ isOpen, grandTotal });
   if (prevCashKey.isOpen !== isOpen || prevCashKey.grandTotal !== grandTotal) {
     setPrevCashKey({ isOpen, grandTotal });
-    if (isOpen) setCashReceived(grandTotal);
+    if (isOpen) {
+      setCashReceived(grandTotal);
+      setCashEntry("");
+    }
   }
 
   // Reset propina al abrir. Render-phase (ver CategoryModal).
@@ -468,6 +477,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 onMethodChange={setMethod}
                 cashReceived={cashReceived}
                 onCashChange={setCashReceived}
+                cashEntry={cashEntry}
+                onCashEntryChange={setCashEntry}
                 cashSuggestions={cashSuggestions}
                 total={grandTotal}
                 change={change}
@@ -631,6 +642,27 @@ function TabButton({
   );
 }
 
+function CashKey({
+  children,
+  onClick,
+  "aria-label": ariaLabel,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  "aria-label"?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className="min-h-[56px] h-14 rounded-2xl bg-white/5 border border-white/10 text-white text-2xl font-black tabular-nums flex items-center justify-center active:scale-95 active:bg-white/10 transition-transform"
+    >
+      {children}
+    </button>
+  );
+}
+
 function MethodGrid({
   method,
   onChange,
@@ -670,6 +702,8 @@ function TotalView({
   onMethodChange,
   cashReceived,
   onCashChange,
+  cashEntry,
+  onCashEntryChange,
   cashSuggestions,
   total,
   change,
@@ -683,6 +717,8 @@ function TotalView({
   onMethodChange: (m: string) => void;
   cashReceived: number;
   onCashChange: (n: number) => void;
+  cashEntry: string;
+  onCashEntryChange: (s: string) => void;
   cashSuggestions: number[];
   total: number;
   change: number;
@@ -692,6 +728,25 @@ function TotalView({
   onTipChange: (pct: number) => void;
   baseTotal: number;
 }) {
+  // Tecleo manual del efectivo recibido. El buffer cashEntry vive en el
+  // padre (se resetea con cashReceived). Tipear reemplaza el monto auto.
+  const pushCash = (next: string) => {
+    onCashEntryChange(next);
+    onCashChange(next === "" ? total : Number(next) || 0);
+  };
+  const pressDigit = (d: string) => {
+    const base = cashEntry === "" ? "" : cashEntry;
+    const next = base + d;
+    // Cap defensivo: 7 enteros + 2 decimales.
+    if (next.replace(".", "").length > 9) return;
+    pushCash(next);
+  };
+  const pressDot = () => {
+    if (cashEntry.includes(".")) return;
+    pushCash(cashEntry === "" ? "0." : cashEntry + ".");
+  };
+  const pressBackspace = () => pushCash(cashEntry.slice(0, -1));
+  const clearCash = () => pushCash("");
   return (
     <div className="space-y-7">
       <TipPicker
@@ -708,15 +763,15 @@ function TotalView({
         {method === "CASH" && (
           <div className="space-y-6">
             <div className="flex justify-between items-end gap-4">
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0">
                 <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
                   Monto recibido
                 </span>
-                <div className="text-5xl font-black tabular-nums text-white leading-none">
-                  ${cashReceived.toFixed(2)}
+                <div className="text-5xl font-black tabular-nums text-white leading-none truncate">
+                  ${cashEntry !== "" ? cashEntry : cashReceived.toFixed(2)}
                 </div>
               </div>
-              <div className="space-y-1 text-right">
+              <div className="space-y-1 text-right shrink-0">
                 <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
                   Cambio
                 </span>
@@ -726,12 +781,16 @@ function TotalView({
               </div>
             </div>
 
+            {/* Denominaciones sugeridas (exacto + redondeos) */}
             <div className="grid grid-cols-4 gap-2">
               {cashSuggestions.map((val) => (
                 <button
                   key={val}
                   type="button"
-                  onClick={() => onCashChange(val)}
+                  onClick={() => {
+                    onCashEntryChange(String(val));
+                    onCashChange(val);
+                  }}
                   className={`min-h-[56px] h-14 rounded-2xl border tabular-nums font-black active:scale-95 transition-transform ${
                     cashReceived === val
                       ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
@@ -741,6 +800,35 @@ function TotalView({
                   ${val}
                 </button>
               ))}
+            </div>
+
+            {/* Numpad — teclear el monto exacto recibido. Resuelve el caso
+                en que el cliente paga un monto fuera de las sugerencias. */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+                  O teclea el monto
+                </span>
+                <button
+                  type="button"
+                  onClick={clearCash}
+                  className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white/70 active:scale-95 transition px-2 py-1"
+                >
+                  Limpiar
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                  <CashKey key={d} onClick={() => pressDigit(d)}>
+                    {d}
+                  </CashKey>
+                ))}
+                <CashKey onClick={pressDot}>.</CashKey>
+                <CashKey onClick={() => pressDigit("0")}>0</CashKey>
+                <CashKey onClick={pressBackspace} aria-label="Borrar">
+                  <Delete size={22} strokeWidth={2.2} />
+                </CashKey>
+              </div>
             </div>
           </div>
         )}

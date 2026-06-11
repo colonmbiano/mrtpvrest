@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, Search, X, Plus, Minus, Check } from "lucide-react";
+import { ChevronLeft, Search, X, Plus, Minus, Check, Delete } from "lucide-react";
 import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
 import api from "@/lib/api";
 import { useCatalogPrefs, type CatalogDensity } from "@/store/catalogPrefsStore";
@@ -656,6 +656,27 @@ function QuickModifierPanel({
     initial?.variantId ?? variants[0]?.id ?? null,
   );
   const [quantity, setQuantity] = useState(initial?.quantity ?? 1);
+  // Teclado numérico de cantidad (estilo Loyverse): teclear el número
+  // directo en vez de tocar +/− N veces. qtyEntry "" = mostrando el valor
+  // del stepper; el primer dígito reemplaza. Entero 1-99.
+  const [qtyEntry, setQtyEntry] = useState("");
+  const [showQtyPad, setShowQtyPad] = useState(false);
+  const stepQty = (next: number) => {
+    setQuantity(Math.max(1, Math.min(99, next)));
+    setQtyEntry("");
+  };
+  const pressQtyDigit = (d: string) => {
+    const candidate = (qtyEntry === "" ? "" : qtyEntry) + d;
+    const num = parseInt(candidate, 10);
+    if (Number.isNaN(num) || num > 99) return;
+    setQtyEntry(candidate);
+    setQuantity(Math.max(1, num));
+  };
+  const pressQtyBackspace = () => {
+    const candidate = qtyEntry.slice(0, -1);
+    setQtyEntry(candidate);
+    setQuantity(candidate === "" ? 1 : Math.max(1, parseInt(candidate, 10) || 1));
+  };
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [selections, setSelections] = useState<Record<string, Modifier[]>>(() => {
     // Modo edición: pre-marcamos los modificadores que el item ya traía.
@@ -807,24 +828,68 @@ function QuickModifierPanel({
           );
         })}
 
-        <OptionSection title="Cantidad" helper="Antes de agregar">
+        <OptionSection title="Cantidad" helper="Toca el número para teclear">
           <div className="inline-flex items-center gap-2 rounded-lg border-2 border-bd bg-surf-2 p-2">
             <button
               type="button"
-              onClick={() => setQuantity((value) => Math.max(1, value - 1))}
+              onClick={() => stepQty(quantity - 1)}
               className="flex h-12 w-12 items-center justify-center rounded-md bg-surf-1 text-tx-pri active:bg-surf-3"
             >
               <Minus size={20} strokeWidth={3} />
             </button>
-            <span className="w-16 text-center text-[24px] font-black tabular-nums">{quantity}</span>
             <button
               type="button"
-              onClick={() => setQuantity((value) => Math.min(99, value + 1))}
+              onClick={() => setShowQtyPad((open) => !open)}
+              aria-label="Teclear cantidad"
+              className={`w-16 rounded-md text-center text-[24px] font-black tabular-nums text-tx-pri active:bg-surf-3 ${showQtyPad ? "bg-surf-3 ring-2 ring-iris-500" : ""}`}
+            >
+              {quantity}
+            </button>
+            <button
+              type="button"
+              onClick={() => stepQty(quantity + 1)}
               className="flex h-12 w-12 items-center justify-center rounded-md bg-surf-1 text-tx-pri active:bg-surf-3"
             >
               <Plus size={20} strokeWidth={3} />
             </button>
           </div>
+
+          {showQtyPad && (
+            <div className="mt-3 grid w-full max-w-[320px] grid-cols-3 gap-2">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => pressQtyDigit(d)}
+                  className="flex h-14 items-center justify-center rounded-lg border-2 border-bd bg-surf-2 text-[22px] font-black tabular-nums text-tx-pri active:bg-surf-3 focus:outline-none focus:ring-2 focus:ring-iris-500"
+                >
+                  {d}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => stepQty(1)}
+                className="flex h-14 items-center justify-center rounded-lg border-2 border-bd bg-surf-1 text-[13px] font-black uppercase text-tx-mut active:bg-surf-3 focus:outline-none focus:ring-2 focus:ring-iris-500"
+              >
+                C
+              </button>
+              <button
+                type="button"
+                onClick={() => pressQtyDigit("0")}
+                className="flex h-14 items-center justify-center rounded-lg border-2 border-bd bg-surf-2 text-[22px] font-black tabular-nums text-tx-pri active:bg-surf-3 focus:outline-none focus:ring-2 focus:ring-iris-500"
+              >
+                0
+              </button>
+              <button
+                type="button"
+                onClick={pressQtyBackspace}
+                aria-label="Borrar"
+                className="flex h-14 items-center justify-center rounded-lg border-2 border-bd bg-surf-2 text-tx-pri active:bg-surf-3 focus:outline-none focus:ring-2 focus:ring-iris-500"
+              >
+                <Delete size={22} strokeWidth={2.4} />
+              </button>
+            </div>
+          )}
         </OptionSection>
 
         <OptionSection title="Nota para cocina" helper="Opcional">

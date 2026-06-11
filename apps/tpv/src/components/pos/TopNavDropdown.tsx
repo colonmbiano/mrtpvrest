@@ -9,7 +9,8 @@ import {
   Bell,
   Wallet,
   Bike,
-  Globe
+  Globe,
+  ArrowLeftRight
 } from "lucide-react";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useRouter, usePathname } from "next/navigation";
@@ -21,6 +22,8 @@ interface Props {
   onOpenNotifs: () => void;
   onOpenWebOrders?: () => void;
   onOpenExpenses?: () => void;
+  /** Cierra sesión y manda al PIN para que entre otro empleado (1 toque). */
+  onSwitchEmployee?: () => void;
   hasOpenOrders: boolean;
   unreadNotifs?: number;
   /** Pedidos web PENDING (sin aceptar) — alimenta el badge de la pestaña. */
@@ -33,6 +36,7 @@ export default function TopNavDropdown({
   onOpenNotifs,
   onOpenWebOrders,
   onOpenExpenses,
+  onSwitchEmployee,
   unreadNotifs = 0,
   webOrdersCount = 0,
 }: Props) {
@@ -186,6 +190,19 @@ export default function TopNavDropdown({
                 </span>
               )}
             </button>
+
+            {onSwitchEmployee && (
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  onSwitchEmployee();
+                }}
+                className="mt-1 flex items-center gap-3 px-3 py-3 rounded-xl border-t border-white/5 text-amber-500/90 hover:text-amber-400 hover:bg-amber-500/5 transition-all active:scale-95"
+              >
+                <ArrowLeftRight size={18} />
+                <span className="text-sm font-bold">Cambiar empleado</span>
+              </button>
+            )}
           </div>
         )}
       </div>
