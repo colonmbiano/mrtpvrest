@@ -6,7 +6,9 @@ import { C, S } from '@/lib/tokens';
 interface CobrarScreenProps {
   order: any;
   onBack: () => void;
-  onConfirm: (method: 'CASH' | 'TRANSFER') => void;
+  // 'PENDING' = entregar sin cobrar: el pedido queda abierto hasta que la
+  // caja confirme el cobro.
+  onConfirm: (method: 'CASH' | 'TRANSFER' | 'PENDING') => void;
 }
 
 export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
@@ -126,6 +128,25 @@ export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
             <polyline points="22 4 12 14.01 9 11.01"/>
           </svg>
           CONFIRMAR ENTREGA
+        </button>
+
+        {/* Entregar sin cobrar — deja el pedido abierto (por cobrar) para que
+            la caja confirme el cobro más tarde. */}
+        <button
+          onClick={() => onConfirm('PENDING')}
+          style={{
+            height: 56, borderRadius: 16, cursor: 'pointer',
+            background: 'transparent', border: `1px dashed ${C.border}`,
+            color: C.textDim, fontFamily: C.fontBody,
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Entregar sin cobrar
         </button>
       </div>
     </div>

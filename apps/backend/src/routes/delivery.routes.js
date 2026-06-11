@@ -220,9 +220,21 @@ router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAcces
     if (paymentMethod) data.paymentMethod = paymentMethod;
     if (status === 'DELIVERED') {
       if (paymentMethod === 'CASH') {
+        // Entregado con efectivo: el repartidor trae el dinero, pero el cobro
+        // queda PENDING hasta que la caja lo concilie (PUT /orders/:id/confirm-cash).
+        data.paymentStatus = 'PENDING';
+        data.cashCollected = false;
+        data.paidAt = null;
+      } else if (paymentMethod === 'PENDING' || !paymentMethod) {
+        // Entregado SIN cobrar (por cobrar / fiado): no entró dinero. El pedido
+        // queda abierto y aparece en "Pendientes de cobro" del admin hasta que
+        // la caja confirme el cobro.
+        data.paymentStatus = 'PENDING';
         data.cashCollected = false;
         data.paidAt = null;
       } else {
+        // Transferencia/tarjeta confirmada por el repartidor en el momento.
+        data.paymentStatus = 'PAID';
         data.paidAt = new Date();
       }
     }

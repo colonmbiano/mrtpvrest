@@ -15,6 +15,8 @@ export default function CajaRepartidoresPage() {
   const [summary, setSummary]   = useState<any[]>([]);
   const [cuts, setCuts]         = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
+  const [pending, setPending]   = useState<any[]>([]);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [selected, setSelected] = useState<any>(null);
   const [movements, setMovements] = useState<any[]>([]);
   const [movSummary, setMovSummary] = useState<any>(null);
@@ -29,15 +31,34 @@ export default function CajaRepartidoresPage() {
   async function fetchAll() {
     setLoading(true);
     try {
-      const [s, c, r] = await Promise.all([
+      const [s, c, r, p] = await Promise.all([
         api.get("/api/driver-cash/summary/today"),
         api.get("/api/driver-cash/cuts"),
         api.get("/api/driver-cash/shift-requests"),
+        api.get("/api/driver-cash/pending-collection"),
       ]);
       setSummary(s.data);
       setCuts(c.data);
       setRequests(r.data);
+      setPending(p.data);
     } catch {} finally { setLoading(false); }
+  }
+
+  async function fetchPending() {
+    try {
+      const { data } = await api.get("/api/driver-cash/pending-collection");
+      setPending(data);
+    } catch {}
+  }
+
+  async function doConfirmCash(order: any) {
+    setConfirmingId(order.id);
+    try {
+      await api.put(`/api/orders/${order.id}/confirm-cash`);
+      setPending((prev) => prev.filter((o) => o.id !== order.id));
+      fetchAll();
+    } catch (err: any) { alert(err.response?.data?.error || "Error al confirmar el cobro"); }
+    finally { setConfirmingId(null); }
   }
 
   async function fetchDriverMovements(driverId: string) {
@@ -57,9 +78,9 @@ export default function CajaRepartidoresPage() {
 
   useEffect(() => {
     fetchAll();
-    // Sondeo ligero: el repartidor avisa el cierre desde su app y aquí aparece
-    // sin tener que refrescar la página manualmente.
-    const t = setInterval(fetchRequests, 20000);
+    // Sondeo ligero: el repartidor avisa el cierre y marca entregas desde su
+    // app, y aquí aparecen sin tener que refrescar la página manualmente.
+    const t = setInterval(() => { fetchRequests(); fetchPending(); }, 20000);
     return () => clearInterval(t);
   }, []);
 
@@ -144,6 +165,48 @@ export default function CajaRepartidoresPage() {
               </div>
               <PrimaryBtn full={false} icon={Scissors} onClick={() => setShowCutModal({ id: r.driverId, name: r.driverName })}>
                 Hacer corte
+              </PrimaryBtn>
+            </div>
+          ))}
+        </WtCard>
+      )}
+
+      {/* pendientes de cobro: entregas sin pago confirmado (efectivo en mano
+          del repartidor o "por cobrar"). Quedan abiertas hasta que la caja
+          confirme el cobro. */}
+      {pending.length > 0 && (
+        <WtCard className="mb-6 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 font-display font-bold text-tx-hi" style={{ borderBottom: "1px solid var(--bd-1)", background: "var(--surf-2)" }}>
+            <Banknote size={16} style={{ color: "var(--brand-primary)" }} /> Pendientes de cobro
+            <Pill tone="warn">{pending.length}</Pill>
+            <span className="ml-auto font-display text-sm font-extrabold text-primary">
+              ${pending.reduce((s, o) => s + (o.total || 0), 0).toFixed(0)}
+            </span>
+          </div>
+          {pending.map((o: any) => (
+            <div key={o.id} className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: "1px solid var(--bd-1)" }}>
+              <IconBadge icon={Bike} tone="warn" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-bold text-tx">
+                  #{o.orderNumber}{o.customerName ? ` · ${o.customerName}` : ""}
+                </div>
+                <div className="truncate text-[11px] text-tx-mut">
+                  {o.driverName ? `${o.driverName} · ` : ""}
+                  {o.paymentMethod === "CASH" ? "Efectivo" : o.paymentMethod === "PENDING" ? "Por cobrar" : o.paymentMethod}
+                  {o.deliveryAddress ? ` · ${o.deliveryAddress}` : ""}
+                </div>
+              </div>
+              <div className="hidden text-right sm:block">
+                <div className="text-[10px] text-tx-mut">Total</div>
+                <div className="font-display font-extrabold text-primary">${(o.total || 0).toFixed(0)}</div>
+              </div>
+              <PrimaryBtn
+                full={false}
+                icon={CheckCircle2}
+                disabled={confirmingId === o.id}
+                onClick={() => doConfirmCash(o)}
+              >
+                {confirmingId === o.id ? "..." : "Confirmar cobro"}
               </PrimaryBtn>
             </div>
           ))}
