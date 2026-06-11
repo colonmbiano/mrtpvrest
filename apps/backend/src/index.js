@@ -39,8 +39,13 @@ const corsOptions = {
     const isMrtpv = host === 'mrtpvrest.com' || host.endsWith('.mrtpvrest.com');
     const isVercel = process.env.ALLOW_VERCEL_PREVIEWS === 'true' && host.endsWith('.vercel.app');
     const isLocal = host === 'localhost' || host === '127.0.0.1' || origin.startsWith('capacitor://');
+    // Extensión de Chrome del TPV (apps/wa-chrome): lee pedidos de WhatsApp y
+    // los manda a los endpoints públicos de /api/store. Sin cookies/credenciales,
+    // y esos endpoints ya son públicos, así que permitir chrome-extension:// no
+    // amplía la superficie.
+    const isExtension = origin.startsWith('chrome-extension://');
 
-    if (isMrtpv || isVercel || isLocal) {
+    if (isMrtpv || isVercel || isLocal || isExtension) {
       callback(null, true);
     } else {
       console.log('CORS Blocked Origin:', origin);
