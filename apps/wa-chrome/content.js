@@ -56,8 +56,20 @@
     return { customerName, phone: "", text: trailing.map((m) => m.text).join(". "), count: trailing.length };
   }
 
+  // Tras recargar la extensión, el content script viejo queda "huérfano":
+  // chrome.runtime pierde su id y sendMessage truena. Detectamos ese caso y
+  // devolvemos un error claro (en vez de colgarnos en "Interpretando…").
+  const ctxAlive = () => { try { return !!chrome.runtime?.id; } catch { return false; } };
   const bg = (type, payload) =>
-    new Promise((res) => chrome.runtime.sendMessage({ type, ...payload }, res));
+    new Promise((res) => {
+      if (!ctxAlive()) return res({ ok: false, stale: true, error: "Recarga la página (F5)" });
+      try {
+        chrome.runtime.sendMessage({ type, ...payload }, (r) => {
+          if (chrome.runtime?.lastError) return res({ ok: false, stale: true, error: "Recarga la página (F5)" });
+          res(r);
+        });
+      } catch { res({ ok: false, stale: true, error: "Recarga la página (F5)" }); }
+    });
 
   // ── UI ─────────────────────────────────────────────────────────────────
   const style = document.createElement("style");
@@ -118,7 +130,11 @@
     lastReadName = norm(chat.customerName);
     out.innerHTML = `<div class="muted">Cliente: ${esc(chat.customerName)} · ${chat.count} mensaje(s)</div><div class="st">Interpretando…</div>`;
     const r = await bg("parse", { text: chat.text });
-    if (!r || !r.ok) { out.innerHTML += `<div class="st" style="color:#f88">Error al interpretar.</div>`; return; }
+    if (!r || !r.ok) {
+      const msg = r?.stale ? "⚠ Extensión recargada — refresca WhatsApp (F5)." : "Error al interpretar.";
+      out.innerHTML = `<div class="muted">Cliente: ${esc(chat.customerName)}</div><div class="st" style="color:#f88">${msg}</div>`;
+      return;
+    }
     state.parsed = r.data;
     renderParsed();
   }
