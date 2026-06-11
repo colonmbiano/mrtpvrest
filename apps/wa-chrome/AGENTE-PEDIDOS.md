@@ -41,14 +41,37 @@ ignoran como producto (no estorban).
 
 ## Cómo configurar el agente
 
-### Opción A — Asistente de IA de WhatsApp Business (si tu cuenta lo tiene)
-En las instrucciones/“personalidad” del asistente, agrega al final:
+### Opción A — Meta Business Agent (la IA nativa de WhatsApp Business)
+Meta lanzó el **Meta Business Agent globalmente el 3-jun-2026** (gratis por ahora).
+Se configura **dentro de la app de WhatsApp Business** → *Herramientas para la
+empresa* → se gestiona desde un chat especial llamado **"Tu agente de IA"**, donde
+le das instrucciones en lenguaje natural y lo corriges.
 
-> Cuando el cliente confirme su pedido, responde con un único mensaje que empiece
-> con la línea `PEDIDO LISTO` y debajo lista cada producto en su propia línea con
-> viñeta y cantidad. Si es a domicilio agrega `Tipo: Domicilio`, `Dirección: ...` y
-> `Tel: ...`. Si es para llevar agrega `Tipo: Para llevar`. No agregues precios ni
-> texto extra después de esa lista.
+**Modo recomendado: "Sugerencias"** (no "Automático completo"). En Sugerencias la IA
+redacta la respuesta pero **el cajero la envía** → encaja con tu filosofía "el cajero
+confirma" y baja el riesgo de baneo. Modos disponibles:
+- **Mi respuesta** — todo manual, la IA no participa.
+- **Sugerencias** — la IA redacta, tú envías. ← recomendado.
+- **Automático** — la IA contesta sola.
+
+**Conocimiento:** sube tu menú/catálogo (PDF o el catálogo de WhatsApp) para que
+conozca productos y precios.
+
+**Instrucción para el formato** — pégala en el chat "Tu agente de IA":
+
+> Cuando el cliente confirme su pedido, redacta un único mensaje que empiece con la
+> línea `PEDIDO LISTO` y debajo lista cada producto en su propia línea con viñeta y
+> cantidad (ej. `• 2 Hamburguesa sencilla`). Si es a domicilio agrega `Tipo:
+> Domicilio`, `Dirección: ...` y `Tel: ...`. Si es para llevar agrega `Tipo: Para
+> llevar`. No agregues precios ni texto extra después de esa lista.
+
+Como nuestro bot lee TODOS los mensajes del chat (entrantes y salientes), detecta
+ese bloque sin importar que lo haya enviado el agente como negocio.
+
+> **Futuro (opcional):** el *Meta Business Agent Platform* (tier empresarial) puede
+> conectarse a sistemas externos (tipo Shopify/Zendesk). Más adelante el agente
+> podría hacer `POST` directo a nuestro backend sin extensión. Por ahora el camino
+> lector (este) es gratis y suficiente.
 
 ### Opción B — Respuesta rápida (sin IA, funciona en cualquier WhatsApp Business)
 Crea una respuesta rápida (Ajustes → Herramientas para la empresa → Respuestas
