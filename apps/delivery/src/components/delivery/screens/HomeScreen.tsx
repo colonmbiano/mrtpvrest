@@ -52,20 +52,28 @@ function OrderCard({ order, onDetail, onChat, onDeliver, onNavigate }: {
       }} />
 
       <div style={{ padding: '16px 16px 16px 20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-          <div>
-            <div style={{ fontFamily: C.fontDisplay, fontSize: 22, fontWeight: 700, color: C.amber, lineHeight: 1 }}>
-              #{order.orderNumber}
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginTop: 4 }}>
-              {order.customerName}
-            </div>
+        {/* Eyebrow — n.º de pedido (chico) + estado */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+          <div style={{
+            fontSize: 10.5, fontWeight: 700, color: C.amber, letterSpacing: '0.06em',
+            fontFamily: C.fontBody, opacity: 0.9,
+          }}>
+            #{order.orderNumber}
           </div>
           <span style={{
             fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
             padding: '4px 10px', borderRadius: 20, flexShrink: 0,
             background: st.bg, color: st.color, border: `1px solid ${st.color}30`,
           }}>{st.label}</span>
+        </div>
+
+        {/* Hero — nombre del cliente (grande) */}
+        <div style={{
+          fontFamily: C.fontDisplay, fontSize: 24, fontWeight: 700, color: C.text,
+          lineHeight: 1.12, letterSpacing: '-0.01em', marginBottom: 14,
+          overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          {order.customerName}
         </div>
 
         {/* Address */}
@@ -85,13 +93,24 @@ function OrderCard({ order, onDetail, onChat, onDeliver, onNavigate }: {
           </span>
         </div>
 
-        {/* Actions row */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{
-            flex: 1, fontFamily: C.fontDisplay, fontSize: 20, fontWeight: 700,
-            color: isOnTheWay ? C.amber : C.green, letterSpacing: '-0.01em',
-          }}>
-            ${(order.total || 0).toFixed(2)}
+        {/* Pie — total + acciones (separado por hairline) */}
+        <div style={{
+          display: 'flex', gap: 8, alignItems: 'center',
+          paddingTop: 14, borderTop: `1px solid ${C.border}`,
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 8, fontWeight: 700, color: C.textMuted,
+              letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 3,
+            }}>
+              Total
+            </div>
+            <div style={{
+              fontFamily: C.fontDisplay, fontSize: 21, fontWeight: 700,
+              color: isOnTheWay ? C.amber : C.green, letterSpacing: '-0.01em', lineHeight: 1,
+            }}>
+              ${(order.total || 0).toFixed(2)}
+            </div>
           </div>
 
           <button onClick={onDetail} style={{ ...S.btnSecondary }}>Detalle</button>
