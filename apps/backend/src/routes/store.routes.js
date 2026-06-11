@@ -27,7 +27,22 @@ const { computeDeliveryFee } = require('../lib/delivery-fee');
 const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
 const { addLoyaltyPoints, genLoyaltyQr } = require('../services/loyalty.service');
+const { runOrderDictationSmart } = require('../services/order-dictation.service');
 const router = express.Router();
+
+// Throttle ligero del parseo de pedidos por IA (público). Protege la cuota de
+// Groq del restaurante (BYOK) ante abuso. En memoria, por restaurante.
+const parseRate = new Map();
+function checkParseRate(restaurantId, limit = 200, windowMs = 60 * 60 * 1000) {
+  const now = Date.now();
+  const r = parseRate.get(restaurantId);
+  if (!r || now > r.resetAt) {
+    parseRate.set(restaurantId, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  r.count += 1;
+  return r.count <= limit;
+}
 
 // Resuelve el cliente final autenticado a partir del header Authorization
 // (opcional). No bloquea si falta o es inválido — el storefront permite pedir
@@ -280,6 +295,42 @@ router.get('/menu', async (req, res) => {
   } catch (e) {
     console.error('[store] GET /menu error:', e.message);
     res.status(500).json({ error: 'Error al obtener el menú.' });
+  }
+});
+
+// ── POST /api/store/parse-order ──────────────────────────────────────────────
+// Interpreta texto libre (p.ej. un mensaje de WhatsApp) y lo convierte en items
+// del menú. Reusa el MISMO motor del dictado por voz del TPV
+// (runOrderDictationSmart): usa la Groq key BYOK del restaurante con fallback a
+// reglas. Público (identifica la tienda por ?r=slug), para que el bridge de
+// WhatsApp (packages/wa-orders) no tenga que manejar ninguna API key.
+//
+// Body: { text }
+// Resp: { items: [{ menuItemId, quantity, name? }], unmatched: [string], ok }
+router.post('/parse-order', async (req, res) => {
+  const store = await resolveStore(req, res);
+  if (!store) return;
+  const { restaurant } = store;
+
+  const text = typeof req.body?.text === 'string' ? req.body.text : req.body?.prompt;
+  if (!text || !text.trim()) {
+    return res.status(400).json({ error: 'text requerido' });
+  }
+  if (!checkParseRate(restaurant.id)) {
+    return res.status(429).json({ error: 'Demasiadas solicitudes de parseo. Intenta más tarde.', code: 'PARSE_RATE_LIMIT' });
+  }
+
+  try {
+    const result = await runOrderDictationSmart({ prompt: text, restaurantId: restaurant.id });
+    return res.json({
+      ok: !!result.ok,
+      items: Array.isArray(result.items) ? result.items : [],
+      unmatched: Array.isArray(result.unresolved) ? result.unresolved : [],
+    });
+  } catch (e) {
+    // Nunca rompemos el flujo del bot por un fallo de IA; devolvemos vacío.
+    console.error('[store] POST /parse-order:', e?.message || e);
+    return res.json({ ok: false, items: [], unmatched: [text.trim()], error: e?.message });
   }
 });
 
