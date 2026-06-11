@@ -36,18 +36,21 @@ const dryRun = !args.send;
 
 const money = (n) => "$" + Number(n || 0).toFixed(2);
 
+const useAi = args["no-ai"] ? false : args.ai ? true : "auto";
+
 const res = await textToOrder({
   slug,
   text,
   orderType: args.type,
   dryRun,
+  useAi,
   apiBase: args.api,
   customer: { name: args.name, phone: args.phone, address: args.address },
 });
 
 console.log("\n── Mensaje ──");
 console.log(" ", text);
-console.log("\n── Productos reconocidos ──");
+console.log(`\n── Productos reconocidos (motor: ${res.engine}) ──`);
 if (res.parsed.length === 0) console.log("  (ninguno)");
 for (const it of res.parsed) {
   console.log(`  ${it.quantity}x  ${it.label}  ${money(it.price)}  [confianza: ${it.confidence}]`);
