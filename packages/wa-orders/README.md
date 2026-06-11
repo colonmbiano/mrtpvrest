@@ -28,7 +28,25 @@ node packages/wa-orders/src/cli.js "1 boneless bbq" --send --type DELIVERY --add
 ```
 
 Flags: `--send` (crea; por defecto dry-run), `--slug` (def. `master-burguer-s`),
-`--type DELIVERY|TAKEOUT|DINE_IN`, `--address`, `--phone`, `--name`, `--api` (URL base).
+`--type DELIVERY|TAKEOUT|DINE_IN`, `--address`, `--phone`, `--name`, `--api` (URL base),
+`--ai` / `--no-ai` (forzar o desactivar el parser de IA; por defecto auto).
+
+## Activar el parser de IA (Groq)
+
+El reconocimiento de nivel producción usa Groq (Llama). Se activa solo si hay
+`GROQ_API_KEY` (la misma que usa tu backend). Si la IA falla, cae al heurístico.
+
+```bash
+# PowerShell
+$env:GROQ_API_KEY="tu_key_de_groq"
+node packages/wa-orders/src/cli.js "unas alitas bbq para 4 y 2 cocas"
+
+# bash
+GROQ_API_KEY=tu_key node packages/wa-orders/src/cli.js "unas alitas bbq para 4 y 2 cocas"
+```
+
+Variables: `GROQ_API_KEY` (requerida para IA), `WA_GROQ_MODEL`
+(def. `llama-3.3-70b-versatile`), `WA_API_BASE` (def. `https://api.mrtpvrest.com`).
 
 ## API
 
