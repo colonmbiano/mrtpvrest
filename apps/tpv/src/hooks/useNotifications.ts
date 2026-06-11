@@ -177,8 +177,23 @@ export function useNotifications() {
 
     const baseUrl = getApiUrl();
 
+    // El backend solo une el socket a los rooms de notificaciones
+    // (`restaurant:…:admins`) si el handshake trae un token JWT válido cuyo
+    // restaurantId coincide con el de la query —ver el guard `canJoinRestaurant`
+    // en apps/backend/src/index.js—. Sin token, `socket.data.user` queda null,
+    // el guard falla y la tablet NO se une a ningún room: no llega ni un pedido
+    // web (`order:new`) ni una entrega del repartidor (`order:updated`). El
+    // token del TPV (PIN de empleado o device) ya incluye restaurantId, así que
+    // pasarlo en `auth` es todo lo que hace falta. Mismo orden de búsqueda que
+    // el interceptor de api.ts para no divergir.
+    const token =
+      sessionStorage.getItem("tpv-access-token") ||
+      localStorage.getItem("accessToken") ||
+      localStorage.getItem("tpv-employee-token");
+
     const socket = io(baseUrl, {
       query: { restaurantId },
+      auth: { token },
       transports: ["websocket", "polling"],
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
