@@ -12,9 +12,12 @@ const EXPENSE_CATEGORIES = [
 interface Props {
   employee: { id: string; name: string };
   onClose: () => void;
+  /** Al cerrar el turno se invoca esto para botar al cajero a la pantalla
+   *  de PIN (logout + /locked). Si no se pasa, solo se cierra el modal. */
+  onShiftClosed?: () => void;
 }
 
-export default function ShiftModal({ employee, onClose }: Props) {
+export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) {
   const [shift, setShift]           = useState<any>(null);
   const [loading, setLoading]       = useState(true);
   const [openingFloat, setOpeningFloat] = useState("");
@@ -96,6 +99,14 @@ export default function ShiftModal({ employee, onClose }: Props) {
         notes: closeNotes,
       });
       setShift(data);
+      // Ya no hay turno abierto: dejamos el cache en false para que, tras
+      // re-loguear con PIN, el hub mande directo a /pos/shift/open.
+      if (typeof window !== "undefined") {
+        localStorage.setItem("tpv-shift-open", "false");
+      }
+      // El tab "Cerrar turno" desaparece al quedar cerrado; volvemos al
+      // resumen para que el cajero vea el corte (y no un cuerpo vacio).
+      setTab("summary");
     } catch (e: any) { alert(e.response?.data?.error || "Error"); }
     finally { setClosing(false); }
   }
@@ -178,7 +189,7 @@ export default function ShiftModal({ employee, onClose }: Props) {
               {isClosed && shift.closedAt && ` · Cierre: ${formatTime(shift.closedAt)}`}
             </p>
           </div>
-          <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{ background: "var(--surf2)", color: "var(--muted)" }}>✕</button>
+          <button onClick={() => (isClosed && onShiftClosed ? onShiftClosed() : onClose())} className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{ background: "var(--surf2)", color: "var(--muted)" }}>✕</button>
         </div>
 
         {/* Tabs */}
@@ -268,6 +279,17 @@ export default function ShiftModal({ employee, onClose }: Props) {
                 <div className="rounded-2xl p-3 text-sm" style={{ background: "var(--surf2)", color: "var(--muted)" }}>
                   📝 {shift.notes}
                 </div>
+              )}
+
+              {/* Turno cerrado: salir a la pantalla de PIN. Quedarse en el POS
+                  sin turno abierto no tiene sentido (no se puede cobrar). */}
+              {isClosed && (
+                <button
+                  onClick={() => (onShiftClosed ? onShiftClosed() : onClose())}
+                  className="w-full py-4 rounded-2xl font-syne font-black text-base mt-1"
+                  style={{ background: "var(--gold)", color: "#000" }}>
+                  🔓 Salir a pantalla de PIN
+                </button>
               )}
             </div>
           )}

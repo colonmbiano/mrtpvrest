@@ -1299,6 +1299,14 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           onClose={() => {
             setShowShift(false);
             fetchShift();
+          }}
+          onShiftClosed={() => {
+            // Turno cerrado: botar a la pantalla de PIN. El cache queda en
+            // false (lo pone ShiftModal), asi que al re-loguear el hub manda
+            // directo a /pos/shift/open con el boton "Abrir Turno Ahora".
+            setShowShift(false);
+            logout();
+            router.replace("/locked");
           }} 
         />
       )}
