@@ -325,7 +325,7 @@ function buildMenuList(catalog) {
     .join('\n');
 }
 
-async function runOrderDictationAI({ prompt, restaurantId, apiKey, catalog: preloaded }) {
+async function runOrderDictationAI({ prompt, restaurantId, apiKey, catalog: preloaded, model }) {
   const catalog = preloaded || (await loadCatalog(restaurantId));
   if (catalog.length === 0) return emptyCatalogResult(prompt);
 
@@ -333,7 +333,9 @@ async function runOrderDictationAI({ prompt, restaurantId, apiKey, catalog: prel
   const userMsg = `MENÚ:\n${buildMenuList(catalog)}\n\nDICTADO: "${String(prompt).trim()}"`;
 
   const completion = await client.chat.completions.create({
-    model: GROQ_MODEL,
+    // Modelo configurable: el dictado por voz usa el default (GROQ_MODEL, 8b,
+    // más rápido); WhatsApp pasa el 70b para mejor matching de pedidos escritos.
+    model: model || GROQ_MODEL,
     temperature: 0,
     response_format: { type: 'json_object' },
     messages: [
@@ -385,7 +387,7 @@ async function runOrderDictationAI({ prompt, restaurantId, apiKey, catalog: prel
 
 /* ── Orquestador — IA si el cliente trae su key (BYOK), si no reglas ──────── */
 
-async function runOrderDictationSmart({ prompt, restaurantId }) {
+async function runOrderDictationSmart({ prompt, restaurantId, model }) {
   if (!prompt?.trim()) {
     const err = new Error('prompt requerido');
     err.code = 'BAD_REQUEST';
@@ -411,7 +413,7 @@ async function runOrderDictationSmart({ prompt, restaurantId }) {
     try {
       const catalog = await loadCatalog(restaurantId);
       if (catalog.length === 0) return emptyCatalogResult(prompt);
-      const ai = await runOrderDictationAI({ prompt, restaurantId, apiKey: keyInfo.apiKey, catalog });
+      const ai = await runOrderDictationAI({ prompt, restaurantId, apiKey: keyInfo.apiKey, catalog, model });
       if (ai.ok) return ai;
       // IA no resolvió nada → intentar reglas sobre el mismo catálogo.
       const rules = await runOrderDictation({ prompt, restaurantId, catalog });

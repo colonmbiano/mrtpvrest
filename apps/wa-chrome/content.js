@@ -53,7 +53,7 @@
     }
     if (trailing.length === 0) trailing = msgs.filter((m) => m.incoming).slice(-4);
 
-    return { customerName, phone: "", text: trailing.map((m) => m.text).join("\n"), count: trailing.length };
+    return { customerName, phone: "", text: trailing.map((m) => m.text).join(". "), count: trailing.length };
   }
 
   const bg = (type, payload) =>
