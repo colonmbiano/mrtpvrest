@@ -108,6 +108,16 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const isOrdersOpen = useUIStore((s) => s.isOrdersOpen);
   const activeTicket = useTicketStore((s) => s.getActiveTicket());
   const updateTicket = useTicketStore((s) => s.updateTicket);
+  const editingIndex = useTicketStore((s) => s.editingIndex);
+
+  // Al re-editar un item del carrito en móvil, el configurador vive en el
+  // área del catálogo: forzamos la vista "menu" para que sea visible.
+  // Diferido a microtask (como el resto de effects del layout) para no
+  // disparar set-state sincrónico dentro del effect.
+  useEffect(() => {
+    if (editingIndex == null) return;
+    queueMicrotask(() => setMobileView("menu"));
+  }, [editingIndex]);
   const activeOrderId = useActiveOrderStore((s) => s.activeOrderId);
   const searchQuery = useUIStore((s) => s.searchQuery);
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);

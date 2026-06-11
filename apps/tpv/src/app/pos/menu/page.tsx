@@ -35,7 +35,12 @@ const COMPLEMENTS_GROUP_ID = "__complements";
 const VARIANTS_GROUP_ID = "__variants";
 
 export default function CatalogPage() {
-  const { addItemToActive } = useTicketStore();
+  const { addItemToActive, replaceItemInActive, setEditingIndex } = useTicketStore();
+  // Item de la ronda actual que se está re-editando (tap en el carrito).
+  const editingIndex = useTicketStore((s) => s.editingIndex);
+  const editingItem = useTicketStore((s) =>
+    s.editingIndex == null ? null : s.getActiveTicket().items[s.editingIndex] ?? null,
+  );
   const searchQuery = useUIStore((s) => s.searchQuery);
   const density = useCatalogPrefs((s) => s.density);
   const viewMode = useCatalogPrefs((s) => s.viewMode);
@@ -121,6 +126,7 @@ export default function CatalogPage() {
       subtotal: unit,
       price: unit,
       originalPrice: product.price,
+      baseName: product.name,
     };
     addItemToActive(cartItem);
   };
@@ -135,31 +141,79 @@ export default function CatalogPage() {
     addPlainProduct(product);
   };
 
+  // Producto base para el configurador: en edición es el item del carrito
+  // (usando su nombre base, sin el sufijo de variante); en alta es el
+  // producto elegido del catálogo.
+  const panelProduct: Product | null = editingItem
+    ? { ...editingItem, name: editingItem.baseName ?? editingItem.name }
+    : configProduct;
+
+  const panelInitial: ConfiguratorInitial | null = editingItem
+    ? {
+        variantId: editingItem.variantId ?? null,
+        selectedModifierIds: (editingItem.modifiers ?? []).map((modifier) => modifier.id),
+        quantity: editingItem.quantity,
+        notes: editingItem.notes ?? "",
+      }
+    : null;
+
+  const closeConfigurator = () => {
+    setConfigProduct(null);
+    if (editingIndex != null) setEditingIndex(null);
+  };
+
+  // Índice inválido (el item se borró mientras se editaba): cancelamos la
+  // edición para no dejar el store en un estado colgado. Diferido a
+  // microtask para no disparar set-state sincrónico dentro del effect.
+  useEffect(() => {
+    if (editingIndex != null && !editingItem) {
+      queueMicrotask(() => setEditingIndex(null));
+    }
+  }, [editingIndex, editingItem, setEditingIndex]);
+
   const handleConfiguratorConfirm = (payload: {
     variant: MenuItemVariant | null;
     modifiers: ModifierSelection[];
     unitPrice: number;
+    quantity: number;
     notes?: string;
   }) => {
-    if (!configProduct) return;
+    const source = panelProduct;
+    if (!source) return;
 
-    const cartItem: CartItem = {
-      ...configProduct,
-      menuItemId: configProduct.id,
-      quantity: 1,
-      subtotal: payload.unitPrice,
+    const baseName = source.name;
+    const fallbackBasePrice =
+      (source as Partial<CartItem>).originalPrice ?? source.price;
+
+    const buildItem = (qty: number): CartItem => ({
+      ...source,
+      menuItemId: source.id,
+      quantity: qty,
+      subtotal: payload.unitPrice * qty,
       price: payload.unitPrice,
-      originalPrice: configProduct.price,
-      ...(payload.variant && {
-        variantId: payload.variant.id,
-        variantName: payload.variant.name,
-        name: `${configProduct.name} (${payload.variant.name})`,
-      }),
+      originalPrice: fallbackBasePrice,
+      baseName,
+      variantId: payload.variant?.id ?? null,
+      variantName: payload.variant?.name ?? null,
+      name: payload.variant ? `${baseName} (${payload.variant.name})` : baseName,
       modifiers: payload.modifiers,
       notes: payload.notes,
-    };
+    });
 
-    addItemToActive(cartItem);
+    if (editingIndex != null && editingItem) {
+      // Editar item existente: reemplazamos en sitio con la cantidad elegida
+      // y conservamos el comensal asignado (DINE_IN).
+      const updated = buildItem(payload.quantity);
+      updated.seatNumber = editingItem.seatNumber ?? null;
+      replaceItemInActive(editingIndex, updated);
+      return;
+    }
+
+    // Alta normal: una unidad por vez para que el merge por modificadores del
+    // store agrupe líneas idénticas (igual que el flujo original).
+    for (let i = 0; i < payload.quantity; i += 1) {
+      addItemToActive(buildItem(1));
+    }
   };
 
   const handleAvailabilityToggle = async (next: boolean) => {
@@ -202,6 +256,7 @@ export default function CatalogPage() {
 
   const goToCategories = () => {
     setConfigProduct(null);
+    setEditingIndex(null);
     setActiveCat("all");
     useUIStore.getState().setSearchQuery("");
   };
@@ -226,6 +281,7 @@ export default function CatalogPage() {
           activeId={isSearching ? "search" : activeCat}
           onSelect={(id) => {
             setConfigProduct(null);
+            setEditingIndex(null);
             setActiveCat(id);
             useUIStore.getState().setSearchQuery("");
           }}
@@ -233,14 +289,16 @@ export default function CatalogPage() {
       )}
 
       <main className="min-h-0 flex-1 overflow-hidden p-3">
-        {configProduct ? (
+        {panelProduct ? (
           <QuickModifierPanel
-            key={configProduct.id}
-            product={configProduct}
-            onBack={() => setConfigProduct(null)}
+            key={`${panelProduct.id}-${editingIndex ?? "new"}`}
+            product={panelProduct}
+            initial={panelInitial}
+            submitLabel={editingItem ? "Guardar cambios" : "Agregar"}
+            onBack={closeConfigurator}
             onConfirm={(payload) => {
               handleConfiguratorConfirm(payload);
-              setConfigProduct(null);
+              closeConfigurator();
             }}
           />
         ) : isLoading ? (
@@ -558,17 +616,29 @@ function ProductTile({
   );
 }
 
+type ConfiguratorInitial = {
+  variantId?: string | null;
+  selectedModifierIds?: string[];
+  quantity?: number;
+  notes?: string;
+};
+
 function QuickModifierPanel({
   product,
+  initial,
+  submitLabel = "Agregar",
   onBack,
   onConfirm,
 }: {
   product: Product;
+  initial?: ConfiguratorInitial | null;
+  submitLabel?: string;
   onBack: () => void;
   onConfirm: (payload: {
     variant: MenuItemVariant | null;
     modifiers: ModifierSelection[];
     unitPrice: number;
+    quantity: number;
     notes?: string;
   }) => void;
 }) {
@@ -582,16 +652,28 @@ function QuickModifierPanel({
     [product, variantMultiSelect, variants],
   );
 
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(variants[0]?.id ?? null);
-  const [quantity, setQuantity] = useState(1);
-  const [notes, setNotes] = useState("");
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
+    initial?.variantId ?? variants[0]?.id ?? null,
+  );
+  const [quantity, setQuantity] = useState(initial?.quantity ?? 1);
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   const [selections, setSelections] = useState<Record<string, Modifier[]>>(() => {
-    const initial: Record<string, Modifier[]> = {};
+    // Modo edición: pre-marcamos los modificadores que el item ya traía.
+    // Modo alta: usamos los modificadores marcados como default.
+    const initialIds = initial?.selectedModifierIds
+      ? new Set(initial.selectedModifierIds)
+      : null;
+    const out: Record<string, Modifier[]> = {};
     for (const group of groups) {
-      const defaults = group.modifiers.filter((modifier) => modifier.isDefault);
-      initial[group.id] = group.multiSelect ? defaults : defaults.slice(0, 1);
+      if (initialIds) {
+        const matched = group.modifiers.filter((modifier) => initialIds.has(modifier.id));
+        out[group.id] = group.multiSelect ? matched : matched.slice(0, 1);
+      } else {
+        const defaults = group.modifiers.filter((modifier) => modifier.isDefault);
+        out[group.id] = group.multiSelect ? defaults : defaults.slice(0, 1);
+      }
     }
-    return initial;
+    return out;
   });
 
   const selectedVariant = useMemo(
@@ -621,14 +703,13 @@ function QuickModifierPanel({
   const confirm = () => {
     if (validationError) return;
     const modifiers = flattenSelections(groups, selections);
-    for (let i = 0; i < quantity; i += 1) {
-      onConfirm({
-        variant: selectedVariant,
-        modifiers,
-        unitPrice,
-        notes: notes.trim() || undefined,
-      });
-    }
+    onConfirm({
+      variant: selectedVariant,
+      modifiers,
+      unitPrice,
+      quantity,
+      notes: notes.trim() || undefined,
+    });
   };
 
   return (
@@ -643,7 +724,9 @@ function QuickModifierPanel({
           <ChevronLeft size={23} strokeWidth={3} />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-black uppercase text-tx-mut">Modificadores rapidos</p>
+          <p className="text-[11px] font-black uppercase text-tx-mut">
+            {initial ? "Editar producto" : "Modificadores rapidos"}
+          </p>
           <h2 className="truncate text-[22px] font-black text-tx-pri">{product.name}</h2>
         </div>
         <button
@@ -770,7 +853,7 @@ function QuickModifierPanel({
             disabled={!!validationError}
             className="h-16 min-w-[210px] rounded-lg bg-green-500 px-5 text-[15px] font-black uppercase text-black active:bg-green-600 disabled:opacity-40 disabled:grayscale focus:outline-none focus:ring-2 focus:ring-iris-500"
           >
-            Agregar
+            {submitLabel}
           </button>
         </div>
       </footer>
