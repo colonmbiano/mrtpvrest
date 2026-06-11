@@ -23,6 +23,13 @@ interface TicketConfig {
   showAddress: boolean;
   address: string;
   phone: string;
+  // Tipografía del recibo. fontFamily → Font A/B; fontSize → alto;
+  // lineSpacing → interlineado; lineWeight → qué tan marcadas las líneas.
+  paperWidth: string;
+  fontFamily: string;
+  fontSize: string;
+  lineSpacing: string;
+  lineWeight: string;
   showPoints: boolean;
   showTip: boolean;
   tipSuggestions: string;
@@ -38,18 +45,26 @@ interface TicketConfig {
   kitchenGroupBySeat: boolean;
   kitchenSeparateByGroup: boolean;
   kitchenFontSize: KitchenFontSize;
+  kitchenFontFamily: string;
+  kitchenLineSpacing: string;
+  kitchenLineWeight: string;
+  kitchenTicketNameSize: string;
   kitchenFooter: string;
 }
 
 const EMPTY: TicketConfig = {
   businessName: "", header: "", subheader: "", footer: "Gracias por su preferencia",
   showLogo: true, showAddress: true, address: "", phone: "",
+  paperWidth: "80mm", fontFamily: "monospace", fontSize: "medium",
+  lineSpacing: "normal", lineWeight: "normal",
   showPoints: true, showTip: true, tipSuggestions: "[10,15,20]",
   kitchenHeader: "COMANDA", adminPin: "0000",
   kitchenShowCustomer: true, kitchenShowTable: true, kitchenShowType: true, kitchenShowTime: true,
   kitchenShowOrderNumber: true, kitchenShowModifiers: true, kitchenShowNotes: true,
   kitchenGroupBySeat: true, kitchenSeparateByGroup: false,
-  kitchenFontSize: "large", kitchenFooter: "",
+  kitchenFontSize: "large", kitchenFontFamily: "monospace",
+  kitchenLineSpacing: "normal", kitchenLineWeight: "bold",
+  kitchenTicketNameSize: "large", kitchenFooter: "",
 };
 
 type SubTab = "general" | "kitchen" | "security";
@@ -123,12 +138,39 @@ export default function TicketFormatTab() {
               <Toggle label="Puntos de lealtad" checked={cfg.showPoints} onChange={(v) => setCfg({ ...cfg, showPoints: v })} />
               <Toggle label="Sugerir propinas" checked={cfg.showTip} onChange={(v) => setCfg({ ...cfg, showTip: v })} />
             </div>
+
+            <SectionLabel>Tipografía del recibo</SectionLabel>
+            <Field label="Fuente">
+              <Segmented value={cfg.fontFamily} onChange={(v) => setCfg({ ...cfg, fontFamily: v })} options={FONT_OPTS} />
+            </Field>
+            <Field label="Tamaño de letra">
+              <Segmented value={cfg.fontSize} onChange={(v) => setCfg({ ...cfg, fontSize: v })} options={SIZE_OPTS} />
+            </Field>
+            <Field label="Espaciado entre líneas">
+              <Segmented value={cfg.lineSpacing} onChange={(v) => setCfg({ ...cfg, lineSpacing: v })} options={SPACING_OPTS} />
+            </Field>
+            <Field label="Líneas (negritas)">
+              <Segmented value={cfg.lineWeight} onChange={(v) => setCfg({ ...cfg, lineWeight: v })} options={WEIGHT_OPTS} />
+            </Field>
+
+            <SectionLabel>Vista previa</SectionLabel>
+            <ReceiptPreview cfg={cfg} />
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              Papel térmico: la fuente real es A (estándar) o B (compacta); el tamaño escala el
+              alto sin descuadrar los importes. &quot;Marcado&quot; usa negrita + doble golpe para líneas más negras.
+            </p>
           </>
         )}
 
         {sub === "kitchen" && (
           <>
             <Field label="Título ticket cocina"><input value={cfg.kitchenHeader} onChange={(e) => setCfg({ ...cfg, kitchenHeader: e.target.value })} className={inputCls} placeholder="COMANDA" /></Field>
+
+            {/* NOMBRE DEL TICKET — elemento principal */}
+            <SectionLabel>Nombre del ticket (Mesa / cliente)</SectionLabel>
+            <Field label="Tamaño del nombre — se imprime arriba y en grande">
+              <Segmented value={cfg.kitchenTicketNameSize} onChange={(v) => setCfg({ ...cfg, kitchenTicketNameSize: v })} options={NAME_SIZE_OPTS} />
+            </Field>
 
             {/* QUÉ SE IMPRIME — encabezado */}
             <SectionLabel>Datos del encabezado</SectionLabel>
@@ -171,6 +213,17 @@ export default function TicketFormatTab() {
                 );
               })}
             </div>
+
+            <SectionLabel>Tipografía de la comanda</SectionLabel>
+            <Field label="Fuente">
+              <Segmented value={cfg.kitchenFontFamily} onChange={(v) => setCfg({ ...cfg, kitchenFontFamily: v })} options={FONT_OPTS} />
+            </Field>
+            <Field label="Espaciado entre líneas">
+              <Segmented value={cfg.kitchenLineSpacing} onChange={(v) => setCfg({ ...cfg, kitchenLineSpacing: v })} options={SPACING_OPTS} />
+            </Field>
+            <Field label="Líneas (negritas)">
+              <Segmented value={cfg.kitchenLineWeight} onChange={(v) => setCfg({ ...cfg, kitchenLineWeight: v })} options={WEIGHT_OPTS} />
+            </Field>
 
             <Field label="Pie de comanda (opcional)">
               <input value={cfg.kitchenFooter} onChange={(e) => setCfg({ ...cfg, kitchenFooter: e.target.value })} className={inputCls} placeholder="Ej: Verificar antes de servir" />
@@ -245,6 +298,110 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Selector segmentado reutilizable para las opciones de tipografía. */
+function Segmented({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { id: string; label: string; hint?: string }[];
+}) {
+  return (
+    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0,1fr))` }}>
+      {options.map((opt) => {
+        const active = value === opt.id;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => onChange(opt.id)}
+            className={`flex flex-col items-center justify-center gap-0.5 h-14 rounded-2xl border transition-all ${active ? "bg-amber-500 border-amber-500 text-[#0a0a0c]" : "bg-[#121316] border-white/5 text-zinc-300 hover:border-amber-500/30"}`}
+          >
+            <span className="text-[11px] font-black uppercase tracking-widest">{opt.label}</span>
+            {opt.hint && <span className={`text-[9px] font-bold ${active ? "text-[#0a0a0c]/70" : "text-zinc-500"}`}>{opt.hint}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Mapeo tipografía → CSS para los previews ──────────────────────────────
+const TYPO_FONT_CSS: Record<string, string> = {
+  monospace: "'Courier New', ui-monospace, monospace",
+  "sans-serif": "ui-sans-serif, system-ui, sans-serif",
+  serif: "Georgia, 'Times New Roman', serif",
+};
+const typoLineHeight = (s: string) => (s === "tight" ? 1.2 : s === "loose" ? 1.85 : 1.5);
+const reciboFontPx = (s: string) => (s === "xlarge" ? 17 : s === "large" ? 15 : s === "small" ? 11 : 13);
+
+// Opciones de los selectores (alineadas a los enums de la DB).
+const FONT_OPTS = [
+  { id: "monospace", label: "Estándar", hint: "Font A" },
+  { id: "sans-serif", label: "Compacta", hint: "Font B" },
+];
+const SIZE_OPTS = [
+  { id: "medium", label: "Normal", hint: "1×" },
+  { id: "large", label: "Grande", hint: "2×" },
+  { id: "xlarge", label: "Extra", hint: "3×" },
+];
+const SPACING_OPTS = [
+  { id: "tight", label: "Compacto" },
+  { id: "normal", label: "Normal" },
+  { id: "loose", label: "Amplio" },
+];
+const WEIGHT_OPTS = [
+  { id: "light", label: "Sencillo" },
+  { id: "normal", label: "Normal" },
+  { id: "bold", label: "Marcado" },
+];
+const NAME_SIZE_OPTS = [
+  { id: "normal", label: "Normal", hint: "1×" },
+  { id: "large", label: "Grande", hint: "2×" },
+  { id: "xlarge", label: "Extra", hint: "3×" },
+];
+
+/**
+ * Vista previa del recibo del cliente. Refleja en pantalla la fuente, tamaño,
+ * interlineado y peso elegidos (lo que el ESC/POS aplica al imprimir). Usa un
+ * pedido de muestra fijo — no consulta datos reales.
+ */
+function ReceiptPreview({ cfg }: { cfg: TicketConfig }) {
+  const fontCss = TYPO_FONT_CSS[cfg.fontFamily] ?? TYPO_FONT_CSS.monospace;
+  const basePx = reciboFontPx(cfg.fontSize);
+  const lh = typoLineHeight(cfg.lineSpacing);
+  const bodyWeight = cfg.lineWeight === "bold" ? 700 : 400;
+  const totalWeight = cfg.lineWeight === "light" ? 400 : 700;
+  const dash = <div className="border-t border-dashed border-black/40 my-1.5" />;
+  return (
+    <div className="rounded-2xl bg-zinc-300/10 border border-white/5 p-4">
+      <div
+        className="mx-auto w-full max-w-[280px] bg-white text-black rounded-sm shadow-inner px-4 py-4"
+        style={{ fontFamily: fontCss, fontSize: basePx, lineHeight: lh, fontWeight: bodyWeight }}
+      >
+        <div className="text-center" style={{ fontWeight: 700, fontSize: basePx + 3 }}>
+          {cfg.businessName.trim() || "MI NEGOCIO"}
+        </div>
+        {cfg.showAddress && cfg.address.trim() && <div className="text-center">{cfg.address}</div>}
+        {cfg.phone.trim() && <div className="text-center">Tel: {cfg.phone}</div>}
+        <div className="text-center">11/06/2026 13:05</div>
+        <div>Orden #1042</div>
+        <div>Para llevar</div>
+        {dash}
+        <div className="flex justify-between gap-2"><span>2x Hamburguesa</span><span>$210.00</span></div>
+        <div style={{ paddingLeft: 10, opacity: 0.75 }}>· Tocino (+$20.00)</div>
+        {dash}
+        <div className="flex justify-between gap-2"><span>Subtotal</span><span>$250.00</span></div>
+        <div className="flex justify-between gap-2" style={{ fontWeight: totalWeight }}><span>TOTAL</span><span>$250.00</span></div>
+        {dash}
+        <div className="text-center">{cfg.footer.trim() || "¡Gracias por su compra!"}</div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Vista previa de la comanda. Replica la lógica de buildKitchenTicket()
  * (printer-tcp.ts) en texto plano para que el admin vea exactamente qué y
@@ -269,6 +426,8 @@ function KitchenPreview({ cfg }: { cfg: TicketConfig }) {
   const itemSizeCls =
     cfg.kitchenFontSize === "normal" ? "text-[13px]" :
     cfg.kitchenFontSize === "xlarge" ? "text-[22px] leading-tight" : "text-[17px] leading-snug";
+  const itemWeight = cfg.kitchenLineWeight === "light" ? 600 : 900;
+  const nameSizePx = cfg.kitchenTicketNameSize === "xlarge" ? 34 : cfg.kitchenTicketNameSize === "large" ? 24 : 13;
 
   const sep = <div className="text-zinc-400 select-none">{"-".repeat(32)}</div>;
 
@@ -277,7 +436,7 @@ function KitchenPreview({ cfg }: { cfg: TicketConfig }) {
 
   const renderItem = (it: typeof SAMPLE.items[number], key: React.Key) => (
     <div key={key}>
-      <div className={`font-black text-black ${itemSizeCls}`}>{it.quantity}x {it.name}</div>
+      <div className={`text-black ${itemSizeCls}`} style={{ fontWeight: itemWeight }}>{it.quantity}x {it.name}</div>
       {cfg.kitchenShowModifiers && it.modifiers.map((m, i) => (
         <div key={`m${i}`} className="text-[12px] text-zinc-700 pl-3">+ {m}</div>
       ))}
@@ -290,8 +449,8 @@ function KitchenPreview({ cfg }: { cfg: TicketConfig }) {
   return (
     <div className="rounded-2xl bg-zinc-300/10 border border-white/5 p-4">
       <div
-        className="mx-auto w-full max-w-[260px] bg-white text-black rounded-sm shadow-inner px-4 py-4 font-mono"
-        style={{ fontFamily: "'Courier New', ui-monospace, monospace" }}
+        className="mx-auto w-full max-w-[260px] bg-white text-black rounded-sm shadow-inner px-4 py-4"
+        style={{ fontFamily: TYPO_FONT_CSS[cfg.kitchenFontFamily] ?? TYPO_FONT_CSS.monospace, lineHeight: typoLineHeight(cfg.kitchenLineSpacing) }}
       >
         <div className="text-center">
           {cfg.kitchenHeader.trim() && (
@@ -300,11 +459,15 @@ function KitchenPreview({ cfg }: { cfg: TicketConfig }) {
           {cfg.kitchenSeparateByGroup && (
             <div className="font-black text-[16px]">COCINA</div>
           )}
+          {cfg.kitchenShowTable && (
+            <div className="font-black leading-tight text-black" style={{ fontSize: nameSizePx }}>Mesa {SAMPLE.tableNumber}</div>
+          )}
+          {cfg.kitchenShowCustomer && (
+            <div className="font-black leading-tight text-black" style={{ fontSize: nameSizePx }}>{SAMPLE.customerName}</div>
+          )}
           {cfg.kitchenShowOrderNumber && <div className="text-[13px]">#{SAMPLE.orderNumber}</div>}
           {cfg.kitchenShowTime && <div className="text-[13px]">{SAMPLE.time}</div>}
           {cfg.kitchenShowType && <div className="text-[13px]">{SAMPLE.orderTypeLabel}</div>}
-          {cfg.kitchenShowTable && <div className="text-[13px]">Mesa {SAMPLE.tableNumber}</div>}
-          {cfg.kitchenShowCustomer && <div className="text-[13px]">{SAMPLE.customerName}</div>}
         </div>
 
         {sep}

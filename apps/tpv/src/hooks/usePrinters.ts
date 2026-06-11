@@ -109,12 +109,25 @@ type TicketConfigDTO = {
   kitchenGroupBySeat?: boolean;
   kitchenSeparateByGroup?: boolean;
   kitchenFontSize?: string;
+  // Tipografía (recibo + comanda).
+  paperWidth?: string;
+  fontFamily?: string;
+  fontSize?: string;
+  lineSpacing?: string;
+  lineWeight?: string;
+  kitchenFontFamily?: string;
+  kitchenLineSpacing?: string;
+  kitchenLineWeight?: string;
+  kitchenTicketNameSize?: string;
 };
 
 function mapToKitchenConfig(dto: TicketConfigDTO | null): KitchenTicketConfig | null {
   if (!dto) return null;
   const fs = dto.kitchenFontSize === "normal" || dto.kitchenFontSize === "xlarge"
     ? (dto.kitchenFontSize as "normal" | "xlarge")
+    : "large";
+  const tns = dto.kitchenTicketNameSize === "normal" || dto.kitchenTicketNameSize === "xlarge"
+    ? (dto.kitchenTicketNameSize as "normal" | "xlarge")
     : "large";
   return {
     header:           dto.kitchenHeader ?? undefined,
@@ -129,6 +142,11 @@ function mapToKitchenConfig(dto: TicketConfigDTO | null): KitchenTicketConfig | 
     groupBySeat:      dto.kitchenGroupBySeat,
     separateByGroup:  dto.kitchenSeparateByGroup,
     fontSize:         fs,
+    fontFamily:       dto.kitchenFontFamily,
+    lineSpacing:      dto.kitchenLineSpacing,
+    lineWeight:       dto.kitchenLineWeight,
+    paperWidth:       dto.paperWidth,
+    ticketNameSize:   tns,
   };
 }
 
