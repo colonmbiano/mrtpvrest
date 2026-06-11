@@ -102,6 +102,60 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     return () => { cancelled = true; };
   }, [activeOrderId]);
 
+  // ── Edición de líneas de rondas anteriores (ya guardadas en la orden) ──────
+  // El backend permite cambiar nota/cantidad y borrar una línea mientras la
+  // orden NO esté pagada ni cerrada (PUT/DELETE /api/orders/items/:id, ver
+  // orders.routes.js). Tras cada cambio recargamos `previousItems`: el
+  // subtotal/total, el IVA y la pantalla de cliente se recalculan solos porque
+  // todos derivan de ese estado. NOTA: agregar extras/modificadores a una línea
+  // ya enviada NO está soportado por el backend; para eso se añade como línea
+  // nueva en la "Nueva ronda".
+  const reloadPreviousItems = React.useCallback(async () => {
+    if (!activeOrderId) return;
+    try {
+      const { data } = await api.get(`/api/orders/${activeOrderId}`);
+      setPreviousItems(data.items || []);
+    } catch (err) {
+      console.error("Error al recargar la orden:", err);
+    }
+  }, [activeOrderId]);
+
+  const removePreviousItem = async (item: any) => {
+    if (!confirm(`¿Quitar "${item.menuItem?.name || item.name}" del ticket?`)) return;
+    try {
+      await api.delete(`/api/orders/items/${item.id}`);
+      await reloadPreviousItems();
+      hapticSuccess();
+    } catch (err: any) {
+      hapticError();
+      toast.error(err?.response?.data?.error || "No se pudo quitar el producto");
+    }
+  };
+
+  const changePreviousItemQty = async (item: any, delta: number) => {
+    const nextQty = (item.quantity || 1) + delta;
+    if (nextQty < 1) { await removePreviousItem(item); return; }
+    try {
+      await api.put(`/api/orders/items/${item.id}`, { quantity: nextQty });
+      await reloadPreviousItems();
+      hapticMedium();
+    } catch (err: any) {
+      hapticError();
+      toast.error(err?.response?.data?.error || "No se pudo actualizar la cantidad");
+    }
+  };
+
+  const updatePreviousItemNotes = async (item: any, notes: string) => {
+    try {
+      await api.put(`/api/orders/items/${item.id}`, { notes });
+      await reloadPreviousItems();
+      hapticSuccess();
+    } catch (err: any) {
+      hapticError();
+      toast.error(err?.response?.data?.error || "No se pudo actualizar la nota");
+    }
+  };
+
   // Sugerencias de propina vienen de la config remota (tpvConfig.extra) si
   // están presentes; caso contrario default [10,15,20] por consistencia
   // con el printer service y el schema de Restaurant.
@@ -810,20 +864,26 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               </span>
               <div className="h-[1px] flex-1 bg-white/5" />
             </div>
-            <div className="opacity-50 pointer-events-none space-y-4">
+            {/* Rondas anteriores: editables (nota, cantidad, quitar) mientras la
+                orden no esté pagada/cerrada. El backend valida ese estado y el
+                rol; si rechaza, mostramos el motivo en un toast. */}
+            <div className="space-y-4">
               {previousItems.map((item, idx) => (
                 <TicketLine
                   key={`prev-${item.id}-${idx}`}
+                  id={item.id}
                   name={item.menuItem?.name || item.name}
                   quantity={item.quantity}
                   price={item.price}
                   notes={item.notes}
-                  modifiers={item.modifiers?.map((m: any) => ({ 
-                    name: m.modifier?.name || m.name, 
-                    priceAdd: m.modifier?.priceAdd || m.priceAdd 
+                  modifiers={item.modifiers?.map((m: any) => ({
+                    name: m.modifier?.name || m.name,
+                    priceAdd: m.modifier?.priceAdd || m.priceAdd
                   }))}
-                  onIncrease={() => {}}
-                  onDecrease={() => {}}
+                  onIncrease={() => changePreviousItemQty(item, 1)}
+                  onDecrease={() => changePreviousItemQty(item, -1)}
+                  onUpdateNotes={(n) => updatePreviousItemNotes(item, n)}
+                  onRemove={() => removePreviousItem(item)}
                 />
               ))}
             </div>
