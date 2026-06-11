@@ -172,8 +172,18 @@
   // productos; descarta "gracias/ok/foto/…"). Solo IDENTIFICA y avisa: al abrir,
   // el cajero usa "Leer pedido del chat abierto" para el parseo exacto (texto
   // completo) y crea. Así no depende del preview truncado de la lista.
-  const ORDER_HINTS = /\d|alit|bonel|hamburg|burger|taco|burrit|gringa|papa|refresc|coca|agua|promo|orden|kilo|combo|pizza|quiero|me da|mandam|para llevar|domicili|pedido|antoj|nugget|costill|boneless/i;
-  const NOISE = /^(gracias|ok|okay|oka|ya|listo|s[ií]|va|vale|sip|hola|buenas|buenos|foto|sticker|audio|imagen|video|ubicaci|jaja|👍|🙏|❤)/i;
+  // ¿El preview parece pedido? Requiere un producto, una cantidad pegada a una
+  // palabra ("2 alitas") o una frase de pedido. Un número/palabra suelto NO basta.
+  const PRODUCT = /alit|bonel|hamburg|burger|taco|burrit|gringa|papa|refresc|coca|agua|promo|kilo|combo|pizza|nugget|costill|antoj|quesadill|alambr|chela|cerveza|orden de|hot ?dog/i;
+  const INTENT = /quiero|me da|me das|mandam|para llevar|a domicili|me preparas|me haces|me armas|un pedido|el pedido/i;
+  const QTY = /\d+\s*[a-záéíóúñ]{3,}/i; // "2 alitas", "1 burrito"
+  const NOISE = /^(gracias|ok|okay|oka|ya|listo|s[ií]|va|vale|sip|hola|buenas|buenos|foto|sticker|audio|imagen|video|ubicaci|jaja|bn|buenas noches|👍|🙏|❤)/i;
+  function looksOrder(p) {
+    p = (p || "").trim();
+    if (p.length < 5) return false;
+    if (NOISE.test(p)) return false;
+    return PRODUCT.test(p) || QTY.test(p) || INTENT.test(p);
+  }
 
   function unreadRows() {
     const pane = document.querySelector("#pane-side");
@@ -210,7 +220,7 @@
     const cands = [];
     for (const r of unreadRows()) {
       const { name, preview } = rowInfo(r);
-      if (!name || !preview || NOISE.test(preview) || !ORDER_HINTS.test(preview)) continue;
+      if (!name || !looksOrder(preview)) continue;
       cands.push({ name, preview, r });
     }
     if (cands.length === 0) { box.innerHTML = ""; return; }
