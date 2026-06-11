@@ -8,20 +8,25 @@ const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const { requireFeatureFlag } = require('../lib/modules');
+const { localDayRange } = require('../utils/dayRange');
 const router = express.Router();
 
 // Reportes son feature premium del plan.
 router.use(authenticate, requireTenantAccess, requireFeatureFlag('hasReports', 'Reportes IA'));
 
-// Util · rango ISO seguro (default: mes actual).
+// Util · rango seguro en hora de México (default: mes actual). El servidor
+// corre en UTC; sin esto los límites caían a las 18:00 MX.
 function resolveRange(query) {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-  let from = query.from ? new Date(String(query.from)) : monthStart;
-  let to = query.to ? new Date(String(query.to)) : monthEnd;
-  if (isNaN(from.getTime())) from = monthStart;
-  if (isNaN(to.getTime())) to = monthEnd;
+  const pad = (n) => String(n).padStart(2, '0');
+  const mxNow = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date());
+  const [y, m] = mxNow.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const monthStart = localDayRange(`${y}-${pad(m)}-01`).from;
+  const monthEnd = localDayRange(`${y}-${pad(m)}-${pad(lastDay)}`).to;
+
+  const isDate = (v) => v && /^\d{4}-\d{2}-\d{2}/.test(String(v));
+  const from = isDate(query.from) ? localDayRange(String(query.from)).from : monthStart;
+  const to = isDate(query.to) ? localDayRange(String(query.to)).to : monthEnd;
   return { from, to };
 }
 
@@ -151,8 +156,9 @@ router.get('/expenses-daily', requireAdmin, async (req, res) => {
 
     // Bucketear por día (YYYY-MM-DD)
     const buckets = new Map();
+    // Fecha natural en México (no UTC) para que el bucket diario cuadre.
     function dateKey(d) {
-      return new Date(d).toISOString().slice(0, 10);
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date(d));
     }
     function bucket(k) {
       if (!buckets.has(k)) buckets.set(k, { date: k, opExpenses: 0, purchases: 0, total: 0 });
@@ -171,8 +177,8 @@ router.get('/expenses-daily', requireAdmin, async (req, res) => {
 
     // Rellenar días faltantes con 0 (para que la sparkline sea continua)
     const result = [];
+    // `from` ya es medianoche de México; iteramos día a día desde ahí.
     const cursor = new Date(from);
-    cursor.setHours(0, 0, 0, 0);
     const end = new Date(to);
     while (cursor <= end) {
       const k = dateKey(cursor);

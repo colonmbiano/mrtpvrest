@@ -1,6 +1,7 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate } = require('../middleware/auth.middleware');
+const { localDayRange } = require('../utils/dayRange');
 const router = express.Router();
 
 // GET /api/workspaces/me
@@ -45,8 +46,8 @@ router.get('/me', authenticate, async (req, res) => {
     const workspaces = [];
     for (const r of restaurants) {
       for (const loc of r.locations) {
-        // Stats opcionales — orders abiertas y ventas del día
-        const today = new Date(); today.setHours(0, 0, 0, 0);
+        // Stats opcionales — orders abiertas y ventas del día (hora de México)
+        const { from: today } = localDayRange();
         const [openOrders, salesAgg] = await Promise.all([
           prisma.order.count({
             where: { locationId: loc.id, status: { in: ['OPEN', 'PENDING', 'PREPARING'] } },

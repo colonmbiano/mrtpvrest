@@ -15,6 +15,7 @@ const {
   requireTenantAccess,
 } = require('../middleware/auth.middleware')
 const requireModule = require('../middleware/module.middleware')
+const { localDayRange } = require('../utils/dayRange')
 
 router.use(authenticate, requireTenantAccess, requireAdmin, requireModule('FINANCE'))
 
@@ -32,16 +33,17 @@ function parseRange(req) {
   return { from, to, invalid: false }
 }
 
-function startOfDay(d) {
-  const x = new Date(d)
-  x.setHours(0, 0, 0, 0)
-  return x
+// Límites del día NATURAL en hora de México (el servidor corre en UTC).
+// Antes `setHours(0,0,0,0)` partía el día a las 18:00 MX y descuadraba las
+// métricas de "hoy". Ver utils/dayRange.js.
+function mxDateStr(d) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(d)
 }
-
+function startOfDay(d) {
+  return localDayRange(mxDateStr(d)).from
+}
 function endOfDay(d) {
-  const x = new Date(d)
-  x.setHours(23, 59, 59, 999)
-  return x
+  return localDayRange(mxDateStr(d)).to
 }
 
 // Calcula el costo "teórico" de una receta sumando RecipeItem.qty * Ingredient.cost
