@@ -66,6 +66,15 @@ interface OrdersDrawerProps {
 const FILTERS = ["Todos", "Mesa", "Llevar", "Domicilio"] as const;
 type FilterKey = (typeof FILTERS)[number];
 
+// Orden del listado. `time` es string de display (no timestamp), así que
+// no ordenamos por tiempo; orden por monto y nombre son confiables.
+const SORTS = [
+  { key: "default", label: "Recientes" },
+  { key: "amount", label: "Monto" },
+  { key: "name", label: "Nombre" },
+] as const;
+type SortKey = (typeof SORTS)[number]["key"];
+
 const matchesFilter = (order: DrawerOrder, filter: FilterKey): boolean => {
   if (filter === "Todos") return true;
   const t = (order.type || "").toUpperCase();
@@ -100,6 +109,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   onAssignDriver,
 }) => {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("Todos");
+  const [sortKey, setSortKey] = useState<SortKey>("default");
   const [search, setSearch] = useState("");
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -113,7 +123,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
 
   const visibleOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return orders
+    const filtered = orders
       .filter((o) => matchesFilter(o, activeFilter))
       .filter((o) => {
         if (!q) return true;
@@ -122,7 +132,17 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
           o.orderNumber?.toLowerCase().includes(q)
         );
       });
-  }, [orders, activeFilter, search]);
+    if (sortKey === "amount") {
+      filtered.sort((a, b) => b.total - a.total);
+    } else if (sortKey === "name") {
+      filtered.sort((a, b) =>
+        (a.customerName || "").localeCompare(b.customerName || "", "es", {
+          sensitivity: "base",
+        }),
+      );
+    }
+    return filtered;
+  }, [orders, activeFilter, search, sortKey]);
 
   const driverlessCount = useMemo(
     () => orders.filter((o) => o.needsDriver).length,
@@ -310,6 +330,32 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
               placeholder="Buscar por cliente o #orden..."
               className="w-full h-12 min-h-[48px] bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 text-[13px] text-white focus:outline-none focus:border-[#ffb84d] transition-colors placeholder:text-white/30"
             />
+          </div>
+
+          {/* ORDENAR */}
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-black uppercase tracking-[0.18em] text-white/30 shrink-0">
+              Ordenar
+            </span>
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+              {SORTS.map((s) => {
+                const isActive = sortKey === s.key;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setSortKey(s.key)}
+                    className={`shrink-0 h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.12em] whitespace-nowrap active:scale-95 transition-all border ${
+                      isActive
+                        ? "bg-white/15 text-white border-white/25"
+                        : "bg-white/5 text-white/45 border-white/10"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 

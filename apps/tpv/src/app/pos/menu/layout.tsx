@@ -1199,6 +1199,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                 onOpenNotifs={() => setShowNotifs((v) => !v)}
                 onOpenWebOrders={() => setShowWebOrders(true)}
                 onOpenExpenses={isLoanMode ? undefined : () => setShowExpenses(true)}
+                onSwitchEmployee={() => {
+                  // Cambiar empleado = cerrar sesión y mandar al PIN (1 toque),
+                  // mismo flujo que "Bloquear Terminal" del ConfigMenu.
+                  logout();
+                  router.replace("/locked");
+                }}
                 hasOpenOrders={openOrders.length > 0}
                 unreadNotifs={unreadCount}
                 webOrdersCount={pendingWebCount}
