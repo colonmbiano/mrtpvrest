@@ -1,0 +1,150 @@
+// Content script (web.whatsapp.com): panel flotante que lee el CHAT ABIERTO,
+// detecta el pedido (vía /api/store/parse-order, IA BYOK del restaurante) y lo
+// crea en el TPV con un clic (queda PENDING en "Pedidos Web" para el cajero).
+//
+// Solo-lectura: lee el DOM del chat que TÚ ya abriste. No abre chats, no manda
+// mensajes, no automatiza nada a tus espaldas → riesgo de baneo ~nulo.
+//
+// Selectores confirmados en WhatsApp Web (jun-2026):
+//   - Nombre del chat: #main header span[dir="auto"]
+//   - Mensajes: .copyable-text[data-pre-plain-text]  (texto = innerText)
+//   - Entrante/saliente: ancestro [data-id] empieza con false_ / true_
+//     (el data-id es <fromMe>_<jid>_<msgid>; el jid trae el número si es @c.us)
+
+(() => {
+  const AMBER = "#FFB84D";
+  const BG = "#0C0C0E";
+
+  // ── Leer el chat abierto ───────────────────────────────────────────────
+  function readOpenChat() {
+    const main = document.querySelector("#main");
+    if (!main) return null;
+    const nameEl = main.querySelector('header span[dir="auto"]');
+    const customerName = nameEl ? nameEl.textContent.trim() : "";
+
+    const copyables = [...main.querySelectorAll(".copyable-text[data-pre-plain-text]")];
+    const msgs = copyables
+      .map((c) => {
+        const idEl = c.closest("[data-id]");
+        const dataId = idEl ? idEl.getAttribute("data-id") || "" : "";
+        const out = dataId.startsWith("true_");
+        const jid = dataId.split("_")[1] || "";
+        return { out, jid, text: (c.innerText || "").trim() };
+      })
+      .filter((m) => m.text);
+
+    // Último "turno" del cliente: entrantes después del último saliente.
+    let lastOut = -1;
+    msgs.forEach((m, i) => { if (m.out) lastOut = i; });
+    let incoming = msgs.slice(lastOut + 1).filter((m) => !m.out);
+    if (incoming.length === 0) incoming = msgs.filter((m) => !m.out).slice(-8);
+
+    const jid = incoming[0]?.jid || "";
+    const phone = jid.endsWith("@c.us") ? jid.split("@")[0] : "";
+    return { customerName, phone, text: incoming.map((m) => m.text).join("\n"), count: incoming.length };
+  }
+
+  const bg = (type, payload) =>
+    new Promise((res) => chrome.runtime.sendMessage({ type, ...payload }, res));
+
+  // ── UI ─────────────────────────────────────────────────────────────────
+  const style = document.createElement("style");
+  style.textContent = `
+    #mbwa{position:fixed;right:18px;bottom:18px;width:320px;z-index:99999;
+      font-family:'Segoe UI',system-ui,sans-serif;color:#fff;background:${BG};
+      border:1px solid rgba(255,255,255,.12);border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden}
+    #mbwa .hd{display:flex;align-items:center;gap:8px;padding:12px 14px;background:rgba(255,184,77,.12);border-bottom:1px solid rgba(255,255,255,.08)}
+    #mbwa .hd b{font-size:13px;letter-spacing:.04em}
+    #mbwa .hd .dot{width:8px;height:8px;border-radius:50%;background:${AMBER}}
+    #mbwa .bd{padding:12px 14px;max-height:46vh;overflow:auto}
+    #mbwa button{cursor:pointer;border:none;border-radius:12px;font-weight:700;font-size:12px;padding:10px;width:100%}
+    #mbwa .b1{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.14)}
+    #mbwa .b2{background:${AMBER};color:${BG};margin-top:8px}
+    #mbwa .it{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+    #mbwa .muted{color:rgba(255,255,255,.5);font-size:11px}
+    #mbwa .row{display:flex;gap:6px;margin:8px 0}
+    #mbwa .row button{font-size:11px;padding:7px}
+    #mbwa .seg{background:rgba(255,255,255,.06);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.1)}
+    #mbwa .seg.on{background:${AMBER};color:${BG}}
+    #mbwa input{width:100%;box-sizing:border-box;margin-top:6px;padding:8px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#fff;font-size:12px}
+    #mbwa .st{font-size:12px;margin-top:8px;min-height:16px}
+    #mbwa .x{margin-left:auto;cursor:pointer;color:rgba(255,255,255,.5);font-size:16px;line-height:1}`;
+  document.documentElement.appendChild(style);
+
+  const panel = document.createElement("div");
+  panel.id = "mbwa";
+  panel.innerHTML = `
+    <div class="hd"><span class="dot"></span><b>Pedido → TPV</b><span class="x" id="mbwa-x">×</span></div>
+    <div class="bd">
+      <button class="b1" id="mbwa-read">📦 Leer pedido del chat</button>
+      <div id="mbwa-out"></div>
+    </div>`;
+  document.body.appendChild(panel);
+
+  const out = panel.querySelector("#mbwa-out");
+  let state = { chat: null, parsed: null, orderType: "TAKEOUT", address: "" };
+
+  panel.querySelector("#mbwa-x").onclick = () => panel.remove();
+
+  panel.querySelector("#mbwa-read").onclick = async () => {
+    const chat = readOpenChat();
+    if (!chat || !chat.text) { out.innerHTML = `<div class="st" style="color:${AMBER}">Abre un chat con un pedido primero.</div>`; return; }
+    state.chat = chat; state.parsed = null;
+    out.innerHTML = `<div class="muted">Cliente: ${esc(chat.customerName)} · ${chat.count} mensaje(s)</div><div class="st">Interpretando…</div>`;
+    const r = await bg("parse", { text: chat.text });
+    if (!r || !r.ok) { out.innerHTML += `<div class="st" style="color:#f88">Error al interpretar.</div>`; return; }
+    state.parsed = r.data;
+    renderParsed();
+  };
+
+  function renderParsed() {
+    const items = state.parsed?.items || [];
+    if (items.length === 0) {
+      out.innerHTML = `<div class="muted">Cliente: ${esc(state.chat.customerName)}</div>
+        <div class="st" style="color:${AMBER}">No se reconoció ningún producto. Revisa el chat o ajústalo manualmente en el TPV.</div>`;
+      return;
+    }
+    const list = items.map((i) => `<div class="it"><span>${i.quantity || 1}× ${esc(i.name || i.menuItemId)}</span></div>`).join("");
+    out.innerHTML = `
+      <div class="muted">Cliente: ${esc(state.chat.customerName)}${state.chat.phone ? " · +" + state.chat.phone : ""}</div>
+      <div style="margin:8px 0">${list}</div>
+      ${state.parsed.unmatched?.length ? `<div class="muted">No reconocido: ${esc(state.parsed.unmatched.join(", "))}</div>` : ""}
+      <div class="row">
+        <button class="seg ${state.orderType === "TAKEOUT" ? "on" : ""}" data-t="TAKEOUT">Para llevar</button>
+        <button class="seg ${state.orderType === "DELIVERY" ? "on" : ""}" data-t="DELIVERY">Domicilio</button>
+      </div>
+      <div id="mbwa-addr"></div>
+      <button class="b2" id="mbwa-create">✅ Crear en TPV</button>
+      <div class="st" id="mbwa-st"></div>`;
+    out.querySelectorAll(".seg").forEach((b) => (b.onclick = () => { state.orderType = b.dataset.t; renderParsed(); }));
+    if (state.orderType === "DELIVERY") {
+      out.querySelector("#mbwa-addr").innerHTML = `<input id="mbwa-addrI" placeholder="Dirección de entrega…" value="${esc(state.address)}">`;
+      out.querySelector("#mbwa-addrI").oninput = (e) => (state.address = e.target.value);
+    }
+    out.querySelector("#mbwa-create").onclick = createOrder;
+  }
+
+  async function createOrder() {
+    const st = out.querySelector("#mbwa-st");
+    if (state.orderType === "DELIVERY" && !state.address.trim()) { st.style.color = AMBER; st.textContent = "Falta la dirección."; return; }
+    st.style.color = "#fff"; st.textContent = "Creando…";
+    const order = {
+      items: (state.parsed.items || []).map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity || 1 })),
+      customerName: state.chat.customerName || "Cliente WhatsApp",
+      customerPhone: state.chat.phone || null,
+      orderType: state.orderType,
+      deliveryAddress: state.orderType === "DELIVERY" ? state.address.trim() : null,
+      notes: "Pedido recibido por WhatsApp (pendiente de confirmar).",
+    };
+    const r = await bg("create", { order });
+    if (r && r.ok) {
+      st.style.color = "#88D66C";
+      st.innerHTML = `✅ Creado #${esc(String(r.data?.orderNumber || r.data?.id || ""))} · total $${Number(r.data?.total || 0).toFixed(2)}<br><span class="muted">Acéptalo en "Pedidos Web" del TPV.</span>`;
+    } else {
+      st.style.color = "#f88";
+      st.textContent = "No se pudo crear: " + (r?.data?.error || r?.error || "error");
+    }
+  }
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+})();
