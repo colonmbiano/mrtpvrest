@@ -314,6 +314,7 @@ model Restaurant {
   coupons          Coupon[]
   integrations     IntegrationConfig[]
   orders           Order[]
+  customers        Customer[]
   suppliers        Supplier[]
   whatsappSessions WhatsappSession[]
   whatsappContacts WhatsappContact[]
@@ -689,6 +690,12 @@ model Order {
   user        User?    @relation(fields: [userId], references: [id])
   addressId   String?
   address     Address? @relation(fields: [addressId], references: [id])
+  // Cliente del directorio (registro por teléfono). Nullable: ventas de
+  // mostrador sin teléfono no enlazan. customerName/customerPhone se mantienen
+  // como snapshot denormalizado de lo capturado en ESTA orden — el Customer
+  // puede cambiar de nombre/dirección después sin reescribir órdenes viejas.
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id])
 
   status        OrderStatus   @default(PENDING)
   paymentMethod PaymentMethod
@@ -762,7 +769,42 @@ model Order {
   updatedAt DateTime @updatedAt
 
   @@index([tableId])
+  @@index([customerId])
   @@map("orders")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLIENTE (CUSTOMER) — Directorio de clientes por teléfono (multi-tenant).
+// El teléfono normalizado (solo dígitos) es la llave de negocio dentro de cada
+// restaurante: al meter un pedido el TPV busca por teléfono y autocompleta
+// nombre/dirección. ordersCount/totalSpent/lastOrderAt son denormalizados que
+// se actualizan en cada creación de orden para mostrar "cliente frecuente" sin
+// agregar al vuelo. No guarda PII sensible más allá de contacto y dirección.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Customer {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  // phone: dígitos normalizados (sin +, espacios ni guiones). Llave única por
+  // restaurante. name/address guardan los últimos valores capturados.
+  phone   String
+  name    String?
+  address String?
+
+  ordersCount Int       @default(0)
+  totalSpent  Float     @default(0)
+  lastOrderAt DateTime?
+
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, phone])
+  @@index([restaurantId, phone])
+  @@map("customers")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

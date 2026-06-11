@@ -100,6 +100,24 @@ function toWhatsappNumber(raw, countryCode) {
   return dial + digits;                                 // fallback
 }
 
+/**
+ * normalizePhone — llave de matching para el directorio de clientes.
+ * Reduce un teléfono a solo dígitos y, si trae más de 10, conserva los últimos
+ * 10 (descarta lada/prefijos). Así "(551) 234-5678", "5512345678" y
+ * "+52 1 55 1234 5678" colapsan al mismo valor para buscar/dedupe.
+ *
+ * NO antepone lada (a diferencia de toWhatsappNumber): aquí solo nos importa
+ * que dos formas del mismo número coincidan, no mandar WhatsApp.
+ *
+ * @returns {string} dígitos normalizados, o '' si no hay número usable.
+ */
+function normalizePhone(raw) {
+  if (!raw) return '';
+  const digits = String(raw).replace(/\D/g, '').replace(/^0+/, '');
+  if (!digits) return '';
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
 /** URL completa de WhatsApp (opcionalmente con texto pre-rellenado); '' si no hay número. */
 function whatsappUrl(raw, text, countryCode) {
   const num = toWhatsappNumber(raw, countryCode);
@@ -113,6 +131,7 @@ module.exports = {
   COUNTRY_DIAL_CODES,
   COUNTRIES,
   dialCodeFor,
+  normalizePhone,
   toWhatsappNumber,
   whatsappUrl,
 };

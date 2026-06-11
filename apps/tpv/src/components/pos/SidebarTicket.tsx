@@ -59,6 +59,13 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const [previousItems, setPreviousItems] = useState<any[]>([]);
   const [_loadingHistory, setLoadingHistory] = useState(false);
 
+  // Registro de clientes — al teclear el teléfono en DELIVERY buscamos el
+  // directorio y autocompletamos nombre/dirección. customerHint muestra el
+  // badge "cliente frecuente". lastLookupPhone evita re-buscar el mismo número
+  // (el prefill dispara un re-render que volvería a entrar al efecto).
+  const [customerHint, setCustomerHint] = useState<{ ordersCount: number } | null>(null);
+  const lastLookupPhone = React.useRef<string>("");
+
   // Cargar historial de la orden si estamos en modo "extender". Diferido
   // a microtask (ver impresoras): el setState ya no corre sincrónicamente
   // en el effect (set-state-in-effect).
@@ -122,6 +129,58 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   
   const ticket = getActiveTicket();
   const hasItems = ticket.items.length > 0;
+
+  // Búsqueda del cliente por teléfono (debounce 400ms). Best-effort: si falla
+  // la red no rompe el flujo de cobro. Sólo autocompleta campos vacíos para no
+  // pisar lo que el cajero ya escribió.
+  useEffect(() => {
+    // DINE_IN no captura teléfono → no hay nada que buscar.
+    if (ticket.type === "DINE_IN") {
+      setCustomerHint(null);
+      lastLookupPhone.current = "";
+      return;
+    }
+    const digits = (ticket.phone || "").replace(/\D/g, "");
+    const key = digits.length > 10 ? digits.slice(-10) : digits;
+    if (key.length < 7) {
+      setCustomerHint(null);
+      lastLookupPhone.current = "";
+      return;
+    }
+    if (key === lastLookupPhone.current) return;
+
+    const handle = setTimeout(async () => {
+      try {
+        const { data } = await api.get("/api/customers/by-phone", { params: { phone: key } });
+        lastLookupPhone.current = key;
+        if (data?.found && data.customer) {
+          const c = data.customer;
+          setCustomerHint({ ordersCount: c.ordersCount ?? 0 });
+          const cur = useTicketStore.getState().getActiveTicket();
+          const patch: { name?: string; address?: string } = {};
+          if (!cur.name?.trim() && c.name) patch.name = c.name;
+          if (!cur.address?.trim() && c.address) patch.address = c.address;
+          if (Object.keys(patch).length) useTicketStore.getState().updateTicket(patch);
+        } else {
+          setCustomerHint(null);
+        }
+      } catch {
+        /* búsqueda best-effort: ignorar errores de red */
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [ticket.phone, ticket.type, ticket.id]);
+
+  // Badge "cliente frecuente" reutilizado en TAKEOUT y DELIVERY.
+  const customerHintBadge = customerHint && customerHint.ordersCount > 0 ? (
+    <div className="flex items-center gap-1.5 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-400/90">
+      <User size={11} className="shrink-0" />
+      <span>
+        Cliente frecuente · {customerHint.ordersCount}{" "}
+        {customerHint.ordersCount === 1 ? "pedido" : "pedidos"}
+      </span>
+    </div>
+  ) : null;
 
   const historySubtotal = useMemo(() =>
     previousItems.reduce((acc, item) => acc + (item.price * item.quantity), 0),
@@ -632,6 +691,23 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           </button>
         </div>
 
+        {/* TAKEOUT: teléfono opcional → activa el registro/autocompletado. */}
+        {ticket.type === "TAKEOUT" && (
+          <div className="flex flex-col gap-2">
+            <div className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[#121316] px-3 transition-all focus-within:border-amber-500/50">
+              <Phone size={15} className="text-zinc-600 shrink-0" />
+              <input
+                placeholder="Teléfono (opcional)..."
+                inputMode="tel"
+                className="bg-transparent border-none outline-none text-xs font-bold text-white w-full placeholder:text-zinc-600 placeholder:font-bold tracking-tight tabular-nums"
+                value={ticket.phone || ""}
+                onChange={(e) => useTicketStore.getState().updateTicket({ phone: e.target.value })}
+              />
+            </div>
+            {customerHintBadge}
+          </div>
+        )}
+
         {/* BUG-24: campos requeridos para DELIVERY. */}
         {ticket.type === "DELIVERY" && (
           <div className="flex flex-col gap-2">
@@ -664,6 +740,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                 </span>
               )}
             </div>
+            {customerHintBadge}
           </div>
         )}
       </div>

@@ -180,6 +180,7 @@ async function discountInventory(prisma, orderItems, orderId, restaurantId, loca
 
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
+const { normalizePhone } = require('@mrtpvrest/config/phone');
 const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePermission, userHasPermission, hasValidOverride } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
@@ -358,7 +359,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
-    const { items, orderType, tableNumber, tableId, numberOfGuests, paymentMethod, subtotal, discount, total, customerName, customerPhone, status, clientOrderId } = req.body;
+    const { items, orderType, tableNumber, tableId, numberOfGuests, paymentMethod, subtotal, discount, total, customerName, customerPhone, deliveryAddress, status, clientOrderId } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'Sin productos' });
 
     const restaurantId = req.user?.restaurantId || req.restaurantId;
@@ -507,6 +508,42 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         ? Math.floor(guestsRaw)
         : null;
 
+      // deliveryAddress sólo se persiste en DELIVERY (en otros tipos queda null).
+      const cleanDeliveryAddress = orderType === 'DELIVERY' && typeof deliveryAddress === 'string' && deliveryAddress.trim()
+        ? deliveryAddress.trim()
+        : null;
+
+      // Directorio de clientes — registro por teléfono. Si la orden trae
+      // teléfono, hacemos upsert por (restaurantId, teléfono normalizado):
+      // enlazamos la orden al Customer y mantenemos contadores para que el
+      // TPV pueda autocompletar y mostrar "cliente frecuente". El nombre/
+      // dirección sólo se sobreescriben si vinieron en ESTA orden (no se
+      // borran datos previos con un campo vacío).
+      let customerId = null;
+      const normPhone = normalizePhone(customerPhone);
+      if (normPhone) {
+        const customer = await tx.customer.upsert({
+          where: { restaurantId_phone: { restaurantId, phone: normPhone } },
+          create: {
+            restaurantId,
+            phone: normPhone,
+            name: customerName || null,
+            address: cleanDeliveryAddress,
+            ordersCount: 1,
+            totalSpent: total || 0,
+            lastOrderAt: new Date(),
+          },
+          update: {
+            ...(customerName ? { name: customerName } : {}),
+            ...(cleanDeliveryAddress ? { address: cleanDeliveryAddress } : {}),
+            ordersCount: { increment: 1 },
+            totalSpent: { increment: total || 0 },
+            lastOrderAt: new Date(),
+          },
+        });
+        customerId = customer.id;
+      }
+
       const created = await tx.order.create({
         data: {
           restaurantId,
@@ -529,6 +566,8 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           total: total || 0,
           source: 'TPV',
           customerName, customerPhone,
+          deliveryAddress: cleanDeliveryAddress,
+          customerId,
         },
       });
 
