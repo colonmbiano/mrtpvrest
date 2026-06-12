@@ -277,14 +277,20 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       // Este flujo no necesita printerGroupIds (esos son para cocina).
       const items: TicketItem[] = orderItemsToTicketItems(payOrder.items || []);
 
+      // Fallback de subtotal SOLO si el backend no lo trae. Usa el subtotal
+      // persistido de la línea (ya incluye modificadores); si tampoco está,
+      // cae a precio×cantidad + modificadores. Evita el doble conteo de antes
+      // (price ya podía incluir el modificador).
       const subtotalCalc = items.reduce(
         (acc, it) =>
           acc +
-          it.price * it.quantity +
-          (it.modifiers || []).reduce(
-            (m, mod) => m + (mod.priceAdd || 0) * it.quantity,
-            0
-          ),
+          (typeof it.subtotal === "number"
+            ? it.subtotal
+            : it.price * it.quantity +
+              (it.modifiers || []).reduce(
+                (m, mod) => m + (mod.priceAdd || 0) * it.quantity,
+                0
+              )),
         0
       );
 
@@ -305,6 +311,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         discount: Number(payOrder.discount ?? 0),
         tax: Number(payOrder.tax ?? 0),
         tip: Number(payOrder.tip ?? 0),
+        deliveryFee: Number(payOrder.deliveryFee ?? 0),
         total: Number(payOrder.total ?? subtotalCalc),
         paymentMethod: method,
       };
@@ -453,6 +460,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         name: it.name || it.menuItem?.name || "Producto",
         quantity: Number(it.quantity ?? 1),
         price: Number(it.unitPrice ?? it.price ?? 0),
+        // subtotal persistido (price×qty con modificadores) → fuente única del
+        // importe de la línea en el recibo, evita el doble conteo del modificador.
+        subtotal: typeof it.subtotal === "number" ? it.subtotal : undefined,
         notes: it.notes || null,
         seatNumber: typeof it.seatNumber === "number" ? it.seatNumber : null,
         modifiers: (it.modifiers || []).map((m: any) => ({
@@ -473,14 +483,20 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     try {
       const full = o.items ? o : await fetchFullOrder(o);
       const items = orderItemsToTicketItems(full.items || []);
+      // Fallback de subtotal SOLO si el backend no lo trae. Usa el subtotal
+      // persistido de la línea (ya incluye modificadores); si tampoco está,
+      // cae a precio×cantidad + modificadores. Evita el doble conteo de antes
+      // (price ya podía incluir el modificador).
       const subtotalCalc = items.reduce(
         (acc, it) =>
           acc +
-          it.price * it.quantity +
-          (it.modifiers || []).reduce(
-            (m, mod) => m + (mod.priceAdd || 0) * it.quantity,
-            0
-          ),
+          (typeof it.subtotal === "number"
+            ? it.subtotal
+            : it.price * it.quantity +
+              (it.modifiers || []).reduce(
+                (m, mod) => m + (mod.priceAdd || 0) * it.quantity,
+                0
+              )),
         0
       );
       const fullOrderNum = full.orderNumber || String(full.id).slice(-6).toUpperCase();
@@ -499,6 +515,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         discount: Number(full.discount ?? 0),
         tax: Number(full.tax ?? 0),
         tip: Number(full.tip ?? 0),
+        deliveryFee: Number(full.deliveryFee ?? 0),
         total: Number(full.total ?? subtotalCalc),
         paymentMethod: full.paymentMethod || null,
       });

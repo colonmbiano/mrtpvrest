@@ -30,6 +30,8 @@ interface TicketConfig {
   showInvoiceQr: boolean;
   invoiceUrl: string;
   invoiceFolioPrefix: string;
+  // Envío (DELIVERY): ¿el costo de envío causa IVA? Default true.
+  deliveryFeeTaxed: boolean;
   // Tipografía del recibo. fontFamily → Font A/B; fontSize → alto;
   // lineSpacing → interlineado; lineWeight → qué tan marcadas las líneas.
   paperWidth: string;
@@ -63,6 +65,7 @@ const EMPTY: TicketConfig = {
   businessName: "", header: "", subheader: "", footer: "Gracias por su preferencia",
   showLogo: true, showAddress: true, address: "", phone: "",
   businessType: "", rfc: "", showInvoiceQr: false, invoiceUrl: "", invoiceFolioPrefix: "",
+  deliveryFeeTaxed: true,
   paperWidth: "80mm", fontFamily: "monospace", fontSize: "medium",
   lineSpacing: "normal", lineWeight: "normal",
   showPoints: true, showTip: true, tipSuggestions: "[10,15,20]",
@@ -149,6 +152,7 @@ export default function TicketFormatTab() {
               <Toggle label="Mostrar dirección" checked={cfg.showAddress} onChange={(v) => setCfg({ ...cfg, showAddress: v })} />
               <Toggle label="Puntos de lealtad" checked={cfg.showPoints} onChange={(v) => setCfg({ ...cfg, showPoints: v })} />
               <Toggle label="Sugerir propinas" checked={cfg.showTip} onChange={(v) => setCfg({ ...cfg, showTip: v })} />
+              <Toggle label="Envío con IVA incluido" checked={cfg.deliveryFeeTaxed} onChange={(v) => setCfg({ ...cfg, deliveryFeeTaxed: v })} />
             </div>
 
             <SectionLabel>Factura (QR al pie del recibo)</SectionLabel>

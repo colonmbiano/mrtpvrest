@@ -15,11 +15,22 @@ import {
   withLabel,
   formatProductLine,
   ivaBreakdown,
+  lineAmount,
   splitItemsBySeat,
   packRaster,
   type ReceiptInput,
   type PrinterRecord,
 } from "@/lib/printer-tcp";
+
+// Extrae el importe ("$xxx.xx") que sigue a la primera aparición de `label`
+// dentro del texto ESC/POS del recibo. Útil para afirmar sobre el renglón TOTAL
+// / Subtotal / una línea de producto sin depender del padding exacto.
+function amountAfter(receipt: string, label: string): number | null {
+  const line = receipt.split("\n").find((l) => l.includes(label));
+  if (!line) return null;
+  const g1 = line.match(/\$\s?([\d,]+\.\d{2})/)?.[1];
+  return g1 ? Number(g1.replace(/,/g, "")) : null;
+}
 
 beforeEach(() => {
   connect.mockClear();
@@ -85,6 +96,73 @@ describe("recibo :: desglose IVA incluido", () => {
     expect(out).toContain("Subtotal:");
     expect(out).toContain("IVA (16% incl.):");
     expect(out).toContain("TOTAL:");
+  });
+});
+
+describe("recibo :: la línea NO duplica el modificador (descuadre del total)", () => {
+  it("lineAmount usa el subtotal persistido cuando viene (price ya incluye mods)", () => {
+    // Backend moderno: price = base+mods = 165, subtotal = 165, modifier informativo.
+    expect(lineAmount({ name: "Boneless", quantity: 1, price: 165, subtotal: 165, modifiers: [{ name: "Papas", priceAdd: 30 }] })).toBe(165);
+    // 2x con subtotal persistido.
+    expect(lineAmount({ name: "Combo", quantity: 2, price: 165, subtotal: 330, modifiers: [{ name: "Papas", priceAdd: 30 }] })).toBe(330);
+  });
+
+  it("lineAmount cae a precio+mods cuando NO viene subtotal (legacy)", () => {
+    expect(lineAmount({ name: "Boneless", quantity: 1, price: 135, modifiers: [{ name: "Papas", priceAdd: 30 }] })).toBe(165);
+  });
+
+  it("la suma de los renglones cuadra con el TOTAL (caso Boneless+Papas)", () => {
+    // Pedido real: Hamburguesa $135 + Boneless $165 (incl. Papas $30) = $300.
+    const out = buildCustomerReceipt({
+      orderNumber: "651661",
+      orderType: "TAKEOUT",
+      items: [
+        { name: "Hamburguesa Arrachera House Super", quantity: 1, price: 135, subtotal: 135 },
+        { name: "Boneless", quantity: 1, price: 165, subtotal: 165, modifiers: [{ name: "BBQ", priceAdd: 0 }, { name: "Papas Extra", priceAdd: 30 }] },
+      ],
+      subtotal: 300,
+      total: 300,
+      paymentMethod: "CASH",
+    });
+    // El renglón del Boneless muestra 165, NO 195 (antes se duplicaba la papa).
+    expect(amountAfter(out, "Boneless")).toBe(165);
+    // Productos = 135 + 165 = 300 = TOTAL.
+    expect(amountAfter(out, "TOTAL:")).toBe(300);
+    expect(out).not.toContain("195.00");
+  });
+});
+
+describe("recibo :: envío (DELIVERY) desglosado y cuadrado", () => {
+  it("imprime el renglón 'Envío:' y los productos + envío = TOTAL", () => {
+    // Pedido a domicilio: productos $265 + envío $20 = $285.
+    const out = buildCustomerReceipt({
+      orderNumber: "454457",
+      orderType: "DELIVERY",
+      items: [
+        { name: "Refrescos 600ml", quantity: 1, price: 35, subtotal: 35 },
+        { name: "Alitas", quantity: 1, price: 105, subtotal: 105 },
+        { name: "Taco", quantity: 3, price: 35, subtotal: 105 },
+      ],
+      subtotal: 245,
+      deliveryFee: 20,
+      total: 265, // 245 productos + 20 envío
+      paymentMethod: "CASH",
+    });
+    expect(out).toContain("Envío:");
+    expect(amountAfter(out, "Envío:")).toBe(20);
+    expect(amountAfter(out, "TOTAL:")).toBe(265);
+  });
+
+  it("IVA del envío configurable: deliveryFeeTaxed=false saca el envío de la base", () => {
+    const base = { orderNumber: "1", orderType: "DELIVERY" as const, items: [{ name: "X", quantity: 1, price: 100, subtotal: 100 }], subtotal: 100, deliveryFee: 16, total: 116, paymentMethod: "CASH" };
+    // Con IVA (default): base gravable = 116/1.16 = 100, IVA = 16.
+    const conIva = buildCustomerReceipt({ ...base, deliveryFeeTaxed: true });
+    expect(amountAfter(conIva, "IVA (16% incl.):")).toBe(16);
+    // Sin IVA en envío: base gravable = (116-16)/1.16 = 86.21, IVA = 13.79.
+    const sinIva = buildCustomerReceipt({ ...base, deliveryFeeTaxed: false });
+    expect(amountAfter(sinIva, "IVA (16% incl.):")).toBe(13.79);
+    // El TOTAL no cambia por el tratamiento de IVA.
+    expect(amountAfter(sinIva, "TOTAL:")).toBe(116);
   });
 });
 
