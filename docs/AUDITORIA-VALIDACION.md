@@ -44,9 +44,10 @@ qué hallazgos son reales, y el plan de remediación priorizado.
 6. ~~SaaS MP: invoice y subscription fuera de transacción~~ → **ARREGLADO**
    (`syncAuthorizedPaymentFromMercadoPago` envuelve ambas en `$transaction`
    con el dedupe por externalId adentro).
-7. ~~Cero tests de webhooks~~ → **PARCIAL**: agregados 4 tests del kiosk
-   webhook (idempotencia, no-downgrade, externalReference mismatch). Faltan
-   tests de los webhooks SaaS.
+7. ~~Cero tests de webhooks~~ → **ARREGLADO**: 4 tests del kiosk webhook
+   (idempotencia, no-downgrade, externalReference mismatch) + 6 del webhook
+   Stripe SaaS (firma, routing de eventos, 500 para retry) + 4 del sync de
+   MP SaaS (tx única invoice+subscription, dedupe por externalId, FAILED).
 
 8. ~~UNIQUE a nivel BD (db push coordinado)~~ → **HECHO (2026-06-12)**:
    migración `20260612200000_unique_webhook_external_ids` aplicada a
@@ -119,9 +120,9 @@ qué hallazgos son reales, y el plan de remediación priorizado.
 ## Orden de ejecución sugerido para lo pendiente
 
 1. Promover E2E a gate (configurar secrets del workflow primero).
-2. Tests de los webhooks SaaS (Stripe/MP billing).
-3. Tokens del TPV a secure storage nativo (requiere plugin + APK).
-4. Migración Decimal (proyecto aparte).
+2. Tokens del TPV a secure storage nativo (requiere plugin + APK, con
+   fallback: los APKs instalados no tendrán el plugin hasta renovarse).
+3. Migración Decimal (proyecto aparte).
 
 > Nota de método: la validación fue por muestreo con agentes de lectura. Los
 > archivo:línea son guía; cada fix debe re-verificar su contexto al implementarse.
