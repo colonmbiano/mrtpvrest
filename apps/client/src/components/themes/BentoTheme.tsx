@@ -137,7 +137,8 @@ export function BentoTheme({ data }: BentoThemeProps) {
                   <article key={product.id}
                     className={`rounded-[24px] p-3 flex flex-col group transition-all hover:-translate-y-0.5 ${wide ? 'col-span-2 md:col-span-2' : ''}`}
                     style={glass}>
-                    <div className={`relative w-full rounded-[18px] overflow-hidden mb-3 ${wide ? 'aspect-[2/1]' : 'aspect-square'}`} style={{ background: '#FFFFFF06' }}>
+                    <div onClick={() => pick(product)} role="button" tabIndex={0}
+                      className={`relative w-full rounded-[18px] overflow-hidden mb-3 cursor-pointer ${wide ? 'aspect-[2/1]' : 'aspect-square'}`} style={{ background: '#FFFFFF06' }}>
                       {product.isPromo && (
                         <span className="absolute top-2 right-2 z-10 text-[9px] font-bold px-2 py-1 rounded-full text-black" style={{ background: accent }}>OFERTA</span>
                       )}
@@ -152,9 +153,18 @@ export function BentoTheme({ data }: BentoThemeProps) {
                     </div>
 
                     <div className="flex-1 flex flex-col">
-                      <h4 className="font-bold text-sm leading-tight" style={{ fontFamily: 'Syne, sans-serif' }}>{product.name}</h4>
+                      <h4 onClick={() => pick(product)} className="font-bold text-sm leading-tight cursor-pointer" style={{ fontFamily: 'Syne, sans-serif' }}>{product.name}</h4>
                       {product.description && (
                         <p className="text-[11px] mt-1 line-clamp-2 leading-snug" style={{ color: '#FFFFFF55' }}>{product.description}</p>
+                      )}
+                      {/* Pista visible de que el producto tiene variantes/opciones; el
+                          botón "+" abría el modal pero la tarjeta no era tappable. */}
+                      {needsModal(product) && (
+                        <button onClick={() => pick(product)}
+                          className="mt-1.5 self-start text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ color: accent, background: `${accent}1a` }}>
+                          Ver opciones ›
+                        </button>
                       )}
                       <div className="mt-auto pt-3 flex items-center justify-between">
                         <div className="flex flex-col">

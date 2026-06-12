@@ -139,7 +139,11 @@ export async function generateMetadata({
   const origin = storeOrigin(slug);
   const title = `${store.name} | Pedidos a domicilio`;
   const description = `Haz tu pedido en línea de ${store.name} de forma fácil y rápida. Menú completo, carrito y entrega a domicilio.`;
-  const images = store.logo ? [{ url: store.logo, alt: store.name }] : undefined;
+  // Los scrapers de OG/Twitter (WhatsApp, Facebook) NO renderizan data: URIs;
+  // solo usamos el logo como preview si es una URL http(s) absoluta. El favicon
+  // sí acepta data URIs, así que esos se quedan con store.logo tal cual.
+  const ogLogo = store.logo && /^https?:\/\//i.test(store.logo) ? store.logo : null;
+  const images = ogLogo ? [{ url: ogLogo, alt: store.name }] : undefined;
 
   return {
     metadataBase: new URL(origin),
@@ -164,7 +168,7 @@ export async function generateMetadata({
       card: 'summary',
       title,
       description,
-      images: store.logo ? [store.logo] : undefined,
+      images: ogLogo ? [ogLogo] : undefined,
     },
     appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: store.name },
   };
