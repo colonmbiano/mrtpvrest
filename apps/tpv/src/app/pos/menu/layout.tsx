@@ -507,6 +507,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           tableNumber: full.table?.name || full.tableNumber || null,
           customerName: full.customerName || full.user?.name || null,
           items,
+          // Banner PAGADO / PENDIENTE DE PAGO en la comanda web: el pago online
+          // llega PAID; el contra-entrega/efectivo llega PENDING y hay que cobrar.
+          paid: full.paymentStatus === "PAID" || full.cashCollected === true,
+          paymentMethod: full.paymentMethod || null,
           config: kitchenConfig ?? undefined,
         });
         const folio = full.orderNumber ? `#${full.orderNumber}` : "";
