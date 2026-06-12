@@ -83,9 +83,13 @@
         const pre = c.getAttribute("data-pre-plain-text") || "";
         const m = pre.match(/\]\s*(.+?):\s*$/);
         const sender = m ? m[1].trim() : "";
-        const incoming = !!custFirst && norm(sender).split(" ").includes(custFirst);
-        // full = mensaje completo (para bloques estructurados multilínea);
-        // last = última línea (descarta encabezados de cita/reenvío).
+        // Entrante/saliente: la clase semántica message-in/message-out de WhatsApp
+        // es mucho más fiable que parsear el nombre (que falla con burbujas
+        // agrupadas o nombres raros y truncaba el pedido). Fallback al nombre.
+        const out = c.closest(".message-out");
+        const inn = c.closest(".message-in");
+        const incoming = out ? false : inn ? true : (!!custFirst && norm(sender).split(" ").includes(custFirst));
+        // full = mensaje completo (multilínea); last = última línea.
         const full = (c.innerText || "").trim();
         const lines = full.split("\n").map((l) => l.trim()).filter(Boolean);
         return { incoming, full, text: lines[lines.length - 1] || "" };
@@ -124,15 +128,19 @@
       return { customerName, phone: "", orderType, address, text: span, count: span.split(/\s*,\s*|\s+y\s+/).filter(Boolean).length || 1, structured: true };
     }
 
-    // 3) Si no, el último "turno" del cliente: racha de mensajes entrantes.
-    let trailing = [];
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      if (msgs[i].incoming) trailing.unshift(msgs[i]);
-      else if (trailing.length) break;
-    }
-    if (trailing.length === 0) trailing = msgs.filter((m) => m.incoming).slice(-4);
+    // 3) Turno del cliente: sus mensajes ENTRANTES desde el último saliente.
+    //    Usamos el TEXTO COMPLETO de cada burbuja (m.full, no la última línea):
+    //    los pedidos suelen venir en varias líneas en una sola burbuja
+    //    ("1 burrito\n1 hamburguesa") y antes se perdía todo menos la última.
+    //    Recolectamos por índice (todo lo entrante tras el último saliente) en
+    //    vez de cortar al primer saliente, para no perder el pedido si una
+    //    burbuja suelta se detecta mal.
+    let lastOut = -1;
+    for (let i = 0; i < msgs.length; i++) if (!msgs[i].incoming) lastOut = i;
+    let trailing = msgs.filter((m, i) => i > lastOut && m.incoming);
+    if (trailing.length === 0) trailing = msgs.filter((m) => m.incoming).slice(-8);
 
-    return { customerName, phone: "", text: trailing.map((m) => m.text).join(". "), count: trailing.length, structured: false };
+    return { customerName, phone: "", text: trailing.map((m) => m.full).join(". "), count: trailing.length, structured: false };
   }
 
   // Tras recargar la extensión, el content script viejo queda "huérfano":
