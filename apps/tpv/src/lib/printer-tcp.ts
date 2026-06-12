@@ -375,6 +375,12 @@ export interface TicketItem {
   name: string;
   quantity: number;
   price: number;
+  // Subtotal REAL de la línea tal como lo persistió el backend: ya incluye el
+  // delta de los modificadores con precio (price puede o no incluirlo según el
+  // origen del pedido). Cuando viene, es la ÚNICA fuente para el importe de la
+  // línea — así el recibo nunca vuelve a sumar el modificador (doble conteo) ni
+  // lo omite. Ver lineAmount().
+  subtotal?: number;
   notes?: string | null;
   modifiers?: TicketModifier[] | null;
   // En DINE_IN: a qué comensal pertenece. null = compartido.
@@ -445,6 +451,15 @@ export interface ReceiptInput {
   discount?: number | null;
   tax?: number | null;
   tip?: number | null;
+  // Costo de envío (DELIVERY). Se imprime como renglón "Envío:" para que los
+  // productos + envío − descuento cuadren con el TOTAL a la vista. El backend
+  // ya lo sumó dentro de `total` (ver store.routes/orders.routes), aquí solo
+  // se DESGLOSA — no se vuelve a sumar.
+  deliveryFee?: number | null;
+  // ¿El envío causa IVA? Default true (envío con IVA incluido, igual que el
+  // resto del ticket). Si false, el envío se excluye de la base gravable del
+  // desglose de IVA. Configurable desde Tickets (admin).
+  deliveryFeeTaxed?: boolean;
   total: number;
   paymentMethod?: string | null;
   businessName?: string | null;
@@ -774,6 +789,22 @@ export function ivaBreakdown(total: number, rate = IVA_RATE): { subtotal: number
   return { subtotal: base, iva: round2(total - base) };
 }
 
+/**
+ * Importe real de una línea de producto. FUENTE ÚNICA para evitar el descuadre
+ * clásico: el recibo sumaba `precio + modificador` cuando el backend ya había
+ * incluido el modificador dentro de `price`/`subtotal` (doble conteo), o lo
+ * omitía. Regla:
+ *   - Si la línea trae `subtotal` (lo persistido por el backend, autoridad del
+ *     cobro), ese ES el importe — no se le suma nada más.
+ *   - Si no (callers legacy / tests sin subtotal), se calcula
+ *     `(precio + Σ priceAdd) × cantidad`.
+ */
+export function lineAmount(item: TicketItem): number {
+  if (typeof item.subtotal === "number") return round2(item.subtotal);
+  const mods = (item.modifiers || []).reduce((s, m) => s + (m.priceAdd || 0), 0);
+  return round2(((item.price || 0) + mods) * (item.quantity || 0));
+}
+
 // ── Logo (raster ESC/POS) ──────────────────────────────────────────────────
 //
 // El logo son bytes binarios (0x00–0xFF) que NO sobreviven al envío utf8 ni a
@@ -935,12 +966,11 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
 
   // ── 3. LÍNEAS DE PRODUCTO (wrap, no truncado; modificadores con sangría) ──
   for (const item of input.items) {
-    const lineTotal =
-      item.price * item.quantity +
-      (item.modifiers || []).reduce((s, m) => s + (m.priceAdd || 0), 0) * item.quantity;
-    d += formatProductLine(item.quantity, item.name, fmtMoney(lineTotal), lw);
+    // Importe de la línea = subtotal real (no se vuelve a sumar el modificador).
+    d += formatProductLine(item.quantity, item.name, fmtMoney(lineAmount(item)), lw);
     for (const m of item.modifiers || []) {
       // Subline con sangría: "+ Nombre        +monto" alineado a la derecha.
+      // El monto es informativo (ya está dentro del importe de la línea).
       const right = m.priceAdd ? "+" + fmtMoney(m.priceAdd) : "";
       d += row("  + " + m.name, right, lw);
     }
@@ -949,10 +979,23 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   d += sep;
 
   // ── 4. TOTALES (IVA incluido: subtotal/iva se desglosan del total) ───────
+  // Los renglones de arriba ya suman el importe real de cada producto. Aquí se
+  // muestran los ajustes (descuento/envío) para que el cliente pueda seguir la
+  // aritmética: productos − descuento + envío = TOTAL.
   if (input.discount && input.discount > 0) {
     d += row("Descuento:", "-" + fmtMoney(input.discount), lw);
   }
-  const { subtotal: subSinIva, iva } = ivaBreakdown(input.total);
+  const deliveryFee = Number(input.deliveryFee || 0);
+  if (deliveryFee > 0) {
+    d += row("Envío:", "+" + fmtMoney(deliveryFee), lw);
+  }
+  // Base gravable del IVA. Default: envío con IVA incluido (se desglosa del
+  // total completo). Si el envío NO causa IVA, se excluye de la base y se
+  // reincorpora al subtotal mostrado.
+  const deliveryTaxed = input.deliveryFeeTaxed !== false;
+  const taxableTotal = deliveryTaxed ? input.total : round2(input.total - deliveryFee);
+  const { subtotal: taxBase, iva } = ivaBreakdown(taxableTotal);
+  const subSinIva = deliveryTaxed ? taxBase : round2(taxBase + deliveryFee);
   d += row("Subtotal:", fmtMoney(subSinIva), lw);
   d += row("IVA (16% incl.):", fmtMoney(iva), lw);
   if (input.tip && input.tip > 0) d += row("Propina:", fmtMoney(input.tip), lw);
@@ -1248,12 +1291,11 @@ export function splitItemsBySeat(
     subtotal: 0,
   }));
 
-  // Total de una línea INCLUYENDO modificadores con precio (misma regla que
-  // el resto del sistema; antes el prorrateo omitía el priceAdd y la suma de
-  // los tickets por comensal no cuadraba con el total de la orden).
-  const lineTotalOf = (it: TicketItem) =>
-    (it.price || 0) * (it.quantity || 0) +
-    (it.modifiers || []).reduce((s, m) => s + (m.priceAdd || 0), 0) * (it.quantity || 0);
+  // Total de una línea = misma regla única que el recibo (lineAmount): usa el
+  // subtotal persistido si viene (ya incluye modificadores) y si no cae al
+  // cálculo precio×cantidad + modificadores. Evita el doble conteo y que la
+  // suma de los tickets por comensal no cuadre con el total de la orden.
+  const lineTotalOf = (it: TicketItem) => lineAmount(it);
 
   // Items asignados a un seat específico.
   for (const it of items) {
@@ -1280,6 +1322,10 @@ export function splitItemsBySeat(
         price: perSeat,
         quantity: 1,
         modifiers: [],
+        // El importe de la parte ya está en `price` (perSeat). Fijamos también
+        // `subtotal` para que lineAmount use exactamente esta parte y NO el
+        // subtotal completo de la línea original (que `...sh` habría copiado).
+        subtotal: perSeat,
         seatNumber: s.seatNumber,
       });
       s.subtotal += perSeat;
@@ -1321,6 +1367,10 @@ export async function printSplitReceipts(
       ...input,
       items: seat.items,
       subtotal: seat.subtotal,
+      // El envío es un cargo de la orden, no del comensal: no se prorratea por
+      // asiento. Se anula para no imprimir un renglón "Envío" que descuadre el
+      // total por asiento (los pedidos a domicilio no se dividen por comensal).
+      deliveryFee: 0,
       total: seat.subtotal - (input.discount || 0) + (input.tax || 0) + (input.tip || 0),
       // El campo customerName se sobreescribe para distinguir al
       // imprimir; conserva el original como referencia.
@@ -1371,6 +1421,7 @@ export async function printEqualSplitReceipts(
   const discountCents = Math.round((input.discount || 0) * 100);
   const taxCents = Math.round((input.tax || 0) * 100);
   const tipCents = Math.round((input.tip || 0) * 100);
+  const deliveryFeeCents = Math.round((input.deliveryFee || 0) * 100);
 
   // División entera por partes y guardado del residuo para sumar al
   // último ticket — así la suma de los N tickets coincide exactamente
@@ -1395,6 +1446,7 @@ export async function printEqualSplitReceipts(
       discount: round2(splitInt(discountCents, i) / 100),
       tax: round2(splitInt(taxCents, i) / 100),
       tip: round2(splitInt(tipCents, i) / 100),
+      deliveryFee: round2(splitInt(deliveryFeeCents, i) / 100),
       total: round2(splitInt(totalCents, i) / 100),
       customerName: `Parte ${i + 1} de ${safeParts}`,
     };

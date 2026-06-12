@@ -135,6 +135,8 @@ type TicketConfigDTO = {
   showInvoiceQr?: boolean;
   invoiceUrl?: string;
   invoiceFolioPrefix?: string;  // el folio final = prefijo + número de orden
+  // ── Envío (DELIVERY) ────────────────────────────────────────────────────
+  deliveryFeeTaxed?: boolean;   // ¿el costo de envío causa IVA? default true
 };
 
 /**
@@ -172,6 +174,9 @@ export function buildReceiptIdentityFields(
     lineSpacing: dto?.lineSpacing,
     lineWeight: dto?.lineWeight,
     paperWidth: dto?.paperWidth,
+    // Envío: ¿causa IVA? Solo se manda explícito cuando el negocio lo apagó,
+    // para no alterar el desglose por defecto (envío con IVA incluido).
+    deliveryFeeTaxed: dto?.deliveryFeeTaxed,
   };
 }
 
