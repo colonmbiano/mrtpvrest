@@ -3,7 +3,12 @@ const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const { notifyLowStock } = require('../services/notifications.service');
 const { recordCostChange } = require('../services/cost-history.service');
+const { pick } = require('../lib/validate');
 const router = express.Router();
+
+// Allowlist contra mass assignment (no req.body directo a Prisma):
+// restaurantId/relaciones quedan fuera.
+const SUPPLIER_FIELDS = ['name', 'contact', 'phone', 'email', 'address', 'notes', 'isActive', 'leadTimeDays', 'minOrderAmount'];
 
 // ── PROVEEDORES (Nivel Marca) ─────────────────────────────────────────────
 
@@ -20,7 +25,7 @@ router.get('/suppliers', authenticate, requireTenantAccess, requireAdmin, async 
 router.post('/suppliers', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const supplier = await prisma.supplier.create({
-      data: { ...req.body, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId }
+      data: { ...pick(req.body, SUPPLIER_FIELDS), restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId }
     });
     res.json(supplier);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -30,7 +35,7 @@ router.put('/suppliers/:id', authenticate, requireTenantAccess, requireAdmin, as
   try {
     const supplier = await prisma.supplier.update({
       where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
-      data: req.body
+      data: pick(req.body, SUPPLIER_FIELDS)
     });
     res.json(supplier);
   } catch (e) { res.status(500).json({ error: e.message }); }

@@ -2,7 +2,12 @@ require('dotenv').config();
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { pick } = require('../lib/validate');
 const router = express.Router();
+
+// Allowlist contra mass assignment (no req.body directo a Prisma).
+// locationId y sortOrder se manejan aparte en cada handler.
+const BANNER_FIELDS = ['title', 'description', 'imageUrl', 'linkType', 'linkValue', 'isActive', 'scheduleDays', 'scheduleStart', 'scheduleEnd', 'dateFrom', 'dateTo'];
 
 async function locationIdsForRequest(req) {
   if (req.locationId) return [req.locationId];
@@ -88,7 +93,7 @@ router.post('/', authenticate, requireTenantAccess, requireAdmin, async (req, re
       where: requestedLocationId ? { locationId: requestedLocationId } : { locationId: null },
     });
     const banner = await prisma.banner.create({
-      data: { ...req.body, locationId: requestedLocationId, sortOrder: count },
+      data: { ...pick(req.body, BANNER_FIELDS), locationId: requestedLocationId, sortOrder: count },
     });
     res.json(banner);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -108,7 +113,12 @@ router.put('/:id', authenticate, requireTenantAccess, requireAdmin, async (req, 
     }
     const updated = await prisma.banner.update({
       where: { id: req.params.id },
-      data: req.body,
+      // locationId entra solo si vino en el body (ya validado arriba);
+      // sortOrder solo se asigna al crear — el PUT no lo toca.
+      data: {
+        ...pick(req.body, BANNER_FIELDS),
+        ...(Object.prototype.hasOwnProperty.call(req.body || {}, 'locationId') ? { locationId: requestedLocationId ?? null } : {}),
+      },
     });
     res.json(updated);
   } catch (e) { res.status(500).json({ error: e.message }); }
