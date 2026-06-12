@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { X, Plus, Minus, MessageSquare, Check, Pencil } from "lucide-react";
 
 interface TicketLineProps {
@@ -40,6 +40,9 @@ const TicketLine: React.FC<TicketLineProps> = ({
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(notes ?? "");
+  // Escape descarta sin guardar; como también disparamos blur al cancelar,
+  // este flag evita que el commit de onBlur sobrescriba con el borrador.
+  const cancelNextCommit = useRef(false);
 
   const startEdit = () => {
     if (!onUpdateNotes) return;
@@ -47,8 +50,17 @@ const TicketLine: React.FC<TicketLineProps> = ({
     setEditing(true);
   };
 
+  // Se invoca al pulsar ✓, Enter Y al perder el foco (onBlur). Antes solo
+  // ✓/Enter guardaban: si el cajero escribía la nota y tocaba "Cobrar/Guardar"
+  // sin confirmar, la nota se perdía y la comanda salía sin ella.
   const commitEdit = () => {
     if (!onUpdateNotes) return;
+    if (cancelNextCommit.current) {
+      cancelNextCommit.current = false;
+      setDraft(notes ?? "");
+      setEditing(false);
+      return;
+    }
     onUpdateNotes(draft);
     setEditing(false);
   };
@@ -130,8 +142,12 @@ const TicketLine: React.FC<TicketLineProps> = ({
               onChange={(e) => setDraft(e.target.value.slice(0, 200))}
               onKeyDown={(e) => {
                 if (e.key === "Enter") commitEdit();
-                if (e.key === "Escape") setEditing(false);
+                if (e.key === "Escape") {
+                  cancelNextCommit.current = true;
+                  (e.target as HTMLInputElement).blur();
+                }
               }}
+              onBlur={commitEdit}
               placeholder="Nota para cocina..."
               className="flex-1 min-w-0 h-8 min-h-[32px] bg-[#0a0a0c] border border-amber-500/30 rounded-lg px-2 text-[11px] text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-amber-500"
             />
