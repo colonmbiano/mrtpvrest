@@ -87,6 +87,39 @@ function lineSubtotal(unitPrice, quantity) {
   return Number(unitPrice) * Number(quantity);
 }
 
+/** Redondeo contable a 2 decimales (evita el clásico 0.1+0.2 de floats). */
+function round2(n) {
+  return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Totales de una orden a partir de sus líneas YA RESUELTAS EN SERVIDOR.
+ *
+ * FUENTE DE VERDAD DEL COBRO: nunca se confía en el subtotal/total del cliente.
+ * Cada `item.subtotal` ya incluye el delta de los modificadores con precio
+ * (`priceAdd`), porque se calculó como `lineSubtotal(basePrice + ΣpriceAdd, qty)`.
+ * Antes el create-order persistía el total del payload del TPV; si el cliente lo
+ * calculaba mal (p.ej. omitía un modificador) la orden se cobraba de menos. Este
+ * helper se usa tanto al crear la orden como al agregar rondas para que ambas
+ * rutas no puedan desincronizarse jamás.
+ *
+ *   subtotal = Σ(item.subtotal)
+ *   discount = clamp(discount, 0, subtotal)
+ *   total    = max(0, subtotal − discount + deliveryFee)
+ *
+ * @param {{subtotal:number}[]} items  Líneas resueltas (cada una con su subtotal).
+ * @param {object} [opts]
+ * @param {number} [opts.discount=0]     Descuento solicitado (se acota a [0, subtotal]).
+ * @param {number} [opts.deliveryFee=0]  Cargo de envío.
+ * @returns {{subtotal:number, discount:number, total:number}}
+ */
+function computeOrderTotals(items, { discount = 0, deliveryFee = 0 } = {}) {
+  const subtotal = round2((items || []).reduce((sum, item) => sum + Number(item?.subtotal || 0), 0));
+  const safeDiscount = round2(Math.min(Math.max(0, Number(discount) || 0), subtotal));
+  const total = round2(Math.max(0, subtotal - safeDiscount + (Number(deliveryFee) || 0)));
+  return { subtotal, discount: safeDiscount, total };
+}
+
 // Mapa por defecto de método de pago → bucket del corte de caja.
 const PAYMENT_METHOD_MAP = {
   CASH: 'totalCash',
@@ -139,6 +172,8 @@ module.exports = {
   resolveVariantSelection,
   applyFreeModifiers,
   lineSubtotal,
+  round2,
+  computeOrderTotals,
   summarizePayments,
   cashCutSummary,
   PAYMENT_METHOD_MAP,

@@ -426,6 +426,22 @@ export interface ReceiptInput {
   address?: string | null;
   showPhone?: boolean;
   phone?: string | null;
+  // ── Identidad de negocio extendida (encabezado fiscal) ──────────────────
+  // Si el tenant aún no define estos campos, el builder los omite (no imprime
+  // líneas vacías). Ver reporte "campos del tenant a agregar".
+  businessType?: string | null;   // giro comercial (ej. "Restaurante")
+  rfc?: string | null;            // RFC del emisor
+  // ── Auditoría de caja ───────────────────────────────────────────────────
+  cashierName?: string | null;    // cajero/empleado que cobró
+  terminalName?: string | null;   // terminal/dispositivo
+  // ── Lugar ───────────────────────────────────────────────────────────────
+  numberOfGuests?: number | null; // para "Comensales: N" cuando no hay mesa
+  // ── Bloque de factura (QR) ──────────────────────────────────────────────
+  showInvoiceQr?: boolean;
+  invoiceUrl?: string | null;     // destino del QR (ej. facturacion.masterburguers.com)
+  invoiceFolio?: string | null;   // folio fiscal (ej. MB-00123)
+  // ── Propina sugerida (informativa, típico dine-in) ──────────────────────
+  suggestedTipPercents?: number[];
   // Tipografía (config admin). fontFamily decide Font A/B; fontSize el alto;
   // lineSpacing el interlineado; lineWeight qué tan marcadas las líneas.
   fontFamily?: string | null;
@@ -443,6 +459,105 @@ const ORDER_TYPE_LABEL: Record<string, string> = {
   TAKEOUT:  "Para llevar",
   DELIVERY: "A domicilio",
 };
+
+// Método de pago → español. Mapa explícito (no hardcode en el render) para que
+// agregar un método nuevo sea una sola línea. Cubre todo el enum PaymentMethod.
+const PAYMENT_LABEL: Record<string, string> = {
+  CASH:             "EFECTIVO",
+  CASH_ON_DELIVERY: "EFECTIVO",
+  CARD:             "TARJETA",
+  CARD_PRESENT:     "TARJETA",
+  TRANSFER:         "TRANSFERENCIA",
+  SPEI:             "TRANSFERENCIA",
+  OXXO:             "OXXO",
+  COURTESY:         "CORTESIA",
+  PENDING:          "PENDIENTE",
+};
+
+/** Traduce el método de pago a español; desconocido → se muestra tal cual (upper). */
+export function paymentLabel(method?: string | null): string {
+  if (!method) return "";
+  const key = String(method).toUpperCase();
+  return PAYMENT_LABEL[key] ?? key;
+}
+
+/**
+ * Antepone una etiqueta SÓLO si el valor no la trae ya, evitando duplicados
+ * tipo "Mesa Mesa 12". `withLabel("Mesa", "Mesa 12") → "Mesa 12"`;
+ * `withLabel("Mesa", "12") → "Mesa 12"`.
+ */
+export function withLabel(label: string, value: string): string {
+  const v = String(value ?? "").trim();
+  if (!v) return label;
+  return new RegExp(`^${label}\\b`, "i").test(v) ? v : `${label} ${v}`;
+}
+
+/**
+ * Renderiza una línea de producto: `Nx Nombre .......  $importe`. Si el nombre
+ * no cabe, lo envuelve a líneas siguientes con sangría (en vez de truncar con
+ * "..."), para no perder información. El importe va sólo en la primera línea.
+ */
+export function formatProductLine(
+  quantity: number,
+  name: string,
+  amount: string,
+  width: number,
+  indent = "   ",
+): string {
+  const prefix = `${quantity}x `;
+  const firstNameMax = Math.max(1, width - amount.length - 1 - prefix.length);
+  const contMax = Math.max(1, width - indent.length);
+
+  const lines: string[] = [];
+  let cur = "";
+  let max = firstNameMax;
+  const flush = () => { lines.push(cur); cur = ""; max = contMax; };
+  for (let word of String(name ?? "").split(/\s+/).filter(Boolean)) {
+    // Palabra más larga que el ancho disponible → corte duro.
+    while (word.length > max) {
+      if (cur) flush();
+      lines.push(word.slice(0, max));
+      word = word.slice(max);
+      max = contMax;
+    }
+    const cand = cur ? `${cur} ${word}` : word;
+    if (cand.length > max && cur) { flush(); cur = word; }
+    else cur = cand;
+  }
+  if (cur) lines.push(cur);
+  if (lines.length === 0) lines.push("");
+
+  let out = row(prefix + lines[0], amount, width);
+  for (let i = 1; i < lines.length; i += 1) out += indent + lines[i] + "\n";
+  return out;
+}
+
+/**
+ * Bloque ESC/POS para imprimir un QR (modelo 2). Lo soportan la mayoría de
+ * térmicas modernas (Epson y compatibles, incl. las del puerto 9100). Si el
+ * firmware no lo entiende, ignora los comandos y el resto del ticket sale igual.
+ * Todos los bytes son ≤ 0x7F, así que sobreviven a normalizeThermalText().
+ */
+export function qrCode(data: string, moduleSize = 6): string {
+  const c = (n: number) => String.fromCharCode(n);
+  const payload = String(data ?? "");
+  const len = payload.length + 3;
+  const pL = len & 0xff;
+  const pH = (len >> 8) & 0xff;
+  const size = Math.min(15, Math.max(1, moduleSize));
+  return (
+    // Modelo 2
+    GS + "(k" + c(4) + c(0) + c(49) + c(65) + c(50) + c(0) +
+    // Tamaño de módulo
+    GS + "(k" + c(3) + c(0) + c(49) + c(67) + c(size) +
+    // Nivel de corrección de errores = M
+    GS + "(k" + c(3) + c(0) + c(49) + c(69) + c(48) +
+    // Cargar datos en el símbolo
+    GS + "(k" + c(pL) + c(pH) + c(49) + c(80) + c(48) + payload +
+    // Imprimir el símbolo
+    GS + "(k" + c(3) + c(0) + c(49) + c(81) + c(48)
+  );
+}
 
 // ── Builders ──────────────────────────────────────────────────────────────
 
@@ -535,7 +650,7 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     cfg.ticketNameSize === "xlarge" ? CMD.TRIPLE_ON : CMD.DOUBLE_ON;
   const nameSizeOff = cfg.ticketNameSize === "normal" ? "" : CMD.DOUBLE_OFF;
   if (cfg.showTableNumber && input.tableNumber) {
-    d += nameSizeOn + CMD.BOLD_ON + "Mesa " + input.tableNumber + "\n" + CMD.BOLD_OFF + nameSizeOff;
+    d += nameSizeOn + CMD.BOLD_ON + withLabel("Mesa", String(input.tableNumber)) + "\n" + CMD.BOLD_OFF + nameSizeOff;
   }
   if (cfg.showCustomerName && input.customerName) {
     d += nameSizeOn + CMD.BOLD_ON + input.customerName + "\n" + CMD.BOLD_OFF + nameSizeOff;
@@ -614,13 +729,29 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
   return d;
 }
 
+// IVA estándar MX (16%), modelo "IVA incluido": el precio que ve el cliente ya
+// trae el impuesto, así que el subtotal sin IVA se DESGLOSA del total
+// (subtotal = total / 1.16; iva = total − subtotal). Centralizado para que
+// recibo y pantalla del TPV usen la misma aritmética.
+const IVA_RATE = 0.16;
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+export function ivaBreakdown(total: number, rate = IVA_RATE): { subtotal: number; iva: number } {
+  const base = round2(total / (1 + rate));
+  return { subtotal: base, iva: round2(total - base) };
+}
+
 export function buildCustomerReceipt(input: ReceiptInput): string {
   const now = new Date().toLocaleString("es-MX");
   // Tipografía configurable (admin). lw = ancho real en caracteres según
   // fuente/papel; heavy/light controlan qué tan marcadas van las líneas.
   const lw = lineWidthFor(input.fontFamily, input.paperWidth);
+  const sep = "-".repeat(lw) + "\n"; // separador al ancho REAL del papel
   const heavy = input.lineWeight === "bold";
   const light = input.lineWeight === "light";
+  const boldOn = light ? "" : CMD.BOLD_ON;
+  const boldOff = light ? "" : CMD.BOLD_OFF;
+
   let d =
     CMD.INIT +
     fontCmd(input.fontFamily) +
@@ -636,64 +767,96 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
     // d += ESC + "..." (comando de imagen futuro)
   }
 
+  // ── 1. ENCABEZADO DE NEGOCIO (del tenant, sin hardcode) ──────────────────
   if (input.businessName) {
     d += CMD.BOLD_ON + CMD.DOUBLE_ON + input.businessName + "\n" + CMD.DOUBLE_OFF + CMD.BOLD_OFF;
   }
-  
-  if (input.showAddress && input.address) {
-    d += input.address + "\n";
-  }
-  if (input.showPhone && input.phone) {
-    d += "Tel: " + input.phone + "\n";
-  }
+  if (input.businessType) d += input.businessType + "\n";
+  if (input.showAddress !== false && input.address) d += input.address + "\n";
+  if (input.showPhone !== false && input.phone) d += "Tel: " + input.phone + "\n";
+  if (input.rfc) d += "RFC: " + input.rfc + "\n";
 
-  d += now + "\n";
-  if (input.orderNumber) d += "Orden #" + input.orderNumber + "\n";
+  d += sep + CMD.ALIGN_LEFT;
+
+  // ── 2. META (ticket, tipo, lugar, fecha, cajero, terminal) ───────────────
+  if (input.orderNumber) d += row("Ticket:", "#" + input.orderNumber, lw);
   if (input.orderType) {
-    d += (ORDER_TYPE_LABEL[input.orderType] || input.orderType) + "\n";
+    d += row("Tipo:", ORDER_TYPE_LABEL[input.orderType] || String(input.orderType), lw);
   }
-  if (input.tableNumber) d += "Mesa " + input.tableNumber + "\n";
-  if (input.customerName) d += input.customerName + "\n";
+  // Lugar: Mesa N (sin duplicar el label) o, si no hay mesa, Comensales: N.
+  if (input.tableNumber) {
+    d += row("Lugar:", withLabel("Mesa", String(input.tableNumber)), lw);
+  } else if (input.numberOfGuests && input.numberOfGuests > 0) {
+    d += row("Comensales:", String(input.numberOfGuests), lw);
+  }
+  if (input.customerName) d += row("Cliente:", input.customerName, lw);
+  d += row("Fecha:", now, lw);
+  if (input.cashierName) d += row("Cajero:", input.cashierName, lw);
+  if (input.terminalName) d += row("Terminal:", input.terminalName, lw);
 
-  d += CMD.LINE + CMD.ALIGN_LEFT;
+  d += sep;
 
+  // ── 3. LÍNEAS DE PRODUCTO (wrap, no truncado; modificadores con sangría) ──
   for (const item of input.items) {
-    const lineTotal = (item.price * item.quantity)
-      + (item.modifiers || []).reduce((s, m) => s + (m.priceAdd || 0), 0) * item.quantity;
-    d += row(`${item.quantity}x ${truncate(item.name, lw - 10)}`, fmtMoney(lineTotal), lw);
-    if (item.modifiers && item.modifiers.length > 0) {
-      for (const m of item.modifiers) {
-        const extra = m.priceAdd ? ` (+${fmtMoney(m.priceAdd)})` : "";
-        d += `  · ${m.name}${extra}\n`;
-      }
+    const lineTotal =
+      item.price * item.quantity +
+      (item.modifiers || []).reduce((s, m) => s + (m.priceAdd || 0), 0) * item.quantity;
+    d += formatProductLine(item.quantity, item.name, fmtMoney(lineTotal), lw);
+    for (const m of item.modifiers || []) {
+      // Subline con sangría: "+ Nombre        +monto" alineado a la derecha.
+      const right = m.priceAdd ? "+" + fmtMoney(m.priceAdd) : "";
+      d += row("  + " + m.name, right, lw);
     }
   }
 
-  d += CMD.LINE;
-  d += row("Subtotal:", fmtMoney(input.subtotal), lw);
-  if (input.discount && input.discount > 0) d += row("Descuento:", "-" + fmtMoney(input.discount), lw);
-  if (input.tax && input.tax > 0)           d += row("Impuestos:", fmtMoney(input.tax), lw);
-  if (input.tip && input.tip > 0)           d += row("Propina:",   fmtMoney(input.tip), lw);
-  // El TOTAL va en negrita salvo en modo "sencillo" (light).
-  d += (light ? "" : CMD.BOLD_ON) + row("TOTAL:", fmtMoney(input.total), lw) + (light ? "" : CMD.BOLD_OFF);
-  d += CMD.LINE;
+  d += sep;
 
+  // ── 4. TOTALES (IVA incluido: subtotal/iva se desglosan del total) ───────
+  if (input.discount && input.discount > 0) {
+    d += row("Descuento:", "-" + fmtMoney(input.discount), lw);
+  }
+  const { subtotal: subSinIva, iva } = ivaBreakdown(input.total);
+  d += row("Subtotal:", fmtMoney(subSinIva), lw);
+  d += row("IVA (16% incl.):", fmtMoney(iva), lw);
+  if (input.tip && input.tip > 0) d += row("Propina:", fmtMoney(input.tip), lw);
+  d += boldOn + CMD.DOUBLE_ON + row("TOTAL:", fmtMoney(input.total), lw) + CMD.DOUBLE_OFF + boldOff;
+
+  d += sep;
+
+  // ── 5. PAGO (método traducido) + propina sugerida (informativa) ──────────
   if (input.paymentMethod) {
-    d += CMD.ALIGN_CENTER + "Pagado con: " + input.paymentMethod + "\n";
+    d += row("Pago:", paymentLabel(input.paymentMethod), lw);
+  }
+  const tipPcts = input.suggestedTipPercents
+    ?? (input.orderType === "DINE_IN" ? [10] : []);
+  if (tipPcts.length > 0) {
+    d += "\n" + CMD.ALIGN_CENTER + "Propina sugerida\n" + CMD.ALIGN_LEFT;
+    const { subtotal: baseForTip } = ivaBreakdown(input.total);
+    for (const pct of tipPcts) {
+      d += row(`  ${pct}%`, fmtMoney(round2(baseForTip * (pct / 100))), lw);
+    }
   }
 
+  // ── 6. BLOQUE DE FACTURA (QR) ────────────────────────────────────────────
+  if (input.showInvoiceQr && input.invoiceUrl) {
+    d += sep + CMD.ALIGN_CENTER;
+    d += boldOn + "¿Quieres tu factura?\n" + boldOff;
+    d += qrCode(input.invoiceUrl) + "\n";
+    if (input.invoiceFolio) d += "Folio: " + input.invoiceFolio + "\n";
+    d += CMD.ALIGN_LEFT;
+  }
+
+  // ── 7. PIE ───────────────────────────────────────────────────────────────
+  d += CMD.ALIGN_CENTER + CMD.LF;
   if (input.businessFooter) {
-    d += CMD.ALIGN_CENTER + CMD.LF + input.businessFooter + "\n";
+    d += input.businessFooter + "\n";
   } else {
-    d += CMD.ALIGN_CENTER + CMD.LF + "¡Gracias por su compra!\n";
+    d += "¡Gracias por tu compra!\n";
+    d += "Te esperamos pronto\n";
   }
 
   d += (heavy ? CMD.DBLSTRIKE_OFF + CMD.BOLD_OFF : "") + CMD.LF + CMD.LF + CMD.CUT;
   return d;
-}
-
-function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 
 // ── Orquestadores: enviar a impresoras de la sucursal ────────────────────
@@ -947,30 +1110,38 @@ export function splitItemsBySeat(
     subtotal: 0,
   }));
 
+  // Total de una línea INCLUYENDO modificadores con precio (misma regla que
+  // el resto del sistema; antes el prorrateo omitía el priceAdd y la suma de
+  // los tickets por comensal no cuadraba con el total de la orden).
+  const lineTotalOf = (it: TicketItem) =>
+    (it.price || 0) * (it.quantity || 0) +
+    (it.modifiers || []).reduce((s, m) => s + (m.priceAdd || 0), 0) * (it.quantity || 0);
+
   // Items asignados a un seat específico.
   for (const it of items) {
     const seat = it.seatNumber;
     if (typeof seat === "number" && seat >= 1 && seat <= numberOfGuests) {
       const target = seats[seat - 1]!;
       target.items.push(it);
-      target.subtotal += (it.price || 0) * (it.quantity || 0);
+      target.subtotal += lineTotalOf(it);
     }
   }
 
   // Items compartidos: prorrateo. La cantidad se queda fija (1 línea
-  // visual por seat) y el precio se divide entre N. Ej: pizza $300
-  // entre 4 → cada seat ve "1x Pizza (compartido) $75".
+  // visual por seat) y el total (con modificadores) se divide entre N. Ej:
+  // pizza $300 entre 4 → cada seat ve "1x Pizza (compartido) $75". Se limpian
+  // los modificadores del clon porque su precio YA quedó dentro de `price`
+  // (perSeat) — si no, el render los volvería a sumar (doble conteo).
   const shared = items.filter((it) => it.seatNumber == null);
   for (const sh of shared) {
-    const lineTotal = (sh.price || 0) * (sh.quantity || 0);
-    const perSeat = lineTotal / numberOfGuests;
+    const perSeat = lineTotalOf(sh) / numberOfGuests;
     seats.forEach((s) => {
       s.items.push({
         ...sh,
         name: sh.name + " (compartido)",
-        // Precio prorrateado por seat; quantity 1 para que el ticket sea legible.
         price: perSeat,
         quantity: 1,
+        modifiers: [],
         seatNumber: s.seatNumber,
       });
       s.subtotal += perSeat;

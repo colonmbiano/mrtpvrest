@@ -4,6 +4,7 @@ const {
   resolveVariantSelection,
   applyFreeModifiers,
   lineSubtotal,
+  computeOrderTotals,
   summarizePayments,
   cashCutSummary,
   PAYMENT_METHOD_MAP,
@@ -121,6 +122,60 @@ describe('money :: applyFreeModifiers (N gratis por grupo)', () => {
 describe('money :: lineSubtotal', () => {
   test('precio × cantidad', () => {
     expect(lineSubtotal(170, 3)).toBe(510);
+  });
+});
+
+// ── computeOrderTotals (GUARDARRAÍL: total NO ignora modificadores) ──────────
+describe('money :: computeOrderTotals', () => {
+  // Caso real reportado: el modificador con precio ($30) desaparecía del total.
+  // El subtotal debe dar $485.00 (no $455) — la línea Boneless vale 135+30.
+  test('un modificador con precio NO se pierde en el total (ticket $485)', () => {
+    // Boneless $135 base + "Papas Extra" $30 (grupo sin gratis) → línea $165.
+    const selectedByGroup = new Map([
+      ['g_extras', [{ id: 'm_papas', name: 'Papas Extra', groupId: 'g_extras', priceAdd: 30 }]],
+    ]);
+    const groupsById = new Map([['g_extras', { id: 'g_extras', freeModifiersLimit: 0 }]]);
+    const { unitExtra } = applyFreeModifiers(selectedByGroup, groupsById);
+    const bonelessLine = lineSubtotal(135 + unitExtra, 1);
+    expect(bonelessLine).toBe(165); // sanity: el modificador entró en la línea
+
+    const items = [
+      { subtotal: bonelessLine },          // Boneless + Papas Extra = 165
+      { subtotal: lineSubtotal(115, 1) },  // Hamburguesa
+      { subtotal: lineSubtotal(105, 1) },  // Alitas
+      { subtotal: lineSubtotal(30, 1) },   // Agua
+      { subtotal: lineSubtotal(35, 1) },   // Refresco vidrio
+      { subtotal: lineSubtotal(35, 1) },   // Refresco 600ml
+    ];
+
+    const { subtotal, total } = computeOrderTotals(items);
+    expect(subtotal).toBe(485.0);
+    expect(total).toBe(485.0);
+    expect(subtotal).not.toBe(455); // el bug histórico (omitía el +$30)
+  });
+
+  test('el descuento se acota a [0, subtotal]', () => {
+    expect(computeOrderTotals([{ subtotal: 100 }], { discount: 150 })).toEqual({
+      subtotal: 100, discount: 100, total: 0,
+    });
+    expect(computeOrderTotals([{ subtotal: 100 }], { discount: -20 })).toEqual({
+      subtotal: 100, discount: 0, total: 100,
+    });
+  });
+
+  test('el deliveryFee se suma al total', () => {
+    expect(computeOrderTotals([{ subtotal: 200 }], { discount: 20, deliveryFee: 35 })).toEqual({
+      subtotal: 200, discount: 20, total: 215,
+    });
+  });
+
+  test('redondea a 2 decimales (sin ruido de floats)', () => {
+    const { subtotal } = computeOrderTotals([{ subtotal: 0.1 }, { subtotal: 0.2 }]);
+    expect(subtotal).toBe(0.3);
+  });
+
+  test('lista vacía → todo en cero', () => {
+    expect(computeOrderTotals([])).toEqual({ subtotal: 0, discount: 0, total: 0 });
   });
 });
 

@@ -23,6 +23,13 @@ interface TicketConfig {
   showAddress: boolean;
   address: string;
   phone: string;
+  // Datos fiscales del emisor (encabezado del recibo).
+  businessType: string;
+  rfc: string;
+  // Bloque de autofactura por QR al pie del recibo.
+  showInvoiceQr: boolean;
+  invoiceUrl: string;
+  invoiceFolioPrefix: string;
   // Tipografía del recibo. fontFamily → Font A/B; fontSize → alto;
   // lineSpacing → interlineado; lineWeight → qué tan marcadas las líneas.
   paperWidth: string;
@@ -55,6 +62,7 @@ interface TicketConfig {
 const EMPTY: TicketConfig = {
   businessName: "", header: "", subheader: "", footer: "Gracias por su preferencia",
   showLogo: true, showAddress: true, address: "", phone: "",
+  businessType: "", rfc: "", showInvoiceQr: false, invoiceUrl: "", invoiceFolioPrefix: "",
   paperWidth: "80mm", fontFamily: "monospace", fontSize: "medium",
   lineSpacing: "normal", lineWeight: "normal",
   showPoints: true, showTip: true, tipSuggestions: "[10,15,20]",
@@ -131,6 +139,10 @@ export default function TicketFormatTab() {
               <Field label="Dirección"><input value={cfg.address} onChange={(e) => setCfg({ ...cfg, address: e.target.value })} className={inputCls} /></Field>
               <Field label="Teléfono"><input value={cfg.phone} onChange={(e) => setCfg({ ...cfg, phone: e.target.value })} className={inputCls} /></Field>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Giro comercial"><input value={cfg.businessType} onChange={(e) => setCfg({ ...cfg, businessType: e.target.value })} className={inputCls} placeholder="Ej: Restaurante" /></Field>
+              <Field label="RFC"><input value={cfg.rfc} onChange={(e) => setCfg({ ...cfg, rfc: e.target.value.toUpperCase() })} className={inputCls} placeholder="XAXX010101000" /></Field>
+            </div>
             <Field label="Pie de página"><input value={cfg.footer} onChange={(e) => setCfg({ ...cfg, footer: e.target.value })} className={inputCls} /></Field>
             <div className="grid grid-cols-2 gap-3 pt-2">
               <Toggle label="Mostrar logo" checked={cfg.showLogo} onChange={(v) => setCfg({ ...cfg, showLogo: v })} />
@@ -138,6 +150,15 @@ export default function TicketFormatTab() {
               <Toggle label="Puntos de lealtad" checked={cfg.showPoints} onChange={(v) => setCfg({ ...cfg, showPoints: v })} />
               <Toggle label="Sugerir propinas" checked={cfg.showTip} onChange={(v) => setCfg({ ...cfg, showTip: v })} />
             </div>
+
+            <SectionLabel>Factura (QR al pie del recibo)</SectionLabel>
+            <Toggle label="Imprimir QR de autofactura" checked={cfg.showInvoiceQr} onChange={(v) => setCfg({ ...cfg, showInvoiceQr: v })} />
+            {cfg.showInvoiceQr && (
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="URL del portal de facturación"><input value={cfg.invoiceUrl} onChange={(e) => setCfg({ ...cfg, invoiceUrl: e.target.value })} className={inputCls} placeholder="https://facturacion.midominio.com" /></Field>
+                <Field label="Prefijo de folio"><input value={cfg.invoiceFolioPrefix} onChange={(e) => setCfg({ ...cfg, invoiceFolioPrefix: e.target.value })} className={inputCls} placeholder="MB-" /></Field>
+              </div>
+            )}
 
             <SectionLabel>Tipografía del recibo</SectionLabel>
             <Field label="Fuente">

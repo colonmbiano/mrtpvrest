@@ -8,7 +8,7 @@ import SplitOrderModal from "@/components/pos/SplitOrderModal";
 import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
-import { usePrinters, useReceiptIdentity, useKitchenConfig, useFullTicketConfig } from "@/hooks/usePrinters";
+import { usePrinters, useReceiptIdentity, useKitchenConfig, useFullTicketConfig, buildReceiptIdentityFields } from "@/hooks/usePrinters";
 import { subscribeToEvents, useClientValue, useHydrated } from "@/hooks/useClientValue";
 import {
   DEFAULT_SIDEBAR_PRESET,
@@ -288,14 +288,17 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         0
       );
 
+      const orderNum =
+        payOrder.orderNumber || String(payOrder.id).slice(-6).toUpperCase();
       const receiptInput: ReceiptInput = {
-        orderNumber:
-          payOrder.orderNumber ||
-          String(payOrder.id).slice(-6).toUpperCase(),
+        ...buildReceiptIdentityFields(ticketConfig, { businessName, businessFooter }, restaurantName, orderNum),
+        orderNumber: orderNum,
         orderType: payOrder.orderType || null,
         tableNumber: payOrder.table?.name || payOrder.tableNumber || null,
         customerName: payOrder.customerName || payOrder.user?.name || null,
         customerPhone: payOrder.customerPhone || null,
+        numberOfGuests: payOrder.numberOfGuests ?? null,
+        cashierName: currentEmployee?.name || null,
         items,
         subtotal: Number(payOrder.subtotal ?? subtotalCalc),
         discount: Number(payOrder.discount ?? 0),
@@ -303,19 +306,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         tip: Number(payOrder.tip ?? 0),
         total: Number(payOrder.total ?? subtotalCalc),
         paymentMethod: method,
-        businessName: ticketConfig?.businessName || businessName || restaurantName || null,
-        businessFooter: ticketConfig?.footer || businessFooter || null,
-        showLogo: ticketConfig?.showLogo,
-        logoUrl: ticketConfig?.logoUrl,
-        showAddress: ticketConfig?.showAddress,
-        address: ticketConfig?.address,
-        showPhone: ticketConfig?.showPhone,
-        phone: ticketConfig?.phone,
-        fontFamily: ticketConfig?.fontFamily,
-        fontSize: ticketConfig?.fontSize,
-        lineSpacing: ticketConfig?.lineSpacing,
-        lineWeight: ticketConfig?.lineWeight,
-        paperWidth: ticketConfig?.paperWidth,
       };
 
       // Dispatch a CASHIER printers según el plan.
@@ -492,12 +482,16 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           ),
         0
       );
+      const fullOrderNum = full.orderNumber || String(full.id).slice(-6).toUpperCase();
       const res = await printCustomerReceipt(printers, {
-        orderNumber: full.orderNumber || String(full.id).slice(-6).toUpperCase(),
+        ...buildReceiptIdentityFields(ticketConfig, { businessName, businessFooter }, restaurantName, fullOrderNum),
+        orderNumber: fullOrderNum,
         orderType: full.orderType || null,
         tableNumber: full.table?.name || full.tableNumber || null,
         customerName: full.customerName || full.user?.name || null,
         customerPhone: full.customerPhone || null,
+        numberOfGuests: full.numberOfGuests ?? null,
+        cashierName: currentEmployee?.name || null,
         items,
         subtotal: Number(full.subtotal ?? subtotalCalc),
         discount: Number(full.discount ?? 0),
@@ -505,19 +499,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         tip: Number(full.tip ?? 0),
         total: Number(full.total ?? subtotalCalc),
         paymentMethod: full.paymentMethod || null,
-        businessName: ticketConfig?.businessName || businessName || restaurantName || null,
-        businessFooter: ticketConfig?.footer || businessFooter || null,
-        showLogo: ticketConfig?.showLogo,
-        logoUrl: ticketConfig?.logoUrl,
-        showAddress: ticketConfig?.showAddress,
-        address: ticketConfig?.address,
-        showPhone: ticketConfig?.showPhone,
-        phone: ticketConfig?.phone,
-        fontFamily: ticketConfig?.fontFamily,
-        fontSize: ticketConfig?.fontSize,
-        lineSpacing: ticketConfig?.lineSpacing,
-        lineWeight: ticketConfig?.lineWeight,
-        paperWidth: ticketConfig?.paperWidth,
       });
 
       if (res.ok > 0 && res.failed.length === 0) {
