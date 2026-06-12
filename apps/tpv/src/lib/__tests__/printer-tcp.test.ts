@@ -10,6 +10,7 @@ import {
   printKitchenTickets,
   printCustomerReceipt,
   buildCustomerReceipt,
+  buildKitchenTicket,
   paymentLabel,
   withLabel,
   formatProductLine,
@@ -100,6 +101,33 @@ describe("recibo :: bloque de factura (QR)", () => {
     expect(con).toContain("¿Quieres tu factura?");
     expect(con).toContain("facturacion.masterburguers.com");
     expect(con).toContain("MB-00123");
+  });
+});
+
+describe("comanda :: título = nombre/mesa, sin 'COMANDA'", () => {
+  it("imprime Mesa/cliente arriba y NO el título 'COMANDA' por defecto", () => {
+    const out = buildKitchenTicket({
+      orderType: "DINE_IN",
+      tableNumber: "Mesa 5",
+      customerName: "Ana",
+      orderNumber: "1042",
+      items: [{ name: "Taco", quantity: 1, price: 20 }],
+    });
+    expect(out).not.toContain("COMANDA");
+    expect(out).toContain("Mesa 5");          // sin duplicar "Mesa"
+    expect(out).not.toContain("Mesa Mesa");
+    expect(out).toContain("Ana");
+    // El nombre/mesa va ANTES del número de orden (es el título).
+    expect(out.indexOf("Mesa 5")).toBeLessThan(out.indexOf("#1042"));
+  });
+
+  it("respeta un header explícito si el negocio lo configura", () => {
+    const out = buildKitchenTicket({
+      tableNumber: "3",
+      items: [{ name: "X", quantity: 1, price: 1 }],
+      config: { header: "COCINA CENTRAL" },
+    });
+    expect(out).toContain("COCINA CENTRAL");
   });
 });
 
