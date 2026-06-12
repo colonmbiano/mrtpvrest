@@ -178,6 +178,57 @@ async function discountInventory(prisma, orderItems, orderId, restaurantId, loca
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// restoreInventoryForCancelledOrder · revierte el stock descontado por una
+// orden al cancelarla. No recalcula recetas (pueden haber cambiado desde la
+// venta): repone exactamente lo que registran los StockMovements SALE de la
+// orden, neteado contra reversiones previas (ADJUSTMENT con el mismo ref)
+// para que reintentos o dobles llamadas no dupliquen la reposición.
+//
+// Órdenes que nunca descontaron inventario (web/kiosko/storefront, o items
+// sin receta) no tienen movimientos SALE → no-op. La reversión usa reason
+// ADJUSTMENT porque el enum no tiene un valor de cancelación; el refType
+// 'order' + notes dejan el rastro auditable.
+async function restoreInventoryForCancelledOrder(prisma, orderId) {
+  const movements = await prisma.stockMovement.findMany({
+    where: { refType: 'order', refId: orderId, reason: { in: ['SALE', 'ADJUSTMENT'] } },
+    select: { ingredientId: true, delta: true },
+  });
+  if (movements.length === 0) return;
+
+  // Neto por ingrediente: SALE aporta negativo, reversiones previas positivo.
+  const netByIngredient = new Map();
+  for (const m of movements) {
+    netByIngredient.set(m.ingredientId, (netByIngredient.get(m.ingredientId) || 0) + Number(m.delta || 0));
+  }
+
+  for (const [ingredientId, net] of netByIngredient) {
+    if (net >= 0) continue; // nada pendiente de reponer
+    const toRestore = -net;
+
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.ingredient.update({
+        where: { id: ingredientId },
+        data: { stock: { increment: toRestore } },
+        select: { id: true, stock: true, baseUnit: true, locationId: true },
+      });
+      await tx.stockMovement.create({
+        data: {
+          ingredientId,
+          locationId: updated.locationId,
+          delta: toRestore,
+          unit: updated.baseUnit,
+          reason: 'ADJUSTMENT',
+          refType: 'order',
+          refId: orderId,
+          balanceAfter: Number(updated.stock),
+          notes: 'Reversión por cancelación de orden',
+        },
+      });
+    });
+  }
+}
+
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { normalizePhone } = require('@mrtpvrest/config/phone');
@@ -1111,10 +1162,26 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
 router.put('/:id/status', authenticate, requireTenantAccess, validateBody(updateStatusSchema), async (req, res) => {
   try {
     const { status } = req.body;
-    const order = await prisma.order.update({
+    // Estado previo: el restore de inventario solo debe correr en la
+    // transición real → CANCELLED (no si la orden ya estaba cancelada).
+    const existing = await prisma.order.findFirst({
       where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.restaurantId },
+      select: { id: true, status: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    const order = await prisma.order.update({
+      where: { id: existing.id },
       data: { status }
     });
+
+    // Cancelar repone el stock que la orden descontó al venderse. Best-effort:
+    // la cancelación no debe fallar por inventario, pero sí queda log.
+    if (status === 'CANCELLED' && existing.status !== 'CANCELLED') {
+      await restoreInventoryForCancelledOrder(prisma, order.id).catch((e) =>
+        console.error('[orders] restoreInventory al cancelar:', e.message)
+      );
+    }
 
     // Cancelar un dine-in libera la mesa (AVAILABLE), no DIRTY: el ticket
     // nunca llegó a usarse. Si no se libera, la mesa queda OCCUPIED con
@@ -1682,3 +1749,4 @@ router.post('/:id/messages', authenticate, requireTenantAccess, validateBody(mes
 module.exports = router;
 // Exportar discountInventory para tests E2E sin levantar el servidor HTTP.
 module.exports.discountInventory = discountInventory;
+module.exports.restoreInventoryForCancelledOrder = restoreInventoryForCancelledOrder;

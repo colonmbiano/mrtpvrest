@@ -12,6 +12,9 @@ jest.mock('@mrtpvrest/database', () => ({
     pushSubscription: { findMany: jest.fn().mockResolvedValue([]), delete: jest.fn() },
     integrationConfig: { findFirst: jest.fn() },
     restaurant: { findUnique: jest.fn() },
+    // sendOrderWhatsApp consulta countryCode antes de resolver la integración;
+    // sin este mock el throw saltaba directo al fallback y el test moría.
+    restaurantConfig: { findUnique: jest.fn().mockResolvedValue(null) },
   },
 }));
 
@@ -69,6 +72,7 @@ describe('notifyOrderStatus :: enrutamiento de WhatsApp', () => {
         pushSubscription: { findMany: jest.fn().mockResolvedValue([]), delete: jest.fn() },
         integrationConfig: { findFirst: jest.fn().mockResolvedValue(null) },
         restaurant: { findUnique: jest.fn().mockResolvedValue({ name: 'Pizzería Sol' }) },
+        restaurantConfig: { findUnique: jest.fn().mockResolvedValue(null) },
       },
     }));
     jest.doMock('web-push', () => ({ setVapidDetails: jest.fn(), sendNotification: jest.fn().mockResolvedValue({}) }));
