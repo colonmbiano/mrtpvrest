@@ -113,6 +113,10 @@ body {
   color: var(--text-primary);
   font-family: var(--font-body);
   overflow-x: hidden;
+  /* PWA iOS: con viewportFit:cover + status bar translúcida el contenido
+     se metería bajo el notch/barra. env() resuelve a 0 sin notch (Android/web). */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Transiciones suaves */

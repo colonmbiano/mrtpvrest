@@ -2,8 +2,9 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import api from "@/lib/api";
+import { useWakeLock } from "@/lib/useWakeLock";
 // MIGRACIÓN: iconos lucide alineados con TPV/KDS.
-import { AlertTriangle, MapPin, Square } from "lucide-react";
+import { AlertTriangle, MapPin, Square, Sun } from "lucide-react";
 
 const ORIGIN_THRESHOLD = 50; // metros para activar tracking automático
 const TRACK_INTERVAL   = 60000; // 1 minuto
@@ -25,6 +26,10 @@ export default function GPSTracker({ driverId, activeOrderId, onRouteStart, onRo
   const watchRef  = useRef<number|null>(null);
   const timerRef  = useRef<any>(null);
   const lastPosRef = useRef<{lat:number,lng:number}|null>(null);
+
+  // Mantén la pantalla encendida mientras hay tracking activo: si se apaga,
+  // iOS suspende el WebView y watchPosition deja de emitir ubicaciones.
+  useWakeLock(tracking);
 
   const startRoute = useCallback(async (lat: number, lng: number, trigger = "MANUAL") => {
     try {
@@ -130,6 +135,7 @@ export default function GPSTracker({ driverId, activeOrderId, onRouteStart, onRo
   return (
     <div className="mx-5 mb-3">
       {tracking ? (
+        <>
         <div className="px-4 py-3 rounded-xl flex items-center gap-3"
           style={{background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.2)"}}>
           <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{background:"#22c55e"}} />
@@ -145,6 +151,16 @@ export default function GPSTracker({ driverId, activeOrderId, onRouteStart, onRo
             <Square size={12} strokeWidth={2.5} fill="currentColor" /> Detener
           </button>
         </div>
+        {/* Aviso al repartidor: el wake lock mantiene la pantalla viva, pero si
+            cierra la app o cambia de tab, iOS suspende el tracking. */}
+        <div className="mt-2 px-4 py-2 rounded-xl flex items-center gap-2"
+          style={{background:"rgba(255,184,77,0.1)",border:"1px solid rgba(255,184,77,0.2)"}}>
+          <Sun size={14} strokeWidth={2.5} className="shrink-0" style={{color:"#FFB84D"}} />
+          <span className="text-[11px] font-semibold leading-snug" style={{color:"#FFB84D"}}>
+            Mantén la app abierta durante la entrega
+          </span>
+        </div>
+        </>
       ) : (
         <button onClick={handleStartTracking}
           className="w-full px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2"
