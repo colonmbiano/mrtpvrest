@@ -208,20 +208,27 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // la red no rompe el flujo de cobro. Sólo autocompleta campos vacíos para no
   // pisar lo que el cajero ya escribió.
   useEffect(() => {
+    // Resets diferidos a microtask (ver impresoras): setCustomerHint síncrono
+    // dentro del effect dispara set-state-in-effect en el lint.
+    let cancelled = false;
+    const clearHint = () => {
+      queueMicrotask(() => { if (!cancelled) setCustomerHint(null); });
+    };
+
     // DINE_IN no captura teléfono → no hay nada que buscar.
     if (ticket.type === "DINE_IN") {
-      setCustomerHint(null);
+      clearHint();
       lastLookupPhone.current = "";
-      return;
+      return () => { cancelled = true; };
     }
     const digits = (ticket.phone || "").replace(/\D/g, "");
     const key = digits.length > 10 ? digits.slice(-10) : digits;
     if (key.length < 7) {
-      setCustomerHint(null);
+      clearHint();
       lastLookupPhone.current = "";
-      return;
+      return () => { cancelled = true; };
     }
-    if (key === lastLookupPhone.current) return;
+    if (key === lastLookupPhone.current) return () => { cancelled = true; };
 
     const handle = setTimeout(async () => {
       try {
@@ -242,7 +249,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         /* búsqueda best-effort: ignorar errores de red */
       }
     }, 400);
-    return () => clearTimeout(handle);
+    return () => { cancelled = true; clearTimeout(handle); };
   }, [ticket.phone, ticket.type, ticket.id]);
 
   // Badge "cliente frecuente" reutilizado en TAKEOUT y DELIVERY.

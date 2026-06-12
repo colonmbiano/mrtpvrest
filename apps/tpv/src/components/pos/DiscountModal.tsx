@@ -55,12 +55,17 @@ export default function DiscountModal({
   const [error, setError] = useState("");
 
   // Al abrir, prellenar con el descuento vigente del pedido (editable).
+  // Diferido a microtask (ver impresoras): evita set-state-in-effect.
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
       setType(initialType ?? "percent");
       setValueStr(initialValue && initialValue > 0 ? String(initialValue) : "");
       setError("");
-    }
+    });
+    return () => { cancelled = true; };
   }, [isOpen, initialType, initialValue]);
 
   if (!isOpen) return null;

@@ -110,10 +110,13 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   }, [driver]);
 
   // Carga diferida de pedidos: solo al abrir la pestaña por primera vez.
+  // Arranque diferido a microtask (ver fetchMovements arriba): fetchOrders
+  // hace setLoadingOrders síncrono y dispara set-state-in-effect en el lint.
   useEffect(() => {
-    if (tab === "pedidos" && !ordersLoaded && !loadingOrders) {
-      fetchOrders();
-    }
+    if (!(tab === "pedidos" && !ordersLoaded && !loadingOrders)) return;
+    let cancelled = false;
+    queueMicrotask(() => { if (!cancelled) fetchOrders(); });
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
