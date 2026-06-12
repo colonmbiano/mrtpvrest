@@ -7,6 +7,7 @@ import {
   X,
   Clock,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
 import useOfflineStore, {
   type OfflineTransaction,
@@ -136,6 +137,10 @@ function PendingDrawer({
   onClose: () => void;
 }) {
   const retryTransaction = useOfflineStore((s) => s.retryTransaction);
+  const discardTransaction = useOfflineStore((s) => s.discardTransaction);
+  // Id de la fallida con confirmación de descarte abierta (two-step, evita
+  // borrar un cobro de un solo toque accidental).
+  const [confirmDiscardId, setConfirmDiscardId] = useState<string | null>(null);
   // Snapshot al montar el drawer — Date.now() durante render es impuro
   // (react-compiler). Si el usuario deja el drawer abierto mucho rato los
   // tiempos se quedarán congelados, lo cual está bien para un panel
@@ -164,6 +169,10 @@ function PendingDrawer({
   const retryAll = () => {
     failed.forEach((tx) => retryTransaction(tx.id));
     void syncOfflineQueue();
+  };
+  const discardOne = (id: string) => {
+    discardTransaction(id);
+    setConfirmDiscardId(null);
   };
 
   const total = failed.length + pending.length;
@@ -230,14 +239,43 @@ function PendingDrawer({
                         </div>
                       )}
                     </div>
-                    <button
-                      onClick={() => retryOne(tx.id)}
-                      disabled={!isOnline}
-                      className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider text-red-200 bg-red-500/15 border border-red-500/40 active:scale-95 disabled:opacity-40"
-                    >
-                      <RefreshCcw size={11} strokeWidth={3} />
-                      Reintentar
-                    </button>
+                    <div className="shrink-0 flex flex-col gap-1.5 items-stretch">
+                      {confirmDiscardId === tx.id ? (
+                        <>
+                          <button
+                            onClick={() => discardOne(tx.id)}
+                            className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider text-white bg-red-600 active:scale-95"
+                          >
+                            <Trash2 size={11} strokeWidth={3} />
+                            Sí, descartar
+                          </button>
+                          <button
+                            onClick={() => setConfirmDiscardId(null)}
+                            className="inline-flex items-center justify-center px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider text-white/60 bg-white/5 border border-white/10 active:scale-95"
+                          >
+                            Cancelar
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => retryOne(tx.id)}
+                            disabled={!isOnline}
+                            className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider text-red-200 bg-red-500/15 border border-red-500/40 active:scale-95 disabled:opacity-40"
+                          >
+                            <RefreshCcw size={11} strokeWidth={3} />
+                            Reintentar
+                          </button>
+                          <button
+                            onClick={() => setConfirmDiscardId(tx.id)}
+                            className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider text-white/50 bg-white/5 border border-white/10 active:scale-95"
+                          >
+                            <Trash2 size={11} strokeWidth={3} />
+                            Descartar
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </li>
                 );
               })}

@@ -43,6 +43,13 @@ interface OfflineState {
   scheduleRetry: (transactionId: string, nextRetryAt: number, error?: string) => void;
   /** Reintento manual: vuelve la tx a 'pending' y resetea el backoff. */
   retryTransaction: (transactionId: string) => void;
+  /**
+   * Descartar manual: elimina una tx de la cola. Pensado para una fallida
+   * que el cajero decide NO reintentar (ya conciliada en caja, o una edición
+   * irrelevante sobre una orden ya cerrada). Sin esto, un 4xx permanente
+   * deja el banner rojo para siempre sin salida.
+   */
+  discardTransaction: (transactionId: string) => void;
   clearQueue: () => void;
   /** Quita del historial las tx ya sincronizadas (limpieza opcional). */
   purgeSynced: () => void;
@@ -117,6 +124,10 @@ const useOfflineStore = create<OfflineState>()(
                 }
               : t
           ),
+        })),
+      discardTransaction: (transactionId) =>
+        set((state) => ({
+          queue: state.queue.filter((t) => t.id !== transactionId),
         })),
       clearQueue: () => set({ queue: [] }),
       purgeSynced: () =>

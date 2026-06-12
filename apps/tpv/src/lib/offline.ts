@@ -283,6 +283,11 @@ export async function syncOfflineQueue() {
       }
     }
 
+    // Limpieza: las tx ya confirmadas no se vuelven a tocar y solo inflan el
+    // localStorage (se observaron 20+ acumuladas por unas pocas ventas). El
+    // chip ya las ignora (cuenta unsynced), pero las purgamos para no crecer
+    // sin límite. La dedupe vive DB-side (Idempotency-Key), así que es seguro.
+    store.purgeSynced();
     store.setLastSync(Date.now());
   } catch (err) {
     console.error('Background sync error:', err);
