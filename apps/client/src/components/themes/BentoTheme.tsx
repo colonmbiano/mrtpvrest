@@ -6,6 +6,7 @@ import StoreCheckout from '../StoreCheckout';
 import BannerCarousel from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import type { DeliveryConfig } from '../../lib/delivery';
+import { productEmoji } from '../../lib/productEmoji';
 
 type BentoThemeProps = {
   data: {
@@ -147,7 +148,7 @@ export function BentoTheme({ data }: BentoThemeProps) {
                       {product.imageUrl ? (
                         <img src={product.imageUrl} alt={product.name} className={`w-full h-full group-hover:scale-105 transition-transform duration-500 ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-3xl opacity-30">🍔</div>
+                        <div className="w-full h-full flex items-center justify-center text-3xl opacity-30">{productEmoji(product.name)}</div>
                       )}
                     </div>
 

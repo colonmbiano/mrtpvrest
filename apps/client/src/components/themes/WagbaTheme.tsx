@@ -10,6 +10,7 @@ import {
   Mail, Lock,
 } from 'lucide-react';
 import { useCart } from '../../lib/cartStore';
+import { productEmoji } from '../../lib/productEmoji';
 import BannerCarousel from '../BannerCarousel';
 import { needsModal } from '../ProductModal';
 import { getApiUrl } from '../../lib/config';
@@ -374,7 +375,7 @@ function ProductCard({ p, accent, isFav, onFav, onOpen }: any) {
         {p.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={p.imageUrl} alt={p.name} className={`w-full h-full ${p.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
-        ) : <div className="w-full h-full flex items-center justify-center text-3xl opacity-30">🍔</div>}
+        ) : <div className="w-full h-full flex items-center justify-center text-3xl opacity-30">{productEmoji(p.name)}</div>}
       </button>
       <button onClick={onFav} className="absolute top-4 right-4 z-10 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur" style={{ background: '#0A0A0Caa' }} aria-label="Favorito">
         <Heart className="w-4 h-4" style={{ color: isFav ? accent : '#FFFFFF' }} fill={isFav ? accent : 'none'} />
@@ -481,7 +482,7 @@ function HomeBody({ info, categories, banners, popular, accent, favs, onFav, onO
                     {p.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={p.imageUrl} alt={p.name} className={`w-full h-full ${p.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
-                    ) : <div className="w-full h-full flex items-center justify-center text-xl opacity-30">🍔</div>}
+                    ) : <div className="w-full h-full flex items-center justify-center text-xl opacity-30">{productEmoji(p.name)}</div>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="font-bold text-sm truncate">{p.name}</h4>
@@ -758,7 +759,7 @@ function MealDetails({ product, accent, isFav, onFav, onBack, onAdded }: any) {
         {product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={product.imageUrl} alt={product.name} className={`w-full h-full ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
-        ) : <div className="w-full h-full flex items-center justify-center text-6xl opacity-20" style={{ background: CARD }}>🍔</div>}
+        ) : <div className="w-full h-full flex items-center justify-center text-6xl opacity-20" style={{ background: CARD }}>{productEmoji(product.name)}</div>}
         <div className="absolute inset-x-0 bottom-0 h-24" style={{ background: `linear-gradient(to top, ${BG}, transparent)` }} />
         <button onClick={onBack} className="absolute top-5 left-4 w-10 h-10 rounded-full flex items-center justify-center backdrop-blur" style={{ background: '#0A0A0Caa' }}><ChevronLeft className="w-5 h-5" /></button>
         <button onClick={onFav} className="absolute top-5 right-4 w-10 h-10 rounded-full flex items-center justify-center backdrop-blur" style={{ background: '#0A0A0Caa' }}>
@@ -884,7 +885,7 @@ function CartScreen({ accent, minOrderAmount = 0, onCheckout, onBrowse, onOpen, 
                 {src?.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={src.imageUrl} alt={l.name} className={`w-full h-full ${src.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
-                ) : <div className="w-full h-full flex items-center justify-center text-xl opacity-30">🍔</div>}
+                ) : <div className="w-full h-full flex items-center justify-center text-xl opacity-30">{productEmoji(l.name)}</div>}
               </div>
               <div className="flex-1 min-w-0">
                 <h4 className="font-bold text-sm truncate">{l.name}</h4>

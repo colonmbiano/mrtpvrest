@@ -7,6 +7,7 @@ import StoreCheckout from '../StoreCheckout';
 import BannerCarousel from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import type { DeliveryConfig } from '../../lib/delivery';
+import { productEmoji } from '../../lib/productEmoji';
 
 type MochiThemeProps = {
   data: {
@@ -215,8 +216,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
                 lines.map(line => (
                   <div key={line.id} className="flex items-center gap-4 group">
                     <div className="w-16 h-16 rounded-2xl bg-gray-50 flex-none overflow-hidden border border-gray-100">
-                      {/* Aquí podríamos buscar la imagen del producto si estuviera en el store */}
-                      <div className="w-full h-full flex items-center justify-center text-xl">🍔</div>
+                      <div className="w-full h-full flex items-center justify-center text-xl">{productEmoji(line.name)}</div>
                     </div>
                     <div className="flex-1">
                       <h4 className="font-bold text-gray-800 leading-tight">{line.name}</h4>
