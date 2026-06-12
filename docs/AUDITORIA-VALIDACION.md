@@ -28,8 +28,11 @@ qué hallazgos son reales, y el plan de remediación priorizado.
    `.catch(()=>null)`~~ → **ARREGLADO** (decremento condicional `WHERE points >= used`
    + movimiento REDEEMED en la misma `$transaction` que crea la orden).
 4. ~~Tenant-guard con 3 modelos fuera de SCOPED_MODELS (Customer, DriverNotice,
-   DriverShiftRequest)~~ → **ARREGLADO**. Pendiente operativo: promover
-   `TENANT_GUARD_MODE=enforce` en Railway tras revisar los warnings acumulados.
+   DriverShiftRequest)~~ → **ARREGLADO**. ~~Promover a enforce~~ → **HECHO
+   (2026-06-12)**: 11h de logs en warn mostraban un solo patrón
+   (User.findUnique en lookups de identidad), se envolvió en runWithBypass
+   (commit 3bc4fb4) y se activó `TENANT_GUARD_MODE=enforce` en Railway.
+   Rollback: volver la variable a `warn`.
 
 ### P0/P1 — webhooks de pago
 5. ~~Kiosk webhooks sin idempotencia (doble emit de sockets → doble impresión)
@@ -111,11 +114,10 @@ viceversa rompe los webhooks):
 
 ## Orden de ejecución sugerido para lo pendiente
 
-1. `TENANT_GUARD_MODE=enforce` en Railway (tras ventana de observación de warns).
-2. Promover E2E a gate (configurar secrets del workflow primero).
-3. UNIQUE constraints de webhooks + tests SaaS (con db push coordinado).
-4. Tokens del TPV a secure storage nativo (requiere plugin + APK).
-5. Migración Decimal (proyecto aparte).
+1. Promover E2E a gate (configurar secrets del workflow primero).
+2. UNIQUE constraints de webhooks + tests SaaS (con db push coordinado).
+3. Tokens del TPV a secure storage nativo (requiere plugin + APK).
+4. Migración Decimal (proyecto aparte).
 
 > Nota de método: la validación fue por muestreo con agentes de lectura. Los
 > archivo:línea son guía; cada fix debe re-verificar su contexto al implementarse.
