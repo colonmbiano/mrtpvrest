@@ -2,7 +2,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { LayoutGrid, Sparkles, Clock, Banknote, Brush, RefreshCw, AlertTriangle, Utensils } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 import api from "@/lib/api";
+import { useWaiterRealtime } from "@/hooks/useWaiterRealtime";
+import { useTPVAuth } from "@/hooks/useTPVAuth";
 
 type ZoneRef = { id: string; name: string; icon: string | null };
 
@@ -160,11 +163,25 @@ export default function WaiterFloorPlanPage() {
     return () => { cancelled = true; };
   }, [loadTables]);
 
-  // Refresh ligero cada 45s — la sala no cambia de estado tan rápido
-  // como para necesitar polling agresivo, pero queremos que "cobrando"
-  // aparezca sin reload manual.
+  // Tiempo real: cualquier cambio de órdenes en la sucursal refresca la
+  // sala al instante. Si la orden del mesero pasa a READY, vibra y avisa.
+  const { currentEmployee } = useTPVAuth();
+  useWaiterRealtime({
+    onChange: () => loadTables(true),
+    onOrderReady: (order) => {
+      const isMine = order?.createdById && order.createdById === currentEmployee?.id;
+      const isDineIn = (order?.orderType || "").toUpperCase() === "DINE_IN";
+      if (!isMine && !isDineIn) return;
+      if (typeof navigator !== "undefined") navigator.vibrate?.([180, 80, 180]);
+      const mesa = order?.table?.name ? ` · ${order.table.name}` : "";
+      toast.success(`🍳 Orden lista${mesa} (#${order?.orderNumber ?? ""})`);
+    },
+  });
+
+  // Polling de respaldo cada 60s — el socket puede caerse en la red del
+  // restaurante; esto garantiza que la sala nunca quede congelada.
   useEffect(() => {
-    const id = setInterval(() => loadTables(true), 45_000);
+    const id = setInterval(() => loadTables(true), 60_000);
     return () => clearInterval(id);
   }, [loadTables]);
 
