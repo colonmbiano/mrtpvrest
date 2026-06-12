@@ -45,7 +45,9 @@ async function enrichOpenShift(shift, req) {
         { shiftId: shift.id },
         { shiftId: null, createdAt: { gte: shift.openedAt } },
       ],
-      source: { in: ['TPV', 'WAITER', 'ONLINE'] },
+      // Mismas fuentes que el cierre real (incluye WhatsApp/Kiosko desde
+      // ec0fb04) para que el esperado en vivo cuadre con el corte.
+      source: { in: ['TPV', 'WAITER', 'ONLINE', 'WHATSAPP', 'KIOSK'] },
     },
   });
   const totals = summarizePayments(orders);
