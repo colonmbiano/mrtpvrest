@@ -215,7 +215,7 @@ export default function CajaRepartidoresPage() {
 
       {/* resumen global */}
       <div className="grid grid-cols-3 gap-3">
-        <StatTile icon={TrendingUp} value={`$${totalIncome.toFixed(0)}`} label="Total cobrado hoy" />
+        <StatTile icon={TrendingUp} value={`$${totalIncome.toFixed(0)}`} label="Cobrado (sin cortar)" />
         <StatTile icon={TrendingDown} value={`$${totalExpense.toFixed(0)}`} label="Total gastos" />
         <StatTile icon={Wallet} value={`$${totalBalance.toFixed(0)}`} label="Balance neto" />
       </div>
@@ -303,7 +303,7 @@ export default function CajaRepartidoresPage() {
             </button>
           </div>
           {movements.length === 0 ? (
-            <div className="py-8 text-center text-sm text-tx-mut">Sin movimientos hoy</div>
+            <div className="py-8 text-center text-sm text-tx-mut">Sin movimientos pendientes de corte</div>
           ) : movements.map((m: any) => {
             const isCredit = m.type === "INCOME" || m.type === "FLOAT";
             const tone = m.type === "FLOAT" ? "info" : m.type === "INCOME" ? "ok" : "err";

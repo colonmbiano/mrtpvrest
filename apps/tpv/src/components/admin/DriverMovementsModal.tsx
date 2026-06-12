@@ -245,11 +245,11 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
 
           {/* Lista de Movimientos */}
           <div className="space-y-3">
-            <h3 className="text-xs font-black uppercase tracking-widest text-white/40 ml-1">Historial de Hoy</h3>
+            <h3 className="text-xs font-black uppercase tracking-widest text-white/40 ml-1">Pendiente de corte</h3>
             {loading ? (
               <p className="text-sm text-[var(--muted)] animate-pulse">Cargando movimientos...</p>
             ) : movements.length === 0 ? (
-              <p className="text-sm text-[var(--muted)] italic">No hay movimientos registrados hoy.</p>
+              <p className="text-sm text-[var(--muted)] italic">Sin movimientos pendientes de corte.</p>
             ) : (
               <div className="space-y-2">
                 {movements.map((m) => (
