@@ -57,12 +57,19 @@ viceversa rompe los webhooks):
   el payload. Si algún día se guardan webhook secrets por restaurante,
   agregar la firma como primera barrera.
 
-### P1 — TPV/Capacitor (pendiente)
-8. Tokens en localStorage/sessionStorage (sin secure storage nativo).
-9. `usesCleartextTraffic="true"` + `allowMixedContent: true`; el override de API
-   URL en /setup acepta http:// sin validar.
+### P1 — TPV/Capacitor
+8. Tokens en localStorage/sessionStorage (sin secure storage nativo) — pendiente.
+9. ~~`usesCleartextTraffic="true"` + `allowMixedContent: true`; override de API
+   URL sin validar~~ → **ARREGLADO** en TPV, KDS y delivery: cleartext fuera
+   del manifest principal y de capacitor.config (la impresión LAN no se afecta:
+   va por socket TCP nativo puerto 9100, no por la pila HTTP); builds debug lo
+   re-habilitan vía `src/debug/AndroidManifest.xml` para dev contra backend
+   http local. `getApiUrl` (TPV) y el override del KDS ahora validan: https
+   siempre, http solo hacia hosts privados (localhost/10.x/192.168.x/172.16-31).
+   ⚠️ El manifest y capacitor.config requieren **APK release nuevo** de las
+   3 apps; la validación de URL sale por OTA (tpv/delivery) sin esperar APK.
 10. Verificar que el backend honre `Idempotency-Key` en `PUT /:id/payment`
-    (el outbox lo manda, pero los pagos no llevan clientOrderId).
+    (el outbox lo manda, pero los pagos no llevan clientOrderId) — pendiente.
 
 ### P1 — WebSockets (pendiente)
 11. Sin revalidación post-handshake (empleado desactivado sigue recibiendo
