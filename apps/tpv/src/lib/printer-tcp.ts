@@ -430,6 +430,13 @@ export interface KitchenTicketInput {
    *  solo un subset de los items originales. */
   isPartial?: boolean;
   assignmentName?: string | null;
+  /** Estado de pago para comandas web/delivery: imprime un banner visible
+   *  "PAGADO" o "PENDIENTE DE PAGO" para que caja/cocina sepan si hay que
+   *  cobrar. undefined = no mostrar nada (comportamiento histórico, p.ej.
+   *  dine-in que se cobra al final). */
+  paid?: boolean | null;
+  /** Método de pago a mostrar bajo el banner (Efectivo/Transferencia/...). */
+  paymentMethod?: string | null;
   /** Configuración admin para mostrar/ocultar campos y ajustar tamaño. */
   config?: KitchenTicketConfig;
 }
@@ -693,6 +700,17 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
   if (cfg.showTime) d += time + "\n";
   if (cfg.showOrderType && input.orderType) {
     d += (ORDER_TYPE_LABEL[input.orderType] || input.orderType) + "\n";
+  }
+
+  // Banner de estado de pago (pedidos web/delivery). Doble ancho para que se
+  // vea de un golpe: PAGADO = no cobrar; PENDIENTE = hay que cobrar al entregar.
+  if (input.paid === true || input.paid === false) {
+    d += CMD.BOLD_ON + CMD.DOUBLE_ON;
+    d += (input.paid ? "** PAGADO **" : "** PENDIENTE DE PAGO **") + "\n";
+    d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
+    if (input.paymentMethod) {
+      d += paymentLabel(input.paymentMethod) + "\n";
+    }
   }
 
   d += CMD.LINE;
