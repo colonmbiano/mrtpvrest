@@ -86,6 +86,7 @@ const authenticate = async (req, res, next) => {
           canApplyDiscounts: true,
           canReopenTables: true,
           canManageUsers: true,
+          canViewExpectedCash: true,
           location: {
             select: {
               restaurantId: true,

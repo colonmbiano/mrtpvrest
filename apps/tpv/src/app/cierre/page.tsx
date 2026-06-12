@@ -29,6 +29,10 @@ interface Shift {
   totalSales: number;
   totalExpenses: number;
   expectedCash: number | null;
+  /** El backend lo pone en true si este empleado puede ver el esperado
+   *  (turno no ciego, o rol admin/owner/super_admin, o permiso
+   *  canViewExpectedCash). Si es false, expectedCash viene null. */
+  canRevealExpected?: boolean;
   expenses?: ShiftExpense[];
 }
 
@@ -115,6 +119,14 @@ export default function CierreTurno() {
   const counted = Number(countedTotal);
   const countedValid = countedTotal.trim() !== '' && Number.isFinite(counted) && counted >= 0;
 
+  // ¿Mostramos el efectivo esperado? El backend ya decidió (corte abierto o
+  // permiso del empleado) y solo manda expectedCash si está permitido.
+  const expectedCash = shift?.expectedCash ?? null;
+  const canReveal = !!shift?.canRevealExpected && expectedCash != null;
+  // Diferencia en vivo contra lo que el cajero teclea (negativo = faltante).
+  const difference =
+    canReveal && countedValid && expectedCash != null ? counted - expectedCash : null;
+
   const onSubmit = async () => {
     if (!shift || !countedValid) return;
     setSubmitting(true);
@@ -179,7 +191,7 @@ export default function CierreTurno() {
               <span className="font-bold text-white">Cierre de Turno</span>
             </div>
             <h1 className="text-lg font-black text-white tracking-tight">
-              Cierre de Turno · Corte Ciego
+              Cierre de Turno · {canReveal ? 'Corte Abierto' : 'Corte Ciego'}
             </h1>
           </div>
         </div>
@@ -218,10 +230,17 @@ export default function CierreTurno() {
                   Cuenta todo el efectivo de la caja y captura el total que se queda.
                 </p>
               </div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#ffb84d]/15 border border-[#ffb84d]/40">
-                <ShieldAlert size={11} className="text-[#ffb84d]" />
-                <span className="text-[10px] font-black tracking-widest text-[#ffb84d]">CORTE CIEGO</span>
-              </div>
+              {canReveal ? (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-400/15 border border-emerald-400/40">
+                  <Wallet size={11} className="text-emerald-300" />
+                  <span className="text-[10px] font-black tracking-widest text-emerald-300">CORTE ABIERTO</span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#ffb84d]/15 border border-[#ffb84d]/40">
+                  <ShieldAlert size={11} className="text-[#ffb84d]" />
+                  <span className="text-[10px] font-black tracking-widest text-[#ffb84d]">CORTE CIEGO</span>
+                </div>
+              )}
             </div>
 
             <div className="relative">
@@ -323,6 +342,44 @@ export default function CierreTurno() {
           </div>
 
           <div className="flex-1 flex flex-col gap-4 px-6 py-5 overflow-auto">
+            {/* EFECTIVO ESPERADO — solo si el empleado puede verlo. */}
+            {canReveal && (
+              <div className="flex flex-col gap-3">
+                <div className="rounded-2xl p-4 bg-emerald-400/8 border border-emerald-400/30">
+                  <p className="text-[10px] font-black tracking-[0.18em] text-emerald-300/80">
+                    EFECTIVO ESPERADO EN CAJA
+                  </p>
+                  <p className="mt-1 text-2xl font-black tabular-nums text-emerald-300">
+                    {fmtMoney(expectedCash || 0)}
+                  </p>
+                  <p className="mt-1 text-[11px] text-white/45">
+                    Fondo inicial + ventas en efectivo − gastos del turno.
+                  </p>
+                </div>
+                {difference != null && (
+                  <div
+                    className={`rounded-2xl p-4 border ${
+                      difference === 0
+                        ? 'bg-emerald-400/8 border-emerald-400/30 text-emerald-300'
+                        : difference < 0
+                          ? 'bg-red-500/8 border-red-500/30 text-red-300'
+                          : 'bg-[#ffb84d]/8 border-[#ffb84d]/30 text-[#ffb84d]'
+                    }`}
+                  >
+                    <p className="text-[10px] font-black tracking-[0.18em] opacity-80">
+                      DIFERENCIA (CONTADO − ESPERADO)
+                    </p>
+                    <p className="mt-1 text-xl font-black tabular-nums">
+                      {difference > 0 ? '+' : ''}{fmtMoney(difference)}
+                      <span className="ml-2 text-[11px] font-bold uppercase tracking-wide opacity-80">
+                        {difference === 0 ? 'cuadra' : difference < 0 ? 'faltante' : 'sobrante'}
+                      </span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <span className="text-[10px] font-black tracking-[0.2em] text-white/40">
               INFORMATIVO · NO SE SUMA AL EFECTIVO
             </span>
@@ -345,7 +402,9 @@ export default function CierreTurno() {
             <div className="rounded-2xl p-4 flex items-start gap-2.5 bg-[#ffb84d]/8 border border-[#ffb84d]/30">
               <ShieldAlert size={16} className="text-[#ffb84d] flex-shrink-0 mt-0.5" />
               <p className="text-[11px] font-medium leading-relaxed text-amber-100">
-                Corte ciego: declaras el total sin ver el esperado. La conciliación la verá el supervisor.
+                {canReveal
+                  ? 'Corte abierto: ves el efectivo esperado y la diferencia en vivo. Cuenta el efectivo real y captura el total.'
+                  : 'Corte ciego: declaras el total sin ver el esperado. La conciliación la verá el supervisor.'}
               </p>
             </div>
 

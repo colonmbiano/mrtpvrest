@@ -1407,6 +1407,7 @@ model Employee {
   canApplyDiscounts Boolean @default(false) // Aplicar cortesías o descuentos al ticket
   canReopenTables   Boolean @default(false) // Reabrir una cuenta cerrada
   canManageUsers    Boolean @default(false) // Crear/editar otros empleados
+  canViewExpectedCash Boolean @default(false) // Ver el efectivo esperado en el corte (rompe el corte ciego para este empleado)
 
   shifts       EmployeeShift[]
   shiftsOpened CashShift[]     @relation("ShiftOpenedBy")

@@ -29,6 +29,54 @@ const requireLocation = (req, res, next) => {
   next();
 };
 
+// ── Snapshot en vivo de un turno ABIERTO ─────────────────────────────────
+// El cierre calcula expectedCash/totales solo al cerrar; para que el corte
+// muestre "cuánto debo tener" en tiempo real, replicamos ese cálculo sobre el
+// turno abierto. El efectivo (totalCash) y el esperado SOLO se revelan si el
+// turno no es ciego o el empleado tiene permiso (rol admin/owner/super_admin o
+// flag canViewExpectedCash). Así el corte ciego sigue impidiendo que el cajero
+// "cuadre" tecleando el número exacto, pero un supervisor sí lo ve.
+async function enrichOpenShift(shift, req) {
+  const orders = await prisma.order.findMany({
+    where: {
+      locationId: req.locationId,
+      status: 'DELIVERED',
+      OR: [
+        { shiftId: shift.id },
+        { shiftId: null, createdAt: { gte: shift.openedAt } },
+      ],
+      source: { in: ['TPV', 'WAITER', 'ONLINE'] },
+    },
+  });
+  const totals = summarizePayments(orders);
+  const totalExpenses = (shift.expenses || []).reduce((s, e) => s + Number(e.amount || 0), 0);
+  const totalSales = Object.values(totals).reduce((a, b) => a + b, 0);
+  const { expectedCash } = cashCutSummary({
+    openingFloat: shift.openingFloat,
+    totalCash: totals.totalCash,
+    totalExpenses,
+  });
+
+  const role = req.user?.role;
+  const privileged =
+    role === 'ADMIN' || role === 'OWNER' || role === 'SUPER_ADMIN' ||
+    req.user?.canViewExpectedCash === true;
+  const reveal = !shift.blindClose || privileged;
+
+  return {
+    ...shift,
+    totalCard: totals.totalCard,
+    totalTransfer: totals.totalTransfer,
+    totalExpenses,
+    ordersCount: orders.length,
+    // Sensibles al corte ciego → null si este empleado no puede verlos.
+    totalCash: reveal ? totals.totalCash : null,
+    totalSales: reveal ? totalSales : null,
+    expectedCash: reveal ? expectedCash : null,
+    canRevealExpected: reveal,
+  };
+}
+
 // ── GET staff clock-in activo de la sucursal (widget "Turno actual") ─────
 // Devuelve empleados con EmployeeShift abierto (endAt = null) en esta sucursal.
 router.get('/staff-active', requireLocation, async (req, res) => {
@@ -60,7 +108,7 @@ router.get('/current', requireLocation, async (req, res) => {
       include: { expenses: { orderBy: { createdAt: 'desc' } } },
       orderBy: { openedAt: 'desc' }
     });
-    res.json(shift || null);
+    res.json(shift ? await enrichOpenShift(shift, req) : null);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -72,7 +120,7 @@ router.get('/active', requireLocation, async (req, res) => {
       include: { expenses: { orderBy: { createdAt: 'desc' } } },
       orderBy: { openedAt: 'desc' }
     });
-    res.json(shift || null);
+    res.json(shift ? await enrichOpenShift(shift, req) : null);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
