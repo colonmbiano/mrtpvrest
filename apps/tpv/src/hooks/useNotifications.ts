@@ -125,11 +125,14 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
   const socketRef = useRef<Socket | null>(null);
   const { addNotification } = useNotifStore();
 
-  // El callback se guarda en un ref que se refresca en cada render, así
+  // El callback se guarda en un ref que se refresca tras cada render (vía
+  // effect — escribirlo durante el render viola react-hooks), así
   // handleOrderNew permanece estable (no re-suscribe el socket) pero siempre
   // invoca la última versión del consumidor (p.ej. la auto-impresión del POS).
   const onOrderNewRef = useRef(opts?.onOrderNew);
-  onOrderNewRef.current = opts?.onOrderNew;
+  useEffect(() => {
+    onOrderNewRef.current = opts?.onOrderNew;
+  });
 
   const handleOrderNew = useCallback((order: any) => {
     const isOnline =

@@ -24,11 +24,15 @@ export function useWaiterRealtime(opts: {
 }) {
   const socketRef = useRef<Socket | null>(null);
 
-  // Callbacks en refs para no re-suscribir el socket en cada render.
+  // Callbacks en refs para no re-suscribir el socket en cada render. Se
+  // refrescan en un effect (escribir el ref durante el render viola
+  // react-hooks y rompe el lint del CI).
   const onChangeRef = useRef(opts.onChange);
-  onChangeRef.current = opts.onChange;
   const onOrderReadyRef = useRef(opts.onOrderReady);
-  onOrderReadyRef.current = opts.onOrderReady;
+  useEffect(() => {
+    onChangeRef.current = opts.onChange;
+    onOrderReadyRef.current = opts.onOrderReady;
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
