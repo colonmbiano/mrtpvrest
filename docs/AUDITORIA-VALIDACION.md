@@ -92,8 +92,10 @@ viceversa rompe los webhooks):
     activarse; revisarlas y mergear.
 14. ~~Sin bloques `permissions`~~ → **ARREGLADO**: GITHUB_TOKEN read-only
     top-level en los 11 workflows (el job de commit de APKs conserva su
-    `contents: write` a nivel job). Pendiente: pin de actions a SHA (resolver
-    tags contra la API de GitHub) y promover E2E a gate.
+    `contents: write` a nivel job). ~~Actions sin pin a SHA~~ → **ARREGLADO**:
+    las 9 actions distintas pineadas a commit SHA con comentario `# vN`
+    (Dependabot github-actions las mantiene). Pendiente: promover E2E a gate
+    (requiere configurar los secrets del workflow primero).
 
 ### P2
 - Migración `Float` → `Decimal` en ~50 campos monetarios (round2 server-side
@@ -110,7 +112,7 @@ viceversa rompe los webhooks):
 ## Orden de ejecución sugerido para lo pendiente
 
 1. `TENANT_GUARD_MODE=enforce` en Railway (tras ventana de observación de warns).
-2. Pin de actions a SHA + promover E2E a gate.
+2. Promover E2E a gate (configurar secrets del workflow primero).
 3. UNIQUE constraints de webhooks + tests SaaS (con db push coordinado).
 4. Tokens del TPV a secure storage nativo (requiere plugin + APK).
 5. Migración Decimal (proyecto aparte).
