@@ -412,7 +412,11 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
 
     // OJO: subtotal/total del body se IGNORAN a propósito — se recalculan
     // server-side desde las líneas resueltas (ver computeOrderTotals abajo).
-    const { items, orderType, tableNumber, tableId, numberOfGuests, paymentMethod, discount, customerName, customerPhone, deliveryAddress, status, clientOrderId } = req.body;
+    const { items, tableNumber, tableId, numberOfGuests, paymentMethod, discount, customerName, customerPhone, deliveryAddress, status, clientOrderId } = req.body;
+    // Tolerancia de nombre: clientes viejos (y replays de la cola offline)
+    // mandan `type` en vez de `orderType`. Sin esto un DINE_IN con tableId
+    // entraba como TAKEOUT/CONFIRMED: sin ronda 1 y con la mesa libre.
+    const orderType = req.body.orderType || req.body.type;
     if (!items || items.length === 0) return res.status(400).json({ error: 'Sin productos' });
 
     const restaurantId = req.user?.restaurantId || req.restaurantId;
@@ -556,11 +560,18 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     // resueltas en servidor (que ya incluyen el delta de los modificadores),
     // NUNCA del subtotal/total del payload. Antes se persistía `req.body.total`
     // y cualquier orden con modificadores con precio se cobraba de menos.
+    //
+    // D2 Meseros v2: el descuento del body solo se acepta si el actor tiene el
+    // permiso apply_discount (ADMIN/OWNER bypass, flag canApplyDiscounts o
+    // canDiscount legacy, u override token de supervisor). Un WAITER sin
+    // permiso no puede auto-descontarse la cuenta: discount forzado a 0.
+    const mayDiscount =
+      userHasPermission(req, 'apply_discount') || hasValidOverride(req, 'apply_discount');
     const {
       subtotal: serverSubtotal,
       discount: serverDiscount,
       total: serverTotal,
-    } = computeOrderTotals(resolvedItems, { discount });
+    } = computeOrderTotals(resolvedItems, { discount: mayDiscount ? discount : 0 });
 
     // Si es dine-in con mesa: status=OPEN (cuenta abierta) y la primera ronda
     // se crea explícita para que el flujo de rondas posteriores quede limpio.
@@ -1074,7 +1085,10 @@ router.post('/:id/print-bill', authenticate, requireTenantAccess, requireRole('A
 // Lo usa el TPV antes de imprimir la cuenta. Persiste en Order.discount y
 // audita DISCOUNT_APPLIED (quién, antes/después, motivo). Consistente con la
 // fórmula del resto del archivo: total = subtotal - discount + deliveryFee.
-router.put('/:id/discount', authenticate, requireTenantAccess, requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+// D2 Meseros v2: además del rol, exige el permiso apply_discount (RBAC
+// granular). WAITER por default no lo tiene; puede pedir override de
+// supervisor (x-override-token) sin salir de su pantalla.
+router.put('/:id/discount', authenticate, requireTenantAccess, requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), requirePermission('apply_discount'), async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     const { type, value, reason } = req.body || {};
