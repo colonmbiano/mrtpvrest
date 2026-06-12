@@ -60,6 +60,11 @@ setup('autenticar admin y guardar sesión', async ({ page }) => {
     return { accessToken, refreshToken, user, restaurantId, mbRole, locationId, locationName, restaurantName };
   });
 
+  // Sin estos ids el login por PIN del TPV no puede mandar x-location-id —
+  // mejor fallar aquí con un mensaje claro que con timeouts en cada spec.
+  expect(authData.restaurantId, 'restaurantId vacío tras login de admin').toBeTruthy();
+  expect(authData.locationId, 'locationId vacío — /api/admin/locations no devolvió sucursales').toBeTruthy();
+
   fs.mkdirSync(path.dirname(ADMIN_AUTH_FILE), { recursive: true });
   fs.writeFileSync(ADMIN_AUTH_FILE, JSON.stringify(authData, null, 2));
 

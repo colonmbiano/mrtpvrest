@@ -32,6 +32,8 @@ on:
       - "apps/backend/**"
       - "apps/tpv/**"
       - "apps/admin/**"
+      - "apps/saas/**"
+      - "apps/kds/**"
       - "packages/**"
       - "tests/e2e/**"
       - ".github/workflows/e2e.yml"
@@ -109,16 +111,21 @@ jobs:
         run: pnpm --filter @mrtpvrest/backend start > backend.log 2>&1 &
         env:
           PORT: "3001"
+          # La suite hace >10 logins por PIN desde la misma IP+location;
+          # sin esto el rate limiter (10/15min) tira 429 a mitad de corrida.
+          PIN_LOGIN_RATE_MAX: "1000"
 
-      - name: Arrancar admin + tpv
+      - name: Arrancar admin + tpv + saas + kds
         run: |
           pnpm --filter @mrtpvrest/admin dev &
           pnpm --filter @mrtpvrest/tpv dev &
+          pnpm --filter @mrtpvrest/saas dev &
+          pnpm --filter @mrtpvrest/kds dev &
         env:
           NEXT_PUBLIC_API_URL: "http://localhost:3001"
 
       - name: Esperar a los servicios
-        run: pnpm dlx wait-on@8.0.1 -t 120000 http://localhost:3001/health http://localhost:3002 http://localhost:3005
+        run: pnpm dlx wait-on@8.0.1 -t 120000 http://localhost:3001/health http://localhost:3002 http://localhost:3004 http://localhost:3005 http://localhost:3009
 
       - name: Logs del backend (pre-tests)
         run: tail -40 backend.log || true
@@ -128,9 +135,12 @@ jobs:
         env:
           ADMIN_URL: "http://localhost:3002"
           TPV_URL: "http://localhost:3005"
+          SAAS_URL: "http://localhost:3004"
+          KDS_URL: "http://localhost:3009"
           ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
           SUPERADMIN_EMAIL: ${{ secrets.SUPERADMIN_EMAIL }}
+          SUPERADMIN_PASSWORD: ${{ secrets.SUPERADMIN_PASSWORD }}
           WAITER_PIN: ${{ secrets.WAITER_PIN }}
           CASHIER_PIN: ${{ secrets.CASHIER_PIN }}
           KITCHEN_PIN: ${{ secrets.KITCHEN_PIN }}

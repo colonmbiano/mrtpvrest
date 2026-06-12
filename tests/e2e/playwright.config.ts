@@ -18,7 +18,8 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    // 1) Corre primero: genera .auth/admin.json
+    // 1) Corre primero: genera .auth/admin.json (lo leen TODOS los helpers
+    //    del TPV — injectTPVDevice necesita restaurantId/locationId del seed)
     {
       name: 'setup',
       testMatch: 'auth.setup.ts',
@@ -31,10 +32,13 @@ export default defineConfig({
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'] },
     },
-    // 3) Tests de validación de roles y seguridad
+    // 3) Tests de validación de roles y seguridad — también usan
+    //    injectTPVDevice, así que dependen del setup (antes corrían en
+    //    paralelo y reventaban con ENOENT .auth/admin.json)
     {
       name: 'security',
       testMatch: '06-role-security.spec.ts',
+      dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'] },
     },
     // 3b) Flujo de meseros (mesa → rondas → cuenta) — usa .auth del setup
@@ -44,10 +48,12 @@ export default defineConfig({
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'] },
     },
-    // 4) Resto sin dependencias
+    // 4) Resto — 02-tpv usa injectTPVDevice; 01/03 no, pero serializar
+    //    detrás del setup es inocuo
     {
       name: 'chromium',
       testMatch: '{01-login,02-tpv,03-kds}.spec.ts',
+      dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'] },
     },
   ],
