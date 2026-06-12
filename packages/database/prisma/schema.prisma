@@ -175,7 +175,7 @@ model Subscription {
   priceSnapshot Float
 
   // Gateway — MANUAL por ahora, Stripe/MP después
-  externalId     String?
+  externalId     String? @unique // id de la suscripción en el gateway; UNIQUE = idempotencia de webhooks a nivel BD
   paymentGateway String? // "MANUAL" | "STRIPE" | "MERCADOPAGO"
 
   invoices Invoice[]
@@ -208,7 +208,7 @@ model Invoice {
   paidAt      DateTime?
   periodStart DateTime
   periodEnd   DateTime
-  externalId  String? // charge ID del gateway cuando lo haya
+  externalId  String? @unique // charge ID del gateway; UNIQUE = idempotencia de webhooks a nivel BD
 
   createdAt DateTime @default(now())
 
@@ -758,7 +758,7 @@ model Order {
   conektaChargeId       String?
   paymentProvider       String? // MERCADOPAGO | STRIPE | CONEKTA | ...
   paymentProviderRef    String? // ID de checkout/preferencia
-  paymentProviderId     String? // ID del pago después de cobrar
+  paymentProviderId     String? @unique // ID del pago después de cobrar; UNIQUE: un pago del gateway no puede marcar dos órdenes
   paymentProviderStatus String? // status crudo de la pasarela
   estimatedMinutes      Int?
 
