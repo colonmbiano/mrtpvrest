@@ -68,14 +68,22 @@ viceversa rompe los webhooks):
    siempre, http solo hacia hosts privados (localhost/10.x/192.168.x/172.16-31).
    ⚠️ El manifest y capacitor.config requieren **APK release nuevo** de las
    3 apps; la validación de URL sale por OTA (tpv/delivery) sin esperar APK.
-10. Verificar que el backend honre `Idempotency-Key` en `PUT /:id/payment`
-    (el outbox lo manda, pero los pagos no llevan clientOrderId) — pendiente.
+10. ~~Verificar que el backend honre `Idempotency-Key` en `PUT /:id/payment`~~
+    → **VERIFICADO OK**: `idempotency.middleware.js` dedupea cualquier método
+    mutante con ese header (el outbox lo manda en todos los replays), scoped
+    por tenant, TTL 1h. Caveat conocido y documentado en el archivo: cache en
+    memoria — si Railway escala a multi-instancia hay que migrarlo a Redis.
 
-### P1 — WebSockets (pendiente)
-11. Sin revalidación post-handshake (empleado desactivado sigue recibiendo
-    eventos hasta reconectar; REST sí revalida `isActive`).
-12. Sin rate limiting en Socket.io; `join:order` / `join:location:*` no validan
-    pertenencia del id (hoy mitigado por el guard del handshake).
+### P1 — WebSockets
+11. ~~Sin revalidación post-handshake~~ → **ARREGLADO**: sweep periódico
+    (`SOCKET_REVALIDATE_MS`, default 5 min) en `lib/socket-guard.js` que
+    desconecta sockets de User/Employee/Device desactivados (espeja la
+    resolución de auth.middleware).
+12. ~~Sin rate limiting; joins sin validar pertenencia~~ → **ARREGLADO**:
+    tope de conexiones por IP (`SOCKET_MAX_CONN_PER_IP`, default 40), rate
+    limit de eventos por socket (`SOCKET_EVENTS_PER_MIN`, default 60, ignora
+    sin desconectar), y `join:order`/`join:location:*` verifican contra la BD
+    que el id pertenece al restaurante del socket.
 
 ### P1 — CI/CD y dependencias (pendiente)
 13. `pnpm audit`: 17 vulnerabilidades (6 HIGH: @xmldom/xmldom x4, qs). Sin
@@ -94,11 +102,10 @@ viceversa rompe los webhooks):
 ## Orden de ejecución sugerido para lo pendiente
 
 1. `TENANT_GUARD_MODE=enforce` en Railway (tras ventana de observación de warns).
-2. Capacitor: cleartext/mixed content + validación https del override.
-3. Sockets: revalidación periódica + rate limit + validar joins.
-4. Dependabot + pin SHA + permissions en workflows.
-5. UNIQUE constraints de webhooks + tests SaaS (con db push coordinado).
-6. Migración Decimal (proyecto aparte).
+2. Dependabot + pin SHA + permissions en workflows.
+3. UNIQUE constraints de webhooks + tests SaaS (con db push coordinado).
+4. Tokens del TPV a secure storage nativo (requiere APK).
+5. Migración Decimal (proyecto aparte).
 
 > Nota de método: la validación fue por muestreo con agentes de lectura. Los
 > archivo:línea son guía; cada fix debe re-verificar su contexto al implementarse.

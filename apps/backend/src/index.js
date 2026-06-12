@@ -69,6 +69,19 @@ const io = new Server(server, {
 
 app.set('io', io)
 
+// Defensas: tope de conexiones por IP, rate limit de eventos, revalidación
+// periódica de principales desactivados y validación de joins. Ver lib.
+const {
+  attachConnectionCap,
+  createEventLimiter,
+  startRevalidationSweep,
+  locationBelongsToRestaurant,
+  orderBelongsToRestaurant,
+} = require('./lib/socket-guard')
+
+attachConnectionCap(io)
+startRevalidationSweep(io)
+
 io.use((socket, next) => {
   const authHeader = String(socket.handshake.headers?.authorization || '');
   const token =
@@ -91,6 +104,11 @@ io.on('connection', (socket) => {
   const restaurantId = socket.handshake.query.restaurantId;
   console.log(`Cliente conectado: ${socket.id} (Restaurant: ${restaurantId || 'none'})`)
 
+  // Cupo de eventos entrantes por socket; exceder el cupo ignora el evento
+  // (no desconecta: un cliente con reintentos agresivos no debe perder las
+  // notificaciones por esto).
+  const allowEvent = createEventLimiter(socket.id);
+
   const userRestaurantId = socket.data.user?.restaurantId;
   const canJoinRestaurant = restaurantId && (
     socket.data.user?.role === 'SUPER_ADMIN' ||
@@ -99,13 +117,22 @@ io.on('connection', (socket) => {
 
   if (canJoinRestaurant) {
     socket.join(`restaurant:${restaurantId}`);
-    socket.on('join:admin',   () => socket.join(`restaurant:${restaurantId}:admins`))
-    socket.on('join:kitchen', () => socket.join(`restaurant:${restaurantId}:kitchen`))
-    socket.on('join:location:admin', (locationId) => {
-      if (locationId) socket.join(`restaurant:${restaurantId}:location:${locationId}:admins`)
+    socket.on('join:admin',   () => { if (allowEvent()) socket.join(`restaurant:${restaurantId}:admins`) })
+    socket.on('join:kitchen', () => { if (allowEvent()) socket.join(`restaurant:${restaurantId}:kitchen`) })
+    // Los ids del payload se verifican contra el restaurante del socket: sin
+    // esto, un cliente podía unirse a rooms de sucursales/órdenes ajenas
+    // armando el nombre del room con un id de otro tenant.
+    socket.on('join:location:admin', async (locationId) => {
+      if (!allowEvent()) return
+      if (await locationBelongsToRestaurant(locationId, restaurantId)) {
+        socket.join(`restaurant:${restaurantId}:location:${locationId}:admins`)
+      }
     })
-    socket.on('join:location:kitchen', (locationId) => {
-      if (locationId) socket.join(`restaurant:${restaurantId}:location:${locationId}:kitchen`)
+    socket.on('join:location:kitchen', async (locationId) => {
+      if (!allowEvent()) return
+      if (await locationBelongsToRestaurant(locationId, restaurantId)) {
+        socket.join(`restaurant:${restaurantId}:location:${locationId}:kitchen`)
+      }
     })
   }
 
@@ -119,8 +146,11 @@ io.on('connection', (socket) => {
     if (tokenUser.restaurantId) socket.join(`restaurant:${tokenUser.restaurantId}:drivers`)
   }
 
-  socket.on('join:order',   (orderId) => {
-    if (canJoinRestaurant) socket.join('order:' + orderId)
+  socket.on('join:order', async (orderId) => {
+    if (!canJoinRestaurant || !allowEvent()) return
+    if (await orderBelongsToRestaurant(orderId, restaurantId)) {
+      socket.join('order:' + orderId)
+    }
   })
   socket.on('disconnect',   () => console.log('Cliente desconectado: ' + socket.id))
 })
