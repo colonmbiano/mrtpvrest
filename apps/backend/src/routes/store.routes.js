@@ -510,6 +510,21 @@ router.post('/orders', async (req, res) => {
   // Resolver sucursal final (body tiene prioridad sobre query)
   let resolvedLocationId = location?.id || bodyLocationId || null;
 
+  // Sin sucursal explícita (caso típico de WhatsApp y de tiendas con un solo
+  // local que no mandan ?l): caer en la sucursal principal del restaurante. Si
+  // la dejáramos en null, el pedido (a) no llega al room Socket de la caja
+  // (restaurant:<id>:location:<loc>:admins) y (b) se filtra del panel del TPV
+  // cuando la tablet tiene una sucursal activa (orders/admin filtra por
+  // locationId) → el cajero NUNCA lo ve, ni en vivo ni al refrescar.
+  if (!resolvedLocationId) {
+    const primary = await prisma.location.findFirst({
+      where: { restaurantId: restaurant.id, isActive: true },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (primary) resolvedLocationId = primary.id;
+  }
+
   try {
     // Verificar y calcular items desde la BD (nunca confiar en precios del cliente)
     const itemsData = await Promise.all(
