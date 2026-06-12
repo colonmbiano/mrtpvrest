@@ -2,7 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
+  Banknote,
   Bike,
+  CheckCircle2,
   Loader2,
   RefreshCw,
   Users,
@@ -47,6 +49,18 @@ type CashSummary = {
   expense: number;
   returned: number;
   deliveries: number;
+};
+
+// Pedido entregado pero sin cobro confirmado (efectivo que el repartidor aún
+// trae). Espejo de la lista del admin (/api/driver-cash/pending-collection).
+type PendingOrder = {
+  id: string;
+  orderNumber: string;
+  total: number;
+  paymentMethod: string | null;
+  customerName: string | null;
+  deliveryAddress: string | null;
+  driverName: string | null;
 };
 
 type ApiError = {
@@ -101,6 +115,9 @@ export default function DriversPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<{ id: string; name: string } | null>(null);
+  const [pending, setPending] = useState<PendingOrder[]>([]);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmingAll, setConfirmingAll] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const canViewFinancial = currentRole ? FINANCIAL_ROLES.has(currentRole) : false;
 
@@ -115,7 +132,14 @@ export default function DriversPanel({
       const cashPromise = canViewFinancial
         ? api.get<CashSummary[]>("/api/driver-cash/summary/today").catch(() => null)
         : Promise.resolve(null);
-      const [gpsRes, cashRes] = await Promise.all([gpsPromise, cashPromise]);
+      const pendingPromise = canViewFinancial
+        ? api.get<PendingOrder[]>("/api/driver-cash/pending-collection").catch(() => null)
+        : Promise.resolve(null);
+      const [gpsRes, cashRes, pendingRes] = await Promise.all([gpsPromise, cashPromise, pendingPromise]);
+
+      // Solo sobrescribimos en éxito: ante un error de red transitorio dejamos
+      // la lista anterior visible en vez de parpadear a vacío.
+      if (pendingRes) setPending(pendingRes.data);
 
       const cashMap = (cashRes?.data || []).reduce(
         (acc: Record<string, DriverRow["cash"]>, item: CashSummary) => {
@@ -146,6 +170,42 @@ export default function DriversPanel({
       }
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Marca el pedido como cobrado: el efectivo del repartidor entra a caja.
+  // Mismo endpoint que usa el admin (PUT /api/orders/:id/confirm-cash): pone
+  // paidAt, dispara el kick del cajón y notifica al TPV.
+  async function confirmCash(orderId: string) {
+    setConfirmingId(orderId);
+    try {
+      await api.put(`/api/orders/${orderId}/confirm-cash`);
+      setPending(prev => prev.filter(o => o.id !== orderId));
+      fetchLive(true); // refresca el resumen de efectivo del repartidor
+    } catch (error: unknown) {
+      const e = error as AxiosError<ApiError>;
+      setError(e?.response?.data?.error || "No se pudo confirmar el cobro");
+    } finally {
+      setConfirmingId(null);
+    }
+  }
+
+  // Liquida todos los pendientes de una vez. Secuencial para no saturar el
+  // backend ni el cajón; cada confirmación va quitando su fila de la lista.
+  async function confirmAll() {
+    if (!pending.length) return;
+    if (!window.confirm(`¿Confirmar el cobro de ${pending.length} pedidos?`)) return;
+    setConfirmingAll(true);
+    try {
+      for (const o of [...pending]) {
+        try {
+          await api.put(`/api/orders/${o.id}/confirm-cash`);
+          setPending(prev => prev.filter(p => p.id !== o.id));
+        } catch { /* deja el pendiente en la lista para reintentar */ }
+      }
+      fetchLive(true);
+    } finally {
+      setConfirmingAll(false);
     }
   }
 
@@ -213,6 +273,85 @@ export default function DriversPanel({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
+          {/* Pendientes de cobro: entregas sin pago confirmado. El cajero
+              liquida aquí el efectivo que trae el repartidor sin salir del TPV. */}
+          {canViewFinancial && pending.length > 0 && (
+            <div className="border-b" style={{ borderColor: "var(--border)" }}>
+              <div
+                className="px-5 py-3 flex items-center gap-2"
+                style={{ background: "var(--surf2)" }}
+              >
+                <Banknote size={16} style={{ color: accent }} />
+                <span className="text-sm font-black text-white">Pendientes de cobro</span>
+                <span
+                  className="text-[10px] font-black px-1.5 py-0.5 rounded-md"
+                  style={{ background: `${accent}22`, color: accent }}
+                >
+                  {pending.length}
+                </span>
+                <span className="ml-auto text-sm font-black" style={{ color: accent }}>
+                  ${pending.reduce((s, o) => s + (o.total || 0), 0).toFixed(0)}
+                </span>
+              </div>
+
+              {pending.length > 1 && (
+                <button
+                  type="button"
+                  onClick={confirmAll}
+                  disabled={confirmingAll || confirmingId !== null}
+                  className="w-full min-h-[44px] flex items-center justify-center gap-2 text-[12px] font-black uppercase tracking-wider border-b disabled:opacity-50 active:scale-[0.99] transition-transform"
+                  style={{ borderColor: "var(--border)", background: `${accent}14`, color: accent }}
+                >
+                  {confirmingAll ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                  {confirmingAll ? "Confirmando..." : `Confirmar todo (${pending.length})`}
+                </button>
+              )}
+
+              <div className="flex flex-col divide-y" style={{ borderColor: "var(--border)" }}>
+                {pending.map(o => {
+                  const method = o.paymentMethod === "CASH"
+                    ? "Efectivo"
+                    : o.paymentMethod === "PENDING"
+                      ? "Por cobrar"
+                      : (o.paymentMethod || "—");
+                  return (
+                    <div
+                      key={o.id}
+                      className="px-5 py-3 flex items-center gap-3"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold text-white truncate">
+                          #{o.orderNumber}{o.customerName ? ` · ${o.customerName}` : ""}
+                        </div>
+                        <div className="text-[11px] truncate" style={{ color: "var(--muted)" }}>
+                          {o.driverName ? `${o.driverName} · ` : ""}{method}
+                          {o.deliveryAddress ? ` · ${o.deliveryAddress}` : ""}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-[9px] uppercase font-bold" style={{ color: "var(--muted)" }}>Total</div>
+                        <div className="text-sm font-black" style={{ color: accent }}>${(o.total || 0).toFixed(0)}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => confirmCash(o.id)}
+                        disabled={confirmingId === o.id || confirmingAll}
+                        aria-label="Confirmar cobro"
+                        className="shrink-0 min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl flex items-center justify-center disabled:opacity-50 active:scale-95 transition-transform"
+                        style={{ background: `${accent}1f`, color: accent, border: `1px solid ${accent}40` }}
+                      >
+                        {confirmingId === o.id
+                          ? <Loader2 size={18} className="animate-spin" />
+                          : <CheckCircle2 size={18} strokeWidth={2.5} />}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {loading && (
             <div className="h-full min-h-48 flex flex-col items-center justify-center gap-3 p-6 text-sm" style={{ color: "var(--muted)" }}>
               <Loader2 size={24} className="animate-spin" style={{ color: accent }} />

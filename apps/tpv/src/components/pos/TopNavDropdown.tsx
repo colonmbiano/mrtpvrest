@@ -207,7 +207,12 @@ export default function TopNavDropdown({
         )}
       </div>
 
-      <DriversPanel isOpen={showDrivers} onClose={() => setShowDrivers(false)} accent="#ffb84d" />
+      <DriversPanel
+        isOpen={showDrivers}
+        onClose={() => setShowDrivers(false)}
+        accent="#ffb84d"
+        currentRole={currentEmployee?.role}
+      />
     </>
   );
 }
