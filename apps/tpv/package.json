@@ -30,6 +30,7 @@
     "@capgo/capacitor-updater": "^8.0.0",
     "@tanstack/react-virtual": "^3.13.25",
     "axios": "^1.16.1",
+    "capacitor-secure-storage-plugin": "0.13.0",
     "capacitor-tcp-socket": "^7.1.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.11.0",

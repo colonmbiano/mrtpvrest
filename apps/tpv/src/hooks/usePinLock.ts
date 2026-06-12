@@ -97,7 +97,8 @@ export function usePinLock() {
         // El KDS vive en una APK aparte (apps/kds). El cocinero no debe
         // estar autenticado en el TPV — limpiamos sesión y avisamos.
         if (typeof window !== "undefined") {
-          localStorage.removeItem("accessToken");
+          const { setToken } = await import("@/lib/token-vault");
+          void setToken(null);
         }
         return;
       }

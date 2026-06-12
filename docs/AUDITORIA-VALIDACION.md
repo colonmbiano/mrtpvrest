@@ -66,7 +66,15 @@ qué hallazgos son reales, y el plan de remediación priorizado.
   agregar la firma como primera barrera.
 
 ### P1 — TPV/Capacitor
-8. Tokens en localStorage/sessionStorage (sin secure storage nativo) — pendiente.
+8. ~~Tokens en localStorage/sessionStorage~~ → **ARREGLADO (código)**: nuevo
+   `apps/tpv/src/lib/token-vault.ts` — en APK con el plugin
+   `capacitor-secure-storage-plugin` el JWT vive en EncryptedSharedPreferences
+   (Android Keystore) con migración automática desde las llaves legacy; en web
+   y APKs viejos (OTA llega antes que el APK) fallback transparente al
+   comportamiento anterior. El JWT también salió del persist de zustand
+   (`tpv-auth-storage` lo duplicaba en claro). Todos los call sites (api,
+   sockets, hooks, dual-screen) leen del vault. ⚠️ El Keystore se activa con
+   el PRÓXIMO APK release del TPV; mientras tanto el OTA corre en fallback.
 9. ~~`usesCleartextTraffic="true"` + `allowMixedContent: true`; override de API
    URL sin validar~~ → **ARREGLADO** en TPV, KDS y delivery: cleartext fuera
    del manifest principal y de capacitor.config (la impresión LAN no se afecta:
@@ -120,8 +128,7 @@ qué hallazgos son reales, y el plan de remediación priorizado.
 ## Orden de ejecución sugerido para lo pendiente
 
 1. Promover E2E a gate (configurar secrets del workflow primero).
-2. Tokens del TPV a secure storage nativo (requiere plugin + APK, con
-   fallback: los APKs instalados no tendrán el plugin hasta renovarse).
+2. APK release del TPV (activa Keystore de tokens + https-only nativo).
 3. Migración Decimal (proyecto aparte).
 
 > Nota de método: la validación fue por muestreo con agentes de lectura. Los

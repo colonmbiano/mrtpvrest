@@ -12,6 +12,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import api from "@/lib/api";
 import { hashPin } from "@/lib/hash";
+import { setToken as vaultSetToken, getTokenSync } from "@/lib/token-vault";
 
 const MAX_PIN_ATTEMPTS = 5;
 const LOCKOUT_MS = 2 * 60 * 1000; // 2 minutos
@@ -176,9 +177,10 @@ export const useAuthStore = create<AuthState>()(
                 localStorage.setItem("currentEmployeeName", employee.name);
                 localStorage.setItem("currentEmployeeRole", employee.role);
                 if (token) {
-                  sessionStorage.setItem("tpv-access-token", token);
-                  localStorage.setItem("accessToken", token);
-                  localStorage.setItem("tpv-employee-token", token);
+                  // token-vault: secure storage en APK con plugin; en web y
+                  // APKs viejos escribe las mismas llaves legacy de siempre.
+                  // La memoria del vault se actualiza síncronamente.
+                  void vaultSetToken(token);
                 }
               }
             };
@@ -241,9 +243,7 @@ export const useAuthStore = create<AuthState>()(
                 });
 
                 if (typeof window !== "undefined") {
-                  sessionStorage.setItem("tpv-access-token", token);
-                  localStorage.setItem("accessToken", token);
-                  localStorage.setItem("tpv-employee-token", token);
+                  void vaultSetToken(token);
                   document.cookie = `tpv-session-active=true; path=/; SameSite=Lax`;
                   if (employee?.role) {
                     document.cookie = `tpv-role=${encodeURIComponent(employee.role)}; path=/; SameSite=Lax`;
@@ -308,10 +308,9 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         if (typeof window !== "undefined") {
-          sessionStorage.removeItem("tpv-access-token");
+          // vault limpia secure storage + llaves legacy del token.
+          void vaultSetToken(null);
           sessionStorage.removeItem("tpv-employee");
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("tpv-employee-token");
           localStorage.removeItem("currentEmployeeId");
           localStorage.removeItem("currentEmployeeName");
           localStorage.removeItem("currentEmployeeRole");
@@ -348,9 +347,7 @@ export const useAuthStore = create<AuthState>()(
       hydrateFromStorage: () => {
         if (typeof window === "undefined") return;
         try {
-          const token =
-            sessionStorage.getItem("tpv-access-token") ||
-            localStorage.getItem("accessToken");
+          const token = getTokenSync();
           const empId = localStorage.getItem("currentEmployeeId");
           
           if (token || empId) {
@@ -369,12 +366,14 @@ export const useAuthStore = create<AuthState>()(
           ? localStorage
           : (undefined as unknown as Storage)
       ),
-      // We persist employee session and the offline cache
+      // We persist employee session and the offline cache.
+      // El token NO se persiste aquí: duplicaba el JWT en claro en
+      // localStorage (tpv-auth-storage). Vive en token-vault; api.ts lo
+      // resuelve de ahí, no de este estado.
       partialize: (state) => ({
         employee: state.employee,
         employees: state.employees,
         isAuthenticated: state.isAuthenticated,
-        token: state.token,
         pinAttempts: state.pinAttempts,
         lockedUntil: state.lockedUntil,
       }),

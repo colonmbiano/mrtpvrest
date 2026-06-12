@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
+import { getTokenSync } from "@/lib/token-vault";
 
 export function useTPVAuth() {
   const router = useRouter();
@@ -34,11 +35,7 @@ export function useTPVAuth() {
 
       // Backfill desde backend si la cache está vacía o trae fallback
       // genérico y tenemos token para autenticar la petición.
-      const hasToken = Boolean(
-        sessionStorage.getItem("tpv-access-token") ||
-        localStorage.getItem("accessToken") ||
-        localStorage.getItem("tpv-employee-token")
-      );
+      const hasToken = Boolean(getTokenSync());
       const needsBackfill =
         !cachedRest || !cachedLoc ||
         cachedRest === "MRTPVREST" || cachedLoc === "Sucursal";

@@ -646,6 +646,9 @@ importers:
       axios:
         specifier: ^1.16.1
         version: 1.16.1
+      capacitor-secure-storage-plugin:
+        specifier: 0.13.0
+        version: 0.13.0(@capacitor/core@8.3.1)
       capacitor-tcp-socket:
         specifier: ^7.1.0
         version: 7.1.0(@capacitor/core@8.3.1)
@@ -3878,6 +3881,11 @@ packages:
 
   caniuse-lite@1.0.30001784:
     resolution: {integrity: sha512-WU346nBTklUV9YfUl60fqRbU5ZqyXlqvo1SgigE1OAXK5bFL8LL9q1K7aap3N739l4BvNqnkm3YrGHiY9sfUQw==}
+
+  capacitor-secure-storage-plugin@0.13.0:
+    resolution: {integrity: sha512-+rLC/9Z0LTaRRt6L6HjBwcDh5gqgI3NPmDSwo4hk41XQOy3EBrRo81VleIqFsowsMA3oMT+E59Bl8/HiWk0nhQ==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
 
   capacitor-tcp-socket@7.1.0:
     resolution: {integrity: sha512-nuw5/AsSlc/IoR6rkhdoRls9a8Rbomk9F9cy+DSfOqTyT0a0Vt8IJ/RZ/L2t1BVYJceNt3ziLs3Ekr6SYwsb6w==}
@@ -11407,6 +11415,10 @@ snapshots:
   camelcase@6.3.0: {}
 
   caniuse-lite@1.0.30001784: {}
+
+  capacitor-secure-storage-plugin@0.13.0(@capacitor/core@8.3.1):
+    dependencies:
+      '@capacitor/core': 8.3.1
 
   capacitor-tcp-socket@7.1.0(@capacitor/core@8.3.1):
     dependencies:

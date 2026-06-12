@@ -6,6 +6,7 @@
  * conservan intactas.
  */
 import api from "@/lib/api";
+import { getTokenSync } from "@/lib/token-vault";
 import { getApiUrl } from "@/lib/config";
 import {
   getDualScreenConfig,
@@ -31,11 +32,7 @@ export const API_URL =
  */
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
-  return (
-    sessionStorage.getItem("tpv-access-token") ||
-    localStorage.getItem("accessToken") ||
-    localStorage.getItem("tpv-employee-token")
-  );
+  return getTokenSync();
 }
 
 interface RemotePromo {
