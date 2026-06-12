@@ -262,7 +262,6 @@ async function syncAuthorizedPaymentFromMercadoPago(authorizedPayment) {
     : null
   const externalId = String(authorizedPayment.id)
 
-  const existingInvoice = await prisma.invoice.findFirst({ where: { externalId } })
   const invoiceData = {
     subscriptionId: subscription.id,
     amount: Number(authorizedPayment.transaction_amount || subscription.priceSnapshot),
@@ -274,27 +273,36 @@ async function syncAuthorizedPaymentFromMercadoPago(authorizedPayment) {
     externalId,
   }
 
-  const invoice = existingInvoice
-    ? await prisma.invoice.update({ where: { id: existingInvoice.id }, data: invoiceData })
-    : await prisma.invoice.create({ data: invoiceData })
+  // Invoice y subscription en la MISMA transacción: un crash entre ambas
+  // dejaba la invoice marcada PAID con la suscripción sin activar (o al
+  // revés en FAILED). MP reintenta el webhook, así que el dedupe por
+  // externalId dentro de la tx también corta el replay del mismo pago.
+  const invoice = await prisma.$transaction(async (tx) => {
+    const existingInvoice = await tx.invoice.findFirst({ where: { externalId } })
+    const inv = existingInvoice
+      ? await tx.invoice.update({ where: { id: existingInvoice.id }, data: invoiceData })
+      : await tx.invoice.create({ data: invoiceData })
 
-  if (status === 'PAID') {
-    await prisma.subscription.update({
-      where: { id: subscription.id },
-      data: {
-        status: 'ACTIVE',
-        currentPeriodStart: periodStart,
-        currentPeriodEnd: periodEnd,
-        trialEndsAt: null,
-        cancelledAt: null,
-      },
-    })
-  } else if (status === 'FAILED') {
-    await prisma.subscription.update({
-      where: { id: subscription.id },
-      data: { status: 'PAST_DUE' },
-    })
-  }
+    if (status === 'PAID') {
+      await tx.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: 'ACTIVE',
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: periodEnd,
+          trialEndsAt: null,
+          cancelledAt: null,
+        },
+      })
+    } else if (status === 'FAILED') {
+      await tx.subscription.update({
+        where: { id: subscription.id },
+        data: { status: 'PAST_DUE' },
+      })
+    }
+
+    return inv
+  })
 
   return invoice
 }

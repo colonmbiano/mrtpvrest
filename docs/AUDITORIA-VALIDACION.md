@@ -31,14 +31,31 @@ qué hallazgos son reales, y el plan de remediación priorizado.
    DriverShiftRequest)~~ → **ARREGLADO**. Pendiente operativo: promover
    `TENANT_GUARD_MODE=enforce` en Railway tras revisar los warnings acumulados.
 
-### P0/P1 — webhooks de pago (pendiente)
-5. Kiosk webhooks (Stripe y MP) sin verificación de firma. Mitigante: revalidan
-   el pago contra la API de la pasarela (`externalReference === orderId`), pero
-   falta la firma como primera barrera.
-6. Sin idempotencia por `event.id` en los 4 webhooks de pago; sin UNIQUE en
-   `Invoice.externalId` / `Order.paymentProviderId`; en SaaS MP el update de
-   invoice y el de subscription van fuera de transacción.
-7. Cero tests de webhooks.
+### P0/P1 — webhooks de pago
+5. ~~Kiosk webhooks sin idempotencia (doble emit de sockets → doble impresión)
+   y eventos tardíos podían degradar órdenes pagadas~~ → **ARREGLADO**:
+   `applyPaymentResult` usa updateMany condicional (`paymentStatus != PAID`);
+   solo el primer PAID gana y emite; no-PAID nunca pisa una orden pagada.
+   Mismo guard en el webhook web de payments.routes.js (`rejected` tardío ya
+   no cancela órdenes pagadas).
+6. ~~SaaS MP: invoice y subscription fuera de transacción~~ → **ARREGLADO**
+   (`syncAuthorizedPaymentFromMercadoPago` envuelve ambas en `$transaction`
+   con el dedupe por externalId adentro).
+7. ~~Cero tests de webhooks~~ → **PARCIAL**: agregados 4 tests del kiosk
+   webhook (idempotencia, no-downgrade, externalReference mismatch). Faltan
+   tests de los webhooks SaaS.
+
+**Pendiente con `db push` coordinado** (Railway NO aplica migraciones en
+deploy — solo `prisma generate`; el constraint sin código que lo maneje o
+viceversa rompe los webhooks):
+- UNIQUE en `Invoice.externalId` y considerar tabla `WebhookEvent` con
+  UNIQUE(provider, eventId) para dedupe duro por evento.
+- Nota de diseño: los kiosk webhooks no verifican firma porque las llaves son
+  per-restaurant y no se almacena webhook secret por restaurante; el patrón
+  actual (re-fetch del pago contra la API de la pasarela + comparar
+  externalReference) es la alternativa documentada por Stripe y no confía en
+  el payload. Si algún día se guardan webhook secrets por restaurante,
+  agregar la firma como primera barrera.
 
 ### P1 — TPV/Capacitor (pendiente)
 8. Tokens en localStorage/sessionStorage (sin secure storage nativo).
@@ -69,11 +86,11 @@ qué hallazgos son reales, y el plan de remediación priorizado.
 
 ## Orden de ejecución sugerido para lo pendiente
 
-1. Webhooks: firma kiosk + idempotencia `event.id` + tx + tests (dinero).
-2. `TENANT_GUARD_MODE=enforce` en Railway (tras ventana de observación de warns).
-3. Capacitor: cleartext/mixed content + validación https del override.
-4. Sockets: revalidación periódica + rate limit + validar joins.
-5. Dependabot + pin SHA + permissions en workflows.
+1. `TENANT_GUARD_MODE=enforce` en Railway (tras ventana de observación de warns).
+2. Capacitor: cleartext/mixed content + validación https del override.
+3. Sockets: revalidación periódica + rate limit + validar joins.
+4. Dependabot + pin SHA + permissions en workflows.
+5. UNIQUE constraints de webhooks + tests SaaS (con db push coordinado).
 6. Migración Decimal (proyecto aparte).
 
 > Nota de método: la validación fue por muestreo con agentes de lectura. Los
