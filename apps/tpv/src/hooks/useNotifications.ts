@@ -106,9 +106,15 @@ export const useNotifStore = create<NotifState>()(
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useNotifications() {
+export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
   const socketRef = useRef<Socket | null>(null);
   const { addNotification } = useNotifStore();
+
+  // El callback se guarda en un ref que se refresca en cada render, así
+  // handleOrderNew permanece estable (no re-suscribe el socket) pero siempre
+  // invoca la última versión del consumidor (p.ej. la auto-impresión del POS).
+  const onOrderNewRef = useRef(opts?.onOrderNew);
+  onOrderNewRef.current = opts?.onOrderNew;
 
   const handleOrderNew = useCallback((order: any) => {
     const isOnline =
@@ -125,6 +131,10 @@ export function useNotifications() {
       orderNumber: order.orderNumber,
       total: Number(order.total ?? 0),
     });
+
+    // Hook para consumidores que necesitan reaccionar al pedido entrante
+    // (auto-impresión de comanda en la caja). No debe romper la notificación.
+    try { onOrderNewRef.current?.(order); } catch { /* noop */ }
   }, [addNotification]);
 
   const handleOrderKiosk = useCallback((data: any) => {
