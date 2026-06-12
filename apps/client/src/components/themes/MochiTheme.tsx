@@ -113,7 +113,8 @@ export function MochiTheme({ data }: MochiThemeProps) {
                 
                 return (
                   <article key={product.id} className="bg-white rounded-[32px] p-4 shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 flex flex-col group">
-                    <div className="relative w-full aspect-square rounded-[24px] overflow-hidden bg-surface-2 mb-4">
+                    <div onClick={() => pick(product)} role="button" tabIndex={0}
+                      className="relative w-full aspect-square rounded-[24px] overflow-hidden bg-surface-2 mb-4 cursor-pointer">
                       {product.isPopular && (
                         <span className="absolute top-3 left-3 bg-white/90 backdrop-blur-md text-gray-800 text-[10px] font-black px-3 py-1.5 rounded-full z-10 shadow-sm border border-gray-100">
                           ⭐ DESTACADO
@@ -130,9 +131,17 @@ export function MochiTheme({ data }: MochiThemeProps) {
                     </div>
                     
                     <div className="flex-1 flex flex-col">
-                      <h4 className="font-syne font-bold text-base text-gray-800 leading-tight mb-1">{product.name}</h4>
+                      <h4 onClick={() => pick(product)} className="font-syne font-bold text-base text-gray-800 leading-tight mb-1 cursor-pointer">{product.name}</h4>
                       {product.description && (
                         <p className="font-sans text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
+                      )}
+                      {/* Pista visible de opciones/variantes: la tarjeta antes solo se
+                          podía abrir con el botón "+" de la esquina. */}
+                      {needsModal(product) && (
+                        <button onClick={() => pick(product)}
+                          className="mt-1.5 self-start text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-primary-light text-primary">
+                          Ver opciones ›
+                        </button>
                       )}
                       
                       <div className="mt-auto pt-4 flex items-center justify-between">
