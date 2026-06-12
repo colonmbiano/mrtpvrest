@@ -1,3 +1,4 @@
+import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import { MapPin, Phone, MessageCircle } from 'lucide-react';
 import { MochiTheme } from '@/components/themes/MochiTheme';
@@ -111,6 +112,78 @@ async function fetchLocations(slug: string) {
   } catch {
     return [];
   }
+}
+
+// URL pública de la tienda (subdominio del tenant). El middleware reescribe
+// `{slug}.mrtpvrest.com/...` a `/[slug]/...`, así que reconstruimos el origen
+// a partir del slug para que canonical, OG y manifest apunten al host real.
+function storeOrigin(slug: string): string {
+  return `https://${slug}.mrtpvrest.com`;
+}
+
+// Metadata por tenant: título con marca, descripción, Open Graph (preview en
+// WhatsApp/Facebook), Twitter card, canonical, favicon y manifest PWA.
+// Soluciona la falta total de OG y el title/description genéricos detectados
+// en la auditoría. Reusa fetchStore (mismas opciones de fetch → Next dedupe).
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const store = await fetchStore(slug);
+
+  // Sin tienda válida: dejamos los defaults globales del layout.
+  if (!store) return {};
+
+  const origin = storeOrigin(slug);
+  const title = `${store.name} | Pedidos a domicilio`;
+  const description = `Haz tu pedido en línea de ${store.name} de forma fácil y rápida. Menú completo, carrito y entrega a domicilio.`;
+  // Los scrapers de OG/Twitter (WhatsApp, Facebook) NO renderizan data: URIs;
+  // solo usamos el logo como preview si es una URL http(s) absoluta. El favicon
+  // sí acepta data URIs, así que esos se quedan con store.logo tal cual.
+  const ogLogo = store.logo && /^https?:\/\//i.test(store.logo) ? store.logo : null;
+  const images = ogLogo ? [{ url: ogLogo, alt: store.name }] : undefined;
+
+  return {
+    metadataBase: new URL(origin),
+    title,
+    description,
+    applicationName: store.name,
+    alternates: { canonical: '/' },
+    manifest: '/manifest.webmanifest',
+    icons: store.logo
+      ? { icon: store.logo, shortcut: store.logo, apple: store.logo }
+      : undefined,
+    openGraph: {
+      type: 'website',
+      siteName: store.name,
+      title,
+      description,
+      url: origin,
+      locale: 'es_MX',
+      images,
+    },
+    twitter: {
+      card: 'summary',
+      title,
+      description,
+      images: ogLogo ? [ogLogo] : undefined,
+    },
+    appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: store.name },
+  };
+}
+
+// theme-color por tenant: usa el acento de la marca en lugar del negro fijo.
+export async function generateViewport({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Viewport> {
+  const { slug } = await params;
+  const store = await fetchStore(slug);
+  const primary = store?.primaryColor || store?.themeConfig?.primaryColor || '#ff5c35';
+  return { width: 'device-width', initialScale: 1, themeColor: primary };
 }
 
 export default async function StorefrontPage({
