@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Search, ShoppingCart, UtensilsCrossed } from "lucide-react";
 import ConfigMenu from "@/components/pos/ConfigMenu";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
@@ -98,8 +98,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [showCatalogSettings, setShowCatalogSettings] = useState(false);
   const [mobileView, setMobileView] = useState<"menu" | "ticket">("menu");
 
-  // Sistema de notificaciones en tiempo real vía Socket.io
-  useNotifications();
+  // Sistema de notificaciones en tiempo real vía Socket.io. Le pasamos un
+  // callback (vía ref, ver abajo) para auto-imprimir la comanda de los pedidos
+  // web al entrar: el backend cloud no alcanza las impresoras LAN, así que la
+  // caja es quien imprime.
+  const autoPrintWebOrderRef = useRef<((order: any) => void) | null>(null);
+  useNotifications({ onOrderNew: (order) => autoPrintWebOrderRef.current?.(order) });
   const unreadCount = useNotifStore((s) => s.unreadCount);
 
   // Mantener la pantalla encendida mientras esté abierto el shell de
@@ -463,6 +467,61 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       };
     });
   };
+
+  // AUTO-IMPRESIÓN DE PEDIDOS WEB (online / WhatsApp / tienda)
+  // El cajero "no veía" los pedidos web porque solo llegaba una notificación en
+  // pantalla. Aquí, al entrar un order:new de una fuente web, imprimimos la
+  // comanda en cocina automáticamente (el backend cloud no alcanza las
+  // impresoras LAN, por eso lo hace la tablet). Los pedidos TPV ya imprimen al
+  // crearse, así que se filtran por source. Dedupe por id para no reimprimir en
+  // reconexión o por el doble order:new (creación + pago) de la tienda.
+  const printedWebOrders = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    autoPrintWebOrderRef.current = async (order: any) => {
+      const id: string | undefined = order?.id || order?.orderId;
+      if (!id) return;
+      const src = String(order?.source || "").toUpperCase();
+      // Si viene source y NO es web (p.ej. TPV/WAITER), no imprimir: esos ya
+      // imprimieron localmente al crearse. Si no viene source (payload mínimo
+      // de la tienda), lo confirmamos con el detalle más abajo.
+      if (src && !ONLINE_SOURCES.has(src)) return;
+      if (printedWebOrders.current.has(id)) return;
+      printedWebOrders.current.add(id);
+      try {
+        // Siempre pedimos el detalle: el payload del socket no trae los
+        // printerGroups/categorías que necesita el ruteo a cocina.
+        const full = await fetchFullOrder({ id });
+        const fullSrc = String(full?.source || "").toUpperCase();
+        if (fullSrc && !ONLINE_SOURCES.has(fullSrc)) {
+          printedWebOrders.current.delete(id);
+          return;
+        }
+        const items = orderItemsToTicketItems(full.items || []);
+        if (items.length === 0) {
+          printedWebOrders.current.delete(id);
+          return;
+        }
+        const res = await printKitchenTickets(printers, {
+          orderNumber: full.orderNumber || String(full.id).slice(-6).toUpperCase(),
+          orderType: full.orderType || null,
+          tableNumber: full.table?.name || full.tableNumber || null,
+          customerName: full.customerName || full.user?.name || null,
+          items,
+          config: kitchenConfig ?? undefined,
+        });
+        const folio = full.orderNumber ? `#${full.orderNumber}` : "";
+        if (res.ok > 0) {
+          toast.success(`🖨️ Pedido web ${folio} impreso en cocina`);
+        } else {
+          // Permitir reintento (manual o por re-evento) si la impresora falló.
+          printedWebOrders.current.delete(id);
+          toast.warning(`Pedido web ${folio} recibido — no se pudo imprimir, revisa la impresora`);
+        }
+      } catch {
+        printedWebOrders.current.delete(id);
+      }
+    };
+  }, [printers, kitchenConfig]);
 
   // FASE 4 · IMPRESIÓN DUAL — TICKET DE CUENTA (CASHIER)
   // El backend Railway no puede llegar a las impresoras LAN del local,
