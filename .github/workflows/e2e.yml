@@ -118,7 +118,7 @@ jobs:
           NEXT_PUBLIC_API_URL: "http://localhost:3001"
 
       - name: Esperar a los servicios
-        run: pnpm exec wait-on -t 120000 http://localhost:3001/health http://localhost:3002 http://localhost:3005
+        run: pnpm dlx wait-on@8.0.1 -t 120000 http://localhost:3001/health http://localhost:3002 http://localhost:3005
 
       - name: Correr E2E
         run: pnpm test:e2e
