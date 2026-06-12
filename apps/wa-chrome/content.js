@@ -101,7 +101,30 @@
       }
     }
 
-    // 2) Si no, el último "turno" del cliente: racha de mensajes entrantes.
+    // 2) Confirmación en lenguaje natural (sin palabra clave). El agente de IA
+    //    del negocio resume el pedido con "Tu pedido de <X> ha sido enviado...",
+    //    o el cliente escribe "...un pedido de <X>". El detalle suele estar en el
+    //    mensaje del NEGOCIO (saliente), no en el último del cliente, por eso
+    //    escaneamos TODOS los mensajes (más reciente primero). Un guard exige que
+    //    el tramo capturado tenga un producto o cantidad, para no engancharse de
+    //    "gracias por tu pedido".
+    const CONFIRM = /\bpedido\b(?:\s+de)?\s*[:\-]?\s+(.+?)(?=\s+(?:ha sido|fue|ser[áa]|est[áa]|qued[óo]|se\b|el repartidor|el tiempo|gracias)\b|[.!?\n]|$)/i;
+    const PROD_HINT = /\d|kg|kilo|alit|bonel|hamburg|burger|taco|burrit|gringa|papa|refresc|coca|agua|promo|combo|pizza|nugget|costill|antoj|quesadill|alambr|chela|cerveza|hot ?dog|\borden\b/i;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i].full.match(CONFIRM);
+      if (!m || !m[1]) continue;
+      const span = m[1].trim();
+      if (span.length < 3 || !PROD_HINT.test(span)) continue;
+      // Tipo y dirección desde el mismo mensaje (heurístico; el cajero ajusta).
+      let address = "";
+      const addrM = msgs[i].full.match(/\b(?:hacia|direcci[oó]n|domicilio en|entregar en)\s+(.+?)(?:[.!?\n]|$)/i);
+      if (addrM) address = addrM[1].trim();
+      const orderType = (address || /\b(repartidor|domicili|env[ií]o|reparto)\b/i.test(msgs[i].full)) ? "DELIVERY"
+        : (TAKEOUT_RE.test(msgs[i].full) ? "TAKEOUT" : null);
+      return { customerName, phone: "", orderType, address, text: span, count: span.split(/\s*,\s*|\s+y\s+/).filter(Boolean).length || 1, structured: true };
+    }
+
+    // 3) Si no, el último "turno" del cliente: racha de mensajes entrantes.
     let trailing = [];
     for (let i = msgs.length - 1; i >= 0; i--) {
       if (msgs[i].incoming) trailing.unshift(msgs[i]);
