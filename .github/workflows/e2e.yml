@@ -117,15 +117,16 @@ jobs:
 
       - name: Arrancar admin + tpv + saas + kds
         run: |
-          pnpm --filter @mrtpvrest/admin dev &
-          pnpm --filter @mrtpvrest/tpv dev &
-          pnpm --filter @mrtpvrest/saas dev &
-          pnpm --filter @mrtpvrest/kds dev &
+          pnpm --filter @mrtpvrest/admin dev > admin.log 2>&1 &
+          pnpm --filter @mrtpvrest/tpv dev > tpv.log 2>&1 &
+          pnpm --filter @mrtpvrest/saas dev > saas.log 2>&1 &
+          pnpm --filter @mrtpvrest/kds dev > kds.log 2>&1 &
         env:
           NEXT_PUBLIC_API_URL: "http://localhost:3001"
 
       - name: Esperar a los servicios
-        run: pnpm dlx wait-on@8.0.1 -t 120000 http://localhost:3001/health http://localhost:3002 http://localhost:3004 http://localhost:3005 http://localhost:3009
+        # El KDS web sirve bajo basePath /kds (la raíz :3009/ es 404)
+        run: pnpm dlx wait-on@8.0.1 -t 120000 http://localhost:3001/health http://localhost:3002 http://localhost:3004 http://localhost:3005 http://localhost:3009/kds/
 
       - name: Logs del backend (pre-tests)
         run: tail -40 backend.log || true
@@ -136,7 +137,7 @@ jobs:
           ADMIN_URL: "http://localhost:3002"
           TPV_URL: "http://localhost:3005"
           SAAS_URL: "http://localhost:3004"
-          KDS_URL: "http://localhost:3009"
+          KDS_URL: "http://localhost:3009/kds/"
           ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
           SUPERADMIN_EMAIL: ${{ secrets.SUPERADMIN_EMAIL }}
@@ -148,6 +149,13 @@ jobs:
       - name: Logs del backend (post-tests)
         if: always()
         run: tail -120 backend.log || true
+
+      - name: Logs de las apps Next (solo si falló)
+        if: failure()
+        run: |
+          for f in admin.log tpv.log saas.log kds.log; do
+            echo "::group::$f"; tail -60 "$f" || true; echo "::endgroup::"
+          done
 
       - name: Subir reporte HTML
         if: always()
