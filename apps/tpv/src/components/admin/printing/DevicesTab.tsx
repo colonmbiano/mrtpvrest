@@ -11,7 +11,7 @@ import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Monitor, Printer as PrinterIcon, Network, Usb, Bluetooth, Trash2, Edit3, Plus } from "lucide-react";
-import { printTestTicket, type PrinterStation } from "@/lib/printer-tcp";
+import { printTestTicket, isValidIPv4, type PrinterStation } from "@/lib/printer-tcp";
 import { formatDisplayName } from "@/lib/formatDisplayName";
 
 interface Printer {
@@ -57,6 +57,12 @@ const EMPTY_FORM: FormState = {
 };
 
 const isKdsPrinter = (p: Printer) => Boolean(p.isVirtual) || p.ip === "0.0.0.0" || (p.stations?.length ?? 0) > 0;
+
+// Limpia la IP mientras se teclea: comas → puntos (typo común) y fuera todo
+// lo que no sea dígito o punto. Un espacio o letra colados hacen que Android
+// trate la IP como hostname y el connect truene con "No address associated
+// with hostname".
+const sanitizeIpInput = (value: string) => value.replace(/,/g, ".").replace(/[^\d.]/g, "");
 
 export default function DevicesTab() {
   const [printers, setPrinters] = useState<Printer[]>([]);
@@ -111,6 +117,14 @@ export default function DevicesTab() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (saving) return;
+    // Validación de IP antes de mandar nada: KDS puede ir sin IP (socket),
+    // pero si trae algo —o si es impresora NETWORK— debe ser IPv4 válida.
+    const ip = sanitizeIpInput(form.ip);
+    const ipRequired = !form.isKDS && form.connectionType === "NETWORK";
+    if ((ipRequired || ip.length > 0) && !isValidIPv4(ip)) {
+      toast.error("IP inválida: usa solo números y puntos, ej. 192.168.1.84 (sin espacios ni letras)");
+      return;
+    }
     setSaving(true);
     const tid = toast.loading(editingId ? "Actualizando dispositivo…" : "Guardando dispositivo…");
     try {
@@ -118,7 +132,7 @@ export default function DevicesTab() {
         ? {
             name: form.name,
             connectionType: "NETWORK",
-            ip: form.ip.trim() || "0.0.0.0",
+            ip: ip || "0.0.0.0",
             port: form.port || 9100,
             type: form.stations[0] || "KITCHEN",
             stations: form.stations,
@@ -126,7 +140,7 @@ export default function DevicesTab() {
         : {
             name: form.name,
             connectionType: form.connectionType,
-            ip: form.connectionType === "NETWORK" ? form.ip.trim() : null,
+            ip: form.connectionType === "NETWORK" ? ip : null,
             port: form.port || 9100,
             type: form.type,
             stations: [],
@@ -365,7 +379,8 @@ export default function DevicesTab() {
                   <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">
                     {form.isKDS ? "IP local de la tablet" : "Dirección IP"}
                   </label>
-                  <input value={form.ip} onChange={(e) => setForm({ ...form, ip: e.target.value })}
+                  <input value={form.ip} onChange={(e) => setForm({ ...form, ip: sanitizeIpInput(e.target.value) })}
+                    inputMode="decimal" autoComplete="off"
                     className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500"
                     placeholder={form.isKDS ? "192.168.1.x (vacío = solo socket)" : "192.168.1..."} required={!form.isKDS} />
                 </div>

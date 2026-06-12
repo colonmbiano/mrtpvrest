@@ -17,6 +17,9 @@ import {
   ivaBreakdown,
   splitItemsBySeat,
   packRaster,
+  isValidIPv4,
+  sanitizeIp,
+  sendRawTcp,
   type ReceiptInput,
   type PrinterRecord,
 } from "@/lib/printer-tcp";
@@ -41,6 +44,34 @@ const baseReceipt: ReceiptInput = {
   total: 165,
   paymentMethod: "CARD",
 };
+
+describe("validación de IP", () => {
+  it("acepta IPv4 válidas y rechaza hostnames/typos", () => {
+    expect(isValidIPv4("192.168.1.84")).toBe(true);
+    expect(isValidIPv4("0.0.0.0")).toBe(true);
+    expect(isValidIPv4("192.168.1.84 ")).toBe(false); // espacio
+    expect(isValidIPv4("192.168.1")).toBe(false);     // incompleta
+    expect(isValidIPv4("192.168.1.300")).toBe(false); // octeto > 255
+    expect(isValidIPv4("EPSON-TM20")).toBe(false);    // hostname
+    expect(isValidIPv4("192,168.1.84")).toBe(false);  // coma
+  });
+
+  it("sanitizeIp quita whitespace interno y de bordes (registros viejos)", () => {
+    expect(sanitizeIp(" 192.168.1.84 ")).toBe("192.168.1.84");
+    expect(sanitizeIp("192.168. 1.84")).toBe("192.168.1.84");
+    expect(sanitizeIp(null)).toBe("");
+  });
+
+  it("sendRawTcp limpia espacios de IPs guardadas y conecta con la IP sana", async () => {
+    await sendRawTcp({ ip: " 192.168.1.84 ", port: 9100 }, "x");
+    expect(connect).toHaveBeenCalledWith({ ipAddress: "192.168.1.84", port: 9100 });
+  });
+
+  it("sendRawTcp rechaza IP inválida con mensaje claro, sin tocar el socket", async () => {
+    await expect(sendRawTcp({ ip: "EPSON-TM20", port: 9100 }, "x")).rejects.toThrow(/IP de impresora invalida/);
+    expect(connect).not.toHaveBeenCalled();
+  });
+});
 
 describe("recibo :: bugs de texto", () => {
   it("no duplica el label de Mesa ('Mesa Mesa 12')", () => {

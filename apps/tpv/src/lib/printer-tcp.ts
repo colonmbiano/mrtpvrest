@@ -183,6 +183,25 @@ async function ensurePlugin(): Promise<void> {
   await initPromise;
 }
 
+// ── Validación de IP ──────────────────────────────────────────────────────
+
+/**
+ * IPv4 estricta (4 octetos 0-255). Si al plugin TCP nativo le llega algo que
+ * no es una IP numérica (un hostname, o una IP con espacios/typos), Android
+ * intenta resolverlo por DNS y falla con el críptico "No address associated
+ * with hostname". Validamos antes para dar un mensaje accionable.
+ */
+export function isValidIPv4(value: string): boolean {
+  const m = value.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return false;
+  return m.slice(1).every((octet) => Number(octet) <= 255);
+}
+
+/** Quita TODO el whitespace (no solo bordes) — registros viejos pudieron guardarse con espacios internos. */
+export function sanitizeIp(value: string | null | undefined): string {
+  return String(value ?? "").replace(/\s+/g, "");
+}
+
 // ── Envío TCP ────────────────────────────────────────────────────────────
 
 const DEFAULT_PORT = 9100;
@@ -296,10 +315,13 @@ async function attemptSendRawTcp(
  * (ver nota de resiliencia arriba).
  */
 export async function sendRawTcp(target: PrintTarget, payload: PrintPayload): Promise<void> {
-  const ip = (target.ip || "").trim();
+  const ip = sanitizeIp(target.ip);
   const port = Number(target.port) || DEFAULT_PORT;
   if (!ip || ip === "0.0.0.0") {
     throw new Error("IP de impresora no configurada");
+  }
+  if (!isValidIPv4(ip)) {
+    throw new Error(`IP de impresora invalida ("${ip}") — usa solo numeros y puntos, ej. 192.168.1.84`);
   }
 
   await ensurePlugin();
