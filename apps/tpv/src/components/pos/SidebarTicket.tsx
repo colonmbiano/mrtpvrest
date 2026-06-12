@@ -323,7 +323,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // checkout imprimía el recibo SIN estos datos (negocio en blanco); ahora se
   // pasan igual que en reimpresión/split.
   const { config: receiptConfig } = useFullTicketConfig();
-  const { businessName, businessFooter } = useReceiptIdentity();
+  const { businessName, businessFooter, terminalName } = useReceiptIdentity();
 
   const { printers } = usePrinters();
 
@@ -748,6 +748,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       const receiptExtras = {
         numberOfGuests: ticket.numberOfGuests ?? null,
         cashierName: employee?.name || null,
+        terminalName: terminalName || null,
       };
       if (isDineInSplit) {
         printSplitReceipts(

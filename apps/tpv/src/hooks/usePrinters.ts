@@ -74,8 +74,18 @@ export function useReceiptIdentity() {
     () => (typeof window === "undefined" ? null : localStorage.getItem("receiptFooter")),
     null,
   );
+  // Identidad de la terminal/dispositivo (sembrada en /setup). Misma resolución
+  // que LockScreen: terminalId explícito → deviceName registrado. Sirve para
+  // auditar en qué caja se cobró cada ticket.
+  const terminalName = useClientValue(
+    () =>
+      typeof window === "undefined"
+        ? null
+        : localStorage.getItem("terminalId") || localStorage.getItem("deviceName"),
+    null,
+  );
 
-  return { businessName, businessFooter };
+  return { businessName, businessFooter, terminalName };
 }
 
 /**
