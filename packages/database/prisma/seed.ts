@@ -1,6 +1,7 @@
 import { PrismaClient, Role, IngredientBaseUnit } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import bcrypt from 'bcryptjs'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import 'dotenv/config'
@@ -219,8 +220,47 @@ async function seedCustomer() {
   console.log(`✅ Customer location: ${location.name} (${location.id})`)
   console.log(`✅ ADMIN: ${admin.email}`)
 
+  // ── Empleados con PIN determinista (E2E) ──
+  await seedEmployees(location.id)
+
   // ── Fase inventario ──
   await seedInventory(restaurant.id, location.id)
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// SEED — EMPLEADOS E2E (PINs deterministas para tests/e2e/06-role-security)
+// ────────────────────────────────────────────────────────────────────────
+// El backend guarda `pin` como bcrypt y `offlinePin` como sha256 hex (mismo
+// formato que POST /api/employees). Los defaults 1111/1112/1113 coinciden
+// con los de los specs; en CI se overridean con los secrets WAITER_PIN /
+// CASHIER_PIN / KITCHEN_PIN. Idempotente: busca por nombre+location.
+
+async function seedEmployees(locationId: string) {
+  const employees = [
+    { name: 'E2E Mesero',  role: 'WAITER',  pin: process.env.WAITER_PIN  || '1111' },
+    { name: 'E2E Cajero',  role: 'CASHIER', pin: process.env.CASHIER_PIN || '1112', extra: { canCharge: true } },
+    { name: 'E2E Cocina',  role: 'KITCHEN', pin: process.env.KITCHEN_PIN || '1113' },
+  ]
+
+  for (const emp of employees) {
+    const exists = await prisma.employee.findFirst({
+      where: { locationId, name: emp.name },
+    })
+    if (exists) continue
+
+    await prisma.employee.create({
+      data: {
+        locationId,
+        name: emp.name,
+        role: emp.role,
+        pin: await bcrypt.hash(emp.pin, 10),
+        offlinePin: crypto.createHash('sha256').update(emp.pin).digest('hex'),
+        isActive: true,
+        ...(emp.extra || {}),
+      },
+    })
+  }
+  console.log(`✅ Empleados E2E: WAITER/CASHIER/KITCHEN con PIN determinista`)
 }
 
 // ────────────────────────────────────────────────────────────────────────
