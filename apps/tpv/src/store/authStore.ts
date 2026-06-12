@@ -15,6 +15,10 @@ import { hashPin } from "@/lib/hash";
 
 const MAX_PIN_ATTEMPTS = 5;
 const LOCKOUT_MS = 2 * 60 * 1000; // 2 minutos
+// Espera máxima por el JWT cuando el PIN ya validó contra el cache local.
+// Sin esto, un backend colgado (TCP abierto sin respuesta) bloquearía el
+// login indefinidamente aunque la caja pueda operar offline.
+const LOGIN_TIMEOUT_MS = 8000;
 
 export type UserRole =
   | "OWNER"
@@ -182,8 +186,15 @@ export const useAuthStore = create<AuthState>()(
             if (isOnline) {
               // Con red: obtenemos el JWT ANTES de activar la sesión. Si no, el
               // hub consulta /api/workspaces/me sin token → 401 "Token requerido".
+              // La espera es acotada: si el backend no responde en
+              // LOGIN_TIMEOUT_MS, el timeout rechaza sin `response` y caemos a
+              // la sesión local validada (mismo camino que red caída / 5xx).
               try {
-                const { data } = await api.post("/api/employees/login", { pin });
+                const { data } = await api.post(
+                  "/api/employees/login",
+                  { pin },
+                  { timeout: LOGIN_TIMEOUT_MS },
+                );
                 const token: string = data.token || data.accessToken;
                 const employee: TPVEmployee = data.employee || data.user;
                 if (token && employee) {
