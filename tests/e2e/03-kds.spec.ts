@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 // El KDS es una app independiente (apps/kds, puerto 3009) desde que /kds
-// salió del TPV. Flujo de vinculación: login admin → sucursal → estaciones
-// → KdsScreen (vista de cocina).
-const KDS_URL = process.env.KDS_URL ?? 'http://localhost:3009';
+// salió del TPV. En web usa basePath '/kds' (next.config.mjs). Flujo de
+// vinculación: login admin → sucursal → estaciones → KdsScreen.
+const KDS_URL = process.env.KDS_URL ?? 'http://localhost:3009/kds/';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
 
