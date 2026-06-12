@@ -90,7 +90,10 @@ jobs:
       - name: Build release APK & AAB
         working-directory: apps/tpv/android
         env:
-          KEYSTORE_PATH: app/tpv-release.jks
+          # Ruta ABSOLUTA: build.gradle la resuelve con file() relativo al
+          # módulo app — una relativa tipo "app/tpv-release.jks" apuntaba a
+          # android/app/app/… y la firma quedaba vacía (APK unsigned).
+          KEYSTORE_PATH: ${{ github.workspace }}/apps/tpv/android/app/tpv-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
