@@ -127,9 +127,18 @@ qué hallazgos son reales, y el plan de remediación priorizado.
 
 ## Orden de ejecución sugerido para lo pendiente
 
-1. Promover E2E a gate (configurar secrets del workflow primero).
-2. APK release del TPV (activa Keystore de tokens + https-only nativo).
-3. Migración Decimal (proyecto aparte).
+1. ~~Promover E2E a gate~~ → **INFRA COMPLETA (2026-06-12)**: secrets
+   configurados, seed con admin verificado + empleados PIN determinista,
+   drift de BD reconciliado, backend boot sin VAPID, trigger pull_request
+   activo. Estado de specs: 7 verdes / 19 rojos (selectores desactualizados,
+   nunca habían corrido — deuda de tests, chip de tarea creado). Hasta que
+   estén verdes, el gate de PRs fallará: es señal de la deuda, no del código.
+2. ~~APK release del TPV~~ → **LISTO**: primer APK firmado (keystore en
+   GitHub Secrets + respaldo en C:\Users\colon\mrtpv-keystore — RESPALDAR).
+   Artefacto en el workflow build-android-apk-release; instalar con
+   uninstall + install. Activa Keystore de tokens + https-only nativo.
+3. Migración Decimal (proyecto aparte, plan en docs/plan-decimal-migration.md).
+4. Poner en verde los 19 specs E2E (chip de tarea).
 
 > Nota de método: la validación fue por muestreo con agentes de lectura. Los
 > archivo:línea son guía; cada fix debe re-verificar su contexto al implementarse.
