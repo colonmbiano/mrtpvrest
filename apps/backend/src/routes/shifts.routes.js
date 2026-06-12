@@ -166,7 +166,10 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
           // Fallback para órdenes antiguas sin shiftId, dentro de la ventana del turno
           { shiftId: null, createdAt: { gte: shift.openedAt } },
         ],
-        source: { in: ['TPV', 'WAITER', 'ONLINE'] },
+        // Todas las fuentes de venta real entran al corte. WhatsApp y Kiosko
+        // quedaban fuera, así que sus ventas en efectivo aparecían como sobrante
+        // inexplicable en el cajón y las ventas totales salían cortas.
+        source: { in: ['TPV', 'WAITER', 'ONLINE', 'WHATSAPP', 'KIOSK'] },
       }
     });
 
