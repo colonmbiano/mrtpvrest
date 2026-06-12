@@ -723,68 +723,97 @@ router.post('/orders', async (req, res) => {
         pointsDiscount = Math.round(pointsUsed * ppv * 100) / 100;
       }
     }
-    discount = Math.round((discount + pointsDiscount) * 100) / 100;
-
-    const total = Math.max(0, subtotal - discount + deliveryFee + tip);
-
     const orderNumberPrefix = source === 'KIOSK' ? 'KIOSK-' : 'WEB-';
     const orderNumber = orderNumberPrefix + Date.now().toString().slice(-6);
 
-    const order = await prisma.order.create({
-      data: {
-        restaurantId:    restaurant.id,
-        locationId:      resolvedLocationId,
-        orderNumber,
-        status:          'PENDING',
-        orderType:       resolvedOrderType,
-        tableNumber,
-        paymentMethod,
-        paymentStatus:   'PENDING',
-        subtotal,
-        deliveryFee,
-        tip,
-        total,
-        discount,
-        couponId:        coupon?.id || null,
-        source,
-        customerName:    customerName.trim(),
-        customerPhone:   customerPhone?.trim() || null,
-        deliveryAddress: resolvedOrderType === 'DELIVERY' ? deliveryAddress.trim() : null,
-        deliveryLat:     resolvedOrderType === 'DELIVERY' ? deliveryLat : null,
-        deliveryLng:     resolvedOrderType === 'DELIVERY' ? deliveryLng : null,
-        deliveryDistanceKm: resolvedOrderType === 'DELIVERY' ? deliveryDistanceKm : null,
-        notes:           notes?.trim() || null,
-        userId:          loyaltyUserId,
-        pointsUsed,
-        items: { create: itemsData },
-      },
-      include: {
-        items: { include: { menuItem: { select: { name: true } } } },
-      },
+    // Crear la orden CON el consumo de cupón y puntos en la misma transacción:
+    // si algo falla, no queda orden con descuento aplicado pero cupón/puntos
+    // sin consumir (ni al revés). Los consumos son condicionales en el WHERE
+    // del UPDATE — la validación de arriba fue un READ y dos pedidos
+    // simultáneos podrían pasarla a la vez; aquí gana solo uno y el otro
+    // degrada a warning sin bloquear el pedido (misma UX que un cupón inválido).
+    const order = await prisma.$transaction(async (tx) => {
+      if (coupon) {
+        const consumed = await tx.coupon.updateMany({
+          where: {
+            id: coupon.id,
+            isActive: true,
+            ...(coupon.maxUses ? { usedCount: { lt: coupon.maxUses } } : {}),
+          },
+          data: { usedCount: { increment: 1 } },
+        });
+        if (consumed.count === 0) {
+          couponWarnings.push('Cupón agotado, ignorado');
+          discount = 0;
+          coupon = null;
+        }
+      }
+
+      if (pointsUsed > 0 && redeemAccount) {
+        const redeemed = await tx.loyaltyAccount.updateMany({
+          where: { id: redeemAccount.id, points: { gte: pointsUsed } },
+          data: { points: { decrement: pointsUsed } },
+        });
+        if (redeemed.count === 0) {
+          couponWarnings.push('Puntos insuficientes, canje ignorado');
+          pointsUsed = 0;
+          pointsDiscount = 0;
+        }
+      }
+
+      const finalDiscount = Math.round((discount + pointsDiscount) * 100) / 100;
+      const finalTotal = Math.max(0, subtotal - finalDiscount + deliveryFee + tip);
+
+      const created = await tx.order.create({
+        data: {
+          restaurantId:    restaurant.id,
+          locationId:      resolvedLocationId,
+          orderNumber,
+          status:          'PENDING',
+          orderType:       resolvedOrderType,
+          tableNumber,
+          paymentMethod,
+          paymentStatus:   'PENDING',
+          subtotal,
+          deliveryFee,
+          tip,
+          total:           finalTotal,
+          discount:        finalDiscount,
+          couponId:        coupon?.id || null,
+          source,
+          customerName:    customerName.trim(),
+          customerPhone:   customerPhone?.trim() || null,
+          deliveryAddress: resolvedOrderType === 'DELIVERY' ? deliveryAddress.trim() : null,
+          deliveryLat:     resolvedOrderType === 'DELIVERY' ? deliveryLat : null,
+          deliveryLng:     resolvedOrderType === 'DELIVERY' ? deliveryLng : null,
+          deliveryDistanceKm: resolvedOrderType === 'DELIVERY' ? deliveryDistanceKm : null,
+          notes:           notes?.trim() || null,
+          userId:          loyaltyUserId,
+          pointsUsed,
+          items: { create: itemsData },
+        },
+        include: {
+          items: { include: { menuItem: { select: { name: true } } } },
+        },
+      });
+
+      // Movimiento REDEEMED en la misma tx que el decremento de saldo: si
+      // falla, el rollback también devuelve los puntos.
+      if (pointsUsed > 0 && redeemAccount) {
+        await tx.loyaltyTransaction.create({
+          data: { accountId: redeemAccount.id, type: 'REDEEMED', points: -pointsUsed, description: `Canje en pedido ${created.orderNumber}`, orderId: created.id },
+        });
+      }
+
+      return created;
     });
 
-    // Canje: descontar los puntos usados y registrar el movimiento REDEEMED.
-    if (pointsUsed > 0 && redeemAccount) {
-      prisma.$transaction([
-        prisma.loyaltyAccount.update({ where: { id: redeemAccount.id }, data: { points: { decrement: pointsUsed } } }),
-        prisma.loyaltyTransaction.create({
-          data: { accountId: redeemAccount.id, type: 'REDEEMED', points: -pointsUsed, description: `Canje en pedido ${order.orderNumber}`, orderId: order.id },
-        }),
-      ]).catch(() => null);
-    }
+    discount = order.discount;
 
     // Lealtad: si el pedido está ligado a un cliente, acumulamos puntos sobre el
     // subtotal (crea la cuenta si no existía). Best-effort: no bloquea la orden.
     if (loyaltyUserId) {
       addLoyaltyPoints(loyaltyUserId, order).catch(() => null);
-    }
-
-    // Incrementar usedCount del cupón (best-effort, no bloquea)
-    if (coupon) {
-      prisma.coupon.update({
-        where: { id: coupon.id },
-        data: { usedCount: { increment: 1 } },
-      }).catch(() => null);
     }
 
     // Notificar al TPV / KDS vía Socket.io.
