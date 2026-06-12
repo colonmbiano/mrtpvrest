@@ -7,28 +7,44 @@ const router  = express.Router()
 const { prisma } = require('@mrtpvrest/database')
 const { getProviderForRestaurant } = require('../lib/payment-providers')
 
+// Idempotente: las pasarelas entregan at-least-once (Stripe reintenta hasta
+// 3 días) y un mismo pago puede llegar varias veces. El WHERE condicional
+// hace que solo el PRIMER webhook que marca PAID gane — los duplicados no
+// re-emiten sockets (el TPV auto-imprime con order:paid; un duplicado sería
+// doble ticket). Y un evento no-PAID tardío o fuera de orden nunca degrada
+// una orden ya pagada.
 async function applyPaymentResult(orderId, { status, rawStatus, providerId }, io) {
   const order = await prisma.order.findUnique({ where: { id: orderId } })
   if (!order) return
 
-  let orderStatus = order.status
-  if (status === 'PAID')   orderStatus = 'CONFIRMED'
+  if (status === 'PAID') {
+    const updated = await prisma.order.updateMany({
+      where: { id: orderId, paymentStatus: { not: 'PAID' } },
+      data: {
+        paymentProviderId:     providerId,
+        paymentProviderStatus: rawStatus,
+        paymentStatus:         'PAID',
+        status:                'CONFIRMED',
+        paidAt:                new Date(),
+      },
+    })
+    if (updated.count === 0) return // duplicado: ya estaba pagada
 
-  await prisma.order.update({
-    where: { id: orderId },
+    if (io) {
+      io.to(`restaurant:${order.restaurantId}`).emit('order:paid', { orderId, source: 'KIOSK' })
+      io.to(`restaurant:${order.restaurantId}`).emit('new:order',  { orderId, source: 'KIOSK' })
+    }
+    return
+  }
+
+  await prisma.order.updateMany({
+    where: { id: orderId, paymentStatus: { not: 'PAID' } },
     data: {
       paymentProviderId:     providerId,
       paymentProviderStatus: rawStatus,
       paymentStatus:         status,
-      status:                orderStatus,
-      paidAt: status === 'PAID' ? new Date() : undefined,
     },
   })
-
-  if (io && status === 'PAID') {
-    io.to(`restaurant:${order.restaurantId}`).emit('order:paid', { orderId, source: 'KIOSK' })
-    io.to(`restaurant:${order.restaurantId}`).emit('new:order',  { orderId, source: 'KIOSK' })
-  }
 }
 
 // ─── POST /api/kiosk/webhook/mercadopago ────────────────────────────────────

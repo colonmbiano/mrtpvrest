@@ -113,9 +113,12 @@ router.post('/webhook', async (req, res) => {
 
     if (!orderId) { res.sendStatus(200); return; }
 
+    // MP entrega at-least-once y puede reordenar eventos: el WHERE condicional
+    // hace los updates idempotentes y evita que un `rejected` tardío (p.ej. un
+    // intento de pago fallido previo al que sí aprobó) cancele una orden pagada.
     if (status === 'approved') {
-      await prisma.order.update({
-        where: { id: orderId },
+      const updated = await prisma.order.updateMany({
+        where: { id: orderId, paymentStatus: { not: 'PAID' } },
         data: {
           status: 'CONFIRMED',
           paymentStatus: 'PAID',
@@ -124,10 +127,10 @@ router.post('/webhook', async (req, res) => {
                          paymentData.payment_type_id === 'bank_transfer' ? 'SPEI' : 'CARD',
         },
       });
-      console.log('Pago aprobado para orden:', orderId);
+      if (updated.count > 0) console.log('Pago aprobado para orden:', orderId);
     } else if (status === 'rejected') {
-      await prisma.order.update({
-        where: { id: orderId },
+      await prisma.order.updateMany({
+        where: { id: orderId, paymentStatus: { not: 'PAID' }, status: { not: 'CANCELLED' } },
         data: { status: 'CANCELLED' },
       });
     }
