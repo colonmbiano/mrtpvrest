@@ -39,8 +39,23 @@ function validate(target) {
   };
 }
 
+// Allowlist contra mass assignment: copia SOLO los campos listados que vengan
+// presentes en el body (undefined no pisa nada en Prisma, pero igual se omite
+// para que el `data` quede limpio). Úsalo en vez de `data: req.body` directo.
+function pick(body, fields) {
+  const out = {};
+  if (!body || typeof body !== 'object') return out;
+  for (const f of fields) {
+    if (Object.prototype.hasOwnProperty.call(body, f) && body[f] !== undefined) {
+      out[f] = body[f];
+    }
+  }
+  return out;
+}
+
 module.exports = {
   validateBody:   validate('body'),
   validateQuery:  validate('query'),
   validateParams: validate('params'),
+  pick,
 };

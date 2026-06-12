@@ -1,6 +1,7 @@
 ﻿const express  = require('express')
 const prisma   = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
+const { pick } = require('../lib/validate')
 const router   = express.Router()
 
 // ── Helper: resuelve restaurantId del request o devuelve 400 explícito ─────
@@ -80,7 +81,8 @@ router.put('/categories/:id', authenticate, requireTenantAccess, requireAdmin, a
         id: req.params.id,
         restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId // Seguridad: Solo si pertenece a este Tenant
       },
-      data: req.body
+      // Allowlist (no req.body directo): restaurantId/relaciones quedan fuera.
+      data: pick(req.body, ['name', 'description', 'imageUrl', 'sortOrder', 'isActive'])
     });
     res.json(cat);
   } catch (e) { res.status(500).json({ error: e.message }); }

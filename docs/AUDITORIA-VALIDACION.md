@@ -95,21 +95,24 @@ viceversa rompe los webhooks):
     `contents: write` a nivel job). Pendiente: pin de actions a SHA (resolver
     tags contra la API de GitHub) y promover E2E a gate.
 
-### P2 (pendiente)
+### P2
 - Migración `Float` → `Decimal` en ~50 campos monetarios (round2 server-side
-  mitiga en los bordes; planificar como proyecto aparte con migración de datos).
-- Allowlist en los 3 endpoints con `data: req.body` (banners, categories,
-  suppliers — todos requieren admin, riesgo acotado).
-- Firma criptográfica del bundle OTA + SSL pinning.
-- Dead-letter / límite de reintentos en el outbox offline del TPV.
-- Sanitizar Morgan en nivel debug (Authorization header).
+  mitiga en los bordes; planificar como proyecto aparte con migración de datos)
+  — pendiente.
+- ~~Allowlist en los 3 endpoints con `data: req.body`~~ → **ARREGLADO**:
+  helper `pick()` en `lib/validate.js` aplicado a banners (POST/PUT),
+  categories (PUT) y suppliers (POST/PUT).
+- ~~Sanitizar Morgan~~ → **FALSO POSITIVO**: index.js usa `combined`/`dev`,
+  formatos que no incluyen headers; Authorization nunca se loguea.
+- Firma criptográfica del bundle OTA + SSL pinning — pendiente.
+- Dead-letter / límite de reintentos en el outbox offline del TPV — pendiente.
 
 ## Orden de ejecución sugerido para lo pendiente
 
 1. `TENANT_GUARD_MODE=enforce` en Railway (tras ventana de observación de warns).
-2. Dependabot + pin SHA + permissions en workflows.
+2. Pin de actions a SHA + promover E2E a gate.
 3. UNIQUE constraints de webhooks + tests SaaS (con db push coordinado).
-4. Tokens del TPV a secure storage nativo (requiere APK).
+4. Tokens del TPV a secure storage nativo (requiere plugin + APK).
 5. Migración Decimal (proyecto aparte).
 
 > Nota de método: la validación fue por muestreo con agentes de lectura. Los
