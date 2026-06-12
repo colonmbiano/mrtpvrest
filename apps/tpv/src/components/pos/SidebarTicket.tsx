@@ -66,6 +66,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const { activeOrderId, activeOrderNumber, setActiveOrder, clear: clearActiveOrder } = useActiveOrderStore();
 
   const [previousItems, setPreviousItems] = useState<any[]>([]);
+  // Envío de la orden cargada (DELIVERY). El backend lo suma al total; la
+  // pantalla también debe sumarlo para no mentir sobre lo que se cobra. Se
+  // sincroniza junto a previousItems (misma fuente: la orden del backend).
+  const [orderDeliveryFee, setOrderDeliveryFee] = useState(0);
   const [_loadingHistory, setLoadingHistory] = useState(false);
 
   // Registro de clientes — al teclear el teléfono en DELIVERY buscamos el
@@ -83,7 +87,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     queueMicrotask(() => {
       if (cancelled) return;
       if (!activeOrderId) {
-        setPreviousItems([]);
+        setPreviousItems([]); setOrderDeliveryFee(0);
         return;
       }
       (async () => {
@@ -91,7 +95,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           setLoadingHistory(true);
           const { data } = await api.get(`/api/orders/${activeOrderId}`);
           // Combinamos todos los items de todas las rondas como historial
-          if (!cancelled) setPreviousItems(data.items || []);
+          if (!cancelled) setPreviousItems(data.items || []); setOrderDeliveryFee(Number(data.deliveryFee || 0));
         } catch (err) {
           console.error("Error al cargar historial de orden:", err);
         } finally {
@@ -114,7 +118,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     if (!activeOrderId) return;
     try {
       const { data } = await api.get(`/api/orders/${activeOrderId}`);
-      setPreviousItems(data.items || []);
+      setPreviousItems(data.items || []); setOrderDeliveryFee(Number(data.deliveryFee || 0));
     } catch (err) {
       console.error("Error al recargar la orden:", err);
     }
@@ -262,11 +266,15 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
   const currentSubtotal = ticket.items.reduce((acc, item) => acc + item.subtotal, 0);
   const subtotal = currentSubtotal + historySubtotal;
-  const total = subtotal - ticket.discount;
+  // El envío (DELIVERY) se suma al total igual que en el backend/recibo, para
+  // que la pantalla refleje EXACTAMENTE lo que se cobra. Solo aplica si hay
+  // orden cargada con items (si no, no hay envío que mostrar).
+  const deliveryFee = previousItems.length > 0 ? orderDeliveryFee : 0;
+  const total = subtotal - ticket.discount + deliveryFee;
   // Desglose fiscal MX: precios mostrados llevan IVA incluido. Subtotal
-  // sin IVA = subtotal / 1.16; IVA = diferencia.
-  const subtotalSinIva = subtotal / (1 + IVA_RATE);
-  const ivaAmount = subtotal - subtotalSinIva;
+  // sin IVA = total / 1.16; IVA = diferencia.
+  const subtotalSinIva = total / (1 + IVA_RATE);
+  const ivaAmount = total - subtotalSinIva;
 
   // ── Doble pantalla (pantalla de cliente) ──────────────────────────────
   // Empuja el carrito en vivo al segundo monitor. No-op si está apagado.
@@ -349,6 +357,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         name: it.name,
         quantity: it.quantity,
         price: it.price,
+        // subtotal del carrito = unitPrice×qty, y unitPrice YA incluye los
+        // modificadores (ver menu/page.tsx). Es la fuente única del importe de
+        // la línea en el recibo (evita el doble conteo del modificador).
+        subtotal: it.subtotal,
         notes: it.notes,
         seatNumber: it.seatNumber ?? null,
         printerGroupIds,
@@ -463,7 +475,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         );
         clearActiveItems();
         clearActiveOrder();
-        setPreviousItems([]);
+        setPreviousItems([]); setOrderDeliveryFee(0);
         updateTicket({
           tableId: "",
           tableName: "",
@@ -496,7 +508,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         queued = res.queued;
         order = res.data;
         // Sincronizar historial local
-        if (!queued) setPreviousItems(order?.items || []);
+        if (!queued) { setPreviousItems(order?.items || []); setOrderDeliveryFee(Number(order?.deliveryFee || 0)); }
         // Persistir también cualquier edición de los datos del cliente sobre
         // la orden ya existente (el POST de items no los incluye). Best-effort:
         // los productos ya quedaron guardados, así que un fallo aquí solo se
@@ -526,7 +538,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         if (order?.id && ticket.tableId) {
           setActiveOrder(order.id, ticket.tableId, order.orderNumber ?? null);
         }
-        if (!queued) setPreviousItems(order?.items || []);
+        if (!queued) { setPreviousItems(order?.items || []); setOrderDeliveryFee(Number(order?.deliveryFee || 0)); }
       }
 
       toast.success(queued ? "Pedido en cola · se enviara al volver la red" : "Pedido enviado a cocina");
@@ -563,7 +575,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
       clearActiveItems();
       clearActiveOrder();
-      setPreviousItems([]);
+      setPreviousItems([]); setOrderDeliveryFee(0);
       updateTicket({
         tableId: "",
         tableName: "",
@@ -710,10 +722,18 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         customerName: ticket.name ?? null,
         customerPhone: ticket.phone ?? null,
       };
+      // Totales del RECIBO: si el backend devolvió la orden, sus campos son la
+      // autoridad del cobro (incluyen el envío y el subtotal con modificadores);
+      // si estamos offline/encolado caemos a los locales. La propina se agrega
+      // aparte (no la persiste el backend en este flujo) y se imprime como
+      // renglón "Propina:" para que productos + envío − descuento + propina = TOTAL.
+      const backendTotal = typeof order?.total === "number" ? order.total : total;
       const totals = {
-        subtotal,
-        discount: ticket.discount,
-        total: total + tipAmount,
+        subtotal: typeof order?.subtotal === "number" ? order.subtotal : subtotal,
+        discount: typeof order?.discount === "number" ? order.discount : ticket.discount,
+        deliveryFee: Number(order?.deliveryFee ?? 0),
+        tip: tipAmount,
+        total: backendTotal + tipAmount,
         paymentMethod: method,
         tipPercent: tip?.percent ?? 0,
         tipAmount,
@@ -723,7 +743,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       // arranque en limpio (items, orden activa, rondas, cliente y descuento).
       clearActiveItems();
       clearActiveOrder();
-      setPreviousItems([]);
+      setPreviousItems([]); setOrderDeliveryFee(0);
       updateTicket({ name: "", address: "", phone: "", discount: 0 });
       setShowPayment(false);
 
@@ -778,6 +798,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       name: it.menuItem?.name || it.name,
       quantity: it.quantity,
       price: it.price,
+      // subtotal persistido por el backend (price×qty, ya incluye modificadores)
+      // → fuente única del importe de la línea, sin doble conteo.
+      subtotal: typeof it.subtotal === "number" ? it.subtotal : undefined,
       notes: it.notes,
       seatNumber: it.seatNumber ?? null,
       modifiers: (it.modifiers || []).map((m: any) => ({ name: m.name || m.modifier?.name, priceAdd: m.priceAdd || m.modifier?.priceAdd })),
@@ -799,7 +822,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const handleClearTicket = () => {
     clearActiveItems();
     clearActiveOrder();
-    setPreviousItems([]);
+    setPreviousItems([]); setOrderDeliveryFee(0);
     updateTicket({ name: "", phone: "", address: "", discount: 0 });
     hapticMedium();
   };
@@ -1022,6 +1045,16 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               </span>
               <span className="font-bold text-emerald-400 mono tabular-nums">
                 −${ticket.discount.toFixed(2)}
+              </span>
+            </div>
+          )}
+          {deliveryFee > 0 && (
+            <div className="flex justify-between items-baseline text-[11px]">
+              <span className="font-bold uppercase tracking-[0.15em] text-zinc-500">
+                Envío
+              </span>
+              <span className="font-bold text-zinc-300 mono tabular-nums">
+                +${deliveryFee.toFixed(2)}
               </span>
             </div>
           )}

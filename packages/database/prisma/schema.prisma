@@ -1082,6 +1082,11 @@ model TicketConfig {
   invoiceUrl         String  @default("") // destino del QR (portal de facturación)
   invoiceFolioPrefix String  @default("")
 
+  // Envío (DELIVERY): ¿el costo de envío causa IVA? Si false, el recibo excluye
+  // el envío de la base gravable del desglose de IVA incluido. Default true
+  // (envío con IVA incluido, igual que el resto del ticket).
+  deliveryFeeTaxed Boolean @default(true)
+
   // Nuevas opciones de personalización
   paperWidth  String  @default("80mm") // "58mm" | "80mm"
   fontFamily  String  @default("monospace") // "monospace" | "sans-serif" | "serif"
