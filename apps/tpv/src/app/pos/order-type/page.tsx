@@ -167,6 +167,12 @@ export default function OrderTypePage() {
         onExpenses={goExpenses}
         onConfig={goConfig}
         allowedTypes={tpvConfig.allowedOrderTypes}
+        // Desactiva los atajos 1/2/3 mientras cualquier modal está abierto
+        // encima del selector, para que los dígitos tecleados dentro del
+        // modal (p.ej. Monto en Gastos) no arranquen una venta por detrás.
+        shortcutsEnabled={
+          !pickingTable && !askingGuests && !askingAdminPin && !showExpenses
+        }
       />
 
       <TablePickerModal
