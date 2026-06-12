@@ -382,6 +382,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         .filter((id): id is string => Boolean(id));
       return {
         menuItemId: item.menuItemId,
+        variantId: item.variantId ?? null,
         quantity: item.quantity,
         notes: item.notes || "",
         seatNumber: item.seatNumber ?? null,

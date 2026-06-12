@@ -7,7 +7,16 @@ import { Capacitor } from "@capacitor/core";
 import { SpeechRecognition as NativeSpeech } from "@capacitor-community/speech-recognition";
 import api from "@/lib/api";
 import { hapticError, hapticLight, hapticSuccess } from "@/lib/haptics";
-import { useTicketStore, type CartItem, type Product } from "@/store/ticketStore";
+import {
+  COMPLEMENT_MODIFIER_PREFIX,
+  VARIANT_MODIFIER_PREFIX,
+} from "@/lib/modifiers";
+import {
+  useTicketStore,
+  type CartItem,
+  type ModifierSelection,
+  type Product,
+} from "@/store/ticketStore";
 
 type SpeechRecognition = any;
 type Status = "idle" | "listening" | "processing" | "error";
@@ -17,6 +26,18 @@ type DictationItem = {
   quantity: number;
   notes?: string;
   needsReview?: boolean;
+  selections?: {
+    selectedVariant?: { id: string; name: string; price: number } | null;
+    selectedVariants?: { id: string; name: string; price: number }[];
+    selectedModifiers?: {
+      id: string;
+      groupId: string;
+      name: string;
+      priceAdd: number;
+    }[];
+    selectedComplements?: { id: string; name: string; price: number }[];
+    unitPrice?: number;
+  };
   product: Product;
 };
 
@@ -76,9 +97,38 @@ export default function VoiceOrderDictation() {
       let review = 0;
       for (const item of items) {
         const product = item.product;
-        const unit = Number(product.promoPrice || product.price || 0);
+        const selections = item.selections;
+        const selectedVariant = selections?.selectedVariant || null;
+        const modifiers: ModifierSelection[] = [
+          ...(selections?.selectedModifiers || []).map((modifier) => ({
+            id: modifier.id,
+            groupId: modifier.groupId,
+            name: modifier.name,
+            priceAdd: Number(modifier.priceAdd || 0),
+          })),
+          ...(selections?.selectedVariants || []).map((variant) => ({
+            id: `${VARIANT_MODIFIER_PREFIX}${variant.id}`,
+            groupId: "__variants",
+            name: variant.name,
+            priceAdd: Number(variant.price || 0),
+          })),
+          ...(selections?.selectedComplements || []).map((complement) => ({
+            id: `${COMPLEMENT_MODIFIER_PREFIX}${complement.id}`,
+            groupId: "__complements",
+            name: complement.name,
+            priceAdd: Number(complement.price || 0),
+          })),
+        ];
+        const unit = Number(
+          selections?.unitPrice ??
+            selectedVariant?.price ??
+            product.promoPrice ??
+            product.price ??
+            0,
+        );
         const quantity = Math.max(1, Math.min(99, Number(item.quantity || 1)));
         const notes = item.notes?.trim() || undefined;
+        const baseName = product.name;
 
         for (let i = 0; i < quantity; i += 1) {
           const cartItem: CartItem = {
@@ -88,6 +138,11 @@ export default function VoiceOrderDictation() {
             subtotal: unit,
             price: unit,
             originalPrice: product.price,
+            baseName,
+            variantId: selectedVariant?.id ?? null,
+            variantName: selectedVariant?.name ?? null,
+            name: selectedVariant ? `${baseName} (${selectedVariant.name})` : baseName,
+            modifiers,
             notes,
           };
           addItemToActive(cartItem);

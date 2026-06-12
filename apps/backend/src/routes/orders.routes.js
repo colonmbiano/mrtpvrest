@@ -236,6 +236,7 @@ const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePer
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
 const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals } = require('../lib/money');
+const { releaseTableAfterPayment } = require('../services/table-lifecycle.service');
 const audit = require('../lib/audit-logger');
 const {
   createOrderSchema,
@@ -1036,19 +1037,9 @@ router.delete('/items/:itemId', authenticate, requireTenantAccess, requireRole('
 
 // ── GESTIÓN DE PAGOS Y CUENTAS ──
 
-// Helper: cuando un dine-in se paga, libera la mesa (OCCUPIED → DIRTY) para
-// que el equipo de salón sepa que está pendiente de limpieza. Idempotente:
-// si la orden no es dine-in o no tiene tableId, no-op.
+// Al cobrar un dine-in, la mesa queda limpia y disponible inmediatamente.
 async function releaseTableIfDineIn(orderId) {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    select: { tableId: true, orderType: true },
-  });
-  if (!order?.tableId || order.orderType !== 'DINE_IN') return;
-  await prisma.table.update({
-    where: { id: order.tableId },
-    data: { status: 'DIRTY' },
-  }).catch(() => {});
+  await releaseTableAfterPayment(prisma, orderId).catch(() => {});
 }
 
 router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER'), async (req, res) => {
@@ -1148,7 +1139,7 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
       kickCashDrawerForLocation(order.locationId).catch(() => {});
     } catch (err) { console.error('Drawer kick no disponible:', err.message); }
 
-    // Si era dine-in, liberar la mesa (OCCUPIED → DIRTY).
+    // Si era dine-in, dejar la mesa limpia y disponible.
     await releaseTableIfDineIn(order.id);
 
     // Avisar a la caja que el efectivo se confirmó (push nativo en el TPV).
