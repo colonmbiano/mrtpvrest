@@ -228,6 +228,9 @@ async function seedCustomer() {
   // ── Empleados con PIN determinista (E2E) ──
   await seedEmployees(location.id)
 
+  // ── Sala + menú mínimo para el flujo de meseros (E2E) ──
+  await seedDineInE2E(restaurant.id, location.id)
+
   // ── Fase inventario ──
   await seedInventory(restaurant.id, location.id)
 }
@@ -266,6 +269,84 @@ async function seedEmployees(locationId: string) {
     })
   }
   console.log(`✅ Empleados E2E: WAITER/CASHIER/KITCHEN con PIN determinista`)
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// SEED — SALA + MENÚ E2E (tests/e2e/07-meseros-rondas)
+// ────────────────────────────────────────────────────────────────────────
+// Mesas y un menú mínimo sin variantes (alta directa al ticket) para que el
+// flujo mesa → ronda 1 → ronda 2 → pedir cuenta sea determinista. El
+// CashShift abierto (lo exige requireActiveShift en POST /api/orders/tpv)
+// solo se crea en entorno de test/CI: un turno abierto fantasma en una base
+// real distorsionaría el corte de caja.
+
+async function seedDineInE2E(restaurantId: string, locationId: string) {
+  // ── Mesas (unique [locationId, name] → upsert idempotente) ──
+  for (const name of ['Mesa 1', 'Mesa 2']) {
+    await prisma.table.upsert({
+      where: { locationId_name: { locationId, name } },
+      create: { locationId, name, isActive: true },
+      update: {},
+    })
+  }
+
+  // ── Categoría + items sin modificadores ──
+  let category = await prisma.category.findFirst({
+    where: { restaurantId, name: 'E2E Comida' },
+  })
+  if (!category) {
+    category = await prisma.category.create({
+      data: { restaurantId, name: 'E2E Comida', isActive: true },
+    })
+  }
+
+  const items = [
+    { name: 'E2E Burger', price: 100 },
+    { name: 'E2E Postre', price: 50 },
+  ]
+  for (const item of items) {
+    const exists = await prisma.menuItem.findFirst({
+      where: { restaurantId, name: item.name },
+    })
+    if (exists) continue
+    await prisma.menuItem.create({
+      data: {
+        restaurantId,
+        categoryId: category.id,
+        name: item.name,
+        price: item.price,
+        isAvailable: true,
+      },
+    })
+  }
+
+  // ── Turno de caja abierto — SOLO test/CI ──
+  const isTestEnv = process.env.NODE_ENV === 'test' || process.env.E2E_SEED === '1'
+  if (isTestEnv) {
+    const openShift = await prisma.cashShift.findFirst({
+      where: { locationId, isOpen: true },
+    })
+    if (!openShift) {
+      const cashier = await prisma.employee.findFirst({
+        where: { locationId, name: 'E2E Cajero' },
+      })
+      if (cashier) {
+        await prisma.cashShift.create({
+          data: {
+            locationId,
+            employeeId: cashier.id,
+            employeeName: cashier.name,
+            openedById: cashier.id,
+            isOpen: true,
+            openingFloat: 0,
+          },
+        })
+      }
+    }
+    console.log(`✅ Sala E2E: 2 mesas, menú mínimo y turno de caja abierto (test)`)
+  } else {
+    console.log(`✅ Sala E2E: 2 mesas y menú mínimo (sin turno: entorno no-test)`)
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────
