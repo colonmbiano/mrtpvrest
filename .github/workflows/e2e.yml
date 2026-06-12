@@ -1,6 +1,8 @@
 name: E2E — Playwright (Turno → Orden → KDS → Cobro)
 
-# ⚠️ PROVISIONAL — pipeline completo pero NO promovido aún a gate obligatorio.
+# Gate en PRs a master desde 2026-06-12 (secrets configurados + seed con
+# empleados E2E). Los push directos a master NO se gatean — trade-off del
+# flujo de push directo; correr workflow_dispatch tras cambios grandes.
 #
 # El ARD §10 pide que los E2E sean BLOQUEANTES del merge a master. Esta
 # infraestructura levanta todo lo necesario (Postgres efímero, migraciones,
@@ -24,6 +26,15 @@ permissions:
 
 on:
   workflow_dispatch: {}
+  pull_request:
+    branches: [master]
+    paths:
+      - "apps/backend/**"
+      - "apps/tpv/**"
+      - "apps/admin/**"
+      - "packages/**"
+      - "tests/e2e/**"
+      - ".github/workflows/e2e.yml"
 
 env:
   PNPM_VERSION: "9"
@@ -85,6 +96,11 @@ jobs:
           SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
           SUPERADMIN_EMAIL: ${{ secrets.SUPERADMIN_EMAIL }}
           SUPERADMIN_PASSWORD: ${{ secrets.SUPERADMIN_PASSWORD }}
+          # PINs deterministas: el seed crea los empleados E2E con estos
+          # valores y los specs (06-role-security) loguean con los mismos.
+          WAITER_PIN: ${{ secrets.WAITER_PIN }}
+          CASHIER_PIN: ${{ secrets.CASHIER_PIN }}
+          KITCHEN_PIN: ${{ secrets.KITCHEN_PIN }}
 
       - name: Instalar navegadores Playwright
         run: pnpm exec playwright install --with-deps chromium
