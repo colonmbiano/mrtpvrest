@@ -29,8 +29,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  themeColor: "#000000",
+  // No fijamos maximumScale: bloquear el pinch-zoom incumple WCAG 2.1 (1.4.4).
+  // El acento corporativo por defecto; cada tienda lo sobreescribe en
+  // `[slug]/page.tsx` (generateViewport) con su propio color de marca.
+  themeColor: "#ff5c35",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
