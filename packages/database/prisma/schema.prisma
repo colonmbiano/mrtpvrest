@@ -1071,6 +1071,17 @@ model TicketConfig {
   phone        String  @default("")
   logoUrl      String?
 
+  // Datos fiscales del emisor (encabezado del recibo). Vacío = no se imprime
+  // la línea correspondiente (degradan a omitidos en el builder ESC/POS).
+  businessType String  @default("") // giro comercial (ej. "Restaurante")
+  rfc          String  @default("") // RFC del emisor
+
+  // Bloque de autofactura por QR al pie del recibo. invoiceFolioPrefix se
+  // antepone al número de orden para formar el folio (ej. "MB-" → "MB-01042").
+  showInvoiceQr      Boolean @default(false)
+  invoiceUrl         String  @default("") // destino del QR (portal de facturación)
+  invoiceFolioPrefix String  @default("")
+
   // Nuevas opciones de personalización
   paperWidth  String  @default("80mm") // "58mm" | "80mm"
   fontFamily  String  @default("monospace") // "monospace" | "sans-serif" | "serif"

@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useClientValue } from "@/hooks/useClientValue";
 import api from "@/lib/api";
-import type { PrinterRecord, KitchenTicketConfig } from "@/lib/printer-tcp";
+import type { PrinterRecord, KitchenTicketConfig, ReceiptInput } from "@/lib/printer-tcp";
 
 /**
  * Carga + normaliza las impresoras de la sucursal y se mantiene viva en
@@ -119,7 +119,51 @@ type TicketConfigDTO = {
   kitchenLineSpacing?: string;
   kitchenLineWeight?: string;
   kitchenTicketNameSize?: string;
+  // ── Identidad fiscal extendida (recibo) ─────────────────────────────────
+  businessType?: string;        // giro
+  rfc?: string;
+  showInvoiceQr?: boolean;
+  invoiceUrl?: string;
+  invoiceFolioPrefix?: string;  // el folio final = prefijo + número de orden
 };
+
+/**
+ * Arma la porción de identidad de negocio + tipografía del recibo a partir de
+ * la config admin (DTO) y la identidad en localStorage. Centraliza el mapeo
+ * para que checkout, reimpresión y split no lo dupliquen (ni se desincronicen).
+ * Los campos por-orden (cajero, terminal, totales, items) se pasan aparte.
+ */
+export function buildReceiptIdentityFields(
+  dto: TicketConfigDTO | null,
+  identity: { businessName: string | null; businessFooter: string | null },
+  fallbackName?: string | null,
+  orderNumber?: string | null,
+): Partial<ReceiptInput> {
+  // Folio fiscal = prefijo configurable + número de orden (per-orden). Sin
+  // prefijo o sin orden no se imprime folio.
+  const prefix = dto?.invoiceFolioPrefix?.trim();
+  const invoiceFolio = prefix && orderNumber ? `${prefix}${orderNumber}` : null;
+  return {
+    businessName: dto?.businessName || identity.businessName || fallbackName || null,
+    businessFooter: dto?.footer || identity.businessFooter || null,
+    businessType: dto?.businessType || null,
+    rfc: dto?.rfc || null,
+    showLogo: dto?.showLogo,
+    logoUrl: dto?.logoUrl,
+    showAddress: dto?.showAddress,
+    address: dto?.address,
+    showPhone: dto?.showPhone,
+    phone: dto?.phone,
+    showInvoiceQr: dto?.showInvoiceQr,
+    invoiceUrl: dto?.invoiceUrl || null,
+    invoiceFolio,
+    fontFamily: dto?.fontFamily,
+    fontSize: dto?.fontSize,
+    lineSpacing: dto?.lineSpacing,
+    lineWeight: dto?.lineWeight,
+    paperWidth: dto?.paperWidth,
+  };
+}
 
 function mapToKitchenConfig(dto: TicketConfigDTO | null): KitchenTicketConfig | null {
   if (!dto) return null;

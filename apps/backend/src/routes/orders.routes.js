@@ -184,7 +184,7 @@ const { normalizePhone } = require('@mrtpvrest/config/phone');
 const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePermission, userHasPermission, hasValidOverride } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
-const { resolveVariantSelection, applyFreeModifiers } = require('../lib/money');
+const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals } = require('../lib/money');
 const audit = require('../lib/audit-logger');
 const {
   createOrderSchema,
@@ -359,7 +359,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
-    const { items, orderType, tableNumber, tableId, numberOfGuests, paymentMethod, subtotal, discount, total, customerName, customerPhone, deliveryAddress, status, clientOrderId } = req.body;
+    // OJO: subtotal/total del body se IGNORAN a propósito — se recalculan
+    // server-side desde las líneas resueltas (ver computeOrderTotals abajo).
+    const { items, orderType, tableNumber, tableId, numberOfGuests, paymentMethod, discount, customerName, customerPhone, deliveryAddress, status, clientOrderId } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'Sin productos' });
 
     const restaurantId = req.user?.restaurantId || req.restaurantId;
@@ -499,6 +501,16 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       };
     }));
 
+    // FUENTE DE VERDAD DEL COBRO: el subtotal/total se derivan de las líneas
+    // resueltas en servidor (que ya incluyen el delta de los modificadores),
+    // NUNCA del subtotal/total del payload. Antes se persistía `req.body.total`
+    // y cualquier orden con modificadores con precio se cobraba de menos.
+    const {
+      subtotal: serverSubtotal,
+      discount: serverDiscount,
+      total: serverTotal,
+    } = computeOrderTotals(resolvedItems, { discount });
+
     // Si es dine-in con mesa: status=OPEN (cuenta abierta) y la primera ronda
     // se crea explícita para que el flujo de rondas posteriores quede limpio.
     const order = await prisma.$transaction(async (tx) => {
@@ -530,14 +542,14 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
             name: customerName || null,
             address: cleanDeliveryAddress,
             ordersCount: 1,
-            totalSpent: total || 0,
+            totalSpent: serverTotal,
             lastOrderAt: new Date(),
           },
           update: {
             ...(customerName ? { name: customerName } : {}),
             ...(cleanDeliveryAddress ? { address: cleanDeliveryAddress } : {}),
             ordersCount: { increment: 1 },
-            totalSpent: { increment: total || 0 },
+            totalSpent: { increment: serverTotal },
             lastOrderAt: new Date(),
           },
         });
@@ -564,9 +576,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           paidAt: paidOnCreate ? new Date() : null,
           cashCollected: paidOnCreate && paymentMethod === 'CASH',
           cashCollectedAt: paidOnCreate && paymentMethod === 'CASH' ? new Date() : null,
-          subtotal: subtotal || 0,
-          discount: discount || 0,
-          total: total || 0,
+          subtotal: serverSubtotal,
+          discount: serverDiscount,
+          total: serverTotal,
           source: 'TPV',
           customerName, customerPhone,
           deliveryAddress: cleanDeliveryAddress,
@@ -766,10 +778,11 @@ async function addRoundHandler(req, res) {
       }
 
       const all = await tx.orderItem.findMany({ where: { orderId: id } });
-      const subtotal = all.reduce((s, i) => s + (i.subtotal || 0), 0);
-      const discount = existing.discount || 0;
-      const deliveryFee = existing.deliveryFee || 0;
-      const total = subtotal - discount + deliveryFee;
+      // Mismo helper que el create: subtotal/total siempre desde las líneas en DB.
+      const { subtotal, total } = computeOrderTotals(all, {
+        discount: existing.discount || 0,
+        deliveryFee: existing.deliveryFee || 0,
+      });
 
       const finalOrder = await tx.order.update({
         where: { id },

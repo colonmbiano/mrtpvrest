@@ -12,7 +12,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useTicketStore, type CartItem } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
-import { useKitchenConfig, usePrinters } from "@/hooks/usePrinters";
+import { useKitchenConfig, usePrinters, useFullTicketConfig, useReceiptIdentity, buildReceiptIdentityFields } from "@/hooks/usePrinters";
 import { useDualScreen } from "@/hooks/useDualScreen";
 import type { CartSnapshot } from "@/lib/dual-screen/channel";
 import { hapticMedium, hapticSuccess, hapticError } from "@/lib/haptics";
@@ -319,6 +319,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // Se pasa al builder en cada printKitchenTickets; si aún no terminó
   // de cargar, el builder usa los defaults históricos.
   const { kitchenConfig } = useKitchenConfig();
+  // Config del recibo CASHIER (identidad del negocio + tipografía). Antes el
+  // checkout imprimía el recibo SIN estos datos (negocio en blanco); ahora se
+  // pasan igual que en reimpresión/split.
+  const { config: receiptConfig } = useFullTicketConfig();
+  const { businessName, businessFooter } = useReceiptIdentity();
 
   const { printers } = usePrinters();
 
@@ -734,16 +739,28 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       const receiptItems = order?.items
         ? orderItemsToTicketItems(order.items)
         : [...orderItemsToTicketItems(previousItems), ...printItems];
+      const receiptIdentity = buildReceiptIdentityFields(
+        receiptConfig,
+        { businessName, businessFooter },
+        null,
+        ticketContext.orderNumber ? String(ticketContext.orderNumber) : null,
+      );
+      const receiptExtras = {
+        numberOfGuests: ticket.numberOfGuests ?? null,
+        cashierName: employee?.name || null,
+      };
       if (isDineInSplit) {
         printSplitReceipts(
           printers,
-          { ...ticketContext, ...totals, items: receiptItems },
+          { ...receiptIdentity, ...ticketContext, ...totals, ...receiptExtras, items: receiptItems },
           guests,
         ).catch(() => {});
       } else {
         printCustomerReceipt(printers, {
+          ...receiptIdentity,
           ...ticketContext,
           ...totals,
+          ...receiptExtras,
           items: receiptItems,
         }).catch(() => {});
       }
