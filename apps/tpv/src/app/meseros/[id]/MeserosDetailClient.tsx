@@ -1,8 +1,9 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, Plus, Banknote, Bell, Split, Move, PlusCircle } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft, Plus, Banknote, Bell, Split, Move, PlusCircle, Brush, ReceiptText } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import api from "@/lib/api";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 
@@ -12,6 +13,13 @@ interface OrderItem {
   price: number;
   quantity: number;
   subtotal: number;
+  roundId?: string | null;
+}
+
+interface OrderRound {
+  id: string;
+  roundNumber: number;
+  createdAt: string;
 }
 
 interface ActiveOrder {
@@ -23,6 +31,7 @@ interface ActiveOrder {
   customerName: string | null;
   createdAt: string;
   items: OrderItem[];
+  rounds?: OrderRound[];
 }
 
 interface Zone {
@@ -71,23 +80,28 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  // Estado de las acciones del mesero: pedir cuenta y marcar mesa limpia.
+  const [billLoading, setBillLoading] = useState(false);
+  const [billRequested, setBillRequested] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  const loadTable = useCallback(async () => {
+    try {
+      const { data } = await api.get<TableData>(`/api/tables/${params.id}`);
+      setTable(data);
+      setErrorMsg(null);
+    } catch (e: any) {
+      setErrorMsg(e?.response?.data?.error || "No se pudo cargar la mesa");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [params.id]);
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const { data } = await api.get<TableData>(`/api/tables/${params.id}`);
-        if (mounted) setTable(data);
-      } catch (e: any) {
-        if (mounted) setErrorMsg(e?.response?.data?.error || "No se pudo cargar la mesa");
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [params.id]);
+    let cancelled = false;
+    queueMicrotask(() => { if (!cancelled) loadTable(); });
+    return () => { cancelled = true; };
+  }, [loadTable]);
 
   // Tick cada 30s para refrescar "min en mesa" sin pegarle al backend.
   useEffect(() => {
@@ -97,6 +111,65 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
 
   const tone = useMemo(() => (table ? STATUS_TONE[table.status] : STATUS_TONE.AVAILABLE), [table]);
   const order = table?.activeOrder ?? null;
+
+  // Items agrupados por ronda para mostrar la comanda como la vive la mesa:
+  // "Ronda 1 · 20:45", "Ronda 2 · 21:14". Items sin roundId (órdenes previas
+  // al sistema de rondas) caen en un grupo sin encabezado.
+  const itemGroups = useMemo(() => {
+    if (!order) return [];
+    const rounds = order.rounds ?? [];
+    const byRound = new Map<string | null, OrderItem[]>();
+    for (const item of order.items) {
+      const key = item.roundId ?? null;
+      const arr = byRound.get(key) || [];
+      arr.push(item);
+      byRound.set(key, arr);
+    }
+    const groups: { label: string | null; items: OrderItem[] }[] = [];
+    const legacy = byRound.get(null);
+    if (legacy?.length) groups.push({ label: null, items: legacy });
+    for (const round of rounds) {
+      const items = byRound.get(round.id);
+      if (items?.length) {
+        groups.push({ label: `Ronda ${round.roundNumber} · ${formatTime(round.createdAt)}`, items });
+      }
+    }
+    // Solo una ronda y nada legacy → sin encabezados (ruido innecesario).
+    if (groups.length === 1) return [{ label: null, items: groups[0]!.items }];
+    return groups;
+  }, [order]);
+
+  // 🧾 Pedir cuenta — imprime el ticket de cuenta en la impresora de caja.
+  // El cobro lo hace caja en el TPV principal (D4): aquí solo se solicita.
+  const handleRequestBill = async () => {
+    if (!order || billLoading) return;
+    setBillLoading(true);
+    try {
+      await api.post(`/api/orders/${order.id}/print-bill`);
+      setBillRequested(true);
+      toast.success("Cuenta enviada a caja");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "No se pudo pedir la cuenta");
+    } finally {
+      setBillLoading(false);
+    }
+  };
+
+  // 🧹 Mesa limpia — DIRTY → AVAILABLE. Visible solo cuando la mesa quedó
+  // sucia tras el cobro.
+  const handleClearTable = async () => {
+    if (!table || clearing) return;
+    setClearing(true);
+    try {
+      await api.post(`/api/tables/${table.id}/clear`);
+      toast.success("Mesa disponible");
+      await loadTable();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "No se pudo marcar la mesa");
+    } finally {
+      setClearing(false);
+    }
+  };
 
   // Navegación al catálogo. Si la mesa tiene orden activa, registramos el
   // orderId en el store para que /orden agregue una RONDA en lugar de crear
@@ -195,19 +268,31 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
                     Sin items en la comanda
                   </p>
                 ) : (
-                  <div className="space-y-3">
-                    {order.items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex justify-between items-baseline gap-4 text-[13px] font-bold"
-                      >
-                        <span className="text-white/80 truncate flex-1 min-w-0">
-                          <span className="text-[#ffb84d] mr-2">{item.quantity}×</span>
-                          {item.name}
-                        </span>
-                        <span className="tabular-nums text-white shrink-0">
-                          ${item.subtotal.toFixed(0)}
-                        </span>
+                  <div className="space-y-4">
+                    {itemGroups.map((group, gi) => (
+                      <div key={group.label ?? `g-${gi}`} className="space-y-3">
+                        {group.label && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black tracking-[0.2em] text-[#ffb84d]/80 uppercase shrink-0">
+                              {group.label}
+                            </span>
+                            <span className="h-px flex-1 bg-white/10" />
+                          </div>
+                        )}
+                        {group.items.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex justify-between items-baseline gap-4 text-[13px] font-bold"
+                          >
+                            <span className="text-white/80 truncate flex-1 min-w-0">
+                              <span className="text-[#ffb84d] mr-2">{item.quantity}×</span>
+                              {item.name}
+                            </span>
+                            <span className="tabular-nums text-white shrink-0">
+                              ${item.subtotal.toFixed(0)}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>
@@ -219,12 +304,21 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
             <div className="grid grid-cols-2 gap-3">
               <Button
                 variant="soft"
-                className="flex-col min-h-[64px] h-20 gap-2 rounded-2xl group bg-white/5 border-white/10 text-white"
-                disabled={!order}
+                onClick={handleRequestBill}
+                className={`flex-col min-h-[64px] h-20 gap-2 rounded-2xl group ${
+                  billRequested
+                    ? "bg-[#88D66C]/10 border-[#88D66C]/40 text-[#88D66C]"
+                    : "bg-white/5 border-white/10 text-white"
+                }`}
+                disabled={!order || billLoading}
               >
-                <Banknote size={20} className="group-active:scale-110 transition-transform" />
+                {billRequested ? (
+                  <ReceiptText size={20} />
+                ) : (
+                  <Banknote size={20} className="group-active:scale-110 transition-transform" />
+                )}
                 <span className="text-[11px] font-black uppercase tracking-tighter">
-                  Pedir cuenta
+                  {billLoading ? "Enviando…" : billRequested ? "Cuenta solicitada" : "Pedir cuenta"}
                 </span>
               </Button>
               <Button
@@ -264,23 +358,35 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
       {/* STICKY BOTTOM CTA */}
       {!isLoading && table && (
         <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 pb-[calc(1rem_+_env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 sm:pb-[calc(1.5rem_+_env(safe-area-inset-bottom))] bg-[#0C0C0E]/95 border-t border-white/5 backdrop-blur-xl">
-          <button
-            type="button"
-            onClick={handleAddProducts}
-            className="w-full min-h-[64px] h-16 rounded-3xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.1em] text-sm gap-3 shadow-[0_10px_30px_rgba(255,184,77,0.3)] active:scale-95 transition-transform flex items-center justify-center"
-          >
-            {order ? (
-              <>
-                <PlusCircle size={20} strokeWidth={2.5} />
-                Agregar más productos
-              </>
-            ) : (
-              <>
-                <Plus size={20} strokeWidth={2.5} />
-                Abrir comanda
-              </>
-            )}
-          </button>
+          {table.status === "DIRTY" ? (
+            <button
+              type="button"
+              onClick={handleClearTable}
+              disabled={clearing}
+              className="w-full min-h-[64px] h-16 rounded-3xl bg-[#88D66C] text-[#0C0C0E] font-black uppercase tracking-[0.1em] text-sm gap-3 shadow-[0_10px_30px_rgba(136,214,108,0.3)] active:scale-95 transition-transform flex items-center justify-center disabled:opacity-50"
+            >
+              <Brush size={20} strokeWidth={2.5} />
+              {clearing ? "Marcando…" : "Marcar mesa limpia"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleAddProducts}
+              className="w-full min-h-[64px] h-16 rounded-3xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.1em] text-sm gap-3 shadow-[0_10px_30px_rgba(255,184,77,0.3)] active:scale-95 transition-transform flex items-center justify-center"
+            >
+              {order ? (
+                <>
+                  <PlusCircle size={20} strokeWidth={2.5} />
+                  Agregar más productos
+                </>
+              ) : (
+                <>
+                  <Plus size={20} strokeWidth={2.5} />
+                  Abrir comanda
+                </>
+              )}
+            </button>
+          )}
         </div>
       )}
     </div>

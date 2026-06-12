@@ -20,25 +20,39 @@ import { printKitchenTickets, type PrinterRecord, type TicketItem } from "@/lib/
 import { useKitchenConfig } from "@/hooks/usePrinters";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import SeatCoursePicker from "@/components/pos/SeatCoursePicker";
-
-type Product = {
-  id: string;
-  name: string;
-  price: number;
-  categoryId?: string;
-  imageUrl?: string | null;
-  promoPrice?: number | null;
-};
+import ProductConfigSheet from "@/components/waiter/ProductConfigSheet";
+import {
+  hasQuickOptions,
+  splitModifierSelections,
+} from "@/lib/modifiers";
+import {
+  modifierKey,
+  type MenuItemVariant,
+  type ModifierSelection,
+  type Product,
+} from "@/store/ticketStore";
 
 type CartLine = {
   menuItemId: string;
   name: string;
   price: number;
   quantity: number;
+  // Variante single-select + selecciones del configurador (modificadores,
+  // complementos y variantes multi-select con id prefijado). El backend
+  // re-lee los precios de DB; aquí solo viajan los ids.
+  variantId?: string | null;
+  variantName?: string | null;
+  modifiers?: ModifierSelection[];
+  notes?: string;
   // FASE 11 · COURSING — asignación opcional por item
   seatNumber?: number | null;
   course?: string | null;
 };
+
+// Dos taps al mismo producto con la misma configuración suman cantidad en
+// vez de duplicar línea (mismo criterio que el TPV principal).
+const lineKey = (l: Pick<CartLine, "menuItemId" | "variantId" | "modifiers" | "notes">) =>
+  `${l.menuItemId}|${l.variantId ?? ""}|${modifierKey(l.modifiers)}|${l.notes ?? ""}`;
 
 // Items previamente enviados a la orden. Se muestran solo-lectura: el
 // mesero los ve para contexto pero no puede cancelarlos ni modificarlos
@@ -79,6 +93,11 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   const [submitting, setSubmitting] = useState(false);
   // FASE 11 · COURSING — picker abierto para qué línea del carrito.
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
+  // Producto con variantes/modificadores pendiente de configurar.
+  const [configProduct, setConfigProduct] = useState<Product | null>(null);
+  // Nombre real de la mesa — el param de la ruta es el id (cuid), no apto
+  // para mostrarse en el header ni en el ticket de cocina.
+  const [tableName, setTableName] = useState<string | null>(null);
 
   // Cache de impresoras de la sucursal — usadas para imprimir comanda
   // local en cocina/barra desde la tablet del mesero (misma LAN). Sólo
@@ -90,14 +109,16 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   useEffect(() => {
     (async () => {
       try {
-        const [catsRes, itemsRes, printersRes] = await Promise.all([
+        const [catsRes, itemsRes, printersRes, tableRes] = await Promise.all([
           api.get("/api/menu/categories"),
           api.get("/api/menu/items"),
           api.get<PrinterRecord[]>("/api/printers").catch(() => ({ data: [] as PrinterRecord[] })),
+          api.get<{ name?: string }>(`/api/tables/${tableId}`).catch(() => ({ data: {} as { name?: string } })),
         ]);
         setCategories([{ id: "all", name: "Todos" }, ...catsRes.data]);
         setProducts(itemsRes.data);
         setPrinters(Array.isArray(printersRes.data) ? printersRes.data : []);
+        if (tableRes.data?.name) setTableName(tableRes.data.name);
       } catch {
         toast.error("No se pudo cargar el menu");
       } finally {
@@ -168,31 +189,68 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
     return list;
   }, [products, activeCat, search]);
 
-  const addToCart = (p: Product) => {
-    const price = p.promoPrice ?? p.price;
+  // Inserta una línea consolidando contra las existentes (misma config →
+  // suma cantidad). Usada por el tap directo y por el configurador.
+  const mergeLine = (line: CartLine) => {
     setCart((prev) => {
-      const idx = prev.findIndex((l) => l.menuItemId === p.id);
+      const key = lineKey(line);
+      const idx = prev.findIndex((l) => lineKey(l) === key);
       if (idx >= 0) {
         const next = [...prev];
         const current = next[idx];
         if (!current) return prev;
-        next[idx] = { ...current, quantity: current.quantity + 1 };
+        next[idx] = { ...current, quantity: current.quantity + line.quantity };
         return next;
       }
-      return [...prev, { menuItemId: p.id, name: p.name, price, quantity: 1 }];
+      return [...prev, line];
     });
   };
 
-  const changeQty = (menuItemId: string, delta: number) => {
+  const addToCart = (p: Product) => {
+    // Producto con variantes/modificadores/complementos → configurador.
+    if (hasQuickOptions(p)) {
+      setConfigProduct(p);
+      return;
+    }
+    const price = Number(p.promoPrice ?? p.price ?? 0);
+    mergeLine({ menuItemId: p.id, name: p.name, price, quantity: 1 });
+  };
+
+  const handleConfigConfirm = (payload: {
+    variant: MenuItemVariant | null;
+    modifiers: ModifierSelection[];
+    unitPrice: number;
+    quantity: number;
+    notes?: string;
+  }) => {
+    if (!configProduct) return;
+    mergeLine({
+      menuItemId: configProduct.id,
+      name: payload.variant
+        ? `${configProduct.name} (${payload.variant.name})`
+        : configProduct.name,
+      price: payload.unitPrice,
+      quantity: payload.quantity,
+      variantId: payload.variant?.id ?? null,
+      variantName: payload.variant?.name ?? null,
+      modifiers: payload.modifiers,
+      notes: payload.notes,
+    });
+    setConfigProduct(null);
+  };
+
+  // Las líneas se identifican por índice: el mismo menuItemId puede existir
+  // varias veces con configuración distinta.
+  const changeQty = (index: number, delta: number) => {
     setCart((prev) =>
       prev
-        .map((l) => (l.menuItemId === menuItemId ? { ...l, quantity: l.quantity + delta } : l))
+        .map((l, i) => (i === index ? { ...l, quantity: l.quantity + delta } : l))
         .filter((l) => l.quantity > 0)
     );
   };
 
-  const removeLine = (menuItemId: string) => {
-    setCart((prev) => prev.filter((l) => l.menuItemId !== menuItemId));
+  const removeLine = (index: number) => {
+    setCart((prev) => prev.filter((_, i) => i !== index));
   };
 
   const cartCount = cart.reduce((acc, l) => acc + l.quantity, 0);
@@ -211,12 +269,17 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
     if (cart.length === 0) return;
     setSubmitting(true);
     try {
+      // Shape canónico del backend (mismo que el TPV principal): el precio
+      // NO viaja — el servidor re-lee item/variante/modificadores de DB.
+      // `notes` queda solo para el texto libre del mesero.
       const itemsPayload = cart.map((l) => ({
         menuItemId: l.menuItemId,
         quantity: l.quantity,
-        notes: "",
+        notes: l.notes || "",
         seatNumber: l.seatNumber ?? null,
         course: l.course ?? null,
+        variantId: l.variantId ?? null,
+        ...splitModifierSelections(l.modifiers || []),
       }));
 
       // Items para impresión LAN (no depende de internet — la cocina
@@ -226,7 +289,9 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         name: l.name,
         quantity: l.quantity,
         price: l.price,
+        notes: l.notes ?? null,
         seatNumber: l.seatNumber ?? null,
+        modifiers: (l.modifiers || []).map((m) => ({ name: m.name, priceAdd: m.priceAdd })),
       }));
 
       if (isAppendMode && activeOrderId) {
@@ -255,17 +320,18 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         }
         clearActiveOrder();
       } else {
-        // Modo ORDEN NUEVA: crea la cuenta de la mesa.
+        // Modo ORDEN NUEVA: crea la cuenta de la mesa. `orderType` es el
+        // nombre que valida el backend (`type` lo dejaba caer al camino
+        // TAKEOUT: sin ronda 1 y sin marcar la mesa OCCUPIED). Totales y
+        // precios los calcula el servidor.
         const res = await apiOrQueue<{ id: string; orderNumber?: string }>(
           "order",
           "POST",
           "/api/orders/tpv",
           {
-            type: "DINE_IN",
+            orderType: "DINE_IN",
             tableId,
             items: itemsPayload,
-            customerName: `Mesa ${tableId}`,
-            total,
           }
         );
 
@@ -287,7 +353,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         printKitchenTickets(printers, {
           orderNumber: res.data?.orderNumber ?? null,
           orderType: "DINE_IN",
-          tableNumber: tableId,
+          tableNumber: tableName ?? tableId,
           items: printItems,
           config: kitchenConfig ?? undefined,
         })
@@ -327,7 +393,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
             {isAppendMode ? "Agregar a comanda" : "Nueva comanda"}
           </span>
           <div className="flex items-baseline gap-2">
-            <h2 className="text-lg font-black leading-none truncate">Mesa {tableId}</h2>
+            <h2 className="text-lg font-black leading-none truncate">{tableName ?? "Mesa"}</h2>
             {isAppendMode && activeOrderNumber && (
               <span className="text-[11px] font-bold text-[#ffb84d]">
                 · #{activeOrderNumber}
@@ -441,6 +507,15 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         </button>
       </div>
 
+      {/* CONFIGURADOR de variantes / modificadores / complementos */}
+      {configProduct && (
+        <ProductConfigSheet
+          product={configProduct}
+          onClose={() => setConfigProduct(null)}
+          onConfirm={handleConfigConfirm}
+        />
+      )}
+
       {/* FASE 11 · PICKER de asiento + tiempo */}
       {pickerIndex != null && cart[pickerIndex] && (
         <SeatCoursePicker
@@ -481,7 +556,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                 <div className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
                   {isAppendMode ? "Ronda nueva" : "Comanda"}
                 </div>
-                <div className="text-[16px] font-black">Mesa {tableId}</div>
+                <div className="text-[16px] font-black">{tableName ?? "Mesa"}</div>
               </div>
               <button
                 onClick={() => setShowSheet(false)}
@@ -556,7 +631,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                     const courseActive = Boolean(l.course);
                     return (
                       <div
-                        key={l.menuItemId}
+                        key={`${lineKey(l)}-${idx}`}
                         className="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-2.5"
                       >
                         <div className="flex items-center gap-3">
@@ -564,13 +639,23 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                             <div className="text-[13px] font-bold truncate">
                               {l.name}
                             </div>
+                            {(l.modifiers?.length ?? 0) > 0 && (
+                              <div className="text-[11px] text-white/40 font-bold truncate">
+                                {(l.modifiers || []).map((m) => m.name).join(" · ")}
+                              </div>
+                            )}
+                            {l.notes && (
+                              <div className="text-[11px] text-[#ffb84d]/70 font-bold truncate">
+                                “{l.notes}”
+                              </div>
+                            )}
                             <div className="tabular-nums text-[12px] text-white/50">
                               ${l.price.toFixed(2)}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => changeQty(l.menuItemId, -1)}
+                              onClick={() => changeQty(idx, -1)}
                               className="w-10 h-10 min-h-[40px] rounded-xl bg-white/5 border border-white/10 flex items-center justify-center active:scale-95 transition-transform"
                               aria-label="Restar"
                             >
@@ -580,14 +665,14 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                               {l.quantity}
                             </span>
                             <button
-                              onClick={() => changeQty(l.menuItemId, 1)}
+                              onClick={() => changeQty(idx, 1)}
                               className="w-10 h-10 min-h-[40px] rounded-xl bg-[#ffb84d]/15 border border-[#ffb84d]/40 text-[#ffb84d] flex items-center justify-center active:scale-95 transition-transform"
                               aria-label="Sumar"
                             >
                               <Plus size={14} />
                             </button>
                             <button
-                              onClick={() => removeLine(l.menuItemId)}
+                              onClick={() => removeLine(idx)}
                               className="ml-1 w-10 h-10 min-h-[40px] rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/50 active:scale-95 transition-transform"
                               aria-label={`Quitar ${l.name}`}
                             >
