@@ -1001,7 +1001,7 @@ model TicketConfig {
   showPoints          Boolean @default(true)
   showTip             Boolean @default(true)
   tipSuggestions      String  @default("[10,15,20]")
-  kitchenHeader       String  @default("COMANDA")
+  kitchenHeader       String  @default("")
   kitchenLayout       String?
   adminPin            String  @default("0000")
   kitchenShowCustomer Boolean @default(true)

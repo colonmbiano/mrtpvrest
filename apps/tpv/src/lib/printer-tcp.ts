@@ -596,7 +596,7 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
   // Defaults — equivalentes al comportamiento previo a la introducción del
   // config admin, para que call-sites sin config sigan funcionando igual.
   const cfg: Required<KitchenTicketConfig> = {
-    header:           input.config?.header           ?? "COMANDA",
+    header:           input.config?.header           ?? "",
     footer:           input.config?.footer           ?? "",
     showOrderNumber:  input.config?.showOrderNumber  ?? true,
     showTime:         input.config?.showTime         ?? true,
@@ -661,20 +661,9 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     d += CMD.LINE;
   }
 
-  if (cfg.header.trim()) {
-    d += CMD.BOLD_ON + CMD.DOUBLE_ON;
-    d += cfg.header.trim() + "\n";
-    d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
-  }
-
-  if (input.assignmentName?.trim()) {
-    d += CMD.BOLD_ON + CMD.DOUBLE_ON;
-    d += input.assignmentName.trim().toUpperCase() + "\n";
-    d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
-  }
-
-  // Nombre del ticket (Mesa / cliente) = elemento PRINCIPAL: grande y arriba,
-  // para que cocina identifique la cuenta de un vistazo. Tamaño configurable.
+  // TÍTULO de la comanda = nombre del ticket (Mesa / cliente): grande y hasta
+  // arriba para que cocina identifique la cuenta de un vistazo. Reemplaza al
+  // antiguo título fijo "COMANDA" (en cocina ya saben que es una comanda).
   const nameSizeOn =
     cfg.ticketNameSize === "normal" ? "" :
     cfg.ticketNameSize === "xlarge" ? CMD.TRIPLE_ON : CMD.DOUBLE_ON;
@@ -684,6 +673,20 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
   }
   if (cfg.showCustomerName && input.customerName) {
     d += nameSizeOn + CMD.BOLD_ON + input.customerName + "\n" + CMD.BOLD_OFF + nameSizeOff;
+  }
+
+  // Estación destino (separateByGroup): a qué printer-group va esta comanda.
+  if (input.assignmentName?.trim()) {
+    d += CMD.BOLD_ON + CMD.DOUBLE_ON;
+    d += input.assignmentName.trim().toUpperCase() + "\n";
+    d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
+  }
+
+  // Encabezado OPCIONAL (vacío por defecto). Ya no es "COMANDA" fijo; queda
+  // como texto extra configurable (Tickets → Cocina) por si el negocio quiere
+  // un rótulo propio. Va debajo del nombre para no robarle protagonismo.
+  if (cfg.header.trim()) {
+    d += CMD.BOLD_ON + cfg.header.trim() + "\n" + CMD.BOLD_OFF;
   }
 
   if (cfg.showOrderNumber && input.orderNumber) d += "#" + input.orderNumber + "\n";

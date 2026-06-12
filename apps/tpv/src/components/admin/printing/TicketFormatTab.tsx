@@ -66,7 +66,7 @@ const EMPTY: TicketConfig = {
   paperWidth: "80mm", fontFamily: "monospace", fontSize: "medium",
   lineSpacing: "normal", lineWeight: "normal",
   showPoints: true, showTip: true, tipSuggestions: "[10,15,20]",
-  kitchenHeader: "COMANDA", adminPin: "0000",
+  kitchenHeader: "", adminPin: "0000",
   kitchenShowCustomer: true, kitchenShowTable: true, kitchenShowType: true, kitchenShowTime: true,
   kitchenShowOrderNumber: true, kitchenShowModifiers: true, kitchenShowNotes: true,
   kitchenGroupBySeat: true, kitchenSeparateByGroup: false,
