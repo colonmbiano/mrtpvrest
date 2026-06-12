@@ -1,27 +1,27 @@
 import { test, expect } from '@playwright/test';
 
 const ADMIN_URL = process.env.ADMIN_URL ?? 'http://localhost:3002';
-const SAAS_URL = process.env.SAAS_URL ?? 'http://localhost:3003';
+const SAAS_URL = process.env.SAAS_URL ?? 'http://localhost:3004';
 const SUPERADMIN_EMAIL = process.env.SUPERADMIN_EMAIL ?? '';
 const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD ?? '';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
 
 test.describe('Autenticación', () => {
-  // El super admin tiene su propio dominio: saas.mrtpvrest.com con login independiente
-  test('Super Admin puede iniciar sesión', async ({ page }) => {
+  // La central SaaS (apps/saas, puerto 3004) tiene login independiente y
+  // solo acepta SUPER_ADMIN. Tras login redirige a /dashboard ("Vista general").
+  test('Super Admin puede iniciar sesión en la central SaaS', async ({ page }) => {
+    test.skip(!SUPERADMIN_EMAIL || !SUPERADMIN_PASSWORD,
+      'SUPERADMIN_EMAIL/SUPERADMIN_PASSWORD no configurados');
+
     await page.goto(`${SAAS_URL}/login`);
 
     await page.locator('input[type="email"]').fill(SUPERADMIN_EMAIL);
     await page.locator('input[type="password"]').fill(SUPERADMIN_PASSWORD);
-    await page.getByRole('button', { name: /ingresar|entrar|acceso/i }).click();
+    await page.locator('button[type="submit"]').click();
 
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
-
-    // La SAAS central muestra tenants o marcas después de login
-    await expect(
-      page.locator('body').getByText(/tenant|marca|restaurante|dashboard/i).first()
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/vista general/i).first()).toBeVisible({ timeout: 10_000 });
   });
 
   test('Admin de restaurante puede iniciar sesión', async ({ page }) => {

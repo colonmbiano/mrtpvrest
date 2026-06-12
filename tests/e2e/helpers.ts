@@ -53,47 +53,72 @@ export async function injectAdminAuth(page: Page, context: BrowserContext) {
 }
 
 /**
- * Inyecta la vinculación de sucursal en el TPV y navega a la raíz.
+ * Vincula el TPV como dispositivo de la sucursal del seed y lo deja en
+ * /locked listo para enterPIN().
  *
- * Por qué no usamos addInitScript:
- *   Next.js App Router ejecuta el useEffect de la página ANTES de que
- *   addInitScript pueda poblar localStorage en algunos entornos SSR.
- *   La solución confiable: navegar a la URL (deja que redirija a /setup),
- *   luego inyectar via page.evaluate() y navegar de nuevo a /.
+ * El middleware del TPV (apps/tpv/src/middleware.ts) enruta por cookies:
+ *   - sin `tpv-device-linked`  → /setup (wizard de vinculación)
+ *   - sin `tpv-session-active` → /locked (PIN pad)
+ * El login por PIN (POST /api/employees/login) necesita el header
+ * x-location-id, que el interceptor de api.ts lee de localStorage. Por eso
+ * seteamos la cookie de vinculación (vía document.cookie, igual que el
+ * wizard real) + restaurantId/locationId y navegamos de nuevo.
+ *
+ * No recibe `context`: se obtiene de page.context() para que la firma sea
+ * de un solo argumento (compatible con todos los specs).
  */
 export async function injectTPVDevice(page: Page) {
   const auth = readAuth();
 
-  // 1ª navegación: el TPV redirige a /setup porque localStorage está vacío
+  // 1ª navegación: sin cookie, el middleware manda a /setup
   await page.goto(TPV_URL);
   await page.waitForLoadState('domcontentloaded');
 
-  // Inyectar los valores de vinculación en el localStorage del origen TPV
   await page.evaluate((a: Record<string, string>) => {
-    if (a.restaurantId)   localStorage.setItem('restaurantId',   a.restaurantId);
-    if (a.locationId)     localStorage.setItem('locationId',     a.locationId);
-    if (a.restaurantName) localStorage.setItem('restaurantName', a.restaurantName || 'Restaurante');
-    if (a.locationName)   localStorage.setItem('locationName',   a.locationName  || 'Sucursal');
+    // tpv-device-linked NO es httpOnly (el wizard la escribe con document.cookie)
+    document.cookie = 'tpv-device-linked=true; path=/; SameSite=Lax';
+    localStorage.setItem('restaurantId', a.restaurantId);
+    localStorage.setItem('locationId',   a.locationId);
+    localStorage.setItem('locationName', a.locationName || 'Sucursal');
   }, auth as Record<string, string>);
 
-  // 2ª navegación: ahora el useEffect encuentra los valores y muestra el PIN pad
+  // 2ª navegación: ya hay device, sin sesión → /locked (PIN pad)
   await page.goto(TPV_URL);
 }
 
 /**
- * Espera el PIN pad, entra los dígitos uno a uno y pulsa "Ingresar".
- * El TPVLockScreen (renderizado cuando isConfigured=true) requiere un clic
- * explícito en el botón de submit — no hay auto-envío al llegar a 4 dígitos.
+ * Teclea un PIN en el NumpadPIN de /locked. El numpad tiene autoSubmit:
+ * al capturar el 4º dígito envía solo (no existe botón "Ingresar").
  */
-export async function enterPIN(page: Page, pin: string) {
-  await expect(page.locator('[class*="grid-cols-3"]').first()).toBeVisible({ timeout: 15_000 });
+export async function typePIN(page: Page, pin: string) {
+  // Espera el numpad (botón dígito "1") — hidratación de /locked
+  await expect(
+    page.getByRole('button', { name: '1', exact: true })
+  ).toBeVisible({ timeout: 15_000 });
 
   for (const digit of pin) {
-    await page.getByRole('button', { name: digit, exact: true }).first().click({ delay: 150 });
+    await page.getByRole('button', { name: digit, exact: true }).click({ delay: 80 });
   }
+}
 
-  await page.getByRole('button', { name: /ingresar/i }).click();
+/**
+ * Login completo por PIN: teclea el PIN y espera a salir de /locked.
+ * Tras validar, el TPV navega a /hub; con un solo workspace el Hub
+ * auto-selecciona y redirige a /pos/shift/open (sin turno) o
+ * /pos/order-type (turno abierto). Roles sin acceso a /pos (KITCHEN,
+ * DELIVERY) rebotan a /hub vía middleware.
+ */
+export async function enterPIN(page: Page, pin: string) {
+  await typePIN(page, pin);
 
-  // Espera que aparezca el header del TPV tras el login exitoso
-  await expect(page.locator('header').first()).toBeVisible({ timeout: 15_000 });
+  await page.waitForURL(
+    (url) => !url.pathname.startsWith('/locked') && !url.pathname.startsWith('/setup'),
+    { timeout: 20_000 },
+  );
+}
+
+/** Lee una cookie del contexto por nombre (origen TPV). */
+export async function getTPVCookie(page: Page, name: string) {
+  const cookies = await page.context().cookies(TPV_URL);
+  return cookies.find((c) => c.name === name)?.value;
 }
