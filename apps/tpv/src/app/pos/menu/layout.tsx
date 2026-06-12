@@ -44,6 +44,7 @@ import { useThemeStore, type Palette } from "@/store/themeStore";
 import NotificationsPanel from "@/components/pos/NotificationsPanel";
 import WebOrdersPanel from "@/components/pos/WebOrdersPanel";
 import { useNotifications, useNotifStore } from "@/hooks/useNotifications";
+import { useOpenOrders } from "@/hooks/useOpenOrders";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
 import MergeTableModal from "@/components/pos/MergeTableModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
@@ -56,19 +57,6 @@ const ORDER_TYPE_LABEL: Record<string, string> = {
   TAKEOUT: "LLEVAR",
   DELIVERY: "DOMICILIO",
 };
-
-const ACTIVE_STATUSES = new Set([
-  "PENDING",
-  "CONFIRMED",
-  "PREPARING",
-  "READY",
-  "OPEN",
-  // ON_THE_WAY = pedido asignado a repartidor y en camino. Es el valor real
-  // del enum OrderStatus (antes se listaba "OUT_FOR_DELIVERY", un nombre
-  // fantasma que nunca coincidía, por lo que el pedido asignado desaparecía
-  // de "Tickets abiertos"). Sigue abierto hasta DELIVERED/CANCELLED.
-  "ON_THE_WAY",
-]);
 
 // Orígenes que cuentan como "pedido web" (tienda en línea). KIOSK queda fuera
 // porque tiene su propio flujo de notificación. WHATSAPP entra aquí para que los
@@ -131,7 +119,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     subscribeToEvents(SIDEBAR_WIDTH_CHANGED_EVENT, "storage"),
   );
 
-  const [openOrders, setOpenOrders] = useState<any[]>([]);
   const [deliveryDrivers, setDeliveryDrivers] = useState<
     { id: string; name: string; isAvailable?: boolean }[]
   >([]);
@@ -162,17 +149,13 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const showVoiceOrderDictation =
     tpvConfig.extra?.voiceOrderDictationEnabled === true;
 
-  const fetchOpenOrders = useCallback(async () => {
-    try {
-      // scope=active → el backend ya filtra a pedidos abiertos (payload chico).
-      // Mantenemos el filtro cliente como red de seguridad.
-      const { data } = await api.get("/api/orders/admin?scope=active");
-      const list = Array.isArray(data) ? data : [];
-      setOpenOrders(list.filter((o: any) => ACTIVE_STATUSES.has(o.status)));
-    } catch (err) {
-      console.error("Error cargando órdenes abiertas:", err);
-    }
-  }, []);
+  // Tickets abiertos en vivo vía Socket.io (reemplaza el polling de 30s que
+  // re-renderizaba toda la pantalla). El hook mantiene la lista reconciliando
+  // solo la orden afectada en cada evento y expone `refresh()` one-shot para
+  // re-fetch tras mutaciones del usuario (merge, asignar repartidor, etc.).
+  const { orders: openOrders, refresh: fetchOpenOrders } = useOpenOrders(
+    mounted && !isLocked,
+  );
 
   // Repartidores activos para asignar desde el drawer de tickets abiertos.
   // GET /api/delivery devuelve los empleados DELIVERY activos de la sucursal.
@@ -189,15 +172,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       console.error("Error cargando repartidores:", err);
     }
   }, []);
-
-  useEffect(() => {
-    if (!mounted || isLocked) return;
-    let cancelled = false;
-    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
-    queueMicrotask(() => { if (!cancelled) fetchOpenOrders(); });
-    const id = setInterval(fetchOpenOrders, 30000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [mounted, isLocked, fetchOpenOrders]);
 
   const fetchShift = useCallback(async () => {
     try {
@@ -417,11 +391,33 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   }, []);
 
   const handleOpenOrderInCatalog = async (o: any) => {
-    const full = await fetchFullOrder(o);
-    openOrderInCatalog(full);
+    // FASE 1.2 · CAMBIO DE TICKET INSTANTÁNEO
+    // Abrimos YA con la orden rica que ya está en el listado (de openOrders),
+    // sin esperar el GET de detalle. El drawer nos pasa una forma mínima
+    // mapeada, así que recuperamos la orden completa del listado por id; trae
+    // todos los escalares (orderType, customerName, tableId, numberOfGuests…).
+    // Lo único que falta es la relación `table` (el listado no la incluye), así
+    // que el nombre de la mesa se reconcilia en background sin bloquear la UI.
+    const rich = openOrders.find((x: any) => x.id === o.id) || o;
+    openOrderInCatalog(rich);
     toast.success(
       "Ticket abierto: agrega productos o usa el menú para reimprimir",
     );
+
+    void (async () => {
+      const full = await fetchFullOrder(rich);
+      const tableName = full?.table?.name;
+      // Merge no destructivo: solo el nombre/ID de mesa que faltaba. El resto
+      // del header ya quedó puesto desde la orden del listado; no lo pisamos
+      // para no sobreescribir lo que el cajero pudiera estar editando.
+      if (tableName) {
+        useTicketStore.getState().updateTicket({
+          tableName,
+          table: tableName,
+          tableId: full.tableId || full.table?.id || "",
+        });
+      }
+    })();
   };
 
   const handleOpenPayment = async (o: any) => {
