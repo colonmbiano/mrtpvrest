@@ -106,7 +106,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Arrancar backend
-        run: pnpm --filter @mrtpvrest/backend start &
+        run: pnpm --filter @mrtpvrest/backend start > backend.log 2>&1 &
         env:
           PORT: "3001"
 
@@ -120,6 +120,9 @@ jobs:
       - name: Esperar a los servicios
         run: pnpm dlx wait-on@8.0.1 -t 120000 http://localhost:3001/health http://localhost:3002 http://localhost:3005
 
+      - name: Logs del backend (pre-tests)
+        run: tail -40 backend.log || true
+
       - name: Correr E2E
         run: pnpm test:e2e
         env:
@@ -131,6 +134,10 @@ jobs:
           WAITER_PIN: ${{ secrets.WAITER_PIN }}
           CASHIER_PIN: ${{ secrets.CASHIER_PIN }}
           KITCHEN_PIN: ${{ secrets.KITCHEN_PIN }}
+
+      - name: Logs del backend (post-tests)
+        if: always()
+        run: tail -120 backend.log || true
 
       - name: Subir reporte HTML
         if: always()
