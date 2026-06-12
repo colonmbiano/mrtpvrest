@@ -160,12 +160,17 @@ async function seedCustomer() {
       hasInventory: true,
       hasDelivery: true,
       hasWebStore: true,
+      // Sin esto el login del admin se queda en el modal "verifica tu correo"
+      // (login/page.tsx gatea /admin con tenant.emailVerifiedAt) — los E2E
+      // nunca pasan del auth.setup.
+      emailVerifiedAt: new Date(),
       themeConfig: { theme: 'STREET_FOOD', primaryColor: '#FF5733' },
     },
     update: {
       hasInventory: true,
       hasDelivery: true,
       hasWebStore: true,
+      emailVerifiedAt: new Date(),
       themeConfig: { theme: 'STREET_FOOD', primaryColor: '#FF5733' },
     },
   })
