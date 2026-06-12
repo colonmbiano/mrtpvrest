@@ -29,6 +29,69 @@ const requireLocation = (req, res, next) => {
   next();
 };
 
+// ── Snapshot en vivo de un turno ABIERTO ─────────────────────────────────
+// El cierre calcula expectedCash/totales solo al cerrar; para que el corte
+// muestre "cuánto debo tener" en tiempo real, replicamos ese cálculo sobre el
+// turno abierto. El efectivo (totalCash) y el esperado SOLO se revelan si el
+// turno no es ciego o el empleado tiene permiso (rol admin/owner/super_admin o
+// flag canViewExpectedCash). Así el corte ciego sigue impidiendo que el cajero
+// "cuadre" tecleando el número exacto, pero un supervisor sí lo ve.
+async function enrichOpenShift(shift, req) {
+  const orders = await prisma.order.findMany({
+    where: {
+      locationId: req.locationId,
+      status: 'DELIVERED',
+      OR: [
+        { shiftId: shift.id },
+        { shiftId: null, createdAt: { gte: shift.openedAt } },
+      ],
+      source: { in: ['TPV', 'WAITER', 'ONLINE'] },
+    },
+  });
+  const totals = summarizePayments(orders);
+  const totalExpenses = (shift.expenses || []).reduce((s, e) => s + Number(e.amount || 0), 0);
+  const totalSales = Object.values(totals).reduce((a, b) => a + b, 0);
+  const { expectedCash } = cashCutSummary({
+    openingFloat: shift.openingFloat,
+    totalCash: totals.totalCash,
+    totalExpenses,
+  });
+
+  // Flag por restaurante: ¿los roles admin pueden ver el esperado en un turno
+  // ciego? Default true (histórico). false → corte ciego estricto: ni los
+  // admins lo ven por su rol; solo quien tenga el permiso explícito.
+  const restaurantId = req.restaurantId || req.user?.restaurantId;
+  let adminMayView = true;
+  if (restaurantId) {
+    const cfg = await prisma.restaurantConfig.findUnique({
+      where: { restaurantId },
+      select: { adminCanViewExpectedCash: true },
+    });
+    if (cfg) adminMayView = cfg.adminCanViewExpectedCash !== false;
+  }
+
+  const role = req.user?.role;
+  const isAdminRole = role === 'ADMIN' || role === 'OWNER' || role === 'SUPER_ADMIN';
+  // El permiso explícito por empleado SIEMPRE concede; el override por rol
+  // admin queda sujeto al flag del restaurante.
+  const privileged =
+    req.user?.canViewExpectedCash === true || (isAdminRole && adminMayView);
+  const reveal = !shift.blindClose || privileged;
+
+  return {
+    ...shift,
+    totalCard: totals.totalCard,
+    totalTransfer: totals.totalTransfer,
+    totalExpenses,
+    ordersCount: orders.length,
+    // Sensibles al corte ciego → null si este empleado no puede verlos.
+    totalCash: reveal ? totals.totalCash : null,
+    totalSales: reveal ? totalSales : null,
+    expectedCash: reveal ? expectedCash : null,
+    canRevealExpected: reveal,
+  };
+}
+
 // ── GET staff clock-in activo de la sucursal (widget "Turno actual") ─────
 // Devuelve empleados con EmployeeShift abierto (endAt = null) en esta sucursal.
 router.get('/staff-active', requireLocation, async (req, res) => {
@@ -60,7 +123,7 @@ router.get('/current', requireLocation, async (req, res) => {
       include: { expenses: { orderBy: { createdAt: 'desc' } } },
       orderBy: { openedAt: 'desc' }
     });
-    res.json(shift || null);
+    res.json(shift ? await enrichOpenShift(shift, req) : null);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -72,7 +135,7 @@ router.get('/active', requireLocation, async (req, res) => {
       include: { expenses: { orderBy: { createdAt: 'desc' } } },
       orderBy: { openedAt: 'desc' }
     });
-    res.json(shift || null);
+    res.json(shift ? await enrichOpenShift(shift, req) : null);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

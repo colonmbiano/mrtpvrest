@@ -952,6 +952,11 @@ model RestaurantConfig {
   // luego se reparten a las demás vía StockTransfer.
   centralWarehouseEnabled Boolean @default(false)
 
+  // CORTE DE CAJA · si true (default), los roles admin ven el efectivo
+  // esperado aunque el turno sea ciego. false → corte ciego también para
+  // admins (solo el permiso explícito canViewExpectedCash lo revela).
+  adminCanViewExpectedCash Boolean @default(true)
+
   updatedAt DateTime @updatedAt
 
   @@map("restaurant_config")
@@ -1407,6 +1412,7 @@ model Employee {
   canApplyDiscounts Boolean @default(false) // Aplicar cortesías o descuentos al ticket
   canReopenTables   Boolean @default(false) // Reabrir una cuenta cerrada
   canManageUsers    Boolean @default(false) // Crear/editar otros empleados
+  canViewExpectedCash Boolean @default(false) // Ver el efectivo esperado en el corte (rompe el corte ciego para este empleado)
 
   shifts       EmployeeShift[]
   shiftsOpened CashShift[]     @relation("ShiftOpenedBy")
@@ -1887,6 +1893,11 @@ model OrderRound {
   // 1 = primera comanda, 2 = segunda ronda, etc. Único por orden.
   roundNumber     Int
   sentToKitchenAt DateTime @default(now())
+  // clientRoundId · idempotencia DB-level para replays optimistas/offline de
+  // "agregar ronda" (POST /:id/items). El cliente manda la llave en el header
+  // Idempotency-Key; si la ronda ya existe se devuelve la orden sin duplicar
+  // items. Equivalente a Order.clientOrderId pero a nivel de ronda.
+  clientRoundId   String?  @unique
 
   items OrderItem[]
 

@@ -97,7 +97,7 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       'phone','whatsappNumber','address','countryCode','deliveryFee','freeDeliveryFrom',
       'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
       'pointsPerTen','pointsValuePesos','storefrontTheme',
-      'centralWarehouseEnabled',
+      'centralWarehouseEnabled','adminCanViewExpectedCash',
       // Horario de atención (businessHours llega como JSON serializado)
       'scheduleEnabled','timezone','businessHours',
       // Envío por distancia
