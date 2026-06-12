@@ -11,17 +11,25 @@ const vapidSubject = process.env.VAPID_EMAIL
       : `mailto:${process.env.VAPID_EMAIL}`)
   : 'mailto:admin@masterburguers.com';
 
-webpush.setVapidDetails(
-  vapidSubject,
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
+// Sin llaves VAPID (CI/E2E, entornos nuevos) el web push queda deshabilitado
+// en vez de tumbar el backend en el boot — setVapidDetails lanza si faltan.
+const PUSH_ENABLED = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+if (PUSH_ENABLED) {
+  webpush.setVapidDetails(
+    vapidSubject,
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+} else {
+  console.warn('[notifications] VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY ausentes — web push deshabilitado');
+}
 
 const WHAPI_TOKEN = process.env.WHATSAPP_TOKEN;
 const WHAPI_URL   = 'https://gate.whapi.cloud';
 
 // ── Enviar notificación push al navegador ─────────────────────────────────
 async function sendPushToOrder(orderId, payload) {
+  if (!PUSH_ENABLED) return 0;
   try {
     const subs = await prisma.pushSubscription.findMany({ where: { orderId } });
     const results = await Promise.allSettled(subs.map(sub =>
@@ -37,6 +45,7 @@ async function sendPushToOrder(orderId, payload) {
 }
 
 async function sendPushToUser(userId, payload) {
+  if (!PUSH_ENABLED) return;
   try {
     const subs = await prisma.pushSubscription.findMany({ where: { userId } });
     await Promise.allSettled(subs.map(sub =>
