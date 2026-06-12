@@ -16,8 +16,11 @@ import {
 } from "@/store/ticketStore";
 import { useUIStore } from "@/store/useUIStore";
 import {
-  COMPLEMENT_MODIFIER_PREFIX,
-  VARIANT_MODIFIER_PREFIX,
+  buildOptionGroups,
+  computeUnitExtra,
+  flattenSelections,
+  getValidationError,
+  hasQuickOptions,
 } from "@/lib/modifiers";
 
 type CategoryLite = {
@@ -30,9 +33,6 @@ const FALLBACK_CATEGORIES: CategoryLite[] = PRIORITY_CATEGORIES.map((name) => ({
   id: `fallback-${name.toLowerCase()}`,
   name,
 }));
-
-const COMPLEMENTS_GROUP_ID = "__complements";
-const VARIANTS_GROUP_ID = "__variants";
 
 export default function CatalogPage() {
   const { addItemToActive, replaceItemInActive, setEditingIndex } = useTicketStore();
@@ -111,11 +111,6 @@ export default function CatalogPage() {
       return sameCategory(product.category || "", selected.name);
     });
   }, [activeCat, products, searchQuery, visibleCategories]);
-
-  const hasQuickOptions = (product: Product) =>
-    (product.hasVariants && (product.variants?.some((v) => v.isAvailable !== false) ?? false)) ||
-    (product.modifierGroups?.some((group) => group.modifiers?.length > 0) ?? false) ||
-    (product.complements?.some((complement) => complement.isAvailable !== false) ?? false);
 
   const addPlainProduct = (product: Product) => {
     const unit = Number(product.promoPrice || product.price || 0);
@@ -965,105 +960,6 @@ function EmptyState({ query }: { query: string }) {
       </p>
     </div>
   );
-}
-
-function buildOptionGroups(
-  product: Product,
-  variants: MenuItemVariant[],
-  variantMultiSelect: boolean,
-): ModifierGroup[] {
-  const variantGroups: ModifierGroup[] = variantMultiSelect
-    ? [
-        {
-          id: VARIANTS_GROUP_ID,
-          name: "Variantes",
-          required: (product.variantMinSelection ?? 0) > 0,
-          multiSelect: true,
-          minSelection: product.variantMinSelection ?? 0,
-          maxSelection: product.variantMaxSelection ?? 0,
-          freeModifiersLimit: 0,
-          modifiers: variants.map((variant) => ({
-            id: `${VARIANT_MODIFIER_PREFIX}${variant.id}`,
-            groupId: VARIANTS_GROUP_ID,
-            name: variant.name,
-            priceAdd: Number(variant.price || 0),
-          })),
-        },
-      ]
-    : [];
-
-  const complements = (product.complements || []).filter((complement) => complement.isAvailable !== false);
-  const complementGroups: ModifierGroup[] =
-    complements.length === 0
-      ? []
-      : [
-          {
-            id: COMPLEMENTS_GROUP_ID,
-            name: "Complementos",
-            required: false,
-            multiSelect: true,
-            minSelection: 0,
-            maxSelection: 0,
-            freeModifiersLimit: 0,
-            modifiers: complements.map((complement) => ({
-              id: `${COMPLEMENT_MODIFIER_PREFIX}${complement.id}`,
-              groupId: COMPLEMENTS_GROUP_ID,
-              name: complement.name,
-              priceAdd: Number(complement.price || 0),
-            })),
-          },
-        ];
-
-  return [...variantGroups, ...(product.modifierGroups || []), ...complementGroups];
-}
-
-function computeUnitExtra(groups: ModifierGroup[], selectionsByGroup: Record<string, Modifier[]>): number {
-  let extra = 0;
-  for (const group of groups) {
-    const selected = selectionsByGroup[group.id] || [];
-    const free = group.freeModifiersLimit || 0;
-    [...selected]
-      .sort((a, b) => a.priceAdd - b.priceAdd)
-      .forEach((modifier, index) => {
-        if (index >= free) extra += Number(modifier.priceAdd || 0);
-      });
-  }
-  return extra;
-}
-
-function getValidationError(
-  groups: ModifierGroup[],
-  selections: Record<string, Modifier[]>,
-  variantCount: number,
-  selectedVariant: MenuItemVariant | null,
-  variantMultiSelect: boolean,
-): string | null {
-  if (!variantMultiSelect && variantCount > 0 && !selectedVariant) return "Selecciona una variante";
-  for (const group of groups) {
-    const count = (selections[group.id] || []).length;
-    const min = Math.max(group.required ? 1 : 0, group.minSelection || 0);
-    if (count < min) return `Selecciona ${min} en ${group.name}`;
-    if (group.maxSelection > 0 && count > group.maxSelection) return `Maximo ${group.maxSelection} en ${group.name}`;
-  }
-  return null;
-}
-
-function flattenSelections(
-  groups: ModifierGroup[],
-  selections: Record<string, Modifier[]>,
-): ModifierSelection[] {
-  const modifiers: ModifierSelection[] = [];
-  for (const group of groups) {
-    for (const modifier of selections[group.id] || []) {
-      modifiers.push({
-        id: modifier.id,
-        groupId: group.id,
-        name: modifier.name,
-        priceAdd: modifier.priceAdd,
-      });
-    }
-  }
-  return modifiers;
 }
 
 function fuzzyFilter(products: Product[], query: string): Product[] {

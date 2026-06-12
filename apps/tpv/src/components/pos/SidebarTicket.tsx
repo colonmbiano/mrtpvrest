@@ -378,6 +378,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         quantity: item.quantity,
         notes: item.notes || "",
         seatNumber: item.seatNumber ?? null,
+        // Variante single-select del configurador. Sin esto el backend
+        // re-calculaba el precio con el item base y la variante elegida
+        // (p.ej. "Doble carne") nunca llegaba al total guardado en DB.
+        variantId: item.variantId ?? null,
         modifiers: modifiers
           .filter(
             (m) =>

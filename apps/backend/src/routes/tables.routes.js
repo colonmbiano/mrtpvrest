@@ -90,9 +90,15 @@ router.get('/:id', async (req, res) => {
           discount: true,
           customerName: true,
           createdAt: true,
+          // roundId + rounds: la pantalla de meseros agrupa la comanda por
+          // ronda ("Ronda 2 · 21:14") para distinguir lo recién enviado.
           items: {
-            select: { id: true, name: true, price: true, quantity: true, subtotal: true },
+            select: { id: true, name: true, price: true, quantity: true, subtotal: true, roundId: true },
             orderBy: { id: 'asc' },
+          },
+          rounds: {
+            select: { id: true, roundNumber: true, createdAt: true },
+            orderBy: { roundNumber: 'asc' },
           },
         },
         orderBy: { createdAt: 'desc' },
