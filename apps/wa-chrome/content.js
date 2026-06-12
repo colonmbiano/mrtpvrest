@@ -105,14 +105,14 @@
       }
     }
 
-    // 2) Confirmación en lenguaje natural (sin palabra clave). El agente de IA
-    //    del negocio resume el pedido con "Tu pedido de <X> ha sido enviado...",
-    //    o el cliente escribe "...un pedido de <X>". El detalle suele estar en el
-    //    mensaje del NEGOCIO (saliente), no en el último del cliente, por eso
-    //    escaneamos TODOS los mensajes (más reciente primero). Un guard exige que
-    //    el tramo capturado tenga un producto o cantidad, para no engancharse de
-    //    "gracias por tu pedido".
-    const CONFIRM = /\bpedido\b(?:\s+de)?\s*[:\-]?\s+(.+?)(?=\s+(?:ha sido|fue|ser[áa]|est[áa]|qued[óo]|se\b|el repartidor|el tiempo|gracias)\b|[.!?\n]|$)/i;
+    // 2) Confirmación del AGENTE en lenguaje natural (sin palabra clave): "Tu
+    //    pedido de <X> ha sido enviado/confirmado/registrado...". El detalle del
+    //    agente vive en mensajes salientes que el modo 3 ignora.
+    //    CLAVE: exige un VERBO DE CONFIRMACIÓN justo después del producto, para NO
+    //    dispararse con SUGERENCIAS/PREGUNTAS del agente ("¿te ayudo a concretar
+    //    tu pedido de las Hamburguesas Angus o las Alitas...?") que NO son pedidos.
+    //    Un guard extra exige producto/cantidad en lo capturado.
+    const CONFIRM = /\bpedido\b(?:\s+de|:)?\s+(.+?)\s+(?:ha\s+sido|fue|qued[óo]|est[áa]\s+\w|se\s+(?:envi|prepar|registr|anot|tom)|confirmad|registrad|enviad|recibid|anotad|tomad|listo)\b/i;
     const PROD_HINT = /\d|kg|kilo|alit|bonel|hamburg|burger|taco|burrit|gringa|papa|refresc|coca|agua|promo|combo|pizza|nugget|costill|antoj|quesadill|alambr|chela|cerveza|hot ?dog|\borden\b/i;
     for (let i = msgs.length - 1; i >= 0; i--) {
       const m = msgs[i].full.match(CONFIRM);
