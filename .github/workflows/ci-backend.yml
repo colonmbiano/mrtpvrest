@@ -6,6 +6,11 @@ name: CI — Backend Test (dinero + tenant guard)
 # (tenant-guard). NO necesita BD: los tests mockean Prisma o prueban funciones
 # puras. Ver ARD §10.
 
+# GITHUB_TOKEN de solo lectura por defecto (least-privilege). Los jobs que
+# necesiten escribir lo declaran a nivel de job (p.ej. el commit de APKs).
+permissions:
+  contents: read
+
 on:
   push:
     branches: [master]

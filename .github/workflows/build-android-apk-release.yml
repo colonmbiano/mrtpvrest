@@ -11,6 +11,11 @@ name: Build Android APK Release (TPV)
 # Si los secrets no están presentes, el job falla en el paso "Decode" para
 # evitar publicar APKs sin firmar.
 
+# GITHUB_TOKEN de solo lectura por defecto (least-privilege). Los jobs que
+# necesiten escribir lo declaran a nivel de job (p.ej. el commit de APKs).
+permissions:
+  contents: read
+
 on:
   push:
     tags:

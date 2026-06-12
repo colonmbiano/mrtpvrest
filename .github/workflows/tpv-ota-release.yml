@@ -13,6 +13,11 @@ name: TPV OTA Release
 # Secrets requeridos:
 #   OTA_PUBLISH_TOKEN o OTA_BUILD_SECRET. OTA_PUBLISH_TOKEN es preferido.
 
+# GITHUB_TOKEN de solo lectura por defecto (least-privilege). Los jobs que
+# necesiten escribir lo declaran a nivel de job (p.ej. el commit de APKs).
+permissions:
+  contents: read
+
 on:
   push:
     branches: [master]

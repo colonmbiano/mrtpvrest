@@ -1,5 +1,10 @@
 name: Build Android APK (Meseros Lite)
 
+# GITHUB_TOKEN de solo lectura por defecto (least-privilege). Los jobs que
+# necesiten escribir lo declaran a nivel de job (p.ej. el commit de APKs).
+permissions:
+  contents: read
+
 on:
   push:
     branches: [master, main]

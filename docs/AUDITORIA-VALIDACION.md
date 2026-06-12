@@ -85,10 +85,15 @@ viceversa rompe los webhooks):
     sin desconectar), y `join:order`/`join:location:*` verifican contra la BD
     que el id pertenece al restaurante del socket.
 
-### P1 — CI/CD y dependencias (pendiente)
-13. `pnpm audit`: 17 vulnerabilidades (6 HIGH: @xmldom/xmldom x4, qs). Sin
-    Dependabot/Renovate.
-14. Actions sin pin a SHA; sin bloques `permissions`; E2E no es gate.
+### P1 — CI/CD y dependencias
+13. ~~Sin Dependabot~~ → **ARREGLADO**: `.github/dependabot.yml` (npm semanal,
+    minor/patch agrupados, majors a mano; github-actions semanal). Las 17 vulns
+    de `pnpm audit` (6 HIGH: @xmldom/xmldom x4, qs) llegarán como PRs al
+    activarse; revisarlas y mergear.
+14. ~~Sin bloques `permissions`~~ → **ARREGLADO**: GITHUB_TOKEN read-only
+    top-level en los 11 workflows (el job de commit de APKs conserva su
+    `contents: write` a nivel job). Pendiente: pin de actions a SHA (resolver
+    tags contra la API de GitHub) y promover E2E a gate.
 
 ### P2 (pendiente)
 - Migración `Float` → `Decimal` en ~50 campos monetarios (round2 server-side

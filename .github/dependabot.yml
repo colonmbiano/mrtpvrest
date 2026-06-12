@@ -1,0 +1,31 @@
+# Dependabot: PRs automáticos para vulnerabilidades y actualizaciones.
+# pnpm audit reportaba 6 HIGH sin nadie mirándolas (ver docs/AUDITORIA-VALIDACION.md).
+# Solo seguridad + minor/patch agrupados para no inundar de PRs; los majors
+# se hacen a mano.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/Mexico_City
+    open-pull-requests-limit: 5
+    groups:
+      seguridad-y-patches:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+    ignore:
+      # Majors a mano: Next/React/Prisma/Capacitor rompen cosas al saltar major.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/Mexico_City
+    open-pull-requests-limit: 3
