@@ -171,7 +171,7 @@ describe("useAuthStore (offline-first)", () => {
       expect(result.current.pinAttempts).toBe(0);
     });
 
-    it("debe desbloquear localmente sin esperar la respuesta del backend", async () => {
+    it("con red y match local, espera el JWT y activa la sesión con el token del backend", async () => {
       const localEmployee: TPVEmployee = {
         id: "emp-local-first",
         name: "Local First",
@@ -181,9 +181,48 @@ describe("useAuthStore (offline-first)", () => {
         permissions: [],
       };
       useAuthStore.setState({ employees: [localEmployee] });
-      mockApi.post.mockImplementationOnce(
-        () => new Promise(() => {}) as never,
+      mockApi.post.mockResolvedValueOnce({
+        data: {
+          token: "tok-fresh",
+          employee: { ...localEmployee, name: "Server Name" },
+        },
+      } as never);
+
+      const { result } = renderHook(() => useAuthStore());
+      let res: { success: boolean; error?: string };
+      await act(async () => {
+        res = await result.current.loginWithPin("2468");
+      });
+
+      expect(res!.success).toBe(true);
+      expect(result.current.isAuthenticated).toBe(true);
+      // Prevalecen los datos frescos del backend, no el cache local
+      expect(result.current.employee?.name).toBe("Server Name");
+      expect(result.current.token).toBe("tok-fresh");
+      expect(result.current.loading).toBe(false);
+      // La espera del JWT debe ser acotada (timeout en la request de login)
+      expect(mockApi.post).toHaveBeenCalledWith(
+        "/api/employees/login",
+        { pin: "2468" },
+        expect.objectContaining({ timeout: expect.any(Number) }),
       );
+    });
+
+    it("debe caer a sesión local (sin token) si el backend no responde a tiempo", async () => {
+      const localEmployee: TPVEmployee = {
+        id: "emp-local-timeout",
+        name: "Local Timeout",
+        role: "CASHIER",
+        pin: "hash-2468",
+        isActive: true,
+        permissions: [],
+      };
+      useAuthStore.setState({ employees: [localEmployee] });
+      // Así rechaza axios cuando expira el timeout: sin response.status
+      mockApi.post.mockRejectedValueOnce({
+        code: "ECONNABORTED",
+        message: "timeout of 8000ms exceeded",
+      });
 
       const { result } = renderHook(() => useAuthStore());
       let res: { success: boolean; error?: string };
@@ -194,10 +233,35 @@ describe("useAuthStore (offline-first)", () => {
       expect(res!.success).toBe(true);
       expect(result.current.isAuthenticated).toBe(true);
       expect(result.current.employee).toEqual(localEmployee);
+      expect(result.current.token).toBeNull();
       expect(result.current.loading).toBe(false);
-      expect(mockApi.post).toHaveBeenCalledWith("/api/employees/login", {
-        pin: "2468",
+      expect(result.current.pinAttempts).toBe(0);
+    });
+
+    it("debe rechazar el login en 4xx aunque el PIN matchee en cache local (el servidor manda)", async () => {
+      const localEmployee: TPVEmployee = {
+        id: "emp-local-stale",
+        name: "Stale Pin",
+        role: "CASHIER",
+        pin: "hash-2468", // cache aceptaría, pero el PIN cambió en backend
+        isActive: true,
+        permissions: [],
+      };
+      useAuthStore.setState({ employees: [localEmployee] });
+      mockApi.post.mockRejectedValueOnce({
+        response: { status: 401, data: { error: "PIN incorrecto" } },
       });
+
+      const { result } = renderHook(() => useAuthStore());
+      let res: { success: boolean; error?: string };
+      await act(async () => {
+        res = await result.current.loginWithPin("2468");
+      });
+
+      expect(res!.success).toBe(false);
+      expect(result.current.isAuthenticated).toBe(false);
+      expect(result.current.employee).toBeNull();
+      expect(result.current.pinAttempts).toBe(1);
     });
   });
 
