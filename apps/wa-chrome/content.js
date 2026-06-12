@@ -261,7 +261,17 @@
         <div class="st" style="color:${AMBER}">No se reconoció ningún producto. Revisa el chat o ajústalo manualmente en el TPV.</div>`;
       return;
     }
-    const list = items.map((i) => `<div class="it"><span>${i.quantity || 1}× ${esc(i.product?.name || i.name || i.menuItemId)}</span></div>`).join("");
+    const list = items.map((i) => {
+      // La IA deduce variante y opciones del texto → las mostramos bajo el
+      // producto para que el cajero vea qué se eligió. ⚠ si aún falta algo
+      // obligatorio (needsReview): toca completarlo al confirmar en el TPV.
+      const extras = [];
+      if (i.variantName) extras.push(esc(i.variantName));
+      if (Array.isArray(i.modifierNames)) extras.push(...i.modifierNames.map(esc));
+      const sub = extras.length ? `<div class="muted">${extras.join(" · ")}</div>` : "";
+      const warn = i.needsReview ? ` <span style="color:${AMBER}" title="Falta variante/opción; complétalo en el TPV">⚠</span>` : "";
+      return `<div class="it" style="display:block"><span>${i.quantity || 1}× ${esc(i.product?.name || i.name || i.menuItemId)}${warn}</span>${sub}</div>`;
+    }).join("");
     out.innerHTML = `
       <div class="muted">Cliente: ${esc(state.chat.customerName)}${state.chat.phone ? " · +" + state.chat.phone : ""}</div>
       <div style="margin:8px 0">${list}</div>
@@ -286,7 +296,13 @@
     if (state.orderType === "DELIVERY" && !state.address.trim()) { st.style.color = AMBER; st.textContent = "Falta la dirección."; return; }
     st.style.color = "#fff"; st.textContent = "Creando…";
     const order = {
-      items: (state.parsed.items || []).map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity || 1 })),
+      items: (state.parsed.items || []).map((i) => ({
+        menuItemId: i.menuItemId,
+        quantity: i.quantity || 1,
+        // Variante y opciones deducidas por la IA (el backend valida y cobra).
+        ...(i.variantId ? { variantId: i.variantId } : {}),
+        ...(Array.isArray(i.modifierIds) && i.modifierIds.length ? { modifierIds: i.modifierIds } : {}),
+      })),
       customerName: state.chat.customerName || "Cliente WhatsApp",
       customerPhone: state.chat.phone || null,
       orderType: state.orderType,

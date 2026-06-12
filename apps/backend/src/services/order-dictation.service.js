@@ -302,11 +302,11 @@ async function runOrderDictation({ prompt, restaurantId, catalog: preloaded }) {
 /* ── NIVEL 2 — Parser con IA (Groq Llama, solo BYOK del cliente) ──────────── */
 
 const AI_SYSTEM_PROMPT = `Eres un parser de pedidos para el punto de venta de un restaurante.
-Recibes un MENÚ numerado y el DICTADO de voz del cajero. Tu trabajo es identificar
-qué productos del menú pidió, con su cantidad y notas.
+Recibes un MENÚ numerado y el PEDIDO del cliente. Identifica qué productos pidió,
+su cantidad y —cuando el producto lo permita— la VARIANTE y las OPCIONES elegidas.
 
 Devuelve EXCLUSIVAMENTE un JSON válido con esta forma exacta:
-{"items":[{"n":<numero del menu>,"quantity":<entero>,"notes":"<texto>"}],"unresolved":["<frase no reconocida>"]}
+{"items":[{"n":<numero del menu>,"quantity":<entero>,"variant":"<nombre de variante o vacío>","modifiers":["<nombre de opción>"],"notes":"<texto>"}],"unresolved":["<frase no reconocida>"]}
 
 Reglas:
 - "n" debe ser el número del MENÚ que mejor corresponde, aunque lo digan con nombre
@@ -320,16 +320,97 @@ Reglas:
   usa "unresolved" cuando de verdad NO exista nada parecido en el menú. Palabras que claramente
   no son comida/bebida (colonias, direcciones, saludos) sí van a "unresolved".
 - "quantity" es entero >= 1 (por defecto 1).
-- "notes" sólo para indicaciones del platillo (ej. "sin cebolla", "extra queso", "bien dorado"); si no hay, usa "".
+- VARIANTES: si el producto lista "variantes:", pon en "variant" el NOMBRE EXACTO de la
+  variante pedida (mapea coloquialismos: "grande"→"Grande", "chico"→"Chico", "media"→"Mediana").
+  Si el cliente NO especifica variante, deja "variant":"" (no inventes una).
+- OPCIONES/MODIFICADORES: si el producto lista grupos de opciones o complementos, pon en
+  "modifiers" los NOMBRES EXACTOS de las opciones pedidas (ej. "con queso extra"→"Queso extra").
+  Usa SÓLO opciones LISTADAS para ESE producto. Si no pidió ninguna, deja "modifiers":[].
+- "variant" y cada valor de "modifiers" deben coincidir con un valor que aparezca en la lista
+  de ESE producto; nunca inventes opciones que no estén listadas.
+- "notes" sólo para indicaciones libres que NO sean una variante ni una opción del menú
+  (ej. "bien dorado", "sin cebolla" cuando no exista como opción); si no hay, usa "".
 - No incluyas explicaciones ni texto fuera del JSON.`;
 
 function buildMenuList(catalog) {
   return catalog
     .map((it, i) => {
       const cat = it.category?.name ? ` [${it.category.name}]` : '';
-      return `${i + 1}. ${it.name}${cat}`;
+      let line = `${i + 1}. ${it.name}${cat}`;
+      // Variantes y opciones se listan debajo del producto para que el modelo
+      // pueda elegir SOLO entre las disponibles de ESE producto (resolución
+      // exacta por nombre en resolveSelections; nada de inventar opciones).
+      const variants = (it.variants || []).filter((v) => v.isAvailable !== false);
+      if (variants.length) {
+        line += `\n   variantes: ${variants.map((v) => v.name).join(' | ')}`;
+      }
+      for (const g of it.modifierGroups || []) {
+        const mods = (g.modifiers || []).filter((m) => m.isAvailable !== false);
+        if (!mods.length) continue;
+        const req = g.required ? ' (obligatorio)' : '';
+        line += `\n   ${g.name || 'opciones'}${req}: ${mods.map((m) => m.name).join(' | ')}`;
+      }
+      const comps = (it.complements || []).filter((c) => c.isAvailable !== false);
+      if (comps.length) {
+        line += `\n   complementos: ${comps.map((c) => c.name).join(' | ')}`;
+      }
+      return line;
     })
     .join('\n');
+}
+
+// ¿Tras intentar resolver desde el texto, aún falta una selección OBLIGATORIA?
+// (producto con variantes pero sin variante elegida, o grupo de modificadores
+// "required" sin ninguna opción). Si sí, el cajero debe completarlo en el TPV.
+function needsReviewAfterResolve(product, variantId, modifierIds) {
+  if (product.hasVariants && (product.variants || []).length && !variantId) return true;
+  const selected = new Set(modifierIds || []);
+  for (const g of product.modifierGroups || []) {
+    if (g.required && !(g.modifiers || []).some((m) => selected.has(m.id))) return true;
+  }
+  return false;
+}
+
+// Resuelve los nombres que devolvió la IA (variante y opciones) a IDs reales del
+// producto: match por nombre normalizado (exacto, luego por inclusión). Los
+// complementos se marcan con el prefijo "complement:" (mismo convenio que el TPV
+// y que POST /api/store/orders).
+function resolveSelections(product, rawVariant, rawModifiers) {
+  const byName = (list, want) =>
+    list.find((x) => normalize(x.name) === want) ||
+    list.find((x) => {
+      const n = normalize(x.name);
+      return n && (n.includes(want) || want.includes(n));
+    });
+
+  let variantId = null;
+  let variantName = null;
+  const wantV = normalize(rawVariant || '');
+  if (wantV && (product.variants || []).length) {
+    const v = byName(product.variants, wantV);
+    if (v) { variantId = v.id; variantName = v.name; }
+  }
+  // Variante ÚNICA (ej. "Unidad", "Papas", "1 Litro", "Porción"): no hay
+  // ambigüedad y el cliente no la menciona → la elegimos sola, para que el
+  // precio sea el correcto y no se marque review en falso.
+  if (!variantId && (product.variants || []).length === 1) {
+    variantId = product.variants[0].id;
+    variantName = product.variants[0].name;
+  }
+
+  const modifierIds = [];
+  const modifierNames = [];
+  const allMods = (product.modifierGroups || []).flatMap((g) => g.modifiers || []);
+  const allComps = product.complements || [];
+  for (const raw of Array.isArray(rawModifiers) ? rawModifiers : []) {
+    const want = normalize(raw);
+    if (!want) continue;
+    const m = byName(allMods, want);
+    if (m) { modifierIds.push(m.id); modifierNames.push(m.name); continue; }
+    const c = byName(allComps, want);
+    if (c) { modifierIds.push(`complement:${c.id}`); modifierNames.push(c.name); }
+  }
+  return { variantId, variantName, modifierIds, modifierNames };
 }
 
 async function runOrderDictationAI({ prompt, restaurantId, apiKey, catalog: preloaded, model }) {
@@ -373,12 +454,19 @@ async function runOrderDictationAI({ prompt, restaurantId, apiKey, catalog: prel
     const product = toProduct(best);
     const quantity = Math.max(1, Math.min(99, Number(row?.quantity) || 1));
     const notes = String(row?.notes || '').slice(0, 200);
+    // La IA dedujo variante/opciones del texto → resolvemos a IDs reales.
+    const sel = resolveSelections(product, row?.variant, row?.modifiers);
     items.push({
       menuItemId: best.id,
       quantity,
       notes,
+      variantId: sel.variantId,
+      variantName: sel.variantName,
+      modifierIds: sel.modifierIds,
+      modifierNames: sel.modifierNames,
       confidence: 0.95,
-      needsReview: computeNeedsReview(product),
+      // Solo marca review si AÚN falta algo obligatorio tras resolver.
+      needsReview: needsReviewAfterResolve(product, sel.variantId, sel.modifierIds),
       product,
     });
   }
