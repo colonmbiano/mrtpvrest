@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import SyncIndicator from "@/components/SyncIndicator";
 import OtaUpdater from "@/components/OtaUpdater";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 // MIGRACIÓN: las fuentes se cargan con <link> en runtime (igual que TPV/KDS)
 // en lugar de next/font/google. Razón: next/font descarga al BUILD time y
@@ -11,6 +12,31 @@ import OtaUpdater from "@/components/OtaUpdater";
 export const metadata: Metadata = {
   title: "MRTPV Delivery",
   description: "Sistema de Reparto Premium",
+  applicationName: "MB Delivery",
+  // CRÍTICO para iOS: Safari ignora el manifest para el modo standalone y la
+  // status bar; lo controla con estos meta de Apple (apple-mobile-web-app-*).
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "MB Delivery",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#ff5c35",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  // viewportFit: "cover" → usa toda la pantalla del iPhone (incluido el notch).
+  // Combinar con safe-area-inset en el CSS para no quedar bajo la barra.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -36,6 +62,7 @@ export default function RootLayout({
         </div>
 
         <OtaUpdater />
+        <ServiceWorkerRegister />
         <SyncIndicator />
         <main className="relative z-0">
           {children}
