@@ -48,11 +48,15 @@ qué hallazgos son reales, y el plan de remediación priorizado.
    webhook (idempotencia, no-downgrade, externalReference mismatch). Faltan
    tests de los webhooks SaaS.
 
-**Pendiente con `db push` coordinado** (Railway NO aplica migraciones en
-deploy — solo `prisma generate`; el constraint sin código que lo maneje o
-viceversa rompe los webhooks):
-- UNIQUE en `Invoice.externalId` y considerar tabla `WebhookEvent` con
-  UNIQUE(provider, eventId) para dedupe duro por evento.
+8. ~~UNIQUE a nivel BD (db push coordinado)~~ → **HECHO (2026-06-12)**:
+   migración `20260612200000_unique_webhook_external_ids` aplicada a
+   producción con `prisma migrate deploy` — `invoices.externalId`,
+   `subscriptions.externalId` y `orders.paymentProviderId` únicos (datos
+   verificados sin duplicados antes de crear). La dedupe de la app queda
+   respaldada por la BD contra entregas concurrentes. La tabla `WebhookEvent`
+   con UNIQUE(provider, eventId) queda como mejora opcional futura.
+   Recordatorio operativo: Railway NO aplica migraciones en deploy (solo
+   `prisma generate`); las migraciones van con `migrate deploy` manual.
 - Nota de diseño: los kiosk webhooks no verifican firma porque las llaves son
   per-restaurant y no se almacena webhook secret por restaurante; el patrón
   actual (re-fetch del pago contra la API de la pasarela + comparar
@@ -115,7 +119,7 @@ viceversa rompe los webhooks):
 ## Orden de ejecución sugerido para lo pendiente
 
 1. Promover E2E a gate (configurar secrets del workflow primero).
-2. UNIQUE constraints de webhooks + tests SaaS (con db push coordinado).
+2. Tests de los webhooks SaaS (Stripe/MP billing).
 3. Tokens del TPV a secure storage nativo (requiere plugin + APK).
 4. Migración Decimal (proyecto aparte).
 
