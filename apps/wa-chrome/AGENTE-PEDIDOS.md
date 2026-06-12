@@ -30,6 +30,10 @@ Tel: 9991234567
 - **Productos:** una línea por producto, con viñeta (`•`, `-`, `*`) o sin ella.
   Idealmente `cantidad + nombre` (ej. `2 Hamburguesa sencilla`). Las notas del
   platillo van en la misma línea (`sin nopales`, `extra queso`).
+- **Variante / sabor / tamaño en la MISMA línea.** Si el producto la tiene, inclúyela
+  junto al nombre para que el bot la asigne sola (ej. `1 kg de Boneless BBQ`,
+  `1 Alambre de Pollo`, `1 Agua de Sabor Jamaica`). Productos como Alitas/Boneless
+  **exigen sabor**: sin él, el panel marca ⚠ y el cajero lo completa en el TPV.
 - **`Tipo:`** `Domicilio` o `Para llevar`. Opcional — si pones `Dirección:` el bot
   asume Domicilio solo.
 - **`Dirección:`** texto libre. Pre-llena el campo de entrega en el panel.
@@ -61,9 +65,11 @@ conozca productos y precios.
 
 > Cuando el cliente confirme su pedido, redacta un único mensaje que empiece con la
 > línea `PEDIDO LISTO` y debajo lista cada producto en su propia línea con viñeta y
-> cantidad (ej. `• 2 Hamburguesa sencilla`). Si es a domicilio agrega `Tipo:
-> Domicilio`, `Dirección: ...` y `Tel: ...`. Si es para llevar agrega `Tipo: Para
-> llevar`. No agregues precios ni texto extra después de esa lista.
+> cantidad (ej. `• 2 Hamburguesa sencilla`). Incluye en la misma línea la variante,
+> sabor o tamaño elegido (ej. `• 1 kg de Boneless BBQ`, `• 1 Alambre de Pollo`). Si
+> es a domicilio agrega `Tipo: Domicilio`, `Dirección: ...` y `Tel: ...`. Si es para
+> llevar agrega `Tipo: Para llevar`. No agregues precios ni texto extra después de
+> esa lista.
 
 Como nuestro bot lee TODOS los mensajes del chat (entrantes y salientes), detecta
 ese bloque sin importar que lo haya enviado el agente como negocio.
