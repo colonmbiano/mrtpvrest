@@ -10,6 +10,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { io, Socket } from "socket.io-client";
 import { getApiUrl } from "@/lib/config";
 import { getTenantIds } from "@/lib/tenant";
+import { getToken } from "@/lib/token-vault";
 import {
   playNotificationSound,
   primeNotificationSound,
@@ -227,38 +228,45 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
     // el guard falla y la tablet NO se une a ningún room: no llega ni un pedido
     // web (`order:new`) ni una entrega del repartidor (`order:updated`). El
     // token del TPV (PIN de empleado o device) ya incluye restaurantId, así que
-    // pasarlo en `auth` es todo lo que hace falta. Mismo orden de búsqueda que
-    // el interceptor de api.ts para no divergir.
-    const token =
-      sessionStorage.getItem("tpv-access-token") ||
-      localStorage.getItem("accessToken") ||
-      localStorage.getItem("tpv-employee-token");
+    // pasarlo en `auth` es todo lo que hace falta. Misma fuente que el
+    // interceptor de api.ts (token-vault) para no divergir; getToken es async
+    // (espera la hidratación del vault), por eso el setup va en una IIFE y el
+    // cleanup chequea `cancelled`.
+    let cancelled = false;
 
-    const socket = io(baseUrl, {
-      query: { restaurantId },
-      auth: { token },
-      transports: ["websocket", "polling"],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 2000,
-    });
+    void (async () => {
+      const token = await getToken();
+      if (cancelled) return;
 
-    socketRef.current = socket;
+      const socket = io(baseUrl, {
+        query: { restaurantId },
+        auth: { token },
+        transports: ["websocket", "polling"],
+        reconnectionAttempts: 5,
+        reconnectionDelay: 2000,
+      });
 
-    socket.on("connect", () => {
-      // Unirse al room de admins de esta sucursal
-      socket.emit("join:admin");
-      if (locationId) {
-        socket.emit("join:location:admin", locationId);
-      }
-    });
+      socketRef.current = socket;
 
-    socket.on("order:new",               handleOrderNew);
-    socket.on("new:order",               handleOrderKiosk);
-    socket.on("order:updated",           handleOrderUpdated);
-    socket.on("order:paid",              handleOrderPaid);
-    socket.on("order:payment:confirmed", handleOrderPaid);
+      socket.on("connect", () => {
+        // Unirse al room de admins de esta sucursal
+        socket.emit("join:admin");
+        if (locationId) {
+          socket.emit("join:location:admin", locationId);
+        }
+      });
+
+      socket.on("order:new",               handleOrderNew);
+      socket.on("new:order",               handleOrderKiosk);
+      socket.on("order:updated",           handleOrderUpdated);
+      socket.on("order:paid",              handleOrderPaid);
+      socket.on("order:payment:confirmed", handleOrderPaid);
+    })();
 
     return () => {
+      cancelled = true;
+      const socket = socketRef.current;
+      if (!socket) return;
       socket.off("order:new",               handleOrderNew);
       socket.off("new:order",               handleOrderKiosk);
       socket.off("order:updated",           handleOrderUpdated);

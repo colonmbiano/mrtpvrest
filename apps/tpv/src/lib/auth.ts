@@ -1,3 +1,5 @@
+import { getTokenSync, setToken } from "@/lib/token-vault";
+
 export function getUser() {
   if (typeof window === "undefined") return null;
   try {
@@ -8,13 +10,13 @@ export function getUser() {
 
 export function getToken() {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("accessToken") || localStorage.getItem("tpv-employee-token");
+  return getTokenSync();
 }
 
 export function logout() {
-  localStorage.removeItem("accessToken");
+  // vault limpia secure storage + llaves legacy del token.
+  void setToken(null);
   localStorage.removeItem("refreshToken");
-  localStorage.removeItem("tpv-employee-token");
   localStorage.removeItem("user");
   localStorage.removeItem("restaurantId");
   localStorage.removeItem("restaurantName");

@@ -9,11 +9,16 @@ import axios from "axios";
 import { getApiUrl } from "@/lib/config";
 import { getTenantIds } from "@/lib/tenant";
 import { consumePendingOverride } from "@/lib/overrideTokens";
+import { getToken, setToken, initTokenVault } from "@/lib/token-vault";
 
 const api = axios.create();
 
+// Hidratar el vault del token lo antes posible (api.ts se importa en todo el
+// árbol). En APK con plugin esto migra el JWT legacy al Keystore.
+if (typeof window !== "undefined") void initTokenVault();
+
 // ── Request interceptor ────────────────────────────────────────────────
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
   config.baseURL = getApiUrl();
 
   if (typeof window !== "undefined") {
@@ -22,11 +27,9 @@ api.interceptors.request.use((config) => {
     // dispositivos que aún no han rotado tras la migración.
     const { restaurantId, locationId } = getTenantIds();
 
-    // Priorizar sessionStorage (más seguro), fallback a localStorage
-    const token =
-      sessionStorage.getItem("tpv-access-token") ||
-      localStorage.getItem("accessToken") ||
-      localStorage.getItem("tpv-employee-token");
+    // Token vía token-vault: secure storage nativo en APK con plugin,
+    // fallback legacy (sessionStorage/localStorage) en web y APKs viejos.
+    const token = await getToken();
 
     // Tenant identification: si falta tenant en una llamada autenticada
     // (no /setup, no login público), avisar en consola para diagnosticar
@@ -80,11 +83,10 @@ api.interceptors.response.use(
         url.includes("/api/tpv/config");
 
       if (!isLoginUrl && !isPublicRoute) {
-        // Limpiar credenciales de empleado
-        sessionStorage.removeItem("tpv-access-token");
+        // Limpiar credenciales de empleado (vault cubre secure storage +
+        // llaves legacy; los removeItem directos quedan por los datos no-token)
+        void setToken(null);
         sessionStorage.removeItem("tpv-employee");
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("tpv-employee-token");
         localStorage.removeItem("tpv-employee");
         localStorage.removeItem("kdsEmployee");
         // restaurantId y locationId NO se borran — son config del dispositivo
