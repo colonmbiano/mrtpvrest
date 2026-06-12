@@ -181,6 +181,80 @@ function scoreItem(segment, item) {
   return Math.round(coverage * 100) + (singleStrong ? 12 : 0);
 }
 
+function findMentionedOptions(segment, options, { multiple = false, max = 0 } = {}) {
+  const ranked = (options || [])
+    .map((option) => ({ option, score: scoreItem(segment, option) }))
+    .filter(({ score }) => score >= 100)
+    .sort((a, b) => b.score - a.score || b.option.name.length - a.option.name.length);
+
+  if (!multiple) return ranked.slice(0, 1).map(({ option }) => option);
+  return ranked.slice(0, max > 0 ? max : ranked.length).map(({ option }) => option);
+}
+
+function resolveSpokenSelections(segment, product) {
+  const availableVariants = (product.variants || []).filter((variant) => variant.isAvailable !== false);
+  const variantMultiSelect = Boolean(product.variantMultiSelect);
+  const selectedVariants = findMentionedOptions(segment, availableVariants, {
+    multiple: variantMultiSelect,
+    max: product.variantMaxSelection || 0,
+  });
+  const selectedVariant = variantMultiSelect ? null : selectedVariants[0] || null;
+
+  const selectedModifiers = [];
+  let needsReview = false;
+  for (const group of product.modifierGroups || []) {
+    const explicit = findMentionedOptions(segment, group.modifiers || [], {
+      multiple: Boolean(group.multiSelect),
+      max: group.maxSelection || 0,
+    });
+    const defaults = explicit.length === 0
+      ? (group.modifiers || []).filter((modifier) => modifier.isDefault)
+      : [];
+    const selected = group.multiSelect
+      ? [...explicit, ...defaults].slice(0, group.maxSelection > 0 ? group.maxSelection : undefined)
+      : (explicit[0] || defaults[0] ? [explicit[0] || defaults[0]] : []);
+    selectedModifiers.push(...selected);
+
+    const minimum = Math.max(group.required ? 1 : 0, group.minSelection || 0);
+    if (selected.length < minimum) needsReview = true;
+  }
+
+  const selectedComplements = findMentionedOptions(segment, product.complements || [], {
+    multiple: true,
+  });
+  const requiredVariantCount = variantMultiSelect
+    ? Math.max(0, product.variantMinSelection || 0)
+    : availableVariants.length > 0
+      ? 1
+      : 0;
+  if (selectedVariants.length < requiredVariantCount) needsReview = true;
+
+  let unitPrice = Number(selectedVariant?.price ?? product.promoPrice ?? product.price ?? 0);
+  for (const group of product.modifierGroups || []) {
+    const selected = selectedModifiers
+      .filter((modifier) => modifier.groupId === group.id)
+      .sort((a, b) => Number(a.priceAdd || 0) - Number(b.priceAdd || 0));
+    selected.forEach((modifier, index) => {
+      if (index >= Number(group.freeModifiersLimit || 0)) {
+        unitPrice += Number(modifier.priceAdd || 0);
+      }
+    });
+  }
+  unitPrice += selectedComplements.reduce((sum, option) => sum + Number(option.price || 0), 0);
+  if (variantMultiSelect) {
+    unitPrice += selectedVariants.reduce((sum, option) => sum + Number(option.price || 0), 0);
+  }
+
+  return {
+    selectedVariant,
+    selectedVariants: variantMultiSelect ? selectedVariants : [],
+    selectedModifiers,
+    selectedComplements,
+    unitPrice,
+    needsReview,
+  };
+}
+
 function toProduct(item) {
   return {
     id: item.id,
@@ -203,14 +277,6 @@ function toProduct(item) {
     complements: item.complements || [],
     modifierGroups: item.modifierGroups || [],
   };
-}
-
-function computeNeedsReview(product) {
-  return (
-    Boolean(product.hasVariants && product.variants.length > 0) ||
-    Boolean(product.modifierGroups?.some((group) => group.required)) ||
-    Boolean(product.complements?.length)
-  );
 }
 
 async function loadCatalog(restaurantId) {
@@ -280,12 +346,14 @@ async function runOrderDictation({ prompt, restaurantId, catalog: preloaded }) {
     }
 
     const product = toProduct(best);
+    const selections = resolveSpokenSelections(segment, product);
     items.push({
       menuItemId: best.id,
       quantity: parseQuantity(segment),
       notes: extractNotes(segment),
       confidence: Math.min(1, Number((bestScore / 120).toFixed(2))),
-      needsReview: computeNeedsReview(product),
+      needsReview: selections.needsReview,
+      selections,
       product,
     });
   }
@@ -530,4 +598,5 @@ module.exports = {
   splitPrompt,
   parseQuantity,
   scoreItem,
+  resolveSpokenSelections,
 };
