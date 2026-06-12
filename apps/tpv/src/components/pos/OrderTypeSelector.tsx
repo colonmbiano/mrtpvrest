@@ -32,6 +32,14 @@ interface OrderTypeSelectorProps {
    * Si se omite, se muestran todos los tipos (comportamiento legacy).
    */
   allowedTypes?: OrderType[];
+  /**
+   * Habilita los atajos de teclado (1/2/3 → tipo de pedido, Escape → cerrar).
+   * Debe ponerse en `false` cuando hay un modal abierto encima del selector
+   * (elegir mesa, comensales, gastos, PIN…), de lo contrario el listener
+   * global captura los dígitos que el usuario teclea dentro de esos modales
+   * y arranca una venta por detrás. Default: true.
+   */
+  shortcutsEnabled?: boolean;
 }
 
 type OrderTypeCard = {
@@ -113,6 +121,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onExpenses,
   onConfig,
   allowedTypes,
+  shortcutsEnabled = true,
 }) => {
   // Filtra las tarjetas a los tipos que la sucursal acepta. Si no se pasa
   // `allowedTypes` (o viene vacío) mostramos todos — así el componente sigue
@@ -126,8 +135,30 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   );
 
   useEffect(() => {
+    // Con un modal abierto encima (mesa, comensales, gastos, PIN) los atajos
+    // no deben dispararse: el "1" que el cajero teclea en el campo Monto de
+    // Gastos arrancaría una venta DINE_IN por detrás del modal.
+    if (!shortcutsEnabled) return;
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey) return;
+
+      // Mientras se escribe en un campo (o el IME está componiendo) el dígito
+      // pertenece al input, no al atajo. Sin este guard, teclear "1" en el
+      // Monto de un gasto disparaba el flujo de mesas.
+      if (event.isComposing) return;
+      const target = event.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          tag === "SELECT" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
 
       // Solo dispara el atajo de tipos visibles: en un bar la tecla "3"
       // (Delivery) no debe iniciar una venta de un tipo deshabilitado.
@@ -146,7 +177,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, onSelect, visibleTypes]);
+  }, [onClose, onSelect, visibleTypes, shortcutsEnabled]);
 
   const runShortcut = (action: (typeof SHORTCUTS)[number]["action"]) => {
     if (action === "tickets") onOpenTickets?.();
