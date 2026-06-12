@@ -6,11 +6,11 @@ const config: CapacitorConfig = {
   webDir: 'out',
   server: {
     androidScheme: 'https',
-    cleartext: true,
+    // cleartext deshabilitado: la impresión LAN va por TCP nativo (no HTTP).
+    // Builds debug lo re-habilitan vía src/debug/AndroidManifest.xml.
   },
   android: {
     backgroundColor: '#0A0A0A',
-    allowMixedContent: true,
   },
   plugins: {
     CapacitorHttp: {

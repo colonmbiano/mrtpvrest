@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Overlay SOLO para builds debug: re-habilita cleartext para poder apuntar
+     el APK de desarrollo a un backend http:// local (192.168.x.x / 10.0.2.2).
+     Los builds release NO incluyen este manifest: quedan https-only. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:usesCleartextTraffic="true" />
+</manifest>

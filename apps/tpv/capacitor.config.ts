@@ -8,11 +8,13 @@ const config: CapacitorConfig = {
   webDir: 'out',
   server: {
     androidScheme: 'https',
-    cleartext: true,
+    // cleartext deshabilitado: todo el tráfico HTTP del WebView va por https.
+    // La impresión LAN no se ve afectada (va por socket TCP nativo, puerto
+    // 9100, fuera de la pila HTTP). Para dev contra backend http local, los
+    // builds debug lo re-habilitan vía src/debug/AndroidManifest.xml.
   },
   android: {
     backgroundColor: '#0A0A0A',
-    allowMixedContent: true,
   },
   plugins: {
     CapacitorHttp: {

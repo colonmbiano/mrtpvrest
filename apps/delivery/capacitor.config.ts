@@ -9,7 +9,8 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   server: {
     androidScheme: 'https',
-    cleartext: true,
+    // cleartext deshabilitado: la app solo habla https con el backend.
+    // Builds debug lo re-habilitan vía src/debug/AndroidManifest.xml.
   },
   plugins: {
     CapacitorHttp: {

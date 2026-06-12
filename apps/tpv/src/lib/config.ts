@@ -40,34 +40,58 @@ function safe<T>(fn: () => T, fallback: T): T {
 
 // ── API URL (Nivel 1) ────────────────────────────────────────────────────────
 
+// Hosts donde se tolera http:// — backend local de desarrollo (el APK release
+// además bloquea cleartext a nivel manifest; esto evita que un override o una
+// config remota corrupta degraden el TPV a http contra un host público).
+function isPrivateHost(hostname: string): boolean {
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "10.0.2.2") return true;
+  if (hostname.endsWith(".local")) return true;
+  if (/^10\./.test(hostname)) return true;
+  if (/^192\.168\./.test(hostname)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true;
+  return false;
+}
+
+/** https siempre; http solo hacia hosts privados/dev. Inválida → null. */
+export function sanitizeApiUrl(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.protocol === "https:") return url;
+    if (u.protocol === "http:" && isPrivateHost(u.hostname)) return url;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Resolución en orden:
  *   1. Override manual guardado en /setup → localStorage.apiBaseUrl
  *   2. apiUrl servido por la config remota cacheada
  *   3. NEXT_PUBLIC_API_URL bakeado en el APK
  *   4. DEFAULT_API_URL (última red de seguridad)
+ * Los niveles 1 y 2 se descartan si no pasan sanitizeApiUrl (cae al siguiente).
  */
 export function getApiUrl(): string {
   const baked = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL;
 
-  const normalizeUrl = (url: string) => {
-    return url;
-  };
-
-  if (typeof window === "undefined") return normalizeUrl(baked);
+  if (typeof window === "undefined") return baked;
 
   const override = safe(() => localStorage.getItem(LS_API_URL_OVERRIDE), null);
-
   if (override && override.trim()) {
-    return normalizeUrl(override.trim());
+    const ok = sanitizeApiUrl(override.trim());
+    if (ok) return ok;
+    console.warn("[config] override de API URL inseguro, ignorado:", override);
   }
 
   const cached = getCachedRemoteConfig();
   if (cached?.apiUrl && cached.apiUrl.trim()) {
-    return normalizeUrl(cached.apiUrl.trim());
+    const ok = sanitizeApiUrl(cached.apiUrl.trim());
+    if (ok) return ok;
+    console.warn("[config] apiUrl de config remota inseguro, ignorado:", cached.apiUrl);
   }
 
-  return normalizeUrl(baked);
+  return baked;
 }
 
 export function setApiUrlOverride(url: string | null): void {
