@@ -153,7 +153,11 @@
     #mbwa .card{background:rgba(255,184,77,.1);border:1px solid rgba(255,184,77,.3);border-radius:12px;padding:8px 10px;margin-bottom:8px}
     #mbwa .card .nm{font-size:12px;font-weight:700}
     #mbwa .card .pv{font-size:11px;color:rgba(255,255,255,.6);margin:2px 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    #mbwa .card button{padding:6px;font-size:11px}`;
+    #mbwa .card button{padding:6px;font-size:11px}
+    #mbwa .shop{font-size:11px;color:rgba(255,255,255,.6);margin:0 0 10px;display:flex;align-items:center;gap:5px}
+    #mbwa .shop b{color:#fff;font-weight:700}
+    #mbwa .gate{font-size:12px;line-height:1.5;color:rgba(255,255,255,.85);background:rgba(255,184,77,.1);border:1px solid rgba(255,184,77,.3);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+    #mbwa .gate b{color:${AMBER}}`;
   document.documentElement.appendChild(style);
 
   const panel = document.createElement("div");
@@ -164,6 +168,8 @@
         <input type="checkbox" id="mbwa-watch" checked> vigilar</label>
       <span class="x" id="mbwa-x">×</span></div>
     <div class="bd">
+      <div id="mbwa-shop" class="shop"></div>
+      <div id="mbwa-gate"></div>
       <div id="mbwa-new"></div>
       <button class="b1" id="mbwa-read">📦 Leer pedido del chat abierto</button>
       <div id="mbwa-out"></div>
@@ -179,7 +185,38 @@
 
   panel.querySelector("#mbwa-x").onclick = () => panel.remove();
 
+  // ── Configuración del restaurante (slug) ───────────────────────────────
+  // El slug se configura desde el popup (icono) y vive en chrome.storage.sync.
+  // Sin restaurante configurado el panel no lee ni crea: solo guía a configurar.
+  let configured = false;
+  const shopEl = panel.querySelector("#mbwa-shop");
+  const gateEl = panel.querySelector("#mbwa-gate");
+  const readBtn = panel.querySelector("#mbwa-read");
+
+  function renderConfig(cfg) {
+    configured = !!(cfg && cfg.slug);
+    if (configured) {
+      shopEl.innerHTML = `🏪 <b>${esc(cfg.name || cfg.slug)}</b>`;
+      gateEl.innerHTML = "";
+      readBtn.style.display = "";
+    } else {
+      shopEl.innerHTML = "";
+      gateEl.innerHTML = `Conecta tu restaurante: clic en el <b>icono de la extensión</b> (arriba a la derecha del navegador) y escribe el código de tu tienda.`;
+      readBtn.style.display = "none";
+    }
+  }
+
+  function loadConfig() { bg("getConfig").then((r) => renderConfig(r && r.ok ? r.config : null)); }
+  loadConfig();
+  // El popup guarda en storage.sync → reaccionamos en vivo (sin recargar).
+  try {
+    chrome.storage?.onChanged?.addListener((changes, area) => {
+      if (area === "sync" && changes.mbwa_config) renderConfig(changes.mbwa_config.newValue);
+    });
+  } catch {}
+
   async function doRead() {
+    if (!configured) { out.innerHTML = `<div class="st" style="color:${AMBER}">Configura tu restaurante primero (icono de la extensión).</div>`; return; }
     const chat = readOpenChat();
     if (!chat || !chat.text) { out.innerHTML = `<div class="st" style="color:${AMBER}">Abre un chat con un pedido primero.</div>`; return; }
     state.chat = chat; state.parsed = null;
@@ -193,6 +230,7 @@
     out.innerHTML = `${badge}<div class="muted">Cliente: ${esc(chat.customerName)} · ${chat.count} ${chat.structured ? "producto(s)" : "mensaje(s)"}</div><div class="st">Interpretando…</div>`;
     const r = await bg("parse", { text: chat.text });
     if (!r || !r.ok) {
+      if (r?.notConfigured) { renderConfig(null); out.innerHTML = `<div class="st" style="color:${AMBER}">Configura tu restaurante primero (icono de la extensión).</div>`; return; }
       const msg = r?.stale ? "⚠ Extensión recargada — refresca WhatsApp (F5)." : "Error al interpretar.";
       out.innerHTML = `<div class="muted">Cliente: ${esc(chat.customerName)}</div><div class="st" style="color:#f88">${msg}</div>`;
       return;
@@ -318,6 +356,7 @@
   function scanNew() {
     const box = panel.querySelector("#mbwa-new");
     if (!box) return;
+    if (!configured) { box.innerHTML = ""; return; }
     if (!panel.querySelector("#mbwa-watch")?.checked) { box.innerHTML = ""; return; }
     const cands = [];
     for (const r of unreadRows()) {

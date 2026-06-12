@@ -1,9 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "Master Burguer's — Pedidos WhatsApp → TPV",
-  "version": "0.1.0",
-  "description": "Lee el chat abierto en WhatsApp Web, detecta el pedido y lo crea en el TPV (solo lectura, el cajero confirma).",
+  "name": "Pedidos WhatsApp → TPV (mrtpvrest)",
+  "version": "0.2.0",
+  "description": "Lee el chat abierto en WhatsApp Web, detecta el pedido y lo crea en el TPV (solo lectura, el cajero confirma). Configura tu restaurante desde el icono.",
+  "permissions": ["storage"],
   "host_permissions": ["https://api.mrtpvrest.com/*"],
+  "action": {
+    "default_title": "Configurar restaurante — Pedidos WhatsApp → TPV",
+    "default_popup": "popup.html"
+  },
   "content_scripts": [
     {
       "matches": ["https://web.whatsapp.com/*"],
