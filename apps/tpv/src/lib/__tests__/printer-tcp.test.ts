@@ -8,14 +8,28 @@ jest.mock("capacitor-tcp-socket", () => ({
 
 import {
   printKitchenTickets,
+  printCustomerReceipt,
   buildCustomerReceipt,
   paymentLabel,
   withLabel,
   formatProductLine,
   ivaBreakdown,
   splitItemsBySeat,
+  packRaster,
   type ReceiptInput,
+  type PrinterRecord,
 } from "@/lib/printer-tcp";
+
+beforeEach(() => {
+  connect.mockClear();
+  send.mockClear();
+  disconnect.mockClear();
+});
+
+const CASHIER: PrinterRecord = {
+  id: "c1", name: "Caja", type: "CASHIER", ip: "192.168.1.100", port: 9100,
+  connectionType: "NETWORK", isActive: true,
+};
 
 const baseReceipt: ReceiptInput = {
   orderNumber: "1234",
@@ -86,6 +100,35 @@ describe("recibo :: bloque de factura (QR)", () => {
     expect(con).toContain("¿Quieres tu factura?");
     expect(con).toContain("facturacion.masterburguers.com");
     expect(con).toContain("MB-00123");
+  });
+});
+
+describe("recibo :: logo (raster ESC/POS)", () => {
+  it("packRaster genera GS v 0 + dimensiones + bits correctos", () => {
+    // 8x1, patrón 1010_1010 → un byte 0xAA tras la cabecera de 8 bytes.
+    const out = packRaster([1, 0, 1, 0, 1, 0, 1, 0], 8, 1);
+    expect(Array.from(out.slice(0, 8))).toEqual([0x1d, 0x76, 0x30, 0x00, 1, 0, 1, 0]);
+    expect(out[8]).toBe(0xaa);
+    expect(out.length).toBe(9);
+  });
+
+  it("packRaster redondea el ancho a múltiplo de 8 (padding con ceros)", () => {
+    const out = packRaster([1, 1, 1], 3, 1); // 3 px → 1 byte
+    expect(out[4]).toBe(1);      // widthBytes = 1
+    expect(out[8]).toBe(0b11100000); // 3 bits altos en 1
+  });
+
+  it("en node (sin canvas) elimina el marker del logo sin romper la impresión", async () => {
+    const res = await printCustomerReceipt([CASHIER], {
+      ...baseReceipt,
+      businessName: "Master Burger's",
+      showLogo: true,
+      logoUrl: "https://cdn.example.com/logo.png",
+    });
+    expect(res.ok).toBe(1);
+    const sent = send.mock.calls.map(([a]) => a.data as string).join("");
+    expect(sent).not.toContain("LOGO");          // el marker no llega a la impresora
+    expect(sent).toContain("Master Burger's");   // el resto del recibo sí
   });
 });
 

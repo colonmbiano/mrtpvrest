@@ -231,12 +231,38 @@ export interface PrintTarget {
   port?: number | null;
 }
 
+// Un payload de impresión es texto (caso normal → se envía utf8, como siempre)
+// o una lista de segmentos texto/binario (para incrustar bytes crudos como el
+// raster del logo, que NO sobreviven a utf8/normalizeThermalText). Los arrays
+// se serializan a HEX, que transporta los 256 valores de byte sin pérdida.
+export type PrintPayload = string | Array<string | Uint8Array>;
+
+/** Concatena segmentos a bytes: strings → ASCII (tras normalizar); Uint8Array tal cual. */
+function segmentsToBytes(segments: Array<string | Uint8Array>): Uint8Array {
+  const parts: number[] = [];
+  for (const seg of segments) {
+    if (typeof seg === "string") {
+      const norm = normalizeThermalText(seg);
+      for (let i = 0; i < norm.length; i += 1) parts.push(norm.charCodeAt(i) & 0xff);
+    } else {
+      for (let i = 0; i < seg.length; i += 1) parts.push(seg[i]);
+    }
+  }
+  return Uint8Array.from(parts);
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  let hex = "";
+  for (let i = 0; i < bytes.length; i += 1) hex += bytes[i].toString(16).padStart(2, "0");
+  return hex;
+}
+
 /** Un único intento de conexión + envío + desconexión. */
 async function attemptSendRawTcp(
   plugin: TCPSocketPlugin,
   ip: string,
   port: number,
-  payload: string,
+  payload: PrintPayload,
 ): Promise<void> {
   let clientId: number | null = null;
   const timeoutPromise = new Promise<never>((_, reject) =>
@@ -246,10 +272,14 @@ async function attemptSendRawTcp(
   try {
     const conn = await Promise.race([plugin.connect({ ipAddress: ip, port }), timeoutPromise]);
     clientId = conn.client;
-    // ESC/POS es binario pero el plugin acepta utf8 → enviamos como string
-    // raw porque buildXTicket genera bytes en code page latin1 compatible.
-    const safePayload = normalizeThermalText(payload);
-    await Promise.race([plugin.send({ client: clientId, data: safePayload, encoding: "utf8" }), timeoutPromise]);
+    // Caso normal (string): ESC/POS de texto, todo ≤0x7F tras normalizar →
+    // se envía utf8 como siempre. Caso binario (segmentos, p.ej. logo raster):
+    // se serializa a HEX para no perder los bytes >0x7F.
+    const send =
+      typeof payload === "string"
+        ? plugin.send({ client: clientId, data: normalizeThermalText(payload), encoding: "utf8" })
+        : plugin.send({ client: clientId, data: bytesToHex(segmentsToBytes(payload)), encoding: "hex" });
+    await Promise.race([send, timeoutPromise]);
   } finally {
     if (clientId !== null) {
       try { await plugin.disconnect({ client: clientId }); } catch { /* noop */ }
@@ -265,7 +295,7 @@ async function attemptSendRawTcp(
  * Serializa por IP y reintenta para sobrevivir colisiones y transitorios
  * (ver nota de resiliencia arriba).
  */
-export async function sendRawTcp(target: PrintTarget, payload: string): Promise<void> {
+export async function sendRawTcp(target: PrintTarget, payload: PrintPayload): Promise<void> {
   const ip = (target.ip || "").trim();
   const port = Number(target.port) || DEFAULT_PORT;
   if (!ip || ip === "0.0.0.0") {
@@ -741,6 +771,110 @@ export function ivaBreakdown(total: number, rate = IVA_RATE): { subtotal: number
   return { subtotal: base, iva: round2(total - base) };
 }
 
+// ── Logo (raster ESC/POS) ──────────────────────────────────────────────────
+//
+// El logo son bytes binarios (0x00–0xFF) que NO sobreviven al envío utf8 ni a
+// normalizeThermalText. El builder (síncrono y puro) solo deja un MARKER donde
+// va el logo; el orquestador async genera el raster, parte el texto en el marker
+// e inyecta los bytes como segmentos (ver injectLogo + PrintPayload).
+const LOGO_MARKER = "\x1F\x1FLOGO\x1F\x1F";
+
+/** Ancho del cabezal en puntos según el papel (58mm≈384, 80mm≈512). */
+function dotWidthFor(paperWidth?: string | null): number {
+  return paperWidth === "58mm" ? 384 : 512;
+}
+
+/**
+ * Empaqueta un bitmap monocromo (1 = punto negro, fila por fila, length
+ * width*height) en el comando ESC/POS GS v 0 (raster bit image). El ancho se
+ * agrupa en bytes (8 puntos/byte, MSB primero). Función PURA → testeable sin
+ * canvas ni impresora.
+ */
+export function packRaster(mono: Uint8Array | number[], width: number, height: number): Uint8Array {
+  const widthBytes = Math.ceil(width / 8);
+  const out = new Uint8Array(8 + widthBytes * height);
+  out[0] = 0x1d; out[1] = 0x76; out[2] = 0x30; out[3] = 0x00; // GS v 0 m=0
+  out[4] = widthBytes & 0xff; out[5] = (widthBytes >> 8) & 0xff; // xL xH (bytes)
+  out[6] = height & 0xff;     out[7] = (height >> 8) & 0xff;     // yL yH (dots)
+  let p = 8;
+  for (let y = 0; y < height; y += 1) {
+    for (let bx = 0; bx < widthBytes; bx += 1) {
+      let byte = 0;
+      for (let bit = 0; bit < 8; bit += 1) {
+        const x = bx * 8 + bit;
+        if (x < width && mono[y * width + x]) byte |= 1 << (7 - bit);
+      }
+      out[p] = byte;
+      p += 1;
+    }
+  }
+  return out;
+}
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous"; // necesario para getImageData sin tainted canvas
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("logo: no se pudo cargar la imagen"));
+    img.src = url;
+  });
+}
+
+/**
+ * Descarga el logo, lo escala al ancho del papel, lo umbraliza a 1 bit y lo
+ * empaqueta como raster ESC/POS. Browser-only (usa canvas). Devuelve null y
+ * NO lanza si algo falla (SSR, CORS/tainted, formato) — el recibo se imprime
+ * igual sin logo.
+ */
+export async function renderLogoEscPos(
+  url: string,
+  targetWidth: number,
+  threshold = 160,
+): Promise<Uint8Array | null> {
+  if (typeof document === "undefined" || typeof Image === "undefined") return null;
+  try {
+    const img = await loadImage(url);
+    const srcW = img.width || targetWidth;
+    const srcH = img.height || targetWidth;
+    const w = Math.min(targetWidth, 512);
+    const h = Math.max(1, Math.round((srcH / srcW) * w));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    const mono = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i += 1) {
+      const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2], a = data[i * 4 + 3];
+      // Píxel transparente → blanco; si no, luminancia. Por debajo del umbral = negro.
+      const lum = a < 128 ? 255 : 0.299 * r + 0.587 * g + 0.114 * b;
+      mono[i] = lum < threshold ? 1 : 0;
+    }
+    return packRaster(mono, w, h);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resuelve el marker del logo en el texto del recibo: si hay logo configurado
+ * y se pudo rasterizar, parte el texto y devuelve segmentos [pre, bytes, post];
+ * si no, simplemente elimina el marker y devuelve el string (impresión normal).
+ */
+async function injectLogo(text: string, input: ReceiptInput): Promise<PrintPayload> {
+  if (!text.includes(LOGO_MARKER)) return text;
+  if (!(input.showLogo && input.logoUrl)) return text.split(LOGO_MARKER).join("");
+  const logo = await renderLogoEscPos(input.logoUrl, dotWidthFor(input.paperWidth));
+  if (!logo) return text.split(LOGO_MARKER).join(""); // fallback: sin logo
+  const idx = text.indexOf(LOGO_MARKER);
+  return [text.slice(0, idx), logo, text.slice(idx + LOGO_MARKER.length)];
+}
+
 export function buildCustomerReceipt(input: ReceiptInput): string {
   const now = new Date().toLocaleString("es-MX");
   // Tipografía configurable (admin). lw = ancho real en caracteres según
@@ -760,11 +894,11 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
     (heavy ? CMD.BOLD_ON + CMD.DBLSTRIKE_ON : "") +
     CMD.ALIGN_CENTER;
 
-  // LOGO placeholder — requiere implementación de raster bit image en el
-  // driver TCP para imprimir bitmaps reales desde URL. Por ahora el admin
-  // permite subirlo para la vista previa y sincronización con tablets.
+  // LOGO — el builder es puro/síncrono, así que solo deja un marker centrado.
+  // printCustomerReceipt (async) lo reemplaza por el raster real (o lo elimina
+  // si no hay logo / falla la carga). Ver injectLogo + renderLogoEscPos.
   if (input.showLogo && input.logoUrl) {
-    // d += ESC + "..." (comando de imagen futuro)
+    d += LOGO_MARKER + "\n";
   }
 
   // ── 1. ENCABEZADO DE NEGOCIO (del tenant, sin hardcode) ──────────────────
@@ -869,7 +1003,7 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
 async function dispatchToStations(
   printers: PrinterRecord[],
   stations: PrinterStation[],
-  payload: string
+  payload: PrintPayload
 ): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
   const targets = printers.filter((p) => {
     if (!p.isActive) return false;
@@ -1074,7 +1208,8 @@ export async function printCustomerReceipt(
   printers: PrinterRecord[],
   input: ReceiptInput
 ): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
-  const payload = buildCustomerReceipt(input);
+  const text = buildCustomerReceipt(input);
+  const payload = await injectLogo(text, input);
   return dispatchToStations(printers, ["CASHIER"], payload);
 }
 

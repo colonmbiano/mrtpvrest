@@ -155,7 +155,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // FASE 4: cache de impresoras LAN + datos del recibo. Se carga una vez
   // al montar el layout y se refresca con el evento `printers-changed`.
   const { printers } = usePrinters();
-  const { businessName, businessFooter } = useReceiptIdentity();
+  const { businessName, businessFooter, terminalName } = useReceiptIdentity();
   const { config: ticketConfig } = useFullTicketConfig();
   const { kitchenConfig } = useKitchenConfig();
   const tpvConfig = useTpvConfig();
@@ -299,6 +299,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         customerPhone: payOrder.customerPhone || null,
         numberOfGuests: payOrder.numberOfGuests ?? null,
         cashierName: currentEmployee?.name || null,
+        terminalName: terminalName || null,
         items,
         subtotal: Number(payOrder.subtotal ?? subtotalCalc),
         discount: Number(payOrder.discount ?? 0),
@@ -492,6 +493,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         customerPhone: full.customerPhone || null,
         numberOfGuests: full.numberOfGuests ?? null,
         cashierName: currentEmployee?.name || null,
+        terminalName: terminalName || null,
         items,
         subtotal: Number(full.subtotal ?? subtotalCalc),
         discount: Number(full.discount ?? 0),
