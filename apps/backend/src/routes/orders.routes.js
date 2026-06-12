@@ -1086,6 +1086,24 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
     // Si era dine-in, liberar la mesa (OCCUPIED → DIRTY).
     await releaseTableIfDineIn(order.id);
 
+    // Avisar a la caja que el efectivo se confirmó (push nativo en el TPV).
+    // El cobro en efectivo no pasaba por ningún emit, así que era la única
+    // confirmación de pago que NO disparaba notificación. Mismo evento que
+    // usan online/terminal para que el TPV lo trate igual.
+    const io = req.app.get('io');
+    if (io) {
+      const payload = {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        total: order.total,
+        paymentMethod: 'CASH',
+        source: 'CASH',
+      };
+      // Sala base: el TPV se auto-une ahí (index.js). Un solo emit — no a
+      // location-admins también, o el TPV lo recibiría doble.
+      io.to(`restaurant:${order.restaurantId}`).emit('order:payment:confirmed', payload);
+    }
+
     res.json(order);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

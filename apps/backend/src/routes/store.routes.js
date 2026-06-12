@@ -1029,7 +1029,18 @@ async function applyStorePaymentResult(orderId, { status, rawStatus, providerId 
     },
   });
   if (io && status === 'PAID') {
-    io.to(`restaurant:${order.restaurantId}`).emit('order:paid', { orderId, source: 'ONLINE' });
+    // Payload enriquecido para que el push nativo del TPV muestre folio y monto.
+    const paidPayload = {
+      orderId,
+      orderNumber: order.orderNumber,
+      total: order.total,
+      paymentMethod: order.paymentMethod || 'ONLINE',
+      source: 'ONLINE',
+    };
+    // Sala base del restaurante: el TPV se auto-une ahí al conectar (ver
+    // index.js), así que un solo emit basta. NO emitir también a la sala
+    // location-admins o el TPV (que está en ambas) recibiría el push doble.
+    io.to(`restaurant:${order.restaurantId}`).emit('order:paid', paidPayload);
     io.to(`restaurant:${order.restaurantId}`).emit('order:new', { orderId, source: 'ONLINE' });
     io.to(`restaurant:${order.restaurantId}:kitchen`).emit('order:new', { orderId, source: 'ONLINE' });
   }

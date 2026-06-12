@@ -14,6 +14,20 @@ import {
   playNotificationSound,
   primeNotificationSound,
 } from "@/lib/notificationSound";
+import {
+  ensureNotifPermission,
+  fireLocalNotification,
+} from "@/lib/localNotifications";
+
+// Etiqueta legible del método de pago para el cuerpo de la notificación.
+const PAY_LABEL: Record<string, string> = {
+  CASH: "Efectivo",
+  CARD: "Tarjeta",
+  CARD_PRESENT: "Tarjeta",
+  TRANSFER: "Transferencia",
+  SPEI: "Transferencia",
+  ONLINE: "En línea",
+};
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -167,12 +181,27 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
   }, [addNotification]);
 
   const handleOrderPaid = useCallback((data: any) => {
+    const folio =
+      data.orderNumber ||
+      (data.orderId ? `#${String(data.orderId).slice(-6).toUpperCase()}` : "");
+    const monto =
+      typeof data.total === "number" ? ` · $${Number(data.total).toFixed(2)}` : "";
+    const metodo = data.paymentMethod
+      ? ` · ${PAY_LABEL[data.paymentMethod] || data.paymentMethod}`
+      : "";
+    const body = `Pedido ${folio}${monto}${metodo}`.trim();
+
     addNotification({
       type: "order_paid",
       title: "💳 Pago confirmado",
-      body: `Orden ${data.orderId || ""} · Pago procesado`,
-      orderNumber: data.orderId,
+      body,
+      orderNumber: data.orderNumber || undefined,
+      total: typeof data.total === "number" ? data.total : undefined,
     });
+
+    // Push nativo en la bandeja de Android (tablet de caja): se ve aunque el
+    // TPV esté minimizado. No-op en web (ahí basta el aviso in-app + sonido).
+    fireLocalNotification("💳 Pago confirmado", body);
   }, [addNotification]);
 
   useEffect(() => {
@@ -181,6 +210,10 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
     // Desbloquea el audio en el primer gesto del cajero para sortear la
     // política de autoplay; sin esto el primer pedido web no sonaría.
     primeNotificationSound();
+
+    // Pide (una vez) permiso de notificaciones nativas para el push de pago
+    // confirmado en la bandeja de Android. No-op en web.
+    ensureNotifPermission().catch(() => {});
 
     const { restaurantId, locationId } = getTenantIds();
     if (!restaurantId) return;
