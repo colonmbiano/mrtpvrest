@@ -1,14 +1,11 @@
 'use client';
-// handoff/screens/MapScreen.tsx
-// Requiere: npm install mapbox-gl @types/mapbox-gl
-// Añadir en next.config.mjs → transpilePackages: ['mapbox-gl']
-// Añadir en .env.local → NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1...
+// MapScreen.tsx — Mapa de ruta del repartidor.
+// Leaflet + OpenStreetMap (tiles oscuros de CARTO) + ruta/ETA por OSRM público.
+// Gratis, sin cuenta ni token. Mismo enfoque que apps/admin/.../rastreo (Leaflet por CDN).
+// Migrado desde Mapbox GL para eliminar la dependencia de cuenta/token externa.
 
 import React, { useEffect, useRef, useState } from 'react';
 import { C, S } from '@/lib/tokens';
-
-// Importación dinámica de mapbox-gl para evitar SSR errors en Next.js
-// mapboxgl.accessToken se fija en el useEffect
 
 interface Order {
   id: string;
@@ -28,36 +25,23 @@ interface MapScreenProps {
   onBack: () => void;
 }
 
-// Estilo Mapbox oscuro alineado con el design system
-const MAPBOX_STYLE = 'mapbox://styles/mapbox/dark-v11';
+// Tiles oscuros gratuitos (CARTO sobre datos OSM) — alineados con el design system.
+const DARK_TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const TILE_ATTR = '© OpenStreetMap © CARTO';
+const LEAFLET_VER = '1.9.4';
 
-// Crea un marker DOM personalizado
-function createMarkerEl(label: string | number, color: string, size = 36): HTMLDivElement {
-  const el = document.createElement('div');
-  Object.assign(el.style, {
-    width: `${size}px`, height: `${size}px`, borderRadius: '50%',
-    background: color, border: '2.5px solid rgba(255,255,255,0.9)',
-    boxShadow: `0 4px 16px rgba(0,0,0,0.5), 0 0 20px ${color}60`,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    color: '#090909', fontWeight: '800',
-    fontFamily: "'Outfit', system-ui, sans-serif", fontSize: '13px',
-    cursor: 'pointer',
-  });
-  el.textContent = String(label);
-  return el;
+// ── Markers como divIcon HTML (mismo look que la versión Mapbox) ──
+function driverMarkerHTML(): string {
+  return `<div style="width:48px;height:48px;border-radius:50%;background:rgba(167,139,250,0.95);
+    border:3px solid rgba(255,255,255,0.9);box-shadow:0 0 24px rgba(167,139,250,0.7);
+    display:flex;align-items:center;justify-content:center;font-size:22px;">🏍</div>`;
 }
 
-function createDriverMarkerEl(): HTMLDivElement {
-  const el = document.createElement('div');
-  Object.assign(el.style, {
-    width: '48px', height: '48px', borderRadius: '50%',
-    background: 'rgba(167,139,250,0.95)',
-    border: '3px solid rgba(255,255,255,0.9)',
-    boxShadow: '0 0 24px rgba(167,139,250,0.7)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px',
-  });
-  el.textContent = '🏍';
-  return el;
+function orderMarkerHTML(label: string | number, color: string): string {
+  return `<div style="width:36px;height:36px;border-radius:50%;background:${color};
+    border:2.5px solid rgba(255,255,255,0.9);box-shadow:0 4px 16px rgba(0,0,0,0.5),0 0 20px ${color}60;
+    display:flex;align-items:center;justify-content:center;color:#090909;font-weight:800;
+    font-family:'Outfit',system-ui,sans-serif;font-size:13px;cursor:pointer;">${label}</div>`;
 }
 
 // Popup HTML reutilizable
@@ -74,99 +58,112 @@ function popupHTML(order: Order): string {
 
 export function MapScreen({ orders, driverLat = 19.4326, driverLng = -99.1332, onBack }: MapScreenProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef           = useRef<any>(null);
-  const activeOrder      = orders.find(o => o.status === 'ON_THE_WAY') || orders[0];
+  const mapRef          = useRef<any>(null);
+  const leafletRef      = useRef<any>(null);
+  const groupRef        = useRef<any>(null); // capa de markers + ruta (se limpia y repuebla)
+  const [mapReady, setMapReady] = useState(false);
+  const activeOrder     = orders.find(o => o.status === 'ON_THE_WAY') || orders[0];
   const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
 
+  // 1) Cargar Leaflet (CDN) y crear el mapa — una sola vez.
   useEffect(() => {
-    let mapboxgl: any;
+    if (typeof window === 'undefined') return;
+    let cancelled = false;
 
-    async function initMap() {
-      // Importación dinámica — evita SSR
-      mapboxgl = (await import('mapbox-gl')).default;
-      mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
-
-      if (!mapContainerRef.current || mapRef.current) return;
-
-      mapRef.current = new mapboxgl.Map({
-        container: mapContainerRef.current,
-        style: MAPBOX_STYLE,
-        center: [driverLng, driverLat],
-        zoom: 14.5,
-        pitch: 35,
-        attributionControl: false,
-      });
-
-      mapRef.current.addControl(new mapboxgl.AttributionControl({ compact: true }));
-
-      mapRef.current.on('load', async () => {
-        const map = mapRef.current;
-        if (!map) return;
-
-        // ── Driver marker ──
-        new mapboxgl.Marker({ element: createDriverMarkerEl() })
-          .setLngLat([driverLng, driverLat])
-          .addTo(map);
-
-        // ── Order markers ──
-        orders.forEach((order, idx) => {
-          if (!order.lat || !order.lng) return;
-
-          const markerColor = order.status === 'ON_THE_WAY' ? '#FFB84D' : '#A78BFA';
-          const markerEl = createMarkerEl(idx + 1, markerColor);
-
-          const popup = new mapboxgl.Popup({ offset: 20, closeButton: false })
-            .setHTML(popupHTML(order));
-
-          new mapboxgl.Marker({ element: markerEl })
-            .setLngLat([order.lng, order.lat])
-            .setPopup(popup)
-            .addTo(map);
-        });
-
-        // ── Route (Mapbox Directions API) ──
-        const activeWithCoords = orders.find(o => o.status === 'ON_THE_WAY' && o.lat && o.lng);
-        if (activeWithCoords?.lat && activeWithCoords?.lng) {
-          try {
-            const resp = await fetch(
-              `https://api.mapbox.com/directions/v5/mapbox/driving/` +
-              `${driverLng},${driverLat};${activeWithCoords.lng},${activeWithCoords.lat}` +
-              `?geometries=geojson&access_token=${mapboxgl.accessToken}`
-            );
-            const data = await resp.json();
-            if (data.routes?.[0]) {
-              const route = data.routes[0];
-              setEtaMinutes(Math.round(route.duration / 60));
-
-              map.addSource('route', {
-                type: 'geojson',
-                data: { type: 'Feature', properties: {}, geometry: route.geometry },
-              });
-
-              // Glow bajo la ruta
-              map.addLayer({
-                id: 'route-glow',
-                type: 'line', source: 'route',
-                layout: { 'line-join': 'round', 'line-cap': 'round' },
-                paint: { 'line-color': '#FFB84D', 'line-width': 16, 'line-opacity': 0.12 },
-              });
-
-              // Línea principal
-              map.addLayer({
-                id: 'route-line',
-                type: 'line', source: 'route',
-                layout: { 'line-join': 'round', 'line-cap': 'round' },
-                paint: { 'line-color': '#FFB84D', 'line-width': 4.5, 'line-opacity': 0.9 },
-              });
-            }
-          } catch { /* Sin ruta — modo sin conexión */ }
-        }
-      });
+    function init() {
+      const L = (window as any).L;
+      if (!L || !mapContainerRef.current || mapRef.current) return;
+      leafletRef.current = L;
+      const map = L.map(mapContainerRef.current, { zoomControl: false, attributionControl: true })
+        .setView([driverLat, driverLng], 14);
+      L.tileLayer(DARK_TILES, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(map);
+      groupRef.current = L.layerGroup().addTo(map);
+      mapRef.current = map;
+      // El contenedor flex puede no tener tamaño en el primer tick.
+      setTimeout(() => map.invalidateSize(), 0);
+      if (!cancelled) setMapReady(true);
     }
 
-    initMap();
-    return () => { mapRef.current?.remove(); mapRef.current = null; };
-  }, [driverLat, driverLng]);
+    // Ya cargado (otra pantalla lo inyectó) → init directo.
+    if ((window as any).L) {
+      init();
+      return () => { cancelled = true; mapRef.current?.remove(); mapRef.current = null; };
+    }
+
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = `https://cdnjs.cloudflare.com/ajax/libs/leaflet/${LEAFLET_VER}/leaflet.min.css`;
+      document.head.appendChild(link);
+    }
+    let script = document.getElementById('leaflet-js') as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement('script');
+      script.id = 'leaflet-js';
+      script.src = `https://cdnjs.cloudflare.com/ajax/libs/leaflet/${LEAFLET_VER}/leaflet.min.js`;
+      document.head.appendChild(script);
+    }
+    const onLoad = () => setTimeout(init, 200);
+    if ((window as any).L) init();
+    else script.addEventListener('load', onLoad);
+
+    return () => {
+      cancelled = true;
+      script?.removeEventListener('load', onLoad);
+      mapRef.current?.remove();
+      mapRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 2) Markers + ruta — al estar listo o cambiar los datos.
+  useEffect(() => {
+    if (!mapReady) return;
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    const group = groupRef.current;
+    if (!L || !map || !group) return;
+
+    group.clearLayers();
+
+    // Repartidor
+    const driverIcon = L.divIcon({ html: driverMarkerHTML(), className: '', iconSize: [48, 48], iconAnchor: [24, 24] });
+    L.marker([driverLat, driverLng], { icon: driverIcon }).addTo(group);
+
+    // Pedidos
+    orders.forEach((order, idx) => {
+      if (order.lat == null || order.lng == null) return;
+      const markerColor = order.status === 'ON_THE_WAY' ? '#FFB84D' : '#A78BFA';
+      const icon = L.divIcon({ html: orderMarkerHTML(idx + 1, markerColor), className: '', iconSize: [36, 36], iconAnchor: [18, 18] });
+      L.marker([order.lat, order.lng], { icon })
+        .addTo(group)
+        .bindPopup(popupHTML(order), { closeButton: false });
+    });
+
+    // Ruta (OSRM público, GeoJSON, sin key) → línea + ETA.
+    const active = orders.find(o => o.status === 'ON_THE_WAY' && o.lat != null && o.lng != null);
+    if (active?.lat != null && active?.lng != null) {
+      const url =
+        `https://router.project-osrm.org/route/v1/driving/` +
+        `${driverLng},${driverLat};${active.lng},${active.lat}` +
+        `?overview=full&geometries=geojson`;
+      fetch(url)
+        .then(r => r.json())
+        .then(data => {
+          const route = data.routes?.[0];
+          if (!route || !mapRef.current) return;
+          setEtaMinutes(Math.round(route.duration / 60));
+          // GeoJSON viene como [lng,lat]; Leaflet usa [lat,lng].
+          const latlngs = route.geometry.coordinates.map((c: number[]) => [c[1], c[0]]);
+          L.polyline(latlngs, { color: '#FFB84D', weight: 16, opacity: 0.12 }).addTo(group); // glow
+          const main = L.polyline(latlngs, { color: '#FFB84D', weight: 4.5, opacity: 0.9 }).addTo(group);
+          try { map.fitBounds(main.getBounds(), { padding: [60, 60], maxZoom: 15 }); } catch { /* noop */ }
+        })
+        .catch(() => { /* Sin ruta — modo sin conexión */ });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady, orders, driverLat, driverLng]);
 
   return (
     <div style={{ height: '100vh', background: C.bg, display: 'flex', flexDirection: 'column', position: 'relative' }}>

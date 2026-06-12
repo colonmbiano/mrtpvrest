@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@mrtpvrest/config", "@mrtpvrest/database", "@mrtpvrest/types", "mapbox-gl"],
+  transpilePackages: ["@mrtpvrest/config", "@mrtpvrest/database", "@mrtpvrest/types"],
   typescript: {
     ignoreBuildErrors: true,
   },
