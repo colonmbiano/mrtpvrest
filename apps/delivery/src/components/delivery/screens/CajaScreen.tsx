@@ -129,7 +129,7 @@ export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCe
           </div>
         </div>
 
-        <div style={S.sectionLabel}>Historial del día</div>
+        <div style={S.sectionLabel}>Pendiente de corte</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {movements.map(m => {
             const isFloat = m.type === 'FLOAT';
@@ -170,7 +170,7 @@ export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCe
           })}
           {movements.length === 0 && (
             <div style={{ padding: '32px', textAlign: 'center', fontSize: 10, color: C.textMuted, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-              No hay movimientos hoy
+              Sin movimientos pendientes de corte
             </div>
           )}
         </div>

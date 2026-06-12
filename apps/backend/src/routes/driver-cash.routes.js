@@ -66,10 +66,20 @@ router.get('/:driverId/movements', authenticate, requireTenantAccess, async (req
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
     const { date } = req.query;
-    // Día natural en hora de México (el servidor corre en UTC).
-    const { from, to } = localDayRange(date);
+    // Por defecto mostramos lo PENDIENTE DE CORTE (movimientos no aprobados =
+    // desde el último corte), NO "hoy". Los turnos cruzan la medianoche y el
+    // corte se hace de madrugada; filtrar por día natural escondía las entregas
+    // de antes de las 00:00 y descuadraba la caja por debajo. Si llega ?date= se
+    // respeta la vista histórica por día natural de México.
+    let where;
+    if (date) {
+      const { from, to } = localDayRange(date);
+      where = { driverId: driver.id, createdAt: { gte: from, lte: to } };
+    } else {
+      where = { driverId: driver.id, approved: false };
+    }
     const movements = await prisma.driverCashMovement.findMany({
-      where: { driverId: driver.id, createdAt: { gte: from, lte: to } },
+      where,
       orderBy: { createdAt: 'desc' },
     });
     const float = movements.filter(m => m.type === 'FLOAT').reduce((s, m) => s + m.amount, 0);
@@ -309,11 +319,11 @@ router.post('/:driverId/shift-request', authenticate, requireTenantAccess, async
       select: { locationId: true },
     });
 
-    // Balance de hoy (mismo cálculo que ve el repartidor en su pantalla de caja).
-    // Día natural en hora de México (el servidor corre en UTC).
-    const { from, to } = localDayRange();
+    // Balance PENDIENTE DE CORTE (mismo criterio que la pantalla de caja y que
+    // el corte real): movimientos no aprobados desde el último corte. No por
+    // día, para no esconder turnos que cruzan medianoche.
     const movements = await prisma.driverCashMovement.findMany({
-      where: { driverId: driver.id, createdAt: { gte: from, lte: to } },
+      where: { driverId: driver.id, approved: false },
     });
     const float = movements.filter(m => m.type === 'FLOAT').reduce((s, m) => s + m.amount, 0);
     const income = movements.filter(m => m.type === 'INCOME').reduce((s, m) => s + m.amount, 0);
@@ -363,12 +373,13 @@ router.post('/:driverId/cut', authenticate, requireTenantAccess, requireAdmin, a
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
     const { notes } = req.body;
-    const lastCut = await prisma.driverCashCut.findFirst({
-      where: { driverId: driver.id }, orderBy: { createdAt: 'desc' },
-    });
-    const from = lastCut ? lastCut.createdAt : new Date(0);
+    // El corte toma EXACTAMENTE los movimientos pendientes (no aprobados) desde
+    // el último corte — el mismo conjunto que se muestra en las vistas de caja,
+    // así lo que ves es lo que se corta. Se marcan por id (no por ventana de
+    // tiempo) para que un movimiento creado durante el corte no quede aprobado
+    // sin haberse contado.
     const movements = await prisma.driverCashMovement.findMany({
-      where: { driverId: driver.id, createdAt: { gt: from } },
+      where: { driverId: driver.id, approved: false },
     });
 
     const float = movements.filter(m => m.type === 'FLOAT').reduce((s, m) => s + m.amount, 0);
@@ -391,7 +402,7 @@ router.post('/:driverId/cut', authenticate, requireTenantAccess, requireAdmin, a
     });
 
     await prisma.driverCashMovement.updateMany({
-      where: { driverId: driver.id, createdAt: { gt: from } },
+      where: { id: { in: movements.map(m => m.id) } },
       data: { approved: true, approvedAt: new Date() },
     });
 
@@ -428,7 +439,6 @@ router.get('/cuts', authenticate, requireTenantAccess, requireAdmin, async (req,
 router.get('/summary/today', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
-    const { from } = localDayRange(); // medianoche de México (servidor en UTC)
     const drivers = await prisma.employee.findMany({
       where: {
         role: 'DELIVERY',
@@ -437,8 +447,10 @@ router.get('/summary/today', authenticate, requireTenantAccess, requireRole('ADM
       },
     });
     const driverIds = drivers.map(d => d.id);
+    // Pendiente de corte (no "hoy"): ver nota en GET /:driverId/movements. Así el
+    // resumen del panel coincide con lo que el corte realmente va a tomar.
     const movements = await prisma.driverCashMovement.findMany({
-      where: { driverId: { in: driverIds }, createdAt: { gte: from } },
+      where: { driverId: { in: driverIds }, approved: false },
     });
     const summary = drivers.map(d => {
       const dm = movements.filter(m => m.driverId === d.id);
