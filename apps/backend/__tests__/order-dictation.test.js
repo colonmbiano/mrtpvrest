@@ -94,6 +94,117 @@ describe('order dictation service', () => {
     });
   });
 
+  it('prefiere Taco al pastor sobre el producto generico Tacos', async () => {
+    prisma.menuItem.findMany.mockResolvedValueOnce([
+      item({ id: 'tacos', name: 'Tacos', price: 20 }),
+      item({ id: 'pastor', name: 'Taco al pastor', price: 22 }),
+    ]);
+
+    const result = await runOrderDictation({
+      restaurantId: 'rest1',
+      prompt: 'dos tacos de pastor',
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      menuItemId: 'pastor',
+      quantity: 2,
+      needsReview: false,
+    });
+  });
+
+  it('selecciona Pastor cuando Tacos usa variantes', async () => {
+    prisma.menuItem.findMany.mockResolvedValueOnce([
+      item({
+        id: 'tacos',
+        name: 'Tacos',
+        price: 20,
+        hasVariants: true,
+        variants: [
+          { id: 'pastor', name: 'Pastor', price: 22, isAvailable: true },
+          { id: 'bistec', name: 'Bistec', price: 24, isAvailable: true },
+        ],
+      }),
+    ]);
+
+    const result = await runOrderDictation({
+      restaurantId: 'rest1',
+      prompt: 'tres tacos de pastor',
+    });
+
+    expect(result.items[0]).toMatchObject({
+      menuItemId: 'tacos',
+      quantity: 3,
+      needsReview: false,
+      selections: {
+        selectedVariant: { id: 'pastor', name: 'Pastor', price: 22 },
+        unitPrice: 22,
+      },
+    });
+  });
+
+  it('mantiene revision si el dictado no incluye la variante requerida', async () => {
+    prisma.menuItem.findMany.mockResolvedValueOnce([
+      item({
+        id: 'tacos',
+        name: 'Tacos',
+        price: 20,
+        hasVariants: true,
+        variants: [
+          { id: 'pastor', name: 'Pastor', price: 22, isAvailable: true },
+          { id: 'bistec', name: 'Bistec', price: 24, isAvailable: true },
+        ],
+      }),
+    ]);
+
+    const result = await runOrderDictation({
+      restaurantId: 'rest1',
+      prompt: 'dos tacos',
+    });
+
+    expect(result.items[0].selections.selectedVariant).toBeNull();
+    expect(result.items[0].needsReview).toBe(true);
+  });
+
+  it('selecciona Pastor cuando es un modificador obligatorio de Tacos', async () => {
+    prisma.menuItem.findMany.mockResolvedValueOnce([
+      item({
+        id: 'tacos',
+        name: 'Tacos',
+        price: 20,
+        modifierGroups: [{
+          id: 'proteina',
+          name: 'Proteina',
+          required: true,
+          multiSelect: false,
+          minSelection: 1,
+          maxSelection: 1,
+          freeModifiersLimit: 0,
+          modifiers: [
+            { id: 'pastor', groupId: 'proteina', name: 'Pastor', priceAdd: 0 },
+            { id: 'bistec', groupId: 'proteina', name: 'Bistec', priceAdd: 3 },
+          ],
+        }],
+      }),
+    ]);
+
+    const result = await runOrderDictation({
+      restaurantId: 'rest1',
+      prompt: 'cuatro tacos de pastor',
+    });
+
+    expect(result.items[0]).toMatchObject({
+      quantity: 4,
+      needsReview: false,
+      selections: {
+        selectedModifiers: [
+          { id: 'pastor', groupId: 'proteina', name: 'Pastor', priceAdd: 0 },
+        ],
+        unitPrice: 20,
+      },
+    });
+  });
+
   it('marca revision cuando el producto tiene variantes o modificadores requeridos', async () => {
     prisma.menuItem.findMany.mockResolvedValueOnce([
       item({
