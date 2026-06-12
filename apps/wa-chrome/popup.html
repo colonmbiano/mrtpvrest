@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --amber:#FFB84D; --bg:#0C0C0E; --ok:#88D66C; }
+    * { box-sizing: border-box; }
+    body {
+      width: 320px; margin: 0; padding: 16px;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg); color: #fff;
+    }
+    h1 { font-size: 14px; margin: 0 0 2px; letter-spacing: .03em; }
+    .sub { font-size: 11px; color: rgba(255,255,255,.5); margin: 0 0 14px; }
+    label { display: block; font-size: 11px; color: rgba(255,255,255,.7); margin: 12px 0 4px; }
+    input {
+      width: 100%; padding: 9px 10px; border-radius: 10px; font-size: 13px;
+      border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05); color: #fff;
+    }
+    input:focus { outline: none; border-color: var(--amber); }
+    .hint { font-size: 10px; color: rgba(255,255,255,.4); margin-top: 4px; }
+    button {
+      width: 100%; margin-top: 14px; padding: 10px; border: none; border-radius: 12px;
+      font-weight: 700; font-size: 13px; cursor: pointer;
+      background: var(--amber); color: var(--bg);
+    }
+    button:disabled { opacity: .5; cursor: default; }
+    .st { font-size: 12px; margin-top: 12px; min-height: 18px; line-height: 1.4; }
+    .card {
+      display: flex; align-items: center; gap: 10px; margin-top: 12px;
+      padding: 10px; border-radius: 12px;
+      background: rgba(136,214,108,.1); border: 1px solid rgba(136,214,108,.3);
+    }
+    .card img { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; background: rgba(255,255,255,.06); }
+    .card .nm { font-size: 13px; font-weight: 700; }
+    .card .sl { font-size: 10px; color: rgba(255,255,255,.5); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); display: inline-block; vertical-align: middle; margin-right: 6px; }
+  </style>
+</head>
+<body>
+  <h1><span class="dot"></span>Pedidos WhatsApp → TPV</h1>
+  <p class="sub">Conecta esta extensión con tu restaurante.</p>
+
+  <div id="current"></div>
+
+  <label for="slug">Código de tu tienda (slug)</label>
+  <input id="slug" type="text" placeholder="ej. master-burguer-s" autocomplete="off" spellcheck="false" />
+  <div class="hint">Es el identificador de tu tienda en línea, p.ej. en <b>tutienda.mrtpvrest.com</b> el código es <b>tutienda</b>.</div>
+
+  <button id="save">Verificar y guardar</button>
+  <div class="st" id="st"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
