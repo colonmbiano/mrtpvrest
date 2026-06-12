@@ -350,9 +350,19 @@
   function rowInfo(r) {
     const nameEl = r.querySelector("span[title]");
     const name = nameEl ? nameEl.getAttribute("title") : "";
+    const nm = norm(name);
+    // innerText de la fila trae, en orden: "N mensajes no leídos", nombre, hora,
+    // PREVIEW (el texto que queremos) y al final el contador "N". Antes tomábamos
+    // la última línea → caía en ese número y looksOrder lo descartaba. Filtramos
+    // badge de no leídos, hora, día, el contador (solo dígitos) y el nombre, y
+    // nos quedamos con la última línea de TEXTO real = el preview del mensaje.
     const lines = (r.innerText || "").split("\n").map((s) => s.trim()).filter(Boolean)
-      .filter((l) => !/no le[ií]d/i.test(l) && !/^\d{1,2}:\d{2}/.test(l)
-        && !/^(ayer|lunes|martes|mi.rcoles|jueves|viernes|s.bado|domingo)$/i.test(l));
+      .filter((l) =>
+        !/no le[ií]d/i.test(l) &&                 // "2 mensajes no leídos"
+        !/^\d{1,2}:\d{2}/.test(l) &&              // hora "8:10 p.m."
+        !/^\d+$/.test(l) &&                       // contador de no leídos "2"
+        !/^(ayer|lunes|martes|mi.rcoles|jueves|viernes|s.bado|domingo)$/i.test(l) &&
+        norm(l) !== nm);                          // la línea con el nombre del chat
     return { name, preview: lines[lines.length - 1] || "" };
   }
 
