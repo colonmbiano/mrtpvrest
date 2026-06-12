@@ -17,6 +17,11 @@ name: E2E — Playwright (Turno → Orden → KDS → Cobro)
 #
 # Mientras tanto se ejecuta manualmente (workflow_dispatch) para validar.
 
+# GITHUB_TOKEN de solo lectura por defecto (least-privilege). Los jobs que
+# necesiten escribir lo declaran a nivel de job (p.ej. el commit de APKs).
+permissions:
+  contents: read
+
 on:
   workflow_dispatch: {}
 
