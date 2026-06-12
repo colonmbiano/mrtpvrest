@@ -1050,6 +1050,13 @@ model RestaurantConfig {
   // luego se reparten a las demás vía StockTransfer.
   centralWarehouseEnabled Boolean @default(false)
 
+  // ─── CORTE DE CAJA ─────────────────────────────────────────────────────
+  // adminCanViewExpectedCash: si true (default), los roles admin (ADMIN/
+  // OWNER/SUPER_ADMIN) ven el efectivo esperado en el corte aunque el turno
+  // sea ciego. Ponerlo en false fuerza corte ciego también para admins: solo
+  // verán el esperado los empleados con el permiso explícito canViewExpectedCash.
+  adminCanViewExpectedCash Boolean @default(true)
+
   updatedAt DateTime @updatedAt
 
   @@map("restaurant_config")

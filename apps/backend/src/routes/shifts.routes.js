@@ -57,10 +57,25 @@ async function enrichOpenShift(shift, req) {
     totalExpenses,
   });
 
+  // Flag por restaurante: ¿los roles admin pueden ver el esperado en un turno
+  // ciego? Default true (histórico). false → corte ciego estricto: ni los
+  // admins lo ven por su rol; solo quien tenga el permiso explícito.
+  const restaurantId = req.restaurantId || req.user?.restaurantId;
+  let adminMayView = true;
+  if (restaurantId) {
+    const cfg = await prisma.restaurantConfig.findUnique({
+      where: { restaurantId },
+      select: { adminCanViewExpectedCash: true },
+    });
+    if (cfg) adminMayView = cfg.adminCanViewExpectedCash !== false;
+  }
+
   const role = req.user?.role;
+  const isAdminRole = role === 'ADMIN' || role === 'OWNER' || role === 'SUPER_ADMIN';
+  // El permiso explícito por empleado SIEMPRE concede; el override por rol
+  // admin queda sujeto al flag del restaurante.
   const privileged =
-    role === 'ADMIN' || role === 'OWNER' || role === 'SUPER_ADMIN' ||
-    req.user?.canViewExpectedCash === true;
+    req.user?.canViewExpectedCash === true || (isAdminRole && adminMayView);
   const reveal = !shift.blindClose || privileged;
 
   return {

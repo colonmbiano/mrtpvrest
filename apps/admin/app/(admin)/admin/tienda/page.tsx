@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Store, Globe, Power, Clock, Phone, MessageCircle, MapPin, Palette,
   Truck, Star, Link2, Copy, Check, ExternalLink, Crosshair, AlertTriangle,
-  Zap, Flower2, Moon, Bike,
+  Zap, Flower2, Moon, Bike, Wallet,
 } from "lucide-react";
 import api from "@/lib/api";
 import { getStoreUrl } from "@/lib/config";
@@ -94,6 +94,8 @@ export default function TiendaConfigPage() {
     // Estado de la tienda
     isOpen: true,
     closedMessage: "",
+    // Corte de caja: ¿los admins ven el efectivo esperado en corte ciego?
+    adminCanViewExpectedCash: true,
     // Horario de atención automático
     scheduleEnabled: false,
     timezone: "America/Mexico_City",
@@ -162,6 +164,7 @@ export default function TiendaConfigPage() {
           closedMessage: d.closedMessage ?? "",
           deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : "FLAT",
           isOpen: d.isOpen ?? true,
+          adminCanViewExpectedCash: d.adminCanViewExpectedCash ?? true,
           scheduleEnabled: d.scheduleEnabled ?? false,
           countryCode: d.countryCode || "MX",
           timezone: d.timezone || "America/Mexico_City",
@@ -282,6 +285,24 @@ export default function TiendaConfigPage() {
               <input type="text" value={config.closedMessage} placeholder="Ej. Volvemos mañana a las 9:00 am" onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, closedMessage: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
             </div>
           )}
+        </WtCard>
+
+        {/* Corte de caja — visibilidad del efectivo esperado */}
+        <WtCard className="p-5 md:p-6">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <Wallet size={16} className="shrink-0 text-tx-mid" />
+                <p className="font-display text-base font-extrabold text-tx-hi">Corte de caja</p>
+              </div>
+              <p className="mt-1 text-[12px] text-tx-mut">
+                {config.adminCanViewExpectedCash
+                  ? "Admins y gerentes ven el efectivo esperado al hacer el corte."
+                  : "Corte ciego estricto: ni los admins ven el esperado (solo empleados con permiso explícito)."}
+              </p>
+            </div>
+            <Toggle checked={config.adminCanViewExpectedCash} onChange={(v) => setConfig(p => ({ ...p, adminCanViewExpectedCash: v }))} label="Admins ven el efectivo esperado" />
+          </div>
         </WtCard>
 
         {/* País / WhatsApp */}
