@@ -1,3 +1,11 @@
+/**
+ * @jest-environment node
+ *
+ * Entorno node a propósito: la lógica de printer-tcp es pura (texto + bytes)
+ * y el caso "sin canvas" depende de que document/Image NO existan. En jsdom
+ * `new Image()` existe pero jamás dispara onload/onerror (jsdom no carga
+ * recursos), así que loadImage dejaba el test colgado hasta el timeout.
+ */
 const connect = jest.fn().mockResolvedValue({ client: 7 });
 const send = jest.fn().mockResolvedValue(undefined);
 const disconnect = jest.fn().mockResolvedValue({ client: 7 });
