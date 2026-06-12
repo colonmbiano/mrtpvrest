@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
+import { useWaiterRealtime } from "@/hooks/useWaiterRealtime";
 
 interface OrderItem {
   id: string;
@@ -102,6 +103,10 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
     queueMicrotask(() => { if (!cancelled) loadTable(); });
     return () => { cancelled = true; };
   }, [loadTable]);
+
+  // Tiempo real: una ronda nueva, un cobro o un cambio de estado de la
+  // orden de ESTA mesa se reflejan sin salir de la pantalla.
+  useWaiterRealtime({ onChange: () => loadTable() });
 
   // Tick cada 30s para refrescar "min en mesa" sin pegarle al backend.
   useEffect(() => {
