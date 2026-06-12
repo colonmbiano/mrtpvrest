@@ -102,6 +102,22 @@ function normalizePrinterPayload(body) {
     payload.ip = null;
     payload.usbPort = null;
   }
+  // IP: quitar TODO el whitespace (un espacio colado hace que el connect
+  // nativo del TPV falle con "No address associated with hostname") y
+  // validar IPv4 estricta. '' → null; '0.0.0.0' (KDS virtual) es válida.
+  if (payload.ip !== undefined && payload.ip !== null) {
+    payload.ip = String(payload.ip).replace(/\s+/g, '');
+    if (payload.ip === '') {
+      payload.ip = null;
+    } else {
+      const octets = payload.ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+      if (!octets || octets.slice(1).some((o) => Number(o) > 255)) {
+        const err = new Error(`IP inválida ("${payload.ip}") — usa formato IPv4, ej. 192.168.1.84`);
+        err.status = 400;
+        throw err;
+      }
+    }
+  }
   // Sanity: port es Int
   if (payload.port !== undefined && payload.port !== null) {
     payload.port = parseInt(payload.port, 10) || 9100;
@@ -153,7 +169,7 @@ router.post('/', requireAdmin, async (req, res) => {
       data: { ...data, locationId: req.locationId },
     });
     res.json(printer);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 
 router.put('/:id', requireAdmin, async (req, res) => {
@@ -164,7 +180,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
       data,
     });
     res.json(printer);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 
 router.delete('/:id', requireAdmin, async (req, res) => {
