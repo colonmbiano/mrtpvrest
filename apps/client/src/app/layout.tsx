@@ -26,11 +26,13 @@ export const metadata: Metadata = {
   formatDetection: { telephone: false },
 };
 
+// Viewport por defecto (rutas fuera de [slug]). NO bloqueamos el zoom (sin
+// maximumScale) por accesibilidad. Cada tienda sobreescribe themeColor con su
+// color de marca vía generateViewport en [slug]/page.tsx.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  themeColor: "#000000",
+  themeColor: "#ff5c35",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
