@@ -96,6 +96,57 @@ router.get('/me', authenticate, async (req, res) => {
   }
 });
 
+// ── Turno laboral del empleado (clock-in/out) — Meseros v2 Fase 2.2 ─────
+// EmployeeShift = jornada del empleado (no confundir con CashShift, que es
+// el corte de caja en /api/shifts). El ID sale SIEMPRE del token; nunca de
+// la URL — un mesero no puede abrir/cerrar el turno de otro.
+// Declarados antes de /:id para que el router no capture "me" como id.
+
+const requireEmployee = (req, res, next) => {
+  if (!req.user?.isEmployee) {
+    return res.status(403).json({ error: 'Solo empleados (token de PIN del TPV)' });
+  }
+  next();
+};
+
+// GET /api/employees/me/shift — turno abierto del empleado del token (o null)
+router.get('/me/shift', authenticate, requireTenantAccess, requireEmployee, async (req, res) => {
+  try {
+    const shift = await prisma.employeeShift.findFirst({
+      where: { employeeId: req.user.id, endAt: null },
+      orderBy: { startAt: 'desc' },
+    });
+    res.json(shift || null);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/employees/me/shift/start — clock-in. Si había un turno abierto
+// lo devuelve tal cual (idempotente): re-entrar a /meseros no duplica turnos.
+router.post('/me/shift/start', authenticate, requireTenantAccess, requireEmployee, async (req, res) => {
+  try {
+    const open = await prisma.employeeShift.findFirst({
+      where: { employeeId: req.user.id, endAt: null },
+      orderBy: { startAt: 'desc' },
+    });
+    if (open) return res.json(open);
+    const shift = await prisma.employeeShift.create({
+      data: { employeeId: req.user.id },
+    });
+    res.json(shift);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/employees/me/shift/end — clock-out de todos los turnos abiertos.
+router.post('/me/shift/end', authenticate, requireTenantAccess, requireEmployee, async (req, res) => {
+  try {
+    const { count } = await prisma.employeeShift.updateMany({
+      where: { employeeId: req.user.id, endAt: null },
+      data: { endAt: new Date() },
+    });
+    res.json({ ok: true, closed: count });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/employees/sync — descarga lista para uso offline
 router.get('/sync', authenticate, requireTenantAccess, async (req, res) => {
   try {
