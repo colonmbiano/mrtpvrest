@@ -656,6 +656,36 @@ async function addRoundHandler(req, res) {
 
     const restaurantId = req.user?.restaurantId || req.restaurantId;
 
+    // Idempotencia DB-level para replays optimistas/offline de la cola. El
+    // cliente manda la llave en Idempotency-Key; si esta ronda ya se creó
+    // (el ack se perdió y el procesador reintenta) devolvemos la orden actual
+    // sin duplicar items. Va ANTES de los checks de estado: un replay que
+    // llega cuando la orden ya fue pagada debe resolverse idempotente, no
+    // fallar con "ya fue pagada" y reintentar para siempre.
+    const idemKey = req.headers['idempotency-key']
+      ? String(req.headers['idempotency-key'])
+      : null;
+    if (idemKey) {
+      const dupRound = await prisma.orderRound.findUnique({
+        where: { clientRoundId: idemKey },
+        select: { orderId: true },
+      });
+      if (dupRound) {
+        const current = await prisma.order.findUnique({
+          where: { id: dupRound.orderId },
+          include: {
+            user: { select: { name: true, phone: true } },
+            items: { include: { menuItem: { select: { name: true, categoryId: true } }, modifiers: true } },
+            rounds: { orderBy: { roundNumber: 'asc' } },
+            address: true,
+            table: true,
+          },
+        });
+        res.setHeader('X-Idempotent-Replay', 'true');
+        return res.json(current);
+      }
+    }
+
     // Verificar que la orden existe, pertenece a la misma sucursal y sigue abierta.
     const existing = await prisma.order.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: 'Orden no encontrada' });
@@ -760,7 +790,7 @@ async function addRoundHandler(req, res) {
       const nextNumber = (lastRound?.roundNumber || 0) + 1;
 
       const newRound = await tx.orderRound.create({
-        data: { orderId: id, roundNumber: nextNumber },
+        data: { orderId: id, roundNumber: nextNumber, clientRoundId: idemKey },
       });
 
       for (const itemData of newItemsData) {

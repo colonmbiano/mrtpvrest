@@ -198,21 +198,23 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     return () => { cancelled = true; clearInterval(id); };
   }, [mounted, isLocked, fetchShift]);
 
+  // FASE 2 · Cobro optimista desde "Tickets abiertos". Cierra el modal al
+  // instante y encola el pago (idempotente: PUT /:id/payment es un flip de
+  // estado, un reintento no doble-cobra). El listado se refresca solo cuando
+  // el pago sincroniza (order:updated → DELIVERED → sale de la lista vía
+  // socket). Si falla tras reintentos, OfflineIndicator muestra el banner.
   const handleConfirmDrawerPayment = async (method: string) => {
     if (!payOrder) return;
-    const res = await apiOrQueue(
+    const orderId = payOrder.id;
+    setPayOrder(null);
+    await apiOrQueue(
       "payment",
       "PUT",
-      `/api/orders/${payOrder.id}/payment`,
-      { paymentMethod: method }
+      `/api/orders/${orderId}/payment`,
+      { paymentMethod: method },
+      { optimistic: true },
     );
-    if (!res.ok) {
-      toast.error("Error al cobrar: " + (res.error || ""));
-      return;
-    }
-    toast.success(res.queued ? "Cobro en cola · se registrará al volver la red" : "Cobro procesado");
-    setPayOrder(null);
-    fetchOpenOrders();
+    toast.success("Cobro procesado");
   };
 
   // FASE 12 · COBRO + IMPRESIÓN DE CUENTA DIVIDIDA (E2E)

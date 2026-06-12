@@ -1887,6 +1887,11 @@ model OrderRound {
   // 1 = primera comanda, 2 = segunda ronda, etc. Único por orden.
   roundNumber     Int
   sentToKitchenAt DateTime @default(now())
+  // clientRoundId · idempotencia DB-level para replays optimistas/offline de
+  // "agregar ronda" (POST /:id/items). El cliente manda la llave en el header
+  // Idempotency-Key; si la ronda ya existe se devuelve la orden sin duplicar
+  // items. Equivalente a Order.clientOrderId pero a nivel de ronda.
+  clientRoundId   String?  @unique
 
   items OrderItem[]
 

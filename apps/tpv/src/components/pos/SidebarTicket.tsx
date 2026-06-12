@@ -433,7 +433,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // productos, así que sin esto las ediciones se quedaban en el store local y
   // se perdían al recargar el ticket. customerName/Phone se mandan siempre
   // (hacen round-trip de lo cargado en DINE_IN); la dirección solo en DELIVERY.
-  const persistOrderDetails = (orderId: string) => {
+  const persistOrderDetails = (orderId: string, optimistic = false) => {
     const payload: Record<string, string | null> = {
       customerName: ticket.name?.trim() ? ticket.name.trim() : null,
       customerPhone: ticket.phone?.trim() ? ticket.phone.trim() : null,
@@ -441,40 +441,48 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     if (ticket.type === "DELIVERY") {
       payload.deliveryAddress = ticket.address?.trim() ? ticket.address.trim() : null;
     }
-    return apiOrQueue("order", "PUT", `/api/orders/${orderId}/details`, payload);
+    return apiOrQueue(
+      "order",
+      "PUT",
+      `/api/orders/${orderId}/details`,
+      payload,
+      optimistic ? { optimistic: true } : undefined,
+    );
   };
 
+  // Reset del ticket tras guardar/cerrar — un solo lugar para no divergir.
+  const resetTicketAfterSave = () => {
+    clearActiveItems();
+    clearActiveOrder();
+    setPreviousItems([]);
+    updateTicket({
+      tableId: "",
+      tableName: "",
+      table: "",
+      numberOfGuests: null,
+      activeSeat: null,
+      name: "",
+      address: "",
+      phone: "",
+      discount: 0,
+    });
+  };
+
+  // FASE 2 · GUARDAR A MESA — OPTIMISTA
+  // La UI marca el ticket como guardado al instante y vuelve a la pantalla de
+  // tipo de pedido. La escritura (ronda/orden + datos) se encola idempotente y
+  // sincroniza en background; la comanda se imprime YA (es local, no depende de
+  // Railway). Si la sync falla tras reintentos, el chip/banner de
+  // OfflineIndicator lo muestra y permite reintento manual.
   const handleSendToKitchen = async () => {
     if (ticket.items.length === 0) {
       if (activeOrderId) {
-        // Cuenta existente sin productos nuevos: no hay ronda que agregar,
-        // pero el cajero pudo haber editado los datos del cliente. Los
-        // persistimos antes de cerrar para que "Guardar" sí los guarde.
-        const detailsRes = await persistOrderDetails(activeOrderId);
-        if (!detailsRes.ok) {
-          toast.error("No se pudieron guardar los datos: " + (detailsRes.error || ""));
-          hapticError();
-          return;
-        }
-        toast.success(
-          detailsRes.queued
-            ? "Datos en cola · se guardarán al volver la red"
-            : "Datos del ticket guardados",
-        );
-        clearActiveItems();
-        clearActiveOrder();
-        setPreviousItems([]);
-        updateTicket({
-          tableId: "",
-          tableName: "",
-          table: "",
-          numberOfGuests: null,
-          activeSeat: null,
-          name: "",
-          address: "",
-          phone: "",
-          discount: 0,
-        });
+        // Cuenta existente sin productos nuevos: solo persistir datos del
+        // cliente editados. Optimista: encolar y cerrar al instante.
+        void persistOrderDetails(activeOrderId, true);
+        toast.success("Datos del ticket guardados");
+        hapticSuccess();
+        resetTicketAfterSave();
         router.replace("/pos/order-type");
         return;
       }
@@ -484,106 +492,88 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     }
     hapticMedium();
 
-    try {
-      const itemsPayload = buildItemsPayload();
+    // Snapshot para impresión ANTES de limpiar el ticket.
+    const itemsPayload = buildItemsPayload();
+    const printItems = buildTicketItems();
+    const ticketContext = {
+      orderNumber: activeOrderNumber ?? null,
+      orderType: ticket.type ?? null,
+      tableNumber: ticket.tableName || ticket.table || null,
+      customerName: ticket.name ?? null,
+    };
 
-      let order;
-      let queued = false;
-      if (activeOrderId) {
-        // Mesa ya tiene orden abierta — agregar ronda.
-        const res = await apiOrQueue("order", "POST", `/api/orders/${activeOrderId}/items`, { items: itemsPayload });
-        if (!res.ok) throw new Error(res.error || "fallo desconocido");
-        queued = res.queued;
-        order = res.data;
-        // Sincronizar historial local
-        if (!queued) setPreviousItems(order?.items || []);
-        // Persistir también cualquier edición de los datos del cliente sobre
-        // la orden ya existente (el POST de items no los incluye). Best-effort:
-        // los productos ya quedaron guardados, así que un fallo aquí solo se
-        // avisa sin abortar la ronda.
-        const detailsRes = await persistOrderDetails(activeOrderId);
-        if (!detailsRes.ok) {
-          toast.warning("Ronda guardada, pero no se pudieron actualizar los datos del cliente");
-        }
-      } else {
-        // Orden nueva (o el backend redirigirá si la mesa está OCCUPIED).
-        const orderData = {
-          orderType: ticket.type,
-          items: itemsPayload,
-          tableId: ticket.tableId || null,
-          numberOfGuests: ticket.numberOfGuests ?? null,
-          customerName: ticket.name || "Publico General",
-          customerPhone: ticket.phone || null,
-          subtotal: currentSubtotal,
-          discount: ticket.discount,
-          total: currentSubtotal - ticket.discount,
-        };
-        const res = await apiOrQueue("order", "POST", "/api/orders/tpv", orderData);
-        if (!res.ok) throw new Error(res.error || "fallo desconocido");
-        queued = res.queued;
-        order = res.data;
-        // Guardar el id para que la siguiente ronda ya conozca la orden.
-        if (order?.id && ticket.tableId) {
-          setActiveOrder(order.id, ticket.tableId, order.orderNumber ?? null);
-        }
-        if (!queued) setPreviousItems(order?.items || []);
-      }
-
-      toast.success(queued ? "Pedido en cola · se enviara al volver la red" : "Pedido enviado a cocina");
-      const printItems = buildTicketItems();
-      const ticketContext = {
-        orderNumber: order?.orderNumber ?? null,
-        orderType:   ticket.type ?? null,
-        tableNumber: ticket.tableName || ticket.table || null,
-        customerName: ticket.name ?? null,
-      };
-
-      try {
-        const printResult = await printKitchenTickets(printers, {
-          ...ticketContext,
-          items: printItems,
-          config: kitchenConfig ?? undefined,
-        });
-        if (printResult.failed.length > 0) {
+    // Imprimir comanda YA (local). Fire-and-forget: no bloquea el guardado.
+    printKitchenTickets(printers, {
+      ...ticketContext,
+      items: printItems,
+      config: kitchenConfig ?? undefined,
+    })
+      .then((r) => {
+        if (r.failed.length > 0) {
           toast.warning(
-            `Pedido guardado, pero la comanda no imprimio: ${
-              printResult.failed[0]?.error || "No hay una impresora disponible"
+            `Guardado, pero la comanda no imprimió: ${
+              r.failed[0]?.error || "No hay una impresora disponible"
             }`,
           );
-        } else {
-          toast.success(
-            `Comanda impresa en ${printResult.ok} impresora${printResult.ok === 1 ? "" : "s"}`,
-          );
         }
-      } catch (printError) {
-        const message =
-          printError instanceof Error ? printError.message : "Error de impresion";
-        toast.warning(`Pedido guardado, pero la comanda no imprimio: ${message}`);
-      }
-
-      clearActiveItems();
-      clearActiveOrder();
-      setPreviousItems([]);
-      updateTicket({
-        tableId: "",
-        tableName: "",
-        table: "",
-        numberOfGuests: null,
-        activeSeat: null,
-        name: "",
-        address: "",
-        phone: "",
-        discount: 0,
+      })
+      .catch((e) => {
+        toast.warning(
+          `Guardado, pero la comanda no imprimió: ${
+            e instanceof Error ? e.message : "Error de impresión"
+          }`,
+        );
       });
 
-      // Tras guardar, volver a la pantalla de tipo de pedido para arrancar la
-      // siguiente venta en limpio (en vez de quedarse en el ticket abierto).
-      router.replace("/pos/order-type");
-    } catch (error: any) {
-      toast.error("Error al enviar pedido: " + (error.response?.data?.error || error.message));
+    // Encolar la escritura optimista (idempotente). activeOrderId siempre es un
+    // id real del backend, así que la ronda no necesita mapa temp→real.
+    if (activeOrderId) {
+      void apiOrQueue(
+        "order",
+        "POST",
+        `/api/orders/${activeOrderId}/items`,
+        { items: itemsPayload },
+        { optimistic: true },
+      );
+      void persistOrderDetails(activeOrderId, true);
+    } else {
+      // Orden nueva: todos los datos (incl. dirección) van inline en el create
+      // para no necesitar un PUT /details posterior con un id que aún no existe.
+      const orderData = {
+        orderType: ticket.type,
+        items: itemsPayload,
+        tableId: ticket.tableId || null,
+        numberOfGuests: ticket.numberOfGuests ?? null,
+        customerName: ticket.name || "Publico General",
+        customerPhone: ticket.phone || null,
+        deliveryAddress: ticket.type === "DELIVERY" ? (ticket.address || null) : null,
+        subtotal: currentSubtotal,
+        discount: ticket.discount,
+        total: currentSubtotal - ticket.discount,
+      };
+      void apiOrQueue("order", "POST", "/api/orders/tpv", orderData, {
+        optimistic: true,
+      });
     }
+
+    toast.success("Orden guardada");
+    hapticSuccess();
+    resetTicketAfterSave();
+    // Volver a la pantalla de tipo de pedido para arrancar la siguiente venta.
+    router.replace("/pos/order-type");
   };
 
+  // FASE 2 · COBRAR — OPTIMISTA (CUIDADO: dinero real)
+  // La UI marca pagado e imprime el recibo de inmediato (impresión local). El
+  // cobro se encola idempotente para que un reintento NO genere doble cobro:
+  //   · PUT /:id/payment es naturalmente idempotente (flip de estado a PAID).
+  //   · La orden nueva se crea PAGADA en una sola op (create-paid) deduplicada
+  //     por clientOrderId, así que no hay paso de pago separado ni mapa
+  //     temp→real.
+  //   · FIFO por orden garantiza que la ronda sincronice ANTES que el pago.
+  // Si el backend rechaza tras reintentos, la tx queda `failed` y
+  // OfflineIndicator muestra el banner "Cobro sin confirmar — revisar". El
+  // recibo ya impreso NO se revierte; el cajero concilia.
   const handleProcessPayment = async (
     method: string,
     tip?: PaymentTip,
@@ -591,165 +581,62 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   ) => {
     if (ticket.items.length === 0 && previousItems.length === 0) return;
     setProcessing(true);
-    try {
-      const tipAmount = tip?.amount ?? 0;
-      const itemsPayload = buildItemsPayload();
-      const printItems = buildTicketItems();
 
-      let order: any = null;
-      let queued = false;
-      if (activeOrderId) {
-        // 1. Si hay items en la "Nueva ronda", primero los enviamos al backend
-        if (itemsPayload.length > 0) {
-          const addRes = await apiOrQueue<any>(
-            "order",
-            "POST",
-            `/api/orders/${activeOrderId}/items`,
-            { items: itemsPayload },
-          );
-          if (!addRes.ok) {
-            toast.error("Error al enviar ronda: " + (addRes.error || ""));
-            return;
-          }
-          queued = queued || addRes.queued;
-          order = addRes.data;
-        } else if (typeof navigator === "undefined" || navigator.onLine) {
-          try {
-            const { data } = await api.get(`/api/orders/${activeOrderId}`);
-            order = data;
-          } catch {
-            // Si no se pudo hidratar, igual podemos encolar el cobro por id.
-          }
-        }
-        // Persistir ediciones de datos del cliente sobre la orden existente
-        // antes de cobrar (best-effort: no bloquea la venta si falla).
-        try {
-          await persistOrderDetails(activeOrderId);
-        } catch {
-          /* no crítico para el cobro */
-        }
-      } else {
-        // 2. Si no hay activeOrderId, creamos la orden completa normalmente
-        const orderData = {
-          orderType: ticket.type,
-          items: itemsPayload,
-          tableId: ticket.tableId || null,
-          numberOfGuests: ticket.numberOfGuests ?? null,
-          customerName: ticket.name || "Publico General",
-          customerPhone: ticket.phone || null,
-          deliveryAddress: ticket.type === "DELIVERY" ? (ticket.address || null) : null,
-          subtotal,
-          discount: ticket.discount,
-          total: total + tipAmount,
-          paymentMethod: method,
-          status: "DELIVERED",
-          notes: tip && tip.percent > 0
-            ? `Propina ${tip.percent}% ($${tipAmount.toFixed(2)})`
-            : undefined,
-        };
-        const createRes = await apiOrQueue<any>("order", "POST", "/api/orders/tpv", orderData);
-        if (!createRes.ok) {
-          toast.error("Error al crear orden: " + (createRes.error || ""));
-          return;
-        }
-        queued = queued || createRes.queued;
-        order = createRes.data;
-      }
+    const tipAmount = tip?.amount ?? 0;
+    const itemsPayload = buildItemsPayload();
+    const printItems = buildTicketItems();
+    const needsDriver = ticket.type === "DELIVERY" && !!driverId;
+    const tipNote =
+      tip && tip.percent > 0
+        ? `Propina ${tip.percent}% ($${tipAmount.toFixed(2)})`
+        : undefined;
 
-      const payableOrderId = activeOrderId || order?.id;
-      if (payableOrderId && !queued) {
-        const payRes = await apiOrQueue<any>(
-          "payment",
-          "PUT",
-          `/api/orders/${payableOrderId}/payment`,
-          { paymentMethod: method },
-        );
-        if (!payRes.ok) {
-          toast.error("Error al cobrar: " + (payRes.error || ""));
-          return;
-        }
-        queued = queued || payRes.queued;
-        if (payRes.data) order = { ...order, ...payRes.data };
-      } else if (activeOrderId && queued) {
-        const payRes = await apiOrQueue<any>(
-          "payment",
-          "PUT",
-          `/api/orders/${activeOrderId}/payment`,
-          { paymentMethod: method },
-        );
-        if (!payRes.ok) {
-          toast.error("Error al encolar cobro: " + (payRes.error || ""));
-          return;
-        }
-      }
+    // Snapshots para impresión/limpieza ANTES de mutar el ticket.
+    const ticketContext = {
+      orderNumber: activeOrderNumber ?? null,
+      orderType: ticket.type ?? null,
+      tableNumber: ticket.tableName || ticket.table || null,
+      customerName: ticket.name ?? null,
+      customerPhone: ticket.phone ?? null,
+    };
+    const totals = {
+      subtotal,
+      discount: ticket.discount,
+      total: total + tipAmount,
+      paymentMethod: method,
+      tipPercent: tip?.percent ?? 0,
+      tipAmount,
+    };
+    const guests = ticket.numberOfGuests ?? 0;
+    const isDineInSplit = ticket.type === "DINE_IN" && guests >= 2;
+    // Sin respuesta del servidor (optimista): los items del recibo se arman
+    // localmente con las rondas previas + la ronda nueva.
+    const receiptItems = [
+      ...orderItemsToTicketItems(previousItems),
+      ...printItems,
+    ];
+    const receiptIdentity = buildReceiptIdentityFields(
+      receiptConfig,
+      { businessName, businessFooter },
+      null,
+      ticketContext.orderNumber ? String(ticketContext.orderNumber) : null,
+    );
+    const receiptExtras = {
+      numberOfGuests: ticket.numberOfGuests ?? null,
+      cashierName: employee?.name || null,
+      terminalName: terminalName || null,
+    };
 
-      // BUG-24: asignar repartidor inmediatamente después del cobro DELIVERY.
-      if (ticket.type === "DELIVERY" && driverId && order?.id && !queued) {
-        try {
-          await api.put("/api/delivery/assign", { orderId: order.id, driverId });
-        } catch (assignErr: any) {
-          toast.warning(
-            "Cobro OK, pero falló asignar repartidor: " +
-            (assignErr?.response?.data?.error || assignErr?.message || "Error desconocido"),
-          );
-        }
-      }
-
-      toast.success(queued ? "Cobro en cola · se registrara al volver la red" : "Cobro procesado");
-      hapticSuccess();
-
-      // Doble pantalla: mostrar agradecimiento en la pantalla de cliente.
-      justCompletedRef.current = true;
-      dualScreen.completeSale({ total: total + tipAmount });
-      
-      // Capturar contexto antes de limpiar el ticket activo.
-      const ticketContext = {
-        orderNumber: order?.orderNumber ?? activeOrderNumber ?? null,
-        orderType:   ticket.type ?? null,
-        tableNumber: ticket.tableName || ticket.table || null,
-        customerName: ticket.name ?? null,
-        customerPhone: ticket.phone ?? null,
-      };
-      const totals = {
-        subtotal,
-        discount: ticket.discount,
-        total: total + tipAmount,
-        paymentMethod: method,
-        tipPercent: tip?.percent ?? 0,
-        tipAmount,
-      };
-
-      // Limpieza post-pago — reset completo para que la próxima venta
-      // arranque en limpio (items, orden activa, rondas, cliente y descuento).
-      clearActiveItems();
-      clearActiveOrder();
-      setPreviousItems([]);
-      updateTicket({ name: "", address: "", phone: "", discount: 0 });
-      setShowPayment(false);
-
-      // Impresión de comanda (solo si había items nuevos)
+    // Impresión local YA (recibo + comanda si hay items nuevos). No depende
+    // del backend; se dispara aunque la sync del cobro esté en cola.
+    const fireReceipts = () => {
       if (printItems.length > 0) {
-        printKitchenTickets(printers, { ...ticketContext, items: printItems, config: kitchenConfig ?? undefined })
-          .catch(() => { /* silencio */ });
+        printKitchenTickets(printers, {
+          ...ticketContext,
+          items: printItems,
+          config: kitchenConfig ?? undefined,
+        }).catch(() => {});
       }
-
-      // Impresión de recibo de cliente (el total completo)
-      const guests = ticket.numberOfGuests ?? 0;
-      const isDineInSplit = ticket.type === "DINE_IN" && guests >= 2;
-      const receiptItems = order?.items
-        ? orderItemsToTicketItems(order.items)
-        : [...orderItemsToTicketItems(previousItems), ...printItems];
-      const receiptIdentity = buildReceiptIdentityFields(
-        receiptConfig,
-        { businessName, businessFooter },
-        null,
-        ticketContext.orderNumber ? String(ticketContext.orderNumber) : null,
-      );
-      const receiptExtras = {
-        numberOfGuests: ticket.numberOfGuests ?? null,
-        cashierName: employee?.name || null,
-        terminalName: terminalName || null,
-      };
       if (isDineInSplit) {
         printSplitReceipts(
           printers,
@@ -765,6 +652,121 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           items: receiptItems,
         }).catch(() => {});
       }
+    };
+
+    // Limpieza optimista de la UI tras dejar el cobro encolado.
+    const finishUI = () => {
+      toast.success("Cobro procesado");
+      hapticSuccess();
+      justCompletedRef.current = true;
+      dualScreen.completeSale({ total: total + tipAmount });
+      clearActiveItems();
+      clearActiveOrder();
+      setPreviousItems([]);
+      updateTicket({ name: "", address: "", phone: "", discount: 0 });
+      setShowPayment(false);
+    };
+
+    try {
+      if (!activeOrderId && needsDriver) {
+        // CASO ESPECIAL (no optimista): orden NUEVA de DELIVERY con repartidor.
+        // Necesitamos el id real para asignar, así que esta creación va online.
+        // El cobro va incluido en el create-paid (idempotente por
+        // clientOrderId), no hay paso de pago separado.
+        const orderData = {
+          orderType: ticket.type,
+          items: itemsPayload,
+          tableId: ticket.tableId || null,
+          numberOfGuests: ticket.numberOfGuests ?? null,
+          customerName: ticket.name || "Publico General",
+          customerPhone: ticket.phone || null,
+          deliveryAddress: ticket.address || null,
+          subtotal,
+          discount: ticket.discount,
+          total: total + tipAmount,
+          paymentMethod: method,
+          status: "DELIVERED",
+          notes: tipNote,
+        };
+        const createRes = await apiOrQueue<any>(
+          "order",
+          "POST",
+          "/api/orders/tpv",
+          orderData,
+        );
+        if (!createRes.ok) {
+          toast.error("Error al crear orden: " + (createRes.error || ""));
+          return;
+        }
+        const newId = createRes.data?.id;
+        if (newId && !createRes.queued) {
+          try {
+            await api.put("/api/delivery/assign", { orderId: newId, driverId });
+          } catch (assignErr: any) {
+            toast.warning(
+              "Cobro OK, pero falló asignar repartidor: " +
+                (assignErr?.response?.data?.error ||
+                  assignErr?.message ||
+                  "Error desconocido"),
+            );
+          }
+        }
+        fireReceipts();
+        finishUI();
+        return;
+      }
+
+      if (activeOrderId) {
+        // Orden existente: ronda (si hay nuevos) → datos → pago. FIFO en la
+        // cola garantiza que la ronda sincronice antes que el pago.
+        if (itemsPayload.length > 0) {
+          await apiOrQueue<any>(
+            "order",
+            "POST",
+            `/api/orders/${activeOrderId}/items`,
+            { items: itemsPayload },
+            { optimistic: true },
+          );
+        }
+        void persistOrderDetails(activeOrderId, true);
+        await apiOrQueue<any>(
+          "payment",
+          "PUT",
+          `/api/orders/${activeOrderId}/payment`,
+          { paymentMethod: method },
+          { optimistic: true },
+        );
+        if (needsDriver) {
+          // id real conocido → asignación best-effort online.
+          api
+            .put("/api/delivery/assign", { orderId: activeOrderId, driverId })
+            .catch(() => {});
+        }
+      } else {
+        // Orden nueva sin repartidor → create-paid en UNA op idempotente.
+        const orderData = {
+          orderType: ticket.type,
+          items: itemsPayload,
+          tableId: ticket.tableId || null,
+          numberOfGuests: ticket.numberOfGuests ?? null,
+          customerName: ticket.name || "Publico General",
+          customerPhone: ticket.phone || null,
+          deliveryAddress:
+            ticket.type === "DELIVERY" ? ticket.address || null : null,
+          subtotal,
+          discount: ticket.discount,
+          total: total + tipAmount,
+          paymentMethod: method,
+          status: "DELIVERED",
+          notes: tipNote,
+        };
+        await apiOrQueue<any>("order", "POST", "/api/orders/tpv", orderData, {
+          optimistic: true,
+        });
+      }
+
+      fireReceipts();
+      finishUI();
     } catch (error: any) {
       toast.error("Error al cobrar: " + (error.response?.data?.error || error.message));
     } finally {

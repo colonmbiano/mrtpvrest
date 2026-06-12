@@ -4,13 +4,28 @@ import api from '@/lib/api';
 
 let syncInterval: NodeJS.Timeout | null = null;
 
+// Backoff para reintentos transitorios (red caída / 5xx). Exponencial con
+// tope; tras MAX_ATTEMPTS la tx pasa a `failed` y se vuelve VISIBLE al cajero.
+const MAX_ATTEMPTS = 6;
+const BASE_BACKOFF_MS = 2000;
+const MAX_BACKOFF_MS = 60000;
+
 // ── apiOrQueue ─────────────────────────────────────────────────────────
 //
 // Wrapper para escrituras críticas que deben sobrevivir a un corte de
-// red. Decide en runtime entre:
-//   a) llamar al backend (caso normal), o
-//   b) encolar la transacción en useOfflineStore y devolver un placeholder
-//      optimista para que la UI siga.
+// red. Tiene dos modos:
+//
+//   · Por defecto (bloqueante): cuando hay red, llama al backend y espera
+//     la respuesta (devuelve `data`). Errores de red → cola. 4xx → error a
+//     la UI. Es el modo histórico, lo usan llamadores que necesitan el id
+//     real de la orden de inmediato (p.ej. meseros).
+//
+//   · `opts.optimistic` (FASE 2): NO bloquea con red. Encola la operación y
+//     devuelve YA con estado optimista; el procesador la sincroniza en
+//     background. La idempotencia (clientOrderId en el body de la orden y la
+//     llave en el header Idempotency-Key) garantiza que un reintento no
+//     duplique ni doble-cobre. Lo usan los flujos de "guardar a mesa" y
+//     "cobrar" para que la UI avance al instante.
 //
 // La detección de offline cubre 2 escenarios:
 //   1. navigator.onLine === false  → directamente a cola.
@@ -25,6 +40,8 @@ export interface ApiOrQueueResult<T = any> {
   queued: boolean;
   data: T | null;
   error?: string;
+  /** Id de la transacción en cola (sirve como Idempotency-Key). */
+  txId?: string;
 }
 
 function isNetworkError(err: any): boolean {
@@ -38,6 +55,10 @@ function isNetworkError(err: any): boolean {
   return false;
 }
 
+function errMsg(err: any): string {
+  return err?.response?.data?.error || err?.message || 'fallo desconocido';
+}
+
 function genTxId(type: TransactionType) {
   return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -47,7 +68,7 @@ export async function apiOrQueue<T = any>(
   method: 'POST' | 'PUT',
   path: string,
   data: Record<string, any>,
-  opts?: { supervisor?: string }
+  opts?: { supervisor?: string; optimistic?: boolean }
 ): Promise<ApiOrQueueResult<T>> {
   const store = useOfflineStore.getState();
 
@@ -60,22 +81,33 @@ export async function apiOrQueue<T = any>(
       ? { ...data, clientOrderId: txId }
       : data;
 
-  // Pre-check: si el navegador YA sabe que está offline, evitamos la
-  // request y vamos directo a cola (ahorra timeout en pantalla).
-  const isOffline =
-    typeof navigator !== 'undefined' && navigator.onLine === false;
-
-  if (isOffline) {
-    const tx = {
+  const enqueue = () => {
+    store.addToQueue({
       id: txId,
       type,
       data: { method, path, body: bodyOut },
       timestamp: Date.now(),
       synced: false,
       supervisor: opts?.supervisor,
-    };
-    store.addToQueue(tx);
-    return { ok: true, queued: true, data: null };
+    });
+  };
+
+  // FASE 2 · MODO OPTIMISTA — encolar y devolver de inmediato. El procesador
+  // sincroniza en background; la idempotencia evita duplicados/doble cobro.
+  if (opts?.optimistic) {
+    enqueue();
+    kickSync();
+    return { ok: true, queued: true, data: null, txId };
+  }
+
+  // Pre-check: si el navegador YA sabe que está offline, evitamos la
+  // request y vamos directo a cola (ahorra timeout en pantalla).
+  const isOffline =
+    typeof navigator !== 'undefined' && navigator.onLine === false;
+
+  if (isOffline) {
+    enqueue();
+    return { ok: true, queued: true, data: null, txId };
   }
 
   try {
@@ -83,28 +115,30 @@ export async function apiOrQueue<T = any>(
       method === 'POST'
         ? await api.post<T>(path, bodyOut)
         : await api.put<T>(path, bodyOut);
-    return { ok: true, queued: false, data: res.data };
+    return { ok: true, queued: false, data: res.data, txId };
   } catch (err: any) {
     if (isNetworkError(err)) {
-      const tx = {
-        id: txId,
-        type,
-        data: { method, path, body: bodyOut },
-        timestamp: Date.now(),
-        synced: false,
-        supervisor: opts?.supervisor,
-      };
-      store.addToQueue(tx);
-      return { ok: true, queued: true, data: null };
+      enqueue();
+      return { ok: true, queued: true, data: null, txId };
     }
     // Error legítimo (4xx) — la UI debe mostrarlo.
     return {
       ok: false,
       queued: false,
       data: null,
-      error: err?.response?.data?.error || err?.message || 'fallo desconocido',
+      error: errMsg(err),
     };
   }
+}
+
+// Dispara el procesador en background sin bloquear el render que originó la
+// acción. No-op si el navegador está offline (el listener `online` lo
+// retomará). Usado tras cada encolado optimista.
+export function kickSync() {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  queueMicrotask(() => {
+    void syncOfflineQueue();
+  });
 }
 
 export function initBackgroundSync() {
@@ -128,14 +162,33 @@ export function initBackgroundSync() {
   }
 }
 
+// Clave de orden de una tx: agrupa las operaciones que pertenecen a la misma
+// orden para respetar su orden relativo (la ronda debe sincronizar ANTES que
+// el pago) y para cascada de fallos (no cobrar una orden cuya ronda se perdió).
+//
+// SOLO la ronda (/items|/rounds) y el pago (/payment) entran en la cadena
+// ordenada. Operaciones de metadatos best-effort (p.ej. /details con el nombre
+// del cliente) quedan INDEPENDIENTES (`tx:`) para que su fallo nunca bloquee ni
+// haga fallar un cobro.
+function orderKeyOf(tx: { id: string; data?: any }): string {
+  const path: string = tx?.data?.path || '';
+  if (path === '/api/orders/tpv') {
+    const cid = tx?.data?.body?.clientOrderId;
+    return cid ? `new:${cid}` : `tx:${tx.id}`;
+  }
+  const m = path.match(/^\/api\/orders\/([^/]+)\/(items|rounds|payment)$/);
+  if (m) return `ord:${m[1]}`;
+  return `tx:${tx.id}`;
+}
+
 export async function syncOfflineQueue() {
   const store = useOfflineStore.getState();
   const authStore = useAuthStore.getState();
 
   if (store.syncInProgress) return;
 
-  const unsyncedTransactions = store.getUnsyncedTransactions();
-  if (unsyncedTransactions.length === 0) return;
+  const pending = store.getPendingTransactions();
+  if (pending.length === 0) return;
 
   store.setSyncInProgress(true);
 
@@ -149,21 +202,42 @@ export async function syncOfflineQueue() {
       /* no crítico, seguimos con el replay */
     }
 
-    // Replay de cada transacción contra su endpoint original. El
-    // beneficio sobre un endpoint genérico de sync: el backend no tiene
-    // que conocer "tipos offline" — es el mismo POST /api/orders/tpv
-    // que se hubiera hecho online. Idempotencia depende del backend
-    // (TODO: cliente debería mandar Idempotency-Key con tx.id).
-    for (const transaction of unsyncedTransactions) {
+    const now = Date.now();
+    // orderKeys con una op no resuelta en este pass → las posteriores de la
+    // misma orden esperan (preserva el orden ronda→pago).
+    const blocked = new Set<string>();
+    // orderKeys con una op fallida permanente → las posteriores se marcan
+    // failed en cascada (no aplicar un cobro si su ronda se perdió).
+    const deadFailed = new Set<string>();
+
+    // Recorremos en orden FIFO (getPendingTransactions conserva el orden de
+    // inserción). Idempotencia por Idempotency-Key = tx.id para que el backend
+    // deduplique si este tx se replay-eara dos veces.
+    for (const transaction of pending) {
+      const key = orderKeyOf(transaction);
+
+      if (deadFailed.has(key)) {
+        store.markFailed(
+          transaction.id,
+          'Una operación previa de esta orden falló — revisar',
+        );
+        continue;
+      }
+      // Op anterior de la misma orden aún pendiente/en backoff este pass.
+      if (blocked.has(key)) continue;
+      // Backoff: todavía no toca reintentar; bloquea la orden, sigue con otras.
+      if ((transaction.nextRetryAt || 0) > now) {
+        blocked.add(key);
+        continue;
+      }
+
       try {
         const replay = transaction.data as
           | { method?: string; path?: string; body?: Record<string, any> }
           | undefined;
 
         if (replay && replay.method && replay.path) {
-          // Shape nuevo (apiOrQueue) — replay directo con Idempotency-Key
-          // para que el backend deduplique si por alguna razón este tx
-          // se replay-eara dos veces (sync corre 2x antes de markSynced).
+          // Shape nuevo (apiOrQueue) — replay directo con Idempotency-Key.
           const cfg = { headers: { 'Idempotency-Key': transaction.id } };
           if (replay.method.toUpperCase() === 'POST') {
             await api.post(replay.path, replay.body || {}, cfg);
@@ -173,18 +247,39 @@ export async function syncOfflineQueue() {
             console.warn(
               `Skipping tx ${transaction.id} — método ${replay.method} no soportado`
             );
+            store.markFailed(transaction.id, `Método ${replay.method} no soportado`);
+            deadFailed.add(key);
             continue;
           }
         } else {
-          // Shape legacy (overrides, etc.) — sigue yendo al endpoint de
-          // auditoría que registra en accessLog server-side.
+          // Shape legacy (overrides, etc.) — endpoint de auditoría server-side.
           await api.post('/api/sync/transaction', transaction);
         }
 
         store.markSynced(transaction.id);
       } catch (err) {
-        console.error(`Failed to sync transaction ${transaction.id}:`, err);
-        // Keep in queue for retry — el próximo tick lo intentará.
+        if (isNetworkError(err)) {
+          // Fallo transitorio → backoff. Bloquea las siguientes ops de la
+          // misma orden hasta que ESTA pase.
+          const attempts = (transaction.attempts || 0) + 1;
+          if (attempts >= MAX_ATTEMPTS) {
+            store.markFailed(transaction.id, errMsg(err));
+            deadFailed.add(key);
+          } else {
+            const delay = Math.min(
+              MAX_BACKOFF_MS,
+              BASE_BACKOFF_MS * 2 ** (transaction.attempts || 0),
+            );
+            store.scheduleRetry(transaction.id, Date.now() + delay, errMsg(err));
+            blocked.add(key);
+          }
+        } else {
+          // 4xx legítimo (validación/permiso) — reintentar no sirve. Failed
+          // VISIBLE + cascada para no aplicar el resto de la cadena.
+          console.error(`Tx ${transaction.id} rechazada por el backend:`, err);
+          store.markFailed(transaction.id, errMsg(err));
+          deadFailed.add(key);
+        }
       }
     }
 
