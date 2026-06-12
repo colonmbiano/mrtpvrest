@@ -3,7 +3,7 @@ const bcrypt     = require('bcryptjs')
 const jwt        = require('jsonwebtoken')
 const crypto     = require('crypto')
 const { z }      = require('zod')
-const prisma     = require('@mrtpvrest/database').prisma
+const { prisma, runWithBypass } = require('@mrtpvrest/database')
 const { authenticate } = require('../middleware/auth.middleware')
 const rateLimit  = require('express-rate-limit')
 const { refreshLimiter, resendVerifyLimiter } = require('../lib/rate-limiters')
@@ -30,10 +30,10 @@ router.post('/login', loginLimiter, async (req, res) => {
     const { email, password } = req.body
     if (!email || !password) return res.status(400).json({ error: 'Email y contrasena requeridos' })
 
-    const user = await prisma.user.findUnique({
+    const user = await runWithBypass(() => prisma.user.findUnique({
       where: { email },
       include: { restaurant: true, tenant: true } // Traemos info de restaurante y tenant
-    })
+    }))
 
     if (!user || !user.isActive) return res.status(401).json({ error: 'Credenciales incorrectas o cuenta inactiva' })
 
@@ -108,7 +108,9 @@ router.get('/my-locations', authenticate, async (req, res) => {
 
 router.get('/me', authenticate, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
+    // Identidad propia (id del token): bypass del tenant-guard — un
+    // SUPER_ADMIN tiene restaurantId null y enforce lo dejaría sin perfil.
+    const user = await runWithBypass(() => prisma.user.findUnique({
       where: { id: req.user.id },
       select: { id: true, name: true, email: true, phone: true, role: true, restaurantId: true,
         // Loyalty es ahora array (una cuenta por restaurant). Devolvemos
@@ -119,7 +121,7 @@ router.get('/me', authenticate, async (req, res) => {
           take: 1,
         },
       },
-    })
+    }))
     const payload = user ? { ...user, loyalty: user.loyalty?.[0] || null } : null
     res.json(payload)
   } catch (error) {
@@ -160,7 +162,7 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
   try {
     // Validaciones previas
     const [emailTaken, slugTaken] = await Promise.all([
-      prisma.user.findUnique({ where: { email: email.toLowerCase() } }),
+      runWithBypass(() => prisma.user.findUnique({ where: { email: email.toLowerCase() } })),
       prisma.tenant.findUnique({ where: { slug } }),
     ])
 
@@ -407,10 +409,10 @@ router.get('/verify-email/:token', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/resend-verification', resendVerifyLimiter, authenticate, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
+    const user = await runWithBypass(() => prisma.user.findUnique({
       where: { id: req.user.id },
       include: { tenant: true }
-    })
+    }))
     if (!user?.tenant) return res.status(404).json({ error: 'Tenant no encontrado' })
     if (user.tenant.emailVerifiedAt) return res.status(400).json({ error: 'El email ya está verificado' })
 
@@ -456,10 +458,10 @@ router.post('/refresh', refreshLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Refresh token expirado', code: 'TOKEN_EXPIRED' })
     }
 
-    const user = await prisma.user.findUnique({
+    const user = await runWithBypass(() => prisma.user.findUnique({
       where: { id: payload.userId },
       select: { id: true, role: true, restaurantId: true, tenantId: true, isActive: true }
-    })
+    }))
     if (!user || !user.isActive) return res.status(401).json({ error: 'Usuario inactivo' })
 
     // Rotar: eliminar el token anterior y emitir uno nuevo
@@ -487,7 +489,7 @@ router.put('/change-password', authenticate, async (req, res) => {
     return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 8 caracteres' })
 
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.user.id } })
+    const user = await runWithBypass(() => prisma.user.findUnique({ where: { id: req.user.id } }))
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
 
     const valid = await bcrypt.compare(currentPassword, user.passwordHash)

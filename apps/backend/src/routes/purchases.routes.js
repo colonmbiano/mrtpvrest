@@ -14,7 +14,7 @@
 //      - CashShift.totalExpenses += totalAmount
 
 const express = require('express');
-const { prisma } = require('@mrtpvrest/database');
+const { prisma, runWithBypass } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware');
 const { requireFeatureFlag } = require('../lib/modules');
 const router = express.Router();
@@ -147,10 +147,12 @@ router.post('/', async (req, res) => {
     // real solo si existe (caso admin web); para empleados del TPV queda null.
     let createdById = null;
     if (userId) {
-      const u = await prisma.user.findUnique({
+      // Resolución de identidad del actor (bypass del tenant-guard: un
+      // SUPER_ADMIN tiene restaurantId null y enforce lo dejaría en null).
+      const u = await runWithBypass(() => prisma.user.findUnique({
         where: { id: userId },
         select: { id: true },
-      });
+      }));
       if (u) createdById = u.id;
     }
 
