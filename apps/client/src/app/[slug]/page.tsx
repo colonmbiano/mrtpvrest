@@ -1,3 +1,4 @@
+import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import { MapPin, Phone, MessageCircle } from 'lucide-react';
 import { MochiTheme } from '@/components/themes/MochiTheme';
@@ -111,6 +112,63 @@ async function fetchLocations(slug: string) {
   } catch {
     return [];
   }
+}
+
+// Metadata dinámico por tenant: title/description/OG/favicon/canonical. Clave
+// para el preview de WhatsApp (necesita imagen y URL absolutas). fetchStore se
+// memoiza por request, así que reusar la misma llamada del render no recobra.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const store = await fetchStore(slug);
+  const name = store?.name ?? 'Tienda';
+  const base = `https://${slug}.mrtpvrest.com`;
+  const description = `Haz tu pedido en línea en ${name}. Rápido y fácil, directo a tu domicilio.`;
+  // store.logo ya es URL absoluta de Cloudinary. WhatsApp no resuelve relativas.
+  const logo = store?.logo || undefined;
+  const ogImages = logo ? [{ url: logo, width: 1200, height: 630, alt: name }] : undefined;
+
+  return {
+    metadataBase: new URL(base),
+    title: `${name} | Pedidos en línea`,
+    description,
+    applicationName: name,
+    icons: logo ? { icon: logo } : undefined,
+    alternates: { canonical: '/' },
+    openGraph: {
+      type: 'website',
+      locale: 'es_MX',
+      url: base,
+      siteName: name,
+      title: `${name} | Pedidos en línea`,
+      description,
+      images: ogImages,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: name,
+      description,
+      images: logo ? [logo] : undefined,
+    },
+  };
+}
+
+// Viewport por tenant: themeColor con el color de marca y zoom habilitado.
+export async function generateViewport({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Viewport> {
+  const { slug } = await params;
+  const store = await fetchStore(slug);
+  return {
+    width: 'device-width',
+    initialScale: 1,
+    themeColor: store?.primaryColor || '#ff5c35',
+  };
 }
 
 export default async function StorefrontPage({
