@@ -45,11 +45,19 @@ async function processTransaction(tx: OfflineTransaction) {
 
   switch (type) {
     case 'CONFIRM_DELIVERY':
-      return api.put(`/api/orders/${data.orderId}/confirm-cash`, data);
-    
+      // DEBE ser el mismo endpoint que la entrega online: este dispara
+      // ensureCashOnDeliveryMovement() (crea el INCOME del corte) y pone
+      // status=DELIVERED respetando el paymentMethod. /confirm-cash NO hace
+      // nada de eso —marcaba el ticket pagado pero dejaba la venta fuera del
+      // corte del repartidor, descuadrándolo por debajo.
+      return api.put(`/api/delivery/${data.driverId}/orders/${data.orderId}/status`, data);
+
     case 'LOG_EXPENSE':
-      return api.post('/api/driver-cash/expenses', data);
-      
+      // El gasto se registra como movimiento del repartidor (mismo endpoint que
+      // la ruta online). /api/driver-cash/expenses no existe → daba 404 y el
+      // gasto offline se perdía.
+      return api.post(`/api/driver-cash/${data.driverId}/movements`, data);
+
     case 'MARK_ERRAND_DONE':
       return api.put(`/api/delivery/errands/${data.id}/done`, data);
 

@@ -330,6 +330,11 @@ export default function DeliveryApp() {
   async function changeStatus(order: any, status: string, method?: string) {
     const data = {
       orderId: order.id, status,
+      // driverId va en el payload para que la reproducción OFFLINE pueda pegarle
+      // al MISMO endpoint que la ruta online (/api/delivery/:driverId/.../status)
+      // — ese es el único que crea el INCOME del corte del repartidor. Sin esto,
+      // la cola caía en /confirm-cash y la entrega quedaba fuera del corte.
+      driverId: driver.id,
       ...(method ? { paymentMethod: method } : {}),
     };
     if (!navigator.onLine) {
