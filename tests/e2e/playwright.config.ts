@@ -37,6 +37,13 @@ export default defineConfig({
       testMatch: '06-role-security.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
+    // 3b) Flujo de meseros (mesa → rondas → cuenta) — usa .auth del setup
+    {
+      name: 'meseros',
+      testMatch: '07-meseros-rondas.spec.ts',
+      dependencies: ['setup'],
+      use: { ...devices['Desktop Chrome'] },
+    },
     // 4) Resto sin dependencias
     {
       name: 'chromium',
