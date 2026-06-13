@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { injectAdminAuth, injectTPVDevice, enterPIN } from './helpers';
+import { injectAdminAuth, injectTPVDevice, enterPIN, getTPVCookie } from './helpers';
 
 const ADMIN_URL = process.env.ADMIN_URL ?? 'http://localhost:3002';
 const TPV_URL   = process.env.TPV_URL   ?? 'http://localhost:3005';
@@ -34,9 +34,12 @@ test.describe('Gestión de Empleados', () => {
 
   test('El empleado creado puede hacer login en TPV', async ({ page }) => {
     await injectTPVDevice(page);
-    await page.goto(TPV_URL);
     await enterPIN(page, TEST_EMPLOYEE_PIN);
-    await expect(page.locator('header').first()).toBeVisible({ timeout: 15_000 });
+
+    // WAITER tiene acceso a /pos; con un workspace el Hub auto-selecciona.
+    await expect(page).toHaveURL(/\/(pos|hub|meseros)/, { timeout: 20_000 });
+    expect(await getTPVCookie(page, 'tpv-session-active')).toBe('true');
+    expect(await getTPVCookie(page, 'tpv-role')).toBe('WAITER');
   });
 
   test('Admin puede eliminar el empleado de prueba', async ({ page, context }) => {

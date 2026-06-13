@@ -23,6 +23,12 @@ test.describe('Meseros — rondas y cuenta', () => {
     await injectTPVDevice(page);
     await page.goto(TPV_URL);
     await enterPIN(page, WAITER_PIN);
+    // Pre-compila la ruta dinámica /meseros/[id] (placeholder "_" de
+    // generateStaticParams). En `next dev` el primer hit la compila
+    // on-demand (~7s); sin este warm-up, el tap a una mesa real corría
+    // contra esa compilación y a veces excedía el timeout del click
+    // (flake). Un goto usa el timeout de navegación (30s), no el del click.
+    await page.goto(`${TPV_URL}/meseros/_/`);
     // El WAITER puede aterrizar en / (modo préstamo) o en /meseros según
     // deviceRole; navegamos explícito a la sala para no depender de eso.
     await page.goto(`${TPV_URL}/meseros`);

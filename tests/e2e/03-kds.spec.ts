@@ -1,28 +1,44 @@
 import { test, expect } from '@playwright/test';
 
-const TPV_URL = process.env.TPV_URL ?? 'http://localhost:3005';
+// El KDS es una app independiente (apps/kds, puerto 3009) desde que /kds
+// salió del TPV. En web usa basePath '/kds' (next.config.mjs). Flujo de
+// vinculación: login admin → sucursal → estaciones → KdsScreen.
+const KDS_URL = process.env.KDS_URL ?? 'http://localhost:3009/kds/';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? '';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
 
 test.describe('KDS (Kitchen Display System)', () => {
-  test('KDS carga y muestra órdenes activas o mensaje vacío', async ({ page }) => {
-    await page.goto(`${TPV_URL}/kds`);
-
-    // Page must load without crashing (no unhandled JS error)
-    let consoleErrors: string[] = [];
+  test('KDS se vincula como pantalla de cocina y carga el tablero', async ({ page }) => {
+    const consoleErrors: string[] = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
-    await page.waitForLoadState('domcontentloaded');
+    await page.goto(KDS_URL);
 
-    // Any of these outcomes is valid:
-    // 1. Proper KDS with station selector
-    // 2. Empty kitchen: "Cocina al día" / "Sin pedidos pendientes"
-    // 3. Auth error: needs kitchen session (acceptable — test verifies page renders)
-    const validStates = page
-      .getByText(/Cocina al día|Sin pedidos pendientes|cocina|COCINA|BARRA|FREIDORA|sesion de cocina/i)
-      .first();
+    // Paso 1: login de admin
+    await expect(page.getByText(/inicia sesión como admin/i)).toBeVisible({ timeout: 15_000 });
+    await page.locator('input[type="email"]').fill(ADMIN_EMAIL);
+    await page.locator('input[type="password"]').fill(ADMIN_PASSWORD);
+    await page.getByRole('button', { name: /continuar/i }).click();
 
-    await expect(validStates).toBeVisible({ timeout: 15_000 });
+    // Paso 2: elegir sucursal (el seed tiene al menos una activa)
+    await expect(page.getByText(/elige sucursal/i)).toBeVisible({ timeout: 15_000 });
+    // Los botones de sucursal contienen <p> (nombre + restaurante);
+    // el botón "Atrás" solo tiene un icono.
+    await page.locator('button', { has: page.locator('p') }).first().click();
+
+    // Paso 3: estaciones — "Cocina central" viene preseleccionado
+    await expect(page.getByText(/qué muestra esta pantalla/i)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: /vincular pantalla/i }).click();
+
+    // KdsScreen montado: validamos el chrome del tablero (tab "Pedidos"),
+    // NO el estado vacío. La cocina puede tener comandas si el spec 07
+    // (meseros → envía a cocina) ya corrió contra el mismo restaurante
+    // sembrado; "sin pedidos pendientes" sería frágil por ese cruce.
+    await expect(
+      page.getByRole('button', { name: /pedidos/i }).first()
+    ).toBeVisible({ timeout: 20_000 });
 
     // No unhandled React/JS errors should have fired
     const fatalErrors = consoleErrors.filter(

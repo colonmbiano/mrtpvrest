@@ -16,9 +16,11 @@ const gateEmployees = requireModule(MODULES.MODULE_EMPLOYEES);
 
 // Rate-limit para login con PIN: max 10 intentos / 15 min por IP+location.
 // (PIN es 4 dígitos = 10000 combinaciones; sin esto, fuerza bruta tarda < 1min)
+// PIN_LOGIN_RATE_MAX solo lo setea el entorno E2E de CI: toda la suite
+// Playwright loguea desde la misma IP+location y excedería los 10 intentos.
 const pinLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: Number(process.env.PIN_LOGIN_RATE_MAX) || 10,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => `${req.ip}:${req.locationId || 'no-loc'}`,

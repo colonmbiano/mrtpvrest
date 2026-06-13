@@ -7,6 +7,10 @@ export function generateStaticParams() {
   return [{ id: "_" }];
 }
 
-export default function Page({ params }: { params: { id: string } }) {
-  return <OrdenClient params={params} />;
+// Next 16: `params` es Promise — await en el server wrapper y pasar el id
+// resuelto (igual que ../page.tsx). Sin esto la navegación client deja
+// params.id undefined.
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <OrdenClient params={{ id }} />;
 }

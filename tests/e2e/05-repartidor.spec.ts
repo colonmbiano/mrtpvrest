@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { injectAdminAuth, injectTPVDevice, enterPIN } from './helpers';
+import { injectAdminAuth, injectTPVDevice, enterPIN, getTPVCookie } from './helpers';
 
 const ADMIN_URL = process.env.ADMIN_URL ?? 'http://localhost:3002';
 const TPV_URL   = process.env.TPV_URL   ?? 'http://localhost:3005';
@@ -31,9 +31,13 @@ test.describe('Gestión de Repartidores', () => {
 
   test('El repartidor puede hacer login en TPV', async ({ page }) => {
     await injectTPVDevice(page);
-    await page.goto(TPV_URL);
     await enterPIN(page, TEST_DRIVER_PIN);
-    await expect(page.locator('header').first()).toBeVisible({ timeout: 15_000 });
+
+    // DELIVERY no tiene acceso a /pos (middleware) — el Hub lo retiene,
+    // pero la sesión queda activa con su rol.
+    expect(await getTPVCookie(page, 'tpv-session-active')).toBe('true');
+    expect(await getTPVCookie(page, 'tpv-role')).toBe('DELIVERY');
+    await expect(page).not.toHaveURL(/\/locked|\/setup/);
   });
 
   test('Admin puede eliminar el repartidor de prueba', async ({ page, context }) => {
