@@ -39,6 +39,8 @@ interface Shift {
   expectedCash: number | null;
   notes?: string | null;
   expenses?: ShiftExpense[];
+  // Cuántos meseros/staff quedaron cerrados (clock-out) junto con la caja.
+  staffClockedOut?: number;
 }
 
 const fmtMoney = (n: number) =>
@@ -256,6 +258,11 @@ export default function CierreTurno() {
             </div>
             <h1 className="text-2xl font-black tracking-tight">Turno cerrado</h1>
             <p className="text-sm text-white/55">{printMsg || 'Generando ticket de corte…'}</p>
+            {typeof cs.staffClockedOut === 'number' && cs.staffClockedOut > 0 && (
+              <p className="text-xs font-bold text-emerald-300/80">
+                {cs.staffClockedOut} {cs.staffClockedOut === 1 ? 'mesero cerrado' : 'meseros cerrados'} con la caja
+              </p>
+            )}
           </div>
 
           <div className="rounded-3xl p-6 flex flex-col gap-3 bg-white/5 backdrop-blur-md border border-white/10">
