@@ -25,6 +25,33 @@ export interface TableLite {
   zone?: { id: string; name: string } | null;
 }
 
+// Caché local de mesas (stale-while-revalidate): se pintan al instante las
+// últimas conocidas y se revalida en segundo plano. El estado libre/ocupado
+// puede venir un momento desfasado, pero el backend lo autocorrige al cobrar
+// (mesa ocupada → une la ronda al ticket existente).
+const TABLES_CACHE_KEY = "tpv-tables-cache-v1";
+
+function readTablesCache(): TableLite[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(TABLES_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as TableLite[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeTablesCache(data: TableLite[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TABLES_CACHE_KEY, JSON.stringify(data));
+  } catch {
+    /* best-effort */
+  }
+}
+
 interface TablePickerModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -44,29 +71,35 @@ export default function TablePickerModal({
   const [error, setError]     = useState("");
   const [showOccupied, setShowOccupied] = useState(initialShowOccupied);
 
-  async function fetchTables() {
-    let cancelled = false;
-    setLoading(true);
+  async function fetchTables(hasCache: boolean) {
+    // Si ya pintamos desde caché, no mostramos spinner: revalidamos callado.
+    if (!hasCache) setLoading(true);
     setError("");
     try {
       const { data } = await api.get<TableLite[]>("/api/tables");
-      if (cancelled) return;
-      setTables(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setTables(list);
+      writeTablesCache(list);
     } catch (err) {
       const e = err as { response?: { data?: { error?: string } } };
-      if (!cancelled) setError(e.response?.data?.error || "No pudimos cargar las mesas");
+      // Con caché en pantalla no rompemos la UI por un fallo de revalidación.
+      if (!hasCache) setError(e.response?.data?.error || "No pudimos cargar las mesas");
     } finally {
-      if (!cancelled) setLoading(false);
+      setLoading(false);
     }
-    return () => { cancelled = true; };
   }
 
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
-    // Arranque diferido (ver impresoras): evita set-state-in-effect del
-    // setLoading(true) síncrono de fetchTables.
-    queueMicrotask(() => { if (!cancelled) fetchTables(); });
+    // Pinta al instante las mesas cacheadas (sin spinner) y revalida detrás.
+    const cached = readTablesCache();
+    if (cached) {
+      setTables(cached);
+      setLoading(false);
+    }
+    // Arranque diferido (ver impresoras): evita set-state-in-effect síncrono.
+    queueMicrotask(() => { if (!cancelled) fetchTables(!!cached); });
     return () => { cancelled = true; };
   }, [isOpen]);
 
