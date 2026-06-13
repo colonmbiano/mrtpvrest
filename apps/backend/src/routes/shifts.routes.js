@@ -187,22 +187,45 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
       totalExpenses,
     });
 
-    const closed = await prisma.cashShift.update({
-      where: { id: shiftId },
-      data: {
-        isOpen: false,
-        closedAt: new Date(),
-        closedById: closedByEmployeeId,
-        closingFloat: closingFloat || 0,
-        notes: notes || null,
-        expectedCash,
-        ...totals,
-        totalExpenses,
-        totalSales,
-        ordersCount: orders.length,
-      },
-      include: { expenses: true }
+    const now = new Date();
+
+    // Clock-out automático: cerrar el turno de caja CIERRA también a todo el
+    // staff con turno laboral abierto en la sucursal (meseros, cajero, etc.).
+    // Es la "conexión directa" pedida: un solo botón de cierre apaga la caja
+    // y saca a todos los meseros de un jalón. EmployeeShift no tiene
+    // restaurantId (no es SCOPED_MODEL), así que filtramos por los empleados
+    // de esta sucursal — mismo patrón que /staff-active.
+    const locationStaff = await prisma.employee.findMany({
+      where: { locationId: req.locationId },
+      select: { id: true },
     });
+    const staffIds = locationStaff.map((e) => e.id);
+
+    // El cierre de caja y el clock-out masivo van en una sola $transaction:
+    // o cierra todo o no cierra nada (no dejar caja cerrada con meseros vivos).
+    const [closed, clockOut] = await prisma.$transaction([
+      prisma.cashShift.update({
+        where: { id: shiftId },
+        data: {
+          isOpen: false,
+          closedAt: now,
+          closedById: closedByEmployeeId,
+          closingFloat: closingFloat || 0,
+          notes: notes || null,
+          expectedCash,
+          ...totals,
+          totalExpenses,
+          totalSales,
+          ordersCount: orders.length,
+        },
+        include: { expenses: true }
+      }),
+      prisma.employeeShift.updateMany({
+        where: { employeeId: { in: staffIds }, endAt: null },
+        data: { endAt: now },
+      }),
+    ]);
+    const staffClockedOut = clockOut.count;
     // Auditoría best-effort del cierre de caja (quién, cuánto, cuántas órdenes).
     audit.record(req, audit.AUDIT_EVENTS.SHIFT_CLOSE, {
       resource: `cashShift:${closed.id}`,
@@ -213,6 +236,7 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
         totalSales: closed.totalSales,
         totalExpenses: closed.totalExpenses,
         ordersCount: closed.ordersCount,
+        staffClockedOut,
       },
     }).catch(() => {});
 
@@ -221,9 +245,9 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
     // endpoint /reveal con PIN), pero lo ocultamos en la respuesta al cajero.
     // El ticket de cierre que imprime el TPV refleja esto: sin arqueo si es ciego.
     if (closed.blindClose) {
-      res.json({ ...closed, expectedCash: null });
+      res.json({ ...closed, expectedCash: null, staffClockedOut });
     } else {
-      res.json(closed);
+      res.json({ ...closed, staffClockedOut });
     }
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
