@@ -8,7 +8,7 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
 
 test.describe('KDS (Kitchen Display System)', () => {
-  test('KDS se vincula como pantalla de cocina y muestra la vista vacía', async ({ page }) => {
+  test('KDS se vincula como pantalla de cocina y carga el tablero', async ({ page }) => {
     const consoleErrors: string[] = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -32,9 +32,12 @@ test.describe('KDS (Kitchen Display System)', () => {
     await expect(page.getByText(/qué muestra esta pantalla/i)).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: /vincular pantalla/i }).click();
 
-    // KdsScreen: sin órdenes en el seed → estado vacío de la estación
+    // KdsScreen montado: validamos el chrome del tablero (tab "Pedidos"),
+    // NO el estado vacío. La cocina puede tener comandas si el spec 07
+    // (meseros → envía a cocina) ya corrió contra el mismo restaurante
+    // sembrado; "sin pedidos pendientes" sería frágil por ese cruce.
     await expect(
-      page.getByText(/sin pedidos pendientes/i).first()
+      page.getByRole('button', { name: /pedidos/i }).first()
     ).toBeVisible({ timeout: 20_000 });
 
     // No unhandled React/JS errors should have fired
