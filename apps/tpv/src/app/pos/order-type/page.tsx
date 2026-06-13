@@ -111,10 +111,11 @@ export default function OrderTypePage() {
     [openOrders],
   );
 
-  // Tap sobre una cuenta abierta → entrar directo (set ticket + activeOrder +
-  // navegar al menú para agregar ronda o cobrar). Mismo patrón que
+  // Entra a una cuenta abierta (set ticket + activeOrder + navegar al menú).
+  // `pendingAction` deja agendada una acción que el layout del menú ejecuta al
+  // montar: "print" reimprime la cuenta, "pay" abre el cobro. Mismo patrón que
   // openOrderInCatalog del layout del menú.
-  const handleOpenAccount = (id: string) => {
+  const enterAccount = (id: string, pendingAction: "pay" | "print" | null = null) => {
     const o = openOrders.find((x: any) => String(x.id) === id);
     if (!o) return;
     const rawType = ORDER_TYPE_OF(o.orderType);
@@ -138,8 +139,19 @@ export default function OrderTypePage() {
       o.tableId || o.table?.id || "",
       o.orderNumber ?? null,
     );
+    useActiveOrderStore.getState().setPendingAction(pendingAction);
     router.push("/pos/menu");
   };
+
+  // Editar → abre la cuenta para agregar productos.
+  const handleOpenAccount = (id: string) => enterAccount(id, null);
+  // Imprimir / Cobrar → entran a la cuenta y el menú dispara la acción al montar.
+  const handleReprintAccount = (id: string) => enterAccount(id, "print");
+  const handleChargeAccount = (id: string) => enterAccount(id, "pay");
+
+  // Meseros (WAITER) operan en modo préstamo: sin cobro directo (igual que el
+  // hideMoney del drawer de tickets en el menú).
+  const hideMoney = employee?.role === "WAITER";
 
   const handlePickType = (type: ExtendedOrderType) => {
     if (type === "DINE_IN") {
@@ -260,6 +272,9 @@ export default function OrderTypePage() {
         onSelect={handlePickType}
         onClose={handleLogout}
         onOpenAccount={handleOpenAccount}
+        onReprintAccount={handleReprintAccount}
+        onChargeAccount={handleChargeAccount}
+        hideMoney={hideMoney}
         openAccounts={openAccounts}
         onShiftClose={goShiftClose}
         onExpenses={goExpenses}

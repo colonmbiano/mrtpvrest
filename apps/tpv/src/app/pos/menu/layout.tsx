@@ -128,6 +128,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     queueMicrotask(() => setMobileView("menu"));
   }, [editingIndex]);
   const activeOrderId = useActiveOrderStore((s) => s.activeOrderId);
+  // Intención agendada desde la pantalla de inicio (Imprimir/Cobrar): el layout
+  // la consume una vez al montar con la cuenta ya activa (ver effect abajo).
+  const pendingAction = useActiveOrderStore((s) => s.pendingAction);
+  const pendingActionFiredRef = useRef(false);
   const searchQuery = useUIStore((s) => s.searchQuery);
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
   const itemCount = activeTicket.items.reduce((acc, i) => acc + i.quantity, 0);
@@ -438,6 +442,26 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     setShowOrders(false);
     useUIStore.getState().setIsOrdersOpen(false);
     setPayOrder(full);
+  };
+
+  // FASE 6 · MODO PRÉSTAMO DE CAJA
+  // Cuando un mesero usa la tablet principal, ocultamos las funciones de
+  // dinero (Cobrar, abrir cajón implícito por payment flow). El mesero
+  // SÍ puede tomar pedidos, ver tickets abiertos y reimprimir comandas
+  // — solo el cobro queda gateado al rol de cajero.
+  const isLoanMode = currentEmployee?.role === "WAITER";
+
+  // Wrapper que respeta el modo préstamo. Si un WAITER intenta abrir
+  // payment (ej. tap accidental antes de que la UI se actualice) lo
+  // bloqueamos en el layer de handler para defensa en profundidad.
+  // Declarado aquí (antes de handleChargeActiveOrder y del effect que dispara
+  // la intención de la pantalla de inicio) para no quedar como forward-ref.
+  const handleOpenPaymentGuarded = async (o: any) => {
+    if (isLoanMode) {
+      toast.error("Cobro no permitido en modo préstamo de caja");
+      return;
+    }
+    await handleOpenPayment(o);
   };
 
   // Mapea items raw del backend al shape de printer-tcp. Resuelve
@@ -786,6 +810,26 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     await handleOpenPaymentGuarded(order);
   };
 
+  // Acción agendada desde la pantalla de inicio (OrderTypeSelector): al entrar a
+  // una cuenta con "Imprimir" o "Cobrar", el layout la ejecuta una sola vez en
+  // cuanto la cuenta está activa. Para "print" esperamos a que las impresoras
+  // LAN estén descubiertas (si no, no hay CASHIER a la cual mandar la cuenta).
+  // Se consume de forma atómica + ref para no repetirse en cada render/poll.
+  useEffect(() => {
+    if (pendingActionFiredRef.current) return;
+    if (!pendingAction || !activeOrderId) return;
+    if (pendingAction === "print" && printers.length === 0) return;
+    pendingActionFiredRef.current = true;
+    const action = useActiveOrderStore.getState().consumePendingAction();
+    // Diferido a microtask: estas acciones disparan setState (PaymentModal /
+    // toasts) y no deben correr síncronas dentro del effect.
+    queueMicrotask(() => {
+      if (action === "pay") void handleChargeActiveOrder();
+      else if (action === "print") void handleReprintActiveReceipt();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAction, activeOrderId, printers.length]);
+
   const handleConfirmActiveSplit = async (itemIds: string[]) => {
     if (!splitOrder) return;
     try {
@@ -1019,24 +1063,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       }
     }
   }, [mounted, currentEmployee, router]);
-
-  // FASE 6 · MODO PRÉSTAMO DE CAJA
-  // Cuando un mesero usa la tablet principal, ocultamos las funciones de
-  // dinero (Cobrar, abrir cajón implícito por payment flow). El mesero
-  // SÍ puede tomar pedidos, ver tickets abiertos y reimprimir comandas
-  // — solo el cobro queda gateado al rol de cajero.
-  const isLoanMode = currentEmployee?.role === "WAITER";
-
-  // Wrapper que respeta el modo préstamo. Si un WAITER intenta abrir
-  // payment (ej. tap accidental antes de que la UI se actualice) lo
-  // bloqueamos en el layer de handler para defensa en profundidad.
-  const handleOpenPaymentGuarded = async (o: any) => {
-    if (isLoanMode) {
-      toast.error("Cobro no permitido en modo préstamo de caja");
-      return;
-    }
-    await handleOpenPayment(o);
-  };
 
   // Abrir cajón monedero: dispara el pulso ESC/POS a la(s) impresora(s)
   // CASHIER (el cajón va físicamente conectado a la de mostrador).

@@ -4,11 +4,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Bike,
-  ChevronRight,
   Coins,
   Globe,
   LogOut,
   Menu,
+  Pencil,
   Phone,
   Receipt,
   Settings,
@@ -17,6 +17,7 @@ import {
   Users,
   Utensils,
   Wallet,
+  Zap,
 } from "lucide-react";
 import type { OrderType } from "@/components/tpv/TicketPanel";
 import UserBadge from "@/components/UserBadge";
@@ -55,8 +56,14 @@ const WEB_ACCENT = "#5e6ad2";
 interface OrderTypeSelectorProps {
   onSelect: (type: ExtendedOrderType) => void;
   onClose?: () => void;
-  /** Tap sobre una cuenta abierta → entrar directo a ella. */
+  /** "Editar" — entra a la cuenta en el menú para agregar productos. */
   onOpenAccount?: (id: string) => void;
+  /** "Imprimir" — manda la cuenta a la impresora CASHIER, directo. */
+  onReprintAccount?: (id: string) => void;
+  /** "Cobrar" — abre el pago de esa cuenta, directo. */
+  onChargeAccount?: (id: string) => void;
+  /** Oculta el botón "Cobrar" (modo préstamo / meseros). */
+  hideMoney?: boolean;
   onShiftClose?: () => void;
   onExpenses?: () => void;
   onConfig?: () => void;
@@ -131,6 +138,9 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onSelect,
   onClose,
   onOpenAccount,
+  onReprintAccount,
+  onChargeAccount,
+  hideMoney = false,
   onShiftClose,
   onExpenses,
   onConfig,
@@ -346,18 +356,17 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   // lateral + badge WEB) para detectarlos de un vistazo.
                   const iconAccent = acc.isWeb ? WEB_ACCENT : meta.accent;
                   return (
-                    <button
+                    <div
                       key={acc.id}
-                      type="button"
-                      onClick={() => onOpenAccount?.(acc.id)}
-                      aria-label={`Abrir cuenta de ${title} por $${acc.total.toFixed(2)}${acc.isWeb ? " (pedido web)" : ""}`}
-                      className="group relative flex items-center gap-3 border-b border-white/[0.06] py-2.5 pl-3 pr-2 text-left transition-colors last:border-0 hover:bg-white/[0.03] active:scale-[0.995]"
+                      aria-label={`Cuenta de ${title} por $${acc.total.toFixed(2)}${acc.isWeb ? " (pedido web)" : ""}`}
+                      className="relative flex flex-col gap-2 border-b border-white/[0.06] py-2.5 pl-3 pr-2 text-left transition-colors last:border-0"
                       style={
                         acc.isWeb
                           ? { boxShadow: `inset 3px 0 0 ${WEB_ACCENT}`, backgroundColor: `${WEB_ACCENT}0d` }
                           : undefined
                       }
                     >
+                    <div className="flex items-center gap-3">
                       <span
                         className="h-2 w-2 shrink-0 rounded-full"
                         style={{ backgroundColor: dotFor(acc.status) }}
@@ -446,8 +455,40 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       <span className="w-[74px] shrink-0 text-right text-[15px] font-black tabular-nums text-white">
                         ${acc.total.toFixed(2)}
                       </span>
-                      <ChevronRight size={16} className="shrink-0 text-white/35" />
-                    </button>
+                    </div>
+
+                    {/* Acciones por cuenta — Editar / Imprimir / Cobrar — sin
+                        tener que abrir el ticket en el editor (el caso más común
+                        en caja). "Cobrar" se oculta con hideMoney (préstamo). */}
+                    <div className="flex items-stretch gap-2">
+                      <button
+                        type="button"
+                        aria-label={`Editar cuenta de ${title}`}
+                        onClick={() => onOpenAccount?.(acc.id)}
+                        className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95 active:text-white"
+                      >
+                        <Pencil size={15} strokeWidth={2.5} /> Editar
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Imprimir cuenta de ${title}`}
+                        onClick={() => onReprintAccount?.(acc.id)}
+                        className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95 active:text-white"
+                      >
+                        <Receipt size={15} strokeWidth={2.5} /> Imprimir
+                      </button>
+                      {!hideMoney && (
+                        <button
+                          type="button"
+                          aria-label={`Cobrar cuenta de ${title}`}
+                          onClick={() => onChargeAccount?.(acc.id)}
+                          className="flex-[1.3] h-10 rounded-xl bg-[#88d66c] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                        >
+                          <Zap size={15} strokeWidth={2.8} /> Cobrar
+                        </button>
+                      )}
+                    </div>
+                    </div>
                   );
                 })}
               </div>

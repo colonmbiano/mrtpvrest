@@ -12,6 +12,12 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
+// Acción diferida que la pantalla de inicio (OrderTypeSelector) deja agendada
+// al entrar a una cuenta para que el layout del menú la ejecute al montar:
+// "pay" → abre el cobro, "print" → reimprime la cuenta. Es efímera (vive solo
+// en memoria, sobrevive la navegación cliente entre rutas pero no recargas).
+export type PendingAction = "pay" | "print" | null;
+
 interface ActiveOrderState {
   activeOrderId: string | null;
   activeTableId: string | null;
@@ -21,6 +27,9 @@ interface ActiveOrderState {
   // observa para recargar `previousItems` y reflejar los productos recién
   // guardados sin desincronizarse. NO se persiste (es señal efímera de sesión).
   roundsRevision: number;
+  // Intención pendiente al abrir una cuenta desde la pantalla de inicio
+  // (Imprimir / Cobrar). NO se persiste: se consume una sola vez en el menú.
+  pendingAction: PendingAction;
 
   setActiveOrder: (
     orderId: string,
@@ -28,16 +37,20 @@ interface ActiveOrderState {
     orderNumber?: string | null
   ) => void;
   bumpRoundsRevision: () => void;
+  setPendingAction: (action: PendingAction) => void;
+  /** Lee y limpia la intención pendiente (consumo atómico, dispara una vez). */
+  consumePendingAction: () => PendingAction;
   clear: () => void;
 }
 
 export const useActiveOrderStore = create<ActiveOrderState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       activeOrderId: null,
       activeTableId: null,
       activeOrderNumber: null,
       roundsRevision: 0,
+      pendingAction: null,
 
       setActiveOrder: (orderId, tableId, orderNumber = null) =>
         set({
@@ -49,11 +62,20 @@ export const useActiveOrderStore = create<ActiveOrderState>()(
       bumpRoundsRevision: () =>
         set((state) => ({ roundsRevision: state.roundsRevision + 1 })),
 
+      setPendingAction: (action) => set({ pendingAction: action }),
+
+      consumePendingAction: () => {
+        const action = get().pendingAction;
+        if (action) set({ pendingAction: null });
+        return action;
+      },
+
       clear: () =>
         set({
           activeOrderId: null,
           activeTableId: null,
           activeOrderNumber: null,
+          pendingAction: null,
         }),
     }),
     {
