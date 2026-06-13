@@ -6,7 +6,7 @@ import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
-import { COMPLEMENT_MODIFIER_PREFIX, VARIANT_MODIFIER_PREFIX } from "@/lib/modifiers";
+import { buildOrderItemsPayload } from "@/lib/modifiers";
 import { useAuthStore } from "@/store/authStore";
 import { useTicketStore, type CartItem } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
@@ -62,6 +62,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     !!employee?.permissions?.includes("apply_discount");
 
   const { activeOrderId, activeOrderNumber, setActiveOrder, clear: clearActiveOrder } = useActiveOrderStore();
+  // Se incrementa cuando una ronda se guarda desde fuera (ej. "Imprimir cuenta"
+  // en el layout): recargamos el historial para reflejar los nuevos productos.
+  const roundsRevision = useActiveOrderStore((s) => s.roundsRevision);
 
   const [previousItems, setPreviousItems] = useState<any[]>([]);
   const [_loadingHistory, setLoadingHistory] = useState(false);
@@ -98,7 +101,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       })();
     });
     return () => { cancelled = true; };
-  }, [activeOrderId]);
+  }, [activeOrderId, roundsRevision]);
 
   // ── Edición de líneas de rondas anteriores (ya guardadas en la orden) ──────
   // El backend permite cambiar nota/cantidad y borrar una línea mientras la
@@ -361,44 +364,12 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       };
     });
 
-  const buildItemsPayload = () =>
-    ticket.items.map((item) => {
-      const modifiers = item.modifiers || [];
-      const complementIds = modifiers
-        .map((m) =>
-          m.id.startsWith(COMPLEMENT_MODIFIER_PREFIX)
-            ? m.id.slice(COMPLEMENT_MODIFIER_PREFIX.length)
-            : null
-        )
-        .filter((id): id is string => Boolean(id));
-      const variantIds = modifiers
-        .map((m) =>
-          m.id.startsWith(VARIANT_MODIFIER_PREFIX)
-            ? m.id.slice(VARIANT_MODIFIER_PREFIX.length)
-            : null
-        )
-        .filter((id): id is string => Boolean(id));
-      return {
-        menuItemId: item.menuItemId,
-        variantId: item.variantId ?? null,
-        quantity: item.quantity,
-        notes: item.notes || "",
-        seatNumber: item.seatNumber ?? null,
-        // Variante single-select del configurador. Sin esto el backend
-        // re-calculaba el precio con el item base y la variante elegida
-        // (p.ej. "Doble carne") nunca llegaba al total guardado en DB.
-        variantId: item.variantId ?? null,
-        modifiers: modifiers
-          .filter(
-            (m) =>
-              !m.id.startsWith(COMPLEMENT_MODIFIER_PREFIX) &&
-              !m.id.startsWith(VARIANT_MODIFIER_PREFIX),
-          )
-          .map((m) => ({ modifierId: m.id })),
-        complements: complementIds.map((complementId) => ({ complementId })),
-        variants: variantIds.map((variantId) => ({ variantId })),
-      };
-    });
+  // Payload de items para POST /tpv y /:id/items. Usa el builder compartido
+  // (mismo shape que el guardado automático al imprimir cuenta). La variante
+  // single-select (item.variantId) y las variantes/complementos prefijados en
+  // los modificadores se separan dentro del helper. El precio nunca se manda:
+  // el backend lo re-lee del catálogo.
+  const buildItemsPayload = () => buildOrderItemsPayload(ticket.items);
 
   // Imprime el ticket de cocina de ANULACIÓN para un producto que se quita de
   // una orden ya enviada — avisa a cocina que ese platillo ya no va. Best-effort:

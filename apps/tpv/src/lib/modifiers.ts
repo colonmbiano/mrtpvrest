@@ -140,6 +140,31 @@ export function flattenSelections(
 // Separa las selecciones aplanadas en las tres colecciones que espera el
 // backend (`POST /api/orders/tpv` y `/:id/rounds`): modificadores reales,
 // complementos y variantes multi-select (estas dos viajan con id prefijado).
+// Item mínimo que el backend necesita para reconstruir una línea de orden.
+// El precio NUNCA se manda: el servidor lo re-lee del catálogo (anti-manipulación).
+export interface OrderItemPayloadInput {
+  menuItemId: string;
+  variantId?: string | null;
+  quantity: number;
+  notes?: string | null;
+  seatNumber?: number | null;
+  modifiers?: ModifierSelection[];
+}
+
+// Construye el payload de items para POST /api/orders/tpv y /:id/items.
+// Centralizado aquí para que el envío a cocina (SidebarTicket) y el guardado
+// automático al imprimir cuenta (layout) usen exactamente el mismo shape.
+export function buildOrderItemsPayload(items: OrderItemPayloadInput[]) {
+  return items.map((item) => ({
+    menuItemId: item.menuItemId,
+    variantId: item.variantId ?? null,
+    quantity: item.quantity,
+    notes: item.notes || "",
+    seatNumber: item.seatNumber ?? null,
+    ...splitModifierSelections(item.modifiers || []),
+  }));
+}
+
 export function splitModifierSelections(modifiers: ModifierSelection[]): {
   modifiers: { modifierId: string }[];
   complements: { complementId: string }[];
