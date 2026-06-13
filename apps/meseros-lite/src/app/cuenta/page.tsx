@@ -136,6 +136,11 @@ export default function CuentaPage() {
   }
   const groupedList = Array.from(grouped.values()).sort((a, b) => a.sort - b.sort);
 
+  // Resumen para revisar de un vistazo que no falte nada: cuantos productos
+  // (sumando cantidades) y cuantas rondas lleva la cuenta.
+  const itemCount = (order?.items ?? []).reduce((sum, item) => sum + item.quantity, 0);
+  const roundCount = groupedList.length;
+
   return (
     <section className="min-h-screen bg-[#0a0a0c] px-5 py-5 pb-40 text-neutral-200">
       <header className="mb-5 flex items-center justify-between gap-3">
@@ -205,6 +210,18 @@ export default function CuentaPage() {
             <p className="text-sm font-black text-neutral-300">{order.orderNumber}</p>
           </div>
 
+          {/* Resumen rapido para revisar que no falte nada en la mesa. */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-neutral-800 bg-[#121214] p-3">
+              <p className="text-xs font-black uppercase text-neutral-500">Productos</p>
+              <p className="text-2xl font-black text-neutral-100">{itemCount}</p>
+            </div>
+            <div className="rounded-lg border border-neutral-800 bg-[#121214] p-3">
+              <p className="text-xs font-black uppercase text-neutral-500">Rondas</p>
+              <p className="text-2xl font-black text-neutral-100">{roundCount}</p>
+            </div>
+          </div>
+
           {groupedList.map((group) => (
             <section key={group.label}>
               <h2 className="mb-2 text-sm font-black uppercase tracking-wide text-neutral-500">
@@ -242,9 +259,21 @@ export default function CuentaPage() {
             </section>
           ))}
 
-          <div className="flex items-center justify-between rounded-lg border border-[#ffb84d] bg-[#121214] px-4 py-4">
-            <p className="text-lg font-black uppercase text-[#ffb84d]">Total</p>
-            <p className="text-2xl font-black text-neutral-100">{money(order.total)}</p>
+          <div className="grid gap-2 rounded-lg border border-[#ffb84d] bg-[#121214] px-4 py-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-black uppercase text-neutral-400">Subtotal</p>
+              <p className="text-base font-black text-neutral-200">{money(order.subtotal)}</p>
+            </div>
+            {order.discount > 0 && (
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-black uppercase text-neutral-400">Descuento</p>
+                <p className="text-base font-black text-[#88d66c]">-{money(order.discount)}</p>
+              </div>
+            )}
+            <div className="mt-1 flex items-center justify-between border-t border-neutral-800 pt-3">
+              <p className="text-lg font-black uppercase text-[#ffb84d]">Total</p>
+              <p className="text-2xl font-black text-neutral-100">{money(order.total)}</p>
+            </div>
           </div>
         </div>
       )}
