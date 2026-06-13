@@ -28,5 +28,5 @@ export default function HomePage() {
     return <LoginScreen onSuccess={() => setHasSession(true)} />;
   }
 
-  return <KdsScreen onLogout={() => setHasSession(false)} />;
+  return <KdsScreen />;
 }

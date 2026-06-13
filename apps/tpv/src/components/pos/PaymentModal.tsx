@@ -13,8 +13,10 @@ import {
   X,
   Bike,
   Delete,
+  Tag,
 } from "lucide-react";
 import api from "@/lib/api";
+import DiscountModal from "@/components/pos/DiscountModal";
 
 /**
  * PaymentModal — diseño operativo rewrite con división de cuenta (Fase 12).
@@ -63,6 +65,11 @@ interface PaymentModalProps {
   total: number;
   items: PaymentItem[];
   discount?: number;
+  requiresDiscountOverride?: boolean;
+  onApplyDiscount?: (
+    type: "percent" | "fixed",
+    value: number,
+  ) => void | Promise<void>;
   /** Sugerencias de propina en porcentaje. Default [10,15,20]. */
   tipSuggestions?: number[];
   /** Tipo de orden — necesario para gatear la asignación de repartidor
@@ -109,6 +116,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   total,
   items,
   discount = 0,
+  requiresDiscountOverride = false,
+  onApplyDiscount,
   tipSuggestions,
   orderType,
   onConfirm,
@@ -125,6 +134,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   // sugerido/auto (= grandTotal). Se resetea junto con cashReceived.
   const [cashEntry, setCashEntry] = useState<string>("");
   const [equalParts, setEqualParts] = useState<number>(2);
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [discountSaving, setDiscountSaving] = useState(false);
 
   // BUG-24: asignación de repartidor inline cuando es DELIVERY.
   // Cargamos la lista de repartidores activos cuando el modal abre con
@@ -287,7 +298,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     : undefined;
 
   // Gate de confirmación: DELIVERY exige repartidor seleccionado.
-  const canConfirm = !isDelivery || Boolean(driverId);
+  const canConfirm = (!isDelivery || Boolean(driverId)) && !discountSaving;
 
   const handleConfirm = () => {
     if (!canConfirm) return;
@@ -328,6 +339,21 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       }
     } else {
       onConfirm(method, tipPayload, driverId);
+    }
+  };
+
+  const handleApplyDiscount = async (
+    type: "percent" | "fixed",
+    value: number,
+  ) => {
+    if (!onApplyDiscount) return;
+    setDiscountSaving(true);
+    try {
+      await onApplyDiscount(type, value);
+    } catch {
+      // El caller muestra el error; mantenemos abierto el modal de pago.
+    } finally {
+      setDiscountSaving(false);
     }
   };
 
@@ -398,6 +424,39 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         <div className="relative z-10 flex-1 min-h-0 flex overflow-hidden">
           {/* LEFT */}
           <div className="flex-1 min-w-0 p-7 sm:p-9 overflow-y-auto scrollbar-hide">
+            {onApplyDiscount && (
+              <section className="mb-6 rounded-3xl bg-white/5 border border-white/10 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 rounded-2xl bg-[#88D66C]/10 border border-[#88D66C]/25 text-[#88D66C] flex items-center justify-center shrink-0">
+                      <Tag size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">
+                        Descuento final
+                      </h3>
+                      <p className="text-xs font-medium text-white/45 mt-1">
+                        {displayDiscount > 0
+                          ? `Aplicado: $${displayDiscount.toFixed(2)}`
+                          : "Opcional, antes de confirmar el cobro"}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowDiscount(true)}
+                    disabled={discountSaving}
+                    className="min-h-[48px] px-5 rounded-2xl bg-[#88D66C]/10 border border-[#88D66C]/30 text-[#88D66C] text-[10px] font-black uppercase tracking-[0.15em] active:scale-95 transition-transform disabled:opacity-40"
+                  >
+                    {discountSaving
+                      ? "Guardando..."
+                      : displayDiscount > 0
+                        ? "Editar"
+                        : "Aplicar"}
+                  </button>
+                </div>
+              </section>
+            )}
             {/* BUG-24: sección Asignar Repartidor — solo DELIVERY.
                 Aparece arriba del TotalView/SplitView para que el cajero
                 la atienda antes que método de pago/propina. El botón
@@ -595,7 +654,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             type="button"
             onClick={handleConfirm}
             disabled={!canConfirm}
-            title={!canConfirm ? "Selecciona un repartidor antes de cobrar" : undefined}
+            title={
+              discountSaving
+                ? "Espera a que se guarde el descuento"
+                : !canConfirm
+                  ? "Selecciona un repartidor antes de cobrar"
+                  : undefined
+            }
             className="flex-[2] min-h-[64px] h-16 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.2em] text-[11px] flex items-center justify-center gap-3 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)] disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed"
           >
             <CheckCircle2 size={20} strokeWidth={2.5} />
@@ -607,6 +672,20 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           </button>
         </div>
       </div>
+
+      {onApplyDiscount && (
+        <DiscountModal
+          isOpen={showDiscount}
+          onClose={() => setShowDiscount(false)}
+          subtotal={subtotal}
+          requiresOverride={requiresDiscountOverride}
+          initialType="fixed"
+          initialValue={displayDiscount}
+          onApply={(type, value) => {
+            void handleApplyDiscount(type, value);
+          }}
+        />
+      )}
     </div>
   );
 };

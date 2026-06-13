@@ -2,6 +2,7 @@ const express = require('express');
 const crypto  = require('crypto');
 const { prisma } = require('@mrtpvrest/database');
 const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
+const { releaseTableAfterPayment } = require('../services/table-lifecycle.service');
 const router = express.Router();
 
 function verifyMPSignature(req) {
@@ -120,14 +121,17 @@ router.post('/webhook', async (req, res) => {
       const updated = await prisma.order.updateMany({
         where: { id: orderId, paymentStatus: { not: 'PAID' } },
         data: {
-          status: 'CONFIRMED',
+          status: 'DELIVERED',
           paymentStatus: 'PAID',
           paidAt: new Date(),
           paymentMethod: paymentData.payment_type_id === 'ticket' ? 'OXXO' :
                          paymentData.payment_type_id === 'bank_transfer' ? 'SPEI' : 'CARD',
         },
       });
-      if (updated.count > 0) console.log('Pago aprobado para orden:', orderId);
+      if (updated.count > 0) {
+        await releaseTableAfterPayment(prisma, orderId).catch(() => {});
+        console.log('Pago aprobado para orden:', orderId);
+      }
     } else if (status === 'rejected') {
       await prisma.order.updateMany({
         where: { id: orderId, paymentStatus: { not: 'PAID' }, status: { not: 'CANCELLED' } },

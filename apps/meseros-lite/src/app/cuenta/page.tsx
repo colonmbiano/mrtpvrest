@@ -66,6 +66,7 @@ export default function CuentaPage() {
   const router = useRouter();
   const activeTableId = useWaiterOrderStore((state) => state.activeTableId);
   const activeTableName = useWaiterOrderStore((state) => state.activeTableName);
+  const setActiveOrder = useWaiterOrderStore((state) => state.setActiveOrder);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [order, setOrder] = useState<AccountOrder | null>(null);
   const [error, setError] = useState("");
@@ -85,6 +86,7 @@ export default function CuentaPage() {
       );
       const orderId = Array.isArray(openOrders) && openOrders.length > 0 ? openOrders[0]?.id : null;
       if (!orderId) {
+        setActiveOrder(null);
         setLoadState("empty");
         return;
       }
@@ -92,6 +94,17 @@ export default function CuentaPage() {
       // 2. Traer el detalle completo (items, modificadores, rondas, total).
       const { data } = await api.get<AccountOrder>(`/api/orders/${orderId}`);
       setOrder(data);
+      setActiveOrder({
+        id: data.id,
+        itemCount: data.items.reduce((sum, item) => sum + item.quantity, 0),
+        total: data.total,
+        items: data.items.map((item) => ({
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          total: item.subtotal,
+        })),
+      });
       setLoadState("ready");
     } catch (err: unknown) {
       const message = errorTextOf(err, "No se pudo cargar la cuenta. Revisa la conexion.");

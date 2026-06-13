@@ -99,13 +99,14 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
         notes: closeNotes,
       });
       setShift(data);
-      // Ya no hay turno abierto: dejamos el cache en false para que, tras
-      // re-loguear con PIN, el hub mande directo a /pos/shift/open.
+      // Ya no hay turno abierto en la sucursal: dejamos el cache en false
+      // para que, tras re-loguear con PIN, el hub mande directo a
+      // /pos/shift/open (botón "Abrir Turno Ahora").
       if (typeof window !== "undefined") {
         localStorage.setItem("tpv-shift-open", "false");
       }
       // El tab "Cerrar turno" desaparece al quedar cerrado; volvemos al
-      // resumen para que el cajero vea el corte (y no un cuerpo vacio).
+      // resumen para que el cajero vea el corte (y no un cuerpo vacío).
       setTab("summary");
     } catch (e: any) { alert(e.response?.data?.error || "Error"); }
     finally { setClosing(false); }
@@ -281,8 +282,8 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
                 </div>
               )}
 
-              {/* Turno cerrado: salir a la pantalla de PIN. Quedarse en el POS
-                  sin turno abierto no tiene sentido (no se puede cobrar). */}
+              {/* Turno cerrado → salir a la pantalla de PIN. Quedarse en el
+                  POS sin turno abierto no tiene sentido (no se puede cobrar). */}
               {isClosed && (
                 <button
                   onClick={() => (onShiftClosed ? onShiftClosed() : onClose())}

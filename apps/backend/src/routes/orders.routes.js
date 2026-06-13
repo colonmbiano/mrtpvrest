@@ -341,6 +341,7 @@ router.get('/table/:tableId/open', authenticate, requireTenantAccess, async (req
       where: {
         tableId: req.params.tableId,
         status: 'OPEN',
+        paymentStatus: { not: 'PAID' },
         restaurantId,
       },
       select: { id: true, orderNumber: true, status: true, createdAt: true },
@@ -447,15 +448,23 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         where: { id: tableId, locationId: req.locationId, isActive: true },
       });
       if (!table) return res.status(400).json({ error: 'Mesa no válida para esta sucursal' });
-      if (table.status === 'OCCUPIED') {
-        const existingOrder = await prisma.order.findFirst({
-          where: { tableId, status: 'OPEN', locationId: req.locationId }
-        });
+      // La orden OPEN es la fuente de verdad. El estado de Table puede quedar
+      // temporalmente desfasado (AVAILABLE) por una sincronizacion o cliente
+      // antiguo; aun asi nunca debemos crear una segunda cuenta para la mesa.
+      const existingOrder = await prisma.order.findFirst({
+        where: { tableId, status: 'OPEN', locationId: req.locationId },
+        orderBy: { createdAt: 'desc' },
+      });
 
-        if (existingOrder) {
-          req.params = { id: existingOrder.id };
-          return addRoundHandler(req, res);
+      if (existingOrder) {
+        if (table.status !== 'OCCUPIED') {
+          await prisma.table.update({
+            where: { id: tableId },
+            data: { status: 'OCCUPIED' },
+          });
         }
+        req.params = { id: existingOrder.id };
+        return addRoundHandler(req, res);
       }
     }
 
@@ -1073,7 +1082,7 @@ router.post('/:id/print-bill', authenticate, requireTenantAccess, requireRole('A
 });
 
 // Aplica/edita el descuento de un pedido ya guardado y recalcula el total.
-// Lo usa el TPV antes de imprimir la cuenta. Persiste en Order.discount y
+// Lo usa el TPV en el paso final de cobro. Persiste en Order.discount y
 // audita DISCOUNT_APPLIED (quién, antes/después, motivo). Consistente con la
 // fórmula del resto del archivo: total = subtotal - discount + deliveryFee.
 // D2 Meseros v2: además del rol, exige el permiso apply_discount (RBAC
@@ -1129,6 +1138,7 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
         cashCollectedAt: new Date(),
         paymentStatus: 'PAID',
         paidAt: new Date(),
+        status: 'DELIVERED',
       }
     });
 
