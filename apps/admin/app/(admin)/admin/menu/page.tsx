@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
   Bot, Plus, Search, X, FolderOpen, UtensilsCrossed, Pencil, Trash2,
@@ -77,7 +77,7 @@ export default function MenuPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
+  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, unit:"pz" });
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -98,17 +98,22 @@ export default function MenuPage() {
   // Complementos
   const [complements, setComplements] = useState<any[]>([]);
   const [newComp, setNewComp] = useState({ name: '', price: '' });
-  const [savingComp, setSavingComp] = useState(false);
   const [editingComp, setEditingComp] = useState<string|null>(null);
   const [editCompForm, setEditCompForm] = useState({ name: '', price: '' });
 
   // Variantes
   const [variants, setVariants] = useState<any[]>([]);
   const [newVariant, setNewVariant] = useState({ name: '', price: '' });
-  const [savingVariant, setSavingVariant] = useState(false);
   const [editingVariant, setEditingVariant] = useState<string|null>(null);
   const [editVariantForm, setEditVariantForm] = useState({ name: '', price: '' });
   const [activeTab, setActiveTab] = useState<'complements'|'variants'>('variants');
+
+  // Snapshots para el diff de variantes/complementos en saveItem (edición inline
+  // sin llamadas API por fila). En alta = []. Contador para ids temporales tmp_.
+  const [originalVariants, setOriginalVariants] = useState<any[]>([]);
+  const [originalComplements, setOriginalComplements] = useState<any[]>([]);
+  const tmpIdRef = useRef(0);
+  const nextTmpId = () => `tmp_${++tmpIdRef.current}`;
 
   // Crear categoría al vuelo (inline en el modal de platillo)
   const [showNewCat, setShowNewCat] = useState(false);
@@ -244,20 +249,27 @@ export default function MenuPage() {
   function openForm(item?: any) {
     if (item) {
       setEditItem(item);
-      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0 });
+      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0, unit:item.unit||"pz" });
       setImagePreview(item.imageUrl||"");
       api.get(`/api/menu/items/${item.id}`).then(r => {
-        setComplements(r.data.complements || []);
-        setVariants(r.data.variants || []);
+        const vs = r.data.variants || [];
+        const cs = r.data.complements || [];
+        setComplements(cs);
+        setVariants(vs);
+        // Snapshots (copias) para diffear al guardar.
+        setOriginalComplements(cs.map((c: any) => ({ ...c })));
+        setOriginalVariants(vs.map((v: any) => ({ ...v })));
         const tplIds = (r.data.variantTemplates || r.data.appliedTemplates || []).map((t: any) => t.id ?? t.variantTemplateId).filter(Boolean);
         setForm(p => ({ ...p, variantTemplateIds: tplIds }));
-      }).catch(() => { setComplements([]); setVariants([]); });
+      }).catch(() => { setComplements([]); setVariants([]); setOriginalComplements([]); setOriginalVariants([]); });
     } else {
       setEditItem(null);
-      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
+      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, unit:"pz" });
       setImagePreview("");
       setComplements([]);
       setVariants([]);
+      setOriginalComplements([]);
+      setOriginalVariants([]);
     }
     setNewComp({ name: '', price: '' });
     setNewVariant({ name: '', price: '' });
@@ -304,19 +316,11 @@ export default function MenuPage() {
     }
   }
 
-  // ── Variantes ──────────────────────────────────────────────────
-  async function addVariant() {
-    if (!editItem || !newVariant.name) return;
-    setSavingVariant(true);
-    try {
-      const { data } = await api.post(`/api/menu/${editItem.id}/variants`, {
-        name: newVariant.name, price: parseFloat(newVariant.price) || 0,
-      });
-      setVariants(p => [...p, data]);
-      setNewVariant({ name: '', price: '' });
-    } catch (e: any) {
-      alert(e.response?.data?.error || 'Error al agregar variante');
-    } finally { setSavingVariant(false); }
+  // ── Variantes (edición LOCAL; se reconcilia con la API en saveItem) ───────
+  function addVariant() {
+    if (!newVariant.name) return;
+    setVariants(p => [...p, { id: nextTmpId(), name: newVariant.name, price: parseFloat(newVariant.price) || 0 }]);
+    setNewVariant({ name: '', price: '' });
   }
 
   function startEditVariant(v: any) {
@@ -324,37 +328,22 @@ export default function MenuPage() {
     setEditVariantForm({ name: v.name, price: String(v.price) });
   }
 
-  async function saveEditVariant(id: string) {
-    try {
-      await api.put(`/api/menu/variants/${id}`, {
-        name: editVariantForm.name, price: parseFloat(editVariantForm.price) || 0,
-      });
-      setVariants(p => p.map(v => v.id === id ? { ...v, name: editVariantForm.name, price: parseFloat(editVariantForm.price) || 0 } : v));
-      setEditingVariant(null);
-    } catch { alert('Error al guardar variante'); }
+  function saveEditVariant(id: string) {
+    setVariants(p => p.map(v => v.id === id ? { ...v, name: editVariantForm.name, price: parseFloat(editVariantForm.price) || 0 } : v));
+    setEditingVariant(null);
   }
 
-  async function deleteVariant(id: string) {
+  function deleteVariant(id: string) {
     if (!confirm('¿Eliminar esta variante?')) return;
-    try {
-      await api.delete(`/api/menu/variants/${id}`);
-      setVariants(p => p.filter(v => v.id !== id));
-    } catch { alert('Error al eliminar'); }
+    setVariants(p => p.filter(v => v.id !== id));
+    if (editingVariant === id) setEditingVariant(null);
   }
 
-  // ── Complementos ───────────────────────────────────────────────
-  async function addComplement() {
-    if (!editItem || !newComp.name) return;
-    setSavingComp(true);
-    try {
-      const { data } = await api.post(`/api/menu/items/${editItem.id}/complements`, {
-        name: newComp.name, price: parseFloat(newComp.price) || 0,
-      });
-      setComplements(p => [...p, data]);
-      setNewComp({ name: '', price: '' });
-    } catch (e: any) {
-      alert(e.response?.data?.error || 'Error al agregar');
-    } finally { setSavingComp(false); }
+  // ── Complementos (edición LOCAL; se reconcilia con la API en saveItem) ────
+  function addComplement() {
+    if (!newComp.name) return;
+    setComplements(p => [...p, { id: nextTmpId(), name: newComp.name, price: parseFloat(newComp.price) || 0 }]);
+    setNewComp({ name: '', price: '' });
   }
 
   function startEditComp(mod: any) {
@@ -362,22 +351,57 @@ export default function MenuPage() {
     setEditCompForm({ name: mod.name, price: String(mod.price) });
   }
 
-  async function saveEditComp(id: string) {
-    try {
-      await api.put(`/api/menu/items/complements/${id}`, {
-        name: editCompForm.name, price: parseFloat(editCompForm.price) || 0,
-      });
-      setComplements(p => p.map(m => m.id === id ? { ...m, name: editCompForm.name, price: parseFloat(editCompForm.price) || 0 } : m));
-      setEditingComp(null);
-    } catch { alert('Error al guardar'); }
+  function saveEditComp(id: string) {
+    setComplements(p => p.map(m => m.id === id ? { ...m, name: editCompForm.name, price: parseFloat(editCompForm.price) || 0 } : m));
+    setEditingComp(null);
   }
 
-  async function deleteComplement(id: string) {
+  function deleteComplement(id: string) {
     if (!confirm('¿Eliminar este complemento?')) return;
-    try {
-      await api.delete(`/api/menu/items/complements/${id}`);
-      setComplements(p => p.filter(m => m.id !== id));
-    } catch { alert('Error al eliminar'); }
+    setComplements(p => p.filter(m => m.id !== id));
+    if (editingComp === id) setEditingComp(null);
+  }
+
+  // Reconciliación genérica de variantes/complementos contra la API. Actualiza
+  // los snapshots a medida que cada operación tiene éxito, para que un reintento
+  // (tras un fallo parcial) solo procese lo pendiente y no recree/redelete.
+  async function reconcileChildren(
+    itemId: string,
+    current: any[],
+    original: any[],
+    setList: React.Dispatch<React.SetStateAction<any[]>>,
+    setOriginal: React.Dispatch<React.SetStateAction<any[]>>,
+    endpoints: {
+      create: (id: string, body: any) => Promise<any>,
+      update: (id: string, body: any) => Promise<any>,
+      remove: (id: string) => Promise<any>,
+    },
+  ) {
+    const originalById = new Map(original.map(o => [o.id, o]));
+    const currentIds = new Set(current.map(c => c.id));
+
+    // Eliminaciones: ids del snapshot ausentes ahora.
+    for (const orig of original) {
+      if (!currentIds.has(orig.id)) {
+        await endpoints.remove(orig.id);
+        setOriginal(p => p.filter(o => o.id !== orig.id));
+      }
+    }
+    // Altas (tmp_) y ediciones (id real con name/price cambiado).
+    for (const row of current) {
+      const price = parseFloat(row.price) || 0;
+      if (String(row.id).startsWith('tmp_')) {
+        const { data } = await endpoints.create(itemId, { name: row.name, price });
+        setList(p => p.map(x => x.id === row.id ? { ...x, id: data.id, price } : x));
+        setOriginal(p => [...p, { id: data.id, name: row.name, price }]);
+      } else {
+        const orig = originalById.get(row.id);
+        if (orig && (orig.name !== row.name || Number(orig.price) !== price)) {
+          await endpoints.update(row.id, { name: row.name, price });
+          setOriginal(p => p.map(o => o.id === row.id ? { ...o, name: row.name, price } : o));
+        }
+      }
+    }
   }
 
   async function saveItem(e: React.FormEvent) {
@@ -397,11 +421,44 @@ export default function MenuPage() {
         promoPrice: form.isPromo ? promoPrice : null,
         imageUrl,
       };
-      if (editItem) await api.put(`/api/menu/items/${editItem.id}`, payload);
-      else await api.post("/api/menu/items", payload);
+
+      // 1) Crear/actualizar el item y obtener su id real.
+      let itemId: string;
+      if (editItem) {
+        await api.put(`/api/menu/items/${editItem.id}`, payload);
+        itemId = editItem.id;
+      } else {
+        const { data } = await api.post("/api/menu/items", payload);
+        itemId = data.id;
+        // El item YA existe: si una sub-llamada falla, pasamos a modo edición con
+        // el id real para no perder contexto ni dejar un producto a medias.
+        setEditItem(data);
+      }
+
+      // 2) Reconciliar variantes y complementos en un solo guardado (no es
+      //    transaccional: ver manejo de error abajo).
+      await reconcileChildren(
+        itemId, variants, originalVariants, setVariants, setOriginalVariants,
+        {
+          create: (id, body) => api.post(`/api/menu/${id}/variants`, body),
+          update: (id, body) => api.put(`/api/menu/variants/${id}`, body),
+          remove: (id) => api.delete(`/api/menu/variants/${id}`),
+        },
+      );
+      await reconcileChildren(
+        itemId, complements, originalComplements, setComplements, setOriginalComplements,
+        {
+          create: (id, body) => api.post(`/api/menu/items/${id}/complements`, body),
+          update: (id, body) => api.put(`/api/menu/items/complements/${id}`, body),
+          remove: (id) => api.delete(`/api/menu/items/complements/${id}`),
+        },
+      );
+
       setShowForm(false);
       fetchData();
     } catch (err: any) {
+      // NO cerramos el modal: si el item se creó, ya quedamos en modo edición con
+      // el id real y las filas que fallaron siguen como tmp_ para reintentar.
       alert(extractErrorMessage(err, "Error al guardar"));
     } finally { setSaving(false); }
   }
@@ -560,6 +617,20 @@ export default function MenuPage() {
   const activeDrillCat = cats.find((c) => c.id === drillCategoryId) || null;
   const showCategoriesGrid = view === "categories" && !search.trim();
   const showItemsList = !showCategoriesGrid;
+
+  // Unidad de venta: pz/unidad son enteros; g/kg se cobran por peso (TPV).
+  const UNIT_OPTIONS = [
+    { val: "pz", label: "Pieza" },
+    { val: "unidad", label: "Unidad" },
+    { val: "g", label: "Gramo" },
+    { val: "kg", label: "Kilogramo" },
+  ] as const;
+  const PRICE_LABEL: Record<string, string> = {
+    pz: "Precio por pieza",
+    unidad: "Precio por unidad",
+    g: "Precio por gramo",
+    kg: "Precio por kilogramo",
+  };
 
   return (
     <WtScreen>
@@ -929,7 +1000,30 @@ export default function MenuPage() {
                   <input placeholder="Hamburguesa" value={form.name} onChange={e => setForm(p => ({...p,name:e.target.value}))} required className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
                 </div>
                 <div className="col-span-2">
-                  <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Precio Base</label>
+                  <label className="mb-2 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Unidad de venta</label>
+                  <div className="flex gap-2">
+                    {UNIT_OPTIONS.map(({ val, label }) => {
+                      const active = form.unit === val;
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setForm(p => ({ ...p, unit: val }))}
+                          className="min-h-10 flex-1 rounded-xl px-2 text-xs font-bold transition-all"
+                          style={{
+                            background: active ? "var(--brand-primary)" : "transparent",
+                            color: active ? "#fffaf4" : "var(--tx-mut)",
+                            border: `1px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`,
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">{PRICE_LABEL[form.unit] || "Precio Base"}</label>
                   <input placeholder="89.00" value={form.price} onChange={e => setForm(p => ({...p,price:e.target.value}))} required type="number" className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
                 </div>
                 <div className="col-span-2">
@@ -1069,6 +1163,92 @@ export default function MenuPage() {
                       })}
                     </div>
                   )}
+                </div>
+
+                {/* Variantes y Complementos — edición inline (alta y edición) */}
+                <div className="col-span-2">
+                  <div className="mb-2 flex gap-2">
+                    {([["variants","Variantes"],["complements","Complementos"]] as const).map(([tab,label]) => {
+                      const active = activeTab === tab;
+                      return (
+                        <button
+                          key={tab}
+                          type="button"
+                          onClick={() => setActiveTab(tab)}
+                          className="min-h-10 flex-1 rounded-xl px-3 text-xs font-bold transition-all"
+                          style={{
+                            background: active ? "var(--brand-primary)" : "transparent",
+                            color: active ? "#fffaf4" : "var(--tx-mut)",
+                            border: `1px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`,
+                          }}
+                        >
+                          {label} {tab === "variants" ? (variants.length > 0 ? `(${variants.length})` : "") : (complements.length > 0 ? `(${complements.length})` : "")}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {activeTab === "variants" ? EditableList({
+                    items: variants,
+                    editingId: editingVariant,
+                    editForm: editVariantForm,
+                    onStartEdit: startEditVariant,
+                    onSaveEdit: saveEditVariant,
+                    onCancelEdit: () => setEditingVariant(null),
+                    onDelete: deleteVariant,
+                    onChangeForm: setEditVariantForm,
+                    addSection: (
+                      <div className="grid grid-cols-12 items-center gap-2">
+                        <input value={newVariant.name} onChange={e => setNewVariant(p => ({ ...p, name: e.target.value }))}
+                          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addVariant(); } }}
+                          placeholder="Nueva variante (ej. Chica)"
+                          className="col-span-6 min-h-10 rounded-lg px-2 text-sm text-tx outline-none"
+                          style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }} />
+                        <div className="col-span-3 flex items-center gap-1">
+                          <span className="text-xs text-tx-mut">$</span>
+                          <input value={newVariant.price} type="number"
+                            onChange={e => setNewVariant(p => ({ ...p, price: e.target.value }))}
+                            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addVariant(); } }}
+                            placeholder="0"
+                            className="w-full min-h-10 rounded-lg px-2 text-right text-sm text-tx outline-none"
+                            style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }} />
+                        </div>
+                        <button type="button" onClick={addVariant} disabled={!newVariant.name}
+                          className="col-span-3 flex min-h-10 items-center justify-center gap-1 rounded-lg text-xs font-bold text-white transition-all disabled:opacity-40"
+                          style={{ background: "var(--brand-primary)" }}><Plus size={13} /> Agregar</button>
+                      </div>
+                    ),
+                  }) : EditableList({
+                    items: complements,
+                    editingId: editingComp,
+                    editForm: editCompForm,
+                    onStartEdit: startEditComp,
+                    onSaveEdit: saveEditComp,
+                    onCancelEdit: () => setEditingComp(null),
+                    onDelete: deleteComplement,
+                    onChangeForm: setEditCompForm,
+                    addSection: (
+                      <div className="grid grid-cols-12 items-center gap-2">
+                        <input value={newComp.name} onChange={e => setNewComp(p => ({ ...p, name: e.target.value }))}
+                          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addComplement(); } }}
+                          placeholder="Nuevo complemento (ej. Extra queso)"
+                          className="col-span-6 min-h-10 rounded-lg px-2 text-sm text-tx outline-none"
+                          style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }} />
+                        <div className="col-span-3 flex items-center gap-1">
+                          <span className="text-xs text-tx-mut">$</span>
+                          <input value={newComp.price} type="number"
+                            onChange={e => setNewComp(p => ({ ...p, price: e.target.value }))}
+                            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addComplement(); } }}
+                            placeholder="0"
+                            className="w-full min-h-10 rounded-lg px-2 text-right text-sm text-tx outline-none"
+                            style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }} />
+                        </div>
+                        <button type="button" onClick={addComplement} disabled={!newComp.name}
+                          className="col-span-3 flex min-h-10 items-center justify-center gap-1 rounded-lg text-xs font-bold text-white transition-all disabled:opacity-40"
+                          style={{ background: "var(--brand-primary)" }}><Plus size={13} /> Agregar</button>
+                      </div>
+                    ),
+                  })}
                 </div>
 
                 {/* Modificadores (solo al editar item ya creado) */}
