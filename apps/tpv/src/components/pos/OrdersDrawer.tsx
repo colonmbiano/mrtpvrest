@@ -13,6 +13,8 @@ import {
   Loader2,
   Clock,
   ChefHat,
+  Zap,
+  Pencil,
 } from "lucide-react";
 import { hapticMedium } from "@/lib/haptics";
 
@@ -125,6 +127,9 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   onClose,
   orders,
   onShowDetail,
+  onConfirmPayment,
+  onReprintOrder,
+  hideMoney = false,
   canMergeOrders = false,
   onMergeOrders,
   canAssignDriver = false,
@@ -439,16 +444,19 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                 const selectedIndex = selectedIds.indexOf(order.id);
                 const isSelected = selectedIndex >= 0;
                 return (
-                  <button
+                  <div
                     key={order.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
                       if (longPressFired.current) {
                         longPressFired.current = false;
                         return;
                       }
+                      // El cuerpo del tile ya NO abre el ticket: las 3 acciones
+                      // (Editar/Imprimir/Cobrar) son botones explícitos. Solo en
+                      // modo selección el tap alterna el ticket seleccionado.
                       if (selectionMode) toggleOrder(order.id);
-                      else onShowDetail(order);
                     }}
                     onPointerDown={() => startLongPress(order.id)}
                     onPointerUp={cancelLongPress}
@@ -458,14 +466,15 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     aria-label={
                       selectionMode
                         ? `${isSelected ? "Quitar" : "Seleccionar"} ticket de ${order.customerName}`
-                        : `Abrir ticket de ${order.customerName} por $${order.total.toFixed(2)}`
+                        : `Ticket de ${order.customerName} por $${order.total.toFixed(2)}`
                     }
-                    className={`relative px-4 py-3 rounded-2xl border bg-white/5 backdrop-blur-md text-left flex items-center gap-3 active:scale-[0.98] transition-all overflow-hidden min-h-[72px] ${
+                    className={`relative px-4 py-3 rounded-2xl border bg-white/5 backdrop-blur-md text-left flex flex-col gap-2.5 active:scale-[0.99] transition-all overflow-hidden ${
                       isSelected
                         ? "border-[#ffb84d] bg-[#ffb84d]/10 shadow-[inset_0_0_0_1px_rgba(255,184,77,0.25)]"
                         : tone.ring
                     }`}
                   >
+                    <div className="flex items-center gap-3 w-full">
                     {selectionMode ? (
                       isSelected ? (
                         <CheckCircle2
@@ -525,15 +534,60 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                       </div>
                     </div>
 
-                    <div className="shrink-0 flex items-center gap-2">
-                      <span className="tabular-nums text-lg font-black tracking-tight text-white">
-                        ${order.total.toFixed(2)}
-                      </span>
-                      {!selectionMode && (
-                        <ChevronRight size={16} className="text-white/40" />
-                      )}
+                    <span className="shrink-0 tabular-nums text-lg font-black tracking-tight text-white">
+                      ${order.total.toFixed(2)}
+                    </span>
                     </div>
-                  </button>
+
+                    {/* Acciones por ticket — Editar / Imprimir / Cobrar — sin
+                        tener que abrir la cuenta en el editor (el caso más común
+                        en caja). En modo selección se ocultan. */}
+                    {!selectionMode && (
+                      <div className="flex items-stretch gap-2 w-full">
+                        <button
+                          type="button"
+                          aria-label={`Editar ticket de ${order.customerName}`}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            hapticMedium();
+                            onShowDetail(order);
+                          }}
+                          className="flex-1 h-11 rounded-xl bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 active:text-white transition-transform"
+                        >
+                          <Pencil size={15} strokeWidth={2.5} /> Editar
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Imprimir cuenta de ${order.customerName}`}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            hapticMedium();
+                            onReprintOrder(order);
+                          }}
+                          className="flex-1 h-11 rounded-xl bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 active:text-white transition-transform"
+                        >
+                          <Receipt size={15} strokeWidth={2.5} /> Imprimir
+                        </button>
+                        {!hideMoney && (
+                          <button
+                            type="button"
+                            aria-label={`Cobrar ticket de ${order.customerName}`}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              hapticMedium();
+                              onConfirmPayment(order);
+                            }}
+                            className="flex-[1.3] h-11 rounded-xl bg-[#88d66c] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                          >
+                            <Zap size={15} strokeWidth={2.8} /> Cobrar
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
