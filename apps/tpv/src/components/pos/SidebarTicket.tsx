@@ -726,14 +726,14 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         }
       }
 
-      toast.success(queued ? "Cobro en cola · se registrara al volver la red" : "Cobro procesado");
       hapticSuccess();
 
       // Doble pantalla: mostrar agradecimiento en la pantalla de cliente.
       justCompletedRef.current = true;
       dualScreen.completeSale({ total: total + tipAmount });
-      
-      // Capturar contexto antes de limpiar el ticket activo.
+
+      // Capturar contexto y armar el recibo ANTES de limpiar el ticket activo
+      // (el botón "Imprimir ticket" del toast los usa después del reset).
       const ticketContext = {
         orderNumber: order?.orderNumber ?? activeOrderNumber ?? null,
         orderType:   ticket.type ?? null,
@@ -751,22 +751,6 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         tipPercent: tip?.percent ?? 0,
         tipAmount,
       };
-
-      // Limpieza post-pago — reset completo para que la próxima venta
-      // arranque en limpio (items, orden activa, rondas, cliente y descuento).
-      clearActiveItems();
-      clearActiveOrder();
-      setPreviousItems([]);
-      updateTicket({ name: "", address: "", phone: "", discount: 0 });
-      setShowPayment(false);
-
-      // Impresión de comanda (solo si había items nuevos)
-      if (printItems.length > 0) {
-        printKitchenTickets(printers, { ...ticketContext, items: printItems, config: kitchenConfig ?? undefined })
-          .catch(() => { /* silencio */ });
-      }
-
-      // Impresión de recibo de cliente (el total completo)
       const guests = ticket.numberOfGuests ?? 0;
       const isDineInSplit = ticket.type === "DINE_IN" && guests >= 2;
       const receiptItems = order?.items
@@ -783,20 +767,48 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         cashierName: employee?.name || null,
         terminalName: terminalName || null,
       };
-      if (isDineInSplit) {
-        printSplitReceipts(
-          printers,
-          { ...receiptIdentity, ...ticketContext, ...totals, ...receiptExtras, items: receiptItems },
-          guests,
-        ).catch(() => {});
-      } else {
-        printCustomerReceipt(printers, {
-          ...receiptIdentity,
-          ...ticketContext,
-          ...totals,
-          ...receiptExtras,
-          items: receiptItems,
-        }).catch(() => {});
+
+      // El recibo de cuenta YA NO se imprime automáticamente al cobrar. El cajero
+      // decide: el toast de éxito trae un botón "Imprimir ticket" que lo manda a
+      // la impresora CASHIER solo si lo tocan (la comanda de cocina sí va sola).
+      const printReceiptNow = () => {
+        if (isDineInSplit) {
+          printSplitReceipts(
+            printers,
+            { ...receiptIdentity, ...ticketContext, ...totals, ...receiptExtras, items: receiptItems },
+            guests,
+          ).catch(() => {});
+        } else {
+          printCustomerReceipt(printers, {
+            ...receiptIdentity,
+            ...ticketContext,
+            ...totals,
+            ...receiptExtras,
+            items: receiptItems,
+          }).catch(() => {});
+        }
+      };
+
+      toast.success(
+        queued ? "Cobro en cola · se registrara al volver la red" : "Cobro procesado",
+        {
+          action: { label: "Imprimir ticket", onClick: printReceiptNow },
+          duration: 12000,
+        },
+      );
+
+      // Limpieza post-pago — reset completo para que la próxima venta
+      // arranque en limpio (items, orden activa, rondas, cliente y descuento).
+      clearActiveItems();
+      clearActiveOrder();
+      setPreviousItems([]);
+      updateTicket({ name: "", address: "", phone: "", discount: 0 });
+      setShowPayment(false);
+
+      // Comanda de cocina (solo si había items nuevos) — sigue automática.
+      if (printItems.length > 0) {
+        printKitchenTickets(printers, { ...ticketContext, items: printItems, config: kitchenConfig ?? undefined })
+          .catch(() => { /* silencio */ });
       }
     } catch (error: any) {
       toast.error("Error al cobrar: " + (error.response?.data?.error || error.message));
