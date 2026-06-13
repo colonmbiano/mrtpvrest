@@ -1073,14 +1073,75 @@ export default function MenuPage() {
                 </div>
 
                 {/* Modificadores (solo al editar item ya creado) */}
-                {editItem && (
-                  <div className="col-span-2">
-                    <label className="mb-2 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">
-                      Modificadores <span className="font-sans normal-case tracking-normal text-tx-dim">(Sin costo o con extra)</span>
-                    </label>
+                <div className="col-span-2">
+                  <label className="mb-2 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">
+                    Modificadores <span className="font-sans normal-case tracking-normal text-tx-dim">(Sin costo o con extra)</span>
+                  </label>
+                  {editItem ? (
                     <ModifierGroupsEditor itemId={editItem.id} />
-                  </div>
-                )}
+                  ) : (
+                    <p className="rounded-xl border border-dashed p-3 text-xs text-tx-mut">
+                      Guarda primero el platillo para agregar grupos de modificadores (ej. “Tipo de leche”, “Sin azúcar”).
+                    </p>
+                  )}
+                </div>
+
+                {/* Complementos (productos extra con precio — ej. refresco, papas) */}
+                <div className="col-span-2">
+                  <label className="mb-2 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">
+                    Complementos <span className="font-sans normal-case tracking-normal text-tx-dim">(Productos extra con precio)</span>
+                  </label>
+                  {editItem ? (
+                    <EditableList
+                      items={complements}
+                      editingId={editingComp}
+                      editForm={editCompForm}
+                      onStartEdit={startEditComp}
+                      onSaveEdit={saveEditComp}
+                      onCancelEdit={() => setEditingComp(null)}
+                      onDelete={deleteComplement}
+                      onChangeForm={setEditCompForm}
+                      addSection={
+                        <div className="grid grid-cols-12 items-center gap-2">
+                          <input
+                            value={newComp.name}
+                            onChange={e => setNewComp(p => ({ ...p, name: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addComplement(); } }}
+                            placeholder="Nuevo complemento (ej. Refresco)"
+                            className="col-span-6 rounded-lg px-3 py-2 text-sm text-tx outline-none"
+                            style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
+                          />
+                          <div className="col-span-3 flex items-center gap-1">
+                            <span className="text-xs text-tx-mut">$</span>
+                            <input
+                              value={newComp.price}
+                              type="number"
+                              step="0.01"
+                              onChange={e => setNewComp(p => ({ ...p, price: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addComplement(); } }}
+                              placeholder="0"
+                              className="w-full rounded-lg px-2 py-2 text-right text-sm text-tx outline-none"
+                              style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={addComplement}
+                            disabled={savingComp || !newComp.name.trim()}
+                            className="col-span-3 grid place-items-center rounded-lg py-2 text-sm font-black text-white"
+                            style={{ background: "var(--brand-primary)", opacity: savingComp || !newComp.name.trim() ? 0.5 : 1 }}
+                          >
+                            + Agregar
+                          </button>
+                        </div>
+                      }
+                    />
+                  ) : (
+                    <p className="rounded-xl border border-dashed p-3 text-xs text-tx-mut">
+                      Guarda primero el platillo para agregar complementos (ej. “Refresco”, “Papas”).
+                    </p>
+                  )}
+                </div>
 
                 {/* Promoción por día */}
                 <div className="col-span-2">
