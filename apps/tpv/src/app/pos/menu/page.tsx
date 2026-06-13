@@ -89,9 +89,13 @@ export default function CatalogPage() {
     //    entrar y el cajero no espera a la nube (stale-while-revalidate).
     const cached = readCatalogCache();
     if (cached) {
-      setCategories(cached.categories);
-      setProducts(cached.products);
-      setIsLoading(false);
+      // Diferido a microtask: evita el set-state síncrono dentro del effect.
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setCategories(cached.categories);
+        setProducts(cached.products);
+        setIsLoading(false);
+      });
     }
 
     // 2. Revalida en segundo plano y actualiza la caché.
