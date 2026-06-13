@@ -173,6 +173,19 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey) return;
 
+      // No robar las teclas cuando el usuario está escribiendo en un campo
+      // (p. ej. el monto en el modal de gastos): el atajo "1" abría Mesa.
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
       const match = visibleTypes.find((type) => type.shortcut === event.key);
       if (match) {
         event.preventDefault();
