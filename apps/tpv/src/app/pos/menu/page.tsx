@@ -34,6 +34,36 @@ const FALLBACK_CATEGORIES: CategoryLite[] = PRIORITY_CATEGORIES.map((name) => ({
   name,
 }));
 
+// ── Caché local del catálogo (stale-while-revalidate) ─────────────────────
+// El menú casi nunca cambia, pero antes se bajaba de la nube CADA vez que el
+// cajero entraba a tomar un pedido (2 round-trips a Railway con spinner). Ahora
+// pintamos al instante lo último cacheado y revalidamos en segundo plano.
+const CATALOG_CACHE_KEY = "tpv-catalog-cache-v1";
+
+type CatalogCache = { categories: CategoryLite[]; products: Product[] };
+
+function readCatalogCache(): CatalogCache | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(CATALOG_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.categories) || !Array.isArray(parsed?.products)) return null;
+    return parsed as CatalogCache;
+  } catch {
+    return null;
+  }
+}
+
+function writeCatalogCache(data: CatalogCache): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify(data));
+  } catch {
+    /* cuota llena / modo privado: la caché es best-effort */
+  }
+}
+
 export default function CatalogPage() {
   const { addItemToActive, replaceItemInActive, setEditingIndex } = useTicketStore();
   // Item de la ronda actual que se está re-editando (tap en el carrito).
@@ -54,6 +84,17 @@ export default function CatalogPage() {
 
   useEffect(() => {
     let cancelled = false;
+
+    // 1. Pinta al instante lo último cacheado: el menú se ve de inmediato al
+    //    entrar y el cajero no espera a la nube (stale-while-revalidate).
+    const cached = readCatalogCache();
+    if (cached) {
+      setCategories(cached.categories);
+      setProducts(cached.products);
+      setIsLoading(false);
+    }
+
+    // 2. Revalida en segundo plano y actualiza la caché.
     const fetchData = async () => {
       try {
         const [catsRes, itemsRes] = await Promise.allSettled([
@@ -61,11 +102,21 @@ export default function CatalogPage() {
           api.get("/api/menu/items?admin=true"),
         ]);
 
-        if (!cancelled && catsRes.status === "fulfilled") {
-          setCategories(Array.isArray(catsRes.value.data) ? catsRes.value.data : []);
+        let nextCats = cached?.categories ?? [];
+        let nextItems = cached?.products ?? [];
+        if (catsRes.status === "fulfilled" && Array.isArray(catsRes.value.data)) {
+          nextCats = catsRes.value.data;
         }
-        if (!cancelled && itemsRes.status === "fulfilled") {
-          setProducts(Array.isArray(itemsRes.value.data) ? itemsRes.value.data : []);
+        if (itemsRes.status === "fulfilled" && Array.isArray(itemsRes.value.data)) {
+          nextItems = itemsRes.value.data;
+        }
+        if (!cancelled) {
+          setCategories(nextCats);
+          setProducts(nextItems);
+        }
+        // Solo cacheamos si al menos una respuesta llegó bien (no pisar con vacío).
+        if (catsRes.status === "fulfilled" || itemsRes.status === "fulfilled") {
+          writeCatalogCache({ categories: nextCats, products: nextItems });
         }
       } catch (error) {
         console.error("Error loading POS catalog:", error);
