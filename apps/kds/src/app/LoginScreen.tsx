@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
-import { Lock, Building2, ArrowRight, ChevronLeft, Layers } from "lucide-react";
+import { Lock, Building2, ArrowRight, ChevronLeft, Layers, LogOut } from "lucide-react";
 import api from "@/lib/api";
+import KioskUnlockModal from "@/components/KioskUnlockModal";
 
 // Estaciones soportadas por el KDS. Mismo enum que el TPV/admin para
 // que los pedidos lleguen filtrados consistentemente.
@@ -42,6 +43,7 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
   const [authToken, setAuthToken] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showUnlock, setShowUnlock] = useState(false);
 
   // Modo de operación de esta pantalla KDS.
   const [stationMode, setStationMode] = useState<StationMode>("central");
@@ -164,6 +166,14 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
 
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center p-6 overflow-hidden bg-[#0a0a0c]">
+      <button
+        type="button"
+        onClick={() => setShowUnlock(true)}
+        className="fixed right-4 bottom-4 z-20 w-12 h-12 rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 text-white/45 active:scale-95"
+        aria-label="Desbloquear tablet"
+      >
+        <LogOut size={18} />
+      </button>
       {/* Ambient glow */}
       <div
         aria-hidden
@@ -372,6 +382,7 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
           </div>
         )}
       </div>
+      {showUnlock && <KioskUnlockModal onClose={() => setShowUnlock(false)} />}
     </div>
   );
 }

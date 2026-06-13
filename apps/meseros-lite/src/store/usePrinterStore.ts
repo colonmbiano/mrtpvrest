@@ -5,9 +5,8 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import type { KitchenTicketConfig, PrinterRecord } from "@/lib/printer";
 
 interface PrinterState {
-  // Impresoras cacheadas en la tablet. Se sincronizan con PIN admin (que sí
-  // tiene permiso para GET /api/printers) y luego se usan al imprimir sin
-  // necesitar el token admin de nuevo.
+  // Cache local de la configuracion central del TPV. Se refresca con la
+  // sesion del mesero y se conserva para operar durante cortes de red.
   printers: PrinterRecord[];
   kitchenConfig: KitchenTicketConfig | null;
   // Auto-imprimir la comanda a cocina al guardar el ticket. Por dispositivo.

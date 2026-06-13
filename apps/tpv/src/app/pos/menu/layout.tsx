@@ -49,7 +49,6 @@ import MergeTableModal from "@/components/pos/MergeTableModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import ChangeOrderTypeModal from "@/components/pos/ChangeOrderTypeModal";
-import DiscountModal from "@/components/pos/DiscountModal";
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
   DINE_IN: "MESA",
@@ -144,8 +143,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [changeTypeOrder, setChangeTypeOrder] = useState<any | null>(null);
   const [moveOrder, setMoveOrder] = useState<any | null>(null);
   const [splitOrder, setSplitOrder] = useState<any | null>(null);
-  // Pedido en espera de imprimir cuenta: abre DiscountModal antes de imprimir.
-  const [discountPrintOrder, setDiscountPrintOrder] = useState<any | null>(null);
   const [shiftOpen, setShiftOpen] = useState<boolean | null>(null);
   const [showShift, setShowShift] = useState(false);
 
@@ -620,31 +617,40 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     if (order) await handleReprintKitchen(order);
   };
 
-  // "Imprimir cuenta": antes de imprimir abrimos el modal de descuento
-  // (editable, prellenado con el descuento vigente). Desde ahí se aplica y
-  // persiste el descuento (auditado) o se imprime sin cambios.
+  // "Imprimir cuenta" usa el total vigente. Los descuentos se editan
+  // exclusivamente en el paso final de cobro.
   const handleReprintActiveReceipt = async () => {
     const order = await getActiveOrderForAction();
-    if (order) setDiscountPrintOrder(order);
+    if (order) await handleReprintOrder(order);
   };
 
   const canApplyDiscount = !!currentEmployee?.permissions?.includes("apply_discount");
 
-  // Aplica el descuento al pedido en backend (audita DISCOUNT_APPLIED) y luego
-  // imprime la cuenta con el total ya actualizado.
-  const handleApplyDiscountAndPrint = async (type: "percent" | "fixed", value: number) => {
-    const order = discountPrintOrder;
-    if (!order) return;
+  // Persiste el descuento mientras el modal de pago sigue abierto.
+  const handleApplyPaymentDiscount = async (
+    type: "percent" | "fixed",
+    value: number,
+  ) => {
+    if (!payOrder) return;
     try {
-      const { data } = await api.put(`/api/orders/${order.id}/discount`, { type, value });
-      await handleReprintOrder({ ...order, ...data });
+      const { data } = await api.put(`/api/orders/${payOrder.id}/discount`, {
+        type,
+        value,
+      });
+      setPayOrder((current: any) =>
+        current?.id === payOrder.id ? { ...current, ...data } : current,
+      );
+      toast.success(
+        Number(data?.discount ?? 0) > 0
+          ? `Descuento aplicado: $${Number(data.discount).toFixed(2)}`
+          : "Descuento eliminado",
+      );
     } catch (err: any) {
       toast.error(
         "No se pudo aplicar el descuento: " +
           (err?.response?.data?.error || err?.message || "error")
       );
-    } finally {
-      setDiscountPrintOrder(null);
+      throw err;
     }
   };
 
@@ -1211,25 +1217,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         />
       )}
 
-      {discountPrintOrder && (
-        <DiscountModal
-          isOpen={!!discountPrintOrder}
-          onClose={() => setDiscountPrintOrder(null)}
-          subtotal={Number(discountPrintOrder.subtotal ?? 0)}
-          requiresOverride={!canApplyDiscount}
-          initialType="fixed"
-          initialValue={Number(discountPrintOrder.discount ?? 0)}
-          primaryLabel="Aplicar e imprimir"
-          secondaryLabel="Imprimir sin cambios"
-          onSecondary={() => {
-            const order = discountPrintOrder;
-            setDiscountPrintOrder(null);
-            if (order) void handleReprintOrder(order);
-          }}
-          onApply={handleApplyDiscountAndPrint}
-        />
-      )}
-
       <NotificationsPanel
         isOpen={showNotifs}
         onClose={() => setShowNotifs(false)}
@@ -1256,6 +1243,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           orderNumber={payOrder.orderNumber || String(payOrder.id).slice(-6).toUpperCase()}
           tableName={payOrder.table?.name || payOrder.tableNumber || undefined}
           total={Number(payOrder.total ?? 0)}
+          discount={Number(payOrder.discount ?? 0)}
+          requiresDiscountOverride={!canApplyDiscount}
+          onApplyDiscount={handleApplyPaymentDiscount}
           items={(payOrder.items || []).map((i: any) => ({
             name: i.name || i.menuItem?.name || "Producto",
             quantity: i.quantity ?? 1,
@@ -1392,20 +1382,20 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       </div>
 
       {showShift && currentEmployee && (
-        <ShiftModal 
-          employee={currentEmployee} 
+        <ShiftModal
+          employee={currentEmployee}
           onClose={() => {
             setShowShift(false);
             fetchShift();
           }}
           onShiftClosed={() => {
-            // Turno cerrado: botar a la pantalla de PIN. El cache queda en
-            // false (lo pone ShiftModal), asi que al re-loguear el hub manda
-            // directo a /pos/shift/open con el boton "Abrir Turno Ahora".
+            // Turno cerrado → botar a la pantalla de PIN. El cache queda en
+            // false (lo pone ShiftModal), así que al re-loguear el hub manda
+            // directo a /pos/shift/open con el botón "Abrir Turno Ahora".
             setShowShift(false);
             logout();
             router.replace("/locked");
-          }} 
+          }}
         />
       )}
 

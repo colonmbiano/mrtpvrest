@@ -106,7 +106,7 @@ export default function PerfilPage() {
           <Printer size={24} className="shrink-0 text-[#ffb84d]" />
           <div className="min-w-0">
             <p className="text-lg font-black text-neutral-100">Impresión</p>
-            <p className="text-sm font-bold text-neutral-500">Impresoras y auto-impresión · PIN admin</p>
+            <p className="text-sm font-bold text-neutral-500">Misma configuración del TPV · sincronización automática</p>
           </div>
         </Link>
       </div>

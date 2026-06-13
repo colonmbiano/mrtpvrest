@@ -5,7 +5,6 @@ import { Trash2, ShoppingCart, User, UtensilsCrossed, MapPin, Phone, Home, Recei
 import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
-import DiscountModal from "@/components/pos/DiscountModal";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
 import { COMPLEMENT_MODIFIER_PREFIX, VARIANT_MODIFIER_PREFIX } from "@/lib/modifiers";
 import { useAuthStore } from "@/store/authStore";
@@ -53,7 +52,6 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const router = useRouter();
   const [showPayment, setShowPayment] = useState(false);
   const [showTables, setShowTables] = useState(false);
-  const [showDiscount, setShowDiscount] = useState(false);
   const [processing, setProcessing] = useState(false);
 
   // Permiso para aplicar descuento sin PIN. WAITER/CASHIER no tienen
@@ -640,6 +638,18 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         } catch {
           /* no crítico para el cobro */
         }
+        const discountRes = await apiOrQueue<any>(
+          "order",
+          "PUT",
+          `/api/orders/${activeOrderId}/discount`,
+          { type: "fixed", value: ticket.discount },
+        );
+        if (!discountRes.ok) {
+          toast.error("No se pudo guardar el descuento: " + (discountRes.error || ""));
+          return;
+        }
+        queued = queued || discountRes.queued;
+        if (discountRes.data) order = { ...order, ...discountRes.data };
       } else {
         // 2. Si no hay activeOrderId, creamos la orden completa normalmente
         const orderData = {
@@ -1123,6 +1133,18 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           orderType={ticket.type}
           total={total}
           discount={ticket.discount}
+          requiresDiscountOverride={!canApplyDiscount}
+          onApplyDiscount={(type, value) => {
+            const amount = type === "percent" ? subtotal * (value / 100) : value;
+            updateTicket({ discount: amount, discountType: type });
+            toast.success(
+              amount > 0
+                ? `Descuento aplicado: $${amount.toFixed(2)}${
+                    type === "percent" ? ` (${value}%)` : ""
+                  }`
+                : "Descuento eliminado",
+            );
+          }}
           tipSuggestions={tipSuggestions}
           items={[
             ...previousItems.map((i) => ({
@@ -1171,21 +1193,6 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           }}
         />
 
-        <DiscountModal
-          isOpen={showDiscount}
-          onClose={() => setShowDiscount(false)}
-          subtotal={subtotal}
-          requiresOverride={!canApplyDiscount}
-          onApply={(type, value) => {
-            const amount = type === "percent" ? subtotal * (value / 100) : value;
-            updateTicket({ discount: amount, discountType: type });
-            toast.success(
-              `Descuento aplicado: $${amount.toFixed(2)}${
-                type === "percent" ? ` (${value}%)` : ""
-              }`,
-            );
-          }}
-        />
       </div>
     </aside>
   );

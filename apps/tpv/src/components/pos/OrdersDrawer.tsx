@@ -24,7 +24,7 @@ export interface DrawerOrder {
   status: string;
   total: number;
   time: string;
-  /** ISO de creacion para mostrar hora + fecha exactas en el tile. */
+  /** ISO de creación para mostrar hora + fecha exactas en el tile. */
   createdAt?: string;
   itemsCount: number;
   driver?: string;

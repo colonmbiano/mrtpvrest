@@ -177,6 +177,10 @@ export default function MenuPage() {
   const clearTicket = useWaiterOrderStore((state) => state.clearTicket);
   const activeTableId = useWaiterOrderStore((state) => state.activeTableId);
   const activeTableName = useWaiterOrderStore((state) => state.activeTableName);
+  const activeOrderId = useWaiterOrderStore((state) => state.activeOrderId);
+  const previousItemCount = useWaiterOrderStore((state) => state.previousItemCount ?? 0);
+  const previousTotal = useWaiterOrderStore((state) => state.previousTotal ?? 0);
+  const previousItems = useWaiterOrderStore((state) => state.previousItems ?? []);
 
   const loadCatalog = async () => {
     setStatus("loading");
@@ -220,6 +224,8 @@ export default function MenuPage() {
 
   const total = ticketItems.reduce((sum, item) => sum + item.total, 0);
   const itemCount = ticketItems.reduce((sum, item) => sum + item.quantity, 0);
+  const accumulatedItemCount = previousItemCount + itemCount;
+  const accumulatedTotal = previousTotal + total;
   const latestTicketItems = ticketItems.slice(-1).reverse();
 
   const handleAddItem = (product: MenuItem) => {
@@ -334,18 +340,25 @@ export default function MenuPage() {
     const tableLabel = activeTableName || (tableNumber ? `Mesa ${tableNumber}` : activeTableId);
 
     try {
-      const result = await apiOrQueue<{ orderNumber?: string }>("order", "POST", "/api/orders/tpv", {
-        orderType: activeTableId ? "DINE_IN" : "TAKEOUT",
-        tableId: realTableId,
-        tableNumber,
-        numberOfGuests: activeTableId ? 1 : null,
-        customerName: tableLabel || "Meseros Lite",
-        paymentMethod: "PENDING",
-        items,
-        subtotal: total,
-        discount: 0,
-        total,
-      });
+      const result = activeOrderId
+        ? await apiOrQueue<{ orderNumber?: string }>(
+            "order",
+            "POST",
+            `/api/orders/${activeOrderId}/rounds`,
+            { items },
+          )
+        : await apiOrQueue<{ orderNumber?: string }>("order", "POST", "/api/orders/tpv", {
+            orderType: activeTableId ? "DINE_IN" : "TAKEOUT",
+            tableId: realTableId,
+            tableNumber,
+            numberOfGuests: activeTableId ? 1 : null,
+            customerName: tableLabel || "Meseros Lite",
+            paymentMethod: "PENDING",
+            items,
+            subtotal: total,
+            discount: 0,
+            total,
+          });
 
       if (!result.ok) {
         throw new Error(result.error || "No se pudo guardar la comanda.");
@@ -359,8 +372,10 @@ export default function MenuPage() {
       clearTicket();
       setLastAddedName(null);
       const baseMessage = result.queued
-        ? "Comanda en cola. Se enviara al volver internet."
-        : "Comanda guardada.";
+        ? `${activeOrderId ? "Nueva ronda" : "Comanda"} en cola. Se enviara al volver internet.`
+        : activeOrderId
+          ? "Nueva ronda agregada a la cuenta."
+          : "Comanda guardada.";
       setSaveMessage(baseMessage + printNote);
       window.setTimeout(() => router.replace("/mesas"), 600);
     } catch (err: unknown) {
@@ -419,18 +434,46 @@ export default function MenuPage() {
                 ? `Agregado: ${lastAddedName}`
                 : latestTicketItems[0]
                   ? `Ultimo: ${latestTicketItems[0].name}`
-                  : "Aun sin productos"}
+                  : activeOrderId
+                    ? `${previousItemCount} productos ya guardados`
+                    : "Aun sin productos"}
             </p>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-xs font-black uppercase text-neutral-500">{itemCount} items</p>
-            <p className="text-2xl font-black text-[#ffb84d]">{money(total)}</p>
+            <p className="text-xs font-black uppercase text-neutral-500">
+              {accumulatedItemCount} items
+            </p>
+            <p className="text-2xl font-black text-[#ffb84d]">{money(accumulatedTotal)}</p>
           </div>
         </div>
       </div>
 
       <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_340px]">
         <div className="min-w-0">
+          {activeOrderId && previousItems.length > 0 && (
+            <section className="mb-3 rounded-lg border border-neutral-800 bg-[#121214] p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-xs font-black uppercase text-[#ffb84d]">
+                  Ya guardado en la cuenta
+                </p>
+                <p className="text-sm font-black text-neutral-300">{money(previousTotal)}</p>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {previousItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="min-w-[180px] rounded-lg border border-neutral-800 bg-[#18181b] p-3"
+                  >
+                    <p className="truncate text-sm font-black text-neutral-100">
+                      <span className="text-[#ffb84d]">{item.quantity}x</span> {item.name}
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-neutral-500">{money(item.total)}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           <div className="mb-3 flex min-h-[64px] items-center gap-3 rounded-lg border border-neutral-800 bg-[#121214] px-4">
             <Search size={24} className="shrink-0 text-neutral-500" aria-hidden="true" />
             <input
@@ -524,6 +567,17 @@ export default function MenuPage() {
         </div>
 
         <aside className="hidden rounded-lg border border-neutral-800 bg-[#121214] p-4 lg:block">
+          {activeOrderId && (
+            <div className="mb-3 rounded-lg border border-[#ffb84d] bg-[#18181b] p-3">
+              <p className="text-xs font-black uppercase text-[#ffb84d]">Cuenta abierta</p>
+              <p className="mt-1 text-base font-black text-neutral-100">
+                {previousItemCount} productos anteriores · {money(previousTotal)}
+              </p>
+              <p className="mt-1 text-sm font-bold text-neutral-500">
+                Abajo se muestran solo los productos de la nueva ronda.
+              </p>
+            </div>
+          )}
           <div className="mb-4 flex items-center justify-between border-b border-neutral-800 pb-3">
             <div>
               <p className="text-xs font-black uppercase text-neutral-500">{ticketStatus}</p>
@@ -590,7 +644,7 @@ export default function MenuPage() {
                   : "border-[#ffb84d] bg-[#ffb84d] text-[#0a0a0c]",
               ].join(" ")}
             >
-              {saving ? "Guardando..." : "Guardar comanda"}
+              {saving ? "Guardando..." : activeOrderId ? "Agregar nueva ronda" : "Guardar comanda"}
             </button>
           </div>
         </aside>
@@ -600,17 +654,21 @@ export default function MenuPage() {
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase text-neutral-500">Comanda local</p>
-            <p className="text-lg font-black text-neutral-100">{itemCount} productos</p>
+            <p className="text-lg font-black text-neutral-100">
+              {accumulatedItemCount} productos
+            </p>
           </div>
           <div className="text-right">
             <p className="text-xs font-black uppercase text-neutral-500">Total</p>
-            <p className="text-2xl font-black text-[#ffb84d]">{money(total)}</p>
+            <p className="text-2xl font-black text-[#ffb84d]">{money(accumulatedTotal)}</p>
           </div>
         </div>
 
         {latestTicketItems.length === 0 ? (
           <p className="min-h-[56px] rounded-lg border border-neutral-800 bg-[#18181b] px-4 py-4 text-center text-base font-bold text-neutral-500">
-            Toca un producto para verlo aqui.
+            {activeOrderId
+              ? `${previousItemCount} productos anteriores. Agrega productos para una nueva ronda.`
+              : "Toca un producto para verlo aqui."}
           </p>
         ) : (
           <div className="grid gap-2">
@@ -660,7 +718,7 @@ export default function MenuPage() {
               : "border-[#ffb84d] bg-[#ffb84d] text-[#0a0a0c]",
           ].join(" ")}
         >
-          {saving ? "Guardando..." : "Guardar comanda"}
+          {saving ? "Guardando..." : activeOrderId ? "Agregar nueva ronda" : "Guardar comanda"}
         </button>
         {(saveError || saveMessage) && (
           <p className="mt-2 rounded-lg border border-[#ffb84d] bg-[#18181b] p-3 text-center text-sm font-black text-[#ffb84d]">

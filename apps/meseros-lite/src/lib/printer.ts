@@ -113,25 +113,31 @@ async function ensurePlugin(): Promise<void> {
 
 const DEFAULT_PORT = 9100;
 const SOCKET_TIMEOUT_MS = 6000;
+const PRINT_RETRIES = 3;
+const RETRY_BACKOFF_MS = [200, 500];
+const SETTLE_AFTER_PRINT_MS = 150;
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const ipLocks = new Map<string, Promise<void>>();
+
+function withIpLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = ipLocks.get(key) ?? Promise.resolve();
+  const run = previous.then(fn, fn);
+  ipLocks.set(key, run.then(() => {}, () => {}));
+  return run;
+}
 
 export interface PrintTarget {
   ip: string;
   port?: number | null;
 }
 
-export async function sendRawTcp(target: PrintTarget, payload: string): Promise<void> {
-  const ip = (target.ip || "").trim();
-  const port = Number(target.port) || DEFAULT_PORT;
-  if (!ip || ip === "0.0.0.0") {
-    throw new Error("IP de impresora no configurada");
-  }
-
-  await ensurePlugin();
-  const plugin = getPluginSync();
-  if (!plugin) {
-    throw new Error("Plugin TCP no disponible (corre el APK; en web no hay impresión).");
-  }
-
+async function attemptSendRawTcp(
+  plugin: TCPSocketPlugin,
+  ip: string,
+  port: number,
+  payload: string,
+): Promise<void> {
   let clientId: number | null = null;
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error("Timeout (6s) — impresora no responde")), SOCKET_TIMEOUT_MS),
@@ -156,6 +162,39 @@ export async function sendRawTcp(target: PrintTarget, payload: string): Promise<
   }
 }
 
+export async function sendRawTcp(target: PrintTarget, payload: string): Promise<void> {
+  const ip = (target.ip || "").trim();
+  const port = Number(target.port) || DEFAULT_PORT;
+  if (!ip || ip === "0.0.0.0") {
+    throw new Error("IP de impresora no configurada");
+  }
+
+  await ensurePlugin();
+  const plugin = getPluginSync();
+  if (!plugin) {
+    throw new Error("Plugin TCP no disponible (corre el APK; en web no hay impresión).");
+  }
+
+  return withIpLock(`${ip}:${port}`, async () => {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < PRINT_RETRIES; attempt += 1) {
+      try {
+        await attemptSendRawTcp(plugin, ip, port, payload);
+        await delay(SETTLE_AFTER_PRINT_MS);
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt < PRINT_RETRIES - 1) {
+          await delay(RETRY_BACKOFF_MS[attempt] ?? 500);
+        }
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Fallo de impresion TCP tras reintentos");
+  });
+}
+
 // ── Tipos ──────────────────────────────────────────────────────────────────
 
 export type PrinterStation = "CASHIER" | "KITCHEN" | "BAR";
@@ -171,6 +210,7 @@ export interface PrinterRecord {
   isVirtual?: boolean;
   stations?: string[];
   printerGroupIds?: string[];
+  printerGroupRefs?: Array<{ id: string; name: string }>;
 }
 
 export interface TicketModifier {
@@ -198,6 +238,7 @@ export interface KitchenTicketConfig {
   showModifiers?: boolean;
   showNotes?: boolean;
   groupBySeat?: boolean;
+  separateByGroup?: boolean;
   fontSize?: "normal" | "large" | "xlarge";
 }
 
@@ -207,6 +248,7 @@ export interface KitchenTicketInput {
   tableNumber?: string | null;
   customerName?: string | null;
   items: TicketItem[];
+  assignmentName?: string | null;
   config?: KitchenTicketConfig;
 }
 
@@ -262,6 +304,7 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     showModifiers: input.config?.showModifiers ?? true,
     showNotes: input.config?.showNotes ?? true,
     groupBySeat: input.config?.groupBySeat ?? true,
+    separateByGroup: input.config?.separateByGroup ?? false,
     fontSize: input.config?.fontSize ?? "large",
   };
 
@@ -274,6 +317,12 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
   if (cfg.header.trim()) {
     d += CMD.BOLD_ON + CMD.DOUBLE_ON;
     d += cfg.header.trim() + "\n";
+    d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
+  }
+
+  if (input.assignmentName?.trim()) {
+    d += CMD.BOLD_ON + CMD.DOUBLE_ON;
+    d += input.assignmentName.trim().toUpperCase() + "\n";
     d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
   }
 
@@ -406,6 +455,54 @@ export async function printKitchenTickets(
 
   if (itemsWithGroups.length === 0) {
     return dispatchToStations(printers, ["KITCHEN", "BAR"], buildKitchenTicket(input));
+  }
+
+  if (input.config?.separateByGroup) {
+    const jobs = new Map<
+      string,
+      { printer: PrinterRecord; assignmentName: string; items: TicketItem[] }
+    >();
+
+    for (const item of input.items) {
+      const groupIds = item.printerGroupIds ?? [];
+      for (const printer of printers) {
+        if (!isNetworkTarget(printer)) continue;
+        for (const group of printer.printerGroupRefs ?? []) {
+          if (!groupIds.includes(group.id)) continue;
+          const key = `${printer.id}:${group.id}`;
+          const job = jobs.get(key) ?? {
+            printer,
+            assignmentName: group.name,
+            items: [],
+          };
+          if (!job.items.includes(item)) job.items.push(item);
+          jobs.set(key, job);
+        }
+      }
+    }
+
+    if (jobs.size > 0) {
+      let ok = 0;
+      const failed: Array<{ name: string; error: string }> = [];
+      await Promise.all(
+        Array.from(jobs.values()).map(async ({ printer, assignmentName, items }) => {
+          try {
+            await sendRawTcp(
+              { ip: printer.ip as string, port: printer.port },
+              buildKitchenTicket({ ...input, items, assignmentName }),
+            );
+            ok += 1;
+          } catch (error) {
+            const detail = error as { message?: string };
+            failed.push({
+              name: `${printer.name} - ${assignmentName}`,
+              error: detail.message || "fallo TCP",
+            });
+          }
+        }),
+      );
+      return { ok, failed };
+    }
   }
 
   const itemsByPrinter = new Map<string, TicketItem[]>();

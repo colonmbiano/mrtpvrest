@@ -41,12 +41,17 @@ router.get('/', async (req, res) => {
       include: { zone: { select: { id: true, name: true, icon: true, isActive: true } } },
     });
 
-    // Para cada mesa OCCUPIED, traer la orden activa (status=OPEN) más reciente
-    // con resumen liviano para que el TPV pinte el estado sin segunda llamada.
-    const occupiedIds = tables.filter(t => t.status === 'OCCUPIED').map(t => t.id);
-    const activeOrders = occupiedIds.length
+    // La orden OPEN es la fuente de verdad. Consultamos todas las mesas para
+    // tolerar un status AVAILABLE desfasado y evitar que Meseros Lite muestre
+    // una mesa con cuenta como libre o con cero articulos.
+    const tableIds = tables.map(t => t.id);
+    const activeOrders = tableIds.length
       ? await prisma.order.findMany({
-          where: { tableId: { in: occupiedIds }, status: 'OPEN' },
+          where: {
+            tableId: { in: tableIds },
+            status: 'OPEN',
+            paymentStatus: { not: 'PAID' },
+          },
           select: {
             id: true, orderNumber: true, status: true,
             paymentStatus: true, total: true, customerName: true,
@@ -61,7 +66,14 @@ router.get('/', async (req, res) => {
       if (!orderByTable[o.tableId]) orderByTable[o.tableId] = o;
     }
 
-    res.json(tables.map(t => ({ ...t, activeOrder: orderByTable[t.id] || null })));
+    res.json(tables.map(t => {
+      const activeOrder = orderByTable[t.id] || null;
+      return {
+        ...t,
+        status: activeOrder ? 'OCCUPIED' : t.status,
+        activeOrder,
+      };
+    }));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -81,7 +93,11 @@ router.get('/:id', async (req, res) => {
     let activeOrder = null;
     if (table.status === 'OCCUPIED') {
       activeOrder = await prisma.order.findFirst({
-        where: { tableId: table.id, status: 'OPEN' },
+        where: {
+          tableId: table.id,
+          status: 'OPEN',
+          paymentStatus: { not: 'PAID' },
+        },
         select: {
           id: true,
           orderNumber: true,
