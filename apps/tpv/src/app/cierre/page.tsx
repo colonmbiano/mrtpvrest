@@ -21,6 +21,14 @@ interface ShiftExpense {
   createdAt: string;
 }
 
+interface ShiftCashIn {
+  id: string;
+  description: string;
+  amount: number;
+  category: string;
+  createdAt: string;
+}
+
 interface Shift {
   id: string;
   openedAt: string;
@@ -35,10 +43,12 @@ interface Shift {
   totalCourtesy?: number;
   totalSales: number;
   totalExpenses: number;
+  totalCashIn?: number;
   ordersCount?: number;
   expectedCash: number | null;
   notes?: string | null;
   expenses?: ShiftExpense[];
+  cashIns?: ShiftCashIn[];
   // Cuántos meseros/staff quedaron cerrados (clock-out) junto con la caja.
   staffClockedOut?: number;
 }
@@ -70,6 +80,7 @@ export default function CierreTurno() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showExpenses, setShowExpenses] = useState(false);
+  const [showCashIn, setShowCashIn] = useState(false);
 
   // Post-cierre: el turno ya cerrado (respuesta del backend) + estado de impresión.
   const [closedShift, setClosedShift] = useState<Shift | null>(null);
@@ -92,6 +103,7 @@ export default function CierreTurno() {
     totalTransfer: Number(s.totalTransfer || 0),
     totalCourtesy: Number(s.totalCourtesy || 0),
     totalExpenses: Number(s.totalExpenses || 0),
+    totalCashIn: Number(s.totalCashIn || 0),
     totalSales: Number(s.totalSales || 0),
     ordersCount: Number(s.ordersCount || 0),
     closingFloat: Number(s.closingFloat ?? 0),
@@ -99,6 +111,9 @@ export default function CierreTurno() {
     expectedCash: reveal ? (revealed?.expectedCash ?? s.expectedCash) : s.expectedCash,
     expenses: (s.expenses ?? []).map((e) => ({
       description: e.description, amount: Number(e.amount || 0), category: e.category,
+    })),
+    cashIns: (s.cashIns ?? []).map((c) => ({
+      description: c.description, amount: Number(c.amount || 0), category: c.category,
     })),
     notes: s.notes ?? null,
     blindClose: s.blindClose,
@@ -180,6 +195,19 @@ export default function CierreTurno() {
     () => (shift?.totalExpenses ?? expenses.reduce((s, e) => s + Number(e.amount || 0), 0)),
     [shift?.totalExpenses, expenses],
   );
+
+  const cashIns = shift?.cashIns ?? [];
+  const totalCashIn = useMemo(
+    () => cashIns.reduce((s, c) => s + Number(c.amount || 0), 0),
+    [cashIns],
+  );
+
+  // Registra un ingreso de efectivo y refresca el turno para que entre al corte.
+  const addCashIn = async (description: string, amount: number, category: string) => {
+    if (!shift) return;
+    await api.post(`/api/shifts/${shift.id}/cash-ins`, { description, amount, category });
+    await loadShift();
+  };
 
   const counted = Number(countedTotal);
   const countedValid = countedTotal.trim() !== '' && Number.isFinite(counted) && counted >= 0;
@@ -272,6 +300,9 @@ export default function CierreTurno() {
             <Line label="Transferencia" value={fmtMoney(cs.totalTransfer || 0)} />
             {Number(cs.totalCourtesy || 0) > 0 && (
               <Line label="Cortesía" value={fmtMoney(cs.totalCourtesy || 0)} />
+            )}
+            {Number(cs.totalCashIn || 0) > 0 && (
+              <Line label="Ingresos de efectivo" value={`+${fmtMoney(cs.totalCashIn || 0)}`} />
             )}
             <Line label="Gastos" value={`−${fmtMoney(cs.totalExpenses || 0)}`} />
             <div className="border-t border-white/10 my-1" />
@@ -497,6 +528,57 @@ export default function CierreTurno() {
             )}
           </div>
 
+          {/* INGRESOS DE EFECTIVO DEL TURNO (cambio/feria a la gaveta) */}
+          <div className="rounded-3xl p-6 flex flex-col gap-4 bg-white/5 backdrop-blur-md border border-white/10">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Wallet size={15} className="text-emerald-400" />
+                <span className="text-[11px] font-black tracking-[0.2em] text-white/55">INGRESOS DE EFECTIVO</span>
+              </div>
+              <button
+                onClick={() => setShowCashIn(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-400/15 border border-emerald-400/30 text-emerald-300 text-[11px] font-black active:scale-95 transition-transform"
+              >
+                <Plus size={14} strokeWidth={3} /> Ingresar
+              </button>
+            </div>
+
+            {cashIns.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
+                <Wallet size={24} className="mx-auto text-white/25" />
+                <p className="mt-2 text-[12px] text-white/40">
+                  Sin ingresos de efectivo en este turno.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {cashIns.map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-3 rounded-2xl p-3 bg-white/5 border border-white/10"
+                  >
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-emerald-400/10 border border-emerald-400/20">
+                      <Wallet size={16} className="text-emerald-300" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-white truncate">{c.description}</p>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-white/35">
+                        {(c.category || 'CAMBIO').replace(/_/g, ' ')}
+                      </p>
+                    </div>
+                    <span className="text-sm font-black tabular-nums text-emerald-300 shrink-0">
+                      +{fmtMoney(c.amount)}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-2 mt-1 border-t border-white/10">
+                  <span className="text-[11px] font-black tracking-[0.15em] text-white/40">TOTAL INGRESOS</span>
+                  <span className="text-base font-black tabular-nums text-emerald-300">+{fmtMoney(totalCashIn)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* NOTAS */}
           <div className="rounded-3xl p-5 flex flex-col gap-2 bg-white/5 backdrop-blur-md border border-white/10">
             <label className="text-[11px] font-black tracking-[0.2em] text-white/55">
@@ -542,6 +624,13 @@ export default function CierreTurno() {
               label="Gastos del turno"
               value={`−${fmtMoney(totalExpenses)}`}
             />
+            {totalCashIn > 0 && (
+              <SummaryCard
+                icon={<Wallet size={14} className="text-emerald-400" />}
+                label="Ingresos de efectivo"
+                value={`+${fmtMoney(totalCashIn)}`}
+              />
+            )}
 
             <div className="rounded-2xl p-4 flex items-start gap-2.5 bg-[#ffb84d]/8 border border-[#ffb84d]/30">
               <ShieldAlert size={16} className="text-[#ffb84d] flex-shrink-0 mt-0.5" />
@@ -585,6 +674,13 @@ export default function CierreTurno() {
         isOpen={showExpenses}
         onClose={() => { setShowExpenses(false); loadShift(); }}
       />
+
+      {showCashIn && (
+        <CashInModal
+          onClose={() => setShowCashIn(false)}
+          onSubmit={addCashIn}
+        />
+      )}
     </div>
   );
 }
@@ -665,6 +761,117 @@ function PinModal({
           className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-[#0a0a0c] bg-[#ffb84d] active:scale-95 transition-transform disabled:opacity-40"
         >
           <Eye size={16} /> {busy ? 'Validando…' : 'Revelar desfase'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Modal para registrar un ingreso de efectivo a la caja (cambio/feria que el
+// cajero mete a la gaveta y que no proviene de una venta).
+const CASH_IN_CATEGORIES = [
+  { value: 'CHANGE', label: '🪙 Cambio / feria' },
+  { value: 'DEPOSIT', label: '💵 Depósito a caja' },
+  { value: 'OTHER', label: '📦 Otro' },
+];
+
+function CashInModal({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void;
+  onSubmit: (description: string, amount: number, category: string) => Promise<void>;
+}) {
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState('CHANGE');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async () => {
+    const amt = Number(amount);
+    if (!description.trim()) { setErr('Ingresa una descripción'); return; }
+    if (!Number.isFinite(amt) || amt <= 0) { setErr('Monto inválido'); return; }
+    if (busy) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await onSubmit(description.trim(), amt, category);
+      onClose();
+    } catch (e: any) {
+      setErr(e?.response?.data?.error || e?.message || 'No se pudo registrar');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-sm p-6" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-3xl p-6 flex flex-col gap-4 bg-[#141416] border border-white/10" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-2xl bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center">
+              <Wallet size={16} className="text-emerald-400" />
+            </div>
+            <h3 className="text-base font-black">Ingresar efectivo</h3>
+          </div>
+          <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95">
+            <X size={16} />
+          </button>
+        </div>
+        <p className="text-xs text-white/55">Efectivo o cambio que metes a la gaveta. Suma al esperado del corte.</p>
+
+        <input
+          type="text"
+          autoFocus
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Descripción (ej. Cambio para caja)"
+          className="w-full h-12 rounded-2xl bg-[#0a0a0c]/60 border border-white/10 px-4 text-sm font-medium text-white outline-none focus:border-emerald-400/40"
+        />
+
+        <div className="relative">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-400 font-black">$</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="0.01"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+            placeholder="0.00"
+            className="w-full h-12 rounded-2xl bg-[#0a0a0c]/60 border border-white/10 pl-9 pr-4 text-lg font-black text-emerald-400 outline-none tabular-nums focus:border-emerald-400/40"
+          />
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {CASH_IN_CATEGORIES.map((c) => {
+            const active = category === c.value;
+            return (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => setCategory(c.value)}
+                className={`h-12 rounded-2xl border text-[10px] font-black uppercase tracking-wider transition-all ${
+                  active ? 'bg-emerald-400/15 border-emerald-400/50 text-emerald-300' : 'bg-white/5 border-white/10 text-white/60'
+                }`}
+              >
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {err && (
+          <p className="text-[11px] font-semibold text-center" style={{ color: '#FF5C33' }}>{err}</p>
+        )}
+
+        <button
+          onClick={submit}
+          disabled={busy}
+          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-[#0a0a0c] bg-emerald-400 active:scale-95 transition-transform disabled:opacity-40"
+        >
+          <Plus size={16} strokeWidth={3} /> {busy ? 'Guardando…' : 'Registrar ingreso'}
         </button>
       </div>
     </div>

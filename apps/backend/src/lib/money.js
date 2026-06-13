@@ -149,18 +149,19 @@ function summarizePayments(orders, pmMap = PAYMENT_METHOD_MAP) {
 
 /**
  * Corte de caja: efectivo esperado y varianza.
- *   expectedCash = openingFloat + totalCash − totalExpenses
+ *   expectedCash = openingFloat + totalCash + totalCashIn − totalExpenses
  *   variance     = countedCash − expectedCash   (negativo = faltante)
  *
  * @param {object} p
  * @param {number} p.openingFloat   Fondo de apertura.
  * @param {number} p.totalCash      Ventas en efectivo del turno.
  * @param {number} p.totalExpenses  Gastos pagados de la caja.
+ * @param {number} [p.totalCashIn]  Ingresos de efectivo a caja (cambio/feria).
  * @param {number} [p.countedCash]  Efectivo contado al cierre (closingFloat).
  * @returns {{expectedCash:number, variance:number|null}}
  */
-function cashCutSummary({ openingFloat = 0, totalCash = 0, totalExpenses = 0, countedCash } = {}) {
-  const expectedCash = Number(openingFloat) + Number(totalCash) - Number(totalExpenses);
+function cashCutSummary({ openingFloat = 0, totalCash = 0, totalExpenses = 0, totalCashIn = 0, countedCash } = {}) {
+  const expectedCash = Number(openingFloat) + Number(totalCash) + Number(totalCashIn) - Number(totalExpenses);
   const variance =
     countedCash === undefined || countedCash === null
       ? null

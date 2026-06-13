@@ -9,6 +9,12 @@ const EXPENSE_CATEGORIES = [
   { value: "OTHER",    label: "📦 Otro" },
 ];
 
+const CASH_IN_CATEGORIES = [
+  { value: "CHANGE",  label: "🪙 Cambio / feria" },
+  { value: "DEPOSIT", label: "💵 Depósito a caja" },
+  { value: "OTHER",   label: "📦 Otro" },
+];
+
 interface Props {
   employee: { id: string; name: string };
   onClose: () => void;
@@ -31,6 +37,13 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
   const [expCat, setExpCat]     = useState("OTHER");
   const [addingExp, setAddingExp] = useState(false);
   const [savingExp, setSavingExp] = useState(false);
+
+  // Ingreso de efectivo nuevo (cambio/feria a la gaveta)
+  const [cashDesc, setCashDesc]     = useState("");
+  const [cashAmt, setCashAmt]       = useState("");
+  const [cashCat, setCashCat]       = useState("CHANGE");
+  const [addingCash, setAddingCash] = useState(false);
+  const [savingCash, setSavingCash] = useState(false);
 
   const [opening, setOpening]   = useState(false);
   const [closing, setClosing]   = useState(false);
@@ -90,6 +103,30 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
     } catch {}
   }
 
+  async function addCashIn() {
+    if (!cashDesc || !cashAmt) { alert("Completa descripción y monto"); return; }
+    setSavingCash(true);
+    try {
+      const { data } = await api.post(`/api/shifts/${shift.id}/cash-ins`, {
+        description: cashDesc,
+        amount: Number(cashAmt),
+        category: cashCat,
+      });
+      setShift((s: any) => ({ ...s, cashIns: [data, ...(s.cashIns || [])] }));
+      setCashDesc(""); setCashAmt(""); setCashCat("CHANGE");
+      setAddingCash(false);
+    } catch (e: any) { alert(e.response?.data?.error || "Error"); }
+    finally { setSavingCash(false); }
+  }
+
+  async function deleteCashIn(id: string) {
+    if (!confirm("¿Eliminar este ingreso?")) return;
+    try {
+      await api.delete(`/api/shifts/cash-ins/${id}`);
+      setShift((s: any) => ({ ...s, cashIns: s.cashIns.filter((c: any) => c.id !== id) }));
+    } catch {}
+  }
+
   async function closeShift() {
     if (!confirm("¿Cerrar el turno? Esta acción no se puede deshacer.")) return;
     setClosing(true);
@@ -119,6 +156,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
   }
 
   const totalExpenses = shift?.expenses?.reduce((s: number, e: any) => s + e.amount, 0) || 0;
+  const totalCashIn = shift?.cashIns?.reduce((s: number, c: any) => s + c.amount, 0) || 0;
 
   // ── SIN TURNO ABIERTO ──
   if (!loading && !shift) {
@@ -197,7 +235,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
         <div className="flex border-b flex-shrink-0" style={{ borderColor: "var(--border)" }}>
           {[
             { key: "summary",  label: "📊 Resumen" },
-            { key: "expenses", label: `💸 Gastos (${shift?.expenses?.length || 0})` },
+            { key: "expenses", label: `💸 Movimientos (${(shift?.expenses?.length || 0) + (shift?.cashIns?.length || 0)})` },
             ...(!isClosed ? [{ key: "close", label: "🔒 Cerrar turno" }] : []),
           ].map((t: any) => (
             <button key={t.key} onClick={() => setTab(t.key)}
@@ -295,9 +333,80 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
             </div>
           )}
 
-          {/* ── TAB: GASTOS ── */}
+          {/* ── TAB: MOVIMIENTOS (gastos + ingresos de efectivo) ── */}
           {tab === "expenses" && (
             <div className="flex flex-col gap-3">
+              {/* ── INGRESOS DE EFECTIVO (cambio/feria) ── */}
+              {!isClosed && (
+                <button onClick={() => setAddingCash(true)}
+                  className="w-full py-3 rounded-2xl font-syne font-black text-sm"
+                  style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>
+                  + Ingresar efectivo / cambio
+                </button>
+              )}
+
+              {addingCash && (
+                <div className="rounded-2xl border p-4 flex flex-col gap-3" style={{ background: "var(--surf2)", borderColor: "#22c55e" }}>
+                  <div className="text-xs font-black uppercase tracking-wider" style={{ color: "#22c55e" }}>Ingreso de efectivo</div>
+                  <input value={cashDesc} onChange={e => setCashDesc(e.target.value)}
+                    placeholder="Descripción * (ej. Cambio para caja)"
+                    className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+                    style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }} />
+                  <div className="flex gap-2">
+                    <input type="number" value={cashAmt} onChange={e => setCashAmt(e.target.value)}
+                      placeholder="Monto *"
+                      className="flex-1 px-3 py-2.5 rounded-xl text-sm outline-none"
+                      style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }} />
+                    <select value={cashCat} onChange={e => setCashCat(e.target.value)}
+                      className="flex-1 px-3 py-2.5 rounded-xl text-sm outline-none"
+                      style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }}>
+                      {CASH_IN_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => { setAddingCash(false); setCashDesc(""); setCashAmt(""); }}
+                      className="flex-1 py-2 rounded-xl text-xs font-bold border" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+                      Cancelar
+                    </button>
+                    <button onClick={addCashIn} disabled={savingCash}
+                      className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: "#22c55e", color: "#000" }}>
+                      {savingCash ? "Guardando..." : "Guardar"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {shift?.cashIns?.length > 0 && (
+                <>
+                  <div className="rounded-2xl p-3 text-center" style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                    <div className="text-xs font-bold mb-0.5" style={{ color: "var(--muted)" }}>Total ingresos de efectivo</div>
+                    <div className="text-2xl font-black" style={{ color: "#22c55e" }}>+${totalCashIn.toFixed(0)}</div>
+                  </div>
+                  {shift.cashIns.map((ci: any) => (
+                    <div key={ci.id} className="flex items-center gap-3 p-3 rounded-xl border"
+                      style={{ background: "var(--surf2)", borderColor: "var(--border)" }}>
+                      <div className="text-lg flex-shrink-0">
+                        {CASH_IN_CATEGORIES.find(c => c.value === ci.category)?.label.split(" ")[0] || "🪙"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold truncate">{ci.description}</div>
+                        <div className="text-xs" style={{ color: "var(--muted)" }}>
+                          {new Date(ci.createdAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      </div>
+                      <div className="font-syne font-black" style={{ color: "#22c55e" }}>+${ci.amount.toFixed(0)}</div>
+                      {!isClosed && (
+                        <button onClick={() => deleteCashIn(ci.id)}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
+                          style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>✕</button>
+                      )}
+                    </div>
+                  ))}
+                  <div className="h-px my-1" style={{ background: "var(--border)" }} />
+                </>
+              )}
+
+              {/* ── GASTOS ── */}
               {!isClosed && (
                 <button onClick={() => setAddingExp(true)}
                   className="w-full py-3 rounded-2xl font-syne font-black text-sm"
@@ -412,12 +521,18 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
                   <span style={{ color: "var(--muted)" }}>Fondo inicial</span>
                   <span className="font-bold">${shift.openingFloat.toFixed(0)}</span>
                 </div>
+                {totalCashIn > 0 && (
+                  <div className="flex justify-between text-sm py-1">
+                    <span style={{ color: "var(--muted)" }}>Ingresos de efectivo</span>
+                    <span className="font-bold" style={{ color: "#22c55e" }}>+${totalCashIn.toFixed(0)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm py-1">
                   <span style={{ color: "var(--muted)" }}>Gastos registrados</span>
                   <span className="font-bold" style={{ color: "#ef4444" }}>-${totalExpenses.toFixed(0)}</span>
                 </div>
                 <div className="flex justify-between text-sm py-1">
-                  <span style={{ color: "var(--muted)" }}>Gastos registrados</span>
+                  <span style={{ color: "var(--muted)" }}>Número de gastos</span>
                   <span className="font-bold">{shift.expenses?.length || 0}</span>
                 </div>
               </div>
