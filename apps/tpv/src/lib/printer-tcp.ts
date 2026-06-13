@@ -229,7 +229,30 @@ const PRINT_RETRIES = 3;
 const RETRY_BACKOFF_MS = [200, 500];
 const SETTLE_AFTER_PRINT_MS = 150;
 
+// Troceado para pedidos grandes (ver attemptSendRawTcp). Las térmicas en el
+// puerto 9100 tienen un buffer de entrada chico (~4KB típico) y sin control de
+// flujo: mandar un ticket grande en un solo send desborda el buffer y el socket
+// se queda colgado hasta el timeout → "no imprime". Mandamos en chunks con una
+// pausa entre cada uno para darle tiempo a la impresora de drenar.
+const PRINT_CHUNK_BYTES = 1024;
+const CHUNK_DELAY_MS = 30;
+
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Corre `p` con un límite de tiempo; rechaza con `msg` si se excede. */
+function raceTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(msg)), ms);
+  });
+  return Promise.race([
+    p.then(
+      (v) => { clearTimeout(timer); return v; },
+      (e) => { clearTimeout(timer); throw e; },
+    ),
+    timeout,
+  ]);
+}
 
 // Cola serializada por clave `ip:port`. Cada nuevo envío encadena tras el
 // anterior (haya tenido éxito o no) para garantizar exclusión por impresora.
@@ -284,21 +307,42 @@ async function attemptSendRawTcp(
   payload: PrintPayload,
 ): Promise<void> {
   let clientId: number | null = null;
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error("Timeout (6s) — impresora no responde")), SOCKET_TIMEOUT_MS)
-  );
-
   try {
-    const conn = await Promise.race([plugin.connect({ ipAddress: ip, port }), timeoutPromise]);
+    const conn = await raceTimeout(
+      plugin.connect({ ipAddress: ip, port }),
+      SOCKET_TIMEOUT_MS,
+      "Timeout de conexión (6s) — impresora no responde",
+    );
     clientId = conn.client;
+
     // Caso normal (string): ESC/POS de texto, todo ≤0x7F tras normalizar →
     // se envía utf8 como siempre. Caso binario (segmentos, p.ej. logo raster):
     // se serializa a HEX para no perder los bytes >0x7F.
-    const send =
-      typeof payload === "string"
-        ? plugin.send({ client: clientId, data: normalizeThermalText(payload), encoding: "utf8" })
-        : plugin.send({ client: clientId, data: bytesToHex(segmentsToBytes(payload)), encoding: "hex" });
-    await Promise.race([send, timeoutPromise]);
+    let data: string;
+    let encoding: "utf8" | "hex";
+    let chunkLen: number; // longitud del chunk medida en chars de `data`
+    if (typeof payload === "string") {
+      data = normalizeThermalText(payload);
+      encoding = "utf8";
+      chunkLen = PRINT_CHUNK_BYTES; // 1 char ≤0x7F = 1 byte
+    } else {
+      data = bytesToHex(segmentsToBytes(payload));
+      encoding = "hex";
+      chunkLen = PRINT_CHUNK_BYTES * 2; // 2 chars hex = 1 byte
+    }
+
+    // Troceo: cada chunk con su PROPIO timeout (un ticket grande no debe
+    // morir por un solo límite de 6s sobre todo el envío) y una pausa entre
+    // chunks para no desbordar el buffer de la impresora.
+    for (let offset = 0; offset < data.length; offset += chunkLen) {
+      const chunk = data.slice(offset, offset + chunkLen);
+      await raceTimeout(
+        plugin.send({ client: clientId, data: chunk, encoding }),
+        SOCKET_TIMEOUT_MS,
+        "Timeout de envío (6s) — impresora no responde",
+      );
+      if (offset + chunkLen < data.length) await delay(CHUNK_DELAY_MS);
+    }
   } finally {
     if (clientId !== null) {
       try { await plugin.disconnect({ client: clientId }); } catch { /* noop */ }

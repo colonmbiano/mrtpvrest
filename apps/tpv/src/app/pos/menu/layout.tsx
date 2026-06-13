@@ -103,6 +103,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // web al entrar: el backend cloud no alcanza las impresoras LAN, así que la
   // caja es quien imprime.
   const autoPrintWebOrderRef = useRef<((order: any) => void) | null>(null);
+  // Lock in-flight para que flushPendingRound no POSTee la misma ronda 2x.
+  const flushingRoundRef = useRef(false);
   useNotifications({ onOrderNew: (order) => autoPrintWebOrderRef.current?.(order) });
   const unreadCount = useNotifStore((s) => s.unreadCount);
 
@@ -550,7 +552,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         orderNumber: fullOrderNum,
         orderType: full.orderType || null,
         tableNumber: full.table?.name || full.tableNumber || null,
-        customerName: full.customerName || full.user?.name || null,
+        // El nombre que el cajero le puso a la cuenta ("Renombrar" → ticketName)
+        // tiene prioridad sobre el nombre del cliente, igual que en el listado
+        // de tickets abiertos (drawerOrders). Sin esto la cuenta impresa nunca
+        // reflejaba el rename.
+        customerName: full.ticketName || full.customerName || full.user?.name || null,
         customerPhone: full.customerPhone || null,
         numberOfGuests: full.numberOfGuests ?? null,
         cashierName: currentEmployee?.name || null,
@@ -624,25 +630,35 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     const pending = useTicketStore.getState().getActiveTicket().items;
     if (!pending || pending.length === 0) return true;
 
-    const res = await apiOrQueue(
-      "order",
-      "POST",
-      `/api/orders/${activeOrderId}/items`,
-      { items: buildOrderItemsPayload(pending) },
-    );
-    if (!res.ok) {
-      toast.error("No se pudieron guardar los productos: " + (res.error || ""));
-      return false;
-    }
+    // Guarda de re-entrada: leemos los items pendientes y solo los limpiamos
+    // DESPUÉS del await. Sin lock, un doble-tap en "Imprimir cuenta" (o
+    // imprimir + cobrar casi a la vez) lee la misma ronda dos veces y la
+    // POSTea duplicada antes de que clearActiveItems corra.
+    if (flushingRoundRef.current) return true;
+    flushingRoundRef.current = true;
+    try {
+      const res = await apiOrQueue(
+        "order",
+        "POST",
+        `/api/orders/${activeOrderId}/items`,
+        { items: buildOrderItemsPayload(pending) },
+      );
+      if (!res.ok) {
+        toast.error("No se pudieron guardar los productos: " + (res.error || ""));
+        return false;
+      }
 
-    useTicketStore.getState().clearActiveItems();
-    useActiveOrderStore.getState().bumpRoundsRevision();
-    toast.success(
-      res.queued
-        ? "Productos en cola · se guardarán al volver la red"
-        : "Productos guardados en la cuenta",
-    );
-    return true;
+      useTicketStore.getState().clearActiveItems();
+      useActiveOrderStore.getState().bumpRoundsRevision();
+      toast.success(
+        res.queued
+          ? "Productos en cola · se guardarán al volver la red"
+          : "Productos guardados en la cuenta",
+      );
+      return true;
+    } finally {
+      flushingRoundRef.current = false;
+    }
   };
 
   const handleReprintActiveKitchen = async () => {
@@ -705,6 +721,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         ticketName: nextName.trim(),
       });
       await fetchOpenOrders();
+      // Re-hidrata el panel del ticket activo (SidebarTicket observa
+      // roundsRevision) para que el nombre nuevo salga también en el header,
+      // no solo en el listado de Tickets abiertos.
+      if (order.id === activeOrderId) {
+        useActiveOrderStore.getState().bumpRoundsRevision();
+      }
       toast.success(
         nextName.trim() ? `Ticket renombrado: ${nextName.trim()}` : "Nombre eliminado",
       );
