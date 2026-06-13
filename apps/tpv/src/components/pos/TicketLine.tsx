@@ -66,28 +66,29 @@ const TicketLine: React.FC<TicketLineProps> = ({
   };
     
   return (
-    <div className="group flex items-start gap-4 py-4 border-b border-white/5 last:border-0">
-      {/* STEPPER VERTICAL - TOUCH OPTIMIZED */}
-      <div className="flex flex-col items-center w-10 bg-[#121316] rounded-xl border border-white/5 overflow-hidden shrink-0">
+    <div className="group flex items-center gap-3 py-2.5 border-b border-white/5 last:border-0">
+      {/* STEPPER VERTICAL - TOUCH OPTIMIZED (compacto) */}
+      <div className="flex flex-col items-center w-9 self-center bg-[#121316] rounded-lg border border-white/5 overflow-hidden shrink-0">
         <button
           onClick={inc}
-          className="w-full h-10 flex items-center justify-center text-zinc-500 active:text-amber-500 active:bg-white/5 transition-all active:scale-90"
+          className="w-full h-8 flex items-center justify-center text-zinc-500 active:text-amber-500 active:bg-white/5 transition-all active:scale-90"
         >
-          <Plus size={16} strokeWidth={3} />
+          <Plus size={15} strokeWidth={3} />
         </button>
-        <span className="text-[13px] font-black text-white mono tnum py-1">
+        <span className="text-[13px] font-black text-white mono tnum leading-none py-0.5">
           {quantity}
         </span>
         <button
           onClick={dec}
-          className="w-full h-10 flex items-center justify-center text-zinc-500 active:text-red-500 active:bg-white/5 transition-all active:scale-90"
+          className="w-full h-8 flex items-center justify-center text-zinc-500 active:text-red-500 active:bg-white/5 transition-all active:scale-90"
         >
-          <Minus size={16} strokeWidth={3} />
+          <Minus size={15} strokeWidth={3} />
         </button>
       </div>
 
       {/* INFO PRODUCTO */}
-      <div className="flex-1 min-w-0 flex flex-col gap-1">
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+        {/* Fila principal: nombre + total alineado a la derecha (estilo recibo) */}
         <div className="flex justify-between items-start gap-2">
           {onEdit ? (
             <button
@@ -95,31 +96,42 @@ const TicketLine: React.FC<TicketLineProps> = ({
               onClick={onEdit}
               className="group/edit flex min-w-0 flex-1 items-start gap-1.5 text-left active:scale-[0.99] transition-transform"
             >
-              <span className="text-sm font-black text-white leading-tight tracking-tight line-clamp-2">
+              <span className="text-sm font-black text-white leading-snug tracking-tight line-clamp-2">
                 {name}
               </span>
               <Pencil
                 size={12}
-                className="mt-0.5 shrink-0 text-zinc-600 group-active/edit:text-amber-500 transition-colors"
+                className="mt-1 shrink-0 text-zinc-600 group-active/edit:text-amber-500 transition-colors"
               />
             </button>
           ) : (
-            <span className="text-sm font-black text-white leading-tight tracking-tight line-clamp-2">
+            <span className="min-w-0 flex-1 text-sm font-black text-white leading-snug tracking-tight line-clamp-2">
               {name}
             </span>
           )}
-          {onRemove && (
-            <button
-              onClick={onRemove}
-              className="text-zinc-700 active:text-red-500 transition-all p-1 active:scale-90"
-            >
-              <X size={18} />
-            </button>
-          )}
+          <div className="flex shrink-0 items-center gap-1">
+            <span className="text-sm font-black text-amber-500 mono tabular-nums">
+              {currency}{(price * quantity).toFixed(2)}
+            </span>
+            {onRemove && (
+              <button
+                onClick={onRemove}
+                aria-label="Quitar producto"
+                className="-mr-1 text-zinc-700 active:text-red-500 transition-all p-1 active:scale-90"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
 
+        {/* Precio unitario discreto bajo el nombre */}
+        <span className="text-[10px] text-zinc-600 font-bold mono tabular-nums">
+          {currency}{price.toFixed(2)} c/u
+        </span>
+
         {modifiers && modifiers.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-0.5">
+          <div className="flex flex-wrap gap-1 mt-0.5">
             {modifiers.map((m, i) => (
               <span
                 key={i}
@@ -182,15 +194,6 @@ const TicketLine: React.FC<TicketLineProps> = ({
             </span>
           </button>
         ) : null}
-
-        <div className="flex justify-between items-baseline mt-2 pt-1">
-          <span className="text-[11px] text-zinc-600 font-bold mono">
-            {currency}{price.toFixed(2)} / u.
-          </span>
-          <span className="text-sm font-black text-amber-500 mono">
-            {currency}{(price * quantity).toFixed(2)}
-          </span>
-        </div>
       </div>
     </div>
   );
