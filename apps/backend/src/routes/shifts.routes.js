@@ -59,7 +59,10 @@ router.get('/current', requireLocation, async (req, res) => {
   try {
     const shift = await prisma.cashShift.findFirst({
       where: { isOpen: true, locationId: req.locationId },
-      include: { expenses: { orderBy: { createdAt: 'desc' } } },
+      include: {
+        expenses: { orderBy: { createdAt: 'desc' } },
+        cashIns: { orderBy: { createdAt: 'desc' } },
+      },
       orderBy: { openedAt: 'desc' }
     });
     res.json(shift || null);
@@ -71,7 +74,10 @@ router.get('/active', requireLocation, async (req, res) => {
   try {
     const shift = await prisma.cashShift.findFirst({
       where: { isOpen: true, locationId: req.locationId },
-      include: { expenses: { orderBy: { createdAt: 'desc' } } },
+      include: {
+        expenses: { orderBy: { createdAt: 'desc' } },
+        cashIns: { orderBy: { createdAt: 'desc' } },
+      },
       orderBy: { openedAt: 'desc' }
     });
     res.json(shift || null);
@@ -118,7 +124,7 @@ router.post('/open', requireLocation, requireCanManageShifts, validateBody(openS
         isOpen: true,
         blindClose: !!blindClose,
       },
-      include: { expenses: true }
+      include: { expenses: true, cashIns: true }
     });
     // Auditoría best-effort: nunca bloquea ni rompe la apertura del turno.
     audit.record(req, audit.AUDIT_EVENTS.SHIFT_OPEN, {
@@ -142,7 +148,7 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
 
     const shift = await prisma.cashShift.findFirst({
       where: { id: shiftId, locationId: req.locationId },
-      include: { expenses: true }
+      include: { expenses: true, cashIns: true }
     });
     if (!shift) return res.status(404).json({ error: 'Turno no encontrado en esta sucursal' });
 
@@ -178,13 +184,17 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
     const totals = summarizePayments(orders);
 
     const totalExpenses = shift.expenses.reduce((s, e) => s + e.amount, 0);
+    const totalCashIn = shift.cashIns.reduce((s, c) => s + c.amount, 0);
     const totalSales = Object.values(totals).reduce((a, b) => a + b, 0);
 
-    // Snapshot para Cierre Ciego: Calculamos lo que DEBERÍA haber en efectivo
+    // Snapshot para Cierre Ciego: Calculamos lo que DEBERÍA haber en efectivo.
+    // Los ingresos de efectivo (cambio que el cajero metió a la gaveta) suman
+    // al esperado — de lo contrario aparecerían como sobrante inexplicable.
     const { expectedCash } = cashCutSummary({
       openingFloat: shift.openingFloat,
       totalCash: totals.totalCash,
       totalExpenses,
+      totalCashIn,
     });
 
     const now = new Date();
@@ -215,10 +225,11 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
           expectedCash,
           ...totals,
           totalExpenses,
+          totalCashIn,
           totalSales,
           ordersCount: orders.length,
         },
-        include: { expenses: true }
+        include: { expenses: true, cashIns: true }
       }),
       prisma.employeeShift.updateMany({
         where: { employeeId: { in: staffIds }, endAt: null },
@@ -235,6 +246,7 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
         expectedCash: closed.expectedCash,
         totalSales: closed.totalSales,
         totalExpenses: closed.totalExpenses,
+        totalCashIn: closed.totalCashIn,
         ordersCount: closed.ordersCount,
         staffClockedOut,
       },
@@ -342,6 +354,52 @@ router.delete('/expenses/:id', requireLocation, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── POST ingresar efectivo a caja (cambio/feria, scoped a sucursal) ──────
+// Contraparte de los gastos: registra efectivo que el cajero METE a la
+// gaveta y que no proviene de una venta. Suma al efectivo esperado del corte.
+router.post('/:id/cash-ins', requireLocation, async (req, res) => {
+  try {
+    const { description, amount, category } = req.body;
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return res.status(400).json({ error: 'Monto inválido', code: 'INVALID_AMOUNT' });
+    }
+
+    // Validar que el turno pertenece a esta sucursal y sigue abierto.
+    const shift = await prisma.cashShift.findFirst({
+      where: { id: req.params.id, locationId: req.locationId },
+      select: { id: true, isOpen: true },
+    });
+    if (!shift) return res.status(404).json({ error: 'Turno no encontrado en esta sucursal' });
+    if (!shift.isOpen) return res.status(409).json({ error: 'El turno ya está cerrado', code: 'SHIFT_CLOSED' });
+
+    const cashIn = await prisma.shiftCashIn.create({
+      data: {
+        shiftId: req.params.id,
+        description: String(description || 'Ingreso de efectivo').slice(0, 200),
+        amount: amt,
+        category: category || 'CHANGE',
+      }
+    });
+    res.json(cashIn);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE ingreso de efectivo (validado por sucursal del turno padre) ───
+router.delete('/cash-ins/:id', requireLocation, async (req, res) => {
+  try {
+    const cashIn = await prisma.shiftCashIn.findUnique({
+      where: { id: req.params.id },
+      include: { shift: { select: { locationId: true } } },
+    });
+    if (!cashIn || cashIn.shift?.locationId !== req.locationId) {
+      return res.status(404).json({ error: 'Ingreso no encontrado' });
+    }
+    await prisma.shiftCashIn.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── GET historial de turnos de la sucursal (admin) ───────────────────────
 router.get('/', requireAdmin, requireLocation, async (req, res) => {
   try {
@@ -349,7 +407,7 @@ router.get('/', requireAdmin, requireLocation, async (req, res) => {
       where: { locationId: req.locationId },
       orderBy: { openedAt: 'desc' },
       take: 100,
-      include: { expenses: true }
+      include: { expenses: true, cashIns: true }
     });
     res.json(shifts);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -360,7 +418,10 @@ router.get('/:id', requireLocation, async (req, res) => {
   try {
     const shift = await prisma.cashShift.findFirst({
       where: { id: req.params.id, locationId: req.locationId },
-      include: { expenses: { orderBy: { createdAt: 'desc' } } }
+      include: {
+        expenses: { orderBy: { createdAt: 'desc' } },
+        cashIns: { orderBy: { createdAt: 'desc' } },
+      }
     });
     if (!shift) return res.status(404).json({ error: 'No encontrado' });
     res.json(shift);

@@ -1598,15 +1598,36 @@ model CashShift {
   totalCourtesy Float @default(0)
   totalTips     Float @default(0)
   totalExpenses Float @default(0)
+  // Ingresos de efectivo a caja durante el turno (cambio/feria que el cajero
+  // mete a la gaveta y que NO viene de una venta). Suma al efectivo esperado.
+  totalCashIn   Float @default(0)
   totalSales    Float @default(0)
   ordersCount   Int   @default(0)
 
   expenses                     ShiftExpense[]
+  cashIns                      ShiftCashIn[]
   orders                       Order[]
   operatingExpensePayments     OperatingExpense[] @relation("OperatingExpenseCashShift")
   purchaseOrderPayments        PurchaseOrder[]    @relation("PurchaseOrderCashShift")
 
   @@map("cash_shifts")
+}
+
+// ShiftCashIn · ingreso de efectivo a la caja durante el turno (la contraparte
+// de ShiftExpense). El cajero mete cambio/feria a la gaveta — efectivo que no
+// proviene de una venta. Suma al efectivo esperado en el arqueo del cierre.
+model ShiftCashIn {
+  id          String    @id @default(cuid())
+  shiftId     String
+  shift       CashShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  description String
+  amount      Float
+  category    String    @default("CHANGE")
+
+  createdAt   DateTime  @default(now())
+
+  @@index([shiftId])
+  @@map("shift_cash_ins")
 }
 
 // ShiftExpense · cache/snapshot del gasto desde el punto de vista del

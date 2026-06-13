@@ -255,4 +255,27 @@ describe('money :: cashCutSummary', () => {
   test('defaults a cero sin argumentos', () => {
     expect(cashCutSummary()).toEqual({ expectedCash: 0, variance: null });
   });
+
+  test('ingresos de efectivo suman al esperado', () => {
+    const { expectedCash } = cashCutSummary({
+      openingFloat: 500,
+      totalCash: 1200,
+      totalExpenses: 300,
+      totalCashIn: 200,
+    });
+    expect(expectedCash).toBe(1600);
+  });
+
+  test('ingreso de efectivo evita falso sobrante en el arqueo', () => {
+    // El cajero metió $500 de cambio a la gaveta; sin registrarlo aparecería
+    // como sobrante. Registrado, la caja cuadra.
+    const { variance } = cashCutSummary({
+      openingFloat: 0,
+      totalCash: 1000,
+      totalExpenses: 0,
+      totalCashIn: 500,
+      countedCash: 1500,
+    });
+    expect(variance).toBe(0);
+  });
 });

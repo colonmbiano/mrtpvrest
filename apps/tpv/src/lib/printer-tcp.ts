@@ -1127,6 +1127,12 @@ export interface ShiftCloseExpenseLine {
   category?: string | null;
 }
 
+export interface ShiftCloseCashInLine {
+  description: string;
+  amount: number;
+  category?: string | null;
+}
+
 export interface ShiftCloseTicketInput {
   shiftId?: string | null;
   businessName?: string | null;
@@ -1140,11 +1146,13 @@ export interface ShiftCloseTicketInput {
   totalTransfer: number;
   totalCourtesy: number;
   totalExpenses: number;
+  totalCashIn?: number;          // ingresos de efectivo a caja (cambio/feria)
   totalSales: number;
   ordersCount: number;
   closingFloat: number;          // efectivo contado al cierre
   expectedCash?: number | null;  // esperado; null/undefined → se calcula
   expenses?: ShiftCloseExpenseLine[];
+  cashIns?: ShiftCloseCashInLine[];
   notes?: string | null;
   blindClose?: boolean;
   /** Imprime el arqueo (esperado + desfase) aunque sea ciego. Se activa tras
@@ -1229,16 +1237,36 @@ export function buildShiftCloseTicket(input: ShiftCloseTicketInput): string {
   d += boldOn + row("TOTAL GASTOS:", "-" + fmtMoney(input.totalExpenses), lw) + boldOff;
   d += sep;
 
+  // Ingresos de efectivo (cambio/feria) línea por línea. Solo si hubo.
+  const cashIns = input.cashIns ?? [];
+  const totalCashIn = Number(input.totalCashIn ?? cashIns.reduce((s, c) => s + (Number(c.amount) || 0), 0));
+  if (cashIns.length > 0 || totalCashIn > 0) {
+    d += boldOn + "INGRESOS DE EFECTIVO\n" + boldOff;
+    if (cashIns.length === 0) {
+      d += row("Ingreso de efectivo", "+" + fmtMoney(totalCashIn), lw);
+    } else {
+      for (const c of cashIns) {
+        const amount = "+" + fmtMoney(Number(c.amount) || 0);
+        const desc = String(c.description || "Ingreso").slice(0, Math.max(1, lw - amount.length - 3));
+        d += row("- " + desc, amount, lw);
+      }
+    }
+    d += sep;
+    d += boldOn + row("TOTAL INGRESOS:", "+" + fmtMoney(totalCashIn), lw) + boldOff;
+    d += sep;
+  }
+
   // Arqueo de efectivo
   const showArqueo = !input.blindClose || input.reveal === true;
   if (showArqueo) {
     const expected = Number(
-      input.expectedCash ?? input.openingFloat + input.totalCash - input.totalExpenses,
+      input.expectedCash ?? input.openingFloat + input.totalCash + totalCashIn - input.totalExpenses,
     );
     const variance = (Number(input.closingFloat) || 0) - expected;
     d += boldOn + "ARQUEO DE EFECTIVO\n" + boldOff;
     d += row("Fondo inicial:", fmtMoney(input.openingFloat), lw);
     d += row("+ Ventas efectivo:", fmtMoney(input.totalCash), lw);
+    if (totalCashIn > 0) d += row("+ Ingresos efectivo:", fmtMoney(totalCashIn), lw);
     d += row("- Gastos:", "-" + fmtMoney(input.totalExpenses), lw);
     d += boldOn + row("= ESPERADO:", fmtMoney(expected), lw) + boldOff;
     d += row("Contado:", fmtMoney(input.closingFloat), lw);
