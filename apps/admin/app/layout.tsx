@@ -60,6 +60,23 @@ const SW_CLEANUP_SCRIPT = `
 })();
 `;
 
+// Guard global contra el bug nativo de <input type="number">: al hacer scroll
+// (rueda del mouse o deslizar en tablet) con el campo enfocado, el navegador
+// SUMA/RESTA al valor. En los modales scrollables esto corrompía precios al
+// deslizar hacia "Guardar" (ej. 30 → 27). Des-enfocamos en fase de captura,
+// ANTES de que el navegador aplique el incremento; passive:true conserva el
+// scroll de la página. Cubre toda la app admin y cualquier input futuro.
+const NUMBER_WHEEL_GUARD_SCRIPT = `
+(function(){
+  try {
+    document.addEventListener('wheel', function(){
+      var el = document.activeElement;
+      if (el && el.tagName === 'INPUT' && el.type === 'number') el.blur();
+    }, { passive: true, capture: true });
+  } catch(e) {}
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
@@ -72,6 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           "(function(){try{var t=localStorage.getItem('mb-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})()"
         }} />
         <script dangerouslySetInnerHTML={{__html: SW_CLEANUP_SCRIPT}} />
+        <script dangerouslySetInnerHTML={{__html: NUMBER_WHEEL_GUARD_SCRIPT}} />
       </head>
       <body>
         <ThemeProvider>
