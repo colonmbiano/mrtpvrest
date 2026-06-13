@@ -2,6 +2,7 @@
 const prisma   = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const { pick } = require('../lib/validate')
+const { normUnit } = require('../lib/units')
 const { PromoPriceValidationError, resolvePromoPricing } = require('../lib/promo-price')
 const router   = express.Router()
 
@@ -235,7 +236,7 @@ router.get('/items/:id', async (req, res) => {
 
 router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection } = req.body
+    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, unit } = req.body
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
 
     const category = await prisma.category.findUnique({ where: { id: categoryId, restaurantId: req.user?.restaurantId || req.restaurantId } });
@@ -251,6 +252,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
         imageUrl,
         imageFit: imageFit === 'contain' ? 'contain' : 'cover',
         price: regularPrice,
+        unit: normUnit(unit),
         preparationTime: preparationTime || 15,
         isPopular: isPopular || false,
         isPromo: promo.isPromo,
@@ -275,7 +277,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
 router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId
-    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection } = req.body
+    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, unit } = req.body
     const existingItem = await prisma.menuItem.findFirst({
       where: { id: req.params.id, restaurantId },
       select: { price: true, isPromo: true, promoPrice: true },
@@ -304,6 +306,7 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
         ...(isFavorite !== undefined && { isFavorite: !!isFavorite }),
         ...(imageUrl !== undefined && { imageUrl }),
         ...(imageFit !== undefined && { imageFit: imageFit === 'contain' ? 'contain' : 'cover' }),
+        ...(unit !== undefined && { unit: normUnit(unit) }),
         ...(categoryId !== undefined && { categoryId }),
         isPromo: promo.isPromo,
         promoPrice: promo.promoPrice,

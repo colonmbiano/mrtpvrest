@@ -13,6 +13,7 @@ export interface ReprintCandidateItem {
   id: string;
   name: string;
   quantity: number;
+  unit?: string;
   notes?: string | null;
   printerGroupIds?: string[];
   modifiers?: { name: string; priceAdd?: number }[];
@@ -92,6 +93,7 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
       const ticketItems: TicketItem[] = chosen.map((it) => ({
         name: it.name,
         quantity: it.quantity,
+        unit: it.unit,
         price: 0, // cocina no muestra precios
         notes: it.notes || null,
         modifiers: it.modifiers || [],

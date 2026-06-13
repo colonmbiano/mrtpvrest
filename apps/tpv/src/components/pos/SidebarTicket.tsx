@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2, ShoppingCart, User, UtensilsCrossed, MapPin, Phone, Home, Receipt, Save, Zap } from "lucide-react";
 import TicketLine from "@/components/pos/TicketLine";
+import WeightModal from "@/components/pos/WeightModal";
 import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
@@ -204,11 +205,19 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const {
     getActiveTicket,
     changeItemQty,
+    setItemQty,
     clearActiveItems,
     updateTicket,
     setItemNotes,
     setEditingIndex,
   } = useTicketStore();
+
+  // Edición de peso de una línea pesable (reabre WeightModal en modo absoluto).
+  // Guarda el onConfirm para reusar el mismo modal en líneas nuevas e historial.
+  const [weightEdit, setWeightEdit] = useState<{
+    name: string; price: number; unit: string; initialWeight: number;
+    onConfirm: (w: number) => void;
+  } | null>(null);
 
   const ticket = getActiveTicket();
   const hasItems = ticket.items.length > 0;
@@ -365,6 +374,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         name: it.name,
         quantity: it.quantity,
         price: it.price,
+        unit: it.unit,
         notes: it.notes,
         seatNumber: it.seatNumber ?? null,
         printerGroupIds,
@@ -394,6 +404,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       name: item.menuItem?.name || item.name || "Producto",
       quantity: item.quantity ?? 1,
       price: item.price ?? 0,
+      unit: item.unit ?? item.menuItem?.unit,
       notes: item.notes || null,
       seatNumber: item.seatNumber ?? null,
       printerGroupIds: itemOverride.length > 0 ? itemOverride : categoryDefault,
@@ -820,6 +831,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       name: it.menuItem?.name || it.name,
       quantity: it.quantity,
       price: it.price,
+      unit: it.unit ?? it.menuItem?.unit,
       notes: it.notes,
       seatNumber: it.seatNumber ?? null,
       modifiers: (it.modifiers || []).map((m: any) => ({ name: m.name || m.modifier?.name, priceAdd: m.priceAdd || m.modifier?.priceAdd })),
@@ -986,6 +998,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                   name={item.menuItem?.name || item.name}
                   quantity={item.quantity}
                   price={item.price}
+                  unit={item.unit ?? item.menuItem?.unit}
                   notes={item.notes}
                   modifiers={item.modifiers?.map((m: any) => ({
                     name: m.modifier?.name || m.name,
@@ -993,6 +1006,22 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                   }))}
                   onIncrease={() => changePreviousItemQty(item, 1)}
                   onDecrease={() => changePreviousItemQty(item, -1)}
+                  onEditWeight={() => setWeightEdit({
+                    name: item.menuItem?.name || item.name,
+                    price: item.price,
+                    unit: item.unit ?? item.menuItem?.unit ?? "kg",
+                    initialWeight: item.quantity,
+                    onConfirm: async (w) => {
+                      try {
+                        await api.put(`/api/orders/items/${item.id}`, { quantity: w });
+                        await reloadPreviousItems();
+                        hapticMedium();
+                      } catch (err: any) {
+                        hapticError();
+                        toast.error(err?.response?.data?.error || "No se pudo actualizar el peso");
+                      }
+                    },
+                  })}
                   onUpdateNotes={(n) => updatePreviousItemNotes(item, n)}
                   onRemove={() => removePreviousItem(item)}
                 />
@@ -1026,10 +1055,18 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               name={item.name}
               quantity={item.quantity}
               price={item.price}
+              unit={item.unit}
               notes={item.notes}
               modifiers={item.modifiers?.map(m => ({ name: m.name, priceAdd: m.priceAdd }))}
               onIncrease={() => changeItemQty(idx, 1)}
               onDecrease={() => changeItemQty(idx, -1)}
+              onEditWeight={() => setWeightEdit({
+                name: item.name,
+                price: item.price,
+                unit: item.unit ?? "kg",
+                initialWeight: item.quantity,
+                onConfirm: (w) => setItemQty(idx, w),
+              })}
               onUpdateNotes={(n) => setItemNotes(idx, n)}
               onEdit={isConfigurableItem(item) ? () => setEditingIndex(idx) : undefined}
             />
@@ -1184,6 +1221,16 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           ]}
           onConfirm={handleProcessPayment}
           showReceiptToggle
+        />
+
+        <WeightModal
+          isOpen={weightEdit != null}
+          name={weightEdit?.name ?? ""}
+          price={weightEdit?.price ?? 0}
+          unit={weightEdit?.unit ?? "kg"}
+          initialWeight={weightEdit?.initialWeight}
+          onConfirm={(w) => weightEdit?.onConfirm(w)}
+          onClose={() => setWeightEdit(null)}
         />
 
         <TablePickerModal
