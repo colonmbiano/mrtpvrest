@@ -561,6 +561,11 @@ model MenuItem {
   isFavorite      Boolean  @default(false)
   promoPrice      Float?
   barcode         String?
+  // Unidad de venta: "pz" | "unidad" (enteros) | "g" | "kg" (pesables, cantidad
+  // decimal). El precio se interpreta literal por esta unidad (precio/kg, /g, etc).
+  // El cobro por peso solo está soportado en el TPV; tienda/kiosko/bot rechazan
+  // los productos pesables (ver lib/units.js).
+  unit            String   @default("pz")
   activeDays      String[]
   hasVariants     Boolean  @default(false)
   // Cuando variantMultiSelect=true el TPV deja elegir varias variantes
@@ -786,8 +791,13 @@ model OrderItem {
   menuItem   MenuItem            @relation(fields: [menuItemId], references: [id])
   name       String
   price      Float
-  quantity   Int
+  // Float (no Int) para soportar cobro por peso: g/kg llevan cantidad decimal
+  // (ej. 0.48 kg). Para pz/unidad sigue siendo un entero almacenado como float.
+  quantity   Float
   subtotal   Float
+  // Snapshot denormalizado de la unidad de venta al momento de la venta, para
+  // comanda/recibo/reimpresión sin re-leer el MenuItem (que pudo cambiar).
+  unit       String              @default("pz")
   notes      String?
   modifiers  OrderItemModifier[]
 

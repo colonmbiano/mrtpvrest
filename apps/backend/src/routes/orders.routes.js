@@ -236,6 +236,7 @@ const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePer
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
 const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals } = require('../lib/money');
+const { isWeighable, parseQty, round2 } = require('../lib/units');
 const { releaseTableAfterPayment } = require('../services/table-lifecycle.service');
 const audit = require('../lib/audit-logger');
 const {
@@ -544,6 +545,15 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       }
 
       const unitPrice = variantSelection.basePrice + unitExtra;
+      // Unidad de venta: del payload con fallback al MenuItem de DB. Para
+      // pesables (g/kg) la cantidad es decimal y NO se redondea el peso; para
+      // pz/unidad cae a entero >= 1. El subtotal de línea se redondea a 2
+      // decimales al PERSISTIR para no guardar 153.60000001.
+      const unit = item.unit || menuItem?.unit || 'pz';
+      const quantity = parseQty(item.quantity, unit);
+      if (isWeighable(unit) && !(quantity > 0)) {
+        throw new Error(`Cantidad (peso) inválida para "${variantSelection.name}".`);
+      }
       const seatRaw = Number(item.seatNumber);
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
         ? Math.floor(seatRaw)
@@ -557,8 +567,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         menuItemId: item.menuItemId,
         name: variantSelection.name,
         price: unitPrice,
-        quantity: item.quantity,
-        subtotal: unitPrice * item.quantity,
+        quantity,
+        unit,
+        subtotal: round2(unitPrice * quantity),
         notes: appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants),
         seatNumber,
         course,
@@ -861,7 +872,11 @@ async function addRoundHandler(req, res) {
       }
 
       const price = variantSelection.basePrice + unitExtra;
-      const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+      const unit = item.unit || menuItem?.unit || 'pz';
+      const qty = parseQty(item.quantity, unit);
+      if (isWeighable(unit) && !(qty > 0)) {
+        throw new Error(`Cantidad (peso) inválida para "${variantSelection.name}".`);
+      }
       const seatRaw = Number(item.seatNumber);
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
         ? Math.floor(seatRaw)
@@ -873,7 +888,8 @@ async function addRoundHandler(req, res) {
         name: variantSelection.name,
         price,
         quantity: qty,
-        subtotal: price * qty,
+        unit,
+        subtotal: round2(price * qty),
         notes: appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants),
         seatNumber,
         course,
@@ -984,16 +1000,25 @@ router.put('/items/:itemId', authenticate, requireTenantAccess, requireRole('ADM
     }
 
     // Validar inputs. Si no viene quantity/notes válido, no-op para ese campo.
-    const newQty = quantity !== undefined
-      ? Math.max(1, Math.min(99, parseInt(quantity, 10) || orderItem.quantity))
-      : orderItem.quantity;
+    // Pesables (g/kg): cantidad decimal > 0, sin redondear el peso ni topar a 99.
+    // No pesables: entero acotado a [1, 99] como hasta ahora.
+    let newQty = orderItem.quantity;
+    if (quantity !== undefined) {
+      if (isWeighable(orderItem.unit)) {
+        const parsed = parseFloat(quantity);
+        newQty = Number.isFinite(parsed) && parsed > 0 ? parsed : orderItem.quantity;
+      } else {
+        newQty = Math.max(1, Math.min(99, parseInt(quantity, 10) || orderItem.quantity));
+      }
+    }
     const newNotes = notes !== undefined
       ? (typeof notes === 'string' ? notes.slice(0, 200) : null)
       : orderItem.notes;
 
     // Subtotal del item = price unitario × quantity. price ya incluye los
-    // modificadores aplicados al item (ver lógica de POST /tpv).
-    const newSubtotal = orderItem.price * newQty;
+    // modificadores aplicados al item (ver lógica de POST /tpv). Redondeo a 2
+    // decimales para no persistir 153.60000001 en líneas pesables.
+    const newSubtotal = round2(orderItem.price * newQty);
 
     const updatedOrder = await prisma.$transaction(async (tx) => {
       await tx.orderItem.update({

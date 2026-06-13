@@ -7,6 +7,7 @@
 
 const { computeDeliveryFee } = require('../../lib/delivery-fee');
 const { resolveProviderForRestaurant } = require('../../lib/payment-providers');
+const { isWeighable } = require('../../lib/units');
 const { effectivePrice } = require('./catalog');
 const { upsertContact } = require('./contacts');
 
@@ -41,6 +42,15 @@ async function createBotOrder({ prisma, io, restaurant, config, data }) {
       include: { variants: { where: { isAvailable: true } } },
     });
     if (!menuItem) continue; // producto retirado del menú → se omite
+
+    // El cobro por peso solo está soportado en el TPV: el bot no puede pesar.
+    // Rechazamos el pedido con un mensaje claro en vez de truncar el peso.
+    if (isWeighable(menuItem.unit)) {
+      throw new BotOrderError(
+        'WEIGHABLE_NOT_SUPPORTED',
+        `"${menuItem.name}" se vende por peso y solo puede cobrarse en el restaurante.`,
+      );
+    }
 
     let unitPrice = effectivePrice(menuItem);
     let displayName = menuItem.name;
