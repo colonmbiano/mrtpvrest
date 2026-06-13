@@ -20,6 +20,12 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "MB Delivery",
   },
+  // Next 16 emite `mobile-web-app-capable` (estándar nuevo); agregamos también
+  // el legacy `apple-mobile-web-app-capable` para iOS viejos que no leen el
+  // display:standalone del manifest.
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+  },
   icons: {
     icon: [
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
