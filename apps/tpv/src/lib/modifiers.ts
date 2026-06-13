@@ -146,6 +146,7 @@ export interface OrderItemPayloadInput {
   menuItemId: string;
   variantId?: string | null;
   quantity: number;
+  unit?: string;
   notes?: string | null;
   seatNumber?: number | null;
   modifiers?: ModifierSelection[];
@@ -158,7 +159,10 @@ export function buildOrderItemsPayload(items: OrderItemPayloadInput[]) {
   return items.map((item) => ({
     menuItemId: item.menuItemId,
     variantId: item.variantId ?? null,
+    // Cantidad decimal SIN redondear para pesables; el backend redondea solo el
+    // importe (subtotal), no el peso.
     quantity: item.quantity,
+    unit: item.unit ?? "pz",
     notes: item.notes || "",
     seatNumber: item.seatNumber ?? null,
     ...splitModifierSelections(item.modifiers || []),

@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useRef } from "react";
-import { X, Plus, Minus, MessageSquare, Check, Pencil } from "lucide-react";
+import { X, Plus, Minus, MessageSquare, Check, Pencil, Scale } from "lucide-react";
+import { isWeighable, formatQty } from "@/store/ticketStore";
 
 interface TicketLineProps {
   id?: string;
@@ -17,6 +18,10 @@ interface TicketLineProps {
   // Reabre el configurador (variantes/modificadores/complementos) para
   // editar este item. Solo se pasa cuando el producto tiene opciones.
   onEdit?: () => void;
+  // Unidad de venta. Si es pesable (g/kg) la línea muestra el peso y reabre el
+  // WeightModal en modo ABSOLUTO en vez del stepper ±1.
+  unit?: string;
+  onEditWeight?: () => void;
   currency?: string;
 }
 
@@ -32,8 +37,11 @@ const TicketLine: React.FC<TicketLineProps> = ({
   onRemove,
   onUpdateNotes,
   onEdit,
+  unit,
+  onEditWeight,
   currency = "$",
 }) => {
+  const weighable = isWeighable(unit);
   const inc = () => (onIncrease ? onIncrease() : onUpdateQty?.(quantity + 1));
   const dec = () =>
     onDecrease ? onDecrease() : onUpdateQty?.(Math.max(0, quantity - 1));
@@ -67,24 +75,39 @@ const TicketLine: React.FC<TicketLineProps> = ({
     
   return (
     <div className="group flex items-center gap-3 py-2.5 border-b border-white/5 last:border-0">
-      {/* STEPPER VERTICAL - TOUCH OPTIMIZED (compacto) */}
-      <div className="flex flex-col items-center w-9 self-center bg-[#121316] rounded-lg border border-white/5 overflow-hidden shrink-0">
+      {/* PESABLES: chip con el peso que reabre el WeightModal (modo absoluto).
+          NO PESABLES: stepper vertical ±1 (touch optimized). */}
+      {weighable ? (
         <button
-          onClick={inc}
-          className="w-full h-8 flex items-center justify-center text-zinc-500 active:text-amber-500 active:bg-white/5 transition-all active:scale-90"
+          type="button"
+          onClick={onEditWeight}
+          aria-label="Editar peso"
+          className="flex flex-col items-center justify-center gap-0.5 min-w-[3.25rem] px-1 py-1.5 self-center bg-[#121316] rounded-lg border border-white/5 shrink-0 active:scale-95 transition-transform"
         >
-          <Plus size={15} strokeWidth={3} />
+          <Scale size={13} className="text-amber-500/80" />
+          <span className="text-[12px] font-black text-white mono tnum leading-none">
+            {formatQty(quantity, unit)}
+          </span>
         </button>
-        <span className="text-[13px] font-black text-white mono tnum leading-none py-0.5">
-          {quantity}
-        </span>
-        <button
-          onClick={dec}
-          className="w-full h-8 flex items-center justify-center text-zinc-500 active:text-red-500 active:bg-white/5 transition-all active:scale-90"
-        >
-          <Minus size={15} strokeWidth={3} />
-        </button>
-      </div>
+      ) : (
+        <div className="flex flex-col items-center w-9 self-center bg-[#121316] rounded-lg border border-white/5 overflow-hidden shrink-0">
+          <button
+            onClick={inc}
+            className="w-full h-8 flex items-center justify-center text-zinc-500 active:text-amber-500 active:bg-white/5 transition-all active:scale-90"
+          >
+            <Plus size={15} strokeWidth={3} />
+          </button>
+          <span className="text-[13px] font-black text-white mono tnum leading-none py-0.5">
+            {quantity}
+          </span>
+          <button
+            onClick={dec}
+            className="w-full h-8 flex items-center justify-center text-zinc-500 active:text-red-500 active:bg-white/5 transition-all active:scale-90"
+          >
+            <Minus size={15} strokeWidth={3} />
+          </button>
+        </div>
+      )}
 
       {/* INFO PRODUCTO */}
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
@@ -127,7 +150,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
 
         {/* Precio unitario discreto bajo el nombre */}
         <span className="text-[10px] text-zinc-600 font-bold mono tabular-nums">
-          {currency}{price.toFixed(2)} c/u
+          {currency}{price.toFixed(2)} {weighable ? `/ ${unit}` : "c/u"}
         </span>
 
         {modifiers && modifiers.length > 0 && (

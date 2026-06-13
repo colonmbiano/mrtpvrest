@@ -54,6 +54,9 @@ export type Product = {
   id: string;
   name: string;
   price: number;
+  // Unidad de venta: "pz" | "unidad" (enteros) | "g" | "kg" (pesables, cantidad
+  // decimal). Default "pz" si no viene del backend.
+  unit?: string;
   category: string;
   categoryId?: string;
   imageUrl?: string | null;
@@ -92,6 +95,25 @@ export type CartItem = Product & {
 export function modifierKey(mods?: ModifierSelection[]): string {
   if (!mods || mods.length === 0) return "";
   return [...mods].map((m) => m.id).sort().join(",");
+}
+
+/** ¿La unidad se cobra por peso (cantidad decimal)? */
+export function isWeighable(unit?: string): boolean {
+  return unit === "g" || unit === "kg";
+}
+
+/**
+ * Formatea la cantidad para mostrar:
+ *  - pesable    → hasta 3 decimales sin ceros sobrantes + sufijo (ej. "0.48 kg").
+ *  - no pesable → entero sin decimales (ej. "2").
+ */
+export function formatQty(qty: number, unit?: string): string {
+  if (isWeighable(unit)) {
+    const n = Number(qty) || 0;
+    const trimmed = parseFloat(n.toFixed(3)).toString();
+    return `${trimmed} ${unit}`;
+  }
+  return String(Math.round(Number(qty) || 0));
 }
 
 export type TicketData = {
@@ -134,6 +156,9 @@ interface TicketState {
 
   addItemToActive: (item: CartItem) => void;
   changeItemQty: (index: number, delta: number) => void;
+  // Fija el peso/cantidad ABSOLUTO de una línea (para pesables). Distinto del
+  // stepper ±1 de changeItemQty.
+  setItemQty: (index: number, qty: number) => void;
   removeItem: (index: number) => void;
   clearActiveItems: () => void;
   setItemNotes: (index: number, notes: string) => void;
@@ -256,14 +281,17 @@ export const useTicketStore = create<TicketState>()(persist((_set, get) => {
             modifierKey(ci.modifiers) === incomingModKey
         );
         if (existing) {
+          // El tap normal manda quantity: 1; los pesables traen el peso capturado
+          // en quantity, así que el merge SUMA la cantidad entrante (no +1 fijo).
+          const inc = tagged.quantity ?? 1;
           return {
             ...t,
             items: t.items.map((ci) =>
               ci === existing
                 ? {
                     ...ci,
-                    quantity: ci.quantity + 1,
-                    subtotal: (ci.quantity + 1) * ci.price,
+                    quantity: ci.quantity + inc,
+                    subtotal: (ci.quantity + inc) * ci.price,
                   }
                 : ci
             ),
@@ -282,6 +310,22 @@ export const useTicketStore = create<TicketState>()(persist((_set, get) => {
           .map((ci, idx) => {
             if (idx !== index) return ci;
             const newQty = Math.max(0, ci.quantity + delta);
+            return { ...ci, quantity: newQty, subtotal: newQty * ci.price };
+          })
+          .filter((ci) => ci.quantity > 0);
+        return { ...t, items };
+      }),
+    }));
+  },
+
+  setItemQty: (index, qty) => {
+    set((state) => ({
+      tickets: state.tickets.map((t, i) => {
+        if (i !== state.activeIndex) return t;
+        const items = t.items
+          .map((ci, idx) => {
+            if (idx !== index) return ci;
+            const newQty = Math.max(0, Number(qty) || 0);
             return { ...ci, quantity: newQty, subtotal: newQty * ci.price };
           })
           .filter((ci) => ci.quantity > 0);

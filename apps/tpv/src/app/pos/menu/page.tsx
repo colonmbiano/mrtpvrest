@@ -2,11 +2,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Search, X, Plus, Minus, Check, Delete } from "lucide-react";
 import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
+import WeightModal from "@/components/pos/WeightModal";
 import api from "@/lib/api";
 import { useCatalogPrefs, type CatalogDensity } from "@/store/catalogPrefsStore";
 import { hapticLight } from "@/lib/haptics";
 import {
   useTicketStore,
+  isWeighable,
   type CartItem,
   type MenuItemVariant,
   type Modifier,
@@ -81,6 +83,8 @@ export default function CatalogPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [configProduct, setConfigProduct] = useState<Product | null>(null);
   const [optionsProduct, setOptionsProduct] = useState<Product | null>(null);
+  // Producto pesable cuyo peso se está capturando en el WeightModal.
+  const [weightProduct, setWeightProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -184,11 +188,34 @@ export default function CatalogPage() {
   const handleProductClick = (product: Product) => {
     if (product.isAvailable === false) return;
     hapticLight();
+    // Pesables (g/kg): capturar el peso en el WeightModal antes de agregar.
+    if (isWeighable(product.unit)) {
+      setWeightProduct(product);
+      return;
+    }
     if (hasQuickOptions(product)) {
       setConfigProduct(product);
       return;
     }
     addPlainProduct(product);
+  };
+
+  const confirmWeight = (weight: number) => {
+    const product = weightProduct;
+    if (!product) return;
+    const unitPrice = Number(product.promoPrice || product.price || 0);
+    const cartItem: CartItem = {
+      ...product,
+      menuItemId: product.id,
+      quantity: weight,
+      subtotal: unitPrice * weight,
+      price: unitPrice,
+      originalPrice: product.price,
+      baseName: product.name,
+      unit: product.unit,
+    };
+    addItemToActive(cartItem);
+    setWeightProduct(null);
   };
 
   // Producto base para el configurador: en edición es el item del carrito
@@ -383,6 +410,15 @@ export default function CatalogPage() {
           onToggleFavorite={handleFavoriteToggle}
         />
       )}
+
+      <WeightModal
+        isOpen={weightProduct != null}
+        name={weightProduct?.name ?? ""}
+        price={Number(weightProduct?.promoPrice || weightProduct?.price || 0)}
+        unit={weightProduct?.unit ?? "kg"}
+        onConfirm={confirmWeight}
+        onClose={() => setWeightProduct(null)}
+      />
     </div>
   );
 }
