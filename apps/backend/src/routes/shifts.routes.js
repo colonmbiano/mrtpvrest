@@ -1,4 +1,6 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const { requireModule, MODULES } = require('../lib/modules');
@@ -213,7 +215,67 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
         ordersCount: closed.ordersCount,
       },
     }).catch(() => {});
-    res.json(closed);
+
+    // Corte ciego: el cajero NO debe ver el efectivo esperado ni el desfase.
+    // Persistimos expectedCash en la BD (para admin/historial y para el
+    // endpoint /reveal con PIN), pero lo ocultamos en la respuesta al cajero.
+    // El ticket de cierre que imprime el TPV refleja esto: sin arqueo si es ciego.
+    if (closed.blindClose) {
+      res.json({ ...closed, expectedCash: null });
+    } else {
+      res.json(closed);
+    }
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST revelar arqueo de un corte ciego (requiere PIN de admin) ────────
+// Devuelve el efectivo esperado y el desfase de un turno SOLO si el PIN
+// corresponde a un empleado con privilegios (ADMIN/OWNER/MANAGER o
+// canManageShifts) de la sucursal. Así el cajero no ve el desfase en un
+// corte ciego, pero un supervisor puede revelarlo/reimprimirlo en sitio.
+router.post('/:id/reveal', requireLocation, async (req, res) => {
+  try {
+    const { pin } = req.body || {};
+    if (!pin) return res.status(400).json({ error: 'PIN requerido', code: 'PIN_REQUIRED' });
+
+    const shift = await prisma.cashShift.findFirst({
+      where: { id: req.params.id, locationId: req.locationId },
+    });
+    if (!shift) return res.status(404).json({ error: 'Turno no encontrado en esta sucursal' });
+
+    // Validar PIN contra empleados de la sucursal (bcrypt o legacy/offlinePin).
+    // Mismo patrón que el login por PIN (employees.routes login).
+    const candidates = await prisma.employee.findMany({
+      where: { locationId: req.locationId, isActive: true },
+      select: { id: true, name: true, role: true, canManageShifts: true, pin: true, offlinePin: true },
+    });
+    const sha256Pin = crypto.createHash('sha256').update(String(pin)).digest('hex');
+    let emp = null;
+    for (const c of candidates) {
+      if (c.pin && c.pin.startsWith('$2')) {
+        if (await bcrypt.compare(String(pin), c.pin)) { emp = c; break; }
+      } else if (c.pin && c.pin === String(pin)) { emp = c; break; }
+      else if (c.offlinePin && c.offlinePin === sha256Pin) { emp = c; break; }
+    }
+    if (!emp) return res.status(401).json({ error: 'PIN incorrecto', code: 'INVALID_PIN' });
+
+    const privileged =
+      ['ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER'].includes(emp.role) || emp.canManageShifts === true;
+    if (!privileged) {
+      return res.status(403).json({ error: 'Este PIN no tiene permiso para ver el arqueo', code: 'NOT_AUTHORIZED' });
+    }
+
+    const expectedCash = Number(shift.expectedCash || 0);
+    const variance = Number(shift.closingFloat || 0) - expectedCash;
+    res.json({
+      revealedBy: emp.name,
+      expectedCash,
+      variance,
+      openingFloat: shift.openingFloat,
+      closingFloat: shift.closingFloat,
+      totalCash: shift.totalCash,
+      totalExpenses: shift.totalExpenses,
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

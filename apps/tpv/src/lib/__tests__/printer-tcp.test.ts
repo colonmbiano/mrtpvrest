@@ -28,8 +28,10 @@ import {
   isValidIPv4,
   sanitizeIp,
   sendRawTcp,
+  buildShiftCloseTicket,
   type ReceiptInput,
   type PrinterRecord,
+  type ShiftCloseTicketInput,
 } from "@/lib/printer-tcp";
 
 beforeEach(() => {
@@ -263,5 +265,67 @@ describe("printKitchenTickets", () => {
     expect(payloads.some((payload) => payload.includes("PLANCHA") && payload.includes("Hamburguesa"))).toBe(true);
     expect(payloads.some((payload) => payload.includes("FREIDORA") && payload.includes("Papas"))).toBe(true);
     expect(payloads.every((payload) => !(payload.includes("Hamburguesa") && payload.includes("Papas")))).toBe(true);
+  });
+});
+
+describe("buildShiftCloseTicket", () => {
+  const base: ShiftCloseTicketInput = {
+    shiftId: "cmqbhk6a500001toitnnzzuq6",
+    businessName: "Master Burger's",
+    openedAt: "2026-06-12T22:16:13.000Z",
+    closedAt: "2026-06-13T07:15:27.000Z",
+    cashierName: "Eduardo",
+    openingFloat: 1026,
+    totalCash: 15305,
+    totalCard: 505,
+    totalTransfer: 2248.9,
+    totalCourtesy: 210,
+    totalExpenses: 1100,
+    totalSales: 18268.9,
+    ordersCount: 62,
+    closingFloat: 13181,
+    expectedCash: 15231,
+    expenses: [
+      { description: "Verduras", amount: 608 },
+      { description: "Harina/jabon", amount: 116 },
+    ],
+  };
+
+  it("imprime ventas por método, total y gastos línea por línea", () => {
+    const t = buildShiftCloseTicket(base);
+    expect(t).toContain("CORTE DE TURNO");
+    expect(t).toContain("Master Burger's");
+    expect(t).toContain("Efectivo:");
+    expect(t).toContain("Transferencia:");
+    expect(t).toContain("Verduras");      // gasto línea por línea
+    expect(t).toContain("Harina/jabon");
+    expect(t).toContain("Ordenes:");
+  });
+
+  it("muestra el DESFASE (faltante) en corte normal", () => {
+    const t = buildShiftCloseTicket(base);
+    expect(t).toContain("ESPERADO");
+    expect(t).toContain("DESFASE");
+    expect(t).toContain("FALTANTE"); // 13181 - 15231 < 0
+  });
+
+  it("oculta el desfase en corte ciego sin reveal", () => {
+    const t = buildShiftCloseTicket({ ...base, blindClose: true, expectedCash: null });
+    expect(t).toContain("CORTE CIEGO");
+    expect(t).not.toContain("DESFASE");
+    expect(t).not.toContain("ESPERADO");
+    expect(t).toContain("Contado:"); // sí muestra lo contado
+  });
+
+  it("revela el desfase en corte ciego cuando reveal=true", () => {
+    const t = buildShiftCloseTicket({ ...base, blindClose: true, reveal: true });
+    expect(t).toContain("DESFASE");
+    expect(t).toContain("ESPERADO");
+    expect(t).not.toContain("CORTE CIEGO");
+  });
+
+  it("marca SOBRANTE cuando lo contado supera lo esperado", () => {
+    const t = buildShiftCloseTicket({ ...base, closingFloat: 16000 });
+    expect(t).toContain("SOBRANTE");
   });
 });
