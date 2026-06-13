@@ -53,6 +53,8 @@ function mapTables(rows: ApiTable[]): AssignedTable[] {
     guests: table.capacity || 4,
     status: tableStatus(table.status),
     activeOrderId: table.activeOrder?.id || null,
+    activeOrderItemCount: table.activeOrder?._count?.items || 0,
+    activeOrderTotal: table.activeOrder?.total || 0,
   }));
 }
 
@@ -197,7 +199,17 @@ export default function MesasPage() {
                     key={table.id}
                     type="button"
                     onClick={() => {
-                      setActiveTable(table.id, table.name);
+                      setActiveTable(
+                        table.id,
+                        table.name,
+                        table.activeOrderId
+                          ? {
+                              id: table.activeOrderId,
+                              itemCount: table.activeOrderItemCount || 0,
+                              total: table.activeOrderTotal || 0,
+                            }
+                          : null,
+                      );
                       // Mesa con cuenta abierta → ver primero lo ya pedido
                       // (items + total) y desde ahí "Agregar mas". Mesa libre
                       // → directo a la comanda nueva.

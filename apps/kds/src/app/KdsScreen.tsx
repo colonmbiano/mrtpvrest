@@ -10,6 +10,7 @@ import {
 import { io, type Socket } from "socket.io-client";
 import api, { getApiUrl } from "@/lib/api";
 import NumpadPIN from "@/components/NumpadPIN";
+import KioskUnlockModal from "@/components/KioskUnlockModal";
 import { startTcpListener, stopTcpListener, listenForData } from "@/lib/tcpListener";
 import { parseEscPosTickets, type ParsedTicketItem } from "@/lib/escpos-parser";
 
@@ -190,11 +191,7 @@ function writeKdsDisplayConfig(config: KdsDisplayConfig): void {
   localStorage.setItem(KDS_CONFIG_KEY, JSON.stringify(config));
 }
 
-interface KdsScreenProps {
-  onLogout: () => void;
-}
-
-export default function KdsScreen({ onLogout }: KdsScreenProps) {
+export default function KdsScreen() {
   const [tab, setTab]               = useState<TabKey>("orders");
   // Estaciones que esta pantalla vigila (config del LoginScreen).
   // visibleStations es el subset de STATIONS que coincide con kdsStations.
@@ -526,18 +523,6 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
     setPendingCount(remaining.length);
   }
 
-  function doLogout() {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("deviceToken");
-      localStorage.removeItem("deviceId");
-      localStorage.removeItem("restaurantId");
-      localStorage.removeItem("locationId");
-      localStorage.removeItem("locationName");
-    }
-    onLogout();
-  }
-
   const locationName = typeof window !== "undefined" ? localStorage.getItem("locationName") || "" : "";
 
   return (
@@ -705,7 +690,7 @@ export default function KdsScreen({ onLogout }: KdsScreenProps) {
       )}
 
       {showLogout && (
-        <LogoutModal onCancel={() => setShowLogout(false)} onConfirm={doLogout} />
+        <KioskUnlockModal onClose={() => setShowLogout(false)} />
       )}
     </div>
   );

@@ -24,6 +24,13 @@ export interface LiteTicketItem {
   modifiers: LiteModifierSelection[];
 }
 
+export interface PreviousTicketItem {
+  id: string;
+  name: string;
+  quantity: number;
+  total: number;
+}
+
 export interface AssignedTable {
   id: string;
   name: string;
@@ -31,15 +38,38 @@ export interface AssignedTable {
   guests?: number;
   status: "free" | "open" | "ready" | "blocked";
   activeOrderId?: string | null;
+  activeOrderItemCount?: number;
+  activeOrderTotal?: number;
 }
 
 interface WaiterOrderState {
   activeTableId: string | null;
   activeTableName: string | null;
+  activeOrderId: string | null;
+  previousItemCount: number;
+  previousTotal: number;
+  previousItems: PreviousTicketItem[];
   assignedTables: AssignedTable[];
   ticketItems: LiteTicketItem[];
   lastLocalChangeAt: string | null;
-  setActiveTable: (tableId: string | null, tableName?: string | null) => void;
+  setActiveTable: (
+    tableId: string | null,
+    tableName?: string | null,
+    order?: {
+      id: string;
+      itemCount?: number;
+      total?: number;
+      items?: PreviousTicketItem[];
+    } | null,
+  ) => void;
+  setActiveOrder: (
+    order: {
+      id: string;
+      itemCount?: number;
+      total?: number;
+      items?: PreviousTicketItem[];
+    } | null,
+  ) => void;
   setAssignedTables: (tables: AssignedTable[]) => void;
   addItem: (item: Omit<LiteTicketItem, "lineId" | "total">) => void;
   incrementItem: (lineId: string) => void;
@@ -55,11 +85,32 @@ export const useWaiterOrderStore = create<WaiterOrderState>()(
     (set) => ({
       activeTableId: null,
       activeTableName: null,
+      activeOrderId: null,
+      previousItemCount: 0,
+      previousTotal: 0,
+      previousItems: [],
       assignedTables: [],
       ticketItems: [],
       lastLocalChangeAt: null,
-      setActiveTable: (activeTableId, activeTableName = null) =>
-        set({ activeTableId, activeTableName, lastLocalChangeAt: touchLocalChange() }),
+      setActiveTable: (activeTableId, activeTableName = null, order = null) =>
+        set({
+          activeTableId,
+          activeTableName,
+          activeOrderId: order?.id ?? null,
+          previousItemCount: order?.itemCount ?? 0,
+          previousTotal: order?.total ?? 0,
+          previousItems: order?.items ?? [],
+          ticketItems: [],
+          lastLocalChangeAt: touchLocalChange(),
+        }),
+      setActiveOrder: (order) =>
+        set({
+          activeOrderId: order?.id ?? null,
+          previousItemCount: order?.itemCount ?? 0,
+          previousTotal: order?.total ?? 0,
+          previousItems: order?.items ?? [],
+          lastLocalChangeAt: touchLocalChange(),
+        }),
       setAssignedTables: (assignedTables) =>
         set({ assignedTables, lastLocalChangeAt: touchLocalChange() }),
       addItem: (item) =>
@@ -107,6 +158,10 @@ export const useWaiterOrderStore = create<WaiterOrderState>()(
           ticketItems: [],
           activeTableId: null,
           activeTableName: null,
+          activeOrderId: null,
+          previousItemCount: 0,
+          previousTotal: 0,
+          previousItems: [],
           lastLocalChangeAt: touchLocalChange(),
         }),
     }),
@@ -116,6 +171,10 @@ export const useWaiterOrderStore = create<WaiterOrderState>()(
       partialize: (state) => ({
         activeTableId: state.activeTableId,
         activeTableName: state.activeTableName,
+        activeOrderId: state.activeOrderId,
+        previousItemCount: state.previousItemCount,
+        previousTotal: state.previousTotal,
+        previousItems: state.previousItems,
         assignedTables: state.assignedTables,
         ticketItems: state.ticketItems,
         lastLocalChangeAt: state.lastLocalChangeAt,

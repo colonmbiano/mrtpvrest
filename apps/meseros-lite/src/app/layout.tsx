@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Outfit } from "next/font/google";
 import OfflineSyncInitializer from "@/components/OfflineSyncInitializer";
+import PrinterConfigInitializer from "@/components/PrinterConfigInitializer";
 import SessionGate from "@/components/SessionGate";
 import "./globals.css";
 
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es" className={outfit.variable}>
       <body className="min-h-screen overflow-hidden bg-[#0a0a0c] font-sans text-neutral-200">
         <OfflineSyncInitializer />
+        <PrinterConfigInitializer />
         <SessionGate>{children}</SessionGate>
       </body>
     </html>
