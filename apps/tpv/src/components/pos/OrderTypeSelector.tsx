@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Bike,
   ChevronRight,
-  Clock,
   Coins,
   Globe,
   LogOut,
