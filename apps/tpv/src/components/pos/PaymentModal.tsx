@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CreditCard,
   Banknote,
@@ -81,7 +81,7 @@ interface PaymentModalProps {
     tip?: PaymentTip,
     driverId?: string | null,
     printReceipt?: boolean,
-  ) => void;
+  ) => void | Promise<void>;
   /** Opcional · invocado en lugar de onConfirm cuando el usuario
    *  presiona Confirmar en modo split. Si no se provee, usa onConfirm. */
   onConfirmSplit?: (
@@ -94,7 +94,7 @@ interface PaymentModalProps {
     },
     tip?: PaymentTip,
     driverId?: string | null,
-  ) => void;
+  ) => void | Promise<void>;
   /** Muestra el toggle fijo "Imprimir ticket" en el footer (solo en la
    *  pantalla de cobro principal; el cobro desde el drawer no imprime). */
   showReceiptToggle?: boolean;
@@ -300,6 +300,29 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   // (mismo motivo que cashSuggestions arriba).
   const [printReceipt, setPrintReceipt] = useState(false);
 
+  // Anti multi-tap: el botón Confirmar se bloquea desde el primer tap hasta
+  // que el cobro/creación de orden resuelva. La idempotencia del backend NO
+  // atrapa el burst (cada tap genera un clientOrderId nuevo), así que la
+  // primera línea de defensa es no disparar N requests. Usamos un ref además
+  // del estado: el ref se actualiza síncrono, así un segundo tap en el mismo
+  // tick (antes de que React re-renderice con submitting=true) también se
+  // descarta — el solo `disabled`/estado deja pasar el doble-tap rapidísimo
+  // por el closure obsoleto del handler.
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+
+  // Reset al abrir (render-phase, ver CategoryModal). El `finally` de
+  // handleConfirm también lo limpia; esto cubre cualquier reapertura del
+  // mismo componente montado (SidebarTicket no desmonta el modal).
+  const [prevOpenSubmit, setPrevOpenSubmit] = useState(isOpen);
+  if (prevOpenSubmit !== isOpen) {
+    setPrevOpenSubmit(isOpen);
+    if (isOpen) {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }
+
   if (!isOpen) return null;
 
   const change = Math.max(0, cashReceived - grandTotal);
@@ -316,45 +339,55 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   // Gate de confirmación: DELIVERY exige repartidor seleccionado.
   const canConfirm = (!isDelivery || Boolean(driverId)) && !discountSaving;
 
-  const handleConfirm = () => {
-    if (!canConfirm) return;
-    if (tab === "TOTAL") {
-      onConfirm(method, tipPayload, driverId, printReceipt);
-      return;
-    }
-    // SPLIT
-    if (onConfirmSplit) {
-      if (splitMode === "EQUAL") {
-        onConfirmSplit(
-          method,
-          { kind: "EQUAL", parts: equalParts, perPart },
-          tipPayload,
-          driverId,
-        );
-      } else {
-        onConfirmSplit(
-          method,
-          {
-            kind: "BY_SEAT",
-            parts:
-              seatBuckets.seats.length +
-              (seatBuckets.shared.subtotal > 0 && !seatBuckets.hasSeats ? 1 : 0),
-            bySeat: [
-              ...seatBuckets.seats.map((s) => ({
-                seatNumber: s.seatNumber,
-                subtotal: s.subtotal,
-              })),
-              ...(seatBuckets.shared.subtotal > 0 && !seatBuckets.hasSeats
-                ? [{ seatNumber: null, subtotal: seatBuckets.shared.subtotal }]
-                : []),
-            ],
-          },
-          tipPayload,
-          driverId,
-        );
+  const handleConfirm = async () => {
+    // Guarda anti doble-tap: el ref se evalúa síncrono (a prueba de closures
+    // obsoletos); el `await` mantiene el botón deshabilitado durante todo el
+    // request y el `finally` lo re-habilita si el cobro falló (para reintentar).
+    if (!canConfirm || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      if (tab === "TOTAL") {
+        await onConfirm(method, tipPayload, driverId, printReceipt);
+        return;
       }
-    } else {
-      onConfirm(method, tipPayload, driverId, printReceipt);
+      // SPLIT
+      if (onConfirmSplit) {
+        if (splitMode === "EQUAL") {
+          await onConfirmSplit(
+            method,
+            { kind: "EQUAL", parts: equalParts, perPart },
+            tipPayload,
+            driverId,
+          );
+        } else {
+          await onConfirmSplit(
+            method,
+            {
+              kind: "BY_SEAT",
+              parts:
+                seatBuckets.seats.length +
+                (seatBuckets.shared.subtotal > 0 && !seatBuckets.hasSeats ? 1 : 0),
+              bySeat: [
+                ...seatBuckets.seats.map((s) => ({
+                  seatNumber: s.seatNumber,
+                  subtotal: s.subtotal,
+                })),
+                ...(seatBuckets.shared.subtotal > 0 && !seatBuckets.hasSeats
+                  ? [{ seatNumber: null, subtotal: seatBuckets.shared.subtotal }]
+                  : []),
+              ],
+            },
+            tipPayload,
+            driverId,
+          );
+        }
+      } else {
+        await onConfirm(method, tipPayload, driverId, printReceipt);
+      }
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -682,14 +715,15 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 min-h-[64px] h-16 rounded-2xl bg-white/5 border border-white/10 text-white/70 font-black uppercase tracking-[0.2em] text-[11px] active:scale-95 active:text-white transition-transform"
+            disabled={submitting}
+            className="flex-1 min-h-[64px] h-16 rounded-2xl bg-white/5 border border-white/10 text-white/70 font-black uppercase tracking-[0.2em] text-[11px] active:scale-95 active:text-white transition-transform disabled:opacity-30 disabled:cursor-not-allowed"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!canConfirm}
+            disabled={!canConfirm || submitting}
             title={
               discountSaving
                 ? "Espera a que se guarde el descuento"
@@ -700,11 +734,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             className="flex-[2] min-h-[64px] h-16 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.2em] text-[11px] flex items-center justify-center gap-3 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)] disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed"
           >
             <CheckCircle2 size={20} strokeWidth={2.5} />
-            {tab === "SPLIT"
-              ? splitMode === "EQUAL"
-                ? `Cobrar ${equalParts} parte${equalParts === 1 ? "" : "s"}`
-                : `Cobrar por asientos`
-              : "Confirmar pago"}
+            {submitting
+              ? "Procesando..."
+              : tab === "SPLIT"
+                ? splitMode === "EQUAL"
+                  ? `Cobrar ${equalParts} parte${equalParts === 1 ? "" : "s"}`
+                  : `Cobrar por asientos`
+                : "Confirmar pago"}
           </button>
           </div>
         </div>
