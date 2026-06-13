@@ -2,6 +2,7 @@
 const prisma   = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const { pick } = require('../lib/validate')
+const { PromoPriceValidationError, resolvePromoPricing } = require('../lib/promo-price')
 const router   = express.Router()
 
 // ── Helper: resuelve restaurantId del request o devuelve 400 explícito ─────
@@ -234,11 +235,13 @@ router.get('/items/:id', async (req, res) => {
 
 router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection } = req.body
+    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection } = req.body
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
 
     const category = await prisma.category.findUnique({ where: { id: categoryId, restaurantId: req.user?.restaurantId || req.restaurantId } });
     if (!category) return res.status(400).json({ error: 'Categoría inválida para este restaurante' });
+    const regularPrice = parseFloat(price)
+    const promo = resolvePromoPricing({ isPromo, promoPrice, regularPrice })
 
     const item = await prisma.menuItem.create({
       data: {
@@ -247,10 +250,11 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
         description,
         imageUrl,
         imageFit: imageFit === 'contain' ? 'contain' : 'cover',
-        price: parseFloat(price),
+        price: regularPrice,
         preparationTime: preparationTime || 15,
         isPopular: isPopular || false,
-        isPromo: isPromo || false,
+        isPromo: promo.isPromo,
+        promoPrice: promo.promoPrice,
         activeDays: activeDays || [],
         variantMultiSelect: !!variantMultiSelect,
         variantMinSelection: Math.max(0, parseInt(variantMinSelection, 10) || 0),
@@ -262,16 +266,34 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
       await syncItemVariantsFromTemplates(item.id, item.restaurantId, variantTemplateIds)
     }
     res.status(201).json(item)
-  } catch (e) { res.status(500).json({ error: 'Error al crear platillo' }) }
+  } catch (e) {
+    if (e instanceof PromoPriceValidationError) return res.status(400).json({ error: e.message })
+    res.status(500).json({ error: 'Error al crear platillo' })
+  }
 })
 
 router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection } = req.body
+    const restaurantId = req.user?.restaurantId || req.restaurantId
+    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection } = req.body
+    const existingItem = await prisma.menuItem.findFirst({
+      where: { id: req.params.id, restaurantId },
+      select: { price: true, isPromo: true, promoPrice: true },
+    })
+    if (!existingItem) return res.status(404).json({ error: 'Platillo no encontrado' })
+
+    const regularPrice = price === undefined ? existingItem.price : parseFloat(price)
+    const promo = resolvePromoPricing({
+      isPromo,
+      promoPrice,
+      regularPrice,
+      currentIsPromo: existingItem.isPromo,
+      currentPromoPrice: existingItem.promoPrice,
+    })
     const item = await prisma.menuItem.update({
       where: {
         id: req.params.id,
-        restaurantId: req.user?.restaurantId || req.restaurantId
+        restaurantId
       },
       data: {
         ...(name !== undefined && { name }),
@@ -283,7 +305,8 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
         ...(imageUrl !== undefined && { imageUrl }),
         ...(imageFit !== undefined && { imageFit: imageFit === 'contain' ? 'contain' : 'cover' }),
         ...(categoryId !== undefined && { categoryId }),
-        ...(isPromo !== undefined && { isPromo }),
+        isPromo: promo.isPromo,
+        promoPrice: promo.promoPrice,
         ...(activeDays !== undefined && { activeDays }),
         ...(variantMultiSelect !== undefined && { variantMultiSelect: !!variantMultiSelect }),
         ...(variantMinSelection !== undefined && { variantMinSelection: Math.max(0, parseInt(variantMinSelection, 10) || 0) }),
@@ -293,12 +316,15 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
     if (variantTemplateIds !== undefined) {
       await syncItemVariantsFromTemplates(
         item.id,
-        req.user?.restaurantId || req.restaurantId,
+        restaurantId,
         variantTemplateIds,
       )
     }
     res.json(item)
-  } catch (e) { res.status(500).json({ error: 'Error al actualizar platillo' }) }
+  } catch (e) {
+    if (e instanceof PromoPriceValidationError) return res.status(400).json({ error: e.message })
+    res.status(500).json({ error: 'Error al actualizar platillo' })
+  }
 })
 
 // PATCH dedicado para el toggle ⭐ desde /admin/menu — lighter que un PUT

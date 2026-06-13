@@ -77,7 +77,7 @@ export default function MenuPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
+  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -244,7 +244,7 @@ export default function MenuPage() {
   function openForm(item?: any) {
     if (item) {
       setEditItem(item);
-      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0 });
+      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0 });
       setImagePreview(item.imageUrl||"");
       api.get(`/api/menu/items/${item.id}`).then(r => {
         setComplements(r.data.complements || []);
@@ -254,7 +254,7 @@ export default function MenuPage() {
       }).catch(() => { setComplements([]); setVariants([]); });
     } else {
       setEditItem(null);
-      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
+      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
       setImagePreview("");
       setComplements([]);
       setVariants([]);
@@ -382,10 +382,21 @@ export default function MenuPage() {
 
   async function saveItem(e: React.FormEvent) {
     e.preventDefault();
+    const regularPrice = Number(form.price);
+    const promoPrice = Number(form.promoPrice);
+    if (form.isPromo && (!form.promoPrice || !Number.isFinite(promoPrice) || promoPrice <= 0 || promoPrice >= regularPrice)) {
+      alert("El precio promocional debe ser mayor a 0 y menor al precio regular.");
+      return;
+    }
     setSaving(true);
     try {
       const imageUrl = await uploadImageToCloud();
-      const payload = { ...form, price: parseFloat(form.price), imageUrl };
+      const payload = {
+        ...form,
+        price: regularPrice,
+        promoPrice: form.isPromo ? promoPrice : null,
+        imageUrl,
+      };
       if (editItem) await api.put(`/api/menu/items/${editItem.id}`, payload);
       else await api.post("/api/menu/items", payload);
       setShowForm(false);
@@ -1077,35 +1088,54 @@ export default function MenuPage() {
                     <Toggle checked={form.isPromo} onChange={() => setForm(p => ({ ...p, isPromo: !p.isPromo }))} label="Promoción por día" />
                   </div>
                   {form.isPromo && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {[
-                        { key: 'MONDAY',    label: 'Lun' },
-                        { key: 'TUESDAY',   label: 'Mar' },
-                        { key: 'WEDNESDAY', label: 'Mié' },
-                        { key: 'THURSDAY',  label: 'Jue' },
-                        { key: 'FRIDAY',    label: 'Vie' },
-                        { key: 'SATURDAY',  label: 'Sáb' },
-                        { key: 'SUNDAY',    label: 'Dom' },
-                      ].map(({ key, label }) => {
-                        const active = form.activeDays.includes(key)
-                        return (
-                          <button key={key} type="button"
-                            onClick={() => setForm(p => ({
-                              ...p,
-                              activeDays: active
-                                ? p.activeDays.filter(d => d !== key)
-                                : [...p.activeDays, key]
-                            }))}
-                            className="min-h-10 rounded-lg px-3 text-xs font-bold transition-all"
-                            style={{
-                              background: active ? "var(--brand-primary)" : "var(--surf-2)",
-                              color: active ? "#fffaf4" : "var(--tx-mut)",
-                              border: `1px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`
-                            }}>
-                            {label}
-                          </button>
-                        )
-                      })}
+                    <div className="mt-3 grid gap-3">
+                      <div>
+                        <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">
+                          Precio promocional
+                        </label>
+                        <input
+                          type="number"
+                          min="0.01"
+                          max={form.price ? Math.max(0.01, Number(form.price) - 0.01) : undefined}
+                          step="0.01"
+                          value={form.promoPrice}
+                          onChange={e => setForm(p => ({ ...p, promoPrice: e.target.value }))}
+                          placeholder="Ej. 79.00"
+                          required
+                          className="min-h-11 w-full rounded-xl px-3 font-mono text-sm font-bold text-tx outline-none"
+                          style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { key: 'MONDAY',    label: 'Lun' },
+                          { key: 'TUESDAY',   label: 'Mar' },
+                          { key: 'WEDNESDAY', label: 'Mié' },
+                          { key: 'THURSDAY',  label: 'Jue' },
+                          { key: 'FRIDAY',    label: 'Vie' },
+                          { key: 'SATURDAY',  label: 'Sáb' },
+                          { key: 'SUNDAY',    label: 'Dom' },
+                        ].map(({ key, label }) => {
+                          const active = form.activeDays.includes(key)
+                          return (
+                            <button key={key} type="button"
+                              onClick={() => setForm(p => ({
+                                ...p,
+                                activeDays: active
+                                  ? p.activeDays.filter(d => d !== key)
+                                  : [...p.activeDays, key]
+                              }))}
+                              className="min-h-10 rounded-lg px-3 text-xs font-bold transition-all"
+                              style={{
+                                background: active ? "var(--brand-primary)" : "var(--surf-2)",
+                                color: active ? "#fffaf4" : "var(--tx-mut)",
+                                border: `1px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`
+                              }}>
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
