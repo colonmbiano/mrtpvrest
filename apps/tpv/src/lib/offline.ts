@@ -79,10 +79,17 @@ export async function apiOrQueue<T = any>(
   }
 
   try {
+    // Mandamos Idempotency-Key=txId también en el intento ONLINE (no solo en
+    // el replay offline). Sin esto, un POST que llega bien al server pero cuya
+    // respuesta se pierde (blip de red) cae a `isNetworkError` → se encola con
+    // el mismo txId → al replay-earse el backend NO lo dedupea (la llamada
+    // online original nunca registró la key) → ronda/cobro DUPLICADO. Con la
+    // misma key en ambos caminos, el middleware de idempotencia los une.
+    const cfg = { headers: { 'Idempotency-Key': txId } };
     const res =
       method === 'POST'
-        ? await api.post<T>(path, bodyOut)
-        : await api.put<T>(path, bodyOut);
+        ? await api.post<T>(path, bodyOut, cfg)
+        : await api.put<T>(path, bodyOut, cfg);
     return { ok: true, queued: false, data: res.data };
   } catch (err: any) {
     if (isNetworkError(err)) {

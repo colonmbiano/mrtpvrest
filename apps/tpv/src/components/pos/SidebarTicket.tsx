@@ -67,6 +67,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const roundsRevision = useActiveOrderStore((s) => s.roundsRevision);
 
   const [previousItems, setPreviousItems] = useState<any[]>([]);
+  // Nombre/etiqueta de la cuenta ("Renombrar" → Order.ticketName). Se hidrata
+  // del pedido activo y se muestra en el header para que el rename sea visible
+  // en la pantalla de trabajo (no solo en Tickets abiertos).
+  const [activeTicketName, setActiveTicketName] = useState<string | null>(null);
   const [_loadingHistory, setLoadingHistory] = useState(false);
 
   // Registro de clientes — al teclear el teléfono en DELIVERY buscamos el
@@ -85,6 +89,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       if (cancelled) return;
       if (!activeOrderId) {
         setPreviousItems([]);
+        setActiveTicketName(null);
         return;
       }
       (async () => {
@@ -92,7 +97,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           setLoadingHistory(true);
           const { data } = await api.get(`/api/orders/${activeOrderId}`);
           // Combinamos todos los items de todas las rondas como historial
-          if (!cancelled) setPreviousItems(data.items || []);
+          if (!cancelled) {
+            setPreviousItems(data.items || []);
+            setActiveTicketName(data.ticketName || null);
+          }
         } catch (err) {
           console.error("Error al cargar historial de orden:", err);
         } finally {
@@ -426,6 +434,12 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   };
 
   const handleSendToKitchen = async () => {
+    // Guarda de re-entrada: sin esto un doble-tap dispara dos POST de la misma
+    // ronda → items duplicados en la cuenta. El botón usa `disabled={processing}`
+    // pero este handler nunca prendía la bandera, así que el disabled no servía.
+    if (processing) return;
+    setProcessing(true);
+    try {
     if (ticket.items.length === 0) {
       if (activeOrderId) {
         // Cuenta existente sin productos nuevos: no hay ronda que agregar,
@@ -563,6 +577,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     } catch (error: any) {
       toast.error("Error al enviar pedido: " + (error.response?.data?.error || error.message));
     }
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleProcessPayment = async (
@@ -571,6 +588,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     driverId?: string | null,
   ) => {
     if (ticket.items.length === 0 && previousItems.length === 0) return;
+    if (processing) return; // evita doble cobro / ronda duplicada por doble-tap
     setProcessing(true);
     try {
       const tipAmount = tip?.amount ?? 0;
@@ -700,7 +718,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         orderNumber: order?.orderNumber ?? activeOrderNumber ?? null,
         orderType:   ticket.type ?? null,
         tableNumber: ticket.tableName || ticket.table || null,
-        customerName: ticket.name ?? null,
+        // ticketName (el "Renombrar" de la cuenta) tiene prioridad sobre el
+        // nombre del cliente, igual que en el listado de tickets abiertos.
+        customerName: order?.ticketName || ticket.name || null,
         customerPhone: ticket.phone ?? null,
       };
       const totals = {
@@ -817,7 +837,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           allowedTypes={tpvConfig.allowedOrderTypes}
         />
         <div className="flex items-center justify-between">
-          <h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">Orden en curso</h2>
+          <h2 className="min-w-0 flex-1 truncate text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            {activeTicketName || "Orden en curso"}
+          </h2>
           <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-amber-400">
             ID: {String(ticket.id).slice(-4)}
           </span>
