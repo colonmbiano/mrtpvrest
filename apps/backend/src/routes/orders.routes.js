@@ -583,6 +583,65 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       total: serverTotal,
     } = computeOrderTotals(resolvedItems, { discount: mayDiscount ? discount : 0 });
 
+    // ── Defensa en profundidad anti multi-tap ───────────────────────────────
+    // Aunque el TPV ya deshabilita el botón Cobrar desde el primer tap, un
+    // burst (p.ej. el botón "Cobrar" pulsado N veces) genera N clientOrderId
+    // DISTINTOS, así que la idempotencia por clientOrderId de arriba NO los
+    // une. Si en los últimos DEDUP_WINDOW_MS el MISMO empleado ya creó en esta
+    // sucursal una orden idéntica (mismo tipo, mesa, cliente, total e items),
+    // la devolvemos en vez de duplicar. La firma es EXACTA a propósito: dos
+    // clientes distintos que pidan lo mismo difieren en mesa/cliente, y el
+    // caso anónimo idéntico real (dos "Publico General" iguales) toma más que
+    // esta ventana en teclearse — no se fusiona el cobro legítimo.
+    const DEDUP_WINDOW_MS = 10_000;
+    const buildItemSig = (its) => its
+      .map((it) => {
+        const mods = (it._modifiers || it.modifiers || [])
+          .map((m) => m.modifierId)
+          .filter(Boolean)
+          .sort()
+          .join('+');
+        return `${it.menuItemId}:${it.quantity}:${Number(it.price).toFixed(2)}:${it.seatNumber ?? ''}:${mods}`;
+      })
+      .sort()
+      .join('|');
+    if (req.user?.id) {
+      const newSig = buildItemSig(resolvedItems);
+      const recent = await prisma.order.findMany({
+        where: {
+          restaurantId,
+          locationId: req.locationId,
+          createdById: req.user.id,
+          source: 'TPV',
+          orderType: orderType || 'TAKEOUT',
+          createdAt: { gte: new Date(Date.now() - DEDUP_WINDOW_MS) },
+        },
+        include: { items: { include: { modifiers: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+      const dup = recent.find((cand) => {
+        const sameCtx =
+          (cand.tableId || null) === (tableId || null) &&
+          (cand.customerName || null) === (customerName || null) &&
+          (cand.customerPhone || null) === (customerPhone || null) &&
+          Math.abs(Number(cand.total) - Number(serverTotal)) < 0.01;
+        return sameCtx && buildItemSig(cand.items) === newSig;
+      });
+      if (dup) {
+        const full = await prisma.order.findUnique({
+          where: { id: dup.id },
+          include: {
+            items: { include: { menuItem: { include: { category: true } }, modifiers: true } },
+            rounds: true,
+            table: true,
+          },
+        });
+        res.setHeader('X-Dedup-Replay', 'true');
+        return res.json(full || dup);
+      }
+    }
+
     // Si es dine-in con mesa: status=OPEN (cuenta abierta) y la primera ronda
     // se crea explícita para que el flujo de rondas posteriores quede limpio.
     const order = await prisma.$transaction(async (tx) => {
