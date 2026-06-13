@@ -598,7 +598,23 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       let order: any = null;
       let queued = false;
       if (activeOrderId) {
-        // 1. Si hay items en la "Nueva ronda", primero los enviamos al backend
+        // VELOCIDAD: antes el cobro encadenaba 4 round-trips secuenciales a la
+        // nube (items → detalles → descuento → pago). Los datos del cliente y
+        // (si no hay ronda nueva) la hidratación de la orden NO tocan total ni
+        // estado, así que arrancan EN PARALELO y se esperan justo antes de
+        // cobrar. La ronda nueva y el descuento sí van en orden (el total se
+        // recalcula server-side sobre el set completo de items).
+        const detailsPromise = persistOrderDetails(activeOrderId).catch(() => null);
+        const hydratePromise =
+          itemsPayload.length === 0 &&
+          (typeof navigator === "undefined" || navigator.onLine)
+            ? api
+                .get(`/api/orders/${activeOrderId}`)
+                .then((r) => r.data)
+                .catch(() => null)
+            : null;
+
+        // 1. Ronda nueva (si hay) — debe aplicarse antes del descuento/pago.
         if (itemsPayload.length > 0) {
           const addRes = await apiOrQueue<any>(
             "order",
@@ -612,33 +628,31 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           }
           queued = queued || addRes.queued;
           order = addRes.data;
-        } else if (typeof navigator === "undefined" || navigator.onLine) {
-          try {
-            const { data } = await api.get(`/api/orders/${activeOrderId}`);
-            order = data;
-          } catch {
-            // Si no se pudo hidratar, igual podemos encolar el cobro por id.
+        }
+
+        // 2. Descuento — solo si hay uno (ahorra un round-trip en el caso común
+        // de cobro sin descuento). Va después de los items.
+        if (ticket.discount > 0) {
+          const discountRes = await apiOrQueue<any>(
+            "order",
+            "PUT",
+            `/api/orders/${activeOrderId}/discount`,
+            { type: "fixed", value: ticket.discount },
+          );
+          if (!discountRes.ok) {
+            toast.error("No se pudo guardar el descuento: " + (discountRes.error || ""));
+            return;
           }
+          queued = queued || discountRes.queued;
+          if (discountRes.data) order = { ...order, ...discountRes.data };
         }
-        // Persistir ediciones de datos del cliente sobre la orden existente
-        // antes de cobrar (best-effort: no bloquea la venta si falla).
-        try {
-          await persistOrderDetails(activeOrderId);
-        } catch {
-          /* no crítico para el cobro */
+
+        // Esperar lo que corrió en paralelo (ya sin costo de latencia extra).
+        await detailsPromise;
+        if (hydratePromise) {
+          const h = await hydratePromise;
+          if (h) order = order ? { ...h, ...order } : h;
         }
-        const discountRes = await apiOrQueue<any>(
-          "order",
-          "PUT",
-          `/api/orders/${activeOrderId}/discount`,
-          { type: "fixed", value: ticket.discount },
-        );
-        if (!discountRes.ok) {
-          toast.error("No se pudo guardar el descuento: " + (discountRes.error || ""));
-          return;
-        }
-        queued = queued || discountRes.queued;
-        if (discountRes.data) order = { ...order, ...discountRes.data };
       } else {
         // 2. Si no hay activeOrderId, creamos la orden completa normalmente
         const orderData = {
@@ -668,7 +682,13 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       }
 
       const payableOrderId = activeOrderId || order?.id;
-      if (payableOrderId && !queued) {
+      // El create de orden nueva ya marca PAID cuando manda status=DELIVERED +
+      // paymentMethod (paidOnCreate). En ese caso el PUT /payment es redundante
+      // → lo saltamos para ahorrar un round-trip. Excepción: DINE_IN, donde el
+      // PUT /payment también libera la mesa (releaseTableIfDineIn).
+      const alreadyPaidOnCreate =
+        !activeOrderId && order?.paymentStatus === "PAID" && ticket.type !== "DINE_IN";
+      if (payableOrderId && !queued && !alreadyPaidOnCreate) {
         const payRes = await apiOrQueue<any>(
           "payment",
           "PUT",
