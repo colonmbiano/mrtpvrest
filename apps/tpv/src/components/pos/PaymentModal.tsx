@@ -294,6 +294,12 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     [grandTotal]
   );
 
+  // Imprimir el ticket de cuenta al cobrar es OPCIONAL y se decide aquí, con un
+  // botón fijo en la pantalla de cobro (default apagado: no imprime solo).
+  // Debe quedar antes del early `return null` para no violar Rules of Hooks
+  // (mismo motivo que cashSuggestions arriba).
+  const [printReceipt, setPrintReceipt] = useState(false);
+
   if (!isOpen) return null;
 
   const change = Math.max(0, cashReceived - grandTotal);
@@ -309,10 +315,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 
   // Gate de confirmación: DELIVERY exige repartidor seleccionado.
   const canConfirm = (!isDelivery || Boolean(driverId)) && !discountSaving;
-
-  // Imprimir el ticket de cuenta al cobrar es OPCIONAL y se decide aquí, con un
-  // botón fijo en la pantalla de cobro (default apagado: no imprime solo).
-  const [printReceipt, setPrintReceipt] = useState(false);
 
   const handleConfirm = () => {
     if (!canConfirm) return;

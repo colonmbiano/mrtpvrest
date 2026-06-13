@@ -95,8 +95,12 @@ export default function TablePickerModal({
     // Pinta al instante las mesas cacheadas (sin spinner) y revalida detrás.
     const cached = readTablesCache();
     if (cached) {
-      setTables(cached);
-      setLoading(false);
+      // Diferido a microtask: evita el set-state síncrono dentro del effect.
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setTables(cached);
+        setLoading(false);
+      });
     }
     // Arranque diferido (ver impresoras): evita set-state-in-effect síncrono.
     queueMicrotask(() => { if (!cancelled) fetchTables(!!cached); });
