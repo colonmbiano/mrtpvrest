@@ -307,7 +307,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
       <main className="relative z-10 mt-3 flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
         {/* CUENTAS ABIERTAS */}
         <section className="flex min-h-0 flex-[2.2] flex-col rounded-xl border border-white/10 bg-white/[0.035] p-3 backdrop-blur-md">
-          <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
+          <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#ffb84d]">
               Cuentas abiertas · {openAccounts.length}
             </p>
@@ -359,7 +359,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                     <div
                       key={acc.id}
                       aria-label={`Cuenta de ${title} por $${acc.total.toFixed(2)}${acc.isWeb ? " (pedido web)" : ""}`}
-                      className="relative flex flex-col gap-2 border-b border-white/[0.06] py-2.5 pl-3 pr-2 text-left transition-colors last:border-0"
+                      className="relative flex flex-col gap-1.5 border-b border-white/[0.06] py-2 pl-3 pr-2 text-left transition-colors last:border-0"
                       style={
                         acc.isWeb
                           ? { boxShadow: `inset 3px 0 0 ${WEB_ACCENT}`, backgroundColor: `${WEB_ACCENT}0d` }
@@ -509,24 +509,24 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   key={type.id}
                   type="button"
                   onClick={() => onSelect(type.id)}
-                  className="group relative flex flex-1 flex-col justify-center gap-2 rounded-xl border border-white/10 bg-[#131316] p-4 text-left transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70"
+                  className="group relative flex min-h-[104px] flex-1 flex-col justify-center gap-3 rounded-2xl border border-white/10 bg-[#131316] p-4 text-left transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70 lg:p-5"
                   style={{ borderColor: `${type.accent}3a` }}
                 >
                   <div className="flex items-center justify-between">
                     <span
-                      className="flex h-11 w-11 items-center justify-center rounded-lg border"
+                      className="flex h-12 w-12 items-center justify-center rounded-xl border"
                       style={{
                         backgroundColor: `${type.accent}1f`,
                         borderColor: `${type.accent}40`,
                         color: type.accent,
                       }}
                     >
-                      <Icon size={22} strokeWidth={2.5} />
+                      <Icon size={24} strokeWidth={2.5} />
                     </span>
-                    <span className="text-[10px] font-black text-white/30">{type.shortcut}</span>
+                    <span className="text-[11px] font-black text-white/30">{type.shortcut}</span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-base font-black leading-tight tracking-tight lg:text-lg">
+                    <h3 className="text-lg font-black leading-tight tracking-tight">
                       {type.title}
                     </h3>
                     <ArrowRight
