@@ -938,7 +938,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       </div>
       <h3 className="text-xl font-black text-white mb-2">Sin mesas configuradas</h3>
       <p className="text-zinc-500 max-w-xs mx-auto text-sm font-medium mb-6">
-        Empieza creando tus mesas. Con "Crear varias" das de alta toda la sala (Mesa 1…Mesa 12) en un solo paso.
+        Empieza creando tus mesas. Con &ldquo;Crear varias&rdquo; das de alta toda la sala (Mesa 1…Mesa 12) en un solo paso.
       </p>
       <button
         onClick={onCreate}

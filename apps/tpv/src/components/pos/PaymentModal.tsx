@@ -318,10 +318,17 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   if (prevOpenSubmit !== isOpen) {
     setPrevOpenSubmit(isOpen);
     if (isOpen) {
-      submittingRef.current = false;
       setSubmitting(false);
     }
   }
+
+  // El espejo en ref del flag submitting se limpia al reabrir, pero FUERA del
+  // render (escribir un ref en render rompe bajo doble-render/StrictMode).
+  // Corre tras el paint; no hay carrera porque no se puede tap Confirmar antes
+  // de que el modal pinte. handleConfirm() lo vuelve a poner true síncrono.
+  useEffect(() => {
+    if (isOpen) submittingRef.current = false;
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
