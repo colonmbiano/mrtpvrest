@@ -734,18 +734,38 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     d += CMD.LINE;
   }
 
-  // TÍTULO de la comanda = nombre del ticket (Mesa / cliente): grande y hasta
-  // arriba para que cocina identifique la cuenta de un vistazo. Reemplaza al
-  // antiguo título fijo "COMANDA" (en cocina ya saben que es una comanda).
+  // TÍTULO de la comanda = nombre del ticket (cliente) GRANDE arriba; la mesa va
+  // debajo en tamaño normal. Reemplaza al antiguo título fijo "COMANDA".
+  //
+  // Antes se imprimían mesa Y nombre ambos en grande. En DINE_IN sin nombre el
+  // backend deja customerName = nombre de la mesa ("Mesa 9"), así que salían dos
+  // líneas grandes "Mesa 9 / Mesa 9" (el "Mesa Mesa" reportado). Ahora:
+  //   - el NOMBRE va grande SOLO si es un nombre real (no vacío y distinto de la
+  //     mesa), cumpliendo "quiero el nombre en grande";
+  //   - la MESA se imprime una sola vez (grande si no hay nombre real; normal si
+  //     el nombre ya ocupa el lugar grande), nunca duplicada.
   const nameSizeOn =
     cfg.ticketNameSize === "normal" ? "" :
     cfg.ticketNameSize === "xlarge" ? CMD.TRIPLE_ON : CMD.DOUBLE_ON;
   const nameSizeOff = cfg.ticketNameSize === "normal" ? "" : CMD.DOUBLE_OFF;
-  if (cfg.showTableNumber && input.tableNumber) {
-    d += nameSizeOn + CMD.BOLD_ON + withLabel("Mesa", String(input.tableNumber)) + "\n" + CMD.BOLD_OFF + nameSizeOff;
-  }
-  if (cfg.showCustomerName && input.customerName) {
-    d += nameSizeOn + CMD.BOLD_ON + input.customerName + "\n" + CMD.BOLD_OFF + nameSizeOff;
+
+  const mesaLabel =
+    cfg.showTableNumber && input.tableNumber
+      ? withLabel("Mesa", String(input.tableNumber))
+      : "";
+  const rawName =
+    cfg.showCustomerName && input.customerName ? String(input.customerName).trim() : "";
+  // El nombre es "real" solo si no repite la mesa (ni su etiqueta ni el valor crudo).
+  const nameIsReal =
+    !!rawName &&
+    rawName.toLowerCase() !== mesaLabel.toLowerCase() &&
+    rawName.toLowerCase() !== String(input.tableNumber ?? "").trim().toLowerCase();
+
+  if (nameIsReal) {
+    d += nameSizeOn + CMD.BOLD_ON + rawName + "\n" + CMD.BOLD_OFF + nameSizeOff;
+    if (mesaLabel) d += CMD.BOLD_ON + mesaLabel + "\n" + CMD.BOLD_OFF;
+  } else if (mesaLabel) {
+    d += nameSizeOn + CMD.BOLD_ON + mesaLabel + "\n" + CMD.BOLD_OFF + nameSizeOff;
   }
 
   // Estación destino (separateByGroup): a qué printer-group va esta comanda.
@@ -1010,7 +1030,18 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   } else if (input.numberOfGuests && input.numberOfGuests > 0) {
     d += row("Comensales:", String(input.numberOfGuests), lw);
   }
-  if (input.customerName) d += row("Cliente:", input.customerName, lw);
+  // "Cliente:" solo si es un nombre real: en DINE_IN sin nombre el customerName
+  // puede venir como la mesa ("Mesa 9"), y ya se imprimió en "Lugar:" — evitamos
+  // la línea redundante "Cliente: Mesa 9".
+  {
+    const custName = input.customerName ? String(input.customerName).trim() : "";
+    const tbl = input.tableNumber ? withLabel("Mesa", String(input.tableNumber)) : "";
+    const custIsReal =
+      !!custName &&
+      custName.toLowerCase() !== tbl.toLowerCase() &&
+      custName.toLowerCase() !== String(input.tableNumber ?? "").trim().toLowerCase();
+    if (custIsReal) d += row("Cliente:", custName, lw);
+  }
   d += row("Fecha:", now, lw);
   if (input.cashierName) d += row("Cajero:", input.cashierName, lw);
   if (input.terminalName) d += row("Terminal:", input.terminalName, lw);
