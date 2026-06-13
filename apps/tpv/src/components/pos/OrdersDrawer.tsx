@@ -438,7 +438,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 gap-2">
               {visibleOrders.map((order) => {
                 const tone = toneFor(order.status);
                 const selectedIndex = selectedIds.indexOf(order.id);
@@ -468,7 +468,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                         ? `${isSelected ? "Quitar" : "Seleccionar"} ticket de ${order.customerName}`
                         : `Ticket de ${order.customerName} por $${order.total.toFixed(2)}`
                     }
-                    className={`relative px-4 py-3 rounded-2xl border bg-white/5 backdrop-blur-md text-left flex flex-col gap-2.5 active:scale-[0.99] transition-all overflow-hidden ${
+                    className={`relative px-3.5 py-2 rounded-xl border bg-white/5 backdrop-blur-md text-left flex flex-col gap-1.5 active:scale-[0.99] transition-all overflow-hidden ${
                       isSelected
                         ? "border-[#ffb84d] bg-[#ffb84d]/10 shadow-[inset_0_0_0_1px_rgba(255,184,77,0.25)]"
                         : tone.ring
@@ -553,7 +553,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                             hapticMedium();
                             onShowDetail(order);
                           }}
-                          className="flex-1 h-11 rounded-xl bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 active:text-white transition-transform"
+                          className="flex-1 h-9 rounded-lg bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 active:text-white transition-transform"
                         >
                           <Pencil size={15} strokeWidth={2.5} /> Editar
                         </button>
@@ -566,7 +566,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                             hapticMedium();
                             onReprintOrder(order);
                           }}
-                          className="flex-1 h-11 rounded-xl bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 active:text-white transition-transform"
+                          className="flex-1 h-9 rounded-lg bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 active:text-white transition-transform"
                         >
                           <Receipt size={15} strokeWidth={2.5} /> Imprimir
                         </button>
@@ -580,7 +580,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                               hapticMedium();
                               onConfirmPayment(order);
                             }}
-                            className="flex-[1.3] h-11 rounded-xl bg-[#88d66c] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                            className="flex-[1.3] h-9 rounded-lg bg-[#88d66c] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
                           >
                             <Zap size={15} strokeWidth={2.8} /> Cobrar
                           </button>
