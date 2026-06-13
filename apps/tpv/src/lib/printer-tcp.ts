@@ -441,6 +441,9 @@ export interface TicketItem {
   name: string;
   quantity: number;
   price: number;
+  // Unidad de venta. Pesable (g/kg) imprime el peso ("0.48 kg Arrachera"); el
+  // resto mantiene el formato "2x Hamburguesa".
+  unit?: string;
   notes?: string | null;
   modifiers?: TicketModifier[] | null;
   // En DINE_IN: a qué comensal pertenece. null = compartido.
@@ -557,6 +560,16 @@ export interface ReceiptInput {
 const fmtMoney = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2 });
 
+// Formato de cantidad para comanda/recibo. Pesable (g/kg) → hasta 3 decimales
+// sin ceros sobrantes + sufijo (ej. "0.48 kg"); no pesable → entero.
+function fmtQty(quantity: number, unit?: string): string {
+  if (unit === "g" || unit === "kg") {
+    const n = Number(quantity) || 0;
+    return `${parseFloat(n.toFixed(3))} ${unit}`;
+  }
+  return String(Math.round(Number(quantity) || 0));
+}
+
 const ORDER_TYPE_LABEL: Record<string, string> = {
   DINE_IN:  "Comer aquí",
   TAKEOUT:  "Para llevar",
@@ -606,8 +619,12 @@ export function formatProductLine(
   amount: string,
   width: number,
   indent = "   ",
+  unit?: string,
 ): string {
-  const prefix = `${quantity}x `;
+  // Pesables: "0.48 kg "; no pesables: "2x ".
+  const prefix = (unit === "g" || unit === "kg")
+    ? `${fmtQty(quantity, unit)} `
+    : `${quantity}x `;
   const firstNameMax = Math.max(1, width - amount.length - 1 - prefix.length);
   const contMax = Math.max(1, width - indent.length);
 
@@ -821,7 +838,11 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
 
   const renderItem = (item: TicketItem) => {
     let s = itemSizeOn + itemBoldOn;
-    s += `${item.quantity}x ${item.name}\n`;
+    // Pesables: "0.48 kg Arrachera" (sin "x"); no pesables: "2x Hamburguesa".
+    const weighable = item.unit === "g" || item.unit === "kg";
+    s += weighable
+      ? `${fmtQty(item.quantity, item.unit)} ${item.name}\n`
+      : `${item.quantity}x ${item.name}\n`;
     if (cfg.showModifiers && item.modifiers && item.modifiers.length > 0) {
       s += itemSizeOff;
       for (const m of item.modifiers) s += `  + ${m.name}\n`;
@@ -1053,7 +1074,7 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
     const lineTotal =
       item.price * item.quantity +
       (item.modifiers || []).reduce((s, m) => s + (m.priceAdd || 0), 0) * item.quantity;
-    d += formatProductLine(item.quantity, item.name, fmtMoney(lineTotal), lw);
+    d += formatProductLine(item.quantity, item.name, fmtMoney(lineTotal), lw, undefined, item.unit);
     for (const m of item.modifiers || []) {
       // Subline con sangría: "+ Nombre        +monto" alineado a la derecha.
       const right = m.priceAdd ? "+" + fmtMoney(m.priceAdd) : "";

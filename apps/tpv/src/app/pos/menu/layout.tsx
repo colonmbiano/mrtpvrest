@@ -494,6 +494,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       return {
         name: it.name || it.menuItem?.name || "Producto",
         quantity: Number(it.quantity ?? 1),
+        unit: it.unit ?? it.menuItem?.unit,
         price: Number(it.unitPrice ?? it.price ?? 0),
         notes: it.notes || null,
         seatNumber: typeof it.seatNumber === "number" ? it.seatNumber : null,
@@ -1240,6 +1241,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
               id: String(it.id),
               name: it.name || it.menuItem?.name || "Producto",
               quantity: Number(it.quantity ?? 1),
+              unit: it.unit ?? it.menuItem?.unit,
               notes: it.notes || null,
               printerGroupIds:
                 itemOverride.length > 0 ? itemOverride : categoryDefault,
