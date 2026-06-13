@@ -67,13 +67,16 @@ android {
             def ksPath = System.getenv("KEYSTORE_PATH") ?: project.findProperty("MRTPV_KEYSTORE_PATH")
             def ksPassword = System.getenv("KEYSTORE_PASSWORD") ?: project.findProperty("MRTPV_KEYSTORE_PASSWORD")
             def alias = System.getenv("KEY_ALIAS") ?: project.findProperty("MRTPV_KEY_ALIAS")
-            def keyPassword = System.getenv("KEY_PASSWORD") ?: project.findProperty("MRTPV_KEY_PASSWORD")
+            def keyPass = System.getenv("KEY_PASSWORD") ?: project.findProperty("MRTPV_KEY_PASSWORD")
 
-            if (ksPath && file(ksPath).exists() && ksPassword && alias && keyPassword) {
+            if (ksPath && file(ksPath).exists() && ksPassword && alias && keyPass) {
                 storeFile file(ksPath)
                 storePassword ksPassword
                 keyAlias alias
-                keyPassword keyPassword
+                // Variable renombrada a `keyPass` para no chocar con el método
+                // `keyPassword` del DSL de Gradle (el shadowing hacía que Groovy
+                // intentara invocar el String como función → String.call()).
+                keyPassword keyPass
             }
         }
     }
