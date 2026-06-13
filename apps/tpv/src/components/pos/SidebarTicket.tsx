@@ -586,6 +586,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     method: string,
     tip?: PaymentTip,
     driverId?: string | null,
+    printReceipt?: boolean,
   ) => {
     if (ticket.items.length === 0 && previousItems.length === 0) return;
     if (processing) return; // evita doble cobro / ronda duplicada por doble-tap
@@ -768,10 +769,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         terminalName: terminalName || null,
       };
 
-      // El recibo de cuenta YA NO se imprime automáticamente al cobrar. El cajero
-      // decide: el toast de éxito trae un botón "Imprimir ticket" que lo manda a
-      // la impresora CASHIER solo si lo tocan (la comanda de cocina sí va sola).
-      const printReceiptNow = () => {
+      // El recibo de cuenta solo se imprime si el cajero activó el toggle
+      // "Imprimir ticket" en la pantalla de cobro (default apagado). La comanda
+      // de cocina no depende de esto (va sola más abajo si hay items nuevos).
+      if (printReceipt) {
         if (isDineInSplit) {
           printSplitReceipts(
             printers,
@@ -787,14 +788,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             items: receiptItems,
           }).catch(() => {});
         }
-      };
+      }
 
       toast.success(
         queued ? "Cobro en cola · se registrara al volver la red" : "Cobro procesado",
-        {
-          action: { label: "Imprimir ticket", onClick: printReceiptNow },
-          duration: 12000,
-        },
       );
 
       // Limpieza post-pago — reset completo para que la próxima venta
@@ -1186,6 +1183,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             })),
           ]}
           onConfirm={handleProcessPayment}
+          showReceiptToggle
         />
 
         <TablePickerModal

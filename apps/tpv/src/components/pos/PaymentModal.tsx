@@ -14,6 +14,7 @@ import {
   Bike,
   Delete,
   Tag,
+  Printer,
 } from "lucide-react";
 import api from "@/lib/api";
 import DiscountModal from "@/components/pos/DiscountModal";
@@ -75,7 +76,12 @@ interface PaymentModalProps {
   /** Tipo de orden — necesario para gatear la asignación de repartidor
    *  cuando es DELIVERY (BUG-24). */
   orderType?: "DINE_IN" | "TAKEOUT" | "DELIVERY";
-  onConfirm: (method: string, tip?: PaymentTip, driverId?: string | null) => void;
+  onConfirm: (
+    method: string,
+    tip?: PaymentTip,
+    driverId?: string | null,
+    printReceipt?: boolean,
+  ) => void;
   /** Opcional · invocado en lugar de onConfirm cuando el usuario
    *  presiona Confirmar en modo split. Si no se provee, usa onConfirm. */
   onConfirmSplit?: (
@@ -89,6 +95,9 @@ interface PaymentModalProps {
     tip?: PaymentTip,
     driverId?: string | null,
   ) => void;
+  /** Muestra el toggle fijo "Imprimir ticket" en el footer (solo en la
+   *  pantalla de cobro principal; el cobro desde el drawer no imprime). */
+  showReceiptToggle?: boolean;
 }
 
 interface DriverLite {
@@ -122,6 +131,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   orderType,
   onConfirm,
   onConfirmSplit,
+  showReceiptToggle = false,
 }) => {
   const [tab, setTab] = useState<Tab>("TOTAL");
   const [splitMode, setSplitMode] = useState<SplitMode>("EQUAL");
@@ -300,10 +310,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   // Gate de confirmación: DELIVERY exige repartidor seleccionado.
   const canConfirm = (!isDelivery || Boolean(driverId)) && !discountSaving;
 
+  // Imprimir el ticket de cuenta al cobrar es OPCIONAL y se decide aquí, con un
+  // botón fijo en la pantalla de cobro (default apagado: no imprime solo).
+  const [printReceipt, setPrintReceipt] = useState(false);
+
   const handleConfirm = () => {
     if (!canConfirm) return;
     if (tab === "TOTAL") {
-      onConfirm(method, tipPayload, driverId);
+      onConfirm(method, tipPayload, driverId, printReceipt);
       return;
     }
     // SPLIT
@@ -338,7 +352,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         );
       }
     } else {
-      onConfirm(method, tipPayload, driverId);
+      onConfirm(method, tipPayload, driverId, printReceipt);
     }
   };
 
@@ -642,7 +656,27 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         </div>
 
         {/* FOOTER · CTA */}
-        <div className="relative z-10 p-5 sm:p-7 border-t border-white/5 bg-[#0C0C0E] flex gap-3 shrink-0">
+        <div className="relative z-10 p-5 sm:p-7 border-t border-white/5 bg-[#0C0C0E] flex flex-col gap-3 shrink-0">
+          {/* Toggle fijo: decidir si se imprime el ticket de cuenta al cobrar.
+              Default apagado (no imprime). El cajero lo enciende si el cliente
+              quiere su ticket. La comanda de cocina no depende de esto. */}
+          {showReceiptToggle && (
+            <button
+              type="button"
+              onClick={() => setPrintReceipt((v) => !v)}
+              aria-pressed={printReceipt}
+              className={`min-h-[52px] w-full rounded-2xl border flex items-center justify-center gap-2.5 font-black uppercase tracking-[0.18em] text-[11px] active:scale-[0.98] transition-all ${
+                printReceipt
+                  ? "bg-[#88d66c]/15 border-[#88d66c]/50 text-[#88d66c]"
+                  : "bg-white/5 border-white/10 text-white/45"
+              }`}
+            >
+              <Printer size={18} strokeWidth={2.5} />
+              {printReceipt ? "Sí imprimir ticket" : "Imprimir ticket: NO"}
+            </button>
+          )}
+
+          <div className="flex gap-3">
           <button
             type="button"
             onClick={onClose}
@@ -670,6 +704,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 : `Cobrar por asientos`
               : "Confirmar pago"}
           </button>
+          </div>
         </div>
       </div>
 
