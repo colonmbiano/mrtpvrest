@@ -492,7 +492,8 @@ export default function MenuPage() {
                       style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }} />
                     <div className="col-span-3 flex items-center gap-1">
                       <span className="text-xs text-tx-mut">$</span>
-                      <input value={editForm.price} type="number"
+                      <input value={editForm.price} type="number" inputMode="decimal"
+                        onWheel={e => e.currentTarget.blur()}
                         onChange={e => onChangeForm((p: any) => ({...p, price: e.target.value}))}
                         className="w-full rounded-lg px-2 py-1.5 text-right text-sm text-tx outline-none"
                         style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }} />
@@ -930,7 +931,7 @@ export default function MenuPage() {
                 </div>
                 <div className="col-span-2">
                   <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Precio Base</label>
-                  <input placeholder="89.00" value={form.price} onChange={e => setForm(p => ({...p,price:e.target.value}))} required type="number" className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
+                  <input placeholder="89.00" value={form.price} onChange={e => setForm(p => ({...p,price:e.target.value}))} onWheel={e => e.currentTarget.blur()} required type="number" inputMode="decimal" className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
                 </div>
                 <div className="col-span-2">
                   <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Categoría</label>
@@ -1014,11 +1015,11 @@ export default function MenuPage() {
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <div>
                         <label className="mb-1 block font-mono text-[9px] uppercase tracking-[.1em] text-tx-mut">Mínimo (0 = opcional)</label>
-                        <input type="number" min={0} value={form.variantMinSelection} onChange={e => setForm(p => ({ ...p, variantMinSelection: Math.max(0, parseInt(e.target.value,10) || 0) }))} className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
+                        <input type="number" min={0} value={form.variantMinSelection} onWheel={e => e.currentTarget.blur()} onChange={e => setForm(p => ({ ...p, variantMinSelection: Math.max(0, parseInt(e.target.value,10) || 0) }))} className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
                       </div>
                       <div>
                         <label className="mb-1 block font-mono text-[9px] uppercase tracking-[.1em] text-tx-mut">Máximo (0 = sin tope)</label>
-                        <input type="number" min={0} value={form.variantMaxSelection} onChange={e => setForm(p => ({ ...p, variantMaxSelection: Math.max(0, parseInt(e.target.value,10) || 0) }))} className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
+                        <input type="number" min={0} value={form.variantMaxSelection} onWheel={e => e.currentTarget.blur()} onChange={e => setForm(p => ({ ...p, variantMaxSelection: Math.max(0, parseInt(e.target.value,10) || 0) }))} className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
                       </div>
                     </div>
                   )}
@@ -1100,6 +1101,8 @@ export default function MenuPage() {
                           step="0.01"
                           value={form.promoPrice}
                           onChange={e => setForm(p => ({ ...p, promoPrice: e.target.value }))}
+                          onWheel={e => e.currentTarget.blur()}
+                          inputMode="decimal"
                           placeholder="Ej. 79.00"
                           required
                           className="min-h-11 w-full rounded-xl px-3 font-mono text-sm font-bold text-tx outline-none"
