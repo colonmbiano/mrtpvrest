@@ -70,6 +70,7 @@ type MenuItem = {
   isPopular?: boolean;
   isFavorite?: boolean;
   isPromo?: boolean;
+  promoPrice?: number | null;
   activeDays?: string[];
   category?: Category;
   variants?: MenuItemVariant[];
@@ -91,6 +92,7 @@ type ProductForm = {
   isPopular: boolean;
   isFavorite: boolean;
   isPromo: boolean;
+  promoPrice: string;
   activeDays: string[];
   variantTemplateIds: string[];
   variantMultiSelect: boolean;
@@ -112,6 +114,7 @@ const emptyForm: ProductForm = {
   isPopular: false,
   isFavorite: false,
   isPromo: false,
+  promoPrice: "",
   activeDays: [],
   variantTemplateIds: [],
   variantMultiSelect: false,
@@ -239,6 +242,7 @@ export default function MenuEditorPage() {
         isPopular: !!item.isPopular,
         isFavorite: !!item.isFavorite,
         isPromo: !!item.isPromo,
+        promoPrice: item.promoPrice == null ? "" : String(item.promoPrice),
         activeDays: item.activeDays || [],
         variantTemplateIds: item.variantTemplates?.map((tpl) => tpl.id) || [],
         variantMultiSelect: !!item.variantMultiSelect,
@@ -262,6 +266,11 @@ export default function MenuEditorPage() {
     e?.preventDefault();
     if (!form.name.trim()) return toast.error("El producto necesita nombre");
     if (!form.categoryId) return toast.error("Selecciona una categoria");
+    const regularPrice = Number(form.price);
+    const promoPrice = Number(form.promoPrice);
+    if (form.isPromo && (!form.promoPrice || !Number.isFinite(promoPrice) || promoPrice <= 0 || promoPrice >= regularPrice)) {
+      return toast.error("El precio promocional debe ser mayor a 0 y menor al precio base");
+    }
     setSaving(true);
     try {
       const imageUrl = imageFile ? await uploadMenuImage(imageFile) : form.imageUrl.trim();
@@ -270,7 +279,8 @@ export default function MenuEditorPage() {
         name: form.name.trim(),
         description: form.description.trim(),
         imageUrl,
-        price: parseFloat(form.price) || 0,
+        price: regularPrice || 0,
+        promoPrice: form.isPromo ? promoPrice : null,
       };
       if (editingItem?.id) {
         await api.put(`/api/menu/items/${editingItem.id}`, payload);
@@ -726,15 +736,30 @@ export default function MenuEditorPage() {
                     <Switch label="Favorito TPV" checked={form.isFavorite} onChange={(v) => setForm((prev) => ({ ...prev, isFavorite: v }))} />
                     <Switch label="Promocion por dia" checked={form.isPromo} onChange={(v) => setForm((prev) => ({ ...prev, isPromo: v }))} />
                     {form.isPromo && (
-                      <div className="sm:col-span-2 flex flex-wrap gap-2">
-                        {days.map(([key, label]) => {
-                          const active = form.activeDays.includes(key);
-                          return (
-                            <button key={key} type="button" onClick={() => setForm((prev) => ({ ...prev, activeDays: active ? prev.activeDays.filter((day) => day !== key) : [...prev.activeDays, key] }))} className={`rounded-xl px-4 py-2 text-xs font-black ${active ? "bg-red-500 text-white" : "bg-white/5 text-zinc-500"}`}>
-                              {label}
-                            </button>
-                          );
-                        })}
+                      <div className="sm:col-span-2 grid gap-4">
+                        <Field label="Precio promocional">
+                          <input
+                            type="number"
+                            min="0.01"
+                            max={form.price ? Math.max(0.01, Number(form.price) - 0.01) : undefined}
+                            step="0.01"
+                            value={form.promoPrice}
+                            onChange={(e) => setForm((prev) => ({ ...prev, promoPrice: e.target.value }))}
+                            placeholder="Ej. 79.00"
+                            className="input-admin font-mono text-lg font-black"
+                            required
+                          />
+                        </Field>
+                        <div className="flex flex-wrap gap-2">
+                          {days.map(([key, label]) => {
+                            const active = form.activeDays.includes(key);
+                            return (
+                              <button key={key} type="button" onClick={() => setForm((prev) => ({ ...prev, activeDays: active ? prev.activeDays.filter((day) => day !== key) : [...prev.activeDays, key] }))} className={`rounded-xl px-4 py-2 text-xs font-black ${active ? "bg-red-500 text-white" : "bg-white/5 text-zinc-500"}`}>
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -863,7 +888,13 @@ function ProductsView(props: {
                 {item.isFavorite && <Star size={14} className="text-amber-400" fill="currentColor" />}
                 {item.isPromo && <span className="rounded-full bg-red-500/10 px-2 py-1 text-[9px] font-black uppercase text-red-400">Promo</span>}
               </div>
-              <p className="mt-1 text-xs font-bold text-zinc-500">{item.category?.name || "Sin categoria"} · ${Number(item.price).toFixed(2)}</p>
+              <p className="mt-1 text-xs font-bold text-zinc-500">
+                {item.category?.name || "Sin categoria"} ·{" "}
+                {item.isPromo && item.promoPrice != null && <span className="mr-1 line-through">${Number(item.price).toFixed(2)}</span>}
+                <span className={item.isPromo && item.promoPrice != null ? "text-red-400" : ""}>
+                  ${Number(item.isPromo && item.promoPrice != null ? item.promoPrice : item.price).toFixed(2)}
+                </span>
+              </p>
               <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-700">ID {item.id.slice(-6).toUpperCase()}</p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
