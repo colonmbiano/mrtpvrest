@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { LockKeyhole, MapPin, MonitorCheck } from "lucide-react";
 import NumpadPIN from "@/components/NumpadPIN";
+import VersionTag from "@/components/VersionTag";
 import { useAuthStore } from "@/store/authStore";
 import { initBackgroundSync } from "@/lib/offline";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
@@ -244,6 +245,8 @@ export default function LockedPage() {
         </section>
       </main>
       </div>
+
+      <VersionTag className="fixed bottom-[max(0.6rem,env(safe-area-inset-bottom))] right-[max(0.85rem,env(safe-area-inset-right))] z-20 text-[10px] font-black uppercase tracking-[0.22em] text-white/25" />
     </div>
   );
 }
