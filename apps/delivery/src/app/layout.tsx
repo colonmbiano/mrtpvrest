@@ -45,6 +45,20 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+// Guard global contra el bug nativo de <input type="number">: con el campo
+// enfocado, hacer scroll (rueda/trackpad) SUMA/RESTA al valor. Des-enfocamos
+// en wheel (fase de captura, antes del incremento; passive conserva scroll).
+const NUMBER_WHEEL_GUARD_SCRIPT = `
+(function(){
+  try {
+    document.addEventListener('wheel', function(){
+      var el = document.activeElement;
+      if (el && el.tagName === 'INPUT' && el.type === 'number') el.blur();
+    }, { passive: true, capture: true });
+  } catch(e) {}
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -59,6 +73,7 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Mono:wght@300;400;500&display=swap"
           rel="stylesheet"
         />
+        <script dangerouslySetInnerHTML={{__html: NUMBER_WHEEL_GUARD_SCRIPT}} />
       </head>
       <body className="antialiased bg-surf-0 text-tx-pri min-h-screen relative">
         {/* Halo Glows Background — usan los tokens del nuevo sistema */}
