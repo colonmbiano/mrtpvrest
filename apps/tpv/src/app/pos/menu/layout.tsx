@@ -245,8 +245,16 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       return;
     }
     toast.success(res.queued ? "Cobro en cola · se registrará al volver la red" : "Cobro procesado");
+    // La cuenta quedó cerrada (PAID + DELIVERED): no debe seguir como ticket
+    // activo. Limpiamos el contexto y volvemos a la pantalla de inicio —
+    // mismo patrón que eliminar/mover/fusionar. Sin esto el cajero quedaba
+    // parado en el editor con la cuenta recién pagada todavía "abierta", lo
+    // que se leía como "no se cobró" (sobre todo al cobrar desde inicio).
     setPayOrder(null);
+    useActiveOrderStore.getState().clear();
+    useTicketStore.getState().clearActiveItems();
     fetchOpenOrders();
+    router.replace("/pos/order-type");
   };
 
   // FASE 12 · COBRO + IMPRESIÓN DE CUENTA DIVIDIDA (E2E)
@@ -371,8 +379,14 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         );
       }
 
+      // Igual que el cobro simple: la cuenta quedó cerrada, limpiamos el
+      // contexto activo y volvemos a inicio para no dejar al cajero en el
+      // editor con la cuenta ya pagada.
       setPayOrder(null);
+      useActiveOrderStore.getState().clear();
+      useTicketStore.getState().clearActiveItems();
       fetchOpenOrders();
+      router.replace("/pos/order-type");
     } catch (err: any) {
       toast.error(
         `Error en el cobro dividido: ${
