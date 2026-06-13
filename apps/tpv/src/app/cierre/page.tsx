@@ -5,10 +5,13 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, ChevronRight, AlarmClock, ShieldAlert, Lock,
   CreditCard, Wifi, Wallet, Plus, Bike, Receipt, ShoppingBag,
+  Printer, Eye, Check, X,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import PurchasesExpensesModal from '@/components/pos/PurchasesExpensesModal';
+import { usePrinters, useReceiptIdentity, useFullTicketConfig } from '@/hooks/usePrinters';
+import { printShiftCloseTicket, type ShiftCloseTicketInput } from '@/lib/printer-tcp';
 
 interface ShiftExpense {
   id: string;
@@ -21,14 +24,20 @@ interface ShiftExpense {
 interface Shift {
   id: string;
   openedAt: string;
+  closedAt?: string | null;
+  employeeName?: string | null;
   openingFloat: number;
   blindClose: boolean;
+  closingFloat?: number | null;
   totalCash: number;
   totalCard: number;
   totalTransfer: number;
+  totalCourtesy?: number;
   totalSales: number;
   totalExpenses: number;
+  ordersCount?: number;
   expectedCash: number | null;
+  notes?: string | null;
   expenses?: ShiftExpense[];
 }
 
@@ -50,12 +59,70 @@ const isDriverExpense = (e: ShiftExpense) =>
 export default function CierreTurno() {
   const router = useRouter();
   const employee = useAuthStore((s) => s.employee);
+  const { printers } = usePrinters();
+  const { businessName } = useReceiptIdentity();
+  const { config: ticketConfig } = useFullTicketConfig();
   const [shift, setShift] = useState<Shift | null>(null);
   const [countedTotal, setCountedTotal] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showExpenses, setShowExpenses] = useState(false);
+
+  // Post-cierre: el turno ya cerrado (respuesta del backend) + estado de impresión.
+  const [closedShift, setClosedShift] = useState<Shift | null>(null);
+  const [printMsg, setPrintMsg] = useState('');
+  // Revelado del arqueo en corte ciego (tras validar PIN de admin).
+  const [revealed, setRevealed] = useState<{ expectedCash: number; variance: number } | null>(null);
+  const [showPinModal, setShowPinModal] = useState(false);
+
+  // Arma el payload del ticket de cierre a partir del turno cerrado.
+  const buildTicketInput = (s: Shift, reveal: boolean, isReprint = false): ShiftCloseTicketInput => ({
+    shiftId: s.id,
+    businessName: businessName || ticketConfig?.businessName || null,
+    openedAt: s.openedAt,
+    closedAt: s.closedAt ?? new Date().toISOString(),
+    cashierName: s.employeeName ?? null,
+    closedByName: employee?.name ?? null,
+    openingFloat: Number(s.openingFloat || 0),
+    totalCash: Number(s.totalCash || 0),
+    totalCard: Number(s.totalCard || 0),
+    totalTransfer: Number(s.totalTransfer || 0),
+    totalCourtesy: Number(s.totalCourtesy || 0),
+    totalExpenses: Number(s.totalExpenses || 0),
+    totalSales: Number(s.totalSales || 0),
+    ordersCount: Number(s.ordersCount || 0),
+    closingFloat: Number(s.closingFloat ?? 0),
+    // En ciego, expectedCash llega null; al revelar usamos el valor del endpoint.
+    expectedCash: reveal ? (revealed?.expectedCash ?? s.expectedCash) : s.expectedCash,
+    expenses: (s.expenses ?? []).map((e) => ({
+      description: e.description, amount: Number(e.amount || 0), category: e.category,
+    })),
+    notes: s.notes ?? null,
+    blindClose: s.blindClose,
+    reveal,
+    isReprint,
+    fontFamily: ticketConfig?.fontFamily,
+    fontSize: ticketConfig?.fontSize,
+    lineSpacing: ticketConfig?.lineSpacing,
+    lineWeight: ticketConfig?.lineWeight,
+    paperWidth: ticketConfig?.paperWidth,
+  });
+
+  const printTicket = async (s: Shift, reveal: boolean, isReprint = false) => {
+    setPrintMsg('Imprimiendo corte…');
+    try {
+      const res = await printShiftCloseTicket(printers, buildTicketInput(s, reveal, isReprint));
+      if (res.ok > 0) {
+        setPrintMsg('Ticket de corte impreso.');
+      } else {
+        const why = res.failed[0]?.error || 'sin impresora de caja';
+        setPrintMsg(`No se pudo imprimir el corte (${why}).`);
+      }
+    } catch (err: any) {
+      setPrintMsg(`No se pudo imprimir el corte (${err?.message || 'error'}).`);
+    }
+  };
 
   const loadShift = async () => {
     try {
@@ -120,15 +187,36 @@ export default function CierreTurno() {
     setSubmitting(true);
     setError('');
     try {
-      await api.post(`/api/shifts/${shift.id}/close`, {
+      const { data: closed } = await api.post<Shift>(`/api/shifts/${shift.id}/close`, {
         closingFloat: counted,
         notes: notes.trim() || null,
       });
       localStorage.removeItem(`cierre-draft-${shift.id}`);
-      router.replace('/hub');
+      // Aseguramos el contado en el objeto (por si el backend no lo refleja al vuelo).
+      const closedWithCount: Shift = { ...closed, closingFloat: closed.closingFloat ?? counted };
+      setClosedShift(closedWithCount);
+      // Impresión automática del ticket de cierre. En corte ciego sale sin
+      // desfase (reveal=false); el supervisor lo revela con su PIN.
+      void printTicket(closedWithCount, !closedWithCount.blindClose);
     } catch (err: any) {
       setError(err?.response?.data?.error || 'No pudimos cerrar el turno');
       setSubmitting(false);
+    }
+  };
+
+  // Revelar el arqueo de un corte ciego con PIN de admin, y reimprimir completo.
+  const onRevealPin = async (pin: string) => {
+    if (!closedShift) return;
+    try {
+      const { data } = await api.post(`/api/shifts/${closedShift.id}/reveal`, { pin });
+      const rev = { expectedCash: Number(data.expectedCash || 0), variance: Number(data.variance || 0) };
+      setRevealed(rev);
+      setShowPinModal(false);
+      // Reimprime el corte ya con el desfase visible.
+      const merged: Shift = { ...closedShift, expectedCash: rev.expectedCash };
+      await printTicket(merged, true, true);
+    } catch (err: any) {
+      throw new Error(err?.response?.data?.error || 'PIN incorrecto');
     }
   };
 
@@ -144,6 +232,112 @@ export default function CierreTurno() {
     employee?.role === 'CASHIER' ? 'Cajero' :
     employee?.role === 'MANAGER' ? 'Gerente' :
     employee?.role === 'ADMIN' ? 'Admin' : (employee?.role || 'Empleado');
+
+  // ── PANTALLA POST-CIERRE ────────────────────────────────────────────────
+  // Tras cerrar: resumen + ticket impreso. En corte ciego el desfase queda
+  // oculto hasta que un supervisor lo revele con su PIN.
+  if (closedShift) {
+    const cs = closedShift;
+    const showArqueo = !cs.blindClose || !!revealed;
+    const expected = revealed?.expectedCash ?? cs.expectedCash ?? null;
+    const variance =
+      revealed?.variance ??
+      (expected != null ? Number(cs.closingFloat || 0) - expected : null);
+
+    return (
+      <div
+        className="relative h-[100dvh] flex flex-col items-center justify-center bg-[#0a0a0c] text-white overflow-auto p-6"
+        style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
+      >
+        <div className="w-full max-w-md flex flex-col gap-5">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center bg-emerald-400/15 border border-emerald-400/40">
+              <Check size={30} className="text-emerald-400" strokeWidth={3} />
+            </div>
+            <h1 className="text-2xl font-black tracking-tight">Turno cerrado</h1>
+            <p className="text-sm text-white/55">{printMsg || 'Generando ticket de corte…'}</p>
+          </div>
+
+          <div className="rounded-3xl p-6 flex flex-col gap-3 bg-white/5 backdrop-blur-md border border-white/10">
+            <Line label="Ventas totales" value={fmtMoney(cs.totalSales || 0)} strong />
+            <Line label="Efectivo" value={fmtMoney(cs.totalCash || 0)} />
+            <Line label="Tarjeta" value={fmtMoney(cs.totalCard || 0)} />
+            <Line label="Transferencia" value={fmtMoney(cs.totalTransfer || 0)} />
+            {Number(cs.totalCourtesy || 0) > 0 && (
+              <Line label="Cortesía" value={fmtMoney(cs.totalCourtesy || 0)} />
+            )}
+            <Line label="Gastos" value={`−${fmtMoney(cs.totalExpenses || 0)}`} />
+            <div className="border-t border-white/10 my-1" />
+            <Line label="Efectivo contado" value={fmtMoney(cs.closingFloat || 0)} strong />
+
+            {showArqueo && expected != null ? (
+              <>
+                <Line label="Esperado en caja" value={fmtMoney(expected)} />
+                <div
+                  className="mt-1 rounded-2xl p-4 flex items-center justify-between"
+                  style={{
+                    background:
+                      (variance ?? 0) === 0 ? 'rgba(136,214,108,0.12)'
+                      : (variance ?? 0) > 0 ? 'rgba(136,214,108,0.12)'
+                      : 'rgba(255,92,51,0.10)',
+                    border:
+                      (variance ?? 0) < 0 ? '1px solid rgba(255,92,51,0.35)'
+                      : '1px solid rgba(136,214,108,0.35)',
+                  }}
+                >
+                  <span className="text-xs font-black tracking-widest text-white/70">
+                    {(variance ?? 0) === 0 ? 'CAJA CUADRADA' : (variance ?? 0) > 0 ? 'SOBRANTE' : 'FALTANTE'}
+                  </span>
+                  <span
+                    className="text-xl font-black tabular-nums"
+                    style={{ color: (variance ?? 0) < 0 ? '#FF5C33' : '#88D66C' }}
+                  >
+                    {fmtMoney(variance ?? 0)}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="mt-1 rounded-2xl p-4 flex items-start gap-2.5 bg-[#ffb84d]/8 border border-[#ffb84d]/30">
+                <ShieldAlert size={16} className="text-[#ffb84d] flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] font-medium leading-relaxed text-amber-100">
+                  Corte ciego: el desfase queda oculto. Un supervisor puede revelarlo con su PIN.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            <button
+              onClick={() => printTicket(cs, showArqueo, true)}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-white bg-white/8 border border-white/15 active:scale-95 transition-transform"
+            >
+              <Printer size={16} /> Reimprimir corte
+            </button>
+
+            {cs.blindClose && !revealed && (
+              <button
+                onClick={() => setShowPinModal(true)}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-[#0a0a0c] bg-[#ffb84d] active:scale-95 transition-transform"
+              >
+                <Eye size={16} /> Ver desfase (PIN admin)
+              </button>
+            )}
+
+            <button
+              onClick={() => router.replace('/hub')}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-emerald-300 bg-emerald-400/10 border border-emerald-400/30 active:scale-95 transition-transform"
+            >
+              Listo
+            </button>
+          </div>
+        </div>
+
+        {showPinModal && (
+          <PinModal onClose={() => setShowPinModal(false)} onSubmit={onRevealPin} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -397,6 +591,74 @@ function SummaryCard({ icon, label, value }: { icon: React.ReactNode; label: str
       <div className="flex-1">
         <p className="text-[10px] font-black tracking-[0.18em] text-white/40">{label.toUpperCase()}</p>
         <p className="text-sm font-black text-white tabular-nums">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className={`text-sm ${strong ? 'font-black text-white' : 'font-medium text-white/60'}`}>{label}</span>
+      <span className={`tabular-nums ${strong ? 'text-base font-black text-white' : 'text-sm font-bold text-white/85'}`}>{value}</span>
+    </div>
+  );
+}
+
+// Modal de PIN para revelar el arqueo de un corte ciego (supervisor/admin).
+function PinModal({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void;
+  onSubmit: (pin: string) => Promise<void>;
+}) {
+  const [pin, setPin] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async () => {
+    if (!pin.trim() || busy) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await onSubmit(pin.trim());
+    } catch (e: any) {
+      setErr(e?.message || 'PIN incorrecto');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-6">
+      <div className="w-full max-w-xs rounded-3xl p-6 flex flex-col gap-4 bg-[#141416] border border-white/10">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-black">PIN de administrador</h3>
+          <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95">
+            <X size={16} />
+          </button>
+        </div>
+        <p className="text-xs text-white/55">Ingresa el PIN de un supervisor para ver e imprimir el desfase.</p>
+        <input
+          type="password"
+          inputMode="numeric"
+          autoFocus
+          value={pin}
+          onChange={(e) => setPin(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+          placeholder="••••"
+          className="w-full h-14 rounded-2xl bg-[#0a0a0c]/60 border border-white/10 px-4 text-2xl font-black text-center tracking-[0.4em] text-white outline-none focus:border-[#ffb84d]/40"
+        />
+        {err && (
+          <p className="text-[11px] font-semibold text-center" style={{ color: '#FF5C33' }}>{err}</p>
+        )}
+        <button
+          onClick={submit}
+          disabled={!pin.trim() || busy}
+          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-[#0a0a0c] bg-[#ffb84d] active:scale-95 transition-transform disabled:opacity-40"
+        >
+          <Eye size={16} /> {busy ? 'Validando…' : 'Revelar desfase'}
+        </button>
       </div>
     </div>
   );

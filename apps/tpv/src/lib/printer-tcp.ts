@@ -1111,6 +1111,163 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   return d;
 }
 
+// ── Ticket de CIERRE DE TURNO (corte de caja) ─────────────────────────────
+//
+// Resumen del turno para la impresora CASHIER: ventas por método, gastos
+// línea por línea y arqueo de efectivo con el desfase (sobrante/faltante).
+//
+// Corte ciego: si `blindClose` y NO `reveal`, el ticket omite el efectivo
+// esperado y el desfase — solo imprime lo contado y un aviso de "corte ciego".
+// El supervisor revela el arqueo con su PIN (endpoint /shifts/:id/reveal) y
+// se reimprime con `reveal: true`.
+
+export interface ShiftCloseExpenseLine {
+  description: string;
+  amount: number;
+  category?: string | null;
+}
+
+export interface ShiftCloseTicketInput {
+  shiftId?: string | null;
+  businessName?: string | null;
+  openedAt?: string | null; // ISO
+  closedAt?: string | null; // ISO
+  cashierName?: string | null;   // dueño del turno (quien lo abrió)
+  closedByName?: string | null;  // quien lo cerró
+  openingFloat: number;
+  totalCash: number;
+  totalCard: number;
+  totalTransfer: number;
+  totalCourtesy: number;
+  totalExpenses: number;
+  totalSales: number;
+  ordersCount: number;
+  closingFloat: number;          // efectivo contado al cierre
+  expectedCash?: number | null;  // esperado; null/undefined → se calcula
+  expenses?: ShiftCloseExpenseLine[];
+  notes?: string | null;
+  blindClose?: boolean;
+  /** Imprime el arqueo (esperado + desfase) aunque sea ciego. Se activa tras
+   *  revelar con PIN de admin. */
+  reveal?: boolean;
+  /** Banner "*** REIMPRESION ***" para reimpresiones manuales. */
+  isReprint?: boolean;
+  // Tipografía (config admin) — mismos campos que el recibo.
+  fontFamily?: string | null;
+  fontSize?: string | null;
+  lineSpacing?: string | null;
+  lineWeight?: string | null;
+  paperWidth?: string | null;
+}
+
+export function buildShiftCloseTicket(input: ShiftCloseTicketInput): string {
+  const lw = lineWidthFor(input.fontFamily, input.paperWidth);
+  const sep = "-".repeat(lw) + "\n";
+  const dsep = "=".repeat(lw) + "\n";
+  const heavy = input.lineWeight === "bold";
+  const light = input.lineWeight === "light";
+  const boldOn = light ? "" : CMD.BOLD_ON;
+  const boldOff = light ? "" : CMD.BOLD_OFF;
+
+  const fmtDate = (iso?: string | null): string => {
+    if (!iso) return "-";
+    const dt = new Date(iso);
+    if (Number.isNaN(dt.getTime())) return "-";
+    return dt.toLocaleString("es-MX", {
+      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+    });
+  };
+
+  let d =
+    CMD.INIT +
+    fontCmd(input.fontFamily) +
+    spacingCmd(input.lineSpacing) +
+    (heavy ? CMD.DBLSTRIKE_ON : "") +
+    CMD.ALIGN_CENTER;
+
+  if (input.isReprint) {
+    d += boldOn + CMD.DOUBLE_ON + "*** REIMPRESION ***\n" + CMD.DOUBLE_OFF + boldOff;
+  }
+  d += boldOn + CMD.DOUBLE_ON + "CORTE DE TURNO\n" + CMD.DOUBLE_OFF + boldOff;
+  if (input.businessName) d += input.businessName + "\n";
+  d += dsep + CMD.ALIGN_LEFT;
+
+  // Meta del turno
+  if (input.shiftId) d += row("Turno:", "#" + String(input.shiftId).slice(-6), lw);
+  d += row("Apertura:", fmtDate(input.openedAt), lw);
+  d += row("Cierre:", fmtDate(input.closedAt), lw);
+  if (input.cashierName) d += row("Cajero:", input.cashierName, lw);
+  if (input.closedByName && input.closedByName !== input.cashierName) {
+    d += row("Cerro:", input.closedByName, lw);
+  }
+  d += sep;
+
+  // Ventas por método de pago
+  d += boldOn + "VENTAS POR METODO\n" + boldOff;
+  d += row("Efectivo:", fmtMoney(input.totalCash), lw);
+  d += row("Tarjeta:", fmtMoney(input.totalCard), lw);
+  d += row("Transferencia:", fmtMoney(input.totalTransfer), lw);
+  if (input.totalCourtesy > 0) d += row("Cortesia:", fmtMoney(input.totalCourtesy), lw);
+  d += sep;
+  d += boldOn + CMD.DOUBLE_ON + row("TOTAL:", fmtMoney(input.totalSales), lw) + CMD.DOUBLE_OFF + boldOff;
+  d += row("Ordenes:", String(input.ordersCount), lw);
+  d += sep;
+
+  // Gastos línea por línea
+  const expenses = input.expenses ?? [];
+  d += boldOn + "GASTOS DEL TURNO\n" + boldOff;
+  if (expenses.length === 0) {
+    d += "Sin gastos\n";
+  } else {
+    for (const e of expenses) {
+      const amount = "-" + fmtMoney(Number(e.amount) || 0);
+      const desc = String(e.description || "Gasto").slice(0, Math.max(1, lw - amount.length - 3));
+      d += row("- " + desc, amount, lw);
+    }
+  }
+  d += sep;
+  d += boldOn + row("TOTAL GASTOS:", "-" + fmtMoney(input.totalExpenses), lw) + boldOff;
+  d += sep;
+
+  // Arqueo de efectivo
+  const showArqueo = !input.blindClose || input.reveal === true;
+  if (showArqueo) {
+    const expected = Number(
+      input.expectedCash ?? input.openingFloat + input.totalCash - input.totalExpenses,
+    );
+    const variance = (Number(input.closingFloat) || 0) - expected;
+    d += boldOn + "ARQUEO DE EFECTIVO\n" + boldOff;
+    d += row("Fondo inicial:", fmtMoney(input.openingFloat), lw);
+    d += row("+ Ventas efectivo:", fmtMoney(input.totalCash), lw);
+    d += row("- Gastos:", "-" + fmtMoney(input.totalExpenses), lw);
+    d += boldOn + row("= ESPERADO:", fmtMoney(expected), lw) + boldOff;
+    d += row("Contado:", fmtMoney(input.closingFloat), lw);
+    d += dsep;
+    const label = variance === 0 ? "CAJA CUADRADA" : variance > 0 ? "SOBRANTE" : "FALTANTE";
+    d += boldOn + CMD.DOUBLE_ON + row("DESFASE:", fmtMoney(variance), lw) + CMD.DOUBLE_OFF + boldOff;
+    d += CMD.ALIGN_CENTER + boldOn + label + "\n" + boldOff + CMD.ALIGN_LEFT;
+  } else {
+    d += boldOn + "EFECTIVO CONTADO\n" + boldOff;
+    d += row("Contado:", fmtMoney(input.closingFloat), lw);
+    d += dsep;
+    d += CMD.ALIGN_CENTER;
+    d += boldOn + CMD.DOUBLE_ON + "** CORTE CIEGO **\n" + CMD.DOUBLE_OFF + boldOff;
+    d += "Arqueo pendiente de supervisor\n";
+    d += CMD.ALIGN_LEFT;
+  }
+
+  // Notas
+  if (input.notes && input.notes.trim()) {
+    d += sep + boldOn + "NOTAS\n" + boldOff + input.notes.trim() + "\n";
+  }
+
+  d += (heavy ? CMD.DBLSTRIKE_OFF : "");
+  d += CMD.ALIGN_CENTER + CMD.LF;
+  d += "Impreso: " + new Date().toLocaleString("es-MX") + "\n";
+  d += CMD.LF + CMD.LF + CMD.CUT;
+  return d;
+}
+
 // ── Orquestadores: enviar a impresoras de la sucursal ────────────────────
 
 /**
@@ -1328,6 +1485,18 @@ export async function printCustomerReceipt(
 ): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
   const text = buildCustomerReceipt(input);
   const payload = await injectLogo(text, input);
+  return dispatchToStations(printers, ["CASHIER"], payload);
+}
+
+/**
+ * Imprime el ticket de cierre de turno (corte de caja) en impresoras CASHIER.
+ * No lanza — la impresión no debe romper el flujo de cierre.
+ */
+export async function printShiftCloseTicket(
+  printers: PrinterRecord[],
+  input: ShiftCloseTicketInput
+): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
+  const payload = buildShiftCloseTicket(input);
   return dispatchToStations(printers, ["CASHIER"], payload);
 }
 
