@@ -24,6 +24,7 @@ const {
 } = require('../lib/payment-providers');
 // Cálculo de envío: fuente única compartida con el chatbot de WhatsApp.
 const { computeDeliveryFee } = require('../lib/delivery-fee');
+const { isWeighable, WEIGHABLE_REJECT_MESSAGE } = require('../lib/units');
 const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
 const { addLoyaltyPoints, genLoyaltyQr } = require('../services/loyalty.service');
@@ -540,6 +541,10 @@ router.post('/orders', async (req, res) => {
           },
         });
         if (!menuItem) throw new Error(`Producto ${menuItemId} no disponible.`);
+
+        // El cobro por peso solo está soportado en el TPV: rechazar pesables aquí
+        // en vez de truncar el peso con parseInt más abajo.
+        if (isWeighable(menuItem.unit)) throw new Error(WEIGHABLE_REJECT_MESSAGE);
 
         let basePrice = menuItem.isPromo && menuItem.promoPrice ? menuItem.promoPrice : menuItem.price;
         let variantName = null;

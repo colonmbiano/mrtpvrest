@@ -4,6 +4,7 @@ const express = require('express')
 const router  = express.Router()
 const { prisma } = require('@mrtpvrest/database')
 const { requireModule, MODULES } = require('../lib/modules')
+const { isWeighable, WEIGHABLE_REJECT_MESSAGE } = require('../lib/units')
 const {
   resolveProviderForRestaurant,
   SUPPORTED_KEYS,
@@ -97,6 +98,10 @@ router.post('/orders', async (req, res) => {
       })
       if (!menuItem || !menuItem.isActive) {
         return res.status(400).json({ error: `Producto no disponible: ${item.menuItemId}` })
+      }
+      // El cobro por peso solo está soportado en el TPV: el kiosko no puede pesar.
+      if (isWeighable(menuItem.unit)) {
+        return res.status(400).json({ error: WEIGHABLE_REJECT_MESSAGE })
       }
 
       let itemTotal = menuItem.price * (item.quantity || 1)
