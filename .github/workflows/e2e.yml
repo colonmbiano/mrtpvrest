@@ -32,6 +32,8 @@ on:
       - "apps/backend/**"
       - "apps/tpv/**"
       - "apps/admin/**"
+      - "apps/saas/**"
+      - "apps/kds/**"
       - "packages/**"
       - "tests/e2e/**"
       - ".github/workflows/e2e.yml"
@@ -109,16 +111,22 @@ jobs:
         run: pnpm --filter @mrtpvrest/backend start > backend.log 2>&1 &
         env:
           PORT: "3001"
+          # La suite hace >10 logins por PIN desde la misma IP+location;
+          # sin esto el rate limiter (10/15min) tira 429 a mitad de corrida.
+          PIN_LOGIN_RATE_MAX: "1000"
 
-      - name: Arrancar admin + tpv
+      - name: Arrancar admin + tpv + saas + kds
         run: |
-          pnpm --filter @mrtpvrest/admin dev &
-          pnpm --filter @mrtpvrest/tpv dev &
+          pnpm --filter @mrtpvrest/admin dev > admin.log 2>&1 &
+          pnpm --filter @mrtpvrest/tpv dev > tpv.log 2>&1 &
+          pnpm --filter @mrtpvrest/saas dev > saas.log 2>&1 &
+          pnpm --filter @mrtpvrest/kds dev > kds.log 2>&1 &
         env:
           NEXT_PUBLIC_API_URL: "http://localhost:3001"
 
       - name: Esperar a los servicios
-        run: pnpm dlx wait-on@8.0.1 -t 120000 http://localhost:3001/health http://localhost:3002 http://localhost:3005
+        # El KDS web sirve bajo basePath /kds (la raíz :3009/ es 404)
+        run: pnpm dlx wait-on@8.0.1 -t 120000 http://localhost:3001/health http://localhost:3002 http://localhost:3004 http://localhost:3005 http://localhost:3009/kds/
 
       - name: Logs del backend (pre-tests)
         run: tail -40 backend.log || true
@@ -128,9 +136,12 @@ jobs:
         env:
           ADMIN_URL: "http://localhost:3002"
           TPV_URL: "http://localhost:3005"
+          SAAS_URL: "http://localhost:3004"
+          KDS_URL: "http://localhost:3009/kds/"
           ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
           SUPERADMIN_EMAIL: ${{ secrets.SUPERADMIN_EMAIL }}
+          SUPERADMIN_PASSWORD: ${{ secrets.SUPERADMIN_PASSWORD }}
           WAITER_PIN: ${{ secrets.WAITER_PIN }}
           CASHIER_PIN: ${{ secrets.CASHIER_PIN }}
           KITCHEN_PIN: ${{ secrets.KITCHEN_PIN }}
@@ -139,10 +150,22 @@ jobs:
         if: always()
         run: tail -120 backend.log || true
 
-      - name: Subir reporte HTML
+      - name: Logs de las apps Next (solo si falló)
+        if: failure()
+        run: |
+          for f in admin.log tpv.log saas.log kds.log; do
+            echo "::group::$f"; tail -60 "$f" || true; echo "::endgroup::"
+          done
+
+      - name: Subir reporte HTML + traces
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report
-          path: apps/e2e-report
+          # El reporter html escribe en tests/e2e-report y los traces/
+          # screenshots/videos de fallos en tests/e2e/results (outputDir).
+          path: |
+            tests/e2e-report
+            tests/e2e/results
           retention-days: 14
+          if-no-files-found: ignore

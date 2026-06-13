@@ -11,6 +11,11 @@ export function generateStaticParams() {
   return [{ id: "_" }];
 }
 
-export default function Page({ params }: { params: { id: string } }) {
-  return <MeserosDetailClient params={params} />;
+// Next 16: `params` es un Promise. Hay que await-earlo en el server wrapper y
+// pasar el id ya resuelto; el client component lo lee síncrono. Sin esto, en
+// navegación client (tap a una mesa desde la sala) `params.id` llega undefined
+// → GET /api/tables/undefined → la pantalla crashea/queda sin "Abrir comanda".
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <MeserosDetailClient params={{ id }} />;
 }
