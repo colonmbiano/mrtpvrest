@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
+import { buildOrderItemsPayload } from "@/lib/modifiers";
 import api from "@/lib/api";
 import { apiOrQueue, syncOfflineQueue } from "@/lib/offline";
 import useOfflineStore from "@/store/useOfflineStore";
@@ -612,14 +613,53 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     return fetchFullOrder(listedOrder);
   };
 
+  // Guarda en el backend los productos pendientes de la "nueva ronda" local
+  // (los que el cajero agregó pero aún no envió) como una ronda sobre la cuenta
+  // abierta. Devuelve true si no había nada pendiente o si se guardó bien; false
+  // si falló (en cuyo caso NO se debe seguir con la impresión). Tras guardar,
+  // limpia los items locales y bumpea roundsRevision para que el SidebarTicket
+  // recargue su historial y no queden duplicados ni desincronización visual.
+  const flushPendingRound = async (): Promise<boolean> => {
+    if (!activeOrderId) return true;
+    const pending = useTicketStore.getState().getActiveTicket().items;
+    if (!pending || pending.length === 0) return true;
+
+    const res = await apiOrQueue(
+      "order",
+      "POST",
+      `/api/orders/${activeOrderId}/items`,
+      { items: buildOrderItemsPayload(pending) },
+    );
+    if (!res.ok) {
+      toast.error("No se pudieron guardar los productos: " + (res.error || ""));
+      return false;
+    }
+
+    useTicketStore.getState().clearActiveItems();
+    useActiveOrderStore.getState().bumpRoundsRevision();
+    toast.success(
+      res.queued
+        ? "Productos en cola · se guardarán al volver la red"
+        : "Productos guardados en la cuenta",
+    );
+    return true;
+  };
+
   const handleReprintActiveKitchen = async () => {
     const order = await getActiveOrderForAction();
     if (order) await handleReprintKitchen(order);
   };
 
   // "Imprimir cuenta" usa el total vigente. Los descuentos se editan
-  // exclusivamente en el paso final de cobro.
+  // exclusivamente en el paso final de cobro. Antes de imprimir guardamos los
+  // productos que el cajero haya agregado en la ronda local: así la cuenta
+  // impresa los incluye y quedan persistidos (no se pierden al recargar).
   const handleReprintActiveReceipt = async () => {
+    if (!activeOrderId) {
+      toast.warning("Abre un ticket para usar esta acción");
+      return;
+    }
+    if (!(await flushPendingRound())) return;
     const order = await getActiveOrderForAction();
     if (order) await handleReprintOrder(order);
   };
