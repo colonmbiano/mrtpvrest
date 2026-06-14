@@ -510,4 +510,190 @@ router.get('/pending-collection', authenticate, requireTenantAccess, requireRole
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
+// ── Lista de repartidores activos (admin) ────────────────────────────────
+// Alimenta el selector del reporte de repartidores. Devuelve los DELIVERY
+// activos de la sucursal/restaurante, sin importar si tuvieron actividad hoy
+// (para poder consultar días históricos).
+router.get('/drivers', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const drivers = await prisma.employee.findMany({
+      where: {
+        role: 'DELIVERY',
+        isActive: true,
+        ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { location: { restaurantId } } : {}),
+      },
+      select: { id: true, name: true, photo: true, locationId: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json(drivers);
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
+// Detecta las categorías de "envío" del restaurante por nombre (Envíos,
+// Domicilio, Flete, Reparto…). Es por-tenant y tolerante a acentos/variantes,
+// así no dependemos de adivinar por el nombre del producto (que es libre:
+// "Local", "San juan", "envio rincon sifon"…). Memoizar no hace falta: una
+// consulta por reporte es barata.
+async function getShippingCategoryIds(restaurantId) {
+  if (!restaurantId) return new Set();
+  const cats = await prisma.category.findMany({
+    where: {
+      restaurantId,
+      OR: [
+        { name: { contains: 'nvio', mode: 'insensitive' } },  // Envio / Envío (sin la E inicial para cubrir acento)
+        { name: { contains: 'nvío', mode: 'insensitive' } },
+        { name: { contains: 'omicilio', mode: 'insensitive' } },
+        { name: { contains: 'lete', mode: 'insensitive' } },  // Flete / Fletes
+        { name: { contains: 'eparto', mode: 'insensitive' } },
+      ],
+    },
+    select: { id: true },
+  });
+  return new Set(cats.map(c => c.id));
+}
+
+// ── Reporte consolidado por repartidor y día (admin) ─────────────────────
+// Una sola llamada devuelve todo lo que la pantalla de "Reporte de
+// Repartidores" necesita, ya cuadrado server-side:
+//  - cashSummary: lo PENDIENTE DE CORTE (movimientos approved=false), igual
+//    criterio que el corte real, para que el número coincida con lo que se va
+//    a cortar (no por día — los turnos cruzan medianoche).
+//  - lastCut: si el repartidor ya tuvo un corte EN ESE día natural, para
+//    explicar el desfase cuando la caja ya se cortó pero los pedidos siguen
+//    abiertos (caso real visto en operación).
+//  - orders: los pedidos del día natural (TZ México), pedido por pedido.
+//  - shipping: desglose de las líneas de la categoría "Envíos" por zona.
+// Mismo control de acceso que el resto del módulo (assertDriverAccess).
+router.get('/:driverId/report', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const scoped = req.user?.role !== 'SUPER_ADMIN' && restaurantId;
+    const { from, to } = localDayRange(req.query.date);
+
+    const [orders, pendingMovements, cuts, shippingCatIds] = await Promise.all([
+      prisma.order.findMany({
+        where: {
+          deliveryDriverId: driver.id,
+          createdAt: { gte: from, lte: to },
+          ...(scoped ? { restaurantId } : {}),
+        },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true, orderNumber: true, status: true,
+          paymentMethod: true, paymentStatus: true,
+          total: true, deliveryFee: true, tip: true, cashCollected: true, paidAt: true,
+          customerName: true, ticketName: true, customerPhone: true,
+          deliveryAddress: true, createdAt: true,
+          items: {
+            select: {
+              name: true, quantity: true, price: true, subtotal: true,
+              menuItem: { select: { categoryId: true } },
+            },
+          },
+        },
+      }),
+      // Pendiente de corte: independiente del día (ver nota en GET /movements).
+      prisma.driverCashMovement.findMany({ where: { driverId: driver.id, approved: false } }),
+      // Cortes hechos dentro del día consultado.
+      prisma.driverCashCut.findMany({
+        where: { driverId: driver.id, createdAt: { gte: from, lte: to } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      getShippingCategoryIds(restaurantId),
+    ]);
+
+    // ── Resumen de caja PENDIENTE DE CORTE ──────────────────────────────
+    const cashSummary = {
+      float: pendingMovements.filter(m => m.type === 'FLOAT').reduce((s, m) => s + m.amount, 0),
+      income: pendingMovements.filter(m => m.type === 'INCOME').reduce((s, m) => s + m.amount, 0),
+      expense: pendingMovements.filter(m => m.type === 'EXPENSE').reduce((s, m) => s + m.amount, 0),
+      returned: pendingMovements.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.amount, 0),
+      movements: pendingMovements.length,
+    };
+    cashSummary.balance = cashSummary.float + cashSummary.income - cashSummary.expense - cashSummary.returned;
+
+    // ── Pedidos + clasificación de líneas de envío ──────────────────────
+    const lineAmount = (it) => (typeof it.subtotal === 'number' && it.subtotal > 0)
+      ? it.subtotal
+      : (it.price || 0) * (it.quantity || 0);
+
+    const zoneTotals = new Map(); // zona -> { zone, count, amount }
+    let shippingTotal = 0;
+    const ordersWithoutShipping = [];
+
+    const outOrders = orders.map(o => {
+      const shipItems = o.items.filter(it => it.menuItem && shippingCatIds.has(it.menuItem.categoryId));
+      let orderShipping = 0;
+      for (const it of shipItems) {
+        const amt = lineAmount(it);
+        orderShipping += amt;
+        const zone = (it.name || 'Envío').trim();
+        const cur = zoneTotals.get(zone) || { zone, count: 0, amount: 0 };
+        cur.count += it.quantity || 1;
+        cur.amount += amt;
+        zoneTotals.set(zone, cur);
+      }
+      shippingTotal += orderShipping;
+      if (shipItems.length === 0) ordersWithoutShipping.push(o.orderNumber);
+      return {
+        id: o.id,
+        orderNumber: o.orderNumber,
+        customer: o.customerName || o.ticketName || null,
+        phone: o.customerPhone || null,
+        address: o.deliveryAddress || null,
+        paymentMethod: o.paymentMethod || null,
+        paymentStatus: o.paymentStatus || null,
+        status: o.status,
+        total: o.total || 0,
+        deliveryFee: o.deliveryFee || 0,
+        tip: o.tip || 0,
+        cashCollected: o.cashCollected,
+        paidAt: o.paidAt,
+        createdAt: o.createdAt,
+        shipping: orderShipping,
+        shippingZones: shipItems.map(it => it.name),
+      };
+    });
+
+    // ── Resumen de pedidos (cuadre) ─────────────────────────────────────
+    const byMethod = {};
+    const byStatus = {};
+    let paidTotal = 0, pendingTotal = 0;
+    for (const o of outOrders) {
+      const m = o.paymentMethod || 'OTHER';
+      byMethod[m] = (byMethod[m] || 0) + o.total;
+      byStatus[o.status] = (byStatus[o.status] || 0) + 1;
+      if (o.paymentStatus === 'PAID') paidTotal += o.total;
+      else pendingTotal += o.total;
+    }
+
+    res.json({
+      driver: { id: driver.id, name: driver.name },
+      date: req.query.date || null,
+      range: { from, to },
+      cashSummary,
+      lastCut: cuts[0] || null,
+      orders: outOrders,
+      ordersSummary: {
+        count: outOrders.length,
+        total: outOrders.reduce((s, o) => s + o.total, 0),
+        paid: paidTotal,
+        pending: pendingTotal,
+        deliveryFees: outOrders.reduce((s, o) => s + o.deliveryFee, 0),
+        tips: outOrders.reduce((s, o) => s + o.tip, 0),
+        byMethod,
+        byStatus,
+      },
+      shipping: {
+        total: shippingTotal,
+        byZone: [...zoneTotals.values()].sort((a, b) => b.amount - a.amount),
+        ordersWithoutShipping,
+      },
+    });
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
 module.exports = router;
