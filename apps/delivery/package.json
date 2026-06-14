@@ -21,6 +21,7 @@
     "@capgo/capacitor-updater": "^8.0.0",
     "axios": "^1.16.1",
     "framer-motion": "^12.38.0",
+    "jsqr": "^1.4.0",
     "lucide-react": "^1.11.0",
     "next": "16.2.6",
     "react": "19.2.6",

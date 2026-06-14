@@ -1,7 +1,9 @@
 'use client';
 // handoff/screens/SetupScreen.tsx
 import React, { useState } from 'react';
+import { QrCode } from 'lucide-react';
 import { C, S } from '@/lib/tokens';
+import QrScanner from '@/components/delivery/QrScanner';
 
 interface SetupScreenProps {
   step: 'auth' | 'location';
@@ -9,11 +11,49 @@ interface SetupScreenProps {
   loggingIn: boolean;
   onLogin: (email: string, password: string) => void;
   onSelectLocation: (loc: { id: string; name: string }) => void;
+  onQrLink: (data: { restaurantId: string; locationId: string; locationName?: string }) => void;
 }
 
-export function SetupScreen({ step, locations, loggingIn, onLogin, onSelectLocation }: SetupScreenProps) {
+// Extrae los IDs de vinculación del texto de un QR. Acepta una URL
+// (https://delivery.mrtpvrest.com/?rid=..&lid=..&ln=..) o una query suelta.
+function parseLinkPayload(text: string): { restaurantId: string; locationId: string; locationName?: string } | null {
+  try {
+    let params: URLSearchParams;
+    try {
+      params = new URL(text).searchParams;
+    } catch {
+      const q = text.includes('?') ? text.slice(text.indexOf('?') + 1) : text;
+      params = new URLSearchParams(q);
+    }
+    const rid = params.get('rid');
+    const lid = params.get('lid');
+    const ln  = params.get('ln') || undefined;
+    if (rid && lid) return { restaurantId: rid, locationId: lid, locationName: ln };
+  } catch { /* ignore */ }
+  return null;
+}
+
+export function SetupScreen({ step, locations, loggingIn, onLogin, onSelectLocation, onQrLink }: SetupScreenProps) {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState('');
+
+  function handleScanResult(text: string) {
+    const data = parseLinkPayload(text);
+    if (!data) {
+      setScanning(false);
+      setScanError('Ese QR no es un código de vinculación válido.');
+      return;
+    }
+    setScanning(false);
+    setScanError('');
+    onQrLink(data);
+  }
+
+  if (scanning) {
+    return <QrScanner onResult={handleScanResult} onClose={() => setScanning(false)} />;
+  }
 
   return (
     <div style={{
@@ -48,6 +88,34 @@ export function SetupScreen({ step, locations, loggingIn, onLogin, onSelectLocat
         {/* Auth step */}
         {step === 'auth' && (
           <div style={S.card}>
+            {/* Opción recomendada: escanear el QR del admin */}
+            <button
+              onClick={() => { setScanError(''); setScanning(true); }}
+              style={{
+                ...S.btnPrimary, width: '100%', marginBottom: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              <QrCode size={18} strokeWidth={2.5} /> ESCANEAR CÓDIGO QR
+            </button>
+            <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'center', marginBottom: 16, lineHeight: 1.5 }}>
+              Pide al administrador el QR de vinculación (Admin → Descargas)
+            </div>
+            {scanError && (
+              <div style={{
+                fontSize: 11, color: '#ef4444', textAlign: 'center', marginBottom: 14,
+                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
+                borderRadius: 10, padding: '8px 10px',
+              }}>{scanError}</div>
+            )}
+
+            {/* Separador */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 18px' }}>
+              <div style={{ flex: 1, height: 1, background: C.border }} />
+              <span style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em' }}>o ingresa como admin</span>
+              <div style={{ flex: 1, height: 1, background: C.border }} />
+            </div>
+
             <div style={{ ...S.sectionLabel, textAlign: 'center', marginBottom: 20 }}>
               Paso 1 — Autenticación admin
             </div>

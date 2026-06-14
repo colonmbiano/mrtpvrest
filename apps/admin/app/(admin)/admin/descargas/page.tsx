@@ -9,6 +9,10 @@ import {
   WtScreen, PageHeader, WtCard, SectionLabel, IconBadge,
   type Tone,
 } from "@/components/warmtech";
+import api from "@/lib/api";
+
+const DELIVERY_URL = "https://delivery.mrtpvrest.com";
+interface LocationRow { id: string; name: string; }
 
 const APPS: {
   id: string;
@@ -68,12 +72,29 @@ const APPS: {
 
 export default function DescargasPage() {
   const [origin, setOrigin] = React.useState("https://admin.mrtpvrest.com");
+  const [restaurantId, setRestaurantId] = React.useState("");
+  const [locations, setLocations] = React.useState<LocationRow[]>([]);
+  const [selectedLoc, setSelectedLoc] = React.useState("");
 
   React.useEffect(() => {
     if (typeof window !== "undefined") {
       setOrigin(window.location.origin);
+      setRestaurantId(localStorage.getItem("restaurantId") || "");
     }
+    api.get("/api/admin/locations")
+      .then((res) => {
+        const list: LocationRow[] = res.data || [];
+        setLocations(list);
+        if (list.length) setSelectedLoc(list[0].id);
+      })
+      .catch(() => {});
   }, []);
+
+  const loc = locations.find((l) => l.id === selectedLoc);
+  const linkUrl =
+    restaurantId && loc
+      ? `${DELIVERY_URL}/?rid=${encodeURIComponent(restaurantId)}&lid=${encodeURIComponent(loc.id)}&ln=${encodeURIComponent(loc.name)}`
+      : "";
 
   return (
     <WtScreen>
@@ -143,6 +164,68 @@ export default function DescargasPage() {
           </WtCard>
         ))}
       </div>
+
+      {/* Vinculación de la app de repartidor (PWA iPhone / Web) por QR */}
+      <SectionLabel>Vincular repartidor (iPhone / Web)</SectionLabel>
+      <WtCard className="flex flex-col gap-4 p-5">
+        <div className="flex items-start gap-3">
+          <IconBadge icon={Bike} tone="ok" size={46} />
+          <div className="min-w-0 flex-1">
+            <h2 className="font-display text-base font-extrabold leading-tight text-tx-hi">
+              Vincular dispositivo del repartidor
+            </h2>
+            <p className="mt-1.5 text-[12px] leading-relaxed text-tx-mut">
+              Para iPhone (PWA): el repartidor abre <span className="font-semibold text-tx-dim">{DELIVERY_URL.replace("https://", "")}</span> en
+              Safari, la agrega a inicio, y dentro de la app toca <span className="font-semibold">“Escanear QR”</span> y apunta a este código.
+              Vincula el celular a la sucursal sin teclear nada.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-tx-mut">
+            Sucursal
+          </label>
+          <select
+            value={selectedLoc}
+            onChange={(e) => setSelectedLoc(e.target.value)}
+            className="w-full rounded-2xl px-4 py-3 text-sm text-tx-hi outline-none"
+            style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+          >
+            {locations.length === 0 && <option value="">Cargando sucursales…</option>}
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div
+          className="flex items-center gap-4 rounded-2xl p-4"
+          style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+        >
+          <div className="grid h-32 w-32 shrink-0 place-items-center rounded-xl bg-white p-2">
+            {linkUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(linkUrl)}`}
+                alt="QR de vinculación del repartidor"
+                className="h-full w-full object-contain"
+              />
+            ) : (
+              <QrCode size={36} className="text-gray-300" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1 text-[11px] leading-snug text-tx-mut">
+            <p className="font-semibold text-tx-dim">{loc ? loc.name : "Selecciona una sucursal"}</p>
+            <p className="mt-1.5">
+              El QR lleva solo el ID de restaurante y sucursal (no son contraseñas; el repartidor igual entra con su PIN).
+            </p>
+            {linkUrl && (
+              <p className="mt-2 break-all font-mono text-[9px] text-tx-dim/70">{linkUrl}</p>
+            )}
+          </div>
+        </div>
+      </WtCard>
     </WtScreen>
   );
 }
