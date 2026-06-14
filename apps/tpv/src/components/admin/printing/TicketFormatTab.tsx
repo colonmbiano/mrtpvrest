@@ -172,7 +172,7 @@ export default function TicketFormatTab() {
                     )}
                   </div>
                   <div className="flex flex-col gap-2">
-                    <label className="h-10 px-4 inline-flex items-center rounded-xl bg-[#121316] border border-white/5 text-[11px] font-black uppercase tracking-widest text-zinc-300 hover:border-amber-500/30 cursor-pointer transition-colors">
+                    <label className="h-10 px-4 inline-flex items-center rounded-xl bg-[#121316] border border-white/5 text-[11px] font-black uppercase tracking-widest text-zinc-300 hover:border-iris-glow cursor-pointer transition-colors">
                       {uploading ? "Subiendo…" : "Subir logo"}
                       <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} disabled={uploading} />
                     </label>
@@ -294,7 +294,7 @@ export default function TicketFormatTab() {
                     key={opt.id}
                     type="button"
                     onClick={() => setCfg({ ...cfg, kitchenFontSize: opt.id })}
-                    className={`flex flex-col items-center justify-center gap-0.5 h-16 rounded-2xl border transition-all ${active ? "bg-amber-500 border-amber-500 text-[#0a0a0c]" : "bg-[#121316] border-white/5 text-zinc-300 hover:border-amber-500/30"}`}
+                    className={`flex flex-col items-center justify-center gap-0.5 h-16 rounded-2xl border transition-all ${active ? "bg-iris-500 border-iris-500 text-iris-fg" : "bg-[#121316] border-white/5 text-zinc-300 hover:border-iris-glow"}`}
                   >
                     <span className="text-xs font-black uppercase tracking-widest">{opt.label}</span>
                     <span className={`text-[10px] font-bold ${active ? "text-[#0a0a0c]/70" : "text-zinc-500"}`}>{opt.hint} ancho</span>
@@ -342,7 +342,7 @@ export default function TicketFormatTab() {
 
       <div className="pt-8">
         <button onClick={save} disabled={saving}
-          className="h-14 px-8 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-60">
+          className="h-14 px-8 rounded-2xl bg-iris-500 text-iris-fg font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-60">
           {saving ? "Guardando…" : "Guardar cambios"}
         </button>
       </div>
@@ -353,7 +353,7 @@ export default function TicketFormatTab() {
 function SubPill({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
     <button onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${active ? "bg-amber-500 text-[#0a0a0c]" : "bg-[#121316] text-zinc-400 hover:text-white"}`}>
+      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${active ? "bg-iris-500 text-iris-fg" : "bg-[#121316] text-zinc-400 hover:text-white"}`}>
       {icon}{label}
     </button>
   );
@@ -370,9 +370,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button type="button" onClick={() => onChange(!checked)} className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-[#121316] border border-white/5 hover:border-amber-500/30 transition-all">
+    <button type="button" onClick={() => onChange(!checked)} className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-[#121316] border border-white/5 hover:border-iris-glow transition-all">
       <span className="text-xs font-bold text-zinc-300 text-left leading-tight">{label}</span>
-      <div className={`shrink-0 w-11 h-6 rounded-full relative transition-colors ${checked ? "bg-amber-500" : "bg-zinc-700"}`}>
+      <div className={`shrink-0 w-11 h-6 rounded-full relative transition-colors ${checked ? "bg-iris-500" : "bg-zinc-700"}`}>
         <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${checked ? "right-1" : "left-1"}`} />
       </div>
     </button>
@@ -381,7 +381,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-black text-amber-500/80 uppercase tracking-[0.2em] pt-3 pb-1">
+    <p className="text-[10px] font-black text-iris-500 uppercase tracking-[0.2em] pt-3 pb-1">
       {children}
     </p>
   );
@@ -406,7 +406,7 @@ function Segmented({
             key={opt.id}
             type="button"
             onClick={() => onChange(opt.id)}
-            className={`flex flex-col items-center justify-center gap-0.5 h-14 rounded-2xl border transition-all ${active ? "bg-amber-500 border-amber-500 text-[#0a0a0c]" : "bg-[#121316] border-white/5 text-zinc-300 hover:border-amber-500/30"}`}
+            className={`flex flex-col items-center justify-center gap-0.5 h-14 rounded-2xl border transition-all ${active ? "bg-iris-500 border-iris-500 text-iris-fg" : "bg-[#121316] border-white/5 text-zinc-300 hover:border-iris-glow"}`}
           >
             <span className="text-[11px] font-black uppercase tracking-widest">{opt.label}</span>
             {opt.hint && <span className={`text-[9px] font-bold ${active ? "text-[#0a0a0c]/70" : "text-zinc-500"}`}>{opt.hint}</span>}

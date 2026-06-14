@@ -164,12 +164,12 @@ export default function RoutingTab() {
   return (
     <div className="space-y-8">
       {legacyCount > 0 && (
-        <div className="flex items-center justify-between gap-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5">
+        <div className="flex items-center justify-between gap-4 bg-iris-soft border border-iris-glow rounded-2xl p-5">
           <div>
-            <p className="text-sm font-black text-amber-300">{legacyCount} impresora(s) con ruteo legacy</p>
+            <p className="text-sm font-black text-iris-500">{legacyCount} impresora(s) con ruteo legacy</p>
             <p className="text-xs text-zinc-400 font-medium mt-1">Migra las categorías por-impresora a grupos para tener una sola fuente de ruteo.</p>
           </div>
-          <button onClick={migrateLegacy} className="flex items-center gap-2 bg-amber-500 text-[#0a0a0c] px-5 py-3 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 shrink-0">
+          <button onClick={migrateLegacy} className="flex items-center gap-2 bg-iris-500 text-iris-fg px-5 py-3 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 shrink-0">
             <ArrowRightLeft size={16} /> Migrar
           </button>
         </div>
@@ -181,7 +181,7 @@ export default function RoutingTab() {
             <h2 className="text-xl font-black text-white tracking-tight">Grupos de impresión</h2>
             <p className="text-sm text-zinc-400 font-medium">Cada grupo: impresoras + categorías que enrutan a ellas.</p>
           </div>
-          <button onClick={openNew} className="flex items-center gap-2 bg-amber-500 text-[#0a0a0c] px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 active:scale-95 shadow-lg shadow-amber-500/20">
+          <button onClick={openNew} className="flex items-center gap-2 bg-iris-500 text-iris-fg px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 active:scale-95 shadow-lg">
             <Plus size={18} /> Nuevo grupo
           </button>
         </div>
@@ -197,9 +197,9 @@ export default function RoutingTab() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {groups.map((g) => (
-              <div key={g.id} className="bg-[#121316] p-6 rounded-[2rem] border border-white/5 hover:border-amber-500/30 transition-all">
+              <div key={g.id} className="bg-[#121316] p-6 rounded-[2rem] border border-white/5 hover:border-iris-glow transition-all">
                 <div className="flex justify-between items-start mb-5">
-                  <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/30 flex items-center justify-center"><Layers size={24} /></div>
+                  <div className="w-14 h-14 rounded-2xl bg-iris-soft text-iris-500 border border-iris-glow flex items-center justify-center"><Layers size={24} /></div>
                   <div className="flex gap-2">
                     <button onClick={() => openEdit(g)} className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-300 active:scale-95 flex items-center justify-center"><Edit3 size={14} /></button>
                     <button onClick={() => handleDelete(g)} disabled={busyId === g.id} className="w-10 h-10 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 active:scale-95 flex items-center justify-center disabled:opacity-40"><Trash2 size={14} /></button>
@@ -218,7 +218,7 @@ export default function RoutingTab() {
                     <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 flex items-center gap-1.5"><Tag size={10} /> Categorías ({g.categories.length})</p>
                     <div className="flex flex-wrap gap-1.5">
                       {g.categories.length === 0 ? <span className="text-[10px] text-zinc-600 italic">Sin categorías</span> :
-                        g.categories.map((c) => <span key={c.categoryId} className="text-[10px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2 py-1">{c.category?.name ?? "?"}</span>)}
+                        g.categories.map((c) => <span key={c.categoryId} className="text-[10px] font-bold text-iris-500 bg-iris-soft border border-iris-glow rounded-lg px-2 py-1">{c.category?.name ?? "?"}</span>)}
                     </div>
                   </div>
                 </div>
@@ -250,7 +250,7 @@ export default function RoutingTab() {
                 <div key={item.id} className="bg-[#121316] border border-white/5 rounded-2xl p-4">
                   <div className="flex items-center justify-between gap-3 mb-3">
                     <span className="text-sm font-black text-white truncate">{formatDisplayName(item.name)}</span>
-                    {savingItem === item.id && <span className="text-[10px] text-amber-500 font-bold">Guardando…</span>}
+                    {savingItem === item.id && <span className="text-[10px] text-iris-500 font-bold">Guardando…</span>}
                   </div>
                   {groups.length === 0 ? (
                     <p className="text-[11px] text-zinc-600 italic">Crea grupos arriba para poder asignar.</p>
@@ -261,7 +261,7 @@ export default function RoutingTab() {
                         return (
                           <button key={g.id} type="button" disabled={savingItem === item.id} onClick={() => toggleItemGroup(item, g.id)}
                             className="text-[11px] font-black rounded-lg px-3 py-1.5 border transition-all active:scale-95 disabled:opacity-50"
-                            style={{ background: active ? "rgba(255,184,77,0.15)" : "#0a0a0c", borderColor: active ? "#ffb84d" : "rgba(255,255,255,0.08)", color: active ? "#ffb84d" : "#a1a1aa" }}>
+                            style={{ background: active ? "var(--brand-soft)" : "#0a0a0c", borderColor: active ? "var(--brand)" : "rgba(255,255,255,0.08)", color: active ? "var(--brand)" : "#a1a1aa" }}>
                             {g.name}
                           </button>
                         );
@@ -301,8 +301,8 @@ export default function RoutingTab() {
                       return (
                         <button key={p.id} type="button" onClick={() => toggleId("printerIds", p.id)}
                           className="flex items-center gap-3 p-3 rounded-xl border transition-all active:scale-95 text-left"
-                          style={{ background: active ? "rgba(255,184,77,0.10)" : "#121316", borderColor: active ? "#ffb84d" : "rgba(255,255,255,0.05)" }}>
-                          <span className="w-3 h-3 rounded-full" style={{ background: active ? "#ffb84d" : "rgba(255,255,255,0.10)" }} />
+                          style={{ background: active ? "var(--brand-soft)" : "#121316", borderColor: active ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
+                          <span className="w-3 h-3 rounded-full" style={{ background: active ? "var(--brand)" : "rgba(255,255,255,0.10)" }} />
                           <div className="flex flex-col flex-1 min-w-0">
                             <span className="text-sm font-black text-white truncate">{formatDisplayName(p.name)}</span>
                             <span className="text-[10px] text-zinc-500 truncate">{p.type} · {p.ip || "sin IP"}</span>
@@ -322,8 +322,8 @@ export default function RoutingTab() {
                       return (
                         <button key={c.id} type="button" onClick={() => toggleId("categoryIds", c.id)}
                           className="flex items-center gap-2 p-2.5 rounded-xl border transition-all active:scale-95 text-left"
-                          style={{ background: active ? "rgba(255,184,77,0.10)" : "#121316", borderColor: active ? "#ffb84d" : "rgba(255,255,255,0.05)" }}>
-                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: active ? "#ffb84d" : "rgba(255,255,255,0.10)" }} />
+                          style={{ background: active ? "var(--brand-soft)" : "#121316", borderColor: active ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: active ? "var(--brand)" : "rgba(255,255,255,0.10)" }} />
                           <span className="text-[12px] font-black text-white truncate">{formatDisplayName(c.name)}</span>
                         </button>
                       );
@@ -334,7 +334,7 @@ export default function RoutingTab() {
             </div>
             <div className="p-6 border-t border-white/10 flex gap-3 bg-[#0a0a0c]">
               <button type="button" onClick={() => setIsFormOpen(false)} disabled={saving} className="flex-1 h-12 rounded-2xl bg-zinc-900 text-zinc-400 font-bold uppercase text-xs tracking-widest hover:text-white disabled:opacity-40">Cancelar</button>
-              <button type="submit" disabled={saving} className="flex-[2] h-12 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-widest text-xs active:scale-95 disabled:opacity-60">
+              <button type="submit" disabled={saving} className="flex-[2] h-12 rounded-2xl bg-iris-500 text-iris-fg font-black uppercase tracking-widest text-xs active:scale-95 disabled:opacity-60">
                 {saving ? "Guardando…" : editingId ? "Guardar cambios" : "Crear grupo"}
               </button>
             </div>

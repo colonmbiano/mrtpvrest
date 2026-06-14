@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Save, Banknote, CreditCard, Wifi, Gift, Receipt } from "lucide-react";
 import api from "@/lib/api";
-import BackButton from "@/components/BackButton";
+import { AdminScreen, AdminHeader } from "@/components/admin/AdminScreen";
 
 interface PaymentConfig {
   taxRate: number;
@@ -84,38 +84,23 @@ export default function PagosAdmin() {
   ];
 
   return (
-    <div
-      className="relative min-h-full p-6 md:p-8 bg-[#0a0a0c] text-white overflow-hidden"
-      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
-    >
-      {/* Glow */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full blur-[120px] opacity-30"
-        style={{ background: 'radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)' }}
-      />
-
-      <div className="relative z-10">
-        <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
-          <div className="flex items-start gap-4">
-            <BackButton ariaLabel="Volver al panel admin" />
-            <div>
-              <p className="text-[10px] font-black tracking-[0.25em] text-white/40">CONFIGURACIÓN</p>
-              <h1 className="text-3xl font-black text-white tracking-tight">Pagos e Impuestos</h1>
-              <p className="text-sm font-medium text-white/55 mt-1">
-                Configura los métodos de pago aceptados, IVA y propina sugerida.
-              </p>
-            </div>
-          </div>
+    <AdminScreen>
+      <AdminHeader
+        title="Pagos e Impuestos"
+        subtitle="Configura los métodos de pago aceptados, IVA y propina sugerida."
+        action={
           <button
             onClick={save}
             disabled={saving || loading}
-            className="inline-flex items-center gap-2 px-5 py-3 min-h-[48px] rounded-2xl text-sm font-black tracking-tight text-[#0a0a0c] bg-[#ffb84d] active:scale-95 transition-transform disabled:opacity-40 shadow-[0_15px_40px_rgba(255,184,77,0.25)]"
+            className="inline-flex items-center gap-2 px-5 py-3 min-h-[48px] rounded-2xl text-sm font-black tracking-tight active:scale-95 transition-transform disabled:opacity-40"
+            style={{ background: "var(--brand)", color: "var(--brand-fg)", boxShadow: "0 15px 40px var(--brand-glow)" }}
           >
             <Save size={16} strokeWidth={3} /> {saving ? "Guardando…" : "Guardar cambios"}
           </button>
-        </div>
+        }
+      />
 
+      <div>
         {msg && (
           <div
             className="mb-5 rounded-2xl p-3 text-xs font-semibold"
@@ -214,6 +199,6 @@ export default function PagosAdmin() {
           </label>
         </section>
       </div>
-    </div>
+    </AdminScreen>
   );
 }
