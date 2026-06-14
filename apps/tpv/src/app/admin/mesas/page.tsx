@@ -27,7 +27,7 @@ import {
   CircleCheck, CircleAlert, CirclePause, RotateCcw,
   Layers, X, Check, ChevronDown,
 } from "lucide-react";
-import BackButton from "@/components/BackButton";
+import { AdminScreen, AdminHeader } from "@/components/admin/AdminScreen";
 
 type TableStatus = "AVAILABLE" | "OCCUPIED" | "DIRTY";
 
@@ -382,33 +382,29 @@ export default function MesasAdminPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-8 max-w-6xl mx-auto min-h-[100dvh] font-sans" onClick={() => setZonePickerId(null)}>
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8">
-        <div className="flex items-start gap-4">
-          <BackButton ariaLabel="Volver al panel admin" />
-          <div>
-            <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500 block mb-2">Configuración</span>
-            <h1 className="text-3xl font-black text-white tracking-tight mb-1">Mesas y Zonas</h1>
-            <p className="text-sm text-zinc-400 font-medium">
-              Crea zonas, da de alta tus mesas (una o varias) y controla su estado.
-            </p>
+    <AdminScreen onClick={() => setZonePickerId(null)}>
+      <AdminHeader
+        icon={Grid3x3}
+        title="Mesas y Zonas"
+        subtitle="Crea zonas, da de alta tus mesas (una o varias) y controla su estado."
+        action={
+          <div className="flex items-center gap-3">
+            <button
+              onClick={openNewZone}
+              className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-zinc-200 px-5 py-3 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 transition-all border border-white/10"
+            >
+              <Layers size={16} /> Nueva Zona
+            </button>
+            <button
+              onClick={openNew}
+              className="flex items-center gap-2 px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 active:scale-95"
+              style={{ background: "var(--brand)", color: "var(--brand-fg)", boxShadow: "0 10px 30px var(--brand-glow)" }}
+            >
+              <Plus size={18} /> Nueva Mesa
+            </button>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={openNewZone}
-            className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-zinc-200 px-5 py-3 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 transition-all border border-white/10"
-          >
-            <Layers size={16} /> Nueva Zona
-          </button>
-          <button
-            onClick={openNew}
-            className="flex items-center gap-2 bg-amber-500 text-[#0a0a0c] px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 active:scale-95 shadow-lg shadow-amber-500/20"
-          >
-            <Plus size={18} /> Nueva Mesa
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <StatTile label="Total"       value={stats.total}     color="zinc"    icon={<Grid3x3 size={20} />} />
@@ -447,7 +443,7 @@ export default function MesasAdminPage() {
         />
         <button
           onClick={openNewZone}
-          className="shrink-0 flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 font-black uppercase tracking-wider text-[11px] active:scale-95 transition-all border border-amber-500/20"
+          className="shrink-0 flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-iris-soft text-iris-500 hover:bg-iris-soft font-black uppercase tracking-wider text-[11px] active:scale-95 transition-all border border-iris-glow"
         >
           <Plus size={14} /> Zona
         </button>
@@ -466,7 +462,7 @@ export default function MesasAdminPage() {
           <p className="text-zinc-600 text-sm mb-6">Crea una mesa aquí o mueve una existente desde su chip de zona.</p>
           <button
             onClick={openNew}
-            className="inline-flex items-center gap-2 bg-amber-500 text-[#0a0a0c] px-5 py-2.5 rounded-xl font-black uppercase tracking-widest text-xs hover:scale-105 active:scale-95"
+            className="inline-flex items-center gap-2 bg-iris-500 text-iris-fg px-5 py-2.5 rounded-xl font-black uppercase tracking-widest text-xs hover:scale-105 active:scale-95"
           >
             <Plus size={16} /> Nueva mesa aquí
           </button>
@@ -479,7 +475,7 @@ export default function MesasAdminPage() {
               <div className="flex items-center gap-3 mb-4">
                 {g.icon
                   ? <span className="text-base leading-none">{g.icon}</span>
-                  : <MapPin size={16} className="text-amber-500" />}
+                  : <MapPin size={16} className="text-iris-500" />}
                 <h2 className="text-sm font-black uppercase tracking-[0.2em] text-zinc-300">{g.label}</h2>
                 <span className="text-[10px] font-bold text-zinc-500">{g.list.length} mesa{g.list.length !== 1 ? "s" : ""}</span>
               </div>
@@ -525,14 +521,14 @@ export default function MesasAdminPage() {
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, bulk: false })}
-                  className={`flex-1 h-11 rounded-xl font-black uppercase tracking-wider text-[11px] transition-all ${!form.bulk ? "bg-amber-500 text-[#0a0a0c]" : "text-zinc-400 hover:text-white"}`}
+                  className={`flex-1 h-11 rounded-xl font-black uppercase tracking-wider text-[11px] transition-all ${!form.bulk ? "bg-iris-500 text-iris-fg" : "text-zinc-400 hover:text-white"}`}
                 >
                   Una mesa
                 </button>
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, bulk: true })}
-                  className={`flex-1 h-11 rounded-xl font-black uppercase tracking-wider text-[11px] transition-all ${form.bulk ? "bg-amber-500 text-[#0a0a0c]" : "text-zinc-400 hover:text-white"}`}
+                  className={`flex-1 h-11 rounded-xl font-black uppercase tracking-wider text-[11px] transition-all ${form.bulk ? "bg-iris-500 text-iris-fg" : "text-zinc-400 hover:text-white"}`}
                 >
                   Crear varias
                 </button>
@@ -569,9 +565,9 @@ export default function MesasAdminPage() {
               )}
 
               {form.bulk && form.name.trim() && (
-                <div className="text-xs text-zinc-400 font-bold bg-amber-500/5 border border-amber-500/15 rounded-xl px-4 py-3">
+                <div className="text-xs text-zinc-400 font-bold bg-iris-soft border border-iris-glow rounded-xl px-4 py-3">
                   Creará:{" "}
-                  <span className="text-amber-300">
+                  <span className="text-iris-500">
                     {form.name.trim()} {form.startAt}
                     {form.quantity > 1 && <>, {form.name.trim()} {form.startAt + 1}</>}
                     {form.quantity > 2 && <span className="text-zinc-500"> … </span>}
@@ -617,7 +613,7 @@ export default function MesasAdminPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="flex-[2] h-14 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-wait flex items-center justify-center gap-2"
+                className="flex-[2] h-14 rounded-2xl bg-iris-500 text-iris-fg font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-wait flex items-center justify-center gap-2"
               >
                 {saving ? (
                   <>
@@ -668,7 +664,7 @@ export default function MesasAdminPage() {
                 <button
                   type="button"
                   onClick={() => setZoneForm({ ...zoneForm, icon: "" })}
-                  className={`h-11 rounded-xl flex items-center justify-center text-xs font-bold transition-all ${!zoneForm.icon ? "bg-amber-500 text-[#0a0a0c]" : "bg-[#121316] border border-white/5 text-zinc-500 hover:border-white/20"}`}
+                  className={`h-11 rounded-xl flex items-center justify-center text-xs font-bold transition-all ${!zoneForm.icon ? "bg-iris-500 text-iris-fg" : "bg-[#121316] border border-white/5 text-zinc-500 hover:border-white/20"}`}
                   title="Sin icono"
                 >
                   <MapPin size={16} />
@@ -678,7 +674,7 @@ export default function MesasAdminPage() {
                     type="button"
                     key={emo}
                     onClick={() => setZoneForm({ ...zoneForm, icon: emo })}
-                    className={`h-11 rounded-xl flex items-center justify-center text-lg transition-all ${zoneForm.icon === emo ? "bg-amber-500/20 border border-amber-500 scale-105" : "bg-[#121316] border border-white/5 hover:border-white/20"}`}
+                    className={`h-11 rounded-xl flex items-center justify-center text-lg transition-all ${zoneForm.icon === emo ? "bg-iris-soft border border-iris-500 scale-105" : "bg-[#121316] border border-white/5 hover:border-white/20"}`}
                   >
                     {emo}
                   </button>
@@ -708,7 +704,7 @@ export default function MesasAdminPage() {
               <button
                 type="submit"
                 disabled={savingZone}
-                className="flex-[2] h-14 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
+                className="flex-[2] h-14 rounded-2xl bg-iris-500 text-iris-fg font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {savingZone ? (
                   <>
@@ -721,7 +717,7 @@ export default function MesasAdminPage() {
           </form>
         </div>
       )}
-    </div>
+    </AdminScreen>
   );
 }
 
@@ -752,7 +748,7 @@ function TableGrid({
         return (
           <div
             key={t.id}
-            className="relative bg-[#121316] p-6 rounded-[2rem] border border-white/5 hover:border-amber-500/30 transition-all"
+            className="relative bg-[#121316] p-6 rounded-[2rem] border border-white/5 hover:border-iris-glow transition-all"
           >
             <div className="flex justify-between items-start mb-5">
               <div
@@ -846,11 +842,11 @@ function ZonePickerItem({ label, emoji, icon, active, onClick }: {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-bold text-left transition-all ${active ? "bg-amber-500/15 text-amber-300" : "text-zinc-300 hover:bg-white/5"}`}
+      className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-bold text-left transition-all ${active ? "bg-iris-soft text-iris-500" : "text-zinc-300 hover:bg-white/5"}`}
     >
       {emoji ? <span className="text-base leading-none">{emoji}</span> : icon}
       <span className="flex-1 truncate">{label}</span>
-      {active && <Check size={14} className="text-amber-400 shrink-0" />}
+      {active && <Check size={14} className="text-iris-500 shrink-0" />}
     </button>
   );
 }
@@ -872,7 +868,7 @@ function ZoneChip({ active, onClick, onEdit, label, count, emoji, icon, muted }:
       onClick={onClick}
       className={`group shrink-0 flex items-center gap-2 h-9 pl-3.5 pr-2.5 rounded-full font-black uppercase tracking-wider text-[11px] cursor-pointer transition-all active:scale-95 border ${
         active
-          ? "bg-amber-500 text-[#0a0a0c] border-amber-500"
+          ? "bg-iris-500 text-iris-fg border-iris-500"
           : muted
             ? "bg-white/[0.03] text-zinc-500 border-white/5 hover:text-zinc-300 hover:border-white/15"
             : "bg-white/5 text-zinc-300 border-white/5 hover:border-white/20"
@@ -942,7 +938,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       </p>
       <button
         onClick={onCreate}
-        className="inline-flex items-center gap-2 bg-amber-500 text-[#0a0a0c] px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 active:scale-95"
+        className="inline-flex items-center gap-2 bg-iris-500 text-iris-fg px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 active:scale-95"
       >
         <Plus size={18} /> Crear mesas
       </button>

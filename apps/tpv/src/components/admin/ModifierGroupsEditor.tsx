@@ -248,7 +248,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
                 type="button"
                 onClick={() => addModifier(group.id)}
                 disabled={savingMod === group.id || !form.name.trim()}
-                className="flex items-center justify-center rounded-xl bg-amber-500 text-[#0a0a0c] disabled:opacity-40"
+                className="flex items-center justify-center rounded-xl bg-iris-500 text-iris-fg disabled:opacity-40"
               >
                 <Plus size={18} />
               </button>
@@ -258,7 +258,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
       })}
 
       {showGroupForm ? (
-        <form onSubmit={saveGroup} className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-4">
+        <form onSubmit={saveGroup} className="rounded-2xl border border-iris-glow bg-iris-soft p-4">
           <input
             autoFocus
             placeholder="Nombre del grupo"
@@ -299,13 +299,13 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
             <button type="button" onClick={() => setShowGroupForm(false)} className="flex-1 rounded-xl border border-white/10 py-3 text-xs font-black uppercase text-zinc-400">
               Cancelar
             </button>
-            <button type="submit" disabled={savingGroup} className="flex-1 rounded-xl bg-amber-500 py-3 text-xs font-black uppercase text-[#0a0a0c] disabled:opacity-40">
+            <button type="submit" disabled={savingGroup} className="flex-1 rounded-xl bg-iris-500 py-3 text-xs font-black uppercase text-iris-fg disabled:opacity-40">
               {editingGroupId ? "Actualizar" : "Crear"}
             </button>
           </div>
         </form>
       ) : (
-        <button type="button" onClick={openNewGroup} className="rounded-2xl border border-dashed border-amber-500/40 py-3 text-xs font-black uppercase tracking-[0.18em] text-amber-400">
+        <button type="button" onClick={openNewGroup} className="rounded-2xl border border-dashed border-iris-glow py-3 text-xs font-black uppercase tracking-[0.18em] text-iris-500">
           + Nuevo grupo de modificadores
         </button>
       )}

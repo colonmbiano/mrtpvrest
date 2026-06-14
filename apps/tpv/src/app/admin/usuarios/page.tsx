@@ -16,7 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import api from "@/lib/api";
-import BackButton from "@/components/BackButton";
+import { AdminScreen, AdminHeader, AdminTabs } from "@/components/admin/AdminScreen";
 import PinInput from "@/components/ui/PinInput";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import SeguridadPanel from "@/components/admin/SeguridadPanel";
@@ -130,54 +130,17 @@ export default function PersonalAdmin() {
   ];
 
   return (
-    <div
-      className="relative min-h-full p-6 sm:p-10 bg-[#0C0C0E] text-white overflow-hidden"
-      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
-    >
-      {/* Glow */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full blur-[120px] opacity-30"
-        style={{ background: 'radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)' }}
+    <AdminScreen>
+      <AdminHeader
+        icon={Users}
+        title="Personal y Seguridad"
+        subtitle="Empleados, roles y PINs · políticas de autorización"
       />
 
-      <div className="relative z-10">
-        {/* HEADER */}
-        <div className="flex items-start gap-4 mb-8">
-          <BackButton ariaLabel="Volver al panel admin" />
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
-              Configuración
-            </span>
-            <h1 className="text-4xl font-black text-white tracking-tight leading-none">
-              Personal y Seguridad
-            </h1>
-            <p className="text-sm font-bold text-white/40">
-              Empleados, roles y PINs · políticas de autorización
-            </p>
-          </div>
-        </div>
+      <AdminTabs tabs={TABS} value={tab} onChange={setTab} />
 
-        {/* Tabs */}
-        <div className="inline-flex items-center gap-1 p-1 mb-8 rounded-2xl bg-white/5 border border-white/10">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black tracking-tight transition-colors ${
-                tab === t.key
-                  ? "bg-[#ffb84d] text-[#0C0C0E]"
-                  : "text-white/55 active:bg-white/5"
-              }`}
-            >
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
-
-        {tab === "empleados" ? <EmpleadosTab /> : <SeguridadPanel />}
-      </div>
-    </div>
+      {tab === "empleados" ? <EmpleadosTab /> : <SeguridadPanel />}
+    </AdminScreen>
   );
 }
 
@@ -243,7 +206,8 @@ function EmpleadosTab() {
         </p>
         <button
           onClick={() => setCreating(true)}
-          className="h-14 min-h-[64px] px-8 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.2em] text-xs flex items-center gap-3 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.25)]"
+          className="h-14 min-h-[64px] px-8 rounded-2xl font-black uppercase tracking-[0.2em] text-xs flex items-center gap-3 active:scale-95 transition-transform"
+          style={{ background: "var(--brand)", color: "var(--brand-fg)", boxShadow: "0 10px 30px var(--brand-glow)" }}
         >
           <Plus size={20} strokeWidth={3} /> Nuevo empleado
         </button>
@@ -256,7 +220,7 @@ function EmpleadosTab() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Filtrar por nombre, cargo o ID…"
-          className="w-full h-16 bg-white/5 border border-white/10 rounded-2xl pl-14 pr-6 text-white font-bold outline-none focus:border-[#ffb84d]/50 transition-colors placeholder:text-white/30"
+          className="w-full h-16 bg-white/5 border border-white/10 rounded-2xl pl-14 pr-6 text-white font-bold outline-none focus:border-iris-500 transition-colors placeholder:text-white/30"
         />
       </div>
 
@@ -338,7 +302,7 @@ function EmpleadosTab() {
                     <button
                       onClick={() => setEditing(emp)}
                       aria-label={`Editar ${emp.name}`}
-                      className="w-12 h-12 min-h-[48px] rounded-xl flex items-center justify-center bg-white/5 text-white/50 active:text-[#ffb84d] active:scale-95 transition-transform border border-white/10"
+                      className="w-12 h-12 min-h-[48px] rounded-xl flex items-center justify-center bg-white/5 text-white/50 active:text-iris-500 active:scale-95 transition-transform border border-white/10"
                     >
                       <Pencil size={18} />
                     </button>
@@ -403,7 +367,7 @@ function WarmToggle({
       }}
       className={`relative shrink-0 w-14 h-8 rounded-full transition-colors active:scale-95 border ${
         active
-          ? "bg-[#ffb84d] border-[#ffb84d] shadow-[0_0_18px_rgba(255,184,77,0.4)]"
+          ? "bg-iris-500 border-iris-500 shadow-[0_0_18px_var(--brand-glow)]"
           : "bg-white/5 border-white/15"
       }`}
     >
@@ -514,7 +478,7 @@ function EmployeeModal({
         {/* HEADER */}
         <div className="flex items-center justify-between p-7 sm:p-9 border-b border-white/5 bg-white/5 backdrop-blur-md shrink-0">
           <div className="flex flex-col gap-1 min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
+            <span className="text-[10px] font-black tracking-[0.25em] text-iris-500 uppercase">
               Expediente de Personal
             </span>
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight truncate">
@@ -543,7 +507,7 @@ function EmployeeModal({
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="Nombre completo"
-                className="w-full h-14 min-h-[56px] px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-bold outline-none focus:border-[#ffb84d]/50 transition-colors placeholder:text-white/30"
+                className="w-full h-14 min-h-[56px] px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-bold outline-none focus:border-iris-500 transition-colors placeholder:text-white/30"
               />
             </Field>
 
@@ -553,7 +517,7 @@ function EmployeeModal({
                 <select
                   value={form.role}
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
-                  className="w-full h-14 min-h-[56px] px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-bold outline-none focus:border-[#ffb84d]/50 transition-colors appearance-none cursor-pointer"
+                  className="w-full h-14 min-h-[56px] px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-bold outline-none focus:border-iris-500 transition-colors appearance-none cursor-pointer"
                 >
                   {ROLES.map((r) => (
                     <option key={r} value={r} className="bg-[#0C0C0E]">
@@ -569,7 +533,7 @@ function EmployeeModal({
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 placeholder="+52 000 000 0000"
-                className="w-full h-14 min-h-[56px] px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-black tabular-nums outline-none focus:border-[#ffb84d]/50 transition-colors placeholder:text-white/30"
+                className="w-full h-14 min-h-[56px] px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-black tabular-nums outline-none focus:border-iris-500 transition-colors placeholder:text-white/30"
               />
             </Field>
 
@@ -579,7 +543,7 @@ function EmployeeModal({
                 value={form.pin}
                 onChange={(pin) => setForm({ ...form, pin })}
                 placeholder={isEdit ? "••••••" : "Ej. 2580"}
-                className="w-full h-14 min-h-[56px] px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-black tabular-nums text-lg outline-none focus:border-[#ffb84d]/50 transition-colors placeholder:text-white/30"
+                className="w-full h-14 min-h-[56px] px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-black tabular-nums text-lg outline-none focus:border-iris-500 transition-colors placeholder:text-white/30"
               />
             </Field>
           </section>
@@ -590,7 +554,7 @@ function EmployeeModal({
           >
             <header className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="w-11 h-11 rounded-2xl bg-[#ffb84d]/15 border border-[#ffb84d]/30 text-[#ffb84d] flex items-center justify-center shrink-0">
+                <div className="w-11 h-11 rounded-2xl bg-iris-soft border border-iris-glow text-iris-500 flex items-center justify-center shrink-0">
                   <KeyRound size={20} strokeWidth={2.5} />
                 </div>
                 <div className="min-w-0">
@@ -603,7 +567,7 @@ function EmployeeModal({
                   </p>
                 </div>
               </div>
-              <span className="shrink-0 mt-1 px-3 h-7 rounded-full bg-[#ffb84d]/10 border border-[#ffb84d]/20 text-[#ffb84d] text-[10px] font-black tracking-widest uppercase tabular-nums flex items-center">
+              <span className="shrink-0 mt-1 px-3 h-7 rounded-full bg-iris-soft border border-iris-glow text-iris-500 text-[10px] font-black tracking-widest uppercase tabular-nums flex items-center">
                 {activeSpecialCount} / {SPECIAL_PERMS.length}
               </span>
             </header>
@@ -619,14 +583,14 @@ function EmployeeModal({
                     onClick={() => setSpecial(p.key, !active)}
                     className={`group min-h-[88px] flex items-start gap-4 p-4 sm:p-5 rounded-2xl border-2 text-left active:scale-[0.99] transition-all ${
                       active
-                        ? "bg-[#ffb84d]/10 border-[#ffb84d]/40 shadow-[0_5px_20px_-5px_rgba(255,184,77,0.25)]"
+                        ? "bg-iris-soft border-iris-glow shadow-[0_5px_20px_-5px_var(--brand-glow)]"
                         : "bg-white/[0.03] border-white/10"
                     }`}
                   >
                     <div
                       className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border transition-colors ${
                         active
-                          ? "bg-[#ffb84d]/15 border-[#ffb84d]/30 text-[#ffb84d]"
+                          ? "bg-iris-soft border-iris-glow text-iris-500"
                           : "bg-white/5 border-white/10 text-white/50"
                       }`}
                     >
@@ -679,7 +643,7 @@ function EmployeeModal({
                   >
                     <input
                       type="checkbox"
-                      className="w-5 h-5 rounded-md accent-[#ffb84d]"
+                      className="w-5 h-5 rounded-md accent-iris-500"
                       checked={checked}
                       onChange={(e) =>
                         setForm({ ...form, [p.key]: e.target.checked })
@@ -725,7 +689,7 @@ function EmployeeModal({
             type="submit"
             onClick={submit}
             disabled={submitting}
-            className="flex-[2] min-h-[64px] h-16 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.2em] text-[11px] active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.25)] disabled:opacity-30 disabled:active:scale-100"
+            className="flex-[2] min-h-[64px] h-16 rounded-2xl bg-iris-500 text-iris-fg font-black uppercase tracking-[0.2em] text-[11px] active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)] disabled:opacity-30 disabled:active:scale-100"
           >
             {submitting
               ? "Procesando..."

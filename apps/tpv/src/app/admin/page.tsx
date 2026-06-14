@@ -12,6 +12,7 @@ import {
   Palette,
   MonitorPlay,
 } from "lucide-react";
+import { AdminScreen, AdminHeader } from "@/components/admin/AdminScreen";
 
 const SECTIONS = [
   {
@@ -74,33 +75,16 @@ const SECTIONS = [
 
 export default function AdminLandingPage() {
   return (
-    <div
-      className="relative min-h-full p-6 md:p-10 bg-[#0a0a0c] text-white overflow-hidden"
-      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
-    >
-      {/* Glow */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full blur-[120px] opacity-30"
-        style={{ background: 'radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)' }}
+    <AdminScreen>
+      <AdminHeader
+        back={false}
+        eyebrow="Configuración"
+        title="Panel Central"
+        subtitle="Administra el catálogo, hardware, personal y políticas de tu sucursal."
       />
 
-      <div className="relative z-10">
-        {/* Header */}
-        <div className="mb-10">
-          <p className="text-[10px] font-black tracking-[0.25em] text-white/40 mb-2">
-            CONFIGURACIÓN
-          </p>
-          <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
-            Panel Central
-          </h1>
-          <p className="text-base font-medium text-white/55 mt-2 max-w-2xl">
-            Administra el catálogo, hardware, personal y políticas de tu sucursal.
-          </p>
-        </div>
-
-        {/* Grid de secciones */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Grid de secciones */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {SECTIONS.map((s) => {
             const Icon = s.icon;
             return (
@@ -147,8 +131,7 @@ export default function AdminLandingPage() {
               </Link>
             );
           })}
-        </div>
       </div>
-    </div>
+    </AdminScreen>
   );
 }

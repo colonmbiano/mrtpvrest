@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   CalendarRange, Share2, ArrowUpRight, ArrowDownRight,
-  TrendingUp, Receipt, ShoppingCart, RotateCcw, ChevronRight,
+  TrendingUp, Receipt, ShoppingCart, RotateCcw,
 } from 'lucide-react';
 import api from '@/lib/api';
-import BackButton from '@/components/BackButton';
+import { AdminScreen, AdminHeader } from '@/components/admin/AdminScreen';
 
 type Period = '7D' | '30D' | 'AÑO';
 
@@ -100,42 +100,35 @@ export default function ReportesPage() {
   const peakIdx = peak ? byDay.findIndex(d => d.date === peak.date) : -1;
 
   return (
-    <div className="min-h-full" style={{ background: 'var(--bg)', color: 'var(--text-primary)' }}>
-      {/* Topbar */}
-      <header className="flex items-end justify-between gap-6 px-8 py-6 border-b border-border bg-surface-1/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="flex items-end gap-4">
-          <BackButton ariaLabel="Volver al panel admin" />
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-widest text-tx-mut uppercase">
-              <span>Configuración</span>
-              <ChevronRight size={11} />
-              <span style={{ color: 'var(--brand)' }}>Reportes de Ventas</span>
+    <AdminScreen maxWidth="max-w-7xl">
+      <AdminHeader
+        icon={TrendingUp}
+        title="Reportes de Ventas"
+        subtitle="Ventas, ticket promedio, órdenes y productos más vendidos."
+        action={
+          <div className="flex items-center gap-3">
+            <div className="inline-flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-xs bg-surface-2 border border-border shadow-sm">
+              <CalendarRange size={14} style={{ color: 'var(--brand)' }} />
+              <select value={period} onChange={(e) => setPeriod(e.target.value as Period)}
+                className="bg-transparent outline-none cursor-pointer font-bold text-tx-pri">
+                <option value="7D" className="bg-surface-1">Últimos 7 días</option>
+                <option value="30D" className="bg-surface-1">Últimos 30 días</option>
+                <option value="AÑO" className="bg-surface-1">Este año</option>
+              </select>
             </div>
-            <h1 className="text-3xl font-black">Dashboard</h1>
+            <button className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all bg-surface-2 border border-border hover:bg-surface-hover shadow-sm active:scale-95">
+              <Share2 size={14} /> PDF
+            </button>
+            <button className="inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all active:scale-95"
+              style={{ background: 'var(--brand)', color: 'var(--brand-fg)', boxShadow: '0 8px 16px var(--brand-glow)' }}>
+              Compartir
+            </button>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="inline-flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-xs bg-surface-2 border border-border shadow-sm">
-            <CalendarRange size={14} style={{ color: 'var(--brand)' }} />
-            <select value={period} onChange={(e) => setPeriod(e.target.value as Period)}
-              className="bg-transparent outline-none cursor-pointer font-bold text-tx-pri">
-              <option value="7D" className="bg-surface-1">Últimos 7 días</option>
-              <option value="30D" className="bg-surface-1">Últimos 30 días</option>
-              <option value="AÑO" className="bg-surface-1">Este año</option>
-            </select>
-          </div>
-          <button className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all bg-surface-2 border border-border hover:bg-surface-hover shadow-sm active:scale-95">
-            <Share2 size={14} /> PDF
-          </button>
-          <button className="inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg"
-            style={{ background: 'var(--brand)', color: 'var(--brand-fg)', boxShadow: '0 8px 16px var(--brand-glow)' }}>
-            Compartir
-          </button>
-        </div>
-      </header>
+        }
+      />
 
       {/* KPI Row */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 px-8 pt-8">
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           icon={<TrendingUp size={18} />}
           label="Ventas Totales"
@@ -172,7 +165,7 @@ export default function ReportesPage() {
       </section>
 
       {/* Chart + Top sellers */}
-      <section className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 px-8 py-8">
+      <section className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 mt-6">
         {/* Chart */}
         <div className="rounded-2xl p-8 flex flex-col gap-6 min-h-[460px] bg-surface-1 border border-border shadow-sm">
           <div className="flex items-start justify-between">
@@ -290,12 +283,12 @@ export default function ReportesPage() {
       </section>
 
       {error && (
-        <div className="mx-8 mb-8 rounded-2xl p-4 text-xs font-bold animate-in zoom-in-95 duration-200"
+        <div className="mt-6 rounded-2xl p-4 text-xs font-bold animate-in zoom-in-95 duration-200"
           style={{ background: 'var(--danger-soft)', border: '1px solid var(--danger)', color: 'var(--danger)' }}>
           {error}
         </div>
       )}
-    </div>
+    </AdminScreen>
   );
 }
 

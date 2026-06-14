@@ -95,7 +95,8 @@ export default function SeguridadPanel() {
         <button
           onClick={save}
           disabled={saving || loading}
-          className="inline-flex items-center gap-2 px-5 py-3 min-h-[48px] rounded-2xl text-sm font-black tracking-tight text-[#0a0a0c] bg-[#ffb84d] active:scale-95 transition-transform disabled:opacity-40 shadow-[0_15px_40px_rgba(255,184,77,0.25)]"
+          className="inline-flex items-center gap-2 px-5 py-3 min-h-[48px] rounded-2xl text-sm font-black tracking-tight active:scale-95 transition-transform disabled:opacity-40"
+          style={{ background: "var(--brand)", color: "var(--brand-fg)", boxShadow: "0 15px 40px var(--brand-glow)" }}
         >
           <Save size={16} strokeWidth={3} /> {saving ? "Guardando…" : "Guardar"}
         </button>
@@ -137,7 +138,10 @@ export default function SeguridadPanel() {
                   aria-pressed={value}
                   className="w-full flex items-center gap-3 px-6 py-4 hover:bg-white/5 transition-colors text-left"
                 >
-                  <div className="w-11 h-11 rounded-2xl flex items-center justify-center bg-[#ffb84d]/15 text-[#ffb84d] border border-[#ffb84d]/30 flex-shrink-0">
+                  <div
+                    className="w-11 h-11 rounded-2xl flex items-center justify-center border flex-shrink-0"
+                    style={{ background: "var(--brand-soft)", color: "var(--brand)", borderColor: "var(--brand-glow)" }}
+                  >
                     <Lock size={16} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -201,7 +205,7 @@ export default function SeguridadPanel() {
           <div>
             <p className="text-[10px] font-black tracking-[0.2em] text-white/40">BITÁCORA DE ACCESO</p>
             <p className="text-sm font-black flex items-center gap-2 text-white">
-              <Activity size={14} className="text-[#ffb84d]" /> Últimos 50 eventos
+              <Activity size={14} style={{ color: "var(--brand)" }} /> Últimos 50 eventos
             </p>
           </div>
         </div>
@@ -218,7 +222,10 @@ export default function SeguridadPanel() {
                 className="px-6 py-3 flex items-center justify-between text-xs gap-3"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-[10px] font-black tracking-widest px-2 py-0.5 rounded-full bg-[#ffb84d]/20 text-[#ffb84d] border border-[#ffb84d]/30">
+                  <span
+                    className="text-[10px] font-black tracking-widest px-2 py-0.5 rounded-full border"
+                    style={{ background: "var(--brand-soft)", color: "var(--brand)", borderColor: "var(--brand-glow)" }}
+                  >
                     {l.action}
                   </span>
                   <span className="truncate font-medium text-white/55">

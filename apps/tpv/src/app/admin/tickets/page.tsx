@@ -12,23 +12,19 @@
  */
 
 import React from "react";
-import BackButton from "@/components/BackButton";
+import { Receipt } from "lucide-react";
+import { AdminScreen, AdminHeader } from "@/components/admin/AdminScreen";
 import TicketFormatTab from "@/components/admin/printing/TicketFormatTab";
 
 export default function TicketConfigPage() {
   return (
-    <div className="p-8 max-w-6xl mx-auto min-h-[100dvh] font-sans">
-      <div className="flex items-start gap-4 mb-8">
-        <BackButton ariaLabel="Volver al panel admin" />
-        <div>
-          <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500 block mb-2">Configuración</span>
-          <h1 className="text-3xl font-black text-white tracking-tight mb-1">Tickets</h1>
-          <p className="text-sm text-zinc-400 font-medium">
-            Formato del recibo del cliente y de la comanda, opciones por línea y PIN admin.
-          </p>
-        </div>
-      </div>
+    <AdminScreen>
+      <AdminHeader
+        icon={Receipt}
+        title="Tickets"
+        subtitle="Formato del recibo del cliente y de la comanda, opciones por línea y PIN admin."
+      />
       <TicketFormatTab />
-    </div>
+    </AdminScreen>
   );
 }

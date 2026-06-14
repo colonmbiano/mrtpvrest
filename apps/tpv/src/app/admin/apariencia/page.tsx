@@ -24,7 +24,7 @@
 
 import React, { useState } from "react";
 import { Type, PanelRightClose, Palette as PaletteIcon, Sun, Moon, Info } from "lucide-react";
-import BackButton from "@/components/BackButton";
+import { AdminScreen, AdminHeader } from "@/components/admin/AdminScreen";
 import { useThemeStore, type Palette as PaletteType } from "@/store/themeStore";
 import {
   type UiScale,
@@ -72,24 +72,12 @@ export default function AparienciaPage() {
   };
 
   return (
-    <div className="p-6 sm:p-10 max-w-5xl mx-auto font-sans bg-[#0a0a0c] min-h-full">
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-12">
-        <div className="flex items-start gap-4">
-          <BackButton ariaLabel="Volver al panel admin" />
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-black tracking-[0.25em] text-amber-500/80 uppercase">
-              Configuración
-            </span>
-            <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight leading-none">
-              Apariencia
-            </h1>
-            <p className="text-zinc-500 font-bold text-sm">
-              Ajusta tipografía, ancho del panel ticket, paleta y modo nocturno.
-            </p>
-          </div>
-        </div>
-      </div>
+    <AdminScreen>
+      <AdminHeader
+        icon={PaletteIcon}
+        title="Apariencia"
+        subtitle="Ajusta tipografía, ancho del panel ticket, paleta y modo nocturno."
+      />
 
       {/* AVISO MODO CLARO */}
       {mode === "light" && (
@@ -265,6 +253,6 @@ export default function AparienciaPage() {
           </button>
         </section>
       </div>
-    </div>
+    </AdminScreen>
   );
 }

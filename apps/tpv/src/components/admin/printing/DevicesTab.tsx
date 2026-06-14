@@ -224,11 +224,11 @@ export default function DevicesTab() {
           onClick={() => openNew(true)}
           className="flex items-center gap-2 bg-[#121316] border border-white/5 text-zinc-300 px-5 py-3 rounded-2xl font-bold transition-all hover:bg-[#1a1b1f] active:scale-95"
         >
-          <Monitor size={18} className="text-amber-500" /> + Nuevo KDS
+          <Monitor size={18} className="text-iris-500" /> + Nuevo KDS
         </button>
         <button
           onClick={() => openNew(false)}
-          className="flex items-center gap-2 bg-amber-500 text-[#0a0a0c] px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-all hover:scale-105 active:scale-95 shadow-lg shadow-amber-500/20"
+          className="flex items-center gap-2 bg-iris-500 text-iris-fg px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-all hover:scale-105 active:scale-95 shadow-lg"
         >
           <Plus size={18} /> Nueva Impresora
         </button>
@@ -252,12 +252,12 @@ export default function DevicesTab() {
           {printers.map((p) => {
             const kds = isKdsPrinter(p);
             return (
-              <div key={p.id} className="group relative bg-[#121316] p-6 rounded-[2rem] border border-white/5 hover:border-amber-500/30 transition-all">
+              <div key={p.id} className="group relative bg-[#121316] p-6 rounded-[2rem] border border-white/5 hover:border-iris-glow transition-all">
                 <div className="flex justify-between items-start mb-6">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${kds ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"}`}>
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${kds ? "bg-emerald-500/10 text-emerald-500" : "bg-iris-soft text-iris-500"}`}>
                     {kds ? <Monitor size={24} /> : <PrinterIcon size={24} />}
                   </div>
-                  <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl ${kds ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"}`}>
+                  <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl ${kds ? "bg-emerald-500/10 text-emerald-500" : "bg-iris-soft text-iris-500"}`}>
                     {kds && p.stations && p.stations.length > 0 ? p.stations.join(" · ") : p.type}
                   </span>
                 </div>
@@ -310,13 +310,13 @@ export default function DevicesTab() {
             <div className="grid grid-cols-2 gap-3">
               <button type="button" onClick={() => setForm({ ...form, isKDS: false, type: "CASHIER" })}
                 className="flex flex-col items-start gap-1 p-4 rounded-2xl border transition-all active:scale-95 text-left"
-                style={{ background: !form.isKDS ? "rgba(255,184,77,0.10)" : "#121316", borderColor: !form.isKDS ? "#ffb84d" : "rgba(255,255,255,0.05)" }}>
+                style={{ background: !form.isKDS ? "var(--brand-soft)" : "#121316", borderColor: !form.isKDS ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
                 <span className="text-sm font-black text-white">Impresora física</span>
                 <span className="text-[10px] font-bold text-zinc-500">Térmica ESC/POS</span>
               </button>
               <button type="button" onClick={() => setForm({ ...form, isKDS: true, type: "KITCHEN" })}
                 className="flex flex-col items-start gap-1 p-4 rounded-2xl border transition-all active:scale-95 text-left"
-                style={{ background: form.isKDS ? "rgba(255,184,77,0.10)" : "#121316", borderColor: form.isKDS ? "#ffb84d" : "rgba(255,255,255,0.05)" }}>
+                style={{ background: form.isKDS ? "var(--brand-soft)" : "#121316", borderColor: form.isKDS ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
                 <span className="text-sm font-black text-white">Pantalla KDS</span>
                 <span className="text-[10px] font-bold text-zinc-500">Tablet de cocina</span>
               </button>
@@ -363,8 +363,8 @@ export default function DevicesTab() {
                     return (
                       <button key={s.code} type="button" onClick={() => toggleStation(s.code)}
                         className="flex items-center gap-3 p-3 rounded-xl border transition-all active:scale-95"
-                        style={{ background: active ? "rgba(255,184,77,0.10)" : "#121316", borderColor: active ? "#ffb84d" : "rgba(255,255,255,0.05)" }}>
-                        <span className="w-3 h-3 rounded-full" style={{ background: active ? "#ffb84d" : "rgba(255,255,255,0.10)" }} />
+                        style={{ background: active ? "var(--brand-soft)" : "#121316", borderColor: active ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
+                        <span className="w-3 h-3 rounded-full" style={{ background: active ? "var(--brand)" : "rgba(255,255,255,0.10)" }} />
                         <span className="text-sm font-black text-white">{s.label}</span>
                       </button>
                     );
@@ -396,7 +396,7 @@ export default function DevicesTab() {
               <button type="button" onClick={() => setForm({ ...form, supportsCashDrawer: !form.supportsCashDrawer })}
                 className="w-full flex items-center justify-between p-4 rounded-2xl bg-[#121316] border border-white/5">
                 <span className="text-sm font-bold text-zinc-300">Cajón de dinero conectado</span>
-                <div className={`w-11 h-6 rounded-full relative transition-colors ${form.supportsCashDrawer ? "bg-amber-500" : "bg-zinc-700"}`}>
+                <div className={`w-11 h-6 rounded-full relative transition-colors ${form.supportsCashDrawer ? "bg-iris-500" : "bg-zinc-700"}`}>
                   <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${form.supportsCashDrawer ? "right-1" : "left-1"}`} />
                 </div>
               </button>
@@ -405,7 +405,7 @@ export default function DevicesTab() {
             {editingId && (
               <button type="button" onClick={() => { const p = printers.find((x) => x.id === editingId); if (p) handleTest(p); }}
                 disabled={testingId === editingId}
-                className="w-full h-12 rounded-2xl bg-white/5 hover:bg-white/10 text-amber-500 border border-amber-500/30 font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-50">
+                className="w-full h-12 rounded-2xl bg-white/5 hover:bg-white/10 text-iris-500 border border-iris-glow font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-50">
                 {testingId === editingId ? "Enviando…" : "🖨️ Test de Impresión"}
               </button>
             )}
@@ -414,7 +414,7 @@ export default function DevicesTab() {
               <button type="button" onClick={() => setIsFormOpen(false)} disabled={saving} className="flex-1 h-14 rounded-2xl bg-zinc-900 text-zinc-400 font-bold hover:text-white disabled:opacity-40">
                 Cancelar
               </button>
-              <button type="submit" disabled={saving} className="flex-[2] h-14 rounded-2xl bg-amber-500 text-[#0a0a0c] font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-60 flex items-center justify-center gap-2">
+              <button type="submit" disabled={saving} className="flex-[2] h-14 rounded-2xl bg-iris-500 text-iris-fg font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-60 flex items-center justify-center gap-2">
                 {saving ? "Guardando…" : editingId ? "Guardar cambios" : "Guardar"}
               </button>
             </div>

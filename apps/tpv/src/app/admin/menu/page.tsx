@@ -5,7 +5,7 @@ import api from "@/lib/api";
 import { getApiUrl } from "@/lib/config";
 import { uploadMenuImage } from "@/lib/upload";
 import ModifierGroupsEditor from "@/components/admin/ModifierGroupsEditor";
-import BackButton from "@/components/BackButton";
+import { AdminScreen, AdminHeader } from "@/components/admin/AdminScreen";
 import {
   Check,
   Copy,
@@ -524,31 +524,32 @@ export default function MenuEditorPage() {
   }
 
   return (
-    <div className="min-h-full bg-[#0a0a0c] p-4 sm:p-6 lg:p-10 text-white">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <header className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-4">
-            <BackButton ariaLabel="Volver al panel admin" />
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-[0.28em] text-amber-400">Configuracion</span>
-              <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Catalogo de Menu</h1>
-              <p className="mt-2 max-w-2xl text-sm font-semibold text-zinc-500">
-                Productos, categorias, variantes, extras, modificadores, promos y favoritos desde la tablet.
-              </p>
-            </div>
-          </div>
+    <AdminScreen maxWidth="max-w-7xl">
+      <AdminHeader
+        title="Catálogo de Menú"
+        subtitle="Productos, categorías, variantes, extras, modificadores, promos y favoritos desde la tablet."
+        action={
           <div className="flex flex-wrap gap-3">
-            <label className="inline-flex h-12 cursor-pointer items-center gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 text-xs font-black uppercase tracking-[0.16em] text-amber-300">
+            <label
+              className="inline-flex h-12 cursor-pointer items-center gap-2 rounded-2xl border px-4 text-xs font-black uppercase tracking-[0.16em]"
+              style={{ borderColor: "var(--brand-glow)", background: "var(--brand-soft)", color: "var(--brand)" }}
+            >
               <Sparkles size={16} />
-              IA menu
+              IA menú
               <input type="file" multiple accept="image/*,.pdf" onChange={handleAIScan} className="hidden" />
             </label>
-            <button onClick={() => openEditor()} className="inline-flex h-12 items-center gap-2 rounded-2xl bg-amber-500 px-5 text-xs font-black uppercase tracking-[0.16em] text-[#0a0a0c] active:scale-95">
+            <button
+              onClick={() => openEditor()}
+              className="inline-flex h-12 items-center gap-2 rounded-2xl px-5 text-xs font-black uppercase tracking-[0.16em] active:scale-95"
+              style={{ background: "var(--brand)", color: "var(--brand-fg)" }}
+            >
               <Plus size={18} strokeWidth={3} />
               Nuevo producto
             </button>
           </div>
-        </header>
+        }
+      />
+      <div className="flex flex-col gap-6">
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat label="Productos" value={stats.total} />
@@ -568,7 +569,7 @@ export default function MenuEditorPage() {
                 const active = section === id;
                 const IconCmp = Icon as typeof Settings2;
                 return (
-                  <button key={id as string} onClick={() => setSection(id as Section)} className={`flex h-12 items-center justify-center gap-2 rounded-xl text-[10px] font-black uppercase tracking-[0.16em] ${active ? "bg-amber-500 text-[#0a0a0c]" : "text-zinc-500"}`}>
+                  <button key={id as string} onClick={() => setSection(id as Section)} className={`flex h-12 items-center justify-center gap-2 rounded-xl text-[10px] font-black uppercase tracking-[0.16em] ${active ? "bg-iris-500 text-iris-fg" : "text-zinc-500"}`}>
                     <IconCmp size={15} />
                     <span className="hidden sm:inline">{label as string}</span>
                   </button>
@@ -632,8 +633,8 @@ export default function MenuEditorPage() {
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-5 left-1/2 z-[120] flex -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-2xl border border-amber-500/40 bg-[#121316] p-3 shadow-2xl">
-          <span className="px-3 text-xs font-black uppercase text-amber-300">{selectedIds.size} seleccionados</span>
+        <div className="fixed bottom-5 left-1/2 z-[120] flex -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-2xl border border-iris-glow bg-[#121316] p-3 shadow-2xl">
+          <span className="px-3 text-xs font-black uppercase text-iris-500">{selectedIds.size} seleccionados</span>
           <button onClick={() => bulkPatch({ isAvailable: true })} className="rounded-xl bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-400">Activar</button>
           <button onClick={() => bulkPatch({ isAvailable: false })} className="rounded-xl bg-red-500/10 px-3 py-2 text-xs font-black text-red-400">Agotar</button>
           <select onChange={(e) => { bulkPatch({ categoryId: e.target.value }); e.target.value = ""; }} defaultValue="" className="rounded-xl border border-white/10 bg-[#0a0a0c] px-3 py-2 text-xs font-black">
@@ -650,7 +651,7 @@ export default function MenuEditorPage() {
           <form onSubmit={saveProduct} className="my-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#121316] shadow-2xl">
             <div className="flex flex-col gap-3 border-b border-white/10 bg-black/25 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-400">{editingItem ? "Editar producto" : "Nuevo producto"}</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-iris-500">{editingItem ? "Editar producto" : "Nuevo producto"}</p>
                 <h2 className="mt-1 text-2xl font-black">{form.name || "Producto sin nombre"}</h2>
               </div>
               <button type="button" onClick={() => setEditorOpen(false)} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/5 text-zinc-400">
@@ -668,7 +669,7 @@ export default function MenuEditorPage() {
                 const IconCmp = Icon as typeof Edit2;
                 const active = editorTab === id;
                 return (
-                  <button key={id as string} type="button" onClick={() => setEditorTab(id as EditorTab)} className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[9px] font-black uppercase tracking-[0.12em] sm:flex-row sm:text-[10px] ${active ? "bg-white/5 text-amber-400" : "text-zinc-600"}`}>
+                  <button key={id as string} type="button" onClick={() => setEditorTab(id as EditorTab)} className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[9px] font-black uppercase tracking-[0.12em] sm:flex-row sm:text-[10px] ${active ? "bg-white/5 text-iris-500" : "text-zinc-600"}`}>
                     <IconCmp size={15} />
                     {label as string}
                   </button>
@@ -699,7 +700,7 @@ export default function MenuEditorPage() {
                               key={val}
                               type="button"
                               onClick={() => setForm((prev) => ({ ...prev, imageFit: val }))}
-                              className={`h-10 rounded-2xl border text-[11px] font-black uppercase tracking-[0.12em] transition-colors ${active ? "border-amber-500 bg-amber-500 text-black" : "border-white/10 bg-white/5 text-zinc-400"}`}
+                              className={`h-10 rounded-2xl border text-[11px] font-black uppercase tracking-[0.12em] transition-colors ${active ? "border-iris-500 bg-iris-500 text-iris-fg" : "border-white/10 bg-white/5 text-zinc-400"}`}
                             >
                               {label}
                             </button>
@@ -791,7 +792,7 @@ export default function MenuEditorPage() {
                     {templates.map((tpl) => {
                       const active = form.variantTemplateIds.includes(tpl.id);
                       return (
-                        <button key={tpl.id} type="button" onClick={() => toggleTemplate(tpl.id)} className={`rounded-2xl border p-4 text-left ${active ? "border-amber-500 bg-amber-500 text-[#0a0a0c]" : "border-white/10 bg-white/5 text-white"}`}>
+                        <button key={tpl.id} type="button" onClick={() => toggleTemplate(tpl.id)} className={`rounded-2xl border p-4 text-left ${active ? "border-iris-500 bg-iris-500 text-iris-fg" : "border-white/10 bg-white/5 text-white"}`}>
                           <div className="flex items-start justify-between gap-3">
                             <span className="font-black">{tpl.name}</span>
                             {active && <Check size={18} strokeWidth={4} />}
@@ -827,7 +828,7 @@ export default function MenuEditorPage() {
 
             <div className="flex gap-3 border-t border-white/10 bg-black/30 p-4">
               <button type="button" onClick={() => setEditorOpen(false)} className="h-14 rounded-2xl border border-white/10 px-6 text-xs font-black uppercase tracking-[0.16em] text-zinc-400">Cerrar</button>
-              <button type="submit" disabled={saving} className="flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-amber-500 text-xs font-black uppercase tracking-[0.16em] text-[#0a0a0c] disabled:opacity-50">
+              <button type="submit" disabled={saving} className="flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-iris-500 text-xs font-black uppercase tracking-[0.16em] text-iris-fg disabled:opacity-50">
                 {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                 Guardar producto
               </button>
@@ -839,13 +840,13 @@ export default function MenuEditorPage() {
       {scanState.active && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4">
           <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#121316] p-8 text-center">
-            <Sparkles className={`mx-auto ${scanState.error ? "text-red-400" : "text-amber-400"}`} size={44} />
+            <Sparkles className={`mx-auto ${scanState.error ? "text-red-400" : "text-iris-500"}`} size={44} />
             <h3 className="mt-4 text-xl font-black">{scanState.error ? "No se pudo importar" : "Analizando menu"}</h3>
             <p className="mt-2 text-sm font-bold text-zinc-500">{scanState.error || scanState.label}</p>
           </div>
         </div>
       )}
-    </div>
+    </AdminScreen>
   );
 }
 
@@ -875,9 +876,9 @@ function ProductsView(props: {
       {props.items.map((item) => {
         const selected = props.selectedIds.has(item.id);
         return (
-          <div key={item.id} className={`grid gap-3 rounded-2xl border p-4 md:grid-cols-[auto_1fr_auto] md:items-center ${selected ? "border-amber-500/50 bg-amber-500/5" : "border-white/10 bg-[#0a0a0c]"}`}>
+          <div key={item.id} className={`grid gap-3 rounded-2xl border p-4 md:grid-cols-[auto_1fr_auto] md:items-center ${selected ? "border-iris-glow bg-iris-soft" : "border-white/10 bg-[#0a0a0c]"}`}>
             <div className="flex items-center gap-3">
-              <input type="checkbox" checked={selected} onChange={() => props.toggleSelect(item.id)} className="h-5 w-5 accent-amber-500" />
+              <input type="checkbox" checked={selected} onChange={() => props.toggleSelect(item.id)} className="h-5 w-5 accent-iris-500" />
               <div className="h-16 w-16 overflow-hidden rounded-2xl bg-white/5">
                 {item.imageUrl ? <img src={item.imageUrl} alt="" className={`h-full w-full ${item.imageFit === "contain" ? "object-contain" : "object-cover"}`} /> : <div className="flex h-full items-center justify-center text-xl">🍽</div>}
               </div>
@@ -932,7 +933,7 @@ function CategoriesView(props: {
     <div className="grid gap-3">
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
         <input value={props.newCategoryName} onChange={(e) => props.setNewCategoryName(e.target.value)} placeholder="Nueva categoria" className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none" />
-        <button onClick={props.createCategory} className="h-12 rounded-2xl bg-amber-500 px-5 text-xs font-black uppercase text-[#0a0a0c]">Crear categoria</button>
+        <button onClick={props.createCategory} className="h-12 rounded-2xl bg-iris-500 px-5 text-xs font-black uppercase text-iris-fg">Crear categoria</button>
       </div>
       {props.categories.map((cat) => {
         const count = props.items.filter((item) => item.categoryId === cat.id).length;
@@ -971,10 +972,10 @@ function VariantsView(props: {
       <div className="space-y-3">
         <div className="grid gap-2">
           <input value={props.newTemplateName} onChange={(e) => props.setNewTemplateName(e.target.value)} placeholder="Nuevo grupo: tamanos, sabores..." className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none" />
-          <button onClick={props.createTemplate} className="h-12 rounded-2xl bg-amber-500 px-5 text-xs font-black uppercase text-[#0a0a0c]">Crear grupo</button>
+          <button onClick={props.createTemplate} className="h-12 rounded-2xl bg-iris-500 px-5 text-xs font-black uppercase text-iris-fg">Crear grupo</button>
         </div>
         {props.templates.map((tpl) => (
-          <button key={tpl.id} onClick={() => props.setSelectedTemplateId(tpl.id)} className={`w-full rounded-2xl border p-4 text-left ${props.selectedTemplate?.id === tpl.id ? "border-amber-500 bg-amber-500/10" : "border-white/10 bg-[#0a0a0c]"}`}>
+          <button key={tpl.id} onClick={() => props.setSelectedTemplateId(tpl.id)} className={`w-full rounded-2xl border p-4 text-left ${props.selectedTemplate?.id === tpl.id ? "border-iris-500 bg-iris-soft" : "border-white/10 bg-[#0a0a0c]"}`}>
             <p className="font-black">{tpl.name}</p>
             <p className="text-xs font-bold text-zinc-500">{tpl.options.length} opciones</p>
           </button>
@@ -996,7 +997,7 @@ function VariantsView(props: {
             <div className="grid gap-2 sm:grid-cols-[1fr_100px_auto]">
               <input value={props.newOption.name} onChange={(e) => props.setNewOption({ ...props.newOption, name: e.target.value })} placeholder="Opcion" className="h-12 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-bold outline-none" />
               <input value={props.newOption.price} onChange={(e) => props.setNewOption({ ...props.newOption, price: e.target.value })} type="number" placeholder="$0" className="h-12 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-bold outline-none" />
-              <button onClick={props.addTemplateOption} className="h-12 rounded-2xl bg-amber-500 px-5 text-xs font-black uppercase text-[#0a0a0c]">Agregar</button>
+              <button onClick={props.addTemplateOption} className="h-12 rounded-2xl bg-iris-500 px-5 text-xs font-black uppercase text-iris-fg">Agregar</button>
             </div>
             <div className="mt-4 space-y-2">
               {props.selectedTemplate.options.map((opt) => (
@@ -1032,7 +1033,7 @@ function Switch({ label, checked, onChange }: { label: string; checked: boolean;
   return (
     <button type="button" onClick={() => onChange(!checked)} className="flex h-14 items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 text-left">
       <span className="text-xs font-black uppercase tracking-[0.16em] text-zinc-300">{label}</span>
-      <span className={`relative h-7 w-12 rounded-full ${checked ? "bg-amber-500" : "bg-white/10"}`}>
+      <span className={`relative h-7 w-12 rounded-full ${checked ? "bg-iris-500" : "bg-white/10"}`}>
         <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} />
       </span>
     </button>
@@ -1059,7 +1060,7 @@ function InlineAdder({ name, price, setValue, onAdd, disabled }: {
     <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_110px_auto]">
       <input value={name} onChange={(e) => setValue({ name: e.target.value, price })} placeholder={disabled ? "Guarda primero" : "Nombre"} disabled={disabled} className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none disabled:opacity-40" />
       <input value={price} onChange={(e) => setValue({ name, price: e.target.value })} type="number" placeholder="$0" disabled={disabled} className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none disabled:opacity-40" />
-      <button type="button" onClick={onAdd} disabled={disabled || !name.trim()} className="h-12 rounded-2xl bg-amber-500 px-5 text-xs font-black uppercase text-[#0a0a0c] disabled:opacity-40">Agregar</button>
+      <button type="button" onClick={onAdd} disabled={disabled || !name.trim()} className="h-12 rounded-2xl bg-iris-500 px-5 text-xs font-black uppercase text-iris-fg disabled:opacity-40">Agregar</button>
     </div>
   );
 }

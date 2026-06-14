@@ -113,7 +113,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             onClick={() => setAvatarOpen((v) => !v)}
             aria-label="Abrir menú de usuario"
             aria-expanded={avatarOpen}
-            className="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-500 font-black text-sm border border-amber-500/30 active:scale-95 transition-all hover:border-amber-500/60"
+            className="w-12 h-12 rounded-2xl bg-iris-soft flex items-center justify-center text-iris-500 font-black text-sm border border-iris-glow active:scale-95 transition-all hover:border-iris-500"
             title={`${employee.name} · ${employee.role}`}
           >
             {employee.name.charAt(0).toUpperCase()}
@@ -128,12 +128,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               />
               <div className="absolute left-full top-0 ml-3 w-64 rounded-2xl bg-[#141417] border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.5)] p-4 z-50">
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-500 font-black border border-amber-500/30 shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-iris-soft flex items-center justify-center text-iris-500 font-black border border-iris-glow shrink-0">
                     {employee.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-black text-white truncate">{employee.name}</p>
-                    <p className="text-[10px] font-black tracking-[0.25em] text-amber-500/80 uppercase">
+                    <p className="text-[10px] font-black tracking-[0.25em] text-iris-500 uppercase">
                       {employee.role}
                     </p>
                   </div>
@@ -164,7 +164,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               prefetch={false}
               title={item.label}
               aria-label={item.label}
-              className="w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-90 text-zinc-500 active:bg-white/5 active:text-amber-500 hover:text-white"
+              className="w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-90 text-zinc-500 active:bg-white/5 active:text-iris-500 hover:text-white"
             >
               <item.icon size={20} />
             </Link>
@@ -177,7 +177,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           prefetch={false}
           title="Volver al TPV"
           aria-label="Volver al TPV"
-          className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-zinc-400 active:scale-90 active:text-amber-500 transition-all"
+          className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-zinc-400 active:scale-90 active:text-iris-500 transition-all"
         >
           <ArrowLeft size={18} strokeWidth={2.5} />
         </Link>
@@ -187,7 +187,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <main className="flex-1 overflow-y-auto relative">
         {/* Ambient Glow */}
         <div className="absolute top-0 right-0 w-full h-full pointer-events-none overflow-hidden opacity-10">
-           <div className="absolute -top-60 -right-60 w-[600px] h-[600px] bg-amber-500/10 blur-[120px] rounded-full" />
+           <div className="absolute -top-60 -right-60 w-[600px] h-[600px] bg-iris-soft blur-[120px] rounded-full" />
         </div>
 
         <div className="relative z-10 min-h-full">
