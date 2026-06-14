@@ -1155,14 +1155,14 @@ export default function MenuPage() {
                   <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
                     style={{ background: form.availableOnline ? "var(--ok-soft)" : "var(--surf-2)", border: `1px solid ${form.availableOnline ? "var(--ok)" : "var(--bd-1)"}` }}>
                     <div>
-                      <span className="font-bold text-tx">Mostrar en tienda en línea</span>
+                      <span className="font-bold text-tx">Mostrar en tienda en línea y kiosko</span>
                       <p className="mt-0.5 text-xs text-tx-mut">
                         {form.availableOnline
-                          ? "Visible y pedible desde la web. Se sigue vendiendo en el TPV."
-                          : "Oculto en la web. Sigue disponible para cobrar en el TPV."}
+                          ? "Visible y pedible desde la web y el kiosko. Se sigue vendiendo en el TPV."
+                          : "Oculto para los clientes (web y kiosko). Sigue disponible para cobrar en el TPV."}
                       </p>
                     </div>
-                    <Toggle checked={form.availableOnline} onChange={() => setForm(p => ({ ...p, availableOnline: !p.availableOnline }))} label="Mostrar en tienda en línea" />
+                    <Toggle checked={form.availableOnline} onChange={() => setForm(p => ({ ...p, availableOnline: !p.availableOnline }))} label="Mostrar en tienda en línea y kiosko" />
                   </div>
                 </div>
 
