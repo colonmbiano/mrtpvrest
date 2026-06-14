@@ -24,13 +24,17 @@ api.interceptors.response.use(
   (r) => r,
   async (error) => {
     if (error.response?.status === 401 && typeof window !== "undefined") {
-      // Si el repartidor no está configurado, lo mandamos al setup
-      if (!localStorage.getItem("restaurantId")) {
-        window.location.href = "/setup";
-      } else {
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("user");
-        window.location.href = "/login";
+      // Unificado: NO mandamos a /setup (IDs crudos) ni a /login (no es ruta, es
+      // pantalla por estado). El enrutado lo decide page.tsx desde la home:
+      // SetupScreen si no hay restaurantId/locationId, teclado de PIN si ya están.
+      const hadToken = !!localStorage.getItem("accessToken");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("user");
+      // Si HABÍA sesión y expiró, recargamos la home para volver al PIN/SetupScreen.
+      // Si NO había token (fetch de arranque sin sesión), no recargamos: la pantalla
+      // correcta ya se muestra y así evitamos un loop de recarga.
+      if (hadToken) {
+        window.location.href = "/";
       }
     }
     return Promise.reject(error);
