@@ -85,7 +85,7 @@ export default function DescargasPage() {
       .then((res) => {
         const list: LocationRow[] = res.data || [];
         setLocations(list);
-        if (list.length) setSelectedLoc(list[0].id);
+        if (list[0]) setSelectedLoc(list[0].id);
       })
       .catch(() => {});
   }, []);
