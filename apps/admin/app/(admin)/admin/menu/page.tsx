@@ -144,7 +144,7 @@ export default function MenuPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
+  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true });
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -311,7 +311,7 @@ export default function MenuPage() {
   function openForm(item?: any) {
     if (item) {
       setEditItem(item);
-      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0 });
+      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0, availableOnline:item.availableOnline ?? true });
       setImagePreview(item.imageUrl||"");
       api.get(`/api/menu/items/${item.id}`).then(r => {
         setComplements(r.data.complements || []);
@@ -321,7 +321,7 @@ export default function MenuPage() {
       }).catch(() => { setComplements([]); setVariants([]); });
     } else {
       setEditItem(null);
-      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0 });
+      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true });
       setImagePreview("");
       setComplements([]);
       setVariants([]);
@@ -721,10 +721,11 @@ export default function MenuPage() {
                       <div className="col-span-3 truncate font-display text-sm font-bold text-tx-hi">{item.name}</div>
                       <div className="col-span-2 text-xs font-medium text-tx-mut">{item.category?.name || "—"}</div>
                       <div className="col-span-1 text-right font-mono text-sm font-bold text-primary">${item.price}</div>
-                      <div className="col-span-2 flex justify-center">
+                      <div className="col-span-2 flex flex-wrap items-center justify-center gap-1">
                         <button onClick={() => toggleAvailable(item)} aria-label={item.isAvailable ? "Desactivar" : "Activar"}>
                           <Pill tone={item.isAvailable ? "ok" : "err"}>{item.isAvailable ? "Activo" : "Inactivo"}</Pill>
                         </button>
+                        {item.availableOnline === false && <Pill tone="neutral">Sin web</Pill>}
                       </div>
                       <div className="col-span-3 flex justify-end gap-2">
                         <button onClick={() => openForm(item)} className="flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-tx-mut" style={{ border: "1px solid var(--bd-1)" }}>
@@ -775,6 +776,7 @@ export default function MenuPage() {
                         <button onClick={() => toggleAvailable(item)} aria-label={item.isAvailable ? "Desactivar" : "Activar"}>
                           <Pill tone={item.isAvailable ? "ok" : "err"}>{item.isAvailable ? "Activo" : "Inactivo"}</Pill>
                         </button>
+                        {item.availableOnline === false && <Pill tone="neutral">Sin web</Pill>}
                         <button onClick={() => openForm(item)} className="ml-auto flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-tx-mut" style={{ border: "1px solid var(--bd-1)" }}>
                           <Pencil size={13} /> Editar
                         </button>
@@ -1146,6 +1148,22 @@ export default function MenuPage() {
                       Guarda primero el platillo para agregar complementos (ej. “Refresco”, “Papas”).
                     </p>
                   )}
+                </div>
+
+                {/* Visibilidad en tienda en línea */}
+                <div className="col-span-2">
+                  <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
+                    style={{ background: form.availableOnline ? "var(--ok-soft)" : "var(--surf-2)", border: `1px solid ${form.availableOnline ? "var(--ok)" : "var(--bd-1)"}` }}>
+                    <div>
+                      <span className="font-bold text-tx">Mostrar en tienda en línea</span>
+                      <p className="mt-0.5 text-xs text-tx-mut">
+                        {form.availableOnline
+                          ? "Visible y pedible desde la web. Se sigue vendiendo en el TPV."
+                          : "Oculto en la web. Sigue disponible para cobrar en el TPV."}
+                      </p>
+                    </div>
+                    <Toggle checked={form.availableOnline} onChange={() => setForm(p => ({ ...p, availableOnline: !p.availableOnline }))} label="Mostrar en tienda en línea" />
+                  </div>
                 </div>
 
                 {/* Promoción por día */}
