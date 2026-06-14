@@ -10,8 +10,21 @@ interface LoginScreenProps {
   loginError?: string;
 }
 
+// URL estable hacia el APK más reciente. Usamos un tag fijo (delivery-latest)
+// en vez de /releases/latest porque este es un monorepo: /latest apuntaría al
+// último release de CUALQUIER app. Para publicar una versión nueva, re-subir el
+// asset con: gh release upload delivery-latest mrtpv-delivery.apk --clobber
+const ANDROID_APK_URL =
+  'https://github.com/colonmbiano/mrtpvrest/releases/download/delivery-latest/mrtpv-delivery.apk';
+
 export function LoginScreen({ locationName = 'Sucursal', onLogin, loggingIn, loginError }: LoginScreenProps) {
   const [pin, setPin] = useState('');
+
+  // El link de descarga solo aplica en el navegador (delivery.mrtpvrest.com).
+  // Dentro del APK nativo no tiene sentido, así que lo ocultamos.
+  const isNative =
+    typeof window !== 'undefined' &&
+    Boolean((window as any).Capacitor?.isNativePlatform?.());
 
   const handleKey = (k: string) => {
     if (k === '⌫') {
@@ -130,6 +143,27 @@ export function LoginScreen({ locationName = 'Sucursal', onLogin, loggingIn, log
       )}
 
       <div style={{ flex: 1, minHeight: 32 }} />
+
+      {!isNative && (
+        <a
+          href={ANDROID_APK_URL}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+            width: '100%', height: 52, borderRadius: 16, marginBottom: 16,
+            background: C.surf1, border: `1px solid ${C.border}`,
+            color: C.text, textDecoration: 'none', fontFamily: C.fontBody,
+            fontSize: 12, fontWeight: 700, letterSpacing: '0.06em',
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+            <path d="M12 3v12" />
+            <path d="m7 11 5 5 5-5" />
+            <path d="M5 21h14" />
+          </svg>
+          Descargar app de Android
+        </a>
+      )}
 
       <button
         onClick={() => { localStorage.clear(); window.location.reload(); }}
