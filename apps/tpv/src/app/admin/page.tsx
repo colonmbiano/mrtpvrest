@@ -11,6 +11,7 @@ import {
   Grid3x3,
   Palette,
   MonitorPlay,
+  Scissors,
 } from "lucide-react";
 import { AdminScreen, AdminHeader } from "@/components/admin/AdminScreen";
 
@@ -21,6 +22,13 @@ const SECTIONS = [
     desc: "Ventas, productos top, rendimiento del turno",
     icon: BarChart3,
     accent: "#ffb84d",
+  },
+  {
+    href: "/admin/cortes",
+    label: "Cortes de Caja",
+    desc: "Cortes de turno y de repartidores, con desglose detallado",
+    icon: Scissors,
+    accent: "#6366f1",
   },
   {
     href: "/admin/menu",
