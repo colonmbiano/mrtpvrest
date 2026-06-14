@@ -94,6 +94,7 @@ const SECTIONS = [
       { href: "/admin/empleados",         icon: <IUsers />,  label: "Empleados" },
       { href: "/admin/turnos",            icon: <IClock />,  label: "Turnos de caja" },
       { href: "/admin/caja-repartidores", icon: <IWallet />, label: "Caja Rep." },
+      { href: "/admin/reportes/repartidores", icon: <ITrending />, label: "Reporte Rep." },
       { href: "/admin/rastreo",           icon: <IMapPin />, label: "Rastreo GPS" },
       { href: "/admin/logistica",         icon: <IMapPin />, label: "Logística & Flota" },
     ],

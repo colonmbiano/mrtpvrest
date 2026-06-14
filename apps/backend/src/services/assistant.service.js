@@ -8,6 +8,7 @@ const OpenAI = require('openai');
 const { prisma } = require('@mrtpvrest/database');
 const { resolveGroqKey } = require('./ai-key.service');
 const { GROQ_BASE_URL, GROQ_MODEL, wrapGroqError } = require('./groq-error');
+const { localDayRange } = require('../utils/dayRange');
 
 const MAX_ITERATIONS = 6;
 
@@ -15,7 +16,8 @@ const SYSTEM_PROMPT = `Eres el asistente administrativo de MRTPVREST, un SaaS de
 Ayudas al dueño/gerente a entender su operación respondiendo en español neutro, con cifras concretas.
 
 Reglas:
-- Usa SIEMPRE las herramientas para obtener datos actualizados antes de responder preguntas sobre ventas, productos, inventario o personal. Nunca inventes cifras.
+- Usa SIEMPRE las herramientas para obtener datos actualizados antes de responder preguntas sobre ventas, productos, inventario, personal o caja de repartidores. Nunca inventes cifras.
+- Para preguntas sobre el conteo, corte o caja de un repartidor (p. ej. "revísame a Pablo de hoy"), usa get_driver_cash_report. El saldo pendiente de corte es el efectivo que el repartidor debe entregar en caja; distínguelo de los pedidos aún sin cobrar.
 - Si el usuario saluda o pregunta algo fuera de alcance, responde breve sin llamar herramientas.
 - Presenta resultados claros: viñetas para listas, moneda en pesos con símbolo $ y agrupación de miles, y resalta la cifra principal con **markdown**.
 - Si una herramienta devuelve lista vacía, di honestamente "no hay datos" y sugiere la acción (p. ej. "aún no hay ventas hoy" o "ningún ingrediente por debajo del mínimo").
@@ -92,7 +94,48 @@ const tools = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_driver_cash_report',
+      description: 'Reporte de caja/corte de un repartidor (DELIVERY) para un día: saldo PENDIENTE DE CORTE (efectivo que debe entregar en caja), pedidos del día con método de pago y estado, totales cobrados vs pendientes, y desglose de envíos por zona. Úsalo para preguntas tipo "revísame el conteo/corte/caja del repartidor X". Si no se indica driverName, devuelve solo el saldo pendiente de todos los repartidores.',
+      parameters: {
+        type: 'object',
+        properties: {
+          driverName: {
+            type: 'string',
+            description: 'Nombre o parte del nombre del repartidor (p. ej. "Pablo"). Omitir para ver a todos los repartidores.',
+          },
+          date: {
+            type: 'string',
+            description: 'Fecha en formato YYYY-MM-DD (día natural, hora de México). Omitir para usar el día de hoy.',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
 ];
+
+// Categorías de "envío" del restaurante (Envíos/Domicilio/Flete/Reparto…),
+// para clasificar las líneas de envío sin depender del nombre del producto.
+async function shippingCategoryIds(restaurantId) {
+  if (!restaurantId) return new Set();
+  const cats = await prisma.category.findMany({
+    where: {
+      restaurantId,
+      OR: [
+        { name: { contains: 'nvio', mode: 'insensitive' } },
+        { name: { contains: 'nvío', mode: 'insensitive' } },
+        { name: { contains: 'omicilio', mode: 'insensitive' } },
+        { name: { contains: 'lete', mode: 'insensitive' } },
+        { name: { contains: 'eparto', mode: 'insensitive' } },
+      ],
+    },
+    select: { id: true },
+  });
+  return new Set(cats.map((c) => c.id));
+}
 
 function periodRange(period) {
   const from = new Date();
@@ -177,6 +220,95 @@ async function execTool(name, args, { restaurantId, locationId }) {
       tables: s.employee.tables,
       startAt: s.startAt,
     }));
+  }
+
+  if (name === 'get_driver_cash_report') {
+    const { from, to } = localDayRange(args.date);
+    const wantName = (args.driverName || '').trim();
+
+    const drivers = await prisma.employee.findMany({
+      where: {
+        role: 'DELIVERY',
+        isActive: true,
+        ...(restaurantId ? { location: { restaurantId } } : {}),
+        ...(wantName ? { name: { contains: wantName, mode: 'insensitive' } } : {}),
+      },
+      select: { id: true, name: true },
+    });
+    if (drivers.length === 0) {
+      return { error: wantName ? `No encontré ningún repartidor que coincida con "${wantName}".` : 'No hay repartidores activos.' };
+    }
+
+    // Sin nombre: vista panorámica — solo saldo pendiente de corte por repartidor.
+    if (!wantName) {
+      const ids = drivers.map((d) => d.id);
+      const movs = await prisma.driverCashMovement.findMany({ where: { driverId: { in: ids }, approved: false } });
+      return drivers.map((d) => {
+        const dm = movs.filter((m) => m.driverId === d.id);
+        const bal = dm.reduce((s, m) => s + (m.type === 'FLOAT' || m.type === 'INCOME' ? m.amount : -m.amount), 0);
+        return { driver: d.name, pendingBalance: Math.round(bal), pendingMovements: dm.length };
+      });
+    }
+
+    // Con nombre: reporte detallado (normalmente 1 repartidor; si hay varios
+    // homónimos, se reporta cada uno).
+    const shipCats = await shippingCategoryIds(restaurantId);
+    const reports = [];
+    for (const d of drivers) {
+      const [orders, pending, cuts] = await Promise.all([
+        prisma.order.findMany({
+          where: { deliveryDriverId: d.id, createdAt: { gte: from, lte: to }, ...(restaurantId ? { restaurantId } : {}) },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            orderNumber: true, status: true, paymentMethod: true, paymentStatus: true, total: true,
+            customerName: true, ticketName: true,
+            items: { select: { name: true, quantity: true, price: true, subtotal: true, menuItem: { select: { categoryId: true } } } },
+          },
+        }),
+        prisma.driverCashMovement.findMany({ where: { driverId: d.id, approved: false } }),
+        prisma.driverCashCut.findMany({ where: { driverId: d.id, createdAt: { gte: from, lte: to } }, orderBy: { createdAt: 'desc' }, take: 1 }),
+      ]);
+
+      const income = pending.filter((m) => m.type === 'INCOME').reduce((s, m) => s + m.amount, 0);
+      const float = pending.filter((m) => m.type === 'FLOAT').reduce((s, m) => s + m.amount, 0);
+      const expense = pending.filter((m) => m.type === 'EXPENSE').reduce((s, m) => s + m.amount, 0);
+      const returned = pending.filter((m) => m.type === 'RETURN').reduce((s, m) => s + m.amount, 0);
+
+      const byMethod = {};
+      let paid = 0, unpaid = 0, shippingTotal = 0;
+      const ordersOut = orders.map((o) => {
+        const m = o.paymentMethod || 'OTHER';
+        byMethod[m] = (byMethod[m] || 0) + (o.total || 0);
+        if (o.paymentStatus === 'PAID') paid += o.total || 0; else unpaid += o.total || 0;
+        let ship = 0;
+        for (const it of o.items) {
+          if (it.menuItem && shipCats.has(it.menuItem.categoryId)) {
+            ship += (typeof it.subtotal === 'number' && it.subtotal > 0) ? it.subtotal : (it.price || 0) * (it.quantity || 0);
+          }
+        }
+        shippingTotal += ship;
+        return { orderNumber: o.orderNumber, customer: o.customerName || o.ticketName || null, method: o.paymentMethod, paymentStatus: o.paymentStatus, status: o.status, total: o.total || 0, shipping: ship };
+      });
+
+      reports.push({
+        driver: d.name,
+        date: args.date || 'hoy',
+        cashPendingToCut: {
+          balance: Math.round(float + income - expense - returned),
+          income: Math.round(income), float: Math.round(float), expense: Math.round(expense), returned: Math.round(returned),
+          movements: pending.length,
+        },
+        alreadyCutToday: cuts[0] ? { balance: Math.round(cuts[0].balance), movements: cuts[0].movements } : null,
+        ordersSummary: {
+          count: ordersOut.length,
+          total: Math.round(ordersOut.reduce((s, o) => s + o.total, 0)),
+          paid: Math.round(paid), pending: Math.round(unpaid),
+          byMethod, shippingTotal: Math.round(shippingTotal),
+        },
+        orders: ordersOut.slice(0, 25),
+      });
+    }
+    return reports.length === 1 ? reports[0] : reports;
   }
 
   return { error: `Herramienta desconocida: ${name}` };
