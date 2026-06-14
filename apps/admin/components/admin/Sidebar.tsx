@@ -92,6 +92,7 @@ const SECTIONS = [
     accent: "#8b5cf6",
     items: [
       { href: "/admin/empleados",         icon: <IUsers />,  label: "Empleados" },
+      { href: "/admin/reportes/cortes",   icon: <IBarChart />, label: "Cortes" },
       { href: "/admin/turnos",            icon: <IClock />,  label: "Turnos de caja" },
       { href: "/admin/caja-repartidores", icon: <IWallet />, label: "Caja Rep." },
       { href: "/admin/reportes/repartidores", icon: <ITrending />, label: "Reporte Rep." },
