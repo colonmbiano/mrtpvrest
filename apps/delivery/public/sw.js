@@ -3,7 +3,7 @@
 // REGLA DE ORO: nunca cachear las llamadas a la API ni el tracking GPS;
 // esas siempre van a la red para no servir datos de pedidos/ubicación stale.
 
-const CACHE = "mb-delivery-v1";
+const CACHE = "mb-delivery-v2";
 const APP_SHELL = ["/", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
