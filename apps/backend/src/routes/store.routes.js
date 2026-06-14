@@ -239,7 +239,7 @@ router.get('/menu', async (req, res) => {
         select: { id: true, name: true, description: true, imageUrl: true, sortOrder: true },
       }),
       prisma.menuItem.findMany({
-        where: { restaurantId: restaurant.id, isAvailable: true },
+        where: { restaurantId: restaurant.id, isAvailable: true, availableOnline: true },
         select: {
           id: true, name: true, description: true, price: true,
           isPromo: true, promoPrice: true, imageUrl: true,
@@ -531,8 +531,12 @@ router.post('/orders', async (req, res) => {
       items.map(async ({ menuItemId, variantId, quantity = 1, notes: itemNotes, modifierIds }) => {
         if (!menuItemId) throw new Error('menuItemId requerido en cada item.');
 
-        const menuItem = await prisma.menuItem.findUnique({
-          where: { id: menuItemId, restaurantId: restaurant.id, isAvailable: true },
+        // findFirst (no findUnique): findUnique ignora silenciosamente los
+        // filtros no-únicos, así que isAvailable/availableOnline no se aplicaban
+        // y un POST directo con el id podía pedir un producto oculto/no
+        // disponible. findFirst respeta todo el where.
+        const menuItem = await prisma.menuItem.findFirst({
+          where: { id: menuItemId, restaurantId: restaurant.id, isAvailable: true, availableOnline: true },
           include: {
             variants: true,
             modifierGroups: { include: { modifiers: true } },

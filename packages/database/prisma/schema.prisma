@@ -563,6 +563,12 @@ model MenuItem {
   imageFit        String   @default("cover")
   price           Float
   isAvailable     Boolean  @default(true)
+  // Visibilidad en la TIENDA EN LÍNEA (storefront del client). Independiente
+  // de isAvailable (que controla si el producto se puede vender en general /
+  // TPV). Un producto puede estar isAvailable=true (se cobra en el TPV) pero
+  // availableOnline=false (no aparece ni se puede pedir desde la web). Default
+  // true para no ocultar el catálogo existente al migrar.
+  availableOnline Boolean  @default(true)
   isPopular       Boolean  @default(false)
   isPromo         Boolean  @default(false)
   // isFavorite — items que el admin destaca como "más vendidos" o de
