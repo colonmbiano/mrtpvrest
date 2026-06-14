@@ -1098,6 +1098,18 @@ model TicketConfig {
   showCustomerData Boolean @default(true)
   showItemsPrice   Boolean @default(true)
 
+  // ── Recibo: opciones POR LÍNEA (de-clutter del ticket) ───────────────────
+  // Controlan cómo se imprime CADA línea de producto en el recibo del cliente.
+  // itemSpacing = aire entre productos ("loose" mete una línea en blanco entre
+  // ítems); showItemSeparator = línea punteada entre productos; modifierIndent =
+  // sangría de los modificadores/notas; receiptShowModifiers/receiptShowNotes los
+  // gatean (las notas son opt-in: históricamente el recibo no las imprimía).
+  itemSpacing          String  @default("normal") // "tight" | "normal" | "loose"
+  showItemSeparator    Boolean @default(false)
+  modifierIndent       String  @default("normal") // "none" | "normal" | "wide"
+  receiptShowModifiers Boolean @default(true)
+  receiptShowNotes     Boolean @default(false)
+
   showWifi     Boolean @default(false)
   wifiSsid     String?
   wifiPassword String?

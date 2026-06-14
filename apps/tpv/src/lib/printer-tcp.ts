@@ -552,6 +552,13 @@ export interface ReceiptInput {
   lineSpacing?: string | null;
   lineWeight?: string | null;
   paperWidth?: string | null;
+  // ── Opciones POR LÍNEA (de-clutter del recibo, /admin/tickets) ───────────
+  showItemsPrice?: boolean | null;    // false = oculta importes por línea (deja solo el total)
+  showModifiers?: boolean | null;     // imprimir modificadores en el recibo (default true)
+  showNotes?: boolean | null;         // imprimir notas del producto (opt-in, default false)
+  itemSpacing?: string | null;        // "tight" | "normal" | "loose" (loose = línea en blanco entre ítems)
+  showItemSeparator?: boolean | null; // línea punteada entre productos
+  modifierIndent?: string | null;     // "none" | "normal" | "wide" — sangría de modificadores/notas
 }
 
 const fmtMoney = (n: number) =>
@@ -1048,18 +1055,43 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
 
   d += sep;
 
-  // ── 3. LÍNEAS DE PRODUCTO (wrap, no truncado; modificadores con sangría) ──
-  for (const item of input.items) {
-    const lineTotal =
-      item.price * item.quantity +
-      (item.modifiers || []).reduce((s, m) => s + (m.priceAdd || 0), 0) * item.quantity;
-    d += formatProductLine(item.quantity, item.name, fmtMoney(lineTotal), lw);
-    for (const m of item.modifiers || []) {
-      // Subline con sangría: "+ Nombre        +monto" alineado a la derecha.
-      const right = m.priceAdd ? "+" + fmtMoney(m.priceAdd) : "";
-      d += row("  + " + m.name, right, lw);
+  // ── 3. LÍNEAS DE PRODUCTO ─────────────────────────────────────────────────
+  // Opciones por línea (config admin /admin/tickets):
+  //   showItemsPrice  → oculta importes (deja solo el TOTAL)
+  //   showModifiers   → imprime/oculta los modificadores
+  //   showNotes       → imprime las notas del producto (opt-in)
+  //   modifierIndent  → sangría de modificadores/notas
+  //   showItemSeparator / itemSpacing → separación entre productos (anti-amontonado)
+  const showPrices = input.showItemsPrice !== false;
+  const showMods   = input.showModifiers  !== false;
+  const showNotes  = input.showNotes === true;
+  const modIndent  = input.modifierIndent === "none" ? "" : input.modifierIndent === "wide" ? "    " : "  ";
+  const itemSep    = input.showItemSeparator ? ".".repeat(lw) + "\n" : "";
+  const itemGap    = input.itemSpacing === "loose" ? "\n" : "";
+  const lines = input.items || [];
+  lines.forEach((item, idx) => {
+    // El `price` del item YA incluye los modificadores de pago: el backend los
+    // hornea en el precio unitario al crear la orden (order_item.price) y el
+    // carrito local hace lo mismo en payload.unitPrice. Por eso NO se re-suma el
+    // priceAdd aquí — hacerlo duplicaba el cargo del modificador en la línea
+    // impresa: la línea salía inflada (p.ej. Alitas 110 → 115, KFC 115 → 145)
+    // mientras el TOTAL —derivado de input.total/order.total— quedaba correcto,
+    // dando un ticket cuyas líneas no cuadran con su total.
+    const lineTotal = item.price * item.quantity;
+    d += formatProductLine(item.quantity, item.name, showPrices ? fmtMoney(lineTotal) : "", lw);
+    if (showMods) {
+      for (const m of item.modifiers || []) {
+        // Subline con sangría: "+ Nombre        +monto" alineado a la derecha.
+        const right = showPrices && m.priceAdd ? "+" + fmtMoney(m.priceAdd) : "";
+        d += row(modIndent + "+ " + m.name, right, lw);
+      }
     }
-  }
+    if (showNotes && item.notes) {
+      d += modIndent + "> " + String(item.notes).trim() + "\n";
+    }
+    // Separación entre productos (nunca tras el último, para no botar papel).
+    if (idx < lines.length - 1) d += itemSep || itemGap;
+  });
 
   d += sep;
 
@@ -1560,12 +1592,12 @@ export function splitItemsBySeat(
     subtotal: 0,
   }));
 
-  // Total de una línea INCLUYENDO modificadores con precio (misma regla que
-  // el resto del sistema; antes el prorrateo omitía el priceAdd y la suma de
-  // los tickets por comensal no cuadraba con el total de la orden).
+  // Total de una línea = precio × cantidad. El `price` YA incluye los
+  // modificadores de pago (los hornea el backend al crear la orden y el carrito
+  // local en payload.unitPrice), así que NO se re-suma el priceAdd: hacerlo
+  // duplicaba el cargo y los tickets por comensal sumaban de más que el total.
   const lineTotalOf = (it: TicketItem) =>
-    (it.price || 0) * (it.quantity || 0) +
-    (it.modifiers || []).reduce((s, m) => s + (m.priceAdd || 0), 0) * (it.quantity || 0);
+    (it.price || 0) * (it.quantity || 0);
 
   // Items asignados a un seat específico.
   for (const it of items) {

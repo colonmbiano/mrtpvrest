@@ -49,7 +49,9 @@ const baseReceipt: ReceiptInput = {
   orderNumber: "1234",
   orderType: "DINE_IN",
   tableNumber: "Mesa 12",
-  items: [{ name: "Boneless", quantity: 1, price: 135, modifiers: [{ name: "Papas Extra", priceAdd: 30 }] }],
+  // `price` ya incluye los modificadores de pago (135 base + 30 Papas Extra = 165),
+  // igual que order_item.price del backend y el unitPrice del carrito local.
+  items: [{ name: "Boneless", quantity: 1, price: 165, modifiers: [{ name: "Papas Extra", priceAdd: 30 }] }],
   subtotal: 165,
   total: 165,
   paymentMethod: "CARD",
@@ -201,13 +203,70 @@ describe("recibo :: logo (raster ESC/POS)", () => {
   });
 });
 
-describe("recibo :: split por comensal incluye modificadores", () => {
-  it("el subtotal por asiento suma el priceAdd (no se pierde como en el bug del total)", () => {
+describe("recibo :: split por comensal usa el precio inclusivo", () => {
+  it("el subtotal por asiento toma el price (que ya incluye el priceAdd), sin duplicarlo", () => {
     const seats = splitItemsBySeat(
-      [{ name: "Boneless", quantity: 1, price: 135, seatNumber: 1, modifiers: [{ name: "Papas Extra", priceAdd: 30 }] }],
+      // price ya incluye Papas Extra (135 + 30 = 165), como en producción.
+      [{ name: "Boneless", quantity: 1, price: 165, seatNumber: 1, modifiers: [{ name: "Papas Extra", priceAdd: 30 }] }],
       2,
     );
-    expect(seats[0].subtotal).toBe(165); // 135 + 30, no 135
+    expect(seats[0].subtotal).toBe(165); // price inclusivo, no se re-suma el priceAdd
+  });
+});
+
+describe("recibo :: la línea NO duplica el modificador (incidente TPV-048483)", () => {
+  it("imprime price×qty (modificador ya incluido), no price + priceAdd", () => {
+    const money = (n: number) =>
+      n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2 });
+    const out = buildCustomerReceipt({
+      ...baseReceipt,
+      // KFC: 85 base + 30 Papas Extra ya horneados en price = 115.
+      items: [{ name: "KFC Pollo Burger", quantity: 1, price: 115, modifiers: [{ name: "Papas Extra", priceAdd: 30 }] }],
+      subtotal: 115,
+      total: 115,
+    });
+    expect(out).toContain(money(115));     // línea correcta = lo cobrado
+    expect(out).not.toContain(money(145)); // 115 + 30 duplicado: el bug original
+  });
+});
+
+describe("recibo :: opciones POR LÍNEA (de-clutter del ticket)", () => {
+  const money = (n: number) =>
+    n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2 });
+  const base: ReceiptInput = {
+    ...baseReceipt,
+    items: [{ name: "Hamburguesa", quantity: 1, price: 165, notes: "Sin cebolla", modifiers: [{ name: "Tocino", priceAdd: 30 }] }],
+    subtotal: 165,
+    total: 165,
+  };
+
+  it("showItemsPrice=false oculta los importes por línea pero conserva el TOTAL", () => {
+    const conPrecio = buildCustomerReceipt({ ...base, showItemsPrice: true });
+    const sinPrecio = buildCustomerReceipt({ ...base, showItemsPrice: false });
+    expect(conPrecio).toContain("+" + money(30)); // modificador con su importe
+    expect(sinPrecio).not.toContain("+" + money(30));
+    expect(sinPrecio).toContain("TOTAL:"); // el total siempre se imprime
+  });
+
+  it("receiptShowNotes / showModifiers gatean notas y modificadores", () => {
+    expect(buildCustomerReceipt({ ...base, showNotes: true })).toContain("Sin cebolla");
+    expect(buildCustomerReceipt({ ...base, showNotes: false })).not.toContain("Sin cebolla");
+    expect(buildCustomerReceipt({ ...base, showModifiers: false })).not.toContain("Tocino");
+    expect(buildCustomerReceipt({ ...base, showModifiers: true })).toContain("Tocino");
+  });
+
+  it("showItemSeparator dibuja una línea punteada entre productos", () => {
+    const dos: ReceiptInput = {
+      ...base,
+      items: [
+        { name: "Hamburguesa", quantity: 1, price: 165 },
+        { name: "Refresco", quantity: 1, price: 35 },
+      ],
+      subtotal: 200,
+      total: 200,
+    };
+    expect(buildCustomerReceipt({ ...dos, showItemSeparator: true })).toContain("..........");
+    expect(buildCustomerReceipt({ ...dos, showItemSeparator: false })).not.toContain("..........");
   });
 });
 

@@ -135,6 +135,13 @@ type TicketConfigDTO = {
   showInvoiceQr?: boolean;
   invoiceUrl?: string;
   invoiceFolioPrefix?: string;  // el folio final = prefijo + número de orden
+  // ── Opciones por línea del recibo (de-clutter) ──────────────────────────
+  showItemsPrice?: boolean;
+  itemSpacing?: string;
+  showItemSeparator?: boolean;
+  modifierIndent?: string;
+  receiptShowModifiers?: boolean;
+  receiptShowNotes?: boolean;
 };
 
 /**
@@ -172,6 +179,14 @@ export function buildReceiptIdentityFields(
     lineSpacing: dto?.lineSpacing,
     lineWeight: dto?.lineWeight,
     paperWidth: dto?.paperWidth,
+    // Opciones por línea: el DTO usa receiptShow* para no chocar con los
+    // kitchenShow*; el builder del recibo los consume como showModifiers/showNotes.
+    showItemsPrice: dto?.showItemsPrice,
+    showModifiers: dto?.receiptShowModifiers,
+    showNotes: dto?.receiptShowNotes,
+    itemSpacing: dto?.itemSpacing,
+    showItemSeparator: dto?.showItemSeparator,
+    modifierIndent: dto?.modifierIndent,
   };
 }
 

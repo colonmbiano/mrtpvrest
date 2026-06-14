@@ -20,6 +20,7 @@ interface TicketConfig {
   subheader: string;
   footer: string;
   showLogo: boolean;
+  logoUrl: string | null;
   showAddress: boolean;
   address: string;
   phone: string;
@@ -37,6 +38,13 @@ interface TicketConfig {
   fontSize: string;
   lineSpacing: string;
   lineWeight: string;
+  // Opciones POR LÍNEA del recibo (de-clutter + detalle de cada producto).
+  showItemsPrice: boolean;
+  itemSpacing: string;        // "tight" | "normal" | "loose"
+  showItemSeparator: boolean;
+  modifierIndent: string;     // "none" | "normal" | "wide"
+  receiptShowModifiers: boolean;
+  receiptShowNotes: boolean;
   showPoints: boolean;
   showTip: boolean;
   tipSuggestions: string;
@@ -61,10 +69,12 @@ interface TicketConfig {
 
 const EMPTY: TicketConfig = {
   businessName: "", header: "", subheader: "", footer: "Gracias por su preferencia",
-  showLogo: true, showAddress: true, address: "", phone: "",
+  showLogo: true, logoUrl: null, showAddress: true, address: "", phone: "",
   businessType: "", rfc: "", showInvoiceQr: false, invoiceUrl: "", invoiceFolioPrefix: "",
   paperWidth: "80mm", fontFamily: "monospace", fontSize: "medium",
   lineSpacing: "normal", lineWeight: "normal",
+  showItemsPrice: true, itemSpacing: "normal", showItemSeparator: false,
+  modifierIndent: "normal", receiptShowModifiers: true, receiptShowNotes: false,
   showPoints: true, showTip: true, tipSuggestions: "[10,15,20]",
   kitchenHeader: "", adminPin: "0000",
   kitchenShowCustomer: true, kitchenShowTable: true, kitchenShowType: true, kitchenShowTime: true,
@@ -83,7 +93,25 @@ export default function TicketFormatTab() {
   const [cfg, setCfg] = useState<TicketConfig>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [sub, setSub] = useState<SubTab>("general");
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("image", file);
+    try {
+      const { data } = await api.post("/api/upload/image", fd);
+      setCfg((c) => ({ ...c, logoUrl: data.url }));
+      toast.success("Logo actualizado");
+    } catch {
+      toast.error("Error al subir el logo");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +159,32 @@ export default function TicketFormatTab() {
         {sub === "general" && (
           <>
             <Field label="Nombre del negocio"><input value={cfg.businessName} onChange={(e) => setCfg({ ...cfg, businessName: e.target.value })} className={inputCls} /></Field>
+
+            <Field label="Logo del ticket">
+              <>
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-[#121316] border border-white/5 flex items-center justify-center overflow-hidden shrink-0">
+                    {cfg.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={cfg.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-[9px] text-zinc-500 font-black uppercase text-center px-1">Sin logo</span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="h-10 px-4 inline-flex items-center rounded-xl bg-[#121316] border border-white/5 text-[11px] font-black uppercase tracking-widest text-zinc-300 hover:border-amber-500/30 cursor-pointer transition-colors">
+                      {uploading ? "Subiendo…" : "Subir logo"}
+                      <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} disabled={uploading} />
+                    </label>
+                    {cfg.logoUrl && (
+                      <button type="button" onClick={() => setCfg({ ...cfg, logoUrl: null })} className="text-[11px] font-bold text-red-400/80 hover:text-red-400 text-left">Eliminar logo</button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-1.5 ml-1">Usa un logo monocromo (silueta) para mejor contraste térmico. El toggle &quot;Mostrar logo&quot; controla si se imprime.</p>
+              </>
+            </Field>
+
             <div className="grid grid-cols-2 gap-4">
               <Field label="Encabezado línea 1"><input value={cfg.header} onChange={(e) => setCfg({ ...cfg, header: e.target.value })} className={inputCls} /></Field>
               <Field label="Encabezado línea 2"><input value={cfg.subheader} onChange={(e) => setCfg({ ...cfg, subheader: e.target.value })} className={inputCls} /></Field>
@@ -172,6 +226,20 @@ export default function TicketFormatTab() {
             </Field>
             <Field label="Líneas (negritas)">
               <Segmented value={cfg.lineWeight} onChange={(v) => setCfg({ ...cfg, lineWeight: v })} options={WEIGHT_OPTS} />
+            </Field>
+
+            <SectionLabel>Productos (cada línea)</SectionLabel>
+            <div className="grid grid-cols-2 gap-3">
+              <Toggle label="Mostrar precio por línea" checked={cfg.showItemsPrice} onChange={(v) => setCfg({ ...cfg, showItemsPrice: v })} />
+              <Toggle label="Mostrar modificadores" checked={cfg.receiptShowModifiers} onChange={(v) => setCfg({ ...cfg, receiptShowModifiers: v })} />
+              <Toggle label="Mostrar notas del producto" checked={cfg.receiptShowNotes} onChange={(v) => setCfg({ ...cfg, receiptShowNotes: v })} />
+              <Toggle label="Línea separadora entre productos" checked={cfg.showItemSeparator} onChange={(v) => setCfg({ ...cfg, showItemSeparator: v })} />
+            </div>
+            <Field label="Espacio entre productos">
+              <Segmented value={cfg.itemSpacing === "loose" ? "loose" : "normal"} onChange={(v) => setCfg({ ...cfg, itemSpacing: v })} options={ITEM_GAP_OPTS} />
+            </Field>
+            <Field label="Sangría de modificadores / notas">
+              <Segmented value={cfg.modifierIndent} onChange={(v) => setCfg({ ...cfg, modifierIndent: v })} options={INDENT_OPTS} />
             </Field>
 
             <SectionLabel>Vista previa</SectionLabel>
@@ -383,6 +451,18 @@ const NAME_SIZE_OPTS = [
   { id: "large", label: "Grande", hint: "2×" },
   { id: "xlarge", label: "Extra", hint: "3×" },
 ];
+// Espacio vertical entre productos del recibo. "loose" mete una línea en blanco
+// entre ítems (anti-amontonado); "normal" los deja juntos.
+const ITEM_GAP_OPTS = [
+  { id: "normal", label: "Juntos" },
+  { id: "loose", label: "Con espacio" },
+];
+// Sangría de los modificadores/notas bajo cada producto.
+const INDENT_OPTS = [
+  { id: "none", label: "Ninguna" },
+  { id: "normal", label: "Normal" },
+  { id: "wide", label: "Amplia" },
+];
 
 /**
  * Vista previa del recibo del cliente. Refleja en pantalla la fuente, tamaño,
@@ -411,11 +491,37 @@ function ReceiptPreview({ cfg }: { cfg: TicketConfig }) {
         <div>Orden #1042</div>
         <div>Para llevar</div>
         {dash}
-        <div className="flex justify-between gap-2"><span>2x Hamburguesa</span><span>$210.00</span></div>
-        <div style={{ paddingLeft: 10, opacity: 0.75 }}>· Tocino (+$20.00)</div>
+        {(() => {
+          const indentPx = cfg.modifierIndent === "none" ? 0 : cfg.modifierIndent === "wide" ? 18 : 10;
+          const gap = cfg.itemSpacing === "loose";
+          const SAMPLE = [
+            { qty: 2, name: "Hamburguesa", amount: "$210.00", mods: [{ name: "Tocino", add: "+$20.00" }], note: "Término medio" },
+            { qty: 1, name: "Refresco", amount: "$35.00", mods: [] as { name: string; add: string }[], note: "Sin hielo" },
+          ];
+          return SAMPLE.map((it, i) => (
+            <div key={i} style={{ marginBottom: gap ? 8 : 0 }}>
+              <div className="flex justify-between gap-2">
+                <span>{it.qty}x {it.name}</span>
+                {cfg.showItemsPrice && <span>{it.amount}</span>}
+              </div>
+              {cfg.receiptShowModifiers && it.mods.map((m, j) => (
+                <div key={j} className="flex justify-between gap-2" style={{ paddingLeft: indentPx, opacity: 0.75 }}>
+                  <span>+ {m.name}</span>
+                  {cfg.showItemsPrice && <span>{m.add}</span>}
+                </div>
+              ))}
+              {cfg.receiptShowNotes && it.note && (
+                <div style={{ paddingLeft: indentPx, opacity: 0.75 }}>&gt; {it.note}</div>
+              )}
+              {i < SAMPLE.length - 1 && cfg.showItemSeparator && (
+                <div className="text-black/40 select-none tracking-tighter overflow-hidden whitespace-nowrap">{".".repeat(40)}</div>
+              )}
+            </div>
+          ));
+        })()}
         {dash}
-        <div className="flex justify-between gap-2"><span>Subtotal</span><span>$250.00</span></div>
-        <div className="flex justify-between gap-2" style={{ fontWeight: totalWeight }}><span>TOTAL</span><span>$250.00</span></div>
+        <div className="flex justify-between gap-2"><span>Subtotal</span><span>$245.00</span></div>
+        <div className="flex justify-between gap-2" style={{ fontWeight: totalWeight }}><span>TOTAL</span><span>$245.00</span></div>
         {dash}
         <div className="text-center">{cfg.footer.trim() || "¡Gracias por su compra!"}</div>
       </div>
