@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { useHydrated } from "@/hooks/useClientValue";
 import Link from "next/link";
-import { Printer, Monitor, MonitorPlay, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, Grid3x3, Palette, Layers, BookOpen, LogOut, TrendingUp } from "lucide-react";
+import { Printer, Monitor, MonitorPlay, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, Grid3x3, Palette, Layers, BookOpen, LogOut, TrendingUp, Scissors } from "lucide-react";
 import api from "@/lib/api";
 
 const ADMIN_ROLES = ["OWNER", "ADMIN", "MANAGER"] as const;
@@ -75,6 +75,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navItems = [
     { href: "/admin",            label: "Inicio",                icon: BarChart3 },
     { href: "/admin/reportes",   label: "Reportes",              icon: BarChart3 },
+    { href: "/admin/cortes",     label: "Cortes",                icon: Scissors },
     // Centro financiero (módulo FINANCE) — solo se muestra si el plan lo
     // incluye Y el tenant lo tiene activado. Cae fuera del /admin route group
     // a propósito porque tiene su propio layout (sub-tabs internas).
