@@ -8,22 +8,22 @@
  * PrinterCategoriesModal, TicketConfigModal):
  *   · Dispositivos  → impresoras físicas + pantallas KDS
  *   · Ruteo         → printer groups (fuente única) + override por producto
- *   · Formato       → formato global de ticket/comanda + PIN admin
+ *
+ * El formato del ticket/comanda vive ahora en su propia pantalla (/admin/tickets),
+ * que es el único editor de formato (antes estaba duplicado aquí como pestaña).
  */
 
 import React, { useEffect, useState } from "react";
-import { Monitor, Layers, Receipt } from "lucide-react";
+import { Monitor, Layers } from "lucide-react";
 import BackButton from "@/components/BackButton";
 import DevicesTab from "@/components/admin/printing/DevicesTab";
 import RoutingTab from "@/components/admin/printing/RoutingTab";
-import TicketFormatTab from "@/components/admin/printing/TicketFormatTab";
 
-type TabKey = "dispositivos" | "ruteo" | "formato";
+type TabKey = "dispositivos" | "ruteo";
 
 const TABS: Array<{ key: TabKey; label: string; icon: React.ReactNode }> = [
   { key: "dispositivos", label: "Dispositivos", icon: <Monitor size={16} /> },
   { key: "ruteo", label: "Ruteo", icon: <Layers size={16} /> },
-  { key: "formato", label: "Formato", icon: <Receipt size={16} /> },
 ];
 
 export default function ImpresorasPage() {
@@ -35,7 +35,7 @@ export default function ImpresorasPage() {
     queueMicrotask(() => {
       if (cancelled || typeof window === "undefined") return;
       const t = new URLSearchParams(window.location.search).get("tab");
-      if (t === "ruteo" || t === "formato" || t === "dispositivos") setTab(t);
+      if (t === "ruteo" || t === "dispositivos") setTab(t);
     });
     return () => { cancelled = true; };
   }, []);
@@ -47,7 +47,7 @@ export default function ImpresorasPage() {
         <div>
           <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500 block mb-2">Configuración</span>
           <h1 className="text-3xl font-black text-white tracking-tight mb-1">Impresión</h1>
-          <p className="text-sm text-zinc-400 font-medium">Dispositivos, enrutamiento y formato de tickets en un solo lugar.</p>
+          <p className="text-sm text-zinc-400 font-medium">Dispositivos físicos y enrutamiento de impresión. El formato del ticket está en Tickets.</p>
         </div>
       </div>
 
@@ -62,7 +62,6 @@ export default function ImpresorasPage() {
 
       {tab === "dispositivos" && <DevicesTab />}
       {tab === "ruteo" && <RoutingTab />}
-      {tab === "formato" && <TicketFormatTab />}
     </div>
   );
 }
