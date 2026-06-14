@@ -176,6 +176,11 @@ export default function MenuPage() {
   const [editingVariant, setEditingVariant] = useState<string|null>(null);
   const [editVariantForm, setEditVariantForm] = useState({ name: '', price: '' });
   const [activeTab, setActiveTab] = useState<'complements'|'variants'>('variants');
+  // Grupos de variantes aplicados al abrir el form. Sirve para decidir si el
+  // guardado debe re-sincronizar plantillas: solo mandamos variantTemplateIds
+  // cuando hay (o había) grupos. Si el producto usa variantes DIRECTAS sin
+  // grupos, omitirlo evita que el sync destructivo del backend las borre.
+  const [initialTemplateIds, setInitialTemplateIds] = useState<string[]>([]);
 
   // Crear categoría al vuelo (inline en el modal de platillo)
   const [showNewCat, setShowNewCat] = useState(false);
@@ -318,13 +323,15 @@ export default function MenuPage() {
         setVariants(r.data.variants || []);
         const tplIds = (r.data.variantTemplates || r.data.appliedTemplates || []).map((t: any) => t.id ?? t.variantTemplateId).filter(Boolean);
         setForm(p => ({ ...p, variantTemplateIds: tplIds }));
-      }).catch(() => { setComplements([]); setVariants([]); });
+        setInitialTemplateIds(tplIds);
+      }).catch(() => { setComplements([]); setVariants([]); setInitialTemplateIds([]); });
     } else {
       setEditItem(null);
       setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true });
       setImagePreview("");
       setComplements([]);
       setVariants([]);
+      setInitialTemplateIds([]);
     }
     setNewComp({ name: '', price: '' });
     setNewVariant({ name: '', price: '' });
@@ -458,12 +465,19 @@ export default function MenuPage() {
     setSaving(true);
     try {
       const imageUrl = await uploadImageToCloud();
-      const payload = {
+      const payload: any = {
         ...form,
         price: regularPrice,
         promoPrice: form.isPromo ? promoPrice : null,
         imageUrl,
       };
+      // El backend re-sincroniza (borra y recrea) las variantes a partir de
+      // variantTemplateIds cada vez que el campo viaja en el body. Si el
+      // producto NO usa grupos (ni ahora ni antes), omitimos el campo para no
+      // disparar ese borrado: las variantes DIRECTAS (chica/grande) se
+      // gestionan aparte por sus propios endpoints y deben sobrevivir al guardar.
+      const usesTemplates = form.variantTemplateIds.length > 0 || initialTemplateIds.length > 0;
+      if (!usesTemplates) delete payload.variantTemplateIds;
       if (editItem) await api.put(`/api/menu/items/${editItem.id}`, payload);
       else await api.post("/api/menu/items", payload);
       setShowForm(false);
@@ -1076,6 +1090,70 @@ export default function MenuPage() {
                         );
                       })}
                     </div>
+                  )}
+                </div>
+
+                {/* Variantes directas (tamaños/precios propios de ESTE producto —
+                    ej. Chica $90, Grande $160; el precio base puede ser 0) */}
+                <div className="col-span-2">
+                  <label className="mb-2 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">
+                    Variantes / Tamaños <span className="font-sans normal-case tracking-normal text-tx-dim">(Precio propio · ej. Chica, Grande)</span>
+                  </label>
+                  {editItem ? (
+                    <EditableList
+                      items={variants}
+                      editingId={editingVariant}
+                      editForm={editVariantForm}
+                      onStartEdit={startEditVariant}
+                      onSaveEdit={saveEditVariant}
+                      onCancelEdit={() => setEditingVariant(null)}
+                      onDelete={deleteVariant}
+                      onChangeForm={setEditVariantForm}
+                      addSection={
+                        <div className="grid grid-cols-12 items-center gap-2">
+                          <input
+                            value={newVariant.name}
+                            onChange={e => setNewVariant(p => ({ ...p, name: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addVariant(); } }}
+                            placeholder="Nueva variante (ej. Chica)"
+                            className="col-span-6 rounded-lg px-3 py-2 text-sm text-tx outline-none"
+                            style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
+                          />
+                          <div className="col-span-3 flex items-center gap-1">
+                            <span className="text-xs text-tx-mut">$</span>
+                            <input
+                              value={newVariant.price}
+                              type="number"
+                              step="0.01"
+                              onWheel={e => e.currentTarget.blur()}
+                              onChange={e => setNewVariant(p => ({ ...p, price: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addVariant(); } }}
+                              placeholder="0"
+                              className="w-full rounded-lg px-2 py-2 text-right text-sm text-tx outline-none"
+                              style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={addVariant}
+                            disabled={savingVariant || !newVariant.name.trim()}
+                            className="col-span-3 grid place-items-center rounded-lg py-2 text-sm font-black text-white"
+                            style={{ background: "var(--brand-primary)", opacity: savingVariant || !newVariant.name.trim() ? 0.5 : 1 }}
+                          >
+                            + Agregar
+                          </button>
+                        </div>
+                      }
+                    />
+                  ) : (
+                    <p className="rounded-xl border border-dashed p-3 text-xs text-tx-mut">
+                      Guarda primero el platillo para agregarle variantes con precio propio (ej. “Chica $90”, “Grande $160”).
+                    </p>
+                  )}
+                  {variants.length > 0 && (
+                    <p className="mt-1.5 px-1 text-[11px] text-tx-mut">
+                      El TPV pedirá elegir una variante al agregar este producto y cobrará el precio de la variante.
+                    </p>
                   )}
                 </div>
 
