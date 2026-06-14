@@ -168,6 +168,20 @@ export default function DeliveryApp() {
     audioRef.current = new Audio('/notification.mp3');
     initBackgroundSync();
 
+    // Deep-link de vinculación (?rid=&lid=&ln=) — fallback si el QR se abre en
+    // Safari/navegador en vez de escanearse dentro de la app.
+    const params = new URLSearchParams(window.location.search);
+    const qrRid = params.get('rid');
+    const qrLid = params.get('lid');
+    if (qrRid && qrLid) {
+      localStorage.setItem('restaurantId', qrRid);
+      localStorage.setItem('locationId', qrLid);
+      const qrLn = params.get('ln');
+      if (qrLn) localStorage.setItem('locationName', qrLn);
+      window.history.replaceState({}, '', window.location.pathname); // limpia la URL
+      return; // ya hay IDs → queda en 'login' (PIN)
+    }
+
     const restId = localStorage.getItem('restaurantId');
     const locId  = localStorage.getItem('locationId');
     if (!restId || !locId) setScreen('setup');
@@ -306,6 +320,15 @@ export default function DeliveryApp() {
     setScreen('login');
   }
 
+  // Vinculado por QR escaneado dentro de la app: guarda los IDs y pasa al PIN.
+  function handleQrLink({ restaurantId, locationId, locationName }: { restaurantId: string; locationId: string; locationName?: string }) {
+    localStorage.setItem('restaurantId', restaurantId);
+    localStorage.setItem('locationId', locationId);
+    if (locationName) localStorage.setItem('locationName', locationName);
+    localStorage.removeItem('accessToken');
+    setScreen('login');
+  }
+
   async function handlePinLogin(pin: string) {
     setLoggingIn(true);
     try {
@@ -433,6 +456,7 @@ export default function DeliveryApp() {
           loggingIn={loggingIn}
           onLogin={handleSetupLogin}
           onSelectLocation={finishSetup}
+          onQrLink={handleQrLink}
         />
       )}
 
