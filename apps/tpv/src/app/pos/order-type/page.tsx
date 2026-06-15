@@ -155,12 +155,15 @@ export default function OrderTypePage() {
 
   const handlePickType = (type: ExtendedOrderType) => {
     if (type === "DINE_IN") {
-      // No reseteamos tableId aquí: si el cajero ya tiene una mesa
-      // asignada con orden activa (activeOrderStore), el picker la
-      // mostrará como OCCUPIED y podrá re-entrar directamente.
       // Venta nueva: arrancar el ticket en limpio (sin items/datos de la
-      // venta anterior). El activeOrder se resuelve al elegir mesa
-      // (ocupada → re-entra; libre → clear()).
+      // venta anterior) Y soltar cualquier orden activa heredada. Antes NO se
+      // limpiaba activeOrderStore aquí; un activeOrderId rezagado de la mesa
+      // anterior hacía que el catálogo agregara la ronda a ESA orden en vez de
+      // a la mesa recién elegida → productos encimados en otra cuenta. La
+      // ocupación de la mesa la pinta el servidor (table.status), y al elegir
+      // una mesa ocupada handlePickTable re-resuelve su orden vía
+      // /table/:id/open, así que limpiar aquí no rompe el re-ingreso.
+      useActiveOrderStore.getState().clear();
       useTicketStore.getState().updateTicket({
         type: "DINE_IN",
         tableId: "",

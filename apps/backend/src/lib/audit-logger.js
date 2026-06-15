@@ -10,6 +10,10 @@ const AUDIT_EVENTS = Object.freeze({
   SHIFT_CLOSE: 'SHIFT_CLOSE',
   ORDER_CANCEL: 'ORDER_CANCEL',
   DISCOUNT_APPLIED: 'DISCOUNT_APPLIED',
+  // Una orden nueva se fusionó como ronda en una cuenta de mesa ya abierta
+  // (el operador confirmó "agregar a la cuenta existente"). Hace rastreable
+  // lo que antes era un merge silencioso por tableId.
+  TAB_MERGE: 'TAB_MERGE',
 });
 
 const VALID_EVENTS = new Set(Object.values(AUDIT_EVENTS));

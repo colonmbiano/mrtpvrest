@@ -25,6 +25,12 @@ export interface ApiOrQueueResult<T = any> {
   queued: boolean;
   data: T | null;
   error?: string;
+  // Status HTTP del error (cuando ok=false y no se encolo). Permite al caller
+  // distinguir un 409 de conflicto (ej. mesa con cuenta abierta) de otros 4xx.
+  status?: number;
+  // Cuerpo de la respuesta de error tal cual (para leer code/existingOrder en
+  // el 409 TABLE_HAS_OPEN_TAB sin re-pegarle al backend).
+  conflict?: any;
 }
 
 function isNetworkError(err: any): boolean {
@@ -60,6 +66,19 @@ export async function apiOrQueue<T = any>(
       ? { ...data, clientOrderId: txId }
       : data;
 
+  // Las creaciones de orden ENCOLADAS (offline, o replay tras un blip de red)
+  // se marcan appendToOpenTab: al sincronizar no podemos abrir un dialogo de
+  // confirmacion, y la comanda ya se imprimio/intento, asi que mantenemos el
+  // comportamiento historico (si la mesa ya tiene cuenta abierta, fusionar la
+  // ronda) en vez de que el backend 409-ee el replay y se pierda el pedido.
+  // El intento ONLINE original (api.post de abajo) NO lleva el flag: ahi SI
+  // queremos el 409 para preguntar antes de encimar.
+  const isOrderCreate =
+    type === 'order' && method === 'POST' && /\/orders\/tpv$/.test(path);
+  const queuedBody = isOrderCreate
+    ? { ...bodyOut, appendToOpenTab: true }
+    : bodyOut;
+
   // Pre-check: si el navegador YA sabe que está offline, evitamos la
   // request y vamos directo a cola (ahorra timeout en pantalla).
   const isOffline =
@@ -69,7 +88,7 @@ export async function apiOrQueue<T = any>(
     const tx = {
       id: txId,
       type,
-      data: { method, path, body: bodyOut },
+      data: { method, path, body: queuedBody },
       timestamp: Date.now(),
       synced: false,
       supervisor: opts?.supervisor,
@@ -96,7 +115,7 @@ export async function apiOrQueue<T = any>(
       const tx = {
         id: txId,
         type,
-        data: { method, path, body: bodyOut },
+        data: { method, path, body: queuedBody },
         timestamp: Date.now(),
         synced: false,
         supervisor: opts?.supervisor,
@@ -104,11 +123,15 @@ export async function apiOrQueue<T = any>(
       store.addToQueue(tx);
       return { ok: true, queued: true, data: null };
     }
-    // Error legítimo (4xx) — la UI debe mostrarlo.
+    // Error legítimo (4xx) — la UI debe mostrarlo. Exponemos status + cuerpo
+    // para que el caller pueda manejar el 409 de conflicto (mesa con cuenta
+    // abierta) sin volver a pegarle al backend.
     return {
       ok: false,
       queued: false,
       data: null,
+      status: err?.response?.status,
+      conflict: err?.response?.data,
       error: err?.response?.data?.error || err?.message || 'fallo desconocido',
     };
   }
