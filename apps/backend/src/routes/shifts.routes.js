@@ -207,13 +207,46 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
     // de esta sucursal — mismo patrón que /staff-active.
     const locationStaff = await prisma.employee.findMany({
       where: { locationId: req.locationId },
-      select: { id: true },
+      select: { id: true, role: true, name: true },
     });
     const staffIds = locationStaff.map((e) => e.id);
 
-    // El cierre de caja y el clock-out masivo van en una sola $transaction:
-    // o cierra todo o no cierra nada (no dejar caja cerrada con meseros vivos).
-    const [closed, clockOut] = await prisma.$transaction([
+    // Corte automático de repartidores: cerrar la caja también CIERRA la caja de
+    // cada repartidor de la sucursal con movimientos pendientes. Se calcula su
+    // corte (DriverCashCut) y se aprueban sus movimientos en la MISMA
+    // $transaction que el cierre — mismo criterio que POST /driver-cash/:id/cut
+    // (toma exactamente los movimientos approved=false y los marca por id, para
+    // que un movimiento creado durante el cierre no quede aprobado sin contar).
+    const drivers = locationStaff.filter((e) => e.role === 'DELIVERY');
+    const driverCuts = [];
+    for (const d of drivers) {
+      const movs = await prisma.driverCashMovement.findMany({
+        where: { driverId: d.id, approved: false },
+        select: { id: true, type: true, amount: true },
+      });
+      if (movs.length === 0) continue;
+      const sumType = (t) => movs.filter((m) => m.type === t).reduce((s, m) => s + m.amount, 0);
+      const float = sumType('FLOAT');
+      const income = sumType('INCOME');
+      const expense = sumType('EXPENSE');
+      const returned = sumType('RETURN');
+      driverCuts.push({
+        driverId: d.id,
+        driverName: d.name || 'Repartidor',
+        totalFloat: float,
+        totalIncome: income,
+        totalExpense: expense,
+        totalReturn: returned,
+        balance: float + income - expense - returned,
+        movements: movs.length,
+        movementIds: movs.map((m) => m.id),
+      });
+    }
+
+    // El cierre de caja, el clock-out masivo y los cortes de repartidor van en
+    // una sola $transaction: o cierra todo o no cierra nada (no dejar caja
+    // cerrada con meseros vivos ni cortes de repartidor a medias).
+    const tx = [
       prisma.cashShift.update({
         where: { id: shiftId },
         data: {
@@ -235,8 +268,33 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
         where: { employeeId: { in: staffIds }, endAt: null },
         data: { endAt: now },
       }),
-    ]);
+    ];
+    for (const dc of driverCuts) {
+      tx.push(prisma.driverCashCut.create({
+        data: {
+          driverId: dc.driverId,
+          driverName: dc.driverName,
+          totalFloat: dc.totalFloat,
+          totalIncome: dc.totalIncome,
+          totalExpense: dc.totalExpense,
+          totalReturn: dc.totalReturn,
+          balance: dc.balance,
+          movements: dc.movements,
+          notes: `Corte automático al cierre de caja ${shiftId}`,
+        },
+      }));
+      tx.push(prisma.driverCashMovement.updateMany({
+        where: { id: { in: dc.movementIds } },
+        data: { approved: true, approvedAt: now },
+      }));
+      tx.push(prisma.driverShiftRequest.updateMany({
+        where: { driverId: dc.driverId, status: 'PENDING' },
+        data: { status: 'RESOLVED', resolvedAt: now },
+      }));
+    }
+    const [closed, clockOut] = await prisma.$transaction(tx);
     const staffClockedOut = clockOut.count;
+    const driversCut = driverCuts.length;
     // Auditoría best-effort del cierre de caja (quién, cuánto, cuántas órdenes).
     audit.record(req, audit.AUDIT_EVENTS.SHIFT_CLOSE, {
       resource: `cashShift:${closed.id}`,
@@ -249,6 +307,7 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
         totalCashIn: closed.totalCashIn,
         ordersCount: closed.ordersCount,
         staffClockedOut,
+        driversCut,
       },
     }).catch(() => {});
 
@@ -257,9 +316,9 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
     // endpoint /reveal con PIN), pero lo ocultamos en la respuesta al cajero.
     // El ticket de cierre que imprime el TPV refleja esto: sin arqueo si es ciego.
     if (closed.blindClose) {
-      res.json({ ...closed, expectedCash: null, staffClockedOut });
+      res.json({ ...closed, expectedCash: null, staffClockedOut, driversCut });
     } else {
-      res.json({ ...closed, staffClockedOut });
+      res.json({ ...closed, staffClockedOut, driversCut });
     }
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
