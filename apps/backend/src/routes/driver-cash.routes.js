@@ -512,21 +512,43 @@ router.get('/pending-collection', authenticate, requireTenantAccess, requireRole
 
 // ── Lista de repartidores activos (admin) ────────────────────────────────
 // Alimenta el selector del reporte de repartidores. Devuelve los DELIVERY
-// activos de la sucursal/restaurante, sin importar si tuvieron actividad hoy
-// (para poder consultar días históricos).
+// activos de la sucursal/restaurante (todos, para poder consultar días
+// históricos), pero ORDENADOS por actividad de hoy: los que tienen pedidos
+// primero, así el selector arranca en uno con datos y no en un repartidor
+// inactivo (que mostraba "Sin pedidos" engañoso). Incluye `ordersToday`.
 router.get('/drivers', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const scoped = req.user?.role !== 'SUPER_ADMIN' && restaurantId;
     const drivers = await prisma.employee.findMany({
       where: {
         role: 'DELIVERY',
         isActive: true,
-        ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { location: { restaurantId } } : {}),
+        ...(scoped ? { location: { restaurantId } } : {}),
       },
       select: { id: true, name: true, photo: true, locationId: true },
-      orderBy: { name: 'asc' },
     });
-    res.json(drivers);
+
+    // Conteo de pedidos de HOY por repartidor (día natural MX) para ordenar.
+    const { from, to } = localDayRange();
+    const ids = drivers.map((d) => d.id);
+    const counts = ids.length
+      ? await prisma.order.groupBy({
+          by: ['deliveryDriverId'],
+          where: {
+            deliveryDriverId: { in: ids },
+            createdAt: { gte: from, lte: to },
+            ...(scoped ? { restaurantId } : {}),
+          },
+          _count: { id: true },
+        })
+      : [];
+    const countByDriver = Object.fromEntries(counts.map((c) => [c.deliveryDriverId, c._count.id]));
+
+    const enriched = drivers
+      .map((d) => ({ ...d, ordersToday: countByDriver[d.id] || 0 }))
+      .sort((a, b) => b.ordersToday - a.ordersToday || a.name.localeCompare(b.name));
+    res.json(enriched);
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 

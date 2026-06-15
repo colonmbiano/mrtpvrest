@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Bike, Wallet, Banknote, AlertTriangle, Download, Printer, RotateCw, Package,
 } from "lucide-react";
@@ -28,7 +28,7 @@ type Report = {
   };
   shipping: { total: number; byZone: Zone[]; ordersWithoutShipping: string[] };
 };
-type Driver = { id: string; name: string; photo: string | null };
+type Driver = { id: string; name: string; photo: string | null; ordersToday?: number };
 
 /* ── Helpers ── */
 const mny = (n: number) =>
@@ -52,6 +52,8 @@ const statusLabel = (s: string) => STATUS_LABEL[s] || s;
 const PRINT_CSS = `
 @keyframes rep-spin { to { transform: rotate(360deg); } }
 .ia-spin { animation: rep-spin .9s linear infinite; display: inline-block; }
+@keyframes rep-pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.ia-pulse { animation: rep-pulse 1.6s ease-in-out infinite; }
 @media print {
   aside, nav, [data-sidebar], .ia-no-print, .rep-no-print { display: none !important; }
   body { background: #fff !important; }
@@ -66,8 +68,10 @@ export default function ReportesRepartidoresPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
 
-  // Cargar repartidores una vez; seleccionar el primero por defecto.
+  // Cargar repartidores. El backend los ordena por actividad de hoy, así que
+  // drivers[0] suele ser uno CON pedidos (no un repartidor inactivo como Kebra).
   useEffect(() => {
     api.get("/api/driver-cash/drivers")
       .then((r) => {
@@ -77,17 +81,27 @@ export default function ReportesRepartidoresPage() {
       .catch(() => setError("No pude cargar la lista de repartidores."));
   }, []);
 
-  // Cargar el reporte cuando cambia repartidor o fecha.
-  useEffect(() => {
+  // Carga del reporte. El reporte se calcula server-side desde las órdenes, así
+  // que cada llamada refleja el estado actual (ventas/cobros en vivo).
+  // silent=true para el refresco automático (no parpadea el loader).
+  const loadReport = useCallback((silent = false) => {
     if (!driverId) return;
-    let cancel = false;
-    setLoading(true); setError(null);
+    if (!silent) setLoading(true);
     api.get(`/api/driver-cash/${driverId}/report`, { params: { date } })
-      .then((r) => { if (!cancel) setReport(r.data); })
-      .catch((e) => { if (!cancel) setError(e.response?.data?.error || "No pude cargar el reporte."); })
-      .finally(() => { if (!cancel) setLoading(false); });
-    return () => { cancel = true; };
+      .then((r) => { setReport(r.data); setError(null); setUpdatedAt(Date.now()); })
+      .catch((e) => { if (!silent) setError(e.response?.data?.error || "No pude cargar el reporte."); })
+      .finally(() => { if (!silent) setLoading(false); });
   }, [driverId, date]);
+
+  useEffect(() => { loadReport(false); }, [loadReport]);
+
+  // Refresco EN VIVO: re-consulta cada 20 s (silencioso). Solo tiene sentido
+  // para el día de hoy; un día histórico ya no cambia.
+  useEffect(() => {
+    if (!driverId || date !== todayMx()) return;
+    const t = setInterval(() => loadReport(true), 20000);
+    return () => clearInterval(t);
+  }, [driverId, date, loadReport]);
 
   const driverName = useMemo(() => drivers.find((d) => d.id === driverId)?.name || "", [drivers, driverId]);
 
@@ -130,7 +144,11 @@ export default function ReportesRepartidoresPage() {
       >
         <select value={driverId} onChange={(e) => setDriverId(e.target.value)} style={selectStyle}>
           {drivers.length === 0 && <option value="">Sin repartidores</option>}
-          {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          {drivers.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}{d.ordersToday ? ` · ${d.ordersToday} hoy` : ""}
+            </option>
+          ))}
         </select>
         <input
           type="date"
@@ -139,6 +157,19 @@ export default function ReportesRepartidoresPage() {
           onChange={(e) => setDate(e.target.value)}
           style={selectStyle}
         />
+        {date === todayMx() && (
+          <span
+            title={updatedAt ? `Actualizado ${horaMx(new Date(updatedAt).toISOString())}` : "En vivo"}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600,
+              color: "var(--ok)", background: "var(--ok-soft)", border: "1px solid var(--ok)",
+              borderRadius: 999, padding: "6px 11px",
+            }}
+          >
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--ok)", display: "inline-block" }} className="ia-pulse" />
+            En vivo
+          </span>
+        )}
         <div style={{ flex: 1 }} />
         <button onClick={exportCsv} disabled={!report} style={btnStyle} title="Descargar CSV (Excel)">
           <Download size={14} /> CSV
