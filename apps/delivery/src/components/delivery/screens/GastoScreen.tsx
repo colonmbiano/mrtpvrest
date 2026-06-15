@@ -8,14 +8,20 @@ interface GastoScreenProps {
   onSave: (category: string, amount: string, description: string) => void;
 }
 
+// Categorías canónicas — alineadas al catálogo de gastos (OperatingExpenseCategory)
+// para que repartidor, turno y reportes hablen el mismo idioma. Sin default: el
+// repartidor DEBE elegir (antes caía siempre en GASOLINA por estar preseleccionada,
+// y las compras de insumos salían mal clasificadas).
 const CATS = [
-  { value: 'GASOLINE',           label: 'Gasolina',           color: '#FFB84D' },
-  { value: 'EMERGENCY_PURCHASE', label: 'Compra emergencia',  color: '#A78BFA' },
-  { value: 'OTHER',              label: 'Otro gasto',         color: 'rgba(255,255,255,0.4)' },
+  { value: 'GASOLINA',      label: 'Gasolina',          color: '#FFB84D' },
+  { value: 'COMPRAS',       label: 'Compras / Insumos', color: '#88D66C' },
+  { value: 'MANTENIMIENTO', label: 'Mantenimiento',     color: '#A78BFA' },
+  { value: 'CASETAS',       label: 'Casetas / Peaje',   color: '#60A5FA' },
+  { value: 'OTROS',         label: 'Otro gasto',        color: 'rgba(255,255,255,0.4)' },
 ];
 
 export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
-  const [cat, setCat]     = useState('GASOLINE');
+  const [cat, setCat]     = useState('');
   const [amount, setAmount] = useState('');
   const [desc, setDesc]   = useState('');
 
@@ -98,15 +104,15 @@ export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
 
         {/* Guardar */}
         <button
-          onClick={() => amount && onSave(cat, amount, desc)}
-          disabled={!amount}
+          onClick={() => amount && cat && onSave(cat, amount, desc)}
+          disabled={!amount || !cat}
           style={{
             ...S.btnPrimary,
-            background: amount ? C.amber : C.amberSoft,
-            color: amount ? '#090909' : 'rgba(255,184,77,0.35)',
-            boxShadow: amount ? '0 16px 48px rgba(255,184,77,0.28)' : 'none',
+            background: (amount && cat) ? C.amber : C.amberSoft,
+            color: (amount && cat) ? '#090909' : 'rgba(255,184,77,0.35)',
+            boxShadow: (amount && cat) ? '0 16px 48px rgba(255,184,77,0.28)' : 'none',
           }}
-        >GUARDAR MOVIMIENTO</button>
+        >{!cat ? 'ELIGE UNA CATEGORÍA' : 'GUARDAR MOVIMIENTO'}</button>
       </div>
     </div>
   );

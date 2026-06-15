@@ -63,14 +63,16 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   const [type, setType] = useState<"INCOME" | "EXPENSE" | "RETURN">("EXPENSE");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("OTROS");
+  const [category, setCategory] = useState("");
 
+  // Categorías canónicas — mismas que la app de delivery y el catálogo de gastos
+  // (OperatingExpenseCategory), para que repartidor/turno/reportes coincidan.
   const categories = [
-    { value: "FUEL", label: "⛽ Gasolina" },
-    { value: "REPAIR", label: "🔧 Reparación" },
-    { value: "FOOD", label: "🍲 Comida" },
-    { value: "OTHER", label: "📝 Otros" },
-    { value: "INCIDENT", label: "⚠️ Incidencia" },
+    { value: "GASOLINA", label: "⛽ Gasolina" },
+    { value: "COMPRAS", label: "🛒 Compras / Insumos" },
+    { value: "MANTENIMIENTO", label: "🔧 Mantenimiento" },
+    { value: "CASETAS", label: "🛣️ Casetas / Peaje" },
+    { value: "OTROS", label: "📝 Otros" },
   ];
 
   async function fetchMovements() {
@@ -123,6 +125,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   async function handleAddMovement(e: React.FormEvent) {
     e.preventDefault();
     if (!driver || !amount || isNaN(Number(amount))) return;
+    if (!category) { alert("Selecciona una categoría"); return; }
 
     try {
       setAdding(true);
@@ -134,6 +137,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
       });
       setAmount("");
       setDescription("");
+      setCategory("");
       fetchMovements();
       onRefresh();
     } catch {
@@ -207,6 +211,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm text-white outline-none"
                 >
+                  <option value="" disabled>Selecciona…</option>
                   {categories.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
