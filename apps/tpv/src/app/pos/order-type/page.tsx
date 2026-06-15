@@ -279,6 +279,7 @@ export default function OrderTypePage() {
         onShiftClose={goShiftClose}
         onExpenses={goExpenses}
         onConfig={goConfig}
+        onWhatsapp={() => router.push("/pos/whatsapp")}
         allowedTypes={tpvConfig.allowedOrderTypes}
       />
 
