@@ -42,6 +42,7 @@ import {
 import {
   parseWhatsappOrder,
   matchScore,
+  normalize,
   type OrderType,
 } from "@/lib/wa-parse";
 
@@ -84,6 +85,51 @@ function availableVariants(p: Product) {
 /** Grupos de opciones (variantes multi-select + modificadores + complementos). */
 function groupsFor(p: Product): ModifierGroup[] {
   return buildOptionGroups(p, availableVariants(p), Boolean(p.variantMultiSelect));
+}
+
+/** ¿El nombre de una opción aparece (como palabras) en el texto del pedido? */
+function optionInText(name: string, normText: string): boolean {
+  const n = normalize(name);
+  if (!n) return false;
+  const padded = ` ${normText} `;
+  if (padded.includes(` ${n} `)) return true;
+  const toks = n.split(" ").filter((w) => w.length >= 3);
+  return toks.length > 0 && toks.every((w) => padded.includes(` ${w} `));
+}
+
+/**
+ * Auto-selecciona la variante única + los modificadores/sabores cuyo nombre
+ * aparezca en el texto del cliente (ej. "BBQ", "mango habanero", "lemon pepper").
+ * Así la línea cae lista sin que el cajero tenga que tocar los chips.
+ */
+function autoSelectOptions(
+  product: Product,
+  text: string,
+): { variantId: string | null; selections: Record<string, Modifier[]> } {
+  const t = normalize(text);
+  let variantId: string | null = null;
+  const selections: Record<string, Modifier[]> = {};
+
+  if (!product.variantMultiSelect) {
+    for (const v of availableVariants(product)) {
+      if (optionInText(v.name, t)) {
+        variantId = v.id;
+        break;
+      }
+    }
+  }
+
+  for (const g of groupsFor(product)) {
+    for (const m of g.modifiers) {
+      if (!optionInText(m.name, t)) continue;
+      if (g.multiSelect) {
+        selections[g.id] = [...(selections[g.id] || []), m];
+      } else if (!selections[g.id]) {
+        selections[g.id] = [m];
+      }
+    }
+  }
+  return { variantId, selections };
 }
 
 /** Precio unitario estimado (el real lo recalcula el backend). */
@@ -174,16 +220,21 @@ export default function WhatsappCapturePage() {
     setCreatedOrder(null);
     setError("");
     setLines(
-      parsed.lines.map((pl) => ({
-        uid: uid(),
-        product: pl.match,
-        productQuery: pl.productQuery,
-        quantity: pl.quantity,
-        variantId: null,
-        selections: {},
-        notes: pl.notes,
-        raw: pl.raw,
-      })),
+      parsed.lines.map((pl) => {
+        const auto = pl.match
+          ? autoSelectOptions(pl.match, `${pl.productQuery} ${pl.notes}`)
+          : { variantId: null, selections: {} };
+        return {
+          uid: uid(),
+          product: pl.match,
+          productQuery: pl.productQuery,
+          quantity: pl.quantity,
+          variantId: auto.variantId,
+          selections: auto.selections,
+          notes: pl.notes,
+          raw: pl.raw,
+        };
+      }),
     );
   };
 
@@ -209,7 +260,14 @@ export default function WhatsappCapturePage() {
     ]);
 
   const setProductForLine = (id: string, product: Product) => {
-    patchLine(id, { product, productQuery: product.name, variantId: null, selections: {} });
+    setLines((prev) =>
+      prev.map((l) => {
+        if (l.uid !== id) return l;
+        // Auto-selecciona sabores/variantes usando el texto original de la línea.
+        const auto = autoSelectOptions(product, `${l.productQuery} ${l.notes}`);
+        return { ...l, product, variantId: auto.variantId, selections: auto.selections };
+      }),
+    );
     setPickerFor(null);
   };
 
