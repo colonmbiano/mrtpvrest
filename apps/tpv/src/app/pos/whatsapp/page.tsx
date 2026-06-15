@@ -35,9 +35,7 @@ import {
   buildOptionGroups,
   computeUnitExtra,
   flattenSelections,
-  buildOrderItemsPayload,
   getValidationError,
-  type OrderItemPayloadInput,
 } from "@/lib/modifiers";
 import {
   parseWhatsappOrder,
@@ -45,6 +43,7 @@ import {
   normalize,
   type OrderType,
 } from "@/lib/wa-parse";
+import { getLocationId } from "@/lib/tenant";
 
 const CATALOG_CACHE_KEY = "tpv-catalog-cache-v1";
 
@@ -319,24 +318,40 @@ export default function WhatsappCapturePage() {
     setSubmitting(true);
     setError("");
     try {
-      const inputs: OrderItemPayloadInput[] = matchedLines.map((l) => ({
-        menuItemId: l.product!.id,
-        variantId: l.variantId,
-        quantity: l.quantity,
-        notes: l.notes,
-        modifiers: flattenSelections(groupsFor(l.product!), l.selections),
-      }));
+      // Shape de /api/store/orders (mismo camino que la tienda en línea y el
+      // bridge wa-orders): items {menuItemId, variantId, quantity, notes,
+      // modifierIds[]} con complementos prefijados "complement:". Las variantes
+      // multi-select ("variant:") no las soporta este endpoint y se omiten — el
+      // menú de Master Burguer's usa variante única + grupos de modificadores.
+      const items = matchedLines.map((l) => {
+        const sels = flattenSelections(groupsFor(l.product!), l.selections);
+        const modifierIds = sels
+          .filter((m) => !m.id.startsWith("variant:"))
+          .map((m) => m.id);
+        return {
+          menuItemId: l.product!.id,
+          variantId: l.variantId,
+          quantity: l.quantity,
+          notes: l.notes,
+          modifierIds,
+        };
+      });
 
+      // source=WHATSAPP → nace PENDING en el panel "Pedidos Web" del TPV (badge
+      // WEB + auto-impresión). locationId explícito evita el bug de pedido
+      // invisible (orphan sin sucursal). El restaurante lo resuelve el backend
+      // con el header x-restaurant-id que ya inyecta lib/api.
       const body = {
+        source: "WHATSAPP",
         orderType,
-        items: buildOrderItemsPayload(inputs),
+        items,
         customerName: customerName.trim() || "Público General",
         customerPhone: customerPhone.trim() || null,
         deliveryAddress: orderType === "DELIVERY" ? deliveryAddress.trim() || null : null,
-        clientOrderId: uid(),
+        locationId: getLocationId(),
       };
 
-      const { data } = await api.post("/api/orders/tpv", body);
+      const { data } = await api.post("/api/store/orders", body);
       setCreatedOrder({
         number: data?.orderNumber || data?.id || "—",
         total: Number(data?.total ?? estimateTotal),
@@ -408,7 +423,7 @@ export default function WhatsappCapturePage() {
               <div>
                 <p className="text-sm font-black text-[#88D66C]">Pedido creado · {createdOrder.number}</p>
                 <p className="text-xs font-semibold text-white/55">
-                  Total {money(createdOrder.total)} · cayó en cuentas abiertas, listo para cobrar.
+                  Total {money(createdOrder.total)} · cayó en Pedidos Web (PENDING) — acéptalo en el TPV para mandar a cocina.
                 </p>
               </div>
             </div>
@@ -587,7 +602,7 @@ export default function WhatsappCapturePage() {
                   {submitting ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                   {submitting ? "Creando…" : "Crear pedido"}
                 </button>
-                <p className="mt-2 text-center text-[11px] font-semibold text-white/30">No cobra · cae como cuenta abierta</p>
+                <p className="mt-2 text-center text-[11px] font-semibold text-white/30">No cobra · cae en Pedidos Web (PENDING)</p>
               </div>
             )}
           </div>
