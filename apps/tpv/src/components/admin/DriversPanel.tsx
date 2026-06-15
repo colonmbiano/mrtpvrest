@@ -30,6 +30,7 @@ type DriverRow = {
   activeRoute: { id: string; startAt: string } | null;
   online: boolean;
   cash?: {
+    float: number;
     income: number;
     expense: number;
     returned: number;
@@ -45,6 +46,7 @@ type LiveResponse = {
 
 type CashSummary = {
   driver: { id: string; name: string; photo?: string | null };
+  float: number;
   income: number;
   expense: number;
   returned: number;
@@ -145,7 +147,10 @@ export default function DriversPanel({
         (acc: Record<string, DriverRow["cash"]>, item: CashSummary) => {
           acc[item.driver.id] = {
             ...item,
-            balance: item.income - item.expense - item.returned,
+            // El fondo de cambio (float) suma al saldo: es efectivo que el
+            // repartidor trae y debe entregar en el corte. Sin él, el saldo
+            // mostrado quedaba corto y no cuadraba con el corte real.
+            balance: item.float + item.income - item.expense - item.returned,
           };
           return acc;
         },
@@ -430,6 +435,10 @@ export default function DriversPanel({
 
                       {canViewFinancial && d.cash && (
                         <div className="mt-2 flex gap-1.5 flex-wrap">
+                          <div className="px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                            <div className="text-[9px] text-amber-400 font-bold uppercase leading-none mb-0.5">Fondo</div>
+                            <div className="text-xs font-black text-amber-400">${(d.cash.float || 0).toFixed(0)}</div>
+                          </div>
                           <div className="px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/20">
                             <div className="text-[9px] text-green-400 font-bold uppercase leading-none mb-0.5">Ingresos</div>
                             <div className="text-xs font-black text-green-400">${d.cash.income.toFixed(0)}</div>
