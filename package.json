@@ -17,11 +17,11 @@
     "test:e2e:ui": "playwright test --ui --config=tests/e2e/playwright.config.ts"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
+    "@playwright/test": "^1.61.0",
     "csv-parser": "^3.2.1",
     "dotenv": "^16.4.4",
-    "prettier": "^3.4.2",
-    "turbo": "^2.9.14"
+    "prettier": "^3.8.4",
+    "turbo": "^2.9.18"
   },
   "engines": {
     "node": ">=20",
@@ -38,6 +38,6 @@
     }
   },
   "dependencies": {
-    "next": "^16.2.6"
+    "next": "^16.2.9"
   }
 }
