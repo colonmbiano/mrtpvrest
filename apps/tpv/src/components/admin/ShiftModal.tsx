@@ -165,7 +165,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
         <div className="bg-[var(--surf)] border border-[var(--border)] rounded-3xl w-full max-w-sm p-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-syne font-black text-white">🕒 Abrir Turno</h2>
-            <button onClick={onClose} className="text-[var(--muted)] hover:text-white text-xl">✕</button>
+            <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-white text-xl">✕</button>
           </div>
           <div className="text-center mb-6">
             <div className="text-5xl mb-3">💰</div>
