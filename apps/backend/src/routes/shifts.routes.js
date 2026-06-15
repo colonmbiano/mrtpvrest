@@ -401,6 +401,37 @@ router.delete('/cash-ins/:id', requireLocation, async (req, res) => {
 });
 
 // ── GET historial de turnos de la sucursal (admin) ───────────────────────
+// Totales EN VIVO de un turno abierto, calculados desde las órdenes con el
+// MISMO criterio que el cierre (summarizePayments + cashCutSummary). Los turnos
+// guardan totalCash/totalSales/expectedCash en 0/null hasta cerrarse, así que
+// sin esto las vistas de cortes muestran $0 para el turno en curso aunque ya
+// haya ventas cobradas. Sólo se llama para turnos abiertos (normalmente 1).
+async function liveShiftTotals(shift) {
+  const orders = await prisma.order.findMany({
+    where: {
+      locationId: shift.locationId,
+      status: 'DELIVERED',
+      OR: [
+        { shiftId: shift.id },
+        { shiftId: null, createdAt: { gte: shift.openedAt } },
+      ],
+      source: { in: ['TPV', 'WAITER', 'ONLINE', 'WHATSAPP', 'KIOSK'] },
+    },
+    select: { paymentMethod: true, total: true },
+  });
+  const totals = summarizePayments(orders);
+  const totalExpenses = (shift.expenses || []).reduce((s, e) => s + e.amount, 0);
+  const totalCashIn = (shift.cashIns || []).reduce((s, c) => s + c.amount, 0);
+  const totalSales = Object.values(totals).reduce((a, b) => a + b, 0);
+  const { expectedCash } = cashCutSummary({
+    openingFloat: shift.openingFloat,
+    totalCash: totals.totalCash,
+    totalExpenses,
+    totalCashIn,
+  });
+  return { ...totals, totalExpenses, totalCashIn, totalSales, expectedCash, ordersCount: orders.length };
+}
+
 router.get('/', requireAdmin, requireLocation, async (req, res) => {
   try {
     const shifts = await prisma.cashShift.findMany({
@@ -409,7 +440,12 @@ router.get('/', requireAdmin, requireLocation, async (req, res) => {
       take: 100,
       include: { expenses: true, cashIns: true }
     });
-    res.json(shifts);
+    // Enriquecer los turnos ABIERTOS con sus totales en vivo (ventas ya
+    // cobradas, efectivo esperado) — los cerrados ya traen su snapshot.
+    const enriched = await Promise.all(shifts.map(async (s) =>
+      s.isOpen ? { ...s, ...(await liveShiftTotals(s)) } : s
+    ));
+    res.json(enriched);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
