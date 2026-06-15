@@ -160,7 +160,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
             <h2 className="text-xl font-black text-white">💰 Caja del Repartidor</h2>
             <p className="text-xs font-bold" style={{ color: accent }}>{driver.name}</p>
           </div>
-          <button onClick={onClose} className="text-[var(--muted)] hover:text-white text-2xl">✕</button>
+          <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-white text-2xl">✕</button>
         </div>
 
         {/* Pestañas */}
@@ -173,7 +173,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
               key={t.key}
               onClick={() => setTab(t.key)}
               className="relative py-3 px-4 text-xs font-black uppercase tracking-widest transition-colors"
-              style={{ color: tab === t.key ? "#fff" : "var(--muted)" }}
+              style={{ color: tab === t.key ? "#fff" : "var(--text-secondary)" }}
             >
               {t.label}
               {tab === t.key && (
@@ -193,7 +193,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
             <h3 className="text-xs font-black uppercase tracking-widest text-white/40">Registrar Nuevo</h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-[var(--muted)] uppercase ml-1">Tipo</label>
+                <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Tipo</label>
                 <select
                   value={type}
                   onChange={(e) => setType(e.target.value as any)}
@@ -205,7 +205,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-[var(--muted)] uppercase ml-1">Categoría</label>
+                <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Categoría</label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
@@ -219,7 +219,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
 
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-1 space-y-1">
-                <label className="text-[10px] font-bold text-[var(--muted)] uppercase ml-1">Monto ($)</label>
+                <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Monto ($)</label>
                 <input
                   type="number"
                   value={amount}
@@ -230,7 +230,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                 />
               </div>
               <div className="col-span-2 space-y-1">
-                <label className="text-[10px] font-bold text-[var(--muted)] uppercase ml-1">Descripción / Incidencia</label>
+                <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Descripción / Incidencia</label>
                 <input
                   type="text"
                   value={description}
@@ -255,9 +255,9 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
           <div className="space-y-3">
             <h3 className="text-xs font-black uppercase tracking-widest text-white/40 ml-1">Pendiente de corte</h3>
             {loading ? (
-              <p className="text-sm text-[var(--muted)] animate-pulse">Cargando movimientos...</p>
+              <p className="text-sm text-[var(--text-secondary)] animate-pulse">Cargando movimientos...</p>
             ) : movements.length === 0 ? (
-              <p className="text-sm text-[var(--muted)] italic">Sin movimientos pendientes de corte.</p>
+              <p className="text-sm text-[var(--text-secondary)] italic">Sin movimientos pendientes de corte.</p>
             ) : (
               <div className="space-y-2">
                 {movements.map((m) => (
@@ -275,7 +275,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                       </div>
                       <div>
                         <div className="text-xs font-bold text-white">{m.description || m.category}</div>
-                        <div className="text-[10px] text-[var(--muted)]">{new Date(m.createdAt).toLocaleTimeString()}</div>
+                        <div className="text-[10px] text-[var(--text-secondary)]">{new Date(m.createdAt).toLocaleTimeString()}</div>
                       </div>
                     </div>
                     <div className={`text-sm font-black ${
@@ -296,7 +296,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
         {tab === "pedidos" && (
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {loadingOrders ? (
-            <p className="text-sm text-[var(--muted)] animate-pulse">Cargando pedidos...</p>
+            <p className="text-sm text-[var(--text-secondary)] animate-pulse">Cargando pedidos...</p>
           ) : (
             <>
               {/* Resumen */}
@@ -327,7 +327,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
               <div className="space-y-3">
                 <h3 className="text-xs font-black uppercase tracking-widest text-white/40 ml-1">Pedidos asignados hoy</h3>
                 {orders.length === 0 ? (
-                  <p className="text-sm text-[var(--muted)] italic">No hay pedidos asignados hoy.</p>
+                  <p className="text-sm text-[var(--text-secondary)] italic">No hay pedidos asignados hoy.</p>
                 ) : (
                   <div className="space-y-2">
                     {orders.map((o) => (
@@ -340,7 +340,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                             <div className="text-xs font-black text-white truncate">
                               {o.customer || "Público General"}
                             </div>
-                            <div className="text-[10px] text-[var(--muted)]">
+                            <div className="text-[10px] text-[var(--text-secondary)]">
                               {o.orderNumber} · {new Date(o.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                             </div>
                           </div>
@@ -348,14 +348,14 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                             <div className="text-sm font-black text-white">${o.total.toFixed(0)}</div>
                             <div
                               className="text-[10px] font-bold"
-                              style={{ color: o.paymentMethod === "CASH" ? "#88D66C" : "var(--muted)" }}
+                              style={{ color: o.paymentMethod === "CASH" ? "#88D66C" : "var(--text-secondary)" }}
                             >
                               {PAYMENT_LABELS[o.paymentMethod || "OTHER"] || o.paymentMethod}
                             </div>
                           </div>
                         </div>
                         {(o.deliveryAddress || o.customerPhone) && (
-                          <div className="mt-1.5 text-[10px] text-[var(--muted)] truncate">
+                          <div className="mt-1.5 text-[10px] text-[var(--text-secondary)] truncate">
                             {[o.customerPhone, o.deliveryAddress].filter(Boolean).join(" · ")}
                           </div>
                         )}
@@ -377,7 +377,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
         <div className="p-4 border-t border-[var(--border)] bg-[var(--bg)] flex justify-end">
           <button
             onClick={onClose}
-            className="px-6 py-2 rounded-xl text-xs font-bold text-[var(--muted)] hover:text-white transition-colors"
+            className="px-6 py-2 rounded-xl text-xs font-bold text-[var(--text-secondary)] hover:text-white transition-colors"
           >
             Cerrar
           </button>
