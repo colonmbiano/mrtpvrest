@@ -11,6 +11,18 @@ import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
+import {
+  usePrinters,
+  useReceiptIdentity,
+  useFullTicketConfig,
+  buildReceiptIdentityFields,
+} from "@/hooks/usePrinters";
+import { printCustomerReceipt, type TicketItem } from "@/lib/printer-tcp";
+import {
+  readPaidTicketsCache,
+  writePaidTicketsCache,
+  type PaidTicketLite,
+} from "@/lib/paid-tickets-cache";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -47,9 +59,15 @@ const ONLINE_SOURCES = new Set(["ONLINE", "STORE", "WHATSAPP"]);
 export default function OrderTypePage() {
   const router = useRouter();
 
-  useTPVAuth();
+  const { restaurantName, currentEmployee } = useTPVAuth();
   const logout   = useAuthStore((s) => s.logout);
   const employee = useAuthStore((s) => s.employee);
+
+  // Impresoras LAN + identidad del recibo para reimprimir un ticket cobrado
+  // directamente desde esta pantalla (sin navegar al catálogo).
+  const { printers } = usePrinters();
+  const { businessName, businessFooter, terminalName } = useReceiptIdentity();
+  const { config: ticketConfig } = useFullTicketConfig();
 
   // Config remota de la sucursal: define qué tipos de orden acepta. Un bar
   // con allowedOrderTypes=["DINE_IN"] oculta las tarjetas Para Llevar/Delivery.
@@ -65,6 +83,11 @@ export default function OrderTypePage() {
   // pasar por el drawer. Guardamos las órdenes crudas para entrar directo.
   const [openOrders, setOpenOrders] = useState<any[]>([]);
 
+  // Pestaña Abiertas/Cobradas de la lista + tickets cobrados del último mes.
+  const [ordersMode, setOrdersMode] = useState<"open" | "paid">("open");
+  const [paidOrders, setPaidOrders] = useState<PaidTicketLite[]>([]);
+  const [paidLoading, setPaidLoading] = useState(false);
+
   const fetchOpenOrders = useCallback(async () => {
     try {
       // scope=active → el backend ya filtra a pedidos abiertos (payload chico).
@@ -76,6 +99,36 @@ export default function OrderTypePage() {
     }
   }, []);
 
+  // Tickets COBRADOS del último mes (pestaña "Cobradas"). Local-first: pinta
+  // el cache al instante y revalida contra el backend (scope=paid, payload
+  // ligero). El detalle para reimprimir se baja on-demand en handleReprintPaid.
+  const fetchPaidOrders = useCallback(async () => {
+    const cached = readPaidTicketsCache();
+    if (cached.length) setPaidOrders(cached);
+    setPaidLoading(cached.length === 0);
+    try {
+      const { data } = await api.get("/api/orders/admin?scope=paid");
+      const list = Array.isArray(data) ? data : [];
+      const lite: PaidTicketLite[] = list.map((o: any) => ({
+        id: o.id,
+        orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
+        customerName:
+          o.ticketName || o.customerName || o.user?.name || "Público general",
+        orderType: o.orderType || null,
+        total: Number(o.total ?? 0),
+        paidAt: o.paidAt || null,
+        createdAt: o.createdAt || null,
+        paymentMethod: o.paymentMethod || null,
+      }));
+      setPaidOrders(lite);
+      writePaidTicketsCache(lite);
+    } catch (err) {
+      console.error("Error cargando tickets cobrados:", err);
+    } finally {
+      setPaidLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     // Diferido a microtask (patrón del resto del TPV): evita set-state-in-effect.
@@ -83,6 +136,15 @@ export default function OrderTypePage() {
     const id = setInterval(fetchOpenOrders, 30000);
     return () => { cancelled = true; clearInterval(id); };
   }, [fetchOpenOrders]);
+
+  // Al entrar a la pestaña "Cobradas" se carga el último mes (no se pollea:
+  // es histórico, basta refrescar al cambiar de pestaña).
+  useEffect(() => {
+    if (ordersMode !== "paid") return;
+    let cancelled = false;
+    queueMicrotask(() => { if (!cancelled) fetchPaidOrders(); });
+    return () => { cancelled = true; };
+  }, [ordersMode, fetchPaidOrders]);
 
   // Mapeo a la forma de tarjeta/fila que consume OrderTypeSelector.
   const openAccounts = useMemo<OpenAccount[]>(
@@ -109,6 +171,30 @@ export default function OrderTypePage() {
         };
       }),
     [openOrders],
+  );
+
+  // Tickets cobrados → mismas filas (OpenAccount) en modo "Cobradas". La hora
+  // mostrada es la de cobro (paidAt); itemsCount 0 (payload ligero) y se
+  // sustituye por el chip de método de pago en la fila.
+  const paidAccounts = useMemo<OpenAccount[]>(
+    () =>
+      paidOrders.map((p) => ({
+        id: p.id,
+        orderNumber: p.orderNumber,
+        customerName: p.customerName,
+        rawType: ORDER_TYPE_OF(p.orderType),
+        tableName: null,
+        phone: null,
+        numberOfGuests: null,
+        itemsCount: 0,
+        total: p.total,
+        status: "PAID",
+        createdAt: p.paidAt || p.createdAt || undefined,
+        driver: null,
+        isWeb: false,
+        paymentMethod: p.paymentMethod,
+      })),
+    [paidOrders],
   );
 
   // Entra a una cuenta abierta (set ticket + activeOrder + navegar al menú).
@@ -148,6 +234,94 @@ export default function OrderTypePage() {
   // Imprimir / Cobrar → entran a la cuenta y el menú dispara la acción al montar.
   const handleReprintAccount = (id: string) => enterAccount(id, "print");
   const handleChargeAccount = (id: string) => enterAccount(id, "pay");
+
+  // Reimprime el RECIBO de un ticket COBRADO directamente desde la pantalla
+  // principal (sin navegar al catálogo ni reactivar la orden). Baja el detalle
+  // on-demand (los cobrados llegan sin items para mantener el cache chico) y lo
+  // manda a las impresoras CASHIER con paid:true (título "RECIBO").
+  const handleReprintPaid = async (id: string) => {
+    const t = toast.loading("Imprimiendo recibo…");
+    try {
+      let full: any = null;
+      try {
+        const { data } = await api.get(`/api/orders/${id}`);
+        full = data;
+      } catch {
+        full = null;
+      }
+      if (!full) {
+        toast.error("No se pudo cargar el ticket", { id: t });
+        return;
+      }
+      const items: TicketItem[] = (full.items || []).map((it: any) => ({
+        name: it.name || it.menuItem?.name || "Producto",
+        quantity: Number(it.quantity ?? 1),
+        price: Number(it.unitPrice ?? it.price ?? 0),
+        notes: it.notes || null,
+        seatNumber: typeof it.seatNumber === "number" ? it.seatNumber : null,
+        modifiers: (it.modifiers || []).map((m: any) => ({
+          name: m.name || m.modifier?.name || "",
+          priceAdd: Number(m.priceAdd ?? m.price ?? 0),
+        })),
+      }));
+      const subtotalCalc = items.reduce(
+        (acc, it) =>
+          acc +
+          it.price * it.quantity +
+          (it.modifiers || []).reduce(
+            (m, mod) => m + (mod.priceAdd || 0) * it.quantity,
+            0,
+          ),
+        0,
+      );
+      const num = full.orderNumber || String(full.id).slice(-6).toUpperCase();
+      const res = await printCustomerReceipt(printers, {
+        ...buildReceiptIdentityFields(
+          ticketConfig,
+          { businessName, businessFooter },
+          restaurantName,
+          num,
+        ),
+        orderNumber: num,
+        orderType: full.orderType || null,
+        tableNumber: full.table?.name || full.tableNumber || null,
+        customerName:
+          full.ticketName || full.customerName || full.user?.name || null,
+        customerPhone: full.customerPhone || null,
+        numberOfGuests: full.numberOfGuests ?? null,
+        cashierName: currentEmployee?.name || null,
+        terminalName: terminalName || null,
+        items,
+        subtotal: Number(full.subtotal ?? subtotalCalc),
+        discount: Number(full.discount ?? 0),
+        tax: Number(full.tax ?? 0),
+        tip: Number(full.tip ?? 0),
+        total: Number(full.total ?? subtotalCalc),
+        paymentMethod: full.paymentMethod || null,
+        paid: true,
+      });
+      if (res.ok > 0 && res.failed.length === 0) {
+        toast.success(
+          `Recibo reimpreso en ${res.ok} impresora${res.ok > 1 ? "s" : ""}`,
+          { id: t },
+        );
+      } else if (res.ok > 0) {
+        toast.warning(`Recibo: ${res.ok} ok / ${res.failed.length} fallaron`, {
+          id: t,
+        });
+      } else {
+        toast.error(
+          "No se pudo imprimir: " +
+            (res.failed[0]?.error || "sin impresoras CASHIER activas"),
+          { id: t },
+        );
+      }
+    } catch (err: any) {
+      toast.error("Error al reimprimir: " + (err?.message || "fallo"), {
+        id: t,
+      });
+    }
+  };
 
   // Meseros (WAITER) operan en modo préstamo: sin cobro directo (igual que el
   // hideMoney del drawer de tickets en el menú).
@@ -277,12 +451,18 @@ export default function OrderTypePage() {
         onOpenAccount={handleOpenAccount}
         onReprintAccount={handleReprintAccount}
         onChargeAccount={handleChargeAccount}
+        onReprintPaid={handleReprintPaid}
         hideMoney={hideMoney}
-        openAccounts={openAccounts}
+        mode={ordersMode}
+        onModeChange={setOrdersMode}
+        paidLoading={paidLoading}
+        openAccounts={ordersMode === "paid" ? paidAccounts : openAccounts}
         onShiftClose={goShiftClose}
         onExpenses={goExpenses}
         onConfig={goConfig}
         onWhatsapp={() => router.push("/pos/whatsapp")}
+        onSales={() => router.push("/pos/menu")}
+        onHub={() => router.push("/hub?force=true")}
         allowedTypes={tpvConfig.allowedOrderTypes}
       />
 

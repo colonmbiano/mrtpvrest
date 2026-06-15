@@ -6,6 +6,8 @@ import {
   Bike,
   Coins,
   Globe,
+  LayoutGrid,
+  Loader2,
   LogOut,
   Menu,
   MessageCircle,
@@ -14,6 +16,7 @@ import {
   Receipt,
   Settings,
   ShoppingBag,
+  ShoppingCart,
   Table2,
   Users,
   Utensils,
@@ -49,7 +52,20 @@ export interface OpenAccount {
   driver?: string | null;
   /** Pedido originado en la tienda web / WhatsApp — se distingue en color. */
   isWeb?: boolean;
+  /** Solo modo "Cobradas": método de pago crudo para el chip de la fila. */
+  paymentMethod?: string | null;
 }
+
+// Etiqueta legible del método de pago (chip de la fila en modo "Cobradas").
+const PAY_METHOD_LABEL: Record<string, string> = {
+  CASH: "Efectivo",
+  CARD: "Tarjeta",
+  TRANSFER: "Transfer.",
+  ONLINE: "En línea",
+  MIXED: "Mixto",
+};
+const payMethodLabel = (m?: string | null): string =>
+  m ? PAY_METHOD_LABEL[m] || m : "Pagado";
 
 // Color "web" de la app (índigo), reutilizado del badge de pedidos web.
 const WEB_ACCENT = "#5e6ad2";
@@ -70,7 +86,20 @@ interface OrderTypeSelectorProps {
   onConfig?: () => void;
   /** Abre la captura de pedidos de WhatsApp (/pos/whatsapp). */
   onWhatsapp?: () => void;
-  /** Cuentas en curso (mesa, llevar, domicilio). */
+  /** Navegación: ir al catálogo de ventas (/pos/menu). */
+  onSales?: () => void;
+  /** Navegación: ir al panel de sucursal / hub. */
+  onHub?: () => void;
+  /** Pestaña activa de la lista: "open" = cuentas abiertas (default),
+   *  "paid" = tickets cobrados del último mes (solo lectura: reimprimir). */
+  mode?: "open" | "paid";
+  /** Cambia de pestaña Abiertas/Cobradas. Si no se pasa, no se muestra el toggle. */
+  onModeChange?: (mode: "open" | "paid") => void;
+  /** "Reimprimir recibo" de un ticket cobrado (impresión directa, sin navegar). */
+  onReprintPaid?: (id: string) => void;
+  /** Spinner en la lista mientras se cargan los cobrados y no hay cache. */
+  paidLoading?: boolean;
+  /** Cuentas en curso (mesa, llevar, domicilio) — o cobradas en modo "paid". */
   openAccounts?: OpenAccount[];
   /**
    * Tipos de orden que la sucursal acepta (subset de DINE_IN / TAKEOUT /
@@ -104,6 +133,7 @@ const TYPE_META: Record<OrderType, { label: string; icon: typeof Utensils; accen
 
 // Punto de estado por estado de la orden.
 const STATUS_DOT: Record<string, string> = {
+  PAID:       "#88D66C",
   READY:      "#88D66C",
   PREPARING:  "#ffb84d",
   CONFIRMED:  "#ffb84d",
@@ -119,11 +149,15 @@ const FILTERS: { key: "ALL" | OrderType; label: string }[] = [
   { key: "DELIVERY", label: "Domicilio" },
 ];
 
-// Accesos rápidos del menú desplegable (esquina del header).
+// Accesos del menú desplegable (esquina del header). Combina navegación
+// (catálogo / sucursal) con los accesos operativos. Replica el rol del
+// TopNavDropdown del catálogo para que la pantalla principal también navegue.
 const SHORTCUTS = [
-  { label: "Corte de caja",    icon: Wallet,   action: "shift"    as const },
-  { label: "Gastos y compras", icon: Coins,    action: "expenses" as const },
-  { label: "Panel central",    icon: Settings, action: "config"   as const },
+  { label: "Ir a ventas",      icon: ShoppingCart, action: "sales"    as const },
+  { label: "Sucursal",         icon: LayoutGrid,   action: "hub"      as const },
+  { label: "Corte de caja",    icon: Wallet,       action: "shift"    as const },
+  { label: "Gastos y compras", icon: Coins,        action: "expenses" as const },
+  { label: "Panel central",    icon: Settings,     action: "config"   as const },
 ];
 
 // Hora exacta (HH:MM) + fecha corta (es-MX) para la columna de hora.
@@ -148,9 +182,16 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onExpenses,
   onConfig,
   onWhatsapp,
+  onSales,
+  onHub,
+  mode = "open",
+  onModeChange,
+  onReprintPaid,
+  paidLoading = false,
   openAccounts = [],
   allowedTypes,
 }) => {
+  const paidMode = mode === "paid";
   const [menuOpen, setMenuOpen] = useState(false);
   const [filter, setFilter] = useState<"ALL" | OrderType>("ALL");
   const menuRef = useRef<HTMLDivElement>(null);
@@ -226,12 +267,16 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
   const runShortcut = (action: (typeof SHORTCUTS)[number]["action"]) => {
     setMenuOpen(false);
+    if (action === "sales") onSales?.();
+    if (action === "hub") onHub?.();
     if (action === "shift") onShiftClose?.();
     if (action === "expenses") onExpenses?.();
     if (action === "config") onConfig?.();
   };
 
   const enabledShortcuts = SHORTCUTS.filter((shortcut) => {
+    if (shortcut.action === "sales") return Boolean(onSales);
+    if (shortcut.action === "hub") return Boolean(onHub);
     if (shortcut.action === "shift") return Boolean(onShiftClose);
     if (shortcut.action === "expenses") return Boolean(onExpenses);
     if (shortcut.action === "config") return Boolean(onConfig);
@@ -324,39 +369,85 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
       <main className="relative z-10 mt-3 flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
         {/* CUENTAS ABIERTAS */}
         <section className="flex min-h-0 flex-[2.2] flex-col rounded-xl border border-white/10 bg-white/[0.035] p-3 backdrop-blur-md">
-          <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#ffb84d]">
-              Cuentas abiertas · {openAccounts.length}
-            </p>
-            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
-              {FILTERS.map((f) => {
-                const active = filter === f.key;
-                return (
-                  <button
-                    key={f.key}
-                    type="button"
-                    onClick={() => setFilter(f.key)}
-                    className={`shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all active:scale-95 ${
-                      active
-                        ? "bg-[#ffb84d] text-[#0c0c0e]"
-                        : "border border-white/10 bg-white/5 text-white/55"
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                );
-              })}
+          <div className="mb-2 flex shrink-0 flex-col gap-2">
+            {/* TOGGLE Abiertas / Cobradas */}
+            {onModeChange && (
+              <div className="flex gap-1.5 rounded-xl border border-white/10 bg-white/5 p-1">
+                {([
+                  { key: "open" as const, label: "Abiertas" },
+                  { key: "paid" as const, label: "Cobradas" },
+                ]).map((m) => {
+                  const active = mode === m.key;
+                  return (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => onModeChange(m.key)}
+                      className={`flex-1 rounded-lg py-2 text-[11px] font-black uppercase tracking-[0.15em] transition-all active:scale-95 ${
+                        active
+                          ? m.key === "paid"
+                            ? "bg-[#88D66C] text-[#0c0c0e]"
+                            : "bg-[#ffb84d] text-[#0c0c0e]"
+                          : "text-white/55"
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3">
+              <p
+                className="text-[10px] font-black uppercase tracking-[0.22em]"
+                style={{ color: paidMode ? "#88D66C" : "#ffb84d" }}
+              >
+                {paidMode
+                  ? `Cobradas · último mes · ${openAccounts.length}`
+                  : `Cuentas abiertas · ${openAccounts.length}`}
+              </p>
+              <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+                {FILTERS.map((f) => {
+                  const active = filter === f.key;
+                  return (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => setFilter(f.key)}
+                      className={`shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all active:scale-95 ${
+                        active
+                          ? "bg-[#ffb84d] text-[#0c0c0e]"
+                          : "border border-white/10 bg-white/5 text-white/55"
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hide">
-            {visibleAccounts.length === 0 ? (
+            {paidMode && paidLoading && openAccounts.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center opacity-50">
+                <Loader2 size={36} className="animate-spin text-white/40" />
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40">
+                  Cargando cobrados…
+                </p>
+              </div>
+            ) : visibleAccounts.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center opacity-40">
                 <Receipt size={40} className="text-white/30" />
                 <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40">
-                  {openAccounts.length === 0
-                    ? "No hay cuentas abiertas"
-                    : "Sin cuentas de este tipo"}
+                  {paidMode
+                    ? openAccounts.length === 0
+                      ? "Sin tickets cobrados este mes"
+                      : "Sin cobrados de este tipo"
+                    : openAccounts.length === 0
+                      ? "No hay cuentas abiertas"
+                      : "Sin cuentas de este tipo"}
                 </p>
               </div>
             ) : (
@@ -425,35 +516,44 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                           </span>
                         </div>
                         <div className="mt-0.5 flex items-center gap-2 text-[10px] font-bold text-white/40">
-                          {acc.rawType === "DINE_IN" ? (
-                            (acc.numberOfGuests ?? 0) > 0 && (
-                              <span className="inline-flex items-center gap-1">
-                                <Users size={11} className="shrink-0" />
-                                {acc.numberOfGuests} pax
-                              </span>
-                            )
-                          ) : acc.phone ? (
-                            <span className="inline-flex items-center gap-1 tabular-nums">
-                              <Phone size={11} className="shrink-0" />
-                              {acc.phone}
+                          {paidMode ? (
+                            <span className="inline-flex items-center gap-1 text-[#88D66C]">
+                              <Wallet size={11} className="shrink-0" />
+                              {payMethodLabel(acc.paymentMethod)}
                             </span>
-                          ) : null}
-                          {acc.itemsCount > 0 && (
+                          ) : (
                             <>
-                              {((acc.rawType === "DINE_IN" && (acc.numberOfGuests ?? 0) > 0) ||
-                                (acc.rawType !== "DINE_IN" && acc.phone)) && (
-                                <span className="text-white/20">·</span>
+                              {acc.rawType === "DINE_IN" ? (
+                                (acc.numberOfGuests ?? 0) > 0 && (
+                                  <span className="inline-flex items-center gap-1">
+                                    <Users size={11} className="shrink-0" />
+                                    {acc.numberOfGuests} pax
+                                  </span>
+                                )
+                              ) : acc.phone ? (
+                                <span className="inline-flex items-center gap-1 tabular-nums">
+                                  <Phone size={11} className="shrink-0" />
+                                  {acc.phone}
+                                </span>
+                              ) : null}
+                              {acc.itemsCount > 0 && (
+                                <>
+                                  {((acc.rawType === "DINE_IN" && (acc.numberOfGuests ?? 0) > 0) ||
+                                    (acc.rawType !== "DINE_IN" && acc.phone)) && (
+                                    <span className="text-white/20">·</span>
+                                  )}
+                                  <span className="tabular-nums">{acc.itemsCount} art.</span>
+                                </>
                               )}
-                              <span className="tabular-nums">{acc.itemsCount} art.</span>
-                            </>
-                          )}
-                          {acc.driver && (
-                            <>
-                              <span className="text-white/20">·</span>
-                              <span className="inline-flex items-center gap-1 truncate text-blue-300">
-                                <Bike size={11} className="shrink-0" />
-                                <span className="truncate">{acc.driver}</span>
-                              </span>
+                              {acc.driver && (
+                                <>
+                                  <span className="text-white/20">·</span>
+                                  <span className="inline-flex items-center gap-1 truncate text-blue-300">
+                                    <Bike size={11} className="shrink-0" />
+                                    <span className="truncate">{acc.driver}</span>
+                                  </span>
+                                </>
+                              )}
                             </>
                           )}
                         </div>
@@ -474,37 +574,50 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       </span>
                     </div>
 
-                    {/* Acciones por cuenta — Editar / Imprimir / Cobrar — sin
-                        tener que abrir el ticket en el editor (el caso más común
-                        en caja). "Cobrar" se oculta con hideMoney (préstamo). */}
-                    <div className="flex items-stretch gap-2">
-                      <button
-                        type="button"
-                        aria-label={`Editar cuenta de ${title}`}
-                        onClick={() => onOpenAccount?.(acc.id)}
-                        className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95 active:text-white"
-                      >
-                        <Pencil size={15} strokeWidth={2.5} /> Editar
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Imprimir cuenta de ${title}`}
-                        onClick={() => onReprintAccount?.(acc.id)}
-                        className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95 active:text-white"
-                      >
-                        <Receipt size={15} strokeWidth={2.5} /> Imprimir
-                      </button>
-                      {!hideMoney && (
+                    {/* Acciones por cuenta. En "Cobradas" (solo lectura) un único
+                        botón reimprime el recibo; en "Abiertas" están Editar /
+                        Imprimir / Cobrar ("Cobrar" se oculta con hideMoney). */}
+                    {paidMode ? (
+                      <div className="flex items-stretch gap-2">
                         <button
                           type="button"
-                          aria-label={`Cobrar cuenta de ${title}`}
-                          onClick={() => onChargeAccount?.(acc.id)}
-                          className="flex-[1.3] h-10 rounded-xl bg-[#88d66c] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                          aria-label={`Reimprimir recibo de ${title}`}
+                          onClick={() => onReprintPaid?.(acc.id)}
+                          className="flex-1 h-10 rounded-xl bg-[#88D66C]/12 border border-[#88D66C]/30 text-[#88D66C] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                         >
-                          <Zap size={15} strokeWidth={2.8} /> Cobrar
+                          <Receipt size={15} strokeWidth={2.5} /> Reimprimir recibo
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-stretch gap-2">
+                        <button
+                          type="button"
+                          aria-label={`Editar cuenta de ${title}`}
+                          onClick={() => onOpenAccount?.(acc.id)}
+                          className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95 active:text-white"
+                        >
+                          <Pencil size={15} strokeWidth={2.5} /> Editar
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Imprimir cuenta de ${title}`}
+                          onClick={() => onReprintAccount?.(acc.id)}
+                          className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95 active:text-white"
+                        >
+                          <Receipt size={15} strokeWidth={2.5} /> Imprimir
+                        </button>
+                        {!hideMoney && (
+                          <button
+                            type="button"
+                            aria-label={`Cobrar cuenta de ${title}`}
+                            onClick={() => onChargeAccount?.(acc.id)}
+                            className="flex-[1.3] h-10 rounded-xl bg-[#88d66c] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                          >
+                            <Zap size={15} strokeWidth={2.8} /> Cobrar
+                          </button>
+                        )}
+                      </div>
+                    )}
                     </div>
                   );
                 })}
