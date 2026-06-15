@@ -229,11 +229,11 @@ export default function TicketFormatTab() {
             <p className="text-[10px] text-zinc-500 -mt-2 ml-1">El cliente escanea el QR al pie del recibo para registrarse en tu tienda en línea y acumular puntos.</p>
 
             <SectionLabel>Tipografía del recibo</SectionLabel>
-            <Field label="Fuente">
-              <Segmented value={cfg.fontFamily} onChange={(v) => setCfg({ ...cfg, fontFamily: v })} options={FONT_OPTS} />
+            <Field label="Fuente — así se ve impresa">
+              <FontPicker value={cfg.fontFamily} onChange={(v) => setCfg({ ...cfg, fontFamily: v })} />
             </Field>
             <Field label="Tamaño de letra">
-              <Segmented value={cfg.fontSize} onChange={(v) => setCfg({ ...cfg, fontSize: v })} options={SIZE_OPTS} />
+              <SizePicker value={cfg.fontSize} onChange={(v) => setCfg({ ...cfg, fontSize: v })} />
             </Field>
             <Field label="Espaciado entre líneas">
               <Segmented value={cfg.lineSpacing} onChange={(v) => setCfg({ ...cfg, lineSpacing: v })} options={SPACING_OPTS} />
@@ -318,8 +318,8 @@ export default function TicketFormatTab() {
             </div>
 
             <SectionLabel>Tipografía de la comanda</SectionLabel>
-            <Field label="Fuente">
-              <Segmented value={cfg.kitchenFontFamily} onChange={(v) => setCfg({ ...cfg, kitchenFontFamily: v })} options={FONT_OPTS} />
+            <Field label="Fuente — así se ve impresa">
+              <FontPicker value={cfg.kitchenFontFamily} onChange={(v) => setCfg({ ...cfg, kitchenFontFamily: v })} />
             </Field>
             <Field label="Espaciado entre líneas">
               <Segmented value={cfg.kitchenLineSpacing} onChange={(v) => setCfg({ ...cfg, kitchenLineSpacing: v })} options={SPACING_OPTS} />
@@ -431,6 +431,76 @@ function Segmented({
   );
 }
 
+/**
+ * Selector de FUENTE con vista previa. La térmica solo tiene 2 tipografías
+ * físicas (A estándar y B compacta) — una tercera imprimiría idéntica a la A.
+ * Cada tile renderiza un mini-recibo para que el ancho/tamaño real se vea
+ * ANTES de elegir (la compacta cabe más pero sale más chica).
+ */
+function FontPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const opts = [
+    { id: "monospace", label: "Estándar", note: "Tamaño normal", fontPx: 13, scaleX: 1, ls: 0 },
+    { id: "sans-serif", label: "Compacta", note: "Más chica, cabe más", fontPx: 10, scaleX: 0.82, ls: -0.4 },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {opts.map((o) => {
+        const active = value === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
+            className={`flex flex-col gap-1 p-3 rounded-2xl border text-left transition-all ${active ? "bg-iris-500/10 border-iris-500" : "bg-[#121316] border-white/5 hover:border-iris-glow"}`}
+          >
+            <span className={`text-[11px] font-black uppercase tracking-widest ${active ? "text-iris-500" : "text-zinc-300"}`}>{o.label}</span>
+            <span className="text-[9px] font-bold text-zinc-500">{o.note}</span>
+            <div className="mt-1 rounded-md bg-white text-black px-2 py-1.5 overflow-hidden">
+              <div style={{ fontFamily: "'Courier New', ui-monospace, monospace", fontSize: o.fontPx, lineHeight: 1.3, letterSpacing: o.ls, transform: `scaleX(${o.scaleX})`, transformOrigin: "left" }}>
+                <div className="flex justify-between gap-1"><span>Hamburguesa</span><span>$210</span></div>
+                <div style={{ opacity: 0.65 }}>2 x $105.00</div>
+              </div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Selector de TAMAÑO con vista previa: 3 alturas reales (Normal/Grande/Extra)
+ * mostrando el importe al alto que saldrá impreso, para que el tamaño no sea
+ * sorpresa (caso "quedó muy pequeña").
+ */
+function SizePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const opts = [
+    { id: "medium", label: "Normal", px: 13 },
+    { id: "large", label: "Grande", px: 19 },
+    { id: "xlarge", label: "Extra", px: 27 },
+  ];
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {opts.map((o) => {
+        const active = value === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
+            className={`flex flex-col gap-1.5 p-2 rounded-2xl border transition-all ${active ? "bg-iris-500/10 border-iris-500" : "bg-[#121316] border-white/5 hover:border-iris-glow"}`}
+          >
+            <span className={`text-[11px] font-black uppercase tracking-widest text-center ${active ? "text-iris-500" : "text-zinc-300"}`}>{o.label}</span>
+            <div className="rounded-md bg-white text-black flex items-center justify-center h-11 overflow-hidden">
+              <span style={{ fontFamily: "'Courier New', ui-monospace, monospace", fontSize: o.px, fontWeight: 700, lineHeight: 1 }}>$210</span>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Mapeo tipografía → CSS para los previews ──────────────────────────────
 const TYPO_FONT_CSS: Record<string, string> = {
   monospace: "'Courier New', ui-monospace, monospace",
@@ -440,16 +510,9 @@ const TYPO_FONT_CSS: Record<string, string> = {
 const typoLineHeight = (s: string) => (s === "tight" ? 1.2 : s === "loose" ? 1.85 : 1.5);
 const reciboFontPx = (s: string) => (s === "xlarge" ? 17 : s === "large" ? 15 : s === "small" ? 11 : 13);
 
-// Opciones de los selectores (alineadas a los enums de la DB).
-const FONT_OPTS = [
-  { id: "monospace", label: "Estándar", hint: "Font A" },
-  { id: "sans-serif", label: "Compacta", hint: "Font B" },
-];
-const SIZE_OPTS = [
-  { id: "medium", label: "Normal", hint: "1×" },
-  { id: "large", label: "Grande", hint: "2×" },
-  { id: "xlarge", label: "Extra", hint: "3×" },
-];
+// Opciones de los selectores (alineadas a los enums de la DB). La fuente y el
+// tamaño del recibo usan FontPicker/SizePicker (con vista previa); el resto
+// siguen con el Segmented simple.
 const SPACING_OPTS = [
   { id: "tight", label: "Compacto" },
   { id: "normal", label: "Normal" },
