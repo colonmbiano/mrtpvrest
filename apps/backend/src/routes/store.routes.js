@@ -64,6 +64,22 @@ async function resolveCustomerId(req, restaurantId) {
   } catch { return null; }
 }
 
+// ¿La petición viene de un CAJERO/STAFF autenticado de ESTE restaurante?
+// Se usa para que la captura manual del TPV (pantalla /pos/whatsapp) NO quede
+// sujeta al horario del storefront ni al mínimo de compra: el cajero procesa
+// pedidos reales que ya llegaron, a cualquier hora. El JWT está firmado, así
+// que confiar en `restaurantId`/`role` del payload es seguro. Los clientes
+// públicos (role CUSTOMER, o sin token) siguen respetando horario y mínimo.
+const STAFF_ROLES = ['OWNER', 'ADMIN', 'MANAGER', 'CASHIER', 'WAITER', 'SUPER_ADMIN'];
+function isAuthedStaff(req, restaurantId) {
+  try {
+    const h = req.headers.authorization;
+    if (!h || !h.startsWith('Bearer ')) return false;
+    const p = jwt.verify(h.split(' ')[1], process.env.JWT_SECRET);
+    return p.restaurantId === restaurantId && STAFF_ROLES.includes(p.role);
+  } catch { return false; }
+}
+
 // ── Anti-fraude: rate limit por kiosko ───────────────────────────────────
 // Cache en memoria de pedidos PENDING por terminal. Si un mismo terminal
 // crea muchas órdenes sin pagar en ventana corta, lo bloqueamos. Para
@@ -425,6 +441,10 @@ router.post('/orders', async (req, res) => {
   // inexistente) → el envío siempre cobraba $0.
   const config = await prisma.restaurantConfig.findUnique({ where: { restaurantId: restaurant.id } });
 
+  // Captura del TPV por un cajero autenticado: exenta de horario y mínimo
+  // (procesa pedidos reales a cualquier hora). Ver isAuthedStaff arriba.
+  const isStaff = isAuthedStaff(req, restaurant.id);
+
   const {
     items,
     customerName,
@@ -466,7 +486,7 @@ router.post('/orders', async (req, res) => {
   // Tienda cerrada: bloquear pedidos online (kioskos operan presencialmente y
   // no dependen de este flag). Considera override manual Y horario automático.
   // 423 Locked = recurso temporalmente no disponible.
-  if (rawSource !== 'KIOSK' && config) {
+  if (rawSource !== 'KIOSK' && !isStaff && config) {
     const storeState = computeOpenState(config);
     if (!storeState.isOpen) {
       return res.status(423).json({
@@ -639,8 +659,8 @@ router.post('/orders', async (req, res) => {
 
     const subtotal    = itemsData.reduce((s, i) => s + i.subtotal, 0);
 
-    // Mínimo de compra (solo pedidos online; el TPV/kiosko no lo aplica).
-    if (rawSource !== 'KIOSK' && config?.minOrderAmount > 0 && subtotal < config.minOrderAmount) {
+    // Mínimo de compra (solo pedidos online; el TPV/kiosko y el staff no lo aplican).
+    if (rawSource !== 'KIOSK' && !isStaff && config?.minOrderAmount > 0 && subtotal < config.minOrderAmount) {
       return res.status(400).json({
         error: `El pedido mínimo es de $${config.minOrderAmount}.`,
         code: 'MIN_ORDER_NOT_MET',
