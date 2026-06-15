@@ -1088,6 +1088,11 @@ model TicketConfig {
   invoiceUrl         String  @default("") // destino del QR (portal de facturación)
   invoiceFolioPrefix String  @default("")
 
+  // QR de lealtad al pie del recibo: el cliente lo escanea para registrarse en
+  // la tienda en línea y acumular puntos. loyaltyUrl = destino (tienda/registro).
+  showLoyaltyQr Boolean @default(false)
+  loyaltyUrl    String  @default("")
+
   // Nuevas opciones de personalización
   paperWidth  String  @default("80mm") // "58mm" | "80mm"
   fontFamily  String  @default("monospace") // "monospace" | "sans-serif" | "serif"

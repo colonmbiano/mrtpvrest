@@ -142,6 +142,9 @@ type TicketConfigDTO = {
   modifierIndent?: string;
   receiptShowModifiers?: boolean;
   receiptShowNotes?: boolean;
+  // ── QR de lealtad (registro de cliente para acumular puntos) ────────────
+  showLoyaltyQr?: boolean;
+  loyaltyUrl?: string;
 };
 
 /**
@@ -187,6 +190,9 @@ export function buildReceiptIdentityFields(
     itemSpacing: dto?.itemSpacing,
     showItemSeparator: dto?.showItemSeparator,
     modifierIndent: dto?.modifierIndent,
+    // QR de lealtad: registro del cliente para acumular puntos.
+    showLoyaltyQr: dto?.showLoyaltyQr,
+    loyaltyUrl: dto?.loyaltyUrl || null,
   };
 }
 
