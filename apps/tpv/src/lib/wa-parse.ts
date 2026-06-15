@@ -90,13 +90,32 @@ export function matchScore(target: string, query: string): number {
   return Math.max(tokenRatio * 0.85, subseq * 0.5);
 }
 
+// Detecta intención de tamaño en el texto del cliente.
+const QUERY_KILO_RE = /\b(kilo|kilos|kg|1\s*k|medio\s*kilo|1\/2\s*kilo|half\s*kilo)\b/;
+
+/**
+ * Sesgo de tamaño orden-vs-kilo. Regla del negocio: si el cliente NO dice
+ * "kilo", se asume ORDEN (porción) — nunca el kilo (más caro). Evita el error
+ * de matchear "1 Orden de Alitas" contra "1 KG de Alitas".
+ */
+function sizeBias(productName: string, query: string): number {
+  const p = normalize(productName);
+  const queryKilo = QUERY_KILO_RE.test(normalize(query));
+  const prodKilo = /\b(kilo|kilos|kg)\b/.test(p);
+  const prodOrden = /\borden\b/.test(p);
+  if (queryKilo) return prodKilo ? 1.2 : prodOrden ? 0.6 : 1; // pidió kilo → prefiere kilo
+  if (prodKilo) return 0.55; // no pidió kilo pero el producto es kilo → penaliza fuerte
+  if (prodOrden) return 1.15; // prefiere "Orden de…"
+  return 1;
+}
+
 /** Devuelve el mejor producto del catálogo para un texto, con su score. */
 export function bestMatch(query: string, products: Product[]): { match: Product | null; score: number } {
   let best: Product | null = null;
   let bestScore = 0;
   for (const p of products) {
     if (p?.isAvailable === false) continue;
-    const s = matchScore(p.name, query);
+    const s = matchScore(p.name, query) * sizeBias(p.name, query);
     if (s > bestScore) {
       bestScore = s;
       best = p;
