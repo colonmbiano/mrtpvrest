@@ -58,6 +58,10 @@ export function matchScore(target: string, query: string): number {
   if (!t || !q) return 0;
   if (t === q) return 1;
   if (t.includes(q)) return 0.9 + Math.min(0.1, q.length / Math.max(t.length, 1) * 0.1);
+  // Inverso: el nombre del producto aparece COMPLETO (como palabras) en el
+  // texto del cliente — ej. "Alitas" dentro de "orden de alitas bbq". Señal
+  // fuerte aunque el texto traiga palabras extra (orden, de, bbq…).
+  if (t.length >= 4 && ` ${q} `.includes(` ${t} `)) return 0.82;
 
   const qTokens = q.split(" ").filter((w) => w.length >= 2);
   const tTokens = t.split(" ").filter(Boolean);
