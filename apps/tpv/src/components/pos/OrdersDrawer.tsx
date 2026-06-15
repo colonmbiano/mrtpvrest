@@ -15,6 +15,8 @@ import {
   ChefHat,
   Zap,
   Pencil,
+  Wallet,
+  History,
 } from "lucide-react";
 import { hapticMedium } from "@/lib/haptics";
 
@@ -26,11 +28,14 @@ export interface DrawerOrder {
   status: string;
   total: number;
   time: string;
-  /** ISO de creación para mostrar hora + fecha exactas en el tile. */
+  /** ISO de creación (o de cobro en modo "Cobradas") para mostrar hora +
+   *  fecha exactas en el tile. */
   createdAt?: string;
   itemsCount: number;
   driver?: string;
   needsDriver?: boolean;
+  /** Solo modo "Cobradas": método de pago crudo para el chip del tile. */
+  paymentMethod?: string | null;
 }
 
 export interface DriverOption {
@@ -73,7 +78,25 @@ interface OrdersDrawerProps {
   canSendToKitchen?: boolean;
   /** Envia a cocina la comanda de TODOS los seleccionados. */
   onSendToKitchen?: (orders: DrawerOrder[]) => Promise<void>;
+  /** Pestaña activa: "open" = tickets abiertos (default), "paid" = cobrados del
+   *  último mes (solo lectura: ver detalle + reimprimir recibo). */
+  mode?: "open" | "paid";
+  /** Cambia de pestaña Abiertas/Cobradas. Si no se pasa, no se muestra el toggle. */
+  onModeChange?: (mode: "open" | "paid") => void;
+  /** Spinner en la lista mientras se refresca "Cobradas" y no hay cache aún. */
+  paidLoading?: boolean;
 }
+
+// Etiqueta legible del método de pago para el chip del tile en modo "Cobradas".
+const PAY_METHOD_LABEL: Record<string, string> = {
+  CASH: "Efectivo",
+  CARD: "Tarjeta",
+  TRANSFER: "Transfer.",
+  ONLINE: "En línea",
+  MIXED: "Mixto",
+};
+const payMethodLabel = (m?: string | null): string =>
+  m ? PAY_METHOD_LABEL[m] || m : "Pagado";
 
 const FILTERS = ["Todos", "Mesa", "Llevar", "Domicilio"] as const;
 type FilterKey = (typeof FILTERS)[number];
@@ -98,6 +121,7 @@ const matchesFilter = (order: DrawerOrder, filter: FilterKey): boolean => {
 
 // Tonos de borde y dot por estado, alineados a la paleta diseño operativo.
 const STATUS_TONE: Record<string, { dot: string; ring: string; chip: string }> = {
+  PAID:         { dot: "bg-[#88D66C]", ring: "border-[#88D66C]/30", chip: "text-[#88D66C]" },
   READY:        { dot: "bg-[#88D66C]", ring: "border-[#88D66C]/40", chip: "text-[#88D66C]" },
   PREPARING:    { dot: "bg-[#ffb84d]", ring: "border-[#ffb84d]/40", chip: "text-[#ffb84d]" },
   CONFIRMED:    { dot: "bg-[#ffb84d]", ring: "border-[#ffb84d]/40", chip: "text-[#ffb84d]" },
@@ -137,7 +161,11 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   onAssignDriver,
   canSendToKitchen = false,
   onSendToKitchen,
+  mode = "open",
+  onModeChange,
+  paidLoading = false,
 }) => {
+  const paidMode = mode === "paid";
   const [activeFilter, setActiveFilter] = useState<FilterKey>("Todos");
   const [sortKey, setSortKey] = useState<SortKey>("default");
   const [search, setSearch] = useState("");
@@ -154,8 +182,9 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   const longPressFired = React.useRef(false);
 
   // La seleccion multiple sirve para juntar cuentas, asignar repartidor
-  // o enviar a cocina.
-  const canSelect = canMergeOrders || canAssignDriver || canSendToKitchen;
+  // o enviar a cocina. En "Cobradas" (solo lectura) no aplica.
+  const canSelect =
+    !paidMode && (canMergeOrders || canAssignDriver || canSendToKitchen);
 
   const visibleOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -333,14 +362,20 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
           </div>
           <div className="flex-1 flex flex-col min-w-0">
             <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
-              {selectionMode ? "Seleccionar cuentas" : "Tickets abiertos"}
+              {paidMode
+                ? "Tickets cobrados"
+                : selectionMode
+                  ? "Seleccionar cuentas"
+                  : "Tickets abiertos"}
             </span>
             <span className="text-[16px] font-black text-white truncate leading-none">
-              {selectionMode
-                ? `${selectedOrders.length} seleccionada${selectedOrders.length === 1 ? "" : "s"}`
-                : `${orders.length} en curso${
-                    driverlessCount > 0 ? ` · ${driverlessCount} sin repartidor` : ""
-                  }`}
+              {paidMode
+                ? `${orders.length} cobrado${orders.length === 1 ? "" : "s"} · último mes`
+                : selectionMode
+                  ? `${selectedOrders.length} seleccionada${selectedOrders.length === 1 ? "" : "s"}`
+                  : `${orders.length} en curso${
+                      driverlessCount > 0 ? ` · ${driverlessCount} sin repartidor` : ""
+                    }`}
             </span>
           </div>
           {canSelect && (
@@ -369,6 +404,34 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
 
         {/* FILTERS & SEARCH */}
         <div className="relative z-10 p-4 border-b border-white/5 space-y-3 shrink-0">
+          {/* TOGGLE Abiertas / Cobradas */}
+          {onModeChange && !selectionMode && (
+            <div className="flex gap-2 p-1 rounded-2xl bg-white/5 border border-white/10">
+              {([
+                { key: "open" as const, label: "Abiertas" },
+                { key: "paid" as const, label: "Cobradas" },
+              ]).map((m) => {
+                const isActive = mode === m.key;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => onModeChange(m.key)}
+                    className={`flex-1 h-11 min-h-[44px] rounded-xl text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all ${
+                      isActive
+                        ? m.key === "paid"
+                          ? "bg-[#88D66C] text-[#0C0C0E] shadow-[0_5px_20px_rgba(136,214,108,0.3)]"
+                          : "bg-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                        : "text-white/55"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
             {FILTERS.map((f) => {
               const isActive = activeFilter === f;
@@ -430,11 +493,28 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
 
         {/* TILE GRID — 2 cols touch */}
         <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide p-3">
-          {visibleOrders.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center opacity-40 gap-4 py-16">
-              <Receipt size={48} className="text-white/30" />
+          {paidMode && paidLoading && orders.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center opacity-50 gap-4 py-16">
+              <Loader2 size={40} className="text-white/40 animate-spin" />
               <p className="text-[12px] font-bold tracking-widest uppercase text-white/40">
-                {orders.length === 0 ? "No hay tickets activos" : "Sin coincidencias"}
+                Cargando cobrados…
+              </p>
+            </div>
+          ) : visibleOrders.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center opacity-40 gap-4 py-16">
+              {paidMode ? (
+                <History size={48} className="text-white/30" />
+              ) : (
+                <Receipt size={48} className="text-white/30" />
+              )}
+              <p className="text-[12px] font-bold tracking-widest uppercase text-white/40">
+                {paidMode
+                  ? orders.length === 0
+                    ? "Sin tickets cobrados este mes"
+                    : "Sin coincidencias"
+                  : orders.length === 0
+                    ? "No hay tickets activos"
+                    : "Sin coincidencias"}
               </p>
             </div>
           ) : (
@@ -523,13 +603,23 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                         <span className="tabular-nums normal-case">
                           {formatDateTime(order.createdAt)}
                         </span>
-                        {order.itemsCount > 0 && (
+                        {paidMode ? (
                           <>
                             <span className="text-white/20">·</span>
-                            <span className="tabular-nums normal-case">
-                              {order.itemsCount} art.
+                            <span className="inline-flex items-center gap-1 text-[#88D66C] normal-case">
+                              <Wallet size={11} className="shrink-0" />
+                              {payMethodLabel(order.paymentMethod)}
                             </span>
                           </>
+                        ) : (
+                          order.itemsCount > 0 && (
+                            <>
+                              <span className="text-white/20">·</span>
+                              <span className="tabular-nums normal-case">
+                                {order.itemsCount} art.
+                              </span>
+                            </>
+                          )
                         )}
                       </div>
                     </div>
@@ -539,10 +629,29 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     </span>
                     </div>
 
-                    {/* Acciones por ticket — Editar / Imprimir / Cobrar — sin
+                    {/* Modo "Cobradas": solo lectura → un único botón para
+                        reimprimir el recibo (paid:true en el caller). */}
+                    {paidMode ? (
+                      <div className="flex items-stretch gap-2 w-full">
+                        <button
+                          type="button"
+                          aria-label={`Reimprimir recibo de ${order.customerName}`}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            hapticMedium();
+                            onReprintOrder(order);
+                          }}
+                          className="flex-1 h-9 rounded-lg bg-[#88D66C]/12 border border-[#88D66C]/30 text-[#88D66C] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                        >
+                          <Receipt size={15} strokeWidth={2.5} /> Reimprimir recibo
+                        </button>
+                      </div>
+                    ) : (
+                    /* Acciones por ticket — Editar / Imprimir / Cobrar — sin
                         tener que abrir la cuenta en el editor (el caso más común
-                        en caja). En modo selección se ocultan. */}
-                    {!selectionMode && (
+                        en caja). En modo selección se ocultan. */
+                    !selectionMode && (
                       <div className="flex items-stretch gap-2 w-full">
                         <button
                           type="button"
@@ -586,6 +695,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                           </button>
                         )}
                       </div>
+                    )
                     )}
                   </div>
                 );
@@ -648,6 +758,10 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                 )}
               </div>
             </div>
+          ) : paidMode ? (
+            <p className="text-center text-[10px] font-black uppercase tracking-[0.18em] text-white/30">
+              Cobrados del último mes · guardado local
+            </p>
           ) : (
             <button
               type="button"
