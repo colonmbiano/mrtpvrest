@@ -5,15 +5,18 @@ import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import OrderTypeSelector from "@/components/pos/OrderTypeSelector";
 import type { ExtendedOrderType, OpenAccount } from "@/components/pos/OrderTypeSelector";
+import OrdersDrawer, { type DrawerOrder } from "@/components/pos/OrdersDrawer";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import GuestCountModal from "@/components/pos/GuestCountModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import NotificationsPanel from "@/components/pos/NotificationsPanel";
 import WebOrdersPanel from "@/components/pos/WebOrdersPanel";
 import DriversPanel from "@/components/admin/DriversPanel";
+import ConfigMenu from "@/components/pos/ConfigMenu";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
+import { useThemeStore, type Palette } from "@/store/themeStore";
 import { useNotifications, useNotifStore } from "@/hooks/useNotifications";
 import {
   usePrinters,
@@ -65,6 +68,22 @@ const ORDER_TYPE_OF = (t: unknown): ExtendedOrderType =>
 // que el layout del menú. Se marcan con color distinto en la lista.
 const ONLINE_SOURCES = new Set(["ONLINE", "STORE", "WHATSAPP"]);
 
+// Etiqueta de tipo y "hace X" para el shape DrawerOrder del cajón (igual que
+// el layout del menú).
+const ORDER_TYPE_LABEL: Record<string, string> = {
+  DINE_IN: "MESA",
+  TAKEOUT: "LLEVAR",
+  DELIVERY: "DOMICILIO",
+};
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const m = Math.max(0, Math.floor(ms / 60000));
+  if (m < 1) return "ahora";
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return `${h}h`;
+}
+
 export default function OrderTypePage() {
   const router = useRouter();
 
@@ -88,6 +107,9 @@ export default function OrderTypePage() {
   useNotifications({ onOrderNew: (order) => autoPrintWebOrderRef.current?.(order) });
   const unreadCount = useNotifStore((s) => s.unreadCount);
 
+  // Tema (paleta + modo claro/oscuro) para el modal de configuración.
+  const { palette, mode, setPalette, toggleMode } = useThemeStore();
+
   // Config remota de la sucursal: define qué tipos de orden acepta. Un bar
   // con allowedOrderTypes=["DINE_IN"] oculta las tarjetas Para Llevar/Delivery.
   const tpvConfig = useTpvConfig();
@@ -102,6 +124,12 @@ export default function OrderTypePage() {
   const [showWebOrders, setShowWebOrders] = useState(false);
   const [showDrivers, setShowDrivers] = useState(false);
   const [acceptingWebId, setAcceptingWebId] = useState<string | null>(null);
+  // Cajón completo de tickets (juntar / repartidor / cocina) + config modal.
+  const [showOrders, setShowOrders] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
+  const [deliveryDrivers, setDeliveryDrivers] = useState<
+    { id: string; name: string; isAvailable?: boolean }[]
+  >([]);
 
   // Cuentas abiertas mostradas en la pantalla de inicio para retomar sin
   // pasar por el drawer. Guardamos las órdenes crudas para entrar directo.
@@ -125,7 +153,7 @@ export default function OrderTypePage() {
 
   // Tickets COBRADOS del último mes (pestaña "Cobradas"). Local-first: pinta
   // el cache al instante y revalida contra el backend (scope=paid, payload
-  // ligero). El detalle para reimprimir se baja on-demand en handleReprintPaid.
+  // ligero). El detalle para reimprimir se baja on-demand en reprintReceiptById.
   const fetchPaidOrders = useCallback(async () => {
     const cached = readPaidTicketsCache();
     if (cached.length) setPaidOrders(cached);
@@ -153,6 +181,21 @@ export default function OrderTypePage() {
     }
   }, []);
 
+  // Repartidores activos para asignar desde el cajón de tickets.
+  const fetchDeliveryDrivers = useCallback(async () => {
+    try {
+      const { data } = await api.get("/api/delivery");
+      const list = Array.isArray(data) ? data : [];
+      setDeliveryDrivers(
+        list
+          .filter((d: any) => d.isActive !== false)
+          .map((d: any) => ({ id: d.id, name: d.name, isAvailable: d.isAvailable })),
+      );
+    } catch (err) {
+      console.error("Error cargando repartidores:", err);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     // Diferido a microtask (patrón del resto del TPV): evita set-state-in-effect.
@@ -160,6 +203,20 @@ export default function OrderTypePage() {
     const id = setInterval(fetchOpenOrders, 30000);
     return () => { cancelled = true; clearInterval(id); };
   }, [fetchOpenOrders]);
+
+  // Al abrir el cajón, refrescamos órdenes y cargamos repartidores (para el
+  // selector de asignación). La carga de "Cobradas" ya la dispara el efecto por
+  // ordersMode (misma pestaña que la lista inline).
+  useEffect(() => {
+    if (!showOrders) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      fetchOpenOrders();
+      fetchDeliveryDrivers();
+    });
+    return () => { cancelled = true; };
+  }, [showOrders, fetchOpenOrders, fetchDeliveryDrivers]);
 
   // Al entrar a la pestaña "Cobradas" se carga el último mes (no se pollea:
   // es histórico, basta refrescar al cambiar de pestaña).
@@ -369,12 +426,13 @@ export default function OrderTypePage() {
   const handleReprintAccount = (id: string) => enterAccount(id, "print");
   const handleChargeAccount = (id: string) => enterAccount(id, "pay");
 
-  // Reimprime el RECIBO de un ticket COBRADO directamente desde la pantalla
+  // Reimprime el ticket de una orden por id, DIRECTAMENTE desde la pantalla
   // principal (sin navegar al catálogo ni reactivar la orden). Baja el detalle
-  // on-demand (los cobrados llegan sin items para mantener el cache chico) y lo
-  // manda a las impresoras CASHIER con paid:true (título "RECIBO").
-  const handleReprintPaid = async (id: string) => {
-    const t = toast.loading("Imprimiendo recibo…");
+  // on-demand y lo manda a las impresoras CASHIER. El título lo decide el estado
+  // real: "RECIBO" si ya está pagada, "CUENTA · pendiente de cobro" si no.
+  // Sirve tanto al botón "Reimprimir recibo" (cobradas) como al cajón.
+  const reprintReceiptById = async (id: string) => {
+    const t = toast.loading("Imprimiendo…");
     try {
       let full: any = null;
       try {
@@ -387,6 +445,8 @@ export default function OrderTypePage() {
         toast.error("No se pudo cargar el ticket", { id: t });
         return;
       }
+      const paid = full.paymentStatus === "PAID";
+      const label = paid ? "Recibo" : "Cuenta";
       const items: TicketItem[] = (full.items || []).map((it: any) => ({
         name: it.name || it.menuItem?.name || "Producto",
         quantity: Number(it.quantity ?? 1),
@@ -432,15 +492,15 @@ export default function OrderTypePage() {
         tip: Number(full.tip ?? 0),
         total: Number(full.total ?? subtotalCalc),
         paymentMethod: full.paymentMethod || null,
-        paid: true,
+        paid,
       });
       if (res.ok > 0 && res.failed.length === 0) {
         toast.success(
-          `Recibo reimpreso en ${res.ok} impresora${res.ok > 1 ? "s" : ""}`,
+          `${label} reimpres${paid ? "o" : "a"} en ${res.ok} impresora${res.ok > 1 ? "s" : ""}`,
           { id: t },
         );
       } else if (res.ok > 0) {
-        toast.warning(`Recibo: ${res.ok} ok / ${res.failed.length} fallaron`, {
+        toast.warning(`${label}: ${res.ok} ok / ${res.failed.length} fallaron`, {
           id: t,
         });
       } else {
@@ -488,6 +548,159 @@ export default function OrderTypePage() {
     setShowWebOrders(false);
     enterAccount(id, null);
   };
+
+  // ── CAJÓN COMPLETO DE TICKETS (juntar / repartidor / cocina) ──
+  // Roles que pueden juntar cuentas / asignar repartidor (no WAITER/cocina).
+  const canMergeOpenOrders = currentEmployee?.role
+    ? ["ADMIN", "SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"].includes(
+        currentEmployee.role,
+      )
+    : false;
+
+  // Detalle / cobro desde el cajón reusan el flujo de la lista (navegan al
+  // catálogo). La reimpresión imprime directo (sin navegar ni reactivar).
+  const handleDrawerShowDetail = (o: DrawerOrder) => {
+    setShowOrders(false);
+    enterAccount(o.id, null);
+  };
+  const handleDrawerConfirmPayment = (o: DrawerOrder) => {
+    setShowOrders(false);
+    handleChargeAccount(o.id);
+  };
+  const handleDrawerReprint = (o: DrawerOrder) => reprintReceiptById(o.id);
+
+  // Juntar cuentas: POST /api/orders/:source/merge/:target por cada origen.
+  const handleMergeOpenOrders = useCallback(
+    async (
+      targetOrder: { id: string; orderNumber: string },
+      sourceOrders: { id: string }[],
+    ) => {
+      let mergedCount = 0;
+      try {
+        for (const sourceOrder of sourceOrders) {
+          await api.post(`/api/orders/${sourceOrder.id}/merge/${targetOrder.id}`);
+          mergedCount += 1;
+        }
+        toast.success(
+          `${sourceOrders.length + 1} tickets unidos en #${targetOrder.orderNumber}`,
+        );
+      } catch (err: any) {
+        const detail =
+          err?.response?.data?.error || err?.message || "fallo desconocido";
+        toast.error(
+          mergedCount > 0
+            ? `${mergedCount} cuenta${mergedCount === 1 ? "" : "s"} unida${mergedCount === 1 ? "" : "s"}; no se pudo terminar: ${detail}`
+            : `No se pudieron juntar los tickets: ${detail}`,
+        );
+        throw err;
+      } finally {
+        await fetchOpenOrders();
+      }
+    },
+    [fetchOpenOrders],
+  );
+
+  // Asignar repartidor: PUT /api/delivery/assign por cada pedido seleccionado.
+  const handleAssignDriverToOrders = useCallback(
+    async (ordersToAssign: { id: string }[], driverId: string) => {
+      let assigned = 0;
+      try {
+        for (const order of ordersToAssign) {
+          await api.put("/api/delivery/assign", { orderId: order.id, driverId });
+          assigned += 1;
+        }
+        const driverName =
+          deliveryDrivers.find((d) => d.id === driverId)?.name || "repartidor";
+        toast.success(
+          `${assigned} pedido${assigned === 1 ? "" : "s"} enviado${assigned === 1 ? "" : "s"} a ${driverName}`,
+        );
+      } catch (err: any) {
+        const detail =
+          err?.response?.data?.error || err?.message || "fallo desconocido";
+        toast.error(
+          assigned > 0
+            ? `${assigned} asignado${assigned === 1 ? "" : "s"}; no se pudo terminar: ${detail}`
+            : `No se pudo asignar repartidor: ${detail}`,
+        );
+        throw err;
+      } finally {
+        await fetchOpenOrders();
+      }
+    },
+    [deliveryDrivers, fetchOpenOrders],
+  );
+
+  // Enviar (reimprimir) a cocina la comanda de los seleccionados, sin abrirlos.
+  const handleSendOrdersToKitchen = async (ordersToSend: { id: string }[]) => {
+    const t = toast.loading(`Enviando ${ordersToSend.length} a cocina...`);
+    let sent = 0;
+    let failed = 0;
+    for (const o of ordersToSend) {
+      try {
+        let full: any = null;
+        try {
+          const { data } = await api.get(`/api/orders/${o.id}`);
+          full = data;
+        } catch {
+          full = null;
+        }
+        const items = orderItemsToTicketItems(full?.items || []);
+        if (items.length === 0) { failed += 1; continue; }
+        const res = await printKitchenTickets(printers, {
+          orderNumber: full.orderNumber || String(full.id).slice(-6).toUpperCase(),
+          orderType: full.orderType || null,
+          tableNumber: full.table?.name || full.tableNumber || null,
+          customerName: full.customerName || full.user?.name || null,
+          items,
+          isReprint: true,
+          config: kitchenConfig ?? undefined,
+        });
+        if (res.ok > 0) sent += 1;
+        else failed += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    if (failed === 0) {
+      toast.success(
+        `${sent} comanda${sent === 1 ? "" : "s"} enviada${sent === 1 ? "" : "s"} a cocina`,
+        { id: t },
+      );
+    } else {
+      toast.warning(
+        `${sent} enviada${sent === 1 ? "" : "s"} - ${failed} fallaron`,
+        { id: t },
+      );
+    }
+  };
+
+  // Shape DrawerOrder para el cajón (abiertas y cobradas), igual que el menú.
+  const drawerOrders: DrawerOrder[] = openOrders.map((o: any) => ({
+    id: o.id,
+    orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
+    customerName:
+      o.ticketName || o.customerName || o.user?.name || "Público general",
+    type: ORDER_TYPE_LABEL[o.orderType] || o.orderType || "ORDEN",
+    status: o.status,
+    total: Number(o.total ?? 0),
+    time: timeAgo(o.createdAt),
+    createdAt: o.createdAt,
+    itemsCount: Array.isArray(o.items) ? o.items.length : 0,
+    driver: o.deliveryDriverName || undefined,
+    needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
+  }));
+  const drawerPaidOrders: DrawerOrder[] = paidOrders.map((p) => ({
+    id: p.id,
+    orderNumber: p.orderNumber,
+    customerName: p.customerName,
+    type: ORDER_TYPE_LABEL[p.orderType || ""] || p.orderType || "ORDEN",
+    status: "PAID",
+    total: p.total,
+    time: timeAgo(p.paidAt || p.createdAt || new Date().toISOString()),
+    createdAt: p.paidAt || p.createdAt || undefined,
+    itemsCount: 0,
+    paymentMethod: p.paymentMethod,
+  }));
 
   const handlePickType = (type: ExtendedOrderType) => {
     if (type === "DINE_IN") {
@@ -621,7 +834,7 @@ export default function OrderTypePage() {
         onOpenAccount={handleOpenAccount}
         onReprintAccount={handleReprintAccount}
         onChargeAccount={handleChargeAccount}
-        onReprintPaid={handleReprintPaid}
+        onReprintPaid={reprintReceiptById}
         hideMoney={hideMoney}
         mode={ordersMode}
         onModeChange={setOrdersMode}
@@ -636,6 +849,8 @@ export default function OrderTypePage() {
         onWebOrders={() => setShowWebOrders(true)}
         onDrivers={() => setShowDrivers(true)}
         onNotifs={() => setShowNotifs(true)}
+        onManageTickets={() => setShowOrders(true)}
+        onConfigMenu={() => setShowConfig(true)}
         webOrdersCount={pendingWebCount}
         unreadNotifs={unreadCount}
         allowedTypes={tpvConfig.allowedOrderTypes}
@@ -695,6 +910,46 @@ export default function OrderTypePage() {
         onClose={() => setShowDrivers(false)}
         accent="#ffb84d"
         currentRole={currentEmployee?.role}
+      />
+
+      {/* CAJÓN COMPLETO DE TICKETS — toggle Abiertas/Cobradas + multiselección
+          para juntar cuentas, asignar repartidor y enviar a cocina. */}
+      <OrdersDrawer
+        isOpen={showOrders}
+        onClose={() => {
+          setShowOrders(false);
+          setOrdersMode("open");
+        }}
+        mode={ordersMode}
+        onModeChange={setOrdersMode}
+        paidLoading={paidLoading}
+        orders={ordersMode === "paid" ? drawerPaidOrders : drawerOrders}
+        onShowDetail={handleDrawerShowDetail}
+        onConfirmPayment={handleDrawerConfirmPayment}
+        onReprintOrder={handleDrawerReprint}
+        hideMoney={hideMoney || ordersMode === "paid"}
+        canMergeOrders={canMergeOpenOrders && !hideMoney && ordersMode === "open"}
+        onMergeOrders={handleMergeOpenOrders}
+        canAssignDriver={canMergeOpenOrders && !hideMoney && ordersMode === "open"}
+        drivers={deliveryDrivers}
+        onAssignDriver={handleAssignDriverToOrders}
+        canSendToKitchen={ordersMode === "open"}
+        onSendToKitchen={handleSendOrdersToKitchen}
+      />
+
+      {/* MODAL DE CONFIGURACIÓN — tema / modo claro-oscuro / bloquear terminal. */}
+      <ConfigMenu
+        isOpen={showConfig}
+        onClose={() => setShowConfig(false)}
+        onLogout={() => {
+          logout();
+          setShowConfig(false);
+          router.replace("/locked");
+        }}
+        currentTheme={palette}
+        onThemeChange={(p) => setPalette(p as Palette)}
+        isDark={mode === "dark"}
+        onToggleMode={toggleMode}
       />
     </div>
   );
