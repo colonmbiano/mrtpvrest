@@ -51,6 +51,8 @@ interface Shift {
   cashIns?: ShiftCashIn[];
   // Cuántos meseros/staff quedaron cerrados (clock-out) junto con la caja.
   staffClockedOut?: number;
+  // Cuántos repartidores recibieron su corte automático al cerrar la caja.
+  driversCut?: number;
 }
 
 const fmtMoney = (n: number) =>
@@ -289,6 +291,11 @@ export default function CierreTurno() {
             {typeof cs.staffClockedOut === 'number' && cs.staffClockedOut > 0 && (
               <p className="text-xs font-bold text-emerald-300/80">
                 {cs.staffClockedOut} {cs.staffClockedOut === 1 ? 'mesero cerrado' : 'meseros cerrados'} con la caja
+              </p>
+            )}
+            {typeof cs.driversCut === 'number' && cs.driversCut > 0 && (
+              <p className="text-xs font-bold text-emerald-300/80">
+                {cs.driversCut} {cs.driversCut === 1 ? 'repartidor cortado' : 'repartidores cortados'} con la caja
               </p>
             )}
           </div>
