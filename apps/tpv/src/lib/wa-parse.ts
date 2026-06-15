@@ -94,7 +94,7 @@ export function bestMatch(query: string, products: Product[]): { match: Product 
   return { match: best, score: bestScore };
 }
 
-const MATCH_THRESHOLD = 0.5;
+const MATCH_THRESHOLD = 0.4;
 
 // Renglones que son metadatos, no productos.
 const META_LINE = /^\s*(cliente|nombre|tel(e|é)fono|tel|cel|whats?app|direcci(o|ó)n|dir|domicilio|pago|total|subtotal|entrega|hora|pedido|orden|nota|comentario|forma de pago|m(e|é)todo)\b\s*[:\-]/i;
@@ -157,16 +157,29 @@ function parseLine(raw: string, products: Product[]): ParsedLine | null {
   const productQuery = body.trim();
   // Un renglón de puro número o muy corto no es producto.
   if (!productQuery || /^\d+$/.test(productQuery) || normalize(productQuery).length < 2) return null;
+  // Línea de teléfono/metadato sin etiqueta con ":" (ej. "Tel 7228447174"):
+  // muchos dígitos y pocas letras → no es un producto.
+  const digitCount = productQuery.replace(/\D/g, "").length;
+  const letterCount = productQuery.replace(/[^a-zA-Z]/g, "").length;
+  if (digitCount >= 8 && letterCount <= 5) return null;
 
   const { match, score } = bestMatch(productQuery, products);
-  return {
-    raw,
-    quantity,
-    productQuery,
-    notes,
-    match: score >= MATCH_THRESHOLD ? match : null,
-    score,
-  };
+  const matched = score >= MATCH_THRESHOLD ? match : null;
+
+  // Palabras del texto que NO están en el nombre del producto (ej. "BBQ" en
+  // "Alitas BBQ" → "Alitas") se conservan como nota para no perder la intención.
+  if (matched) {
+    const nameNorm = normalize(matched.name);
+    const leftover = normalize(productQuery)
+      .split(" ")
+      .filter((w) => w.length >= 2 && !nameNorm.includes(w));
+    if (leftover.length) {
+      const hint = leftover.join(" ");
+      notes = notes ? `${notes}, ${hint}` : hint;
+    }
+  }
+
+  return { raw, quantity, productQuery, notes, match: matched, score };
 }
 
 /** Punto de entrada: texto pegado + catálogo → pedido estructurado editable. */
