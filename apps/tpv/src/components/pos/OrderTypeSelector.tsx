@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
+  Bell,
   Bike,
   Coins,
   Globe,
@@ -90,6 +91,16 @@ interface OrderTypeSelectorProps {
   onSales?: () => void;
   /** Navegación: ir al panel de sucursal / hub. */
   onHub?: () => void;
+  /** Abre el panel de pedidos web (tienda en línea / WhatsApp). */
+  onWebOrders?: () => void;
+  /** Abre el panel de repartidores en vivo. */
+  onDrivers?: () => void;
+  /** Abre el panel de notificaciones. */
+  onNotifs?: () => void;
+  /** Badge: pedidos web PENDING por aceptar. */
+  webOrdersCount?: number;
+  /** Badge: notificaciones sin leer. */
+  unreadNotifs?: number;
   /** Pestaña activa de la lista: "open" = cuentas abiertas (default),
    *  "paid" = tickets cobrados del último mes (solo lectura: reimprimir). */
   mode?: "open" | "paid";
@@ -150,14 +161,18 @@ const FILTERS: { key: "ALL" | OrderType; label: string }[] = [
 ];
 
 // Accesos del menú desplegable (esquina del header). Combina navegación
-// (catálogo / sucursal) con los accesos operativos. Replica el rol del
-// TopNavDropdown del catálogo para que la pantalla principal también navegue.
+// (catálogo / sucursal), paneles en vivo (pedidos web, repartidores,
+// notificaciones) y los accesos operativos. Replica el rol del TopNavDropdown
+// del catálogo para que la pantalla principal también navegue y gestione.
 const SHORTCUTS = [
-  { label: "Ir a ventas",      icon: ShoppingCart, action: "sales"    as const },
-  { label: "Sucursal",         icon: LayoutGrid,   action: "hub"      as const },
-  { label: "Corte de caja",    icon: Wallet,       action: "shift"    as const },
-  { label: "Gastos y compras", icon: Coins,        action: "expenses" as const },
-  { label: "Panel central",    icon: Settings,     action: "config"   as const },
+  { label: "Pedidos web",      icon: Globe,        action: "weborders" as const },
+  { label: "Repartidores",     icon: Bike,         action: "drivers"   as const },
+  { label: "Notificaciones",   icon: Bell,         action: "notifs"    as const },
+  { label: "Ir a ventas",      icon: ShoppingCart, action: "sales"     as const },
+  { label: "Sucursal",         icon: LayoutGrid,   action: "hub"       as const },
+  { label: "Corte de caja",    icon: Wallet,       action: "shift"     as const },
+  { label: "Gastos y compras", icon: Coins,        action: "expenses"  as const },
+  { label: "Panel central",    icon: Settings,     action: "config"    as const },
 ];
 
 // Hora exacta (HH:MM) + fecha corta (es-MX) para la columna de hora.
@@ -184,6 +199,11 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onWhatsapp,
   onSales,
   onHub,
+  onWebOrders,
+  onDrivers,
+  onNotifs,
+  webOrdersCount = 0,
+  unreadNotifs = 0,
   mode = "open",
   onModeChange,
   onReprintPaid,
@@ -267,6 +287,9 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
   const runShortcut = (action: (typeof SHORTCUTS)[number]["action"]) => {
     setMenuOpen(false);
+    if (action === "weborders") onWebOrders?.();
+    if (action === "drivers") onDrivers?.();
+    if (action === "notifs") onNotifs?.();
     if (action === "sales") onSales?.();
     if (action === "hub") onHub?.();
     if (action === "shift") onShiftClose?.();
@@ -275,6 +298,9 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   };
 
   const enabledShortcuts = SHORTCUTS.filter((shortcut) => {
+    if (shortcut.action === "weborders") return Boolean(onWebOrders);
+    if (shortcut.action === "drivers") return Boolean(onDrivers);
+    if (shortcut.action === "notifs") return Boolean(onNotifs);
     if (shortcut.action === "sales") return Boolean(onSales);
     if (shortcut.action === "hub") return Boolean(onHub);
     if (shortcut.action === "shift") return Boolean(onShiftClose);
@@ -282,6 +308,13 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
     if (shortcut.action === "config") return Boolean(onConfig);
     return false;
   });
+
+  // Badge numérico por acceso (pedidos web pendientes / notificaciones sin leer).
+  const badgeFor = (action: (typeof SHORTCUTS)[number]["action"]): number => {
+    if (action === "weborders") return webOrdersCount;
+    if (action === "notifs") return unreadNotifs;
+    return 0;
+  };
 
   return (
     <div
@@ -325,9 +358,18 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               onClick={() => setMenuOpen((v) => !v)}
               aria-label="Menú"
               aria-expanded={menuOpen}
-              className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#6b5641] bg-[#1e1b18] text-[#f8e8d0] transition-all active:scale-95 hover:border-[#ff8400]/60 hover:text-[#ffb84d]"
+              className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-[#6b5641] bg-[#1e1b18] text-[#f8e8d0] transition-all active:scale-95 hover:border-[#ff8400]/60 hover:text-[#ffb84d]"
             >
               <Menu size={20} />
+              {/* Punto de aviso: hay pedidos web por aceptar o notifs sin leer. */}
+              {(webOrdersCount > 0 || unreadNotifs > 0) && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#ff8400] px-1 text-[9px] font-black text-[#0c0c0e]">
+                  {(() => {
+                    const n = webOrdersCount + unreadNotifs;
+                    return n > 99 ? "99+" : n;
+                  })()}
+                </span>
+              )}
             </button>
 
             {menuOpen && (
@@ -337,6 +379,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                 </div>
                 {enabledShortcuts.map((shortcut) => {
                   const Icon = shortcut.icon;
+                  const badge = badgeFor(shortcut.action);
                   return (
                     <button
                       key={shortcut.action}
@@ -345,7 +388,12 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-zinc-300 transition-all hover:bg-white/5 hover:text-white active:scale-[0.98]"
                     >
                       <Icon size={18} />
-                      <span className="text-sm font-bold">{shortcut.label}</span>
+                      <span className="flex-1 text-left text-sm font-bold">{shortcut.label}</span>
+                      {badge > 0 && (
+                        <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#ff8400] px-1.5 text-[10px] font-black text-[#0c0c0e]">
+                          {badge > 99 ? "99+" : badge}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

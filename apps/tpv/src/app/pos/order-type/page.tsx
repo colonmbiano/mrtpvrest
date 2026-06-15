@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
@@ -8,16 +8,25 @@ import type { ExtendedOrderType, OpenAccount } from "@/components/pos/OrderTypeS
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import GuestCountModal from "@/components/pos/GuestCountModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
+import NotificationsPanel from "@/components/pos/NotificationsPanel";
+import WebOrdersPanel from "@/components/pos/WebOrdersPanel";
+import DriversPanel from "@/components/admin/DriversPanel";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
+import { useNotifications, useNotifStore } from "@/hooks/useNotifications";
 import {
   usePrinters,
   useReceiptIdentity,
   useFullTicketConfig,
+  useKitchenConfig,
   buildReceiptIdentityFields,
 } from "@/hooks/usePrinters";
-import { printCustomerReceipt, type TicketItem } from "@/lib/printer-tcp";
+import {
+  printCustomerReceipt,
+  printKitchenTickets,
+  type TicketItem,
+} from "@/lib/printer-tcp";
 import {
   readPaidTicketsCache,
   writePaidTicketsCache,
@@ -68,6 +77,16 @@ export default function OrderTypePage() {
   const { printers } = usePrinters();
   const { businessName, businessFooter, terminalName } = useReceiptIdentity();
   const { config: ticketConfig } = useFullTicketConfig();
+  const { kitchenConfig } = useKitchenConfig();
+
+  // Notificaciones en tiempo real (socket) también en la pantalla principal.
+  // El store es global (zustand+localStorage) así que el badge se comparte con
+  // /pos/menu; el socket se monta solo aquí mientras esta pantalla esté viva
+  // (order-type y menu nunca coexisten). De paso auto-imprime los pedidos web
+  // entrantes: antes solo imprimían si el cajero estaba en /pos/menu.
+  const autoPrintWebOrderRef = useRef<((order: any) => void) | null>(null);
+  useNotifications({ onOrderNew: (order) => autoPrintWebOrderRef.current?.(order) });
+  const unreadCount = useNotifStore((s) => s.unreadCount);
 
   // Config remota de la sucursal: define qué tipos de orden acepta. Un bar
   // con allowedOrderTypes=["DINE_IN"] oculta las tarjetas Para Llevar/Delivery.
@@ -78,6 +97,11 @@ export default function OrderTypePage() {
   const [askingGuests, setAskingGuests] = useState(false);
   const [askingAdminPin, setAskingAdminPin] = useState(false);
   const [showExpenses, setShowExpenses] = useState(false);
+  // Paneles en vivo traídos desde /pos/menu a la pantalla principal.
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [showWebOrders, setShowWebOrders] = useState(false);
+  const [showDrivers, setShowDrivers] = useState(false);
+  const [acceptingWebId, setAcceptingWebId] = useState<string | null>(null);
 
   // Cuentas abiertas mostradas en la pantalla de inicio para retomar sin
   // pasar por el drawer. Guardamos las órdenes crudas para entrar directo.
@@ -146,6 +170,85 @@ export default function OrderTypePage() {
     return () => { cancelled = true; };
   }, [ordersMode, fetchPaidOrders]);
 
+  // Mapea items crudos del backend al shape de printer-tcp para la comanda de
+  // cocina (resuelve printerGroups item → categoría), igual que en /pos/menu.
+  const orderItemsToTicketItems = (rawItems: any[]): TicketItem[] =>
+    (rawItems || []).map((it: any) => {
+      const itemOverride = (it.menuItem?.printerGroups ?? [])
+        .map((m: any) => m.printerGroup?.id)
+        .filter((id: unknown): id is string => Boolean(id));
+      const categoryDefault = (it.menuItem?.category?.printerGroups ?? [])
+        .map((m: any) => m.printerGroup?.id)
+        .filter((id: unknown): id is string => Boolean(id));
+      const printerGroupIds =
+        itemOverride.length > 0 ? itemOverride : categoryDefault;
+      return {
+        name: it.name || it.menuItem?.name || "Producto",
+        quantity: Number(it.quantity ?? 1),
+        price: Number(it.unitPrice ?? it.price ?? 0),
+        notes: it.notes || null,
+        seatNumber: typeof it.seatNumber === "number" ? it.seatNumber : null,
+        modifiers: (it.modifiers || []).map((m: any) => ({
+          name: m.name || m.modifier?.name || "",
+          priceAdd: Number(m.priceAdd ?? m.price ?? 0),
+        })),
+        printerGroupIds,
+      };
+    });
+
+  // Auto-impresión de pedidos web entrantes (online / WhatsApp / tienda), con
+  // dedupe por id. Mismo patrón que /pos/menu: el backend cloud no alcanza las
+  // impresoras LAN, así que la tablet imprime la comanda al entrar el pedido.
+  const printedWebOrders = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    autoPrintWebOrderRef.current = async (order: any) => {
+      const id: string | undefined = order?.id || order?.orderId;
+      if (!id) return;
+      const src = String(order?.source || "").toUpperCase();
+      if (src && !ONLINE_SOURCES.has(src)) return;
+      if (printedWebOrders.current.has(id)) return;
+      printedWebOrders.current.add(id);
+      try {
+        let full: any = null;
+        try {
+          const { data } = await api.get(`/api/orders/${id}`);
+          full = data;
+        } catch {
+          full = null;
+        }
+        if (!full) { printedWebOrders.current.delete(id); return; }
+        const fullSrc = String(full?.source || "").toUpperCase();
+        if (fullSrc && !ONLINE_SOURCES.has(fullSrc)) {
+          printedWebOrders.current.delete(id);
+          return;
+        }
+        const items = orderItemsToTicketItems(full.items || []);
+        if (items.length === 0) { printedWebOrders.current.delete(id); return; }
+        const res = await printKitchenTickets(printers, {
+          orderNumber: full.orderNumber || String(full.id).slice(-6).toUpperCase(),
+          orderType: full.orderType || null,
+          tableNumber: full.table?.name || full.tableNumber || null,
+          customerName: full.customerName || full.user?.name || null,
+          items,
+          paid: full.paymentStatus === "PAID" || full.cashCollected === true,
+          paymentMethod: full.paymentMethod || null,
+          config: kitchenConfig ?? undefined,
+        });
+        const folio = full.orderNumber ? `#${full.orderNumber}` : "";
+        if (res.ok > 0) {
+          toast.success(`🖨️ Pedido web ${folio} impreso en cocina`);
+          fetchOpenOrders();
+        } else {
+          printedWebOrders.current.delete(id);
+          toast.warning(`Pedido web ${folio} recibido — no se pudo imprimir, revisa la impresora`);
+        }
+      } catch {
+        printedWebOrders.current.delete(id);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printers, kitchenConfig, fetchOpenOrders]);
+
   // Mapeo a la forma de tarjeta/fila que consume OrderTypeSelector.
   const openAccounts = useMemo<OpenAccount[]>(
     () =>
@@ -195,6 +298,37 @@ export default function OrderTypePage() {
         paymentMethod: p.paymentMethod,
       })),
     [paidOrders],
+  );
+
+  // Pedidos web (tienda en línea / WhatsApp) para el panel "Pedidos web".
+  // Salen del mismo openOrders ya polleado.
+  const webOrders = useMemo(
+    () =>
+      openOrders.filter((o: any) =>
+        ONLINE_SOURCES.has(String(o.source || "").toUpperCase()),
+      ),
+    [openOrders],
+  );
+  const webOrdersData = useMemo(
+    () =>
+      webOrders.map((o: any) => ({
+        id: o.id,
+        orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
+        customerName: o.customerName || o.user?.name || "Cliente",
+        customerPhone: o.customerPhone || null,
+        orderType: o.orderType || "TAKEOUT",
+        status: o.status,
+        total: Number(o.total ?? 0),
+        createdAt: o.createdAt,
+        itemsCount: Array.isArray(o.items) ? o.items.length : 0,
+        address: o.deliveryAddress || o.address?.street || null,
+      })),
+    [webOrders],
+  );
+  // Solo los PENDING requieren acción del cajero → ese es el número del badge.
+  const pendingWebCount = useMemo(
+    () => webOrders.filter((o: any) => o.status === "PENDING").length,
+    [webOrders],
   );
 
   // Entra a una cuenta abierta (set ticket + activeOrder + navegar al menú).
@@ -326,6 +460,34 @@ export default function OrderTypePage() {
   // Meseros (WAITER) operan en modo préstamo: sin cobro directo (igual que el
   // hideMoney del drawer de tickets en el menú).
   const hideMoney = employee?.role === "WAITER";
+
+  // Aceptar un pedido web: PENDING → CONFIRMED. Tras confirmar, refrescamos el
+  // listado para que salga de "nuevos por aceptar" y el badge baje.
+  const handleAcceptWebOrder = useCallback(
+    async (id: string) => {
+      setAcceptingWebId(id);
+      try {
+        await api.put(`/api/orders/${id}/status`, { status: "CONFIRMED" });
+        toast.success("Pedido web aceptado");
+        fetchOpenOrders();
+      } catch (err: any) {
+        toast.error(
+          "Error al aceptar: " +
+            (err?.response?.data?.error || err?.message || "fallo desconocido"),
+        );
+      } finally {
+        setAcceptingWebId(null);
+      }
+    },
+    [fetchOpenOrders],
+  );
+
+  // Ver detalle del pedido web → entra a la cuenta en el catálogo (igual que el
+  // resto de cuentas). enterAccount lo resuelve desde openOrders.
+  const handleShowWebDetail = (id: string) => {
+    setShowWebOrders(false);
+    enterAccount(id, null);
+  };
 
   const handlePickType = (type: ExtendedOrderType) => {
     if (type === "DINE_IN") {
@@ -471,6 +633,11 @@ export default function OrderTypePage() {
         onWhatsapp={() => router.push("/pos/whatsapp")}
         onSales={() => router.push("/pos/menu")}
         onHub={() => router.push("/hub?force=true")}
+        onWebOrders={() => setShowWebOrders(true)}
+        onDrivers={() => setShowDrivers(true)}
+        onNotifs={() => setShowNotifs(true)}
+        webOrdersCount={pendingWebCount}
+        unreadNotifs={unreadCount}
         allowedTypes={tpvConfig.allowedOrderTypes}
       />
 
@@ -505,6 +672,29 @@ export default function OrderTypePage() {
         isOpen={askingAdminPin}
         onClose={() => setAskingAdminPin(false)}
         onSuccess={() => router.push("/admin")}
+      />
+
+      {/* PANELES EN VIVO — traídos desde /pos/menu a la pantalla principal. */}
+      <WebOrdersPanel
+        isOpen={showWebOrders}
+        onClose={() => setShowWebOrders(false)}
+        orders={webOrdersData}
+        onShowDetail={handleShowWebDetail}
+        onAccept={handleAcceptWebOrder}
+        acceptingId={acceptingWebId}
+        hideMoney={hideMoney}
+      />
+
+      <NotificationsPanel
+        isOpen={showNotifs}
+        onClose={() => setShowNotifs(false)}
+      />
+
+      <DriversPanel
+        isOpen={showDrivers}
+        onClose={() => setShowDrivers(false)}
+        accent="#ffb84d"
+        currentRole={currentEmployee?.role}
       />
     </div>
   );
