@@ -63,11 +63,22 @@ export function matchScore(target: string, query: string): number {
   const tTokens = t.split(" ").filter(Boolean);
   if (qTokens.length === 0) return 0;
 
-  let hit = 0;
+  // Match exacto de token pesa 1; prefijo (ej. "cola"→"colada") pesa solo 0.5
+  // para que un prefijo débil no iguale a una coincidencia exacta y produzca
+  // falsos positivos ("Coca cola" → "Piña Colada").
+  let weighted = 0;
   for (const qt of qTokens) {
-    if (tTokens.some((tt) => tt === qt || tt.startsWith(qt) || qt.startsWith(tt))) hit += 1;
+    if (tTokens.some((tt) => tt === qt)) {
+      weighted += 1;
+    } else if (
+      tTokens.some(
+        (tt) => (tt.startsWith(qt) || qt.startsWith(tt)) && Math.min(tt.length, qt.length) >= 3,
+      )
+    ) {
+      weighted += 0.5;
+    }
   }
-  const tokenRatio = hit / qTokens.length;
+  const tokenRatio = weighted / qTokens.length;
 
   // Subsecuencia de caracteres (cubre abreviaturas tipo "hamb hawai").
   let i = 0;
