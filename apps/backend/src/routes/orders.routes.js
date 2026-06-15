@@ -300,19 +300,37 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
     // solo para descartar ~el 90% en el cliente → el drawer tardaba en cargar.
     // Las páginas admin siguen pidiendo el historial completo (sin el param).
     const ACTIVE_ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'OPEN', 'ON_THE_WAY'];
+    const isPaidScope = req.query.scope === 'paid';
     if (req.query.scope === 'active' || req.query.status === 'active') {
       where.status = { in: ACTIVE_ORDER_STATUSES };
+    } else if (isPaidScope) {
+      // `?scope=paid`: tickets ya cobrados del último mes para la pestaña
+      // "Cobradas" del TPV. Ventana rodante de 31 días por `paidAt`; si la orden
+      // no tiene `paidAt` (datos viejos previos a esa columna) caemos a
+      // `createdAt` para no perderla. Payload ligero: sin items ni address — el
+      // TPV los muestra en lista y baja el detalle on-demand al reimprimir.
+      const PAID_WINDOW_DAYS = 31;
+      const cutoff = new Date(Date.now() - PAID_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+      where.paymentStatus = 'PAID';
+      where.OR = [
+        { paidAt: { gte: cutoff } },
+        { AND: [{ paidAt: null }, { createdAt: { gte: cutoff } }] },
+      ];
     }
 
     const orders = await prisma.order.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-      include: {
-        user: { select: { name: true, phone: true } },
-        items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
-        address: true,
-      }
+      orderBy: isPaidScope
+        ? [{ paidAt: 'desc' }, { createdAt: 'desc' }]
+        : { createdAt: 'desc' },
+      take: isPaidScope ? 500 : 200,
+      include: isPaidScope
+        ? { user: { select: { name: true, phone: true } } }
+        : {
+            user: { select: { name: true, phone: true } },
+            items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
+            address: true,
+          },
     });
 
     // deliveryDriverId es un FK escalar sin relación Prisma, así que el nombre

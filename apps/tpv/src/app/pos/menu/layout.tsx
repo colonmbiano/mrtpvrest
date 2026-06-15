@@ -22,6 +22,11 @@ import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { buildOrderItemsPayload } from "@/lib/modifiers";
 import api from "@/lib/api";
+import {
+  readPaidTicketsCache,
+  writePaidTicketsCache,
+  type PaidTicketLite,
+} from "@/lib/paid-tickets-cache";
 import { apiOrQueue, syncOfflineQueue } from "@/lib/offline";
 import useOfflineStore from "@/store/useOfflineStore";
 import {
@@ -142,6 +147,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   );
 
   const [openOrders, setOpenOrders] = useState<any[]>([]);
+  // Pestaña Abiertas/Cobradas del drawer de tickets + datos del modo "Cobradas".
+  const [ordersMode, setOrdersMode] = useState<"open" | "paid">("open");
+  const [paidOrders, setPaidOrders] = useState<PaidTicketLite[]>([]);
+  const [paidLoading, setPaidLoading] = useState(false);
   const [deliveryDrivers, setDeliveryDrivers] = useState<
     { id: string; name: string; isAvailable?: boolean }[]
   >([]);
@@ -179,6 +188,37 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       setOpenOrders(list.filter((o: any) => ACTIVE_STATUSES.has(o.status)));
     } catch (err) {
       console.error("Error cargando órdenes abiertas:", err);
+    }
+  }, []);
+
+  // Tickets COBRADOS del último mes (pestaña "Cobradas"). Local-first: pinta el
+  // cache al instante (stale-while-revalidate) y revalida contra el backend.
+  // El backend (scope=paid) manda payload ligero sin items; el detalle completo
+  // para reimprimir el recibo se baja on-demand por id en handleReprintOrder.
+  const fetchPaidOrders = useCallback(async () => {
+    const cached = readPaidTicketsCache();
+    if (cached.length) setPaidOrders(cached);
+    setPaidLoading(cached.length === 0);
+    try {
+      const { data } = await api.get("/api/orders/admin?scope=paid");
+      const list = Array.isArray(data) ? data : [];
+      const lite: PaidTicketLite[] = list.map((o: any) => ({
+        id: o.id,
+        orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
+        customerName:
+          o.ticketName || o.customerName || o.user?.name || "Público general",
+        orderType: o.orderType || null,
+        total: Number(o.total ?? 0),
+        paidAt: o.paidAt || null,
+        createdAt: o.createdAt || null,
+        paymentMethod: o.paymentMethod || null,
+      }));
+      setPaidOrders(lite);
+      writePaidTicketsCache(lite);
+    } catch (err) {
+      console.error("Error cargando tickets cobrados:", err);
+    } finally {
+      setPaidLoading(false);
     }
   }, []);
 
@@ -884,6 +924,16 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     return () => { cancelled = true; };
   }, [showOrders, fetchOpenOrders, fetchDeliveryDrivers]);
 
+  // Al cambiar a la pestaña "Cobradas" (con el drawer abierto) se carga el
+  // último mes. No se pollea: es histórico, basta con refrescar al entrar.
+  const drawerVisible = isOrdersOpen || showOrders;
+  useEffect(() => {
+    if (!drawerVisible || ordersMode !== "paid") return;
+    let cancelled = false;
+    queueMicrotask(() => { if (!cancelled) fetchPaidOrders(); });
+    return () => { cancelled = true; };
+  }, [drawerVisible, ordersMode, fetchPaidOrders]);
+
   // Auto-abrir el drawer cuando llegamos desde el atajo "Tickets Abiertos"
   // del Panel de Operación (/pos/order-type → /pos/menu?orders=1). Se lee
   // de window.location para evitar la dependencia de useSearchParams
@@ -916,6 +966,22 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     itemsCount: Array.isArray(o.items) ? o.items.length : 0,
     driver: o.deliveryDriverName || undefined,
     needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
+  }));
+
+  // Tickets cobrados → shape del drawer. El "createdAt" del tile muestra la
+  // hora de COBRO (paidAt) para esta pestaña; itemsCount es 0 (payload ligero,
+  // sin items) y se sustituye por el chip de método de pago en el drawer.
+  const drawerPaidOrders = paidOrders.map((p) => ({
+    id: p.id,
+    orderNumber: p.orderNumber,
+    customerName: p.customerName,
+    type: ORDER_TYPE_LABEL[p.orderType || ""] || p.orderType || "ORDEN",
+    status: "PAID",
+    total: p.total,
+    time: timeAgo(p.paidAt || p.createdAt || new Date().toISOString()),
+    createdAt: p.paidAt || p.createdAt || undefined,
+    itemsCount: 0,
+    paymentMethod: p.paymentMethod,
   }));
 
   // Pedidos de la tienda en línea (source ONLINE/STORE) para la pestaña web.
@@ -1196,18 +1262,24 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         onClose={() => {
           setShowOrders(false);
           useUIStore.getState().setIsOrdersOpen(false);
+          // Volver a "Abiertas" al cerrar: la próxima apertura arranca en el
+          // modo operativo por defecto, no en el histórico de cobrados.
+          setOrdersMode("open");
         }}
-        orders={drawerOrders}
+        mode={ordersMode}
+        onModeChange={setOrdersMode}
+        paidLoading={paidLoading}
+        orders={ordersMode === "paid" ? drawerPaidOrders : drawerOrders}
         onShowDetail={handleOpenOrderInCatalog}
         onConfirmPayment={handleOpenPaymentGuarded}
         onReprintOrder={handleReprintOrder}
-        hideMoney={isLoanMode}
-        canMergeOrders={canMergeOpenOrders && !isLoanMode}
+        hideMoney={isLoanMode || ordersMode === "paid"}
+        canMergeOrders={canMergeOpenOrders && !isLoanMode && ordersMode === "open"}
         onMergeOrders={handleMergeOpenOrders}
-        canAssignDriver={canMergeOpenOrders && !isLoanMode}
+        canAssignDriver={canMergeOpenOrders && !isLoanMode && ordersMode === "open"}
         drivers={deliveryDrivers}
         onAssignDriver={handleAssignDriverToOrders}
-        canSendToKitchen={true}
+        canSendToKitchen={ordersMode === "open"}
         onSendToKitchen={handleSendOrdersToKitchen}
       />
 
