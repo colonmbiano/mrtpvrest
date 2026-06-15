@@ -711,12 +711,65 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             : undefined,
         };
         const createRes = await apiOrQueue<any>("order", "POST", "/api/orders/tpv", orderData);
-        if (!createRes.ok) {
-          toast.error("Error al crear orden: " + (createRes.error || ""));
-          return;
+
+        if (
+          !createRes.ok &&
+          createRes.status === 409 &&
+          createRes.conflict?.code === "TABLE_HAS_OPEN_TAB"
+        ) {
+          // La mesa ya tenía una cuenta abierta que el operador no veía (status
+          // de mesa desfasado / lookup offline). NO la encimamos en silencio ni
+          // creamos una 2ª orden: confirmamos y, si acepta, agregamos estos
+          // productos a ESA cuenta y cobramos el total junto.
+          const ex = createRes.conflict.existingOrder || {};
+          const mesa = ticket.tableName || ticket.table || "";
+          const proceed =
+            typeof window !== "undefined" &&
+            window.confirm(
+              `La mesa ${mesa} ya tiene la cuenta ${ex.orderNumber ?? ""} abierta` +
+                (ex.total != null ? ` ($${ex.total})` : "") +
+                `.\n\n¿Agregar estos productos a esa cuenta y cobrarla completa?\n\n` +
+                `Cancela para revisar la cuenta existente antes de cobrar.`,
+            );
+          if (!proceed) {
+            toast.info("Cobro cancelado — la cuenta existente no se tocó");
+            return;
+          }
+          const addRes = await apiOrQueue<any>(
+            "order",
+            "POST",
+            `/api/orders/${ex.id}/items`,
+            { items: itemsPayload },
+          );
+          if (!addRes.ok) {
+            toast.error("Error al agregar a la cuenta: " + (addRes.error || ""));
+            return;
+          }
+          if (ticket.discount > 0) {
+            const discRes = await apiOrQueue<any>(
+              "order",
+              "PUT",
+              `/api/orders/${ex.id}/discount`,
+              { type: "fixed", value: ticket.discount },
+            );
+            if (!discRes.ok) {
+              toast.error("No se pudo guardar el descuento: " + (discRes.error || ""));
+              return;
+            }
+          }
+          queued = queued || addRes.queued;
+          // payableOrderId se resuelve a ex.id vía order?.id → el PUT /payment
+          // de abajo cobra la cuenta completa.
+          order = addRes.data || { id: ex.id, orderNumber: ex.orderNumber };
+          setActiveOrder(ex.id, ticket.tableId, ex.orderNumber ?? null);
+        } else {
+          if (!createRes.ok) {
+            toast.error("Error al crear orden: " + (createRes.error || ""));
+            return;
+          }
+          queued = queued || createRes.queued;
+          order = createRes.data;
         }
-        queued = queued || createRes.queued;
-        order = createRes.data;
       }
 
       const payableOrderId = activeOrderId || order?.id;

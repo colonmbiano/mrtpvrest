@@ -380,34 +380,42 @@ export default function OrderTypePage() {
       table: t.name,
     });
 
-    if (t.status === "OCCUPIED") {
-      // Mesa ocupada → buscar orden abierta existente y saltar directo
-      // al catálogo para agregar una nueva ronda. No pedimos comensales
-      // porque la cuenta ya existe con sus datos originales.
-      try {
-        const { data: orders } = await api.get<{ id: string; orderNumber: string; status: string }[]>(
-          `/api/orders/table/${t.id}/open`
+    // SIEMPRE buscamos si la mesa ya tiene cuenta abierta — NO confiamos en
+    // `t.status === "OCCUPIED"`. Esa columna (table.status) es denormalizada y
+    // se queda desfasada (AVAILABLE/DIRTY aunque la cuenta siga abierta: la
+    // cocina avanza la orden, una sync vieja, etc., ver project_open_account_
+    // statuses). Si gateábamos el lookup tras OCCUPIED, una mesa con cuenta
+    // abierta pero status stale se trataba como LIBRE → se construía un ticket
+    // nuevo encima y la cuenta existente quedaba encimada/huérfana (bug
+    // reportado: "puse Mesa 1 y me borró la cuenta que ya tenía"). El endpoint
+    // /table/:id/open resuelve por el status de la ORDEN, no de la mesa, así
+    // que es la fuente de verdad correcta.
+    try {
+      const { data: orders } = await api.get<{ id: string; orderNumber: string; status: string }[]>(
+        `/api/orders/table/${t.id}/open`
+      );
+      const openOrder = Array.isArray(orders) ? orders[0] : null;
+      if (openOrder?.id) {
+        // La mesa ya tiene cuenta → entramos a ESA cuenta a agregar ronda.
+        // No pedimos comensales: la cuenta ya existe con sus datos originales.
+        useActiveOrderStore.getState().setActiveOrder(
+          openOrder.id,
+          t.id,
+          openOrder.orderNumber ?? null,
         );
-        const openOrder = Array.isArray(orders) ? orders[0] : null;
-        if (openOrder?.id) {
-          useActiveOrderStore.getState().setActiveOrder(
-            openOrder.id,
-            t.id,
-            openOrder.orderNumber ?? null,
-          );
-          setPickingTable(false);
-          toast.success(`Mesa ${t.name} — agregando ronda al Ticket ${openOrder.orderNumber ?? openOrder.id.slice(-4)}`);
-          router.replace("/pos/menu");
-          return;
-        }
-      } catch {
-        // Si falla el lookup, caemos al flujo normal con GuestCountModal.
-        // El backend igualmente redirige a addRoundHandler si la mesa
-        // está OCCUPIED al crear la orden.
+        setPickingTable(false);
+        toast.success(`Mesa ${t.name} — agregando ronda al Ticket ${openOrder.orderNumber ?? openOrder.id.slice(-4)}`);
+        router.replace("/pos/menu");
+        return;
       }
+    } catch {
+      // Si falla el lookup (p.ej. sin red), caemos al flujo normal con
+      // GuestCountModal. El backend es la red de seguridad: al crear la orden
+      // responde 409 TABLE_HAS_OPEN_TAB si la mesa ya tenía cuenta, así que no
+      // se enciman ventas aunque el lookup haya fallado aquí.
     }
 
-    // Mesa libre o DIRTY → flujo normal con GuestCountModal.
+    // Mesa libre (sin cuenta abierta) → flujo normal con GuestCountModal.
     useActiveOrderStore.getState().clear();
     setPicked(t);
     setPickingTable(false);
