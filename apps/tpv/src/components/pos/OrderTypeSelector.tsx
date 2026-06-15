@@ -8,6 +8,7 @@ import {
   Coins,
   Globe,
   LayoutGrid,
+  ListChecks,
   Loader2,
   LogOut,
   Menu,
@@ -18,6 +19,7 @@ import {
   Settings,
   ShoppingBag,
   ShoppingCart,
+  SlidersHorizontal,
   Table2,
   Users,
   Utensils,
@@ -97,6 +99,12 @@ interface OrderTypeSelectorProps {
   onDrivers?: () => void;
   /** Abre el panel de notificaciones. */
   onNotifs?: () => void;
+  /** Abre el cajón completo de tickets (juntar / asignar repartidor / cocina /
+   *  multiselección + Abiertas/Cobradas). Si se pasa, se muestra el botón
+   *  "Gestionar tickets" en la sección de cuentas. */
+  onManageTickets?: () => void;
+  /** Abre el modal de configuración (tema / modo / bloquear terminal). */
+  onConfigMenu?: () => void;
   /** Badge: pedidos web PENDING por aceptar. */
   webOrdersCount?: number;
   /** Badge: notificaciones sin leer. */
@@ -165,14 +173,15 @@ const FILTERS: { key: "ALL" | OrderType; label: string }[] = [
 // notificaciones) y los accesos operativos. Replica el rol del TopNavDropdown
 // del catálogo para que la pantalla principal también navegue y gestione.
 const SHORTCUTS = [
-  { label: "Pedidos web",      icon: Globe,        action: "weborders" as const },
-  { label: "Repartidores",     icon: Bike,         action: "drivers"   as const },
-  { label: "Notificaciones",   icon: Bell,         action: "notifs"    as const },
-  { label: "Ir a ventas",      icon: ShoppingCart, action: "sales"     as const },
-  { label: "Sucursal",         icon: LayoutGrid,   action: "hub"       as const },
-  { label: "Corte de caja",    icon: Wallet,       action: "shift"     as const },
-  { label: "Gastos y compras", icon: Coins,        action: "expenses"  as const },
-  { label: "Panel central",    icon: Settings,     action: "config"    as const },
+  { label: "Pedidos web",      icon: Globe,            action: "weborders" as const },
+  { label: "Repartidores",     icon: Bike,             action: "drivers"   as const },
+  { label: "Notificaciones",   icon: Bell,             action: "notifs"    as const },
+  { label: "Ir a ventas",      icon: ShoppingCart,     action: "sales"     as const },
+  { label: "Sucursal",         icon: LayoutGrid,       action: "hub"       as const },
+  { label: "Corte de caja",    icon: Wallet,           action: "shift"     as const },
+  { label: "Gastos y compras", icon: Coins,            action: "expenses"  as const },
+  { label: "Configuración",    icon: SlidersHorizontal, action: "settings" as const },
+  { label: "Panel central",    icon: Settings,         action: "config"    as const },
 ];
 
 // Hora exacta (HH:MM) + fecha corta (es-MX) para la columna de hora.
@@ -202,6 +211,8 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onWebOrders,
   onDrivers,
   onNotifs,
+  onManageTickets,
+  onConfigMenu,
   webOrdersCount = 0,
   unreadNotifs = 0,
   mode = "open",
@@ -294,6 +305,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
     if (action === "hub") onHub?.();
     if (action === "shift") onShiftClose?.();
     if (action === "expenses") onExpenses?.();
+    if (action === "settings") onConfigMenu?.();
     if (action === "config") onConfig?.();
   };
 
@@ -305,6 +317,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
     if (shortcut.action === "hub") return Boolean(onHub);
     if (shortcut.action === "shift") return Boolean(onShiftClose);
     if (shortcut.action === "expenses") return Boolean(onExpenses);
+    if (shortcut.action === "settings") return Boolean(onConfigMenu);
     if (shortcut.action === "config") return Boolean(onConfig);
     return false;
   });
@@ -475,6 +488,19 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                 })}
               </div>
             </div>
+
+            {/* Abre el cajón completo: multiselección para juntar cuentas,
+                asignar repartidor y enviar a cocina (no cabe en las filas). */}
+            {onManageTickets && (
+              <button
+                type="button"
+                onClick={onManageTickets}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#ffb84d]/25 bg-[#ffb84d]/10 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] text-[#ffb84d] transition-transform active:scale-95"
+              >
+                <ListChecks size={15} strokeWidth={2.5} />
+                Gestionar · juntar / repartidor / cocina
+              </button>
+            )}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hide">
