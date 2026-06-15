@@ -751,6 +751,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         paymentMethod: method,
         tipPercent: tip?.percent ?? 0,
         tipAmount,
+        paid: true, // el recibo se imprime al cobrar → orden pagada
       };
       const guests = ticket.numberOfGuests ?? 0;
       const isDineInSplit = ticket.type === "DINE_IN" && guests >= 2;

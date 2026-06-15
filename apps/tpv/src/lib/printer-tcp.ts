@@ -559,6 +559,13 @@ export interface ReceiptInput {
   itemSpacing?: string | null;        // "tight" | "normal" | "loose" (loose = línea en blanco entre ítems)
   showItemSeparator?: boolean | null; // línea punteada entre productos
   modifierIndent?: string | null;     // "none" | "normal" | "wide" — sangría de modificadores/notas
+  // ── Estado de cobro ──────────────────────────────────────────────────────
+  // paid===false → cuenta sin pagar: título "CUENTA" + "Pendiente de cobro".
+  // true o undefined → recibo normal: "RECIBO" + "TOTAL".
+  paid?: boolean | null;
+  // ── QR de lealtad (registro de cliente para acumular puntos) ─────────────
+  showLoyaltyQr?: boolean | null;
+  loyaltyUrl?: string | null;         // destino del QR (tienda en línea / registro)
 }
 
 const fmtMoney = (n: number) =>
@@ -603,18 +610,19 @@ export function withLabel(label: string, value: string): string {
 }
 
 /**
- * Renderiza una línea de producto: `Nx Nombre .......  $importe`. Si el nombre
- * no cabe, lo envuelve a líneas siguientes con sangría (en vez de truncar con
- * "..."), para no perder información. El importe va sólo en la primera línea.
+ * Núcleo de envoltura: imprime `<prefix><nombre> ....... <importe>`, quebrando
+ * el nombre a líneas siguientes con sangría (en vez de truncar con "...") para
+ * no perder información. El importe va sólo en la primera línea. Compartido por
+ * `formatProductLine` (con prefijo "Nx ") y `formatNameAmountLine` (sin prefijo,
+ * estilo Loyverse donde la cantidad va en un renglón aparte).
  */
-export function formatProductLine(
-  quantity: number,
+function wrapLineWithAmount(
+  prefix: string,
   name: string,
   amount: string,
   width: number,
-  indent = "   ",
+  indent: string,
 ): string {
-  const prefix = `${quantity}x `;
   const firstNameMax = Math.max(1, width - amount.length - 1 - prefix.length);
   const contMax = Math.max(1, width - indent.length);
 
@@ -640,6 +648,33 @@ export function formatProductLine(
   let out = row(prefix + lines[0], amount, width);
   for (let i = 1; i < lines.length; i += 1) out += indent + lines[i] + "\n";
   return out;
+}
+
+/**
+ * Renderiza una línea de producto: `Nx Nombre .......  $importe`. Si el nombre
+ * no cabe, lo envuelve a líneas siguientes con sangría.
+ */
+export function formatProductLine(
+  quantity: number,
+  name: string,
+  amount: string,
+  width: number,
+  indent = "   ",
+): string {
+  return wrapLineWithAmount(`${quantity}x `, name, amount, width, indent);
+}
+
+/**
+ * Renderiza el renglón `Nombre ........ $importe` SIN prefijo de cantidad
+ * (estilo Loyverse): la cantidad y el precio unitario van debajo en otra línea.
+ */
+export function formatNameAmountLine(
+  name: string,
+  amount: string,
+  width: number,
+  indent = "  ",
+): string {
+  return wrapLineWithAmount("", name, amount, width, indent);
 }
 
 /**
@@ -994,11 +1029,17 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   // Tipografía configurable (admin). lw = ancho real en caracteres según
   // fuente/papel; heavy/light controlan qué tan marcadas van las líneas.
   const lw = lineWidthFor(input.fontFamily, input.paperWidth);
-  const sep = "-".repeat(lw) + "\n"; // separador al ancho REAL del papel
+  // Separadores punteados al ancho REAL del papel (estilo Loyverse: la imagen
+  // de referencia usa líneas de puntos para dividir cada bloque).
+  const sep = ".".repeat(lw) + "\n";
   const heavy = input.lineWeight === "bold";
   const light = input.lineWeight === "light";
   const boldOn = light ? "" : CMD.BOLD_ON;
   const boldOff = light ? "" : CMD.BOLD_OFF;
+
+  // Estado de cobro: una cuenta sin pagar (paid===false) imprime título
+  // "CUENTA" y total "Pendiente de cobro"; pagada o sin dato → "RECIBO"/"TOTAL".
+  const isPending = input.paid === false;
 
   let d =
     CMD.INIT +
@@ -1024,13 +1065,18 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   if (input.showPhone !== false && input.phone) d += "Tel: " + input.phone + "\n";
   if (input.rfc) d += "RFC: " + input.rfc + "\n";
 
+  // Saludo arriba (estilo Loyverse) + título del documento (CUENTA/RECIBO).
+  const greeting = (input.businessFooter && input.businessFooter.trim()) || "Gracias por su preferencia";
+  d += CMD.LF + greeting + "\n";
+  d += CMD.LF + boldOn + (isPending ? "CUENTA" : "RECIBO") + "\n" + boldOff;
+
   d += sep + CMD.ALIGN_LEFT;
 
-  // ── 2. META (ticket, tipo, lugar, fecha, cajero, terminal) ───────────────
-  if (input.orderNumber) d += row("Ticket:", "#" + input.orderNumber, lw);
-  if (input.orderType) {
-    d += row("Tipo:", ORDER_TYPE_LABEL[input.orderType] || String(input.orderType), lw);
-  }
+  // ── 2. META (pedido, fecha, empleado, TPV, lugar, cliente) ───────────────
+  if (input.orderNumber) d += row("Pedido:", "#" + input.orderNumber, lw);
+  d += row("Fecha:", now, lw);
+  if (input.cashierName) d += row("Empleado:", input.cashierName, lw);
+  if (input.terminalName) d += row("TPV:", input.terminalName, lw);
   // Lugar: Mesa N (sin duplicar el label) o, si no hay mesa, Comensales: N.
   if (input.tableNumber) {
     d += row("Lugar:", withLabel("Mesa", String(input.tableNumber)), lw);
@@ -1049,13 +1095,16 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
       custName.toLowerCase() !== String(input.tableNumber ?? "").trim().toLowerCase();
     if (custIsReal) d += row("Cliente:", custName, lw);
   }
-  d += row("Fecha:", now, lw);
-  if (input.cashierName) d += row("Cajero:", input.cashierName, lw);
-  if (input.terminalName) d += row("Terminal:", input.terminalName, lw);
 
   d += sep;
 
-  // ── 3. LÍNEAS DE PRODUCTO ─────────────────────────────────────────────────
+  // ── 2b. BANDA DE TIPO DE ORDEN (Comer aquí / Para llevar / A domicilio) ──
+  if (input.orderType) {
+    d += (ORDER_TYPE_LABEL[input.orderType] || String(input.orderType)) + "\n";
+    d += sep;
+  }
+
+  // ── 3. LÍNEAS DE PRODUCTO (cantidad en renglón aparte, estilo Loyverse) ──
   // Opciones por línea (config admin /admin/tickets):
   //   showItemsPrice  → oculta importes (deja solo el TOTAL)
   //   showModifiers   → imprime/oculta los modificadores
@@ -1066,8 +1115,10 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   const showMods   = input.showModifiers  !== false;
   const showNotes  = input.showNotes === true;
   const modIndent  = input.modifierIndent === "none" ? "" : input.modifierIndent === "wide" ? "    " : "  ";
-  const itemSep    = input.showItemSeparator ? ".".repeat(lw) + "\n" : "";
-  const itemGap    = input.itemSpacing === "loose" ? "\n" : "";
+  const itemSep    = input.showItemSeparator ? sep : "";
+  // Por defecto deja una línea en blanco entre productos (look Loyverse); el
+  // admin puede apretarlo a "tight" para juntarlos.
+  const itemGap    = input.itemSpacing === "tight" ? "" : "\n";
   const lines = input.items || [];
   lines.forEach((item, idx) => {
     // El `price` del item YA incluye los modificadores de pago: el backend los
@@ -1078,7 +1129,12 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
     // mientras el TOTAL —derivado de input.total/order.total— quedaba correcto,
     // dando un ticket cuyas líneas no cuadran con su total.
     const lineTotal = item.price * item.quantity;
-    d += formatProductLine(item.quantity, item.name, showPrices ? fmtMoney(lineTotal) : "", lw);
+    // Renglón 1: nombre + total de la línea (alineado a la derecha).
+    d += formatNameAmountLine(item.name, showPrices ? fmtMoney(lineTotal) : "", lw);
+    // Renglón 2: cantidad × precio unitario (o solo "x N" si se ocultan precios).
+    d += showPrices
+      ? "  " + `${item.quantity} x ${fmtMoney(item.price)}` + "\n"
+      : "  " + `x ${item.quantity}` + "\n";
     if (showMods) {
       for (const m of item.modifiers || []) {
         // Subline con sangría: "+ Nombre        +monto" alineado a la derecha.
@@ -1100,11 +1156,14 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
     d += row("Descuento:", "-" + fmtMoney(input.discount), lw);
   }
   const { subtotal: subSinIva, iva } = ivaBreakdown(input.total);
-  d += row("Subtotal:", fmtMoney(subSinIva), lw);
+  d += boldOn + row("Subtotal:", fmtMoney(subSinIva), lw) + boldOff;
   d += row("IVA (16% incl.):", fmtMoney(iva), lw);
   if (input.tip && input.tip > 0) d += row("Propina:", fmtMoney(input.tip), lw);
-  d += boldOn + CMD.DOUBLE_ON + row("TOTAL:", fmtMoney(input.total), lw) + CMD.DOUBLE_OFF + boldOff;
 
+  d += sep;
+  // Total: "Pendiente de cobro" para cuentas sin pagar; "TOTAL:" para recibos.
+  const totalLabel = isPending ? "Pendiente de cobro" : "TOTAL:";
+  d += boldOn + CMD.DOUBLE_ON + row(totalLabel, fmtMoney(input.total), lw) + CMD.DOUBLE_OFF + boldOff;
   d += sep;
 
   // ── 5. PAGO (método traducido) + propina sugerida (informativa) ──────────
@@ -1130,15 +1189,17 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
     d += CMD.ALIGN_LEFT;
   }
 
-  // ── 7. PIE ───────────────────────────────────────────────────────────────
-  d += CMD.ALIGN_CENTER + CMD.LF;
-  if (input.businessFooter) {
-    d += input.businessFooter + "\n";
-  } else {
-    d += "¡Gracias por tu compra!\n";
-    d += "Te esperamos pronto\n";
+  // ── 6b. QR DE LEALTAD (registro del cliente para acumular puntos) ────────
+  if (input.showLoyaltyQr && input.loyaltyUrl) {
+    d += sep + CMD.ALIGN_CENTER;
+    d += boldOn + "Acumula puntos\n" + boldOff;
+    d += "Escanea y registrate\n";
+    d += qrCode(input.loyaltyUrl) + "\n";
+    d += CMD.ALIGN_LEFT;
   }
 
+  // ── 7. PIE ───────────────────────────────────────────────────────────────
+  d += sep;
   d += (heavy ? CMD.DBLSTRIKE_OFF + CMD.BOLD_OFF : "") + CMD.LF + CMD.LF + CMD.CUT;
   return d;
 }

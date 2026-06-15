@@ -323,6 +323,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         tip: Number(payOrder.tip ?? 0),
         total: Number(payOrder.total ?? subtotalCalc),
         paymentMethod: method,
+        paid: true, // se está cobrando ahora → recibo pagado
       };
 
       // Dispatch a CASHIER printers según el plan.
@@ -606,6 +607,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         tip: Number(full.tip ?? 0),
         total: Number(full.total ?? subtotalCalc),
         paymentMethod: full.paymentMethod || null,
+        // Reimpresión de la cuenta: "Pendiente de cobro" si aún no está pagada.
+        paid: full.paymentStatus === "PAID",
       });
 
       if (res.ok > 0 && res.failed.length === 0) {

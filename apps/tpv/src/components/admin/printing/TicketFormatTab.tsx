@@ -31,6 +31,10 @@ interface TicketConfig {
   showInvoiceQr: boolean;
   invoiceUrl: string;
   invoiceFolioPrefix: string;
+  // Bloque de QR de lealtad al pie del recibo: el cliente lo escanea para
+  // registrarse en la tienda en línea y acumular puntos.
+  showLoyaltyQr: boolean;
+  loyaltyUrl: string;
   // Tipografía del recibo. fontFamily → Font A/B; fontSize → alto;
   // lineSpacing → interlineado; lineWeight → qué tan marcadas las líneas.
   paperWidth: string;
@@ -71,6 +75,7 @@ const EMPTY: TicketConfig = {
   businessName: "", header: "", subheader: "", footer: "Gracias por su preferencia",
   showLogo: true, logoUrl: null, showAddress: true, address: "", phone: "",
   businessType: "", rfc: "", showInvoiceQr: false, invoiceUrl: "", invoiceFolioPrefix: "",
+  showLoyaltyQr: false, loyaltyUrl: "",
   paperWidth: "80mm", fontFamily: "monospace", fontSize: "medium",
   lineSpacing: "normal", lineWeight: "normal",
   showItemsPrice: true, itemSpacing: "normal", showItemSeparator: false,
@@ -213,6 +218,15 @@ export default function TicketFormatTab() {
                 <Field label="Prefijo de folio"><input value={cfg.invoiceFolioPrefix} onChange={(e) => setCfg({ ...cfg, invoiceFolioPrefix: e.target.value })} className={inputCls} placeholder="MB-" /></Field>
               </div>
             )}
+
+            <SectionLabel>Puntos de lealtad (QR de registro)</SectionLabel>
+            <Toggle label="Imprimir QR para acumular puntos" checked={cfg.showLoyaltyQr} onChange={(v) => setCfg({ ...cfg, showLoyaltyQr: v })} />
+            {cfg.showLoyaltyQr && (
+              <Field label="URL de la tienda / registro">
+                <input value={cfg.loyaltyUrl} onChange={(e) => setCfg({ ...cfg, loyaltyUrl: e.target.value })} className={inputCls} placeholder="https://mitienda.mrtpvrest.com" />
+              </Field>
+            )}
+            <p className="text-[10px] text-zinc-500 -mt-2 ml-1">El cliente escanea el QR al pie del recibo para registrarse en tu tienda en línea y acumular puntos.</p>
 
             <SectionLabel>Tipografía del recibo</SectionLabel>
             <Field label="Fuente">
@@ -475,7 +489,14 @@ function ReceiptPreview({ cfg }: { cfg: TicketConfig }) {
   const lh = typoLineHeight(cfg.lineSpacing);
   const bodyWeight = cfg.lineWeight === "bold" ? 700 : 400;
   const totalWeight = cfg.lineWeight === "light" ? 400 : 700;
-  const dash = <div className="border-t border-dashed border-black/40 my-1.5" />;
+  // Separador punteado al ancho del papel (espejo del builder ESC/POS).
+  const dots = <div className="text-black/40 select-none tracking-tighter overflow-hidden whitespace-nowrap my-1">{".".repeat(48)}</div>;
+  const indentPx = cfg.modifierIndent === "none" ? 0 : cfg.modifierIndent === "wide" ? 18 : 10;
+  const itemGap = cfg.itemSpacing === "tight" ? 0 : 8;
+  const SAMPLE = [
+    { qty: 2, name: "Hamburguesa", unit: "$105.00", amount: "$210.00", mods: [{ name: "Tocino", add: "+$20.00" }], note: "Término medio" },
+    { qty: 1, name: "Refresco", unit: "$35.00", amount: "$35.00", mods: [] as { name: string; add: string }[], note: "Sin hielo" },
+  ];
   return (
     <div className="rounded-2xl bg-zinc-300/10 border border-white/5 p-4">
       <div
@@ -487,43 +508,49 @@ function ReceiptPreview({ cfg }: { cfg: TicketConfig }) {
         </div>
         {cfg.showAddress && cfg.address.trim() && <div className="text-center">{cfg.address}</div>}
         {cfg.phone.trim() && <div className="text-center">Tel: {cfg.phone}</div>}
-        <div className="text-center">11/06/2026 13:05</div>
-        <div>Orden #1042</div>
+        <div className="text-center mt-2">{cfg.footer.trim() || "Gracias por su preferencia"}</div>
+        <div className="text-center mt-2" style={{ fontWeight: 700 }}>RECIBO</div>
+        {dots}
+        <div className="flex justify-between gap-2"><span>Pedido:</span><span>#1042</span></div>
+        <div className="flex justify-between gap-2"><span>Fecha:</span><span>11/06/2026 13:05</span></div>
+        <div className="flex justify-between gap-2"><span>Empleado:</span><span>Propietario</span></div>
+        {dots}
         <div>Para llevar</div>
-        {dash}
-        {(() => {
-          const indentPx = cfg.modifierIndent === "none" ? 0 : cfg.modifierIndent === "wide" ? 18 : 10;
-          const gap = cfg.itemSpacing === "loose";
-          const SAMPLE = [
-            { qty: 2, name: "Hamburguesa", amount: "$210.00", mods: [{ name: "Tocino", add: "+$20.00" }], note: "Término medio" },
-            { qty: 1, name: "Refresco", amount: "$35.00", mods: [] as { name: string; add: string }[], note: "Sin hielo" },
-          ];
-          return SAMPLE.map((it, i) => (
-            <div key={i} style={{ marginBottom: gap ? 8 : 0 }}>
-              <div className="flex justify-between gap-2">
-                <span>{it.qty}x {it.name}</span>
-                {cfg.showItemsPrice && <span>{it.amount}</span>}
-              </div>
-              {cfg.receiptShowModifiers && it.mods.map((m, j) => (
-                <div key={j} className="flex justify-between gap-2" style={{ paddingLeft: indentPx, opacity: 0.75 }}>
-                  <span>+ {m.name}</span>
-                  {cfg.showItemsPrice && <span>{m.add}</span>}
-                </div>
-              ))}
-              {cfg.receiptShowNotes && it.note && (
-                <div style={{ paddingLeft: indentPx, opacity: 0.75 }}>&gt; {it.note}</div>
-              )}
-              {i < SAMPLE.length - 1 && cfg.showItemSeparator && (
-                <div className="text-black/40 select-none tracking-tighter overflow-hidden whitespace-nowrap">{".".repeat(40)}</div>
-              )}
+        {dots}
+        {SAMPLE.map((it, i) => (
+          <div key={i} style={{ marginBottom: i < SAMPLE.length - 1 ? itemGap : 0 }}>
+            <div className="flex justify-between gap-2">
+              <span>{it.name}</span>
+              {cfg.showItemsPrice && <span>{it.amount}</span>}
             </div>
-          ));
-        })()}
-        {dash}
-        <div className="flex justify-between gap-2"><span>Subtotal</span><span>$245.00</span></div>
-        <div className="flex justify-between gap-2" style={{ fontWeight: totalWeight }}><span>TOTAL</span><span>$245.00</span></div>
-        {dash}
-        <div className="text-center">{cfg.footer.trim() || "¡Gracias por su compra!"}</div>
+            <div style={{ paddingLeft: 10, opacity: 0.75 }}>
+              {cfg.showItemsPrice ? `${it.qty} x ${it.unit}` : `x ${it.qty}`}
+            </div>
+            {cfg.receiptShowModifiers && it.mods.map((m, j) => (
+              <div key={j} className="flex justify-between gap-2" style={{ paddingLeft: indentPx, opacity: 0.75 }}>
+                <span>+ {m.name}</span>
+                {cfg.showItemsPrice && <span>{m.add}</span>}
+              </div>
+            ))}
+            {cfg.receiptShowNotes && it.note && (
+              <div style={{ paddingLeft: indentPx, opacity: 0.75 }}>&gt; {it.note}</div>
+            )}
+            {i < SAMPLE.length - 1 && cfg.showItemSeparator && dots}
+          </div>
+        ))}
+        {dots}
+        <div className="flex justify-between gap-2" style={{ fontWeight: 700 }}><span>Subtotal:</span><span>$211.21</span></div>
+        <div className="flex justify-between gap-2"><span>IVA (16% incl.):</span><span>$33.79</span></div>
+        {dots}
+        <div className="flex justify-between gap-2" style={{ fontWeight: totalWeight, fontSize: basePx + 2 }}><span>TOTAL</span><span>$245.00</span></div>
+        {dots}
+        {cfg.showLoyaltyQr && (
+          <div className="text-center mt-1">
+            <div style={{ fontWeight: 700 }}>Acumula puntos</div>
+            <div style={{ opacity: 0.75 }}>Escanea y regístrate</div>
+            <div className="mx-auto mt-1 w-14 h-14 bg-black" style={{ clipPath: "polygon(0 0,100% 0,100% 100%,0 100%)" }} aria-label="QR" />
+          </div>
+        )}
       </div>
     </div>
   );

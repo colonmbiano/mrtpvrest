@@ -255,7 +255,7 @@ describe("recibo :: opciones POR LÍNEA (de-clutter del ticket)", () => {
     expect(buildCustomerReceipt({ ...base, showModifiers: true })).toContain("Tocino");
   });
 
-  it("showItemSeparator dibuja una línea punteada entre productos", () => {
+  it("showItemSeparator agrega una línea punteada extra entre productos", () => {
     const dos: ReceiptInput = {
       ...base,
       items: [
@@ -265,8 +265,67 @@ describe("recibo :: opciones POR LÍNEA (de-clutter del ticket)", () => {
       subtotal: 200,
       total: 200,
     };
-    expect(buildCustomerReceipt({ ...dos, showItemSeparator: true })).toContain("..........");
-    expect(buildCustomerReceipt({ ...dos, showItemSeparator: false })).not.toContain("..........");
+    // Los separadores de SECCIÓN ya son punteados (estilo Loyverse), así que
+    // contamos líneas de puntos: activar el separador suma una más (la que va
+    // entre los dos productos).
+    const dottedLines = (s: string) => (s.match(/\.{10,}/g) || []).length;
+    const con = dottedLines(buildCustomerReceipt({ ...dos, showItemSeparator: true }));
+    const sin = dottedLines(buildCustomerReceipt({ ...dos, showItemSeparator: false }));
+    expect(con).toBeGreaterThan(sin);
+  });
+});
+
+describe("recibo :: estilo Loyverse (cantidad aparte, CUENTA/RECIBO)", () => {
+  const money = (n: number) =>
+    n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2 });
+
+  it("imprime la cantidad × precio unitario en un renglón aparte", () => {
+    const out = buildCustomerReceipt({
+      ...baseReceipt,
+      items: [{ name: "Manzanas", quantity: 2, price: 15 }],
+      subtotal: 30,
+      total: 30,
+    });
+    expect(out).toContain("Manzanas");
+    expect(out).toContain(`2 x ${money(15)}`); // renglón de cantidad × unitario
+    expect(out).toContain(money(30));          // total de la línea
+    expect(out).not.toContain("2x Manzanas");  // ya no usa el prefijo viejo
+  });
+
+  it("paid===false → título CUENTA y total 'Pendiente de cobro'", () => {
+    const cuenta = buildCustomerReceipt({ ...baseReceipt, paid: false });
+    expect(cuenta).toContain("CUENTA");
+    expect(cuenta).toContain("Pendiente de cobro");
+    expect(cuenta).not.toContain("TOTAL:");
+  });
+
+  it("paid===true (o sin dato) → título RECIBO y total TOTAL", () => {
+    const recibo = buildCustomerReceipt({ ...baseReceipt, paid: true });
+    expect(recibo).toContain("RECIBO");
+    expect(recibo).toContain("TOTAL:");
+    expect(recibo).not.toContain("Pendiente de cobro");
+    // sin el flag se comporta como recibo pagado
+    expect(buildCustomerReceipt(baseReceipt)).toContain("TOTAL:");
+  });
+
+  it("usa labels Empleado/TPV (no Cajero/Terminal)", () => {
+    const out = buildCustomerReceipt({ ...baseReceipt, cashierName: "Ana", terminalName: "Caja 1" });
+    expect(out).toContain("Empleado:");
+    expect(out).toContain("TPV:");
+    expect(out).not.toContain("Cajero:");
+    expect(out).not.toContain("Terminal:");
+  });
+
+  it("emite el QR de lealtad sólo con showLoyaltyQr + loyaltyUrl", () => {
+    const sin = buildCustomerReceipt(baseReceipt);
+    expect(sin).not.toContain("Acumula puntos");
+    const con = buildCustomerReceipt({
+      ...baseReceipt,
+      showLoyaltyQr: true,
+      loyaltyUrl: "https://masterburguers.mrtpvrest.com",
+    });
+    expect(con).toContain("Acumula puntos");
+    expect(con).toContain("masterburguers.mrtpvrest.com");
   });
 });
 
