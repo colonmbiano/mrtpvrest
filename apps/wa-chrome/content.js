@@ -180,6 +180,8 @@
     #mbwa input{width:100%;box-sizing:border-box;margin-top:6px;padding:8px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#fff;font-size:12px}
     #mbwa .st{font-size:12px;margin-top:8px;min-height:16px}
     #mbwa #mbwa-watchlbl{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:10px;color:rgba(255,255,255,.6);cursor:pointer}
+    #mbwa #mbwa-autolbl{display:flex;align-items:center;gap:4px;font-size:10px;color:rgba(255,255,255,.6);cursor:pointer;margin-left:8px}
+    #mbwa #mbwa-autolbl:has(#mbwa-auto:checked){color:${AMBER};font-weight:700}
     #mbwa .x{cursor:pointer;color:rgba(255,255,255,.5);font-size:16px;line-height:1;padding-left:8px}
     #mbwa .card{background:rgba(255,184,77,.1);border:1px solid rgba(255,184,77,.3);border-radius:12px;padding:8px 10px;margin-bottom:8px}
     #mbwa .card .nm{font-size:12px;font-weight:700}
@@ -197,6 +199,8 @@
     <div class="hd"><span class="dot"></span><b>Pedido → TPV</b>
       <label id="mbwa-watchlbl" title="Vigilar nuevos pedidos">
         <input type="checkbox" id="mbwa-watch" checked> vigilar</label>
+      <label id="mbwa-autolbl" title="Crear el pedido SOLO cuando es seguro: bloque estructurado del agente y sin opciones obligatorias faltantes. Tú solo abres el chat.">
+        <input type="checkbox" id="mbwa-auto"> auto</label>
       <span class="x" id="mbwa-x">×</span></div>
     <div class="bd">
       <div id="mbwa-shop" class="shop"></div>
@@ -208,11 +212,30 @@
   document.body.appendChild(panel);
 
   const out = panel.querySelector("#mbwa-out");
-  let state = { chat: null, parsed: null, orderType: "TAKEOUT", address: "" };
+  let state = { chat: null, parsed: null, orderType: "TAKEOUT", address: "", created: false };
   // Chat marcado por el vigilante que esperamos que el cajero abra: al detectar
   // que ese chat quedó abierto, lo leemos solo (cierra el hueco manual).
   let pendingAutoRead = null;   // nombre normalizado del chat a auto-leer
   let lastReadName = null;      // evita re-leer el mismo chat en loop
+  let lastCreatedName = null;   // chat ya creado (evita doble-create en modo auto)
+
+  // ── Modo automático (Fase B) ───────────────────────────────────────────
+  // ON = crea el pedido SOLO, sin que el cajero apriete "Crear" — pero solo
+  // cuando es SEGURO. El cajero sigue teniendo que ABRIR el chat (WhatsApp no
+  // permite abrir chats por código), pero ya no toca nada más.
+  const autoOn = () => !!panel.querySelector("#mbwa-auto")?.checked;
+  // ¿El pedido parseado es seguro para crear sin revisión humana?
+  //   · Debe venir de un BLOQUE ESTRUCTURADO del agente (precisión ~100%).
+  //   · Sin items con needsReview (variante/sabor obligatorio sin llenar).
+  //   · Con al menos un item; si es DOMICILIO, con dirección.
+  function isSafeForAuto() {
+    if (!state.chat?.structured) return false;
+    const items = state.parsed?.items || [];
+    if (items.length === 0) return false;
+    if (items.some((i) => i.needsReview)) return false;
+    if (state.orderType === "DELIVERY" && !state.address.trim()) return false;
+    return true;
+  }
 
   panel.querySelector("#mbwa-x").onclick = () => panel.remove();
 
@@ -250,7 +273,7 @@
     if (!configured) { out.innerHTML = `<div class="st" style="color:${AMBER}">Configura tu restaurante primero (icono de la extensión).</div>`; return; }
     const chat = readOpenChat();
     if (!chat || !chat.text) { out.innerHTML = `<div class="st" style="color:${AMBER}">Abre un chat con un pedido primero.</div>`; return; }
-    state.chat = chat; state.parsed = null;
+    state.chat = chat; state.parsed = null; state.created = false;
     lastReadName = norm(chat.customerName);
     // Pre-llenado desde un bloque estructurado del agente (tipo/dir/tel).
     if (chat.structured) {
@@ -268,6 +291,15 @@
     }
     state.parsed = r.data;
     renderParsed();
+
+    // Fase B — modo automático: si está ON y el pedido es seguro (bloque
+    // estructurado, sin opciones faltantes), lo creamos solo. Guard por nombre
+    // de chat para no duplicar si se vuelve a leer el mismo.
+    if (autoOn() && isSafeForAuto() && lastCreatedName !== norm(chat.customerName)) {
+      const stEl = out.querySelector("#mbwa-st");
+      if (stEl) { stEl.style.color = AMBER; stEl.textContent = "⚡ Modo automático — creando…"; }
+      createOrder();
+    }
   }
 
   panel.querySelector("#mbwa-read").onclick = doRead;
@@ -324,8 +356,10 @@
 
   async function createOrder() {
     const st = out.querySelector("#mbwa-st");
-    if (state.orderType === "DELIVERY" && !state.address.trim()) { st.style.color = AMBER; st.textContent = "Falta la dirección."; return; }
-    st.style.color = "#fff"; st.textContent = "Creando…";
+    if (state.created) return; // ya creado (evita doble-create por clic + auto)
+    if (state.orderType === "DELIVERY" && !state.address.trim()) { if (st) { st.style.color = AMBER; st.textContent = "Falta la dirección."; } return; }
+    state.created = true; // reserva inmediata: bloquea un segundo disparo en vuelo
+    if (st) { st.style.color = "#fff"; st.textContent = "Creando…"; }
     const order = {
       items: (state.parsed.items || []).map((i) => ({
         menuItemId: i.menuItemId,
@@ -342,11 +376,18 @@
     };
     const r = await bg("create", { order });
     if (r && r.ok) {
-      st.style.color = "#88D66C";
-      st.innerHTML = `✅ Creado #${esc(String(r.data?.orderNumber || r.data?.id || ""))} · total $${Number(r.data?.total || 0).toFixed(2)}<br><span class="muted">Acéptalo en "Pedidos Web" del TPV.</span>`;
+      lastCreatedName = norm(state.chat?.customerName || "");
+      if (st) {
+        st.style.color = "#88D66C";
+        const auto = autoOn() ? "⚡ " : "";
+        st.innerHTML = `${auto}✅ Creado #${esc(String(r.data?.orderNumber || r.data?.id || ""))} · total $${Number(r.data?.total || 0).toFixed(2)}<br><span class="muted">Acéptalo en "Pedidos Web" del TPV.</span>`;
+      }
     } else {
-      st.style.color = "#f88";
-      st.textContent = "No se pudo crear: " + (r?.data?.error || r?.error || "error");
+      state.created = false; // falló: permite reintentar (manual o al re-leer)
+      if (st) {
+        st.style.color = "#f88";
+        st.textContent = "No se pudo crear: " + (r?.data?.error || r?.error || "error");
+      }
     }
   }
 
