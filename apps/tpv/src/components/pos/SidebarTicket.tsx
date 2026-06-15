@@ -501,7 +501,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           toast.warning("Ronda guardada, pero no se pudieron actualizar los datos del cliente");
         }
       } else {
-        // Orden nueva (o el backend redirigirá si la mesa está OCCUPIED).
+        // Orden nueva. Si la mesa resulta tener YA una cuenta abierta que el
+        // operador no veía, el backend responde 409 (en vez de encimar en
+        // silencio): preguntamos si agregar a esa cuenta o cancelar.
         const orderData = {
           orderType: ticket.type,
           items: itemsPayload,
@@ -513,15 +515,50 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           discount: ticket.discount,
           total: currentSubtotal - ticket.discount,
         };
-        const res = await apiOrQueue("order", "POST", "/api/orders/tpv", orderData);
-        if (!res.ok) throw new Error(res.error || "fallo desconocido");
-        queued = res.queued;
-        order = res.data;
-        // Guardar el id para que la siguiente ronda ya conozca la orden.
-        if (order?.id && ticket.tableId) {
-          setActiveOrder(order.id, ticket.tableId, order.orderNumber ?? null);
+        let res = await apiOrQueue("order", "POST", "/api/orders/tpv", orderData);
+
+        if (
+          !res.ok &&
+          res.status === 409 &&
+          res.conflict?.code === "TABLE_HAS_OPEN_TAB"
+        ) {
+          // La mesa ya tiene una cuenta abierta. NO encimamos: confirmamos.
+          const ex = res.conflict.existingOrder || {};
+          const mesa = ticket.tableName || ticket.table || "";
+          const proceed =
+            typeof window !== "undefined" &&
+            window.confirm(
+              `La mesa ${mesa} ya tiene la cuenta ${ex.orderNumber ?? ""} abierta` +
+                (ex.total != null ? ` ($${ex.total})` : "") +
+                `.\n\n¿Agregar estos productos a esa cuenta?\n\n` +
+                `Cancela para elegir otra mesa o cobrar la cuenta que ya existe.`,
+            );
+          if (!proceed) {
+            toast.info("Operación cancelada — la cuenta existente no se tocó");
+            return;
+          }
+          // Confirmado: agregar la ronda a la cuenta existente.
+          res = await apiOrQueue(
+            "order",
+            "POST",
+            `/api/orders/${ex.id}/items`,
+            { items: itemsPayload },
+          );
+          if (!res.ok) throw new Error(res.error || "fallo desconocido");
+          queued = res.queued;
+          order = res.data;
+          setActiveOrder(ex.id, ticket.tableId, ex.orderNumber ?? null);
+          if (!queued) setPreviousItems(order?.items || []);
+        } else {
+          if (!res.ok) throw new Error(res.error || "fallo desconocido");
+          queued = res.queued;
+          order = res.data;
+          // Guardar el id para que la siguiente ronda ya conozca la orden.
+          if (order?.id && ticket.tableId) {
+            setActiveOrder(order.id, ticket.tableId, order.orderNumber ?? null);
+          }
+          if (!queued) setPreviousItems(order?.items || []);
         }
-        if (!queued) setPreviousItems(order?.items || []);
       }
 
       toast.success(queued ? "Pedido en cola · se enviara al volver la red" : "Pedido enviado a cocina");

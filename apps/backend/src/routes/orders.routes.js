@@ -247,6 +247,15 @@ const {
 } = require('../schemas/orders.schema');
 const router = express.Router();
 
+// Estados en los que una cuenta de mesa DINE_IN sigue "abierta" (con saldo por
+// cobrar). OJO: una cuenta abierta NO se queda en 'OPEN' — cocina la avanza a
+// CONFIRMED/PREPARING/READY sin que esté pagada. Filtrar solo por 'OPEN'
+// rompía de dos formas: (a) duplicaba cuentas (la mesa "ocupada" no se
+// detectaba al re-entrar) y (b) hacía inconsistente la fusión por tableId.
+// Este set + paymentStatus != PAID es la definición canónica de "mesa con
+// cuenta abierta" y debe usarse en TODO lookup de cuenta-por-mesa.
+const OPEN_TABLE_STATUSES = ['OPEN', 'CONFIRMED', 'PREPARING', 'READY'];
+
 function extractIds(value, key) {
   return Array.isArray(value)
     ? value.map((entry) => entry?.[key]).filter(Boolean)
@@ -340,7 +349,7 @@ router.get('/table/:tableId/open', authenticate, requireTenantAccess, async (req
     const orders = await prisma.order.findMany({
       where: {
         tableId: req.params.tableId,
-        status: 'OPEN',
+        status: { in: OPEN_TABLE_STATUSES },
         paymentStatus: { not: 'PAID' },
         restaurantId,
       },
@@ -452,19 +461,60 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       // temporalmente desfasado (AVAILABLE) por una sincronizacion o cliente
       // antiguo; aun asi nunca debemos crear una segunda cuenta para la mesa.
       const existingOrder = await prisma.order.findFirst({
-        where: { tableId, status: 'OPEN', locationId: req.locationId },
+        where: {
+          tableId,
+          status: { in: OPEN_TABLE_STATUSES },
+          paymentStatus: { not: 'PAID' },
+          locationId: req.locationId,
+        },
         orderBy: { createdAt: 'desc' },
+        select: {
+          id: true, orderNumber: true, total: true, customerName: true,
+          _count: { select: { items: true } },
+        },
       });
 
       if (existingOrder) {
-        if (table.status !== 'OCCUPIED') {
-          await prisma.table.update({
-            where: { id: tableId },
-            data: { status: 'OCCUPIED' },
-          });
+        // La mesa YA tiene una cuenta abierta. El front solo cae a crear (en
+        // vez de agregar ronda) cuando creia la mesa LIBRE; por eso un merge
+        // silencioso aqui encimaria la venta del operador sobre otra cuenta
+        // que no sabia que existia (bug reportado: "al abrir una mesa se
+        // sobreescribio otra"). Solo fusionamos si el cliente lo pidio
+        // explicitamente: el operador confirmo en el dialogo, o es un replay
+        // de la cola offline (la comanda ya salio a cocina, no hay vuelta
+        // atras). En cualquier otro caso devolvemos 409 con la cuenta
+        // existente para que el TPV pregunte en vez de encimar.
+        if (req.body.appendToOpenTab === true) {
+          if (table.status !== 'OCCUPIED') {
+            await prisma.table.update({
+              where: { id: tableId },
+              data: { status: 'OCCUPIED' },
+            });
+          }
+          // Auditar el merge: antes era invisible. Best-effort (no debe
+          // tumbar el guardado de la ronda si falla el log).
+          await audit.record(req, audit.AUDIT_EVENTS.TAB_MERGE, {
+            resource: `order:${existingOrder.id}`,
+            after: {
+              orderNumber: existingOrder.orderNumber,
+              tableId,
+              addedItems: Array.isArray(items) ? items.length : 0,
+            },
+          }).catch(() => {});
+          req.params = { id: existingOrder.id };
+          return addRoundHandler(req, res);
         }
-        req.params = { id: existingOrder.id };
-        return addRoundHandler(req, res);
+        return res.status(409).json({
+          code: 'TABLE_HAS_OPEN_TAB',
+          error: `La mesa ya tiene la cuenta ${existingOrder.orderNumber} abierta`,
+          existingOrder: {
+            id: existingOrder.id,
+            orderNumber: existingOrder.orderNumber,
+            total: existingOrder.total,
+            customerName: existingOrder.customerName,
+            itemCount: existingOrder._count?.items ?? 0,
+          },
+        });
       }
     }
 
