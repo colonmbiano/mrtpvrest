@@ -127,8 +127,10 @@ router.post('/', requireAdmin, async (req, res) => {
     if (normalizedItems.error) return res.status(400).json({ error: normalizedItems.error });
 
     const recipe = await prisma.$transaction(async (tx) => {
-      // Upsert manual (Recipe.menuItemId @unique)
-      const existing = await tx.recipe.findUnique({ where: { menuItemId } });
+      // Upsert manual de la receta BASE del platillo (variantId NULL).
+      // La unicidad ahora es (menuItemId, variantId); este endpoint maneja la
+      // receta base, así que filtramos variantId null.
+      const existing = await tx.recipe.findFirst({ where: { menuItemId, variantId: null } });
       const data = {
         restaurantId,
         marginErrorPct: Number(marginErrorPct) || 0,
@@ -236,7 +238,9 @@ router.get('/import/template/recetas', requireAdmin, async (req, res) => {
         select: {
           id: true, name: true, price: true,
           category: { select: { name: true, sortOrder: true } },
-          recipe: {
+          // Receta base (variantId NULL) para la plantilla de exportación.
+          recipes: {
+            where: { variantId: null },
             select: {
               priceDelivery: true, platformCommissionPct: true,
               items: {
@@ -563,7 +567,7 @@ router.post('/import/recetas/confirm', requireAdmin, async (req, res) => {
       }
 
       await prisma.$transaction(async (tx) => {
-        const existing = await tx.recipe.findUnique({ where: { menuItemId } });
+        const existing = await tx.recipe.findFirst({ where: { menuItemId, variantId: null } });
         const meta = {
           restaurantId,
           priceDelivery: d.priceDelivery != null ? Number(d.priceDelivery) : null,

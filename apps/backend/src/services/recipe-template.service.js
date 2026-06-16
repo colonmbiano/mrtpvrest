@@ -183,7 +183,8 @@ function buildRecetasWorkbook({ menuItems = [], subRecipes = [] }) {
   let pRow = 2;
   const dishBlockRanges = []; // para aplicar dropdowns por bloque
   for (const mi of menuItems) {
-    const items = mi.recipe?.items || [];
+    const rec = mi.recipes?.[0] || mi.recipe || null; // receta base (include filtra variantId null)
+    const items = rec?.items || [];
     const rowsForThisDish = Math.max(MIN_ROWS_PER_DISH, items.length);
     const blockStart = pRow;
 
@@ -210,8 +211,8 @@ function buildRecetasWorkbook({ menuItems = [], subRecipes = [] }) {
         unidad,
         merma,
         isFirst ? (mi.price ?? '') : '',
-        isFirst ? (mi.recipe?.priceDelivery ?? '') : '',
-        isFirst ? (mi.recipe?.platformCommissionPct ?? '') : '',
+        isFirst ? (rec?.priceDelivery ?? '') : '',
+        isFirst ? (rec?.platformCommissionPct ?? '') : '',
       ]);
       pRow++;
     }

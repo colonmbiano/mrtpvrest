@@ -78,15 +78,36 @@ async function discountInventory(prisma, orderItems, orderId, restaurantId, loca
 
   try {
     for (const oi of orderItems) {
-      // Buscar RecipeItems vinculados a este MenuItem. Aceptamos ambas
-      // formas: vía Recipe (nuevo) o vía menuItemId directo (legacy).
+      // Resolver la receta del platillo. Un platillo puede tener:
+      //   - una receta base (variantId NULL), y/o
+      //   - recetas por variante (p.ej. Alambre 350gr Arrachera/Pollo/Res-Cerdo).
+      // order_items NO guarda variantId; la variante viene embebida en oi.name
+      // como "Platillo (Variante)". Elegimos la receta de la variante vendida
+      // y, si no hay match, caemos a la receta base.
+      const recipes = await prisma.recipe.findMany({
+        where: { menuItemId: oi.menuItemId, restaurantId, isActive: true },
+        select: { id: true, variantId: true, variant: { select: { name: true } } },
+      });
+
+      let chosenRecipeId = null;
+      if (recipes.length > 0) {
+        const variantRecipes = recipes.filter((r) => r.variantId && r.variant);
+        if (variantRecipes.length > 0) {
+          const nm = (oi.name || '').toLowerCase();
+          const match = variantRecipes.find((r) => nm.includes(r.variant.name.toLowerCase()));
+          const base = recipes.find((r) => !r.variantId);
+          chosenRecipeId = (match || base || recipes[0]).id;
+        } else {
+          chosenRecipeId = recipes[0].id; // solo receta base
+        }
+      }
+
+      // RecipeItems de la receta elegida; si el platillo no tiene Recipe formal,
+      // fallback a la forma legacy (RecipeItem.menuItemId directo).
       const recipeItems = await prisma.recipeItem.findMany({
-        where: {
-          OR: [
-            { recipe: { menuItemId: oi.menuItemId, restaurantId } },
-            { menuItemId: oi.menuItemId, menuItem: { restaurantId } },
-          ],
-        },
+        where: chosenRecipeId
+          ? { recipeId: chosenRecipeId }
+          : { menuItemId: oi.menuItemId, menuItem: { restaurantId } },
         include: { ingredient: true, recipe: true },
       });
 
