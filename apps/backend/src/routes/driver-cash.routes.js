@@ -737,4 +737,89 @@ router.get('/:driverId/report', authenticate, requireTenantAccess, async (req, r
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
+// ── Inventariar una COMPRA de repartidor (entrada de stock, SIN dinero) ───
+// La COMPRAS del repartidor ya quedó como gasto en efectivo (DriverCashMovement
+// EXPENSE, que reduce su corte). Esto agrega SOLO el inventario: incrementa
+// Ingredient.stock + crea StockMovement, sin tocar dinero (NO crea PurchaseOrder
+// ni ShiftExpense) → cero doble conteo en los reportes de gasto.
+// Idempotente por movementId (un inventariado por movimiento): si ya se hizo,
+// devuelve alreadyDone. Esto lo hace seguro contra el replay offline del TPV
+// (mismo Idempotency-Key reentra sin duplicar stock).
+router.post('/inventory-in', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const scoped = req.user?.role !== 'SUPER_ADMIN' && restaurantId;
+    const { movementId, items } = req.body || {};
+    if (!movementId) return res.status(400).json({ error: 'movementId requerido' });
+    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'items requerido (mínimo 1)' });
+
+    // El movimiento debe ser un EXPENSE de un repartidor del restaurante.
+    const movement = await prisma.driverCashMovement.findUnique({
+      where: { id: movementId },
+      select: { id: true, driverId: true, type: true },
+    });
+    if (!movement || movement.type !== 'EXPENSE') {
+      return res.status(404).json({ error: 'Movimiento de gasto no encontrado' });
+    }
+    const driver = await prisma.employee.findFirst({
+      where: { id: movement.driverId, role: 'DELIVERY', ...(scoped ? { location: { restaurantId } } : {}) },
+      select: { id: true, name: true, locationId: true },
+    });
+    if (!driver) return res.status(404).json({ error: 'Repartidor no encontrado' });
+
+    // Idempotencia natural: un solo inventariado por movimiento. Sobrevive a
+    // reinicios del server (a diferencia del Idempotency-Key in-memory).
+    const already = await prisma.stockMovement.findFirst({
+      where: { refType: 'driverExpense', refId: movementId },
+      select: { id: true },
+    });
+    if (already) return res.json({ ok: true, alreadyDone: true });
+
+    // Validar ingredientes (que pertenezcan al restaurante) y cantidades.
+    const ids = [...new Set(items.map((i) => i.ingredientId).filter(Boolean))];
+    const ingredients = await prisma.ingredient.findMany({
+      where: { id: { in: ids }, ...(scoped ? { restaurantId } : {}) },
+      select: { id: true, name: true, baseUnit: true, locationId: true },
+    });
+    const ingMap = new Map(ingredients.map((i) => [i.id, i]));
+    const normalized = [];
+    for (const it of items) {
+      const ing = ingMap.get(it.ingredientId);
+      const qty = Number(it.qty);
+      if (!ing) return res.status(400).json({ error: `Ingrediente no válido: ${it.ingredientId}` });
+      if (!Number.isFinite(qty) || qty <= 0 || qty > 1000000) return res.status(400).json({ error: 'qty inválida' });
+      normalized.push({ ing, qty });
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const out = [];
+      for (const { ing, qty } of normalized) {
+        const updated = await tx.ingredient.update({
+          where: { id: ing.id },
+          data: { stock: { increment: qty } },
+          select: { stock: true },
+        });
+        await tx.stockMovement.create({
+          data: {
+            ingredientId: ing.id,
+            locationId: ing.locationId || driver.locationId,
+            delta: qty,
+            unit: ing.baseUnit,
+            reason: 'PURCHASE',
+            refType: 'driverExpense',
+            refId: movementId,
+            balanceAfter: Number(updated.stock),
+            userId: null, // El TPV autentica como Employee, no User (FK a users rompe).
+            notes: `Compra repartidor ${driver.name}`,
+          },
+        });
+        out.push(ing.name);
+      }
+      return out;
+    });
+
+    res.json({ ok: true, inventoried: created });
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
 module.exports = router;
