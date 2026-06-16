@@ -263,7 +263,7 @@ export default function DriversPanel({
               <Bike size={19} style={{ color: accent }} />
               Repartidores
             </h2>
-            <p className="text-[11px] font-bold" style={{ color: "var(--muted)" }}>
+            <p className="text-[11px] font-bold" style={{ color: "var(--text-secondary)" }}>
               {drivers.length} activos · {onlineCount} online · {onRouteCount} en ruta
             </p>
           </div>
@@ -329,13 +329,13 @@ export default function DriversPanel({
                         <div className="text-sm font-bold text-white truncate">
                           #{o.orderNumber}{o.customerName ? ` · ${o.customerName}` : ""}
                         </div>
-                        <div className="text-[11px] truncate" style={{ color: "var(--muted)" }}>
+                        <div className="text-[11px] truncate" style={{ color: "var(--text-secondary)" }}>
                           {o.driverName ? `${o.driverName} · ` : ""}{method}
                           {o.deliveryAddress ? ` · ${o.deliveryAddress}` : ""}
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-[9px] uppercase font-bold" style={{ color: "var(--muted)" }}>Total</div>
+                        <div className="text-[9px] uppercase font-bold" style={{ color: "var(--text-secondary)" }}>Total</div>
                         <div className="text-sm font-black" style={{ color: accent }}>${(o.total || 0).toFixed(0)}</div>
                       </div>
                       <button
@@ -358,7 +358,7 @@ export default function DriversPanel({
           )}
 
           {loading && (
-            <div className="h-full min-h-48 flex flex-col items-center justify-center gap-3 p-6 text-sm" style={{ color: "var(--muted)" }}>
+            <div className="h-full min-h-48 flex flex-col items-center justify-center gap-3 p-6 text-sm" style={{ color: "var(--text-secondary)" }}>
               <Loader2 size={24} className="animate-spin" style={{ color: accent }} />
               Cargando repartidores...
             </div>
@@ -382,9 +382,9 @@ export default function DriversPanel({
           {!loading && !error && drivers.length === 0 && (
             <div className="min-h-48 p-8 text-center flex flex-col items-center justify-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-                <Users size={23} style={{ color: "var(--muted)" }} />
+                <Users size={23} style={{ color: "var(--text-secondary)" }} />
               </div>
-              <p className="text-sm" style={{ color: "var(--muted)" }}>
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
                 No hay repartidores registrados.
               </p>
             </div>
@@ -435,9 +435,12 @@ export default function DriversPanel({
 
                       {canViewFinancial && d.cash && (
                         <div className="mt-2 flex gap-1.5 flex-wrap">
-                          <div className="px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                            <div className="text-[9px] text-amber-400 font-bold uppercase leading-none mb-0.5">Fondo</div>
-                            <div className="text-xs font-black text-amber-400">${(d.cash.float || 0).toFixed(0)}</div>
+                          <div
+                            className="px-2 py-1 rounded-lg border"
+                            style={{ background: "color-mix(in srgb, var(--warning) 12%, transparent)", borderColor: "color-mix(in srgb, var(--warning) 25%, transparent)" }}
+                          >
+                            <div className="text-[9px] font-bold uppercase leading-none mb-0.5" style={{ color: "var(--warning)" }}>Fondo</div>
+                            <div className="text-xs font-black" style={{ color: "var(--warning)" }}>${(d.cash.float || 0).toFixed(0)}</div>
                           </div>
                           <div className="px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/20">
                             <div className="text-[9px] text-green-400 font-bold uppercase leading-none mb-0.5">Ingresos</div>
@@ -458,14 +461,14 @@ export default function DriversPanel({
                         </div>
                       )}
 
-                      <div className="text-[11px] mt-2" style={{ color: "var(--muted)" }}>
+                      <div className="text-[11px] mt-2" style={{ color: "var(--text-secondary)" }}>
                         {d.activeRoute ? (
                           <span style={{ color: accent }}>● En ruta desde {formatRelative(d.activeRoute.startAt)}</span>
                         ) : (
                           <span>{d.online ? "Disponible" : "Desconectado"}</span>
                         )}
                       </div>
-                      <div className="text-[11px] mt-0.5 flex gap-2" style={{ color: "var(--muted)" }}>
+                      <div className="text-[11px] mt-0.5 flex gap-2" style={{ color: "var(--text-secondary)" }}>
                         <span>Última señal {last}</span>
                         {dist !== null && (
                           <>
@@ -485,7 +488,7 @@ export default function DriversPanel({
         {/* Footer */}
         <div
           className="p-3 text-[11px] border-t flex items-center justify-between"
-          style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--muted)" }}
+          style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text-secondary)" }}
         >
           <span>Actualiza cada 10s</span>
           <button

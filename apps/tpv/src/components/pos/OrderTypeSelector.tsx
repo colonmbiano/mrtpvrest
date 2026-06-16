@@ -138,14 +138,14 @@ type OrderTypeCard = {
 };
 
 const ORDER_TYPES: OrderTypeCard[] = [
-  { id: "DINE_IN",  title: "Comer Aquí",  icon: Utensils,    accent: "#ff8400", shortcut: "1" },
+  { id: "DINE_IN",  title: "Comer Aquí",  icon: Utensils,    accent: "#34C988", shortcut: "1" },
   { id: "TAKEOUT",  title: "Para Llevar", icon: ShoppingBag, accent: "#3b82f6", shortcut: "2" },
   { id: "DELIVERY", title: "Delivery",    icon: Bike,        accent: "#10b981", shortcut: "3" },
 ];
 
 // Metadatos por tipo para las filas de cuentas abiertas (badge + icono + tono).
 const TYPE_META: Record<OrderType, { label: string; icon: typeof Utensils; accent: string }> = {
-  DINE_IN:  { label: "MESA",      icon: Utensils,    accent: "#ffb84d" },
+  DINE_IN:  { label: "MESA",      icon: Utensils,    accent: "#E0A22A" },
   TAKEOUT:  { label: "LLEVAR",    icon: ShoppingBag, accent: "#3b82f6" },
   DELIVERY: { label: "DOMICILIO", icon: Bike,        accent: "#10b981" },
 };
@@ -154,8 +154,8 @@ const TYPE_META: Record<OrderType, { label: string; icon: typeof Utensils; accen
 const STATUS_DOT: Record<string, string> = {
   PAID:       "#88D66C",
   READY:      "#88D66C",
-  PREPARING:  "#ffb84d",
-  CONFIRMED:  "#ffb84d",
+  PREPARING:  "#E0A22A",
+  CONFIRMED:  "#E0A22A",
   ON_THE_WAY: "#5e6ad2",
 };
 const dotFor = (status: string) => STATUS_DOT[status] ?? "rgba(255,255,255,0.5)";
@@ -331,7 +331,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex min-h-[100dvh] flex-col overflow-hidden bg-[#0C0C0E] px-3 py-[max(0.75rem,env(safe-area-inset-top))] text-white sm:px-5"
+      className="fixed inset-0 z-50 flex min-h-[100dvh] flex-col overflow-hidden bg-[var(--bg)] px-3 py-[max(0.75rem,env(safe-area-inset-top))] text-white sm:px-5"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       <div
@@ -339,14 +339,14 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
         className="pointer-events-none absolute inset-0 opacity-60"
         style={{
           background:
-            "linear-gradient(135deg, rgba(255,132,0,0.10), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.04), transparent 42%)",
+            "linear-gradient(135deg, var(--brand-glow), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.04), transparent 42%)",
         }}
       />
 
       {/* HEADER — título + usuario + menú desplegable (esquina) */}
       <header className="relative z-30 flex shrink-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#ff8400]/25 bg-[#ff8400]/10 text-[#ffb84d]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]">
             <Table2 size={20} strokeWidth={2.5} />
           </div>
           <div className="min-w-0">
@@ -371,12 +371,12 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               onClick={() => setMenuOpen((v) => !v)}
               aria-label="Menú"
               aria-expanded={menuOpen}
-              className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-[#6b5641] bg-[#1e1b18] text-[#f8e8d0] transition-all active:scale-95 hover:border-[#ff8400]/60 hover:text-[#ffb84d]"
+              className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-secondary)] transition-all active:scale-95 hover:border-[var(--brand)] hover:text-[var(--brand)]"
             >
               <Menu size={20} />
               {/* Punto de aviso: hay pedidos web por aceptar o notifs sin leer. */}
               {(webOrdersCount > 0 || unreadNotifs > 0) && (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#ff8400] px-1 text-[9px] font-black text-[#0c0c0e]">
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--brand)] px-1 text-[9px] font-black text-[var(--brand-fg)]">
                   {(() => {
                     const n = webOrdersCount + unreadNotifs;
                     return n > 99 ? "99+" : n;
@@ -386,7 +386,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
             </button>
 
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-2 w-60 origin-top-right rounded-2xl border border-white/10 bg-[#121316] p-2 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute right-0 top-full mt-2 w-60 origin-top-right rounded-2xl border border-white/10 bg-[var(--surface-1)] p-2 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
                 <div className="sm:hidden border-b border-white/5 px-2 pb-2 mb-1">
                   <UserBadge expanded={false} />
                 </div>
@@ -403,7 +403,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       <Icon size={18} />
                       <span className="flex-1 text-left text-sm font-bold">{shortcut.label}</span>
                       {badge > 0 && (
-                        <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#ff8400] px-1.5 text-[10px] font-black text-[#0c0c0e]">
+                        <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[var(--brand)] px-1.5 text-[10px] font-black text-[var(--brand-fg)]">
                           {badge > 99 ? "99+" : badge}
                         </span>
                       )}
@@ -448,7 +448,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                         active
                           ? m.key === "paid"
                             ? "bg-[#88D66C] text-[#0c0c0e]"
-                            : "bg-[#ffb84d] text-[#0c0c0e]"
+                            : "bg-[var(--brand)] text-[var(--brand-fg)]"
                           : "text-white/55"
                       }`}
                     >
@@ -462,7 +462,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
             <div className="flex items-center justify-between gap-3">
               <p
                 className="text-[10px] font-black uppercase tracking-[0.22em]"
-                style={{ color: paidMode ? "#88D66C" : "#ffb84d" }}
+                style={{ color: paidMode ? "#88D66C" : "var(--brand)" }}
               >
                 {paidMode
                   ? `Cobradas · último mes · ${openAccounts.length}`
@@ -478,7 +478,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       onClick={() => setFilter(f.key)}
                       className={`shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all active:scale-95 ${
                         active
-                          ? "bg-[#ffb84d] text-[#0c0c0e]"
+                          ? "bg-[var(--brand)] text-[var(--brand-fg)]"
                           : "border border-white/10 bg-white/5 text-white/55"
                       }`}
                     >
@@ -495,7 +495,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               <button
                 type="button"
                 onClick={onManageTickets}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#ffb84d]/25 bg-[#ffb84d]/10 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] text-[#ffb84d] transition-transform active:scale-95"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--brand)] bg-[var(--brand-soft)] py-2.5 text-[11px] font-black uppercase tracking-[0.12em] text-[var(--brand)] transition-transform active:scale-95"
               >
                 <ListChecks size={15} strokeWidth={2.5} />
                 Gestionar · juntar / repartidor / cocina
@@ -702,7 +702,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
         {/* TIPO DE PEDIDO */}
         <aside className="flex shrink-0 flex-col gap-2.5 lg:w-[260px]">
-          <p className="px-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#ffb84d]">
+          <p className="px-1 text-[10px] font-black uppercase tracking-[0.22em] text-[var(--brand)]">
             Iniciar venta
           </p>
           <div className="grid flex-1 grid-cols-3 gap-2.5 lg:grid-cols-1">
@@ -713,7 +713,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   key={type.id}
                   type="button"
                   onClick={() => onSelect(type.id)}
-                  className="group relative flex min-h-[104px] flex-1 flex-col justify-center gap-3 rounded-2xl border border-white/10 bg-[#131316] p-4 text-left transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70 lg:p-5"
+                  className="group relative flex min-h-[104px] flex-1 flex-col justify-center gap-3 rounded-2xl border border-white/10 bg-[var(--surface-1)] p-4 text-left transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[var(--brand)] lg:p-5"
                   style={{ borderColor: `${type.accent}3a` }}
                 >
                   <div className="flex items-center justify-between">
@@ -750,7 +750,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               type="button"
               onClick={onWhatsapp}
               aria-label="Capturar pedido de WhatsApp"
-              className="group flex shrink-0 items-center gap-3 rounded-2xl border bg-[#131316] p-4 text-left transition-colors active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366]/60"
+              className="group flex shrink-0 items-center gap-3 rounded-2xl border bg-[var(--surface-1)] p-4 text-left transition-colors active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366]/60"
               style={{ borderColor: "#25D3663a" }}
             >
               <span

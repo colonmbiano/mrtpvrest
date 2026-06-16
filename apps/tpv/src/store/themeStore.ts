@@ -35,7 +35,7 @@ const applyDocAttrs = (palette: Palette, mode: Mode) => {
 // a "amber" — la paleta brand de MRTPVREST.
 const normalizePalette = (p: unknown): Palette => {
   if (p === "green" || p === "purple" || p === "amber") return p;
-  return "amber";
+  return "green";
 };
 
 interface ThemeState {
@@ -56,10 +56,10 @@ interface ThemeState {
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
-      palette: "amber",
+      palette: "green",
       mode: "dark",
       themeChosen: false,
-      theme: "amber",
+      theme: "green",
 
       setPalette: (palette) => {
         set({ palette, theme: palette });
@@ -81,7 +81,7 @@ export const useThemeStore = create<ThemeState>()(
 
       setTheme: (theme) => {
         const target = LEGACY_THEME_MAP[theme] ?? {
-          palette: "amber" as Palette,
+          palette: "green" as Palette,
           mode: "dark" as Mode,
         };
         set({ palette: target.palette, mode: target.mode, theme });

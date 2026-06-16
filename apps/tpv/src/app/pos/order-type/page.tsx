@@ -827,7 +827,7 @@ export default function OrderTypePage() {
   };
 
   return (
-    <div className="flex h-[100dvh] w-full bg-[#0a0a0c] overflow-auto">
+    <div className="flex h-[100dvh] w-full bg-[var(--bg)] overflow-auto">
       <OrderTypeSelector
         onSelect={handlePickType}
         onClose={handleLogout}
@@ -908,7 +908,7 @@ export default function OrderTypePage() {
       <DriversPanel
         isOpen={showDrivers}
         onClose={() => setShowDrivers(false)}
-        accent="#ffb84d"
+        accent="#E0A22A"
         currentRole={currentEmployee?.role}
       />
 

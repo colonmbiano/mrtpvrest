@@ -23,7 +23,7 @@ const OPTIONS: Array<{
     title: 'Caja Principal',
     desc: 'POS para cobrar, abrir comandas y gestionar mesas',
     icon: Laptop,
-    accent: '#ffb84d',
+    accent: '#E0A22A',
   },
   {
     key: 'MESERO',
@@ -53,7 +53,7 @@ export default function DeviceStep({ onSubmit, loading, error }: DeviceStepProps
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       <div className="flex flex-col items-center text-center gap-3">
-        <div className="inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-[#ffb84d] bg-[#ffb84d]/10 border border-[#ffb84d]/20">
+        <div className="inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-[var(--brand)] bg-[var(--brand-soft)] border border-[var(--brand)]">
           Paso 3 · Vinculación
         </div>
         <h1 className="text-3xl font-black text-white tracking-tight">
@@ -98,7 +98,7 @@ export default function DeviceStep({ onSubmit, loading, error }: DeviceStepProps
                 className="relative w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
                 style={{
                   background: active ? opt.accent : 'rgba(255,255,255,0.06)',
-                  color: active ? '#0a0a0c' : opt.accent,
+                  color: active ? 'var(--brand-fg)' : opt.accent,
                   border: active ? 'none' : `1px solid ${opt.accent}40`,
                 }}
               >
@@ -121,7 +121,7 @@ export default function DeviceStep({ onSubmit, loading, error }: DeviceStepProps
                   border: active ? 'none' : '1.5px solid rgba(255,255,255,0.20)',
                 }}
               >
-                {active && <Check size={16} className="text-[#0a0a0c]" strokeWidth={3} />}
+                {active && <Check size={16} className="text-[var(--brand-fg)]" strokeWidth={3} />}
               </div>
             </button>
           );
@@ -132,9 +132,9 @@ export default function DeviceStep({ onSubmit, loading, error }: DeviceStepProps
         <div
           className="rounded-2xl p-3 text-sm font-semibold"
           style={{
-            background: 'rgba(255,92,51,0.10)',
-            border: '1px solid rgba(255,92,51,0.30)',
-            color: '#FF8B6E',
+            background: 'var(--danger-soft)',
+            border: '1px solid var(--danger)',
+            color: 'var(--danger)',
           }}
         >
           {error}
@@ -147,9 +147,9 @@ export default function DeviceStep({ onSubmit, loading, error }: DeviceStepProps
         disabled={loading || !selected}
         className="inline-flex items-center justify-center gap-2 w-full min-h-[64px] py-4 rounded-2xl text-sm font-black uppercase tracking-[0.2em] active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
         style={{
-          background: selected ? '#ffb84d' : 'rgba(255,255,255,0.06)',
-          color: selected ? '#0a0a0c' : 'rgba(255,255,255,0.50)',
-          boxShadow: selected ? '0 15px 40px rgba(255,184,77,0.30)' : 'none',
+          background: selected ? 'var(--brand)' : 'rgba(255,255,255,0.06)',
+          color: selected ? 'var(--brand-fg)' : 'rgba(255,255,255,0.50)',
+          boxShadow: selected ? '0 15px 40px var(--brand-glow)' : 'none',
         }}
       >
         {loading

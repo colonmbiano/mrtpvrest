@@ -92,7 +92,7 @@ const EMPTY: TicketConfig = {
 
 type SubTab = "general" | "kitchen" | "security";
 
-const inputCls = "w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500 transition-colors";
+const inputCls = "w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)] transition-colors";
 
 export default function TicketFormatTab() {
   const [cfg, setCfg] = useState<TicketConfig>(EMPTY);
@@ -149,7 +149,7 @@ export default function TicketFormatTab() {
   };
 
   if (loading) {
-    return <div className="flex justify-center py-20"><div className="w-10 h-10 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" /></div>;
+    return <div className="flex justify-center py-20"><div className="w-10 h-10 border-4 rounded-full animate-spin" style={{ borderColor: "var(--brand-soft)", borderTopColor: "var(--brand)" }} /></div>;
   }
 
   return (
@@ -168,7 +168,7 @@ export default function TicketFormatTab() {
             <Field label="Logo del ticket">
               <>
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-[#121316] border border-white/5 flex items-center justify-center overflow-hidden shrink-0">
+                  <div className="w-16 h-16 rounded-2xl bg-[var(--surface-1)] border border-white/5 flex items-center justify-center overflow-hidden shrink-0">
                     {cfg.logoUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={cfg.logoUrl} alt="Logo" className="w-full h-full object-contain" />
@@ -177,7 +177,7 @@ export default function TicketFormatTab() {
                     )}
                   </div>
                   <div className="flex flex-col gap-2">
-                    <label className="h-10 px-4 inline-flex items-center rounded-xl bg-[#121316] border border-white/5 text-[11px] font-black uppercase tracking-widest text-zinc-300 hover:border-iris-glow cursor-pointer transition-colors">
+                    <label className="h-10 px-4 inline-flex items-center rounded-xl bg-[var(--surface-1)] border border-white/5 text-[11px] font-black uppercase tracking-widest text-zinc-300 hover:border-iris-glow cursor-pointer transition-colors">
                       {uploading ? "Subiendo…" : "Subir logo"}
                       <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} disabled={uploading} />
                     </label>
@@ -308,10 +308,10 @@ export default function TicketFormatTab() {
                     key={opt.id}
                     type="button"
                     onClick={() => setCfg({ ...cfg, kitchenFontSize: opt.id })}
-                    className={`flex flex-col items-center justify-center gap-0.5 h-16 rounded-2xl border transition-all ${active ? "bg-iris-500 border-iris-500 text-iris-fg" : "bg-[#121316] border-white/5 text-zinc-300 hover:border-iris-glow"}`}
+                    className={`flex flex-col items-center justify-center gap-0.5 h-16 rounded-2xl border transition-all ${active ? "bg-iris-500 border-iris-500 text-iris-fg" : "bg-[var(--surface-1)] border-white/5 text-zinc-300 hover:border-iris-glow"}`}
                   >
                     <span className="text-xs font-black uppercase tracking-widest">{opt.label}</span>
-                    <span className={`text-[10px] font-bold ${active ? "text-[#0a0a0c]/70" : "text-zinc-500"}`}>{opt.hint} ancho</span>
+                    <span className={`text-[10px] font-bold ${active ? "text-[var(--brand-fg)]" : "text-zinc-500"}`}>{opt.hint} ancho</span>
                   </button>
                 );
               })}
@@ -367,7 +367,7 @@ export default function TicketFormatTab() {
 function SubPill({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
     <button onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${active ? "bg-iris-500 text-iris-fg" : "bg-[#121316] text-zinc-400 hover:text-white"}`}>
+      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${active ? "bg-iris-500 text-iris-fg" : "bg-[var(--surface-1)] text-zinc-400 hover:text-white"}`}>
       {icon}{label}
     </button>
   );
@@ -384,7 +384,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button type="button" onClick={() => onChange(!checked)} className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-[#121316] border border-white/5 hover:border-iris-glow transition-all">
+    <button type="button" onClick={() => onChange(!checked)} className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-[var(--surface-1)] border border-white/5 hover:border-iris-glow transition-all">
       <span className="text-xs font-bold text-zinc-300 text-left leading-tight">{label}</span>
       <div className={`shrink-0 w-11 h-6 rounded-full relative transition-colors ${checked ? "bg-iris-500" : "bg-zinc-700"}`}>
         <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${checked ? "right-1" : "left-1"}`} />
@@ -420,10 +420,10 @@ function Segmented({
             key={opt.id}
             type="button"
             onClick={() => onChange(opt.id)}
-            className={`flex flex-col items-center justify-center gap-0.5 h-14 rounded-2xl border transition-all ${active ? "bg-iris-500 border-iris-500 text-iris-fg" : "bg-[#121316] border-white/5 text-zinc-300 hover:border-iris-glow"}`}
+            className={`flex flex-col items-center justify-center gap-0.5 h-14 rounded-2xl border transition-all ${active ? "bg-iris-500 border-iris-500 text-iris-fg" : "bg-[var(--surface-1)] border-white/5 text-zinc-300 hover:border-iris-glow"}`}
           >
             <span className="text-[11px] font-black uppercase tracking-widest">{opt.label}</span>
-            {opt.hint && <span className={`text-[9px] font-bold ${active ? "text-[#0a0a0c]/70" : "text-zinc-500"}`}>{opt.hint}</span>}
+            {opt.hint && <span className={`text-[9px] font-bold ${active ? "text-[var(--brand-fg)]" : "text-zinc-500"}`}>{opt.hint}</span>}
           </button>
         );
       })}
@@ -451,7 +451,7 @@ function FontPicker({ value, onChange }: { value: string; onChange: (v: string) 
             key={o.id}
             type="button"
             onClick={() => onChange(o.id)}
-            className={`flex flex-col gap-1 p-3 rounded-2xl border text-left transition-all ${active ? "bg-iris-500/10 border-iris-500" : "bg-[#121316] border-white/5 hover:border-iris-glow"}`}
+            className={`flex flex-col gap-1 p-3 rounded-2xl border text-left transition-all ${active ? "bg-iris-500/10 border-iris-500" : "bg-[var(--surface-1)] border-white/5 hover:border-iris-glow"}`}
           >
             <span className={`text-[11px] font-black uppercase tracking-widest ${active ? "text-iris-500" : "text-zinc-300"}`}>{o.label}</span>
             <span className="text-[9px] font-bold text-zinc-500">{o.note}</span>
@@ -488,7 +488,7 @@ function SizePicker({ value, onChange }: { value: string; onChange: (v: string) 
             key={o.id}
             type="button"
             onClick={() => onChange(o.id)}
-            className={`flex flex-col gap-1.5 p-2 rounded-2xl border transition-all ${active ? "bg-iris-500/10 border-iris-500" : "bg-[#121316] border-white/5 hover:border-iris-glow"}`}
+            className={`flex flex-col gap-1.5 p-2 rounded-2xl border transition-all ${active ? "bg-iris-500/10 border-iris-500" : "bg-[var(--surface-1)] border-white/5 hover:border-iris-glow"}`}
           >
             <span className={`text-[11px] font-black uppercase tracking-widest text-center ${active ? "text-iris-500" : "text-zinc-300"}`}>{o.label}</span>
             <div className="rounded-md bg-white text-black flex items-center justify-center h-11 overflow-hidden">

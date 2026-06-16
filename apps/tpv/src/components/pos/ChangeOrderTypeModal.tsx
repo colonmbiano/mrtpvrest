@@ -98,16 +98,16 @@ const ChangeOrderTypeModal: React.FC<ChangeOrderTypeModalProps> = ({
       />
 
       {/* MODAL */}
-      <div className="relative w-full max-w-[480px] flex flex-col bg-[#0C0C0E] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-[480px] flex flex-col bg-[var(--bg)] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         <div
           aria-hidden
           className="absolute pointer-events-none -top-24 -right-24 w-72 h-72 rounded-full opacity-30 blur-[80px]"
-          style={{ background: "radial-gradient(circle, rgba(255,184,77,0.4) 0%, transparent 70%)" }}
+          style={{ background: "radial-gradient(circle, var(--brand-glow) 0%, transparent 70%)" }}
         />
 
         {/* HEADER */}
         <div className="relative z-10 p-5 border-b border-white/5 bg-white/5 backdrop-blur-md flex items-center gap-4 shrink-0">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[#ffb84d]/15 text-[#ffb84d] border border-[#ffb84d]/30 shrink-0">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[var(--brand-soft)] text-[var(--brand)] border border-[var(--brand)] shrink-0">
             <ShoppingBag size={22} />
           </div>
           <div className="flex-1 min-w-0">
@@ -141,7 +141,7 @@ const ChangeOrderTypeModal: React.FC<ChangeOrderTypeModalProps> = ({
                   onClick={() => setTarget(id)}
                   className={`relative min-h-[112px] rounded-2xl flex flex-col items-center justify-center gap-1.5 px-2 py-3 transition-all active:scale-95 ${
                     active
-                      ? "bg-[#ffb84d]/15 border-2 border-[#ffb84d] text-[#ffb84d]"
+                      ? "bg-[var(--brand-soft)] border-2 border-[var(--brand)] text-[var(--brand)]"
                       : "bg-white/[0.03] border-2 border-white/10 text-white/60"
                   }`}
                 >
@@ -177,7 +177,7 @@ const ChangeOrderTypeModal: React.FC<ChangeOrderTypeModalProps> = ({
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="Calle, número, colonia..."
-                  className="w-full h-12 pl-10 pr-4 rounded-2xl bg-white/5 border border-white/10 text-[14px] font-bold text-white placeholder:text-white/30 outline-none focus:border-[#ffb84d]/50"
+                  className="w-full h-12 pl-10 pr-4 rounded-2xl bg-white/5 border border-white/10 text-[14px] font-bold text-white placeholder:text-white/30 outline-none focus:border-[var(--brand)]"
                 />
               </div>
             </div>
@@ -185,12 +185,12 @@ const ChangeOrderTypeModal: React.FC<ChangeOrderTypeModalProps> = ({
         </div>
 
         {/* ACCIONES */}
-        <div className="relative z-10 p-4 border-t border-white/5 bg-[#0C0C0E] flex flex-col gap-3 shrink-0">
+        <div className="relative z-10 p-4 border-t border-white/5 bg-[var(--bg)] flex flex-col gap-3 shrink-0">
           <button
             type="button"
             onClick={handleSave}
             disabled={!canSave}
-            className="w-full min-h-[64px] h-16 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.1em] text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)] disabled:opacity-40 disabled:grayscale disabled:shadow-none"
+            className="w-full min-h-[64px] h-16 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.1em] text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)] disabled:opacity-40 disabled:grayscale disabled:shadow-none"
           >
             <Check size={18} strokeWidth={2.5} />
             {saving ? "Guardando..." : isSame ? "Selecciona otro tipo" : "Guardar"}

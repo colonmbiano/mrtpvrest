@@ -946,11 +946,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
   return (
     <aside
-      className="w-full h-full min-h-0 bg-[#0c0c0e] flex flex-col relative z-20 overflow-hidden"
+      className="w-full h-full min-h-0 bg-[var(--bg)] flex flex-col relative z-20 overflow-hidden"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* HEADER DEL TICKET */}
-      <div className="flex shrink-0 flex-col gap-2.5 border-b border-white/10 bg-[#0a0a0c] p-3">
+      <div className="flex shrink-0 flex-col gap-2.5 border-b border-white/10 bg-[var(--bg)] p-3">
         <OrderTypeToggle
           active={ticket.type}
           onChange={(type) => updateTicket({ type })}
@@ -960,14 +960,14 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           <h2 className="min-w-0 flex-1 truncate text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
             {activeTicketName || "Orden en curso"}
           </h2>
-          <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-amber-400">
+          <span className="rounded-md border border-[var(--brand)] bg-[var(--brand-soft)] px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[var(--brand)]">
             ID: {String(ticket.id).slice(-4)}
           </span>
         </div>
 
         <div className="flex gap-2">
           {ticket.type !== "DINE_IN" ? (
-            <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[#121316] px-3 transition-all focus-within:border-amber-500/50">
+            <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[var(--surface-1)] px-3 transition-all focus-within:border-[var(--brand)]">
               <User size={15} className="text-zinc-600 shrink-0" />
               <input
                 placeholder="Nombre del cliente..."
@@ -990,7 +990,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             </div>
           )}
           <button
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#121316] text-zinc-500 transition-all active:scale-95 active:border-red-500/20 active:bg-red-500/10 active:text-red-500"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[var(--surface-1)] text-zinc-500 transition-all active:scale-95 active:border-red-500/20 active:bg-red-500/10 active:text-red-500"
             onClick={handleClearTicket}
             aria-label="Limpiar ticket"
           >
@@ -1001,7 +1001,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         {/* TAKEOUT: teléfono opcional → activa el registro/autocompletado. */}
         {ticket.type === "TAKEOUT" && (
           <div className="flex flex-col gap-2">
-            <div className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[#121316] px-3 transition-all focus-within:border-amber-500/50">
+            <div className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[var(--surface-1)] px-3 transition-all focus-within:border-[var(--brand)]">
               <Phone size={15} className="text-zinc-600 shrink-0" />
               <input
                 placeholder="Teléfono (opcional)..."
@@ -1018,7 +1018,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         {/* BUG-24: campos requeridos para DELIVERY. */}
         {ticket.type === "DELIVERY" && (
           <div className="flex flex-col gap-2">
-            <div className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[#121316] px-3 transition-all focus-within:border-amber-500/50">
+            <div className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[var(--surface-1)] px-3 transition-all focus-within:border-[var(--brand)]">
               <Home size={15} className="text-zinc-600 shrink-0" />
               <input
                 placeholder="Dirección..."
@@ -1027,12 +1027,12 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                 onChange={(e) => useTicketStore.getState().updateTicket({ address: e.target.value })}
               />
               {!ticket.address?.trim() && (
-                <span className="text-[8px] font-black tracking-[0.2em] uppercase text-amber-500/70 shrink-0">
+                <span className="text-[8px] font-black tracking-[0.2em] uppercase text-[var(--warning)] shrink-0">
                   Req
                 </span>
               )}
             </div>
-            <div className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[#121316] px-3 transition-all focus-within:border-amber-500/50">
+            <div className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[var(--surface-1)] px-3 transition-all focus-within:border-[var(--brand)]">
               <Phone size={15} className="text-zinc-600 shrink-0" />
               <input
                 placeholder="Teléfono..."
@@ -1042,7 +1042,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                 onChange={(e) => useTicketStore.getState().updateTicket({ phone: e.target.value })}
               />
               {!ticket.phone?.trim() && (
-                <span className="text-[8px] font-black tracking-[0.2em] uppercase text-amber-500/70 shrink-0">
+                <span className="text-[8px] font-black tracking-[0.2em] uppercase text-[var(--warning)] shrink-0">
                   Req
                 </span>
               )}
@@ -1054,7 +1054,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
       {/* LISTA DE ITEMS — área scrollable que ocupa lo que sobre entre
           header y bloque de totales/acciones (siempre fijo abajo). */}
-      <div className="min-h-0 flex-1 overflow-y-auto bg-[#0a0a0c] px-3 py-2 scrollbar-hide">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--bg)] px-3 py-2 scrollbar-hide">
         {/* Historial de rondas anteriores si existe activeOrderId */}
         {previousItems.length > 0 && (
           <div className="space-y-2 mb-4">
@@ -1091,11 +1091,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             </div>
             {ticket.items.length > 0 && (
               <div className="flex items-center gap-3">
-                <div className="h-[1px] flex-1 bg-amber-500/20" />
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-500/50">
+                <div className="h-[1px] flex-1 bg-[var(--brand-soft)]" />
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--brand)]">
                   Nueva ronda
                 </span>
-                <div className="h-[1px] flex-1 bg-amber-500/20" />
+                <div className="h-[1px] flex-1 bg-[var(--brand-soft)]" />
               </div>
             )}
           </div>
@@ -1130,7 +1130,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
       {/* FOOTER DEL TICKET — fijo al fondo. Incluye bloque de totales
           (e-commerce style) + CTA primario + acciones secundarias. */}
-      <div className="relative mt-auto shrink-0 overflow-hidden border-t border-white/10 bg-[#121316]">
+      <div className="relative mt-auto shrink-0 overflow-hidden border-t border-white/10 bg-[var(--surface-1)]">
         {/* BLOQUE DE TOTALES — Subtotal, IVA (16%), Descuento, Total.
             Estilo e-commerce: rows alineadas con valores tabulares. */}
         <div className="relative z-10 flex flex-col gap-1.5 border-b border-white/10 bg-[#0d0e11] px-4 py-3">
@@ -1164,7 +1164,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             <span className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-300">
               Total
             </span>
-            <span className="mono text-2xl font-black leading-none tabular-nums text-amber-400">
+            <span className="mono text-2xl font-black leading-none tabular-nums text-[var(--brand)]">
               ${total.toFixed(2)}
             </span>
           </div>
@@ -1182,7 +1182,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               <button
                 onClick={handleSendToKitchen}
                 disabled={processing}
-                className="flex-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] font-black uppercase tracking-widest text-amber-400 active:bg-amber-500/20 transition-transform duration-100 active:scale-[0.97] flex items-center justify-center gap-1.5 disabled:opacity-40"
+                className="flex-1 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[11px] font-black uppercase tracking-widest text-[var(--brand)] active:bg-[var(--brand-soft)] transition-transform duration-100 active:scale-[0.97] flex items-center justify-center gap-1.5 disabled:opacity-40"
               >
                 <Save size={16} strokeWidth={2.5} /> Guardar Orden
               </button>
@@ -1204,7 +1204,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               <button
                 onClick={handleSendToKitchen}
                 disabled={processing || !hasItems}
-                className="flex-[2] rounded-xl text-[12px] font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-transform duration-100 active:scale-[0.97] disabled:opacity-40 disabled:grayscale bg-amber-500 text-black"
+                className="flex-[2] rounded-xl text-[12px] font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-transform duration-100 active:scale-[0.97] disabled:opacity-40 disabled:grayscale bg-[var(--brand)] text-[var(--brand-fg)]"
               >
                 <UtensilsCrossed size={14} strokeWidth={2.5} />
                 {processing ? "Enviando..." : "Cocina"}

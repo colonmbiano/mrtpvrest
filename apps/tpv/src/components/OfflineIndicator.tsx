@@ -47,7 +47,7 @@ export default function OfflineIndicator() {
     <button
       type="button"
       onClick={() => setDrawerOpen(true)}
-      className={`${base} bg-[#ffb84d]/15 border-[#ffb84d]/40 text-[#ffb84d]`}
+      className={`${base} bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]`}
       aria-label="Sincronizando"
     >
       <RefreshCcw size={14} strokeWidth={2.5} className="animate-spin" />
@@ -60,7 +60,7 @@ export default function OfflineIndicator() {
     <button
       type="button"
       onClick={() => setDrawerOpen(true)}
-      className={`${base} bg-[#88D66C]/15 border-[#88D66C]/40 text-[#88D66C]`}
+      className={`${base} bg-[var(--success-soft)] border-[var(--success)] text-[var(--success)]`}
       aria-label="Pendientes de sincronizar"
     >
       <CloudUpload size={14} strokeWidth={2.5} />
@@ -123,7 +123,7 @@ function PendingDrawer({
       onClick={onClose}
     >
       <div
-        className="w-full md:max-w-md max-h-[85vh] overflow-auto rounded-t-3xl md:rounded-3xl bg-[#0e0e11] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.6)] p-5"
+        className="w-full md:max-w-md max-h-[85vh] overflow-auto rounded-t-3xl md:rounded-3xl bg-[var(--surface-1)] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.6)] p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between mb-4">
@@ -151,7 +151,7 @@ function PendingDrawer({
               const path = (tx.data as any)?.path || "";
               return (
                 <li key={tx.id} className="py-3 flex items-start gap-3">
-                  <Clock size={14} className="text-amber-300 mt-0.5 shrink-0" />
+                  <Clock size={14} className="text-[var(--warning)] mt-0.5 shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-bold text-white">
                       {typeLabel[tx.type] || tx.type}
@@ -181,7 +181,7 @@ function PendingDrawer({
             onClick={() => {
               void syncOfflineQueue();
             }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-black text-[#0a0a0c] bg-amber-400 active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-black text-[var(--brand-fg)] bg-[var(--brand)] active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
           >
             {syncInProgress ? (
               <RefreshCcw size={12} strokeWidth={3} className="animate-spin" />

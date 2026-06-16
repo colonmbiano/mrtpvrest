@@ -65,9 +65,9 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
 
   // Temas diseño operativo actualizados
   const themes = [
-    { id: "amber",  label: "Miel",   color: "#ffb84d" },
-    { id: "purple", label: "Cian",   color: "#3b82f6" },
-    { id: "green",  label: "Lima",   color: "#10b981" },
+    { id: "amber",  label: "Miel",   color: "#E0A22A" },
+    { id: "purple", label: "Cian",   color: "#9472FF" },
+    { id: "green",  label: "Lima",   color: "#34C988" },
   ];
 
   return (
@@ -79,22 +79,22 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
       />
 
       {/* DRAWER CONTENT - DISEÑO OPERATIVO */}
-      <div className="relative w-full max-w-[400px] h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 ease-out overflow-hidden bg-[#0a0a0c] border-r border-white/5">
+      <div className="relative w-full max-w-[400px] h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 ease-out overflow-hidden bg-[var(--bg)] border-r border-white/5">
         {/* Glows */}
         <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
-          <div className="absolute -top-40 -left-40 w-80 h-80 bg-amber-500/5 blur-[80px] rounded-full" />
-          <div className="absolute -bottom-40 -right-40 w-80 h-80 bg-amber-500/5 blur-[80px] rounded-full" />
+          <div className="absolute -top-40 -left-40 w-80 h-80 bg-[var(--brand-soft)] blur-[80px] rounded-full" />
+          <div className="absolute -bottom-40 -right-40 w-80 h-80 bg-[var(--brand-soft)] blur-[80px] rounded-full" />
         </div>
 
         {/* HEADER */}
-        <div className="relative z-10 p-8 border-b border-white/5 flex justify-between items-center bg-[#0a0a0c]/80 backdrop-blur-xl">
+        <div className="relative z-10 p-8 border-b border-white/5 flex justify-between items-center bg-[var(--bg)] backdrop-blur-xl">
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-black tracking-[0.2em] uppercase text-zinc-500">Configuración</span>
             <span className="text-2xl font-black tracking-tight text-white">Centro de Control</span>
           </div>
           <button
             onClick={onClose}
-            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-[#121316] text-zinc-400 active:text-white transition-all active:scale-90 border border-white/5"
+            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-[var(--surface-1)] text-zinc-400 active:text-white transition-all active:scale-90 border border-white/5"
             aria-label="Cerrar"
           >
             <X size={20} />
@@ -106,13 +106,13 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
           {/* SESIÓN */}
           <section className="space-y-5">
             <span className="text-[11px] font-black text-zinc-500 tracking-[0.2em] uppercase ml-1">Sesión Activa</span>
-            <div className="flex items-center gap-5 bg-[#121316] p-5 rounded-[1.5rem] border border-white/5 shadow-xl">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl bg-amber-500 text-[#0a0a0c] shadow-[0_0_15px_rgba(255,184,77,0.2)]">
+            <div className="flex items-center gap-5 bg-[var(--surface-1)] p-5 rounded-[1.5rem] border border-white/5 shadow-xl">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl bg-[var(--brand)] text-[var(--brand-fg)] shadow-[0_0_15px_var(--brand-glow)]">
                 {initials}
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="text-base font-black text-white tracking-tight">{employee?.name ?? "Invitado"}</span>
-                <span className="text-[10px] uppercase font-black tracking-[0.15em] text-amber-500/80">{roleLabel}</span>
+                <span className="text-[10px] uppercase font-black tracking-[0.15em] text-[var(--brand)]">{roleLabel}</span>
               </div>
             </div>
           </section>
@@ -138,7 +138,7 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
                         onClick={() => onThemeChange(t.id)}
                         className={`
                           flex-1 flex flex-col items-center justify-center gap-3 h-20 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95
-                          ${isActive ? "bg-[#1a1b1f] border-amber-500 text-white shadow-[0_0_15px_rgba(255,184,77,0.2)]" : "bg-[#121316] border-white/5 text-zinc-600"}
+                          ${isActive ? "bg-[var(--surface-1)] border-[var(--brand)] text-white shadow-[0_0_15px_var(--brand-glow)]" : "bg-[var(--surface-1)] border-white/5 text-zinc-600"}
                         `}
                       >
                         <div className="w-5 h-5 rounded-full shadow-lg" style={{ backgroundColor: t.color }} />
@@ -149,7 +149,7 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between bg-[#121316] p-5 rounded-2xl border border-white/5">
+              <div className="flex items-center justify-between bg-[var(--surface-1)] p-5 rounded-2xl border border-white/5">
                 <div className="flex items-center gap-4">
                   <Palette size={20} className="text-zinc-500" />
                   <span className="text-sm font-bold text-zinc-200">Interfaz Nocturna</span>
@@ -157,11 +157,11 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
                 <button
                   onClick={onToggleMode}
                   className="w-14 h-7 rounded-full relative transition-all duration-300 shadow-inner"
-                  style={{ background: isDark ? "#ffb84d" : "#1a1b1f" }}
+                  style={{ background: isDark ? "var(--brand)" : "var(--surface-1)" }}
                   aria-label="Alternar modo oscuro"
                 >
                   <div
-                    className={`absolute top-1 w-5 h-5 rounded-full transition-all duration-300 shadow-lg ${isDark ? "left-8 bg-[#0a0a0c]" : "left-1 bg-zinc-600"}`}
+                    className={`absolute top-1 w-5 h-5 rounded-full transition-all duration-300 shadow-lg ${isDark ? "left-8 bg-[var(--brand-fg)]" : "left-1 bg-zinc-600"}`}
                   />
                 </button>
               </div>
@@ -170,7 +170,7 @@ const ConfigMenu: React.FC<ConfigMenuProps> = ({
         </div>
 
         {/* FOOTER */}
-        <div className="relative z-10 p-8 border-t border-white/5 bg-[#0a0a0c]">
+        <div className="relative z-10 p-8 border-t border-white/5 bg-[var(--bg)]">
           <button
             className="w-full flex items-center justify-center gap-3 h-16 rounded-[1.25rem] bg-red-500/10 text-red-500 border border-red-500/20 font-black uppercase tracking-[0.2em] text-xs transition-all active:scale-95 active:bg-red-500 active:text-white"
             onClick={onLogout}
@@ -220,7 +220,7 @@ function UiScalePicker() {
               onClick={() => setUiScale(s)}
               className={`
                 flex flex-col items-center justify-center gap-1 min-h-[64px] py-3 rounded-2xl border transition-all active:scale-95
-                ${active ? "bg-[#1a1b1f] border-amber-500 text-white shadow-[0_0_15px_rgba(255,184,77,0.2)]" : "bg-[#121316] border-white/5 text-zinc-500"}
+                ${active ? "bg-[var(--surface-1)] border-[var(--brand)] text-white shadow-[0_0_15px_var(--brand-glow)]" : "bg-[var(--surface-1)] border-white/5 text-zinc-500"}
               `}
               style={{ fontSize: s === "small" ? 12 : s === "large" ? 18 : 14 }}
             >
@@ -267,7 +267,7 @@ function SidebarWidthPicker() {
               onClick={() => setSidebarPreset(p)}
               className={`
                 flex flex-col items-center justify-center gap-1 min-h-[64px] py-3 rounded-2xl border transition-all active:scale-95
-                ${active ? "bg-[#1a1b1f] border-amber-500 text-white shadow-[0_0_15px_rgba(255,184,77,0.2)]" : "bg-[#121316] border-white/5 text-zinc-500"}
+                ${active ? "bg-[var(--surface-1)] border-[var(--brand)] text-white shadow-[0_0_15px_var(--brand-glow)]" : "bg-[var(--surface-1)] border-white/5 text-zinc-500"}
               `}
             >
               <span className="text-[10px] font-black uppercase tracking-widest">{meta.label}</span>

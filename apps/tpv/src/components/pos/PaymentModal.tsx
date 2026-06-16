@@ -427,14 +427,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         aria-hidden
       />
 
-      <div className="relative w-full h-full max-w-none rounded-none border-0 lg:w-full lg:max-w-5xl lg:h-[88vh] lg:max-h-[760px] lg:rounded-[2.5rem] lg:border bg-[#0C0C0E] border-white/10 shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+      <div className="relative w-full h-full max-w-none rounded-none border-0 lg:w-full lg:max-w-5xl lg:h-[88vh] lg:max-h-[760px] lg:rounded-[2.5rem] lg:border bg-[var(--bg)] border-white/10 shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
         {/* GLOWS */}
         <div
           aria-hidden
           className="absolute pointer-events-none -top-40 -left-40 w-[500px] h-[500px] rounded-full opacity-30 blur-[120px]"
           style={{
             background:
-              "radial-gradient(circle, rgba(255,184,77,0.25) 0%, transparent 70%)",
+              "radial-gradient(circle, var(--brand-glow) 0%, transparent 70%)",
           }}
         />
 
@@ -442,7 +442,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         <div className="relative z-10 px-7 sm:px-10 pt-7 sm:pt-9 pb-0 shrink-0">
           <div className="flex items-start justify-between gap-4 mb-6">
             <div className="space-y-1 min-w-0">
-              <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
+              <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
                 Orden #{orderNumber}
                 {tableName ? ` · Mesa ${tableName}` : ""}
               </span>
@@ -521,7 +521,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
               <section className="mb-6 rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <Bike size={16} className="text-[#ffb84d]" />
+                    <Bike size={16} className="text-[var(--brand)]" />
                     <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">
                       Asignar repartidor
                     </h3>
@@ -538,7 +538,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                   </p>
                 ) : drivers.length === 0 ? (
                   <div className="py-2 flex flex-col gap-2">
-                    <p className="text-xs font-medium text-amber-400/90">
+                    <p className="text-xs font-medium text-[var(--warning)]">
                       No hay repartidores activos.
                     </p>
                     <button 
@@ -550,7 +550,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                           .catch(() => setDrivers([]))
                           .finally(() => setDriversLoading(false));
                       }}
-                      className="text-[10px] font-black uppercase tracking-widest text-[#ffb84d] hover:underline w-fit"
+                      className="text-[10px] font-black uppercase tracking-widest text-[var(--brand)] hover:underline w-fit"
                     >
                       Reintentar
                     </button>
@@ -566,7 +566,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                           onClick={() => setDriverId(d.id)}
                           className={`min-h-[56px] px-3 py-2 rounded-xl border text-left transition-all active:scale-95 ${
                             active
-                              ? "bg-[#ffb84d]/15 border-[#ffb84d]/50 text-white"
+                              ? "bg-[var(--brand-soft)] border-[var(--brand)] text-white"
                               : "bg-white/[0.03] border-white/10 text-white/75"
                           }`}
                         >
@@ -574,7 +574,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                             {d.name}
                           </span>
                           {d.isAvailable === false && (
-                            <span className="block text-[9px] font-bold text-amber-400/80 uppercase tracking-widest">
+                            <span className="block text-[9px] font-bold text-[var(--warning)] uppercase tracking-widest">
                               Ocupado
                             </span>
                           )}
@@ -644,7 +644,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                         className="text-[13px] font-bold text-white/80 flex-1 min-w-0 break-words leading-snug"
                         title={it.name}
                       >
-                        <span className="text-[#ffb84d] mr-2 tabular-nums">
+                        <span className="text-[var(--brand)] mr-2 tabular-nums">
                           {it.quantity}×
                         </span>
                         {it.name}
@@ -676,7 +676,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                   </div>
                 )}
                 {tipPercent > 0 && (
-                  <div className="flex justify-between items-baseline text-[#ffb84d] text-[12px] font-bold">
+                  <div className="flex justify-between items-baseline text-[var(--brand)] text-[12px] font-bold">
                     <span>Propina ({tipPercent}%)</span>
                     <span className="tabular-nums">
                       + ${tipAmount.toFixed(2)}
@@ -698,7 +698,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         </div>
 
         {/* FOOTER · CTA */}
-        <div className="relative z-10 p-5 sm:p-7 border-t border-white/5 bg-[#0C0C0E] flex flex-col gap-3 shrink-0">
+        <div className="relative z-10 p-5 sm:p-7 border-t border-white/5 bg-[var(--bg)] flex flex-col gap-3 shrink-0">
           {/* Toggle fijo: decidir si se imprime el ticket de cuenta al cobrar.
               Default apagado (no imprime). El cajero lo enciende si el cliente
               quiere su ticket. La comanda de cocina no depende de esto. */}
@@ -738,7 +738,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                   ? "Selecciona un repartidor antes de cobrar"
                   : undefined
             }
-            className="flex-[2] min-h-[64px] h-16 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.2em] text-[11px] flex items-center justify-center gap-3 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)] disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed"
+            className="flex-[2] min-h-[64px] h-16 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.2em] text-[11px] flex items-center justify-center gap-3 active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)] disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed"
           >
             <CheckCircle2 size={20} strokeWidth={2.5} />
             {submitting
@@ -791,7 +791,7 @@ function TabButton({
       onClick={onClick}
       className={`min-h-[44px] h-11 px-5 rounded-xl text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-2 active:scale-95 transition-all ${
         active
-          ? "bg-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+          ? "bg-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
           : "bg-transparent text-white/60"
       }`}
     >
@@ -841,7 +841,7 @@ function MethodGrid({
             onClick={() => onChange(m.id)}
             className={`min-h-[88px] h-24 rounded-3xl flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform border-2 ${
               isSelected
-                ? "bg-[#ffb84d]/10 border-[#ffb84d] text-[#ffb84d] shadow-[0_5px_20px_rgba(255,184,77,0.15)]"
+                ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)] shadow-[0_5px_20px_var(--brand-glow)]"
                 : "bg-white/5 border-white/10 text-white/60"
             }`}
           >
@@ -931,10 +931,10 @@ function TotalView({
                 </div>
               </div>
               <div className="space-y-1 text-right shrink-0">
-                <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
+                <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
                   Cambio
                 </span>
-                <div className="text-3xl font-black tabular-nums text-[#ffb84d] leading-none">
+                <div className="text-3xl font-black tabular-nums text-[var(--brand)] leading-none">
                   ${change.toFixed(2)}
                 </div>
               </div>
@@ -952,7 +952,7 @@ function TotalView({
                   }}
                   className={`min-h-[56px] h-14 rounded-2xl border tabular-nums font-black active:scale-95 transition-transform ${
                     cashReceived === val
-                      ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                      ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
                       : "bg-white/5 border-white/10 text-white"
                   }`}
                 >
@@ -994,7 +994,7 @@ function TotalView({
 
         {method === "CARD" && (
           <div className="flex flex-col items-center justify-center gap-6 py-10 text-center">
-            <div className="w-20 h-20 rounded-3xl bg-[#ffb84d]/10 border border-[#ffb84d]/30 flex items-center justify-center text-[#ffb84d] animate-pulse">
+            <div className="w-20 h-20 rounded-3xl bg-[var(--brand-soft)] border border-[var(--brand)] flex items-center justify-center text-[var(--brand)] animate-pulse">
               <CreditCard size={42} />
             </div>
             <div className="space-y-2">
@@ -1027,7 +1027,7 @@ function TotalView({
 
         {method === "COURTESY" && (
           <div className="flex flex-col items-center justify-center gap-5 py-10 text-center">
-            <div className="w-16 h-16 rounded-full bg-[#ffb84d]/10 flex items-center justify-center text-[#ffb84d]">
+            <div className="w-16 h-16 rounded-full bg-[var(--brand-soft)] flex items-center justify-center text-[var(--brand)]">
               <Gift size={36} />
             </div>
             <div className="space-y-2">
@@ -1109,7 +1109,7 @@ function SplitView({
           onClick={() => onModeChange("EQUAL")}
           className={`min-h-[44px] h-11 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-all ${
             mode === "EQUAL"
-              ? "bg-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+              ? "bg-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
               : "bg-transparent text-white/60"
           }`}
         >
@@ -1121,7 +1121,7 @@ function SplitView({
           onClick={() => onModeChange("BY_SEAT")}
           className={`min-h-[44px] h-11 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-all ${
             mode === "BY_SEAT"
-              ? "bg-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+              ? "bg-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
               : "bg-transparent text-white/60"
           }`}
         >
@@ -1190,23 +1190,23 @@ function EqualSplit({
             onClick={onInc}
             disabled={parts >= 20}
             aria-label="Sumar comensal"
-            className="w-16 h-16 min-h-[64px] rounded-2xl bg-[#ffb84d]/15 border border-[#ffb84d]/40 text-[#ffb84d] flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+            className="w-16 h-16 min-h-[64px] rounded-2xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
           >
             <Plus size={22} />
           </button>
         </div>
       </div>
 
-      <div className="flex items-center justify-between p-5 rounded-2xl bg-[#ffb84d]/10 border border-[#ffb84d]/30">
+      <div className="flex items-center justify-between p-5 rounded-2xl bg-[var(--brand-soft)] border border-[var(--brand)]">
         <div>
-          <div className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
+          <div className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
             Cada parte paga
           </div>
           <div className="text-[10px] font-bold text-white/40 mt-1 tabular-nums">
             ${total.toFixed(2)} ÷ {parts}
           </div>
         </div>
-        <div className="tabular-nums text-4xl font-black text-[#ffb84d] tracking-tight">
+        <div className="tabular-nums text-4xl font-black text-[var(--brand)] tracking-tight">
           ${perPart.toFixed(2)}
         </div>
       </div>
@@ -1257,7 +1257,7 @@ function SeatSplit({
         >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#ffb84d]/15 border border-[#ffb84d]/30 text-[#ffb84d] flex items-center justify-center font-black tabular-nums text-[15px]">
+              <div className="w-10 h-10 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center font-black tabular-nums text-[15px]">
                 {seat.seatNumber}
               </div>
               <span className="text-[12px] font-black uppercase tracking-[0.2em] text-white">
@@ -1275,7 +1275,7 @@ function SeatSplit({
                 className="flex justify-between items-baseline text-[11px] font-bold text-white/60"
               >
                 <span className="truncate flex-1 min-w-0">
-                  <span className="text-[#ffb84d] mr-1.5 tabular-nums">
+                  <span className="text-[var(--brand)] mr-1.5 tabular-nums">
                     {l.quantity}×
                   </span>
                   {l.name}
@@ -1327,7 +1327,7 @@ function TipPicker({
           Propina (opcional)
         </span>
         {selected > 0 && (
-          <span className="text-[11px] font-black text-[#ffb84d] tabular-nums">
+          <span className="text-[11px] font-black text-[var(--brand)] tabular-nums">
             +${amount.toFixed(2)}
           </span>
         )}
@@ -1354,14 +1354,14 @@ function TipPicker({
               onClick={() => onChange(active ? 0 : pct)}
               className={`min-h-[56px] h-14 rounded-2xl border flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-transform ${
                 active
-                  ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                  ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
                   : "bg-white/5 border-white/10 text-white"
               }`}
             >
               <span className="font-black text-[14px]">{pct}%</span>
               <span
                 className={`text-[10px] tabular-nums ${
-                  active ? "text-[#0C0C0E]/80" : "text-white/40"
+                  active ? "text-[var(--brand-fg)]" : "text-white/40"
                 }`}
               >
                 +${tip.toFixed(0)}

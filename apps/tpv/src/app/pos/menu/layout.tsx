@@ -1448,14 +1448,14 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           {/* FASE 6 · BANNER MODO PRÉSTAMO */}
           {isLoanMode && (
             <div
-              className="shrink-0 px-5 py-2 flex items-center justify-center gap-3 border-b border-[#ffb84d]/30"
+              className="shrink-0 px-5 py-2 flex items-center justify-center gap-3 border-b border-[var(--brand)]"
               style={{
                 background:
-                  "linear-gradient(90deg, rgba(255,184,77,0.14) 0%, rgba(255,184,77,0.08) 50%, rgba(255,184,77,0.14) 100%)",
+                  "linear-gradient(90deg, var(--brand-glow) 0%, var(--brand-soft) 50%, var(--brand-glow) 100%)",
                 fontFamily: "'Outfit', system-ui, sans-serif",
               }}
             >
-              <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
+              <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
                 Modo préstamo
               </span>
               <span className="text-[11px] font-bold text-white/80 truncate">

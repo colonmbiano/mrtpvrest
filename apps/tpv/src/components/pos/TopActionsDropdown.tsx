@@ -78,16 +78,16 @@ export default function TopActionsDropdown({
     <div className="relative z-50" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#6b5641] bg-[#1e1b18] text-[#f8e8d0] shadow-[0_4px_12px_rgba(44,31,19,0.22)] transition-all active:scale-95 hover:border-[#ff8400]/60 hover:text-[#ffb84d]"
+        className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#6b5641] bg-[#1e1b18] text-[#f8e8d0] shadow-[0_4px_12px_rgba(44,31,19,0.22)] transition-all active:scale-95 hover:border-[var(--brand)] hover:text-[var(--brand)]"
       >
         <MoreVertical size={20} />
       </button>
 
       {isOpen && (
-        <div className="absolute top-12 right-0 max-h-[calc(100vh-5rem)] w-60 overflow-y-auto bg-[#121316] border border-white/10 rounded-2xl shadow-2xl p-2 flex flex-col gap-1 origin-top-right animate-in fade-in zoom-in-95 duration-200">
+        <div className="absolute top-12 right-0 max-h-[calc(100vh-5rem)] w-60 overflow-y-auto bg-[var(--surface-1)] border border-white/10 rounded-2xl shadow-2xl p-2 flex flex-col gap-1 origin-top-right animate-in fade-in zoom-in-95 duration-200">
           <button
             onClick={() => handleAction(onOpenCatalogSettings)}
-            className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-3 text-amber-300 transition-all active:scale-95 hover:bg-amber-500/15"
+            className="flex items-center gap-3 rounded-xl border border-[var(--brand)] bg-[var(--brand-soft)] px-3 py-3 text-[var(--brand)] transition-all active:scale-95 hover:bg-[var(--brand-soft)]"
           >
             <SlidersHorizontal size={16} />
             <span className="text-xs font-bold">Vista catálogo</span>
@@ -158,7 +158,7 @@ export default function TopActionsDropdown({
           <button
             onClick={() => handleAction(onChargeOrder)}
             disabled={!hasActiveOrder}
-            className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-3 text-amber-300 transition-all active:scale-95 hover:bg-amber-500/15 disabled:opacity-35 disabled:active:scale-100"
+            className="flex items-center gap-3 rounded-xl border border-[var(--brand)] bg-[var(--brand-soft)] px-3 py-3 text-[var(--brand)] transition-all active:scale-95 hover:bg-[var(--brand-soft)] disabled:opacity-35 disabled:active:scale-100"
           >
             <Banknote size={16} />
             <span className="text-xs font-bold">Cobrar ahora</span>

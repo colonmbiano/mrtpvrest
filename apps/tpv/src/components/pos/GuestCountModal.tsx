@@ -55,20 +55,20 @@ export default function GuestCountModal({
 
   return (
     <div
-      className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-[#0a0a0c]/85 backdrop-blur-sm"
+      className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       <div className="w-full max-w-md rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.5)] overflow-hidden">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-6 py-5 border-b border-white/10 bg-white/5">
           <div>
-            <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d]">COMENSALES</span>
+            <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)]">COMENSALES</span>
             <h3 className="text-2xl font-black text-white tracking-tight mt-1">
               ¿Cuántos comensales?
             </h3>
             {tableName && (
               <p className="inline-flex items-center gap-1.5 text-xs font-bold text-white/55 mt-2">
-                <MapPin size={12} className="text-[#ffb84d]" /> {tableName}
+                <MapPin size={12} className="text-[var(--brand)]" /> {tableName}
               </p>
             )}
           </div>
@@ -94,7 +94,7 @@ export default function GuestCountModal({
           </button>
           <div className="flex-1 max-w-[160px] text-center">
             <div className="inline-flex items-center justify-center gap-2 text-5xl font-black text-white tracking-tight">
-              <Users size={28} className="text-[#ffb84d]" />
+              <Users size={28} className="text-[var(--brand)]" />
               <span>{guests}</span>
             </div>
             <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40 mt-2">
@@ -126,9 +126,9 @@ export default function GuestCountModal({
                   onClick={() => setGuests(n)}
                   className="h-12 rounded-xl text-base font-black tracking-tight active:scale-90 transition-transform"
                   style={{
-                    background: active ? "#ffb84d" : "rgba(255,255,255,0.05)",
-                    color: active ? "#0a0a0c" : "rgba(255,255,255,0.85)",
-                    border: `1px solid ${active ? "#ffb84d" : "rgba(255,255,255,0.10)"}`,
+                    background: active ? "var(--brand)" : "rgba(255,255,255,0.05)",
+                    color: active ? "var(--brand-fg)" : "rgba(255,255,255,0.85)",
+                    border: `1px solid ${active ? "var(--brand)" : "rgba(255,255,255,0.10)"}`,
                   }}
                 >
                   {n}
@@ -143,7 +143,7 @@ export default function GuestCountModal({
           <button
             type="button"
             onClick={() => onConfirm(guests)}
-            className="w-full inline-flex items-center justify-center gap-2 min-h-[64px] py-4 rounded-2xl text-sm font-black uppercase tracking-[0.2em] text-[#0a0a0c] bg-[#ffb84d] active:scale-95 transition-transform shadow-[0_15px_40px_rgba(255,184,77,0.25)]"
+            className="w-full inline-flex items-center justify-center gap-2 min-h-[64px] py-4 rounded-2xl text-sm font-black uppercase tracking-[0.2em] text-[var(--brand-fg)] bg-[var(--brand)] active:scale-95 transition-transform shadow-[0_15px_40px_var(--brand-glow)]"
           >
             Empezar orden
             <ArrowRight size={16} strokeWidth={3} />

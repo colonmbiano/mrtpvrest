@@ -125,7 +125,7 @@ export default function CentroResumenPage() {
               const tone = a.severity === "err"
                 ? "bg-red-500/10 border-red-500/30 text-red-200"
                 : a.severity === "warn"
-                ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                ? "bg-[var(--warning-soft)] border-[var(--warning)] text-[var(--warning)]"
                 : "bg-sky-500/10 border-sky-500/30 text-sky-200";
               return (
                 <li key={i} className={`flex items-start justify-between gap-3 p-3.5 rounded-xl border ${tone}`}>
@@ -256,7 +256,7 @@ function Panel({ title, cta, children }: { title: string; cta?: { label: string;
         {cta && (
           <Link
             href={cta.href}
-            className="inline-flex items-center gap-1.5 text-[10px] font-black tracking-widest text-amber-300 hover:text-amber-200"
+            className="inline-flex items-center gap-1.5 text-[10px] font-black tracking-widest text-[var(--brand)] hover:text-[var(--brand)]"
           >
             {cta.label} <ArrowRight size={11} strokeWidth={3} />
           </Link>

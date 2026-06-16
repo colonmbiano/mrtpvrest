@@ -144,7 +144,7 @@ export default function CentroPlatosPage() {
               onClick={() => setRange(r.key)}
               className={`px-3 py-1.5 rounded-full text-[11px] font-black transition-all ${
                 range === r.key
-                  ? "text-[#0a0a0c] bg-amber-400"
+                  ? "text-[var(--brand-fg)] bg-[var(--brand)]"
                   : "text-white/70 bg-white/5 border border-white/10 hover:bg-white/10"
               }`}
             >
@@ -161,7 +161,7 @@ export default function CentroPlatosPage() {
             onClick={() => setCategoryFilter("")}
             className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
               categoryFilter === ""
-                ? "text-[#0a0a0c] bg-white"
+                ? "text-[var(--bg)] bg-white"
                 : "text-white/60 bg-white/5 border border-white/10 hover:bg-white/10"
             }`}
           >
@@ -173,7 +173,7 @@ export default function CentroPlatosPage() {
               onClick={() => setCategoryFilter(c.id)}
               className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
                 categoryFilter === c.id
-                  ? "text-[#0a0a0c] bg-white"
+                  ? "text-[var(--bg)] bg-white"
                   : "text-white/60 bg-white/5 border border-white/10 hover:bg-white/10"
               }`}
             >
@@ -209,7 +209,7 @@ export default function CentroPlatosPage() {
                       {!d.hasRecipe && (
                         <span
                           title="Sin receta — food cost no calculable"
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[9px] font-black uppercase tracking-widest"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[var(--warning-soft)] border border-[var(--warning)] text-[var(--warning)] text-[9px] font-black uppercase tracking-widest"
                         >
                           <AlertTriangle size={9} /> Sin receta
                         </span>
@@ -265,7 +265,7 @@ function SortableTh({ label, active, desc, onClick }: { label: string; active: b
     <th className="px-3 py-3">
       <button
         onClick={onClick}
-        className={`inline-flex items-center gap-1 ${active ? "text-amber-300" : "text-white/40"}`}
+        className={`inline-flex items-center gap-1 ${active ? "text-[var(--brand)]" : "text-white/40"}`}
       >
         {label}
         <ArrowUpDown size={10} className={active ? (desc ? "rotate-0" : "rotate-180") : "opacity-40"} />

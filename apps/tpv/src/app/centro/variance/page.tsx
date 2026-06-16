@@ -108,7 +108,7 @@ export default function CentroVariancePage() {
               onClick={() => setRange(r.key)}
               className={`px-3 py-1.5 rounded-full text-[11px] font-black transition-all ${
                 range === r.key
-                  ? "text-[#0a0a0c] bg-amber-400"
+                  ? "text-[var(--brand-fg)] bg-[var(--brand)]"
                   : "text-white/70 bg-white/5 border border-white/10 hover:bg-white/10"
               }`}
             >
@@ -126,7 +126,7 @@ export default function CentroVariancePage() {
             onClick={() => setSevFilter(s)}
             className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
               sevFilter === s
-                ? "text-[#0a0a0c] bg-white"
+                ? "text-[var(--bg)] bg-white"
                 : "text-white/60 bg-white/5 border border-white/10 hover:bg-white/10"
             }`}
           >

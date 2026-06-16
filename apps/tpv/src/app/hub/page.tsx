@@ -40,8 +40,8 @@ const fmtMoney = (n: number) =>
 // como en el estado pre-mounted del cliente.
 function HubLoader({ label = 'Verificando turno...' }: { label?: string }) {
   return (
-    <div className="min-h-[100dvh] w-full bg-[#0a0a0c] flex flex-col items-center justify-center gap-4">
-      <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
+    <div className="min-h-[100dvh] w-full bg-[var(--bg)] flex flex-col items-center justify-center gap-4">
+      <Loader2 className="w-10 h-10 text-[var(--brand)] animate-spin" />
       <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">
         {label}
       </span>
@@ -184,26 +184,26 @@ function HubPageInner() {
 
   return (
     <div
-      className="relative min-h-[100dvh] w-full overflow-hidden bg-[#0a0a0c]"
+      className="relative min-h-[100dvh] w-full overflow-hidden bg-[var(--bg)]"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* Ambient diseño operativo glows */}
       <div
         aria-hidden
         className="pointer-events-none absolute -top-60 -left-60 w-[700px] h-[700px] rounded-full blur-[120px] opacity-60"
-        style={{ background: 'radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)' }}
+        style={{ background: 'radial-gradient(circle, var(--brand-glow) 0%, transparent 70%)' }}
       />
       <div
         aria-hidden
         className="pointer-events-none absolute top-[400px] -right-40 w-[800px] h-[800px] rounded-full blur-[120px] opacity-50"
-        style={{ background: 'radial-gradient(circle, rgba(136,214,108,0.10) 0%, transparent 70%)' }}
+        style={{ background: 'radial-gradient(circle, var(--success-soft) 0%, transparent 70%)' }}
       />
 
       {/* Top nav */}
       <header className="relative z-10 flex items-center justify-between px-6 lg:px-10 py-7">
         <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-[#ffb84d] shadow-lg shadow-amber-500/20">
-            <UtensilsCrossed size={20} className="text-[#0a0a0c]" strokeWidth={2.5} />
+          <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-[var(--brand)] shadow-lg shadow-[var(--brand-glow)]">
+            <UtensilsCrossed size={20} className="text-[var(--brand-fg)]" strokeWidth={2.5} />
           </div>
           <span className="text-white text-sm font-bold tracking-[0.18em]">MR TPV REST</span>
         </div>
@@ -216,7 +216,7 @@ function HubPageInner() {
             aria-expanded={menuOpen}
             className="flex items-center gap-2.5 pl-1.5 pr-3 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md active:scale-95 transition-transform"
           >
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black text-[#0a0a0c] bg-[#ffb84d]">
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black text-[var(--brand-fg)] bg-[var(--brand)]">
               {userInitial}
             </div>
             <span className="text-xs font-semibold text-white">{employee?.name || 'Empleado'}</span>
@@ -229,7 +229,7 @@ function HubPageInner() {
           {menuOpen && (
             <div
               role="menu"
-              className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#0a0a0c]/95 backdrop-blur-xl border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.5)] p-1.5 z-50"
+              className="absolute right-0 mt-2 w-56 rounded-2xl bg-[var(--surface-1)] backdrop-blur-xl border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.5)] p-1.5 z-50"
             >
               <div className="px-3 py-2 border-b border-white/5 mb-1">
                 <p className="text-[11px] font-bold text-white truncate">{employee?.name || 'Empleado'}</p>
@@ -260,7 +260,7 @@ function HubPageInner() {
         >
           {/* Header del card */}
           <div className="flex flex-col items-center gap-4 mb-10 text-center">
-            <div className="inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-[#ffb84d] bg-[#ffb84d]/10 border border-[#ffb84d]/20">
+            <div className="inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-[var(--brand)] bg-[var(--brand-soft)] border border-[var(--brand)]">
               Workspace
             </div>
             <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight leading-tight">
@@ -274,7 +274,7 @@ function HubPageInner() {
           {/* Estados */}
           {workspaces === null && !error && (
             <div className="flex flex-col items-center gap-3 py-12">
-              <div className="w-10 h-10 border-4 border-amber-500/20 border-t-[#ffb84d] rounded-full animate-spin" />
+              <div className="w-10 h-10 border-4 border-[var(--brand-soft)] border-t-[var(--brand)] rounded-full animate-spin" />
               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">
                 Cargando espacios…
               </span>
@@ -284,9 +284,9 @@ function HubPageInner() {
           {error && (
             <div
               className="text-center max-w-md mx-auto p-5 rounded-2xl"
-              style={{ background: 'rgba(255,92,51,0.08)', border: '1px solid rgba(255,92,51,0.25)' }}
+              style={{ background: 'var(--danger-soft)', border: '1px solid var(--danger)' }}
             >
-              <p className="text-sm font-semibold" style={{ color: '#FF5C33' }}>{error}</p>
+              <p className="text-sm font-semibold" style={{ color: 'var(--danger)' }}>{error}</p>
             </div>
           )}
 
@@ -294,7 +294,7 @@ function HubPageInner() {
           {workspaces && workspaces.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {workspaces.map((w, i) => {
-                const accent = w.accentColor || (i === 0 ? '#ffb84d' : i === 1 ? '#10b981' : '#3b82f6');
+                const accent = w.accentColor || (i === 0 ? 'var(--brand)' : i === 1 ? '#10b981' : '#3b82f6');
                 return (
                   <button
                     key={w.id}
@@ -307,9 +307,9 @@ function HubPageInner() {
                       style={{ background: accent }}
                     >
                       {w.businessType === 'RESTAURANT' ? (
-                        <UtensilsCrossed size={32} className="text-[#0a0a0c]" strokeWidth={2.5} />
+                        <UtensilsCrossed size={32} className="text-[var(--brand-fg)]" strokeWidth={2.5} />
                       ) : (
-                        <ShoppingBag size={32} className="text-[#0a0a0c]" strokeWidth={2.5} />
+                        <ShoppingBag size={32} className="text-[var(--brand-fg)]" strokeWidth={2.5} />
                       )}
                     </div>
 
@@ -332,17 +332,17 @@ function HubPageInner() {
                     {/* Stats */}
                     <div className="flex gap-2 w-full mt-1">
                       <Stat
-                        icon={<TrendingUp size={11} className="text-emerald-400" />}
+                        icon={<TrendingUp size={11} className="text-[var(--success)]" />}
                         label="VENTAS"
                         value={fmtMoney(w.salesToday)}
                       />
                       <Stat
-                        icon={<ShoppingBag size={11} className="text-[#ffb84d]" />}
+                        icon={<ShoppingBag size={11} className="text-[var(--brand)]" />}
                         label="ÓRDENES"
                         value={String(w.openOrders)}
                       />
                       <Stat
-                        icon={<Clock size={11} className="text-amber-300" />}
+                        icon={<Clock size={11} className="text-[var(--warning)]" />}
                         label="ESTADO"
                         value={w.isOpen ? 'Abierto' : 'Cerrado'}
                       />
@@ -352,13 +352,13 @@ function HubPageInner() {
                     <div className="flex items-center justify-between w-full mt-auto pt-2">
                       <div
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-                        style={{ background: 'rgba(136,214,108,0.12)', border: '1px solid rgba(136,214,108,0.35)' }}
+                        style={{ background: 'var(--success-soft)', border: '1px solid var(--success)' }}
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        <span className="text-[10px] font-black tracking-widest text-emerald-300">EN LÍNEA</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)]" />
+                        <span className="text-[10px] font-black tracking-widest text-[var(--success)]">EN LÍNEA</span>
                       </div>
                       <div
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black text-[#0a0a0c] bg-[#ffb84d] shadow-lg shadow-amber-500/20"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black text-[var(--brand-fg)] bg-[var(--brand)] shadow-lg shadow-[var(--brand-glow)]"
                       >
                         Seleccionar
                         <ArrowRight size={13} strokeWidth={3} />

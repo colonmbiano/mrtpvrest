@@ -55,8 +55,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // Loader mientras hidrata o mientras llega el employee.
   if (!hydrated || !employee) {
     return (
-      <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-[#0a0a0c] text-white">
-        <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-4" />
+      <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-[var(--bg)] text-white">
+        <div className="w-12 h-12 border-4 border-[var(--brand-soft)] border-t-[var(--brand)] rounded-full animate-spin mb-4" />
         <span className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Verificando Credenciales...</span>
       </div>
     );
@@ -65,8 +65,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // Rol no autorizado tras hidratar — el effect ya lanzó replace; mostrar loader.
   if (!ADMIN_ROLES.includes(employee.role as typeof ADMIN_ROLES[number])) {
     return (
-      <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-[#0a0a0c] text-white">
-        <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-4" />
+      <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-[var(--bg)] text-white">
+        <div className="w-12 h-12 border-4 border-[var(--brand-soft)] border-t-[var(--brand)] rounded-full animate-spin mb-4" />
         <span className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Redirigiendo…</span>
       </div>
     );

@@ -119,31 +119,31 @@ export default function TopNavDropdown({
       <div className="relative z-50" ref={menuRef}>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#6b5641] bg-[#1e1b18] text-[#f8e8d0] shadow-[0_4px_12px_rgba(44,31,19,0.22)] transition-all active:scale-95 hover:border-[#ff8400]/60 hover:text-[#ffb84d]"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#6b5641] bg-[#1e1b18] text-[#f8e8d0] shadow-[0_4px_12px_rgba(44,31,19,0.22)] transition-all active:scale-95 hover:border-[var(--brand)] hover:text-[var(--brand)]"
         >
           <Menu size={20} />
           {(unreadNotifs > 0 || webOrdersCount > 0) && (
             <span
-              className={`absolute -top-1 -right-1 w-3 h-3 rounded-full shadow-[0_0_8px_rgba(255,184,77,0.6)] ${
-                webOrdersCount > 0 ? "bg-[#5e6ad2]" : "bg-amber-500"
+              className={`absolute -top-1 -right-1 w-3 h-3 rounded-full shadow-[0_0_8px_var(--brand-glow)] ${
+                webOrdersCount > 0 ? "bg-[#5e6ad2]" : "bg-[var(--brand)]"
               }`}
             />
           )}
         </button>
 
         {isOpen && (
-          <div className="absolute top-12 left-0 w-64 bg-[#121316] border border-white/10 rounded-2xl shadow-2xl p-2 flex flex-col gap-1 overflow-hidden origin-top-left animate-in fade-in zoom-in-95 duration-200">
+          <div className="absolute top-12 left-0 w-64 bg-[var(--surface-1)] border border-white/10 rounded-2xl shadow-2xl p-2 flex flex-col gap-1 overflow-hidden origin-top-left animate-in fade-in zoom-in-95 duration-200">
             {/* Header del Menú */}
             <div className="px-3 py-3 border-b border-white/5 mb-2 flex items-center gap-3">
               <button
                 onClick={() => { setIsOpen(false); onOpenMenu(); }}
-                className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black bg-[#1a1b1f] border border-white/10 text-amber-500 shrink-0"
+                className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black bg-[var(--surface-1)] border border-white/10 text-[var(--brand)] shrink-0"
               >
                 {currentEmployee?.name?.charAt(0).toUpperCase() || "E"}
               </button>
               <div className="flex flex-col min-w-0">
                 <span className="text-sm font-bold text-white truncate">{currentEmployee?.name || "Sin sesión"}</span>
-                <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{currentEmployee?.role || "—"}</span>
+                <span className="text-[10px] font-black text-[var(--brand)] uppercase tracking-widest">{currentEmployee?.role || "—"}</span>
               </div>
             </div>
 
@@ -156,7 +156,7 @@ export default function TopNavDropdown({
                 }}
                 className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all active:scale-95 ${
                   item.active
-                    ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                    ? "bg-[var(--brand-soft)] text-[var(--brand)] border border-[var(--brand)]"
                     : "text-zinc-400 hover:text-white hover:bg-white/5"
                 }`}
               >
@@ -180,12 +180,12 @@ export default function TopNavDropdown({
               <div className="relative">
                 <Bell size={18} />
                 {unreadNotifs > 0 && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(255,184,77,0.6)]" />
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[var(--brand)] shadow-[0_0_8px_var(--brand-glow)]" />
                 )}
               </div>
               <span className="text-sm font-bold">Notificaciones</span>
               {unreadNotifs > 0 && (
-                <span className="ml-auto bg-amber-500 text-black px-1.5 py-0.5 rounded-md text-[10px] font-black">
+                <span className="ml-auto bg-[var(--brand)] text-[var(--brand-fg)] px-1.5 py-0.5 rounded-md text-[10px] font-black">
                   {unreadNotifs}
                 </span>
               )}
@@ -197,7 +197,7 @@ export default function TopNavDropdown({
                   setIsOpen(false);
                   onSwitchEmployee();
                 }}
-                className="mt-1 flex items-center gap-3 px-3 py-3 rounded-xl border-t border-white/5 text-amber-500/90 hover:text-amber-400 hover:bg-amber-500/5 transition-all active:scale-95"
+                className="mt-1 flex items-center gap-3 px-3 py-3 rounded-xl border-t border-white/5 text-[var(--brand)] hover:text-[var(--brand)] hover:bg-[var(--brand-soft)] transition-all active:scale-95"
               >
                 <ArrowLeftRight size={18} />
                 <span className="text-sm font-bold">Cambiar empleado</span>
@@ -210,7 +210,7 @@ export default function TopNavDropdown({
       <DriversPanel
         isOpen={showDrivers}
         onClose={() => setShowDrivers(false)}
-        accent="#ffb84d"
+        accent="var(--brand)"
         currentRole={currentEmployee?.role}
       />
     </>

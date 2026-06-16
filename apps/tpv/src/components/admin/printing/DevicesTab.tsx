@@ -222,7 +222,7 @@ export default function DevicesTab() {
       <div className="flex justify-end gap-3 mb-6">
         <button
           onClick={() => openNew(true)}
-          className="flex items-center gap-2 bg-[#121316] border border-white/5 text-zinc-300 px-5 py-3 rounded-2xl font-bold transition-all hover:bg-[#1a1b1f] active:scale-95"
+          className="flex items-center gap-2 bg-[var(--surface-1)] border border-white/5 text-zinc-300 px-5 py-3 rounded-2xl font-bold transition-all hover:bg-[var(--surface-2)] active:scale-95"
         >
           <Monitor size={18} className="text-iris-500" /> + Nuevo KDS
         </button>
@@ -236,11 +236,14 @@ export default function DevicesTab() {
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+          <div
+            className="w-12 h-12 border-4 rounded-full animate-spin"
+            style={{ borderColor: "var(--brand-soft)", borderTopColor: "var(--brand)" }}
+          />
           <span className="text-zinc-500 font-bold uppercase tracking-widest text-[10px]">Sincronizando…</span>
         </div>
       ) : printers.length === 0 ? (
-        <div className="bg-[#121316] rounded-[2.5rem] p-20 border border-white/5 text-center">
+        <div className="bg-[var(--surface-1)] rounded-[2.5rem] p-20 border border-white/5 text-center">
           <div className="w-20 h-20 bg-zinc-900 rounded-3xl flex items-center justify-center mx-auto mb-6 text-zinc-700">
             <PrinterIcon size={40} />
           </div>
@@ -252,7 +255,7 @@ export default function DevicesTab() {
           {printers.map((p) => {
             const kds = isKdsPrinter(p);
             return (
-              <div key={p.id} className="group relative bg-[#121316] p-6 rounded-[2rem] border border-white/5 hover:border-iris-glow transition-all">
+              <div key={p.id} className="group relative bg-[var(--surface-1)] p-6 rounded-[2rem] border border-white/5 hover:border-iris-glow transition-all">
                 <div className="flex justify-between items-start mb-6">
                   <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${kds ? "bg-emerald-500/10 text-emerald-500" : "bg-iris-soft text-iris-500"}`}>
                     {kds ? <Monitor size={24} /> : <PrinterIcon size={24} />}
@@ -298,7 +301,7 @@ export default function DevicesTab() {
 
       {isFormOpen && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <form onSubmit={handleSave} className="w-full max-w-lg bg-[#0a0a0c] p-8 rounded-[2rem] border border-white/10 shadow-2xl space-y-6 max-h-[92vh] overflow-y-auto scrollbar-hide">
+          <form onSubmit={handleSave} className="w-full max-w-lg bg-[var(--bg)] p-8 rounded-[2rem] border border-white/10 shadow-2xl space-y-6 max-h-[92vh] overflow-y-auto scrollbar-hide">
             <div>
               <h2 className="text-2xl font-black text-white tracking-tight mb-1">
                 {editingId ? "Editar dispositivo" : form.isKDS ? "Nueva pantalla KDS" : "Nueva impresora"}
@@ -310,13 +313,13 @@ export default function DevicesTab() {
             <div className="grid grid-cols-2 gap-3">
               <button type="button" onClick={() => setForm({ ...form, isKDS: false, type: "CASHIER" })}
                 className="flex flex-col items-start gap-1 p-4 rounded-2xl border transition-all active:scale-95 text-left"
-                style={{ background: !form.isKDS ? "var(--brand-soft)" : "#121316", borderColor: !form.isKDS ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
+                style={{ background: !form.isKDS ? "var(--brand-soft)" : "var(--surface-1)", borderColor: !form.isKDS ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
                 <span className="text-sm font-black text-white">Impresora física</span>
                 <span className="text-[10px] font-bold text-zinc-500">Térmica ESC/POS</span>
               </button>
               <button type="button" onClick={() => setForm({ ...form, isKDS: true, type: "KITCHEN" })}
                 className="flex flex-col items-start gap-1 p-4 rounded-2xl border transition-all active:scale-95 text-left"
-                style={{ background: form.isKDS ? "var(--brand-soft)" : "#121316", borderColor: form.isKDS ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
+                style={{ background: form.isKDS ? "var(--brand-soft)" : "var(--surface-1)", borderColor: form.isKDS ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
                 <span className="text-sm font-black text-white">Pantalla KDS</span>
                 <span className="text-[10px] font-bold text-zinc-500">Tablet de cocina</span>
               </button>
@@ -325,7 +328,7 @@ export default function DevicesTab() {
             <div className="space-y-1.5">
               <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Nombre</label>
               <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500"
+                className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)]"
                 placeholder={form.isKDS ? "Ej. KDS Parrilla" : "Ej. Comandas Cocina"} />
             </div>
 
@@ -334,7 +337,7 @@ export default function DevicesTab() {
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Rol</label>
                   <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}
-                    className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500 appearance-none">
+                    className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)] appearance-none">
                     <option value="CASHIER">Caja / Recibos</option>
                     <option value="KITCHEN">Cocina</option>
                     <option value="BAR">Barra / Drinks</option>
@@ -345,7 +348,7 @@ export default function DevicesTab() {
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Conexión</label>
                   <select value={form.connectionType} onChange={(e) => setForm({ ...form, connectionType: e.target.value as FormState["connectionType"] })}
-                    className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500 appearance-none">
+                    className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)] appearance-none">
                     <option value="NETWORK">Ethernet / WiFi</option>
                     <option value="USB">USB Local</option>
                     <option value="BLUETOOTH">Bluetooth</option>
@@ -363,7 +366,7 @@ export default function DevicesTab() {
                     return (
                       <button key={s.code} type="button" onClick={() => toggleStation(s.code)}
                         className="flex items-center gap-3 p-3 rounded-xl border transition-all active:scale-95"
-                        style={{ background: active ? "var(--brand-soft)" : "#121316", borderColor: active ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
+                        style={{ background: active ? "var(--brand-soft)" : "var(--surface-1)", borderColor: active ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
                         <span className="w-3 h-3 rounded-full" style={{ background: active ? "var(--brand)" : "rgba(255,255,255,0.10)" }} />
                         <span className="text-sm font-black text-white">{s.label}</span>
                       </button>
@@ -381,20 +384,20 @@ export default function DevicesTab() {
                   </label>
                   <input value={form.ip} onChange={(e) => setForm({ ...form, ip: sanitizeIpInput(e.target.value) })}
                     inputMode="decimal" autoComplete="off"
-                    className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500"
+                    className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)]"
                     placeholder={form.isKDS ? "192.168.1.x (vacío = solo socket)" : "192.168.1..."} required={!form.isKDS} />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Puerto</label>
                   <input type="number" value={form.port} onChange={(e) => setForm({ ...form, port: parseInt(e.target.value, 10) || 9100 })}
-                    className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500" />
+                    className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)]" />
                 </div>
               </div>
             )}
 
             {!form.isKDS && form.type === "CASHIER" && (
               <button type="button" onClick={() => setForm({ ...form, supportsCashDrawer: !form.supportsCashDrawer })}
-                className="w-full flex items-center justify-between p-4 rounded-2xl bg-[#121316] border border-white/5">
+                className="w-full flex items-center justify-between p-4 rounded-2xl bg-[var(--surface-1)] border border-white/5">
                 <span className="text-sm font-bold text-zinc-300">Cajón de dinero conectado</span>
                 <div className={`w-11 h-6 rounded-full relative transition-colors ${form.supportsCashDrawer ? "bg-iris-500" : "bg-zinc-700"}`}>
                   <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${form.supportsCashDrawer ? "right-1" : "left-1"}`} />

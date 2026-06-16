@@ -82,7 +82,7 @@ export default function OrderPanel() {
       </header>
 
       {/* CUSTOMER STRIP */}
-      <div className="px-5 py-2.5 flex items-center gap-2" style={{ borderBottom: "1px solid #1F1F23", background: "#0C0C0E" }}>
+      <div className="px-5 py-2.5 flex items-center gap-2" style={{ borderBottom: "1px solid #1F1F23", background: "var(--bg)" }}>
         <input
           type="text"
           value={ticket.name}
@@ -141,7 +141,7 @@ export default function OrderPanel() {
                         onClick={() => changeItemQty(idx, 1)}
                         aria-label="Aumentar"
                         className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-white/10"
-                        style={{ color: "#FF8400" }}
+                        style={{ color: "var(--brand)" }}
                       >
                         <Plus size={11} />
                       </button>
@@ -182,13 +182,13 @@ export default function OrderPanel() {
       )}
 
       {/* TOTALS */}
-      <footer className="flex flex-col gap-2 px-5 pt-3 pb-5" style={{ borderTop: "1px solid #27272A", background: "#0C0C0E" }}>
+      <footer className="flex flex-col gap-2 px-5 pt-3 pb-5" style={{ borderTop: "1px solid #27272A", background: "var(--bg)" }}>
         <Row label="Subtotal" value={fmt(subtotal)} muted />
         {ticket.discount > 0 && (
           <Row
             label={`Descuento ${ticket.discountType === "percent" ? `(${ticket.discount}%)` : ""}`}
             value={`-${fmt(discountAmount)}`}
-            color="#FFB84D"
+            color="var(--brand)"
           />
         )}
         <Row label="IVA (16%)" value={fmt(tax)} muted />
@@ -207,9 +207,9 @@ export default function OrderPanel() {
           }}
           className="mt-2 inline-flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
-            background: isEmpty ? "rgba(255,255,255,0.04)" : "#FF8400",
-            color: isEmpty ? "#666" : "#0C0C0E",
-            boxShadow: isEmpty ? "none" : "0 8px 18px rgba(255,132,0,0.35)",
+            background: isEmpty ? "rgba(255,255,255,0.04)" : "var(--brand)",
+            color: isEmpty ? "#666" : "var(--brand-fg)",
+            boxShadow: isEmpty ? "none" : "0 8px 18px var(--brand-glow)",
           }}
         >
           <CreditCard size={16} />
@@ -235,9 +235,9 @@ function ActionPill({ icon, label, active, onClick }: { icon: React.ReactNode; l
       onClick={onClick}
       className="inline-flex items-center justify-center gap-1.5 rounded-full py-2 text-[10px] font-bold transition"
       style={{
-        background: active ? "rgba(255,132,0,0.18)" : "rgba(255,255,255,0.04)",
-        color: active ? "#FF8400" : "#B8B9B6",
-        border: `1px solid ${active ? "rgba(255,132,0,0.4)" : "rgba(255,255,255,0.08)"}`,
+        background: active ? "var(--brand-soft)" : "rgba(255,255,255,0.04)",
+        color: active ? "var(--brand)" : "#B8B9B6",
+        border: `1px solid ${active ? "var(--brand)" : "rgba(255,255,255,0.08)"}`,
       }}
     >
       {icon}

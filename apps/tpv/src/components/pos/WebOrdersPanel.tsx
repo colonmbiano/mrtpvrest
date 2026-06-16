@@ -50,7 +50,7 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 const TYPE_TONE: Record<string, string> = {
-  DINE_IN: "bg-[#ffb84d]/15 text-[#ffb84d] border-[#ffb84d]/25",
+  DINE_IN: "bg-[var(--brand-soft)] text-[var(--brand)] border-[var(--brand)]",
   TAKEOUT: "bg-white/8 text-white/70 border-white/15",
   DELIVERY: "bg-sky-400/15 text-sky-300 border-sky-400/25",
 };
@@ -109,7 +109,7 @@ export default function WebOrdersPanel({
       />
 
       {/* PANEL */}
-      <aside className="relative w-full max-w-[560px] h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 ease-out overflow-hidden bg-[#0C0C0E] text-white border-l border-white/10">
+      <aside className="relative w-full max-w-[560px] h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 ease-out overflow-hidden bg-[var(--bg)] text-white border-l border-white/10">
         {/* Glows */}
         <div
           className="absolute pointer-events-none"
@@ -298,7 +298,7 @@ function WebOrderCard({
           <Clock size={12} /> {timeAgo(order.createdAt)}
         </span>
         {!isPending && STATUS_LABEL[order.status] && (
-          <span className="text-[#ffb84d] font-bold">
+          <span className="text-[var(--brand)] font-bold">
             {STATUS_LABEL[order.status]}
           </span>
         )}

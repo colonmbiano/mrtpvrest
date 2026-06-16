@@ -38,7 +38,7 @@ export default function ItemOptionsSheet({
       />
 
       <div
-        className="relative w-full max-w-md bg-[#0c0c0e] border-t border-white/10 rounded-t-3xl shadow-2xl flex flex-col p-5 gap-3 animate-in slide-in-from-bottom duration-200"
+        className="relative w-full max-w-md bg-[var(--bg)] border-t border-white/10 rounded-t-3xl shadow-2xl flex flex-col p-5 gap-3 animate-in slide-in-from-bottom duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
@@ -92,12 +92,12 @@ export default function ItemOptionsSheet({
           className="flex items-center gap-3 px-4 py-4 min-h-[56px] rounded-2xl border active:scale-[0.99] transition-transform"
           style={{
             background: favorite
-              ? "rgba(245,158,11,0.08)"
+              ? "var(--brand-soft)"
               : "rgba(255,255,255,0.04)",
             borderColor: favorite
-              ? "rgba(245,158,11,0.30)"
+              ? "var(--brand)"
               : "rgba(255,255,255,0.10)",
-            color: favorite ? "#f59e0b" : "rgba(255,255,255,0.85)",
+            color: favorite ? "var(--brand)" : "rgba(255,255,255,0.85)",
           }}
         >
           <Star

@@ -34,7 +34,7 @@ export default function Error({
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-[#0C0C0E] px-6 py-8 text-white overflow-y-auto"
+      className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-[var(--bg)] px-6 py-8 text-white overflow-y-auto"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-red-500/30 bg-red-500/10 text-red-400 mb-5">
@@ -66,7 +66,7 @@ export default function Error({
         <button
           type="button"
           onClick={reset}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#ffb84d] px-4 text-sm font-black uppercase tracking-[0.2em] text-[#0a0a0c] transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-black uppercase tracking-[0.2em] text-[var(--brand-fg)] transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
         >
           <RefreshCw size={16} strokeWidth={2.5} /> Reintentar
         </button>

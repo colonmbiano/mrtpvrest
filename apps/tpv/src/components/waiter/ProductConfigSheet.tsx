@@ -110,7 +110,7 @@ export default function ProductConfigSheet({
   return (
     <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="absolute bottom-0 left-0 right-0 max-h-[88%] bg-[#0C0C0E] border-t border-white/10 rounded-t-3xl flex flex-col"
+        className="absolute bottom-0 left-0 right-0 max-h-[88%] bg-[var(--bg)] border-t border-white/10 rounded-t-3xl flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* HEADER */}
@@ -151,7 +151,7 @@ export default function ProductConfigSheet({
                       onClick={() => setSelectedVariantId(variant.id)}
                       className={`min-h-[64px] rounded-2xl border p-3 text-left active:scale-[0.98] transition-transform ${
                         active
-                          ? "bg-[#ffb84d]/15 border-[#ffb84d]/50 text-[#ffb84d]"
+                          ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
                           : "bg-white/5 border-white/10 text-white/80"
                       }`}
                     >
@@ -194,14 +194,14 @@ export default function ProductConfigSheet({
                         onClick={() => toggle(group, modifier)}
                         className={`w-full min-h-[52px] flex items-center gap-3 rounded-2xl border px-3 text-left active:scale-[0.99] transition-transform ${
                           active
-                            ? "bg-[#ffb84d]/15 border-[#ffb84d]/50 text-[#ffb84d]"
+                            ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
                             : "bg-white/5 border-white/10 text-white/80"
                         }`}
                       >
                         <span
                           className={`flex h-6 w-6 shrink-0 items-center justify-center ${
                             group.multiSelect ? "rounded-md" : "rounded-full"
-                          } ${active ? "bg-[#ffb84d] text-[#0C0C0E]" : "border border-white/20 bg-white/5"}`}
+                          } ${active ? "bg-[var(--brand)] text-[var(--brand-fg)]" : "border border-white/20 bg-white/5"}`}
                         >
                           {active && <Check size={14} strokeWidth={3} />}
                         </span>
@@ -237,7 +237,7 @@ export default function ProductConfigSheet({
                 type="button"
                 onClick={() => setQuantity((q) => Math.min(99, q + 1))}
                 aria-label="Sumar"
-                className="w-12 h-12 min-h-[48px] rounded-xl bg-[#ffb84d]/15 border border-[#ffb84d]/40 text-[#ffb84d] flex items-center justify-center active:scale-95 transition-transform"
+                className="w-12 h-12 min-h-[48px] rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center active:scale-95 transition-transform"
               >
                 <Plus size={16} />
               </button>
@@ -254,7 +254,7 @@ export default function ProductConfigSheet({
               placeholder="Sin cebolla, término medio, alergia..."
               rows={2}
               maxLength={200}
-              className="w-full resize-none rounded-2xl bg-white/5 border border-white/10 px-3 py-3 text-[13px] font-bold text-white outline-none placeholder:text-white/30 focus:border-[#ffb84d]"
+              className="w-full resize-none rounded-2xl bg-white/5 border border-white/10 px-3 py-3 text-[13px] font-bold text-white outline-none placeholder:text-white/30 focus:border-[var(--brand)]"
             />
           </section>
         </div>
@@ -278,7 +278,7 @@ export default function ProductConfigSheet({
               type="button"
               onClick={confirm}
               disabled={!!validationError}
-              className="h-14 min-h-[56px] px-6 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] text-[12px] font-black uppercase tracking-[0.1em] active:scale-95 transition-transform disabled:opacity-40 disabled:active:scale-100"
+              className="h-14 min-h-[56px] px-6 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] text-[12px] font-black uppercase tracking-[0.1em] active:scale-95 transition-transform disabled:opacity-40 disabled:active:scale-100"
             >
               Agregar
             </button>

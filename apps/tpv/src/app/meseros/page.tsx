@@ -87,29 +87,29 @@ const PHASE_TONE: Record<TablePhase, PhaseTone> = {
     Icon: Sparkles,
   },
   ocupada: {
-    ring: "border-[#ffb84d]/50",
-    bg: "bg-[#ffb84d]/10",
-    fg: "text-[#ffb84d]",
-    accent: "rgba(255,184,77,0.55)",
-    dot: "bg-[#ffb84d]",
+    ring: "border-[var(--brand)]",
+    bg: "bg-[var(--brand-soft)]",
+    fg: "text-[var(--brand)]",
+    accent: "var(--brand-glow)",
+    dot: "bg-[var(--brand)]",
     pulse: true,
     Icon: Clock,
   },
   cobrando: {
-    ring: "border-[#88D66C]/50",
-    bg: "bg-[#88D66C]/10",
-    fg: "text-[#88D66C]",
-    accent: "rgba(136,214,108,0.55)",
-    dot: "bg-[#88D66C]",
+    ring: "border-[var(--success)]",
+    bg: "bg-[var(--success-soft)]",
+    fg: "text-[var(--success)]",
+    accent: "var(--success-soft)",
+    dot: "bg-[var(--success)]",
     pulse: true,
     Icon: Banknote,
   },
   sucia: {
-    ring: "border-red-500/40",
-    bg: "bg-red-500/10",
-    fg: "text-red-400",
-    accent: "rgba(239,68,68,0.5)",
-    dot: "bg-red-500",
+    ring: "border-[var(--danger)]",
+    bg: "bg-[var(--danger-soft)]",
+    fg: "text-[var(--danger)]",
+    accent: "var(--danger-soft)",
+    dot: "bg-[var(--danger)]",
     pulse: false,
     Icon: Brush,
   },
@@ -218,23 +218,23 @@ export default function WaiterFloorPlanPage() {
 
   return (
     <div
-      className="h-full flex flex-col bg-[#0C0C0E] text-white"
+      className="h-full flex flex-col bg-[var(--bg)] text-white"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* HEADER */}
-      <div className="p-5 sm:p-7 border-b border-white/5 bg-[#0C0C0E] flex flex-col gap-6 shrink-0 relative overflow-hidden">
+      <div className="p-5 sm:p-7 border-b border-white/5 bg-[var(--bg)] flex flex-col gap-6 shrink-0 relative overflow-hidden">
         <div
           aria-hidden
           className="absolute -top-32 -left-32 w-72 h-72 rounded-full blur-[80px] pointer-events-none opacity-50"
           style={{
             background:
-              "radial-gradient(circle, rgba(255,184,77,0.15) 0%, transparent 70%)",
+              "radial-gradient(circle, var(--brand-glow) 0%, transparent 70%)",
           }}
         />
 
         <div className="relative z-10 flex justify-between items-start gap-4">
           <div className="space-y-1.5 min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
+            <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
               Gestión de salón
             </span>
             <h1 className="text-[clamp(1.75rem,5vw,2.5rem)] font-black tracking-tight text-white truncate leading-none">
@@ -289,7 +289,7 @@ export default function WaiterFloorPlanPage() {
             <button
               onClick={() => setActiveZone("all")}
               className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all ${activeZone === "all"
-                  ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                  ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
                   : "bg-white/5 border-white/10 text-white/60"
                 }`}
             >
@@ -303,7 +303,7 @@ export default function WaiterFloorPlanPage() {
                   key={z.id}
                   onClick={() => setActiveZone(z.id)}
                   className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all flex items-center gap-2 ${isActive
-                      ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                      ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
                       : "bg-white/5 border-white/10 text-white/60"
                     }`}
                 >
@@ -329,7 +329,7 @@ export default function WaiterFloorPlanPage() {
       </div>
 
       {/* GIANT TILES GRID */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 scrollbar-hide bg-[#0C0C0E]">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 scrollbar-hide bg-[var(--bg)]">
         {errorMsg && !isLoading && tables.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center gap-5 py-20 text-center">
             <div className="w-20 h-20 rounded-3xl bg-red-500/10 border-2 border-red-500/40 flex items-center justify-center">
@@ -347,7 +347,7 @@ export default function WaiterFloorPlanPage() {
               type="button"
               onClick={() => loadTables(false)}
               disabled={isRefreshing}
-              className="h-12 min-h-[48px] px-6 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.15em] flex items-center gap-2 active:scale-95 transition-transform disabled:opacity-50"
+              className="h-12 min-h-[48px] px-6 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] text-[11px] font-black uppercase tracking-[0.15em] flex items-center gap-2 active:scale-95 transition-transform disabled:opacity-50"
             >
               <RefreshCw size={16} strokeWidth={2.5} className={isRefreshing ? "animate-spin" : ""} />
               Reintentar

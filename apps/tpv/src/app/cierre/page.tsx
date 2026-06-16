@@ -278,7 +278,7 @@ export default function CierreTurno() {
 
     return (
       <div
-        className="relative h-[100dvh] flex flex-col items-center justify-center bg-[#0a0a0c] text-white overflow-auto p-6"
+        className="relative h-[100dvh] flex flex-col items-center justify-center bg-[var(--bg)] text-white overflow-auto p-6"
         style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
       >
         <div className="w-full max-w-md flex flex-col gap-5">
@@ -342,9 +342,9 @@ export default function CierreTurno() {
                 </div>
               </>
             ) : (
-              <div className="mt-1 rounded-2xl p-4 flex items-start gap-2.5 bg-[#ffb84d]/8 border border-[#ffb84d]/30">
-                <ShieldAlert size={16} className="text-[#ffb84d] flex-shrink-0 mt-0.5" />
-                <p className="text-[11px] font-medium leading-relaxed text-amber-100">
+              <div className="mt-1 rounded-2xl p-4 flex items-start gap-2.5 bg-[var(--brand-soft)] border border-[var(--brand)]">
+                <ShieldAlert size={16} className="text-[var(--brand)] flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] font-medium leading-relaxed text-[var(--text-primary)]">
                   Corte ciego: el desfase queda oculto. Un supervisor puede revelarlo con su PIN.
                 </p>
               </div>
@@ -362,7 +362,7 @@ export default function CierreTurno() {
             {cs.blindClose && !revealed && (
               <button
                 onClick={() => setShowPinModal(true)}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-[#0a0a0c] bg-[#ffb84d] active:scale-95 transition-transform"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-[var(--brand-fg)] bg-[var(--brand)] active:scale-95 transition-transform"
               >
                 <Eye size={16} /> Ver desfase (PIN admin)
               </button>
@@ -386,14 +386,14 @@ export default function CierreTurno() {
 
   return (
     <div
-      className="relative h-[100dvh] flex flex-col bg-[#0a0a0c] text-white overflow-hidden"
+      className="relative h-[100dvh] flex flex-col bg-[var(--bg)] text-white overflow-hidden"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* Ambient glows */}
       <div
         aria-hidden
         className="pointer-events-none absolute -top-60 -left-60 w-[700px] h-[700px] rounded-full blur-[120px] opacity-50"
-        style={{ background: 'radial-gradient(circle, rgba(255,184,77,0.14) 0%, transparent 70%)' }}
+        style={{ background: 'radial-gradient(circle, var(--brand-soft) 0%, transparent 70%)' }}
       />
       <div
         aria-hidden
@@ -425,7 +425,7 @@ export default function CierreTurno() {
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2.5 pl-1.5 pr-3.5 py-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10">
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black text-[#0a0a0c] bg-[#ffb84d]">
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black text-[var(--brand-fg)] bg-[var(--brand)]">
               {userInitial}
             </div>
             <div className="flex flex-col">
@@ -435,7 +435,7 @@ export default function CierreTurno() {
           </div>
           {shift && (
             <div className="hidden md:flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10">
-              <AlarmClock size={14} className="text-[#ffb84d]" />
+              <AlarmClock size={14} className="text-[var(--brand)]" />
               <span className="text-xs font-bold text-white">
                 {new Date(shift.openedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} → {new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} · {elapsed(shift.openedAt)}
               </span>
@@ -457,9 +457,9 @@ export default function CierreTurno() {
                   Cuenta todo el efectivo de la caja y captura el total que se queda.
                 </p>
               </div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#ffb84d]/15 border border-[#ffb84d]/40">
-                <ShieldAlert size={11} className="text-[#ffb84d]" />
-                <span className="text-[10px] font-black tracking-widest text-[#ffb84d]">CORTE CIEGO</span>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--brand-soft)] border border-[var(--brand)]">
+                <ShieldAlert size={11} className="text-[var(--brand)]" />
+                <span className="text-[10px] font-black tracking-widest text-[var(--brand)]">CORTE CIEGO</span>
               </div>
             </div>
 
@@ -474,7 +474,7 @@ export default function CierreTurno() {
                 onChange={(e) => setCountedTotal(e.target.value)}
                 placeholder="0.00"
                 autoFocus
-                className="w-full h-24 rounded-3xl bg-[#0a0a0c]/60 border border-white/10 pl-14 pr-6 text-5xl font-black text-emerald-400 outline-none tabular-nums focus:border-emerald-400/40 transition-colors"
+                className="w-full h-24 rounded-3xl bg-[var(--bg)] border border-white/10 pl-14 pr-6 text-5xl font-black text-emerald-400 outline-none tabular-nums focus:border-emerald-400/40 transition-colors"
                 style={{ fontFamily: 'inherit' }}
               />
             </div>
@@ -484,12 +484,12 @@ export default function CierreTurno() {
           <div className="rounded-3xl p-6 flex flex-col gap-4 bg-white/5 backdrop-blur-md border border-white/10">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <Receipt size={15} className="text-[#ffb84d]" />
+                <Receipt size={15} className="text-[var(--brand)]" />
                 <span className="text-[11px] font-black tracking-[0.2em] text-white/55">GASTOS Y COMPRAS DEL TURNO</span>
               </div>
               <button
                 onClick={() => setShowExpenses(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#ffb84d]/15 border border-[#ffb84d]/30 text-[#ffb84d] text-[11px] font-black active:scale-95 transition-transform"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] text-[11px] font-black active:scale-95 transition-transform"
               >
                 <Plus size={14} strokeWidth={3} /> Registrar
               </button>
@@ -511,8 +511,8 @@ export default function CierreTurno() {
                       key={e.id}
                       className="flex items-center gap-3 rounded-2xl p-3 bg-white/5 border border-white/10"
                     >
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${driver ? 'bg-sky-400/10 border border-sky-400/20' : 'bg-[#ffb84d]/10 border border-[#ffb84d]/20'}`}>
-                        {driver ? <Bike size={16} className="text-sky-300" /> : <Wallet size={16} className="text-[#ffb84d]" />}
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${driver ? 'bg-sky-400/10 border border-sky-400/20' : 'bg-[var(--brand-soft)] border border-[var(--brand)]'}`}>
+                        {driver ? <Bike size={16} className="text-sky-300" /> : <Wallet size={16} className="text-[var(--brand)]" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold text-white truncate">{e.description}</p>
@@ -596,7 +596,7 @@ export default function CierreTurno() {
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Ej. Faltó cambio en moneda de $2 al iniciar el turno…"
               rows={3}
-              className="rounded-2xl px-4 py-3 text-sm font-medium resize-none outline-none bg-[#0a0a0c]/60 text-white border border-white/10 focus:border-[#ffb84d]/40 transition-colors"
+              className="rounded-2xl px-4 py-3 text-sm font-medium resize-none outline-none bg-[var(--bg)] text-white border border-white/10 focus:border-[var(--brand)] transition-colors"
               style={{ fontFamily: 'inherit' }}
             />
           </div>
@@ -617,7 +617,7 @@ export default function CierreTurno() {
               INFORMATIVO · NO SE SUMA AL EFECTIVO
             </span>
             <SummaryCard
-              icon={<CreditCard size={14} className="text-[#ffb84d]" />}
+              icon={<CreditCard size={14} className="text-[var(--brand)]" />}
               label="Tarjeta"
               value={fmtMoney(shift?.totalCard ?? 0)}
             />
@@ -639,9 +639,9 @@ export default function CierreTurno() {
               />
             )}
 
-            <div className="rounded-2xl p-4 flex items-start gap-2.5 bg-[#ffb84d]/8 border border-[#ffb84d]/30">
-              <ShieldAlert size={16} className="text-[#ffb84d] flex-shrink-0 mt-0.5" />
-              <p className="text-[11px] font-medium leading-relaxed text-amber-100">
+            <div className="rounded-2xl p-4 flex items-start gap-2.5 bg-[var(--brand-soft)] border border-[var(--brand)]">
+              <ShieldAlert size={16} className="text-[var(--brand)] flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] font-medium leading-relaxed text-[var(--text-primary)]">
                 Corte ciego: declaras el total sin ver el esperado. La conciliación la verá el supervisor.
               </p>
             </div>
@@ -660,7 +660,7 @@ export default function CierreTurno() {
             <button
               onClick={onSubmit}
               disabled={!shift || submitting || !countedValid}
-              className="w-full inline-flex items-center justify-center gap-2.5 rounded-2xl py-4 min-h-[56px] text-sm font-black tracking-tight text-[#0a0a0c] bg-[#ffb84d] active:scale-95 transition-transform disabled:opacity-40 shadow-[0_15px_40px_rgba(255,184,77,0.25)]"
+              className="w-full inline-flex items-center justify-center gap-2.5 rounded-2xl py-4 min-h-[56px] text-sm font-black tracking-tight text-[var(--brand-fg)] bg-[var(--brand)] active:scale-95 transition-transform disabled:opacity-40 shadow-[0_15px_40px_var(--brand-glow)]"
             >
               <Lock size={16} strokeWidth={3} />
               {submitting ? 'Cerrando…' : 'Confirmar y Cerrar Turno'}
@@ -757,7 +757,7 @@ function PinModal({
           onChange={(e) => setPin(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
           placeholder="••••"
-          className="w-full h-14 rounded-2xl bg-[#0a0a0c]/60 border border-white/10 px-4 text-2xl font-black text-center tracking-[0.4em] text-white outline-none focus:border-[#ffb84d]/40"
+          className="w-full h-14 rounded-2xl bg-[var(--bg)] border border-white/10 px-4 text-2xl font-black text-center tracking-[0.4em] text-white outline-none focus:border-[var(--brand)]"
         />
         {err && (
           <p className="text-[11px] font-semibold text-center" style={{ color: '#FF5C33' }}>{err}</p>
@@ -765,7 +765,7 @@ function PinModal({
         <button
           onClick={submit}
           disabled={!pin.trim() || busy}
-          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-[#0a0a0c] bg-[#ffb84d] active:scale-95 transition-transform disabled:opacity-40"
+          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-[var(--brand-fg)] bg-[var(--brand)] active:scale-95 transition-transform disabled:opacity-40"
         >
           <Eye size={16} /> {busy ? 'Validando…' : 'Revelar desfase'}
         </button>
@@ -833,7 +833,7 @@ function CashInModal({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Descripción (ej. Cambio para caja)"
-          className="w-full h-12 rounded-2xl bg-[#0a0a0c]/60 border border-white/10 px-4 text-sm font-medium text-white outline-none focus:border-emerald-400/40"
+          className="w-full h-12 rounded-2xl bg-[var(--bg)] border border-white/10 px-4 text-sm font-medium text-white outline-none focus:border-emerald-400/40"
         />
 
         <div className="relative">
@@ -847,7 +847,7 @@ function CashInModal({
             onChange={(e) => setAmount(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
             placeholder="0.00"
-            className="w-full h-12 rounded-2xl bg-[#0a0a0c]/60 border border-white/10 pl-9 pr-4 text-lg font-black text-emerald-400 outline-none tabular-nums focus:border-emerald-400/40"
+            className="w-full h-12 rounded-2xl bg-[var(--bg)] border border-white/10 pl-9 pr-4 text-lg font-black text-emerald-400 outline-none tabular-nums focus:border-emerald-400/40"
           />
         </div>
 
@@ -876,7 +876,7 @@ function CashInModal({
         <button
           onClick={submit}
           disabled={busy}
-          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-[#0a0a0c] bg-emerald-400 active:scale-95 transition-transform disabled:opacity-40"
+          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-[var(--brand-fg)] bg-emerald-400 active:scale-95 transition-transform disabled:opacity-40"
         >
           <Plus size={16} strokeWidth={3} /> {busy ? 'Guardando…' : 'Registrar ingreso'}
         </button>

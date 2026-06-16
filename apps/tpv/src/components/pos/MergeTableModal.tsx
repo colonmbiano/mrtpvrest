@@ -120,9 +120,9 @@ export default function MergeTableModal({
     >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
 
-      <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col bg-[#0C0C0E] border border-white/10 rounded-3xl shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col bg-[var(--bg)] border border-white/10 rounded-3xl shadow-2xl overflow-hidden">
         <div className="p-5 border-b border-white/5 flex items-center gap-3 shrink-0">
-          <div className="w-12 h-12 rounded-2xl bg-[#ffb84d]/15 border border-[#ffb84d]/30 text-[#ffb84d] flex items-center justify-center">
+          <div className="w-12 h-12 rounded-2xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center">
             <Users size={20} />
           </div>
           <div className="flex-1 min-w-0">
@@ -167,13 +167,13 @@ export default function MergeTableModal({
                   onClick={() => setPickedTargetId(o.id)}
                   className={`w-full p-4 rounded-2xl border flex items-center gap-3 transition-transform active:scale-[0.99] ${
                     isPicked
-                      ? "bg-[#ffb84d]/10 border-[#ffb84d] text-white"
+                      ? "bg-[var(--brand-soft)] border-[var(--brand)] text-white"
                       : "bg-white/5 border-white/10 text-white/80"
                   }`}
                 >
                   <div className="flex-1 min-w-0 text-left">
                     <div className="text-[13px] font-black truncate">
-                      {label} <span className="text-[#ffb84d]">· #{o.orderNumber}</span>
+                      {label} <span className="text-[var(--brand)]">· #{o.orderNumber}</span>
                     </div>
                     <div className="text-[11px] font-bold text-white/50 truncate">
                       {(o.customerName || "Público general")} · {o.itemsCount ?? 0} item
@@ -194,7 +194,7 @@ export default function MergeTableModal({
             type="button"
             disabled={!pickedTargetId || submitting}
             onClick={() => execute("merge")}
-            className="w-full min-h-[56px] h-14 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.15em] text-[12px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)] disabled:opacity-30 disabled:active:scale-100"
+            className="w-full min-h-[56px] h-14 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.15em] text-[12px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)] disabled:opacity-30 disabled:active:scale-100"
           >
             <ArrowRight size={16} strokeWidth={2.5} />
             {submitting ? "Procesando..." : "Fusionar / mover cuenta"}
