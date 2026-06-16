@@ -23,9 +23,21 @@
  */
 
 import React, { useState } from "react";
-import { Type, PanelRightClose, Palette as PaletteIcon, Sun, Moon, Info } from "lucide-react";
+import { Type, PanelRightClose, Palette as PaletteIcon, Sun, Moon, Info, SlidersHorizontal } from "lucide-react";
 import { AdminScreen, AdminHeader } from "@/components/admin/AdminScreen";
 import { useThemeStore, type Palette as PaletteType } from "@/store/themeStore";
+import { useAuthStore, type EmployeeRole } from "@/store/authStore";
+
+const ROLE_LABEL: Record<EmployeeRole, string> = {
+  OWNER: "Propietario",
+  ADMIN: "Administrador",
+  MANAGER: "Gerente",
+  CASHIER: "Cajero",
+  WAITER: "Mesero",
+  KITCHEN: "Cocina",
+  COOK: "Cocinero",
+  DELIVERY: "Repartidor",
+};
 import {
   type UiScale,
   type SidebarWidthPreset as SidebarPreset,
@@ -52,6 +64,16 @@ export default function AparienciaPage() {
   const setPalette = useThemeStore((s) => s.setPalette);
   const mode = useThemeStore((s) => s.mode);
   const toggleMode = useThemeStore((s) => s.toggleMode);
+  const employee = useAuthStore((s) => s.employee);
+
+  const initials =
+    (employee?.name ?? "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? "")
+      .join("") || "??";
+  const roleLabel = employee?.role ? ROLE_LABEL[employee.role] : "Sin sesión";
 
   // Inicializadores perezosos (SSR-safe: readX devuelve default sin
   // window). Esta página solo se monta en cliente — AdminLayout muestra
@@ -74,10 +96,30 @@ export default function AparienciaPage() {
   return (
     <AdminScreen>
       <AdminHeader
-        icon={PaletteIcon}
-        title="Apariencia"
-        subtitle="Ajusta tipografía, ancho del panel ticket, paleta y modo nocturno."
+        icon={SlidersHorizontal}
+        title="General"
+        subtitle="Sesión, tipografía, ancho del panel ticket, paleta y modo nocturno."
       />
+
+      {/* SESIÓN ACTIVA */}
+      <section className="mb-6 rounded-3xl border border-white/5 bg-[var(--surface-1)] p-6">
+        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-zinc-500">
+          Sesión activa
+        </span>
+        <div className="mt-4 flex items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--brand)] text-xl font-black text-[var(--brand-fg)] shadow-[0_0_15px_var(--brand-glow)]">
+            {initials}
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-base font-black tracking-tight text-white">
+              {employee?.name ?? "Invitado"}
+            </span>
+            <span className="text-[10px] font-black uppercase tracking-[0.15em] text-[var(--brand)]">
+              {roleLabel}
+            </span>
+          </div>
+        </div>
+      </section>
 
       {/* AVISO MODO CLARO */}
       {mode === "light" && (
