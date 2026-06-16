@@ -4,7 +4,7 @@ import api from "@/lib/api";
 
 type Movement = {
   id: string;
-  type: "INCOME" | "EXPENSE" | "RETURN";
+  type: "INCOME" | "EXPENSE" | "RETURN" | "FLOAT";
   category: string;
   amount: number;
   description: string | null;
@@ -35,11 +35,22 @@ type OrdersSummary = {
   byMethod: Record<string, number>;
 };
 
+type CashSummary = {
+  float: number;
+  income: number;
+  expense: number;
+  returned: number;
+  balance: number;
+};
+
 type Props = {
   driver: { id: string; name: string } | null;
   onClose: () => void;
   onRefresh: () => void;
   accent: string;
+  // Quién puede ejecutar el corte (cerrar la caja del repartidor). El backend
+  // exige rol ADMIN/OWNER/MANAGER; sin esto el botón daría 403.
+  canCut?: boolean;
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -49,11 +60,13 @@ const PAYMENT_LABELS: Record<string, string> = {
   OTHER: "Otro",
 };
 
-export default function DriverMovementsModal({ driver, onClose, onRefresh, accent }: Props) {
+export default function DriverMovementsModal({ driver, onClose, onRefresh, accent, canCut }: Props) {
   const [tab, setTab] = useState<"movimientos" | "pedidos">("movimientos");
   const [movements, setMovements] = useState<Movement[]>([]);
+  const [summary, setSummary] = useState<CashSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [cutting, setCutting] = useState(false);
   const [orders, setOrders] = useState<DriverOrder[]>([]);
   const [ordersSummary, setOrdersSummary] = useState<OrdersSummary | null>(null);
   const [loadingOrders, setLoadingOrders] = useState(false);
@@ -81,6 +94,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
       setLoading(true);
       const { data } = await api.get(`/api/driver-cash/${driver.id}/movements`);
       setMovements(data.movements);
+      setSummary(data.summary || null);
     } catch (e) {
       console.error(e);
     } finally {
@@ -147,6 +161,32 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
     }
   }
 
+  // Cierra la caja del repartidor: aprueba TODOS los movimientos pendientes y
+  // genera su DriverCashCut (el backend recalcula los totales, no confía en el
+  // cliente). Tras el corte la lista queda vacía y se refresca el panel.
+  async function handleCut() {
+    if (!driver || !movements.length) return;
+    const bal = summary?.balance ?? 0;
+    if (!window.confirm(
+      `¿Cerrar el corte de ${driver.name}?\n\n` +
+      `Entrega en caja: $${bal.toFixed(0)}\n` +
+      `Movimientos: ${movements.length}\n\n` +
+      `Se aprueban todos los movimientos pendientes. No se puede deshacer.`
+    )) return;
+    try {
+      setCutting(true);
+      await api.post(`/api/driver-cash/${driver.id}/cut`, {});
+      await fetchMovements();
+      onRefresh();
+      alert(`Corte realizado. Balance entregado: $${bal.toFixed(0)}`);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      alert(err?.response?.data?.error || "No se pudo realizar el corte");
+    } finally {
+      setCutting(false);
+    }
+  }
+
   if (!driver) return null;
 
   return (
@@ -167,7 +207,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
         <div className="flex border-b border-[var(--border)] bg-[var(--bg)] px-6">
           {([
             { key: "movimientos", label: "Movimientos" },
-            { key: "pedidos", label: "Pedidos del día" },
+            { key: "pedidos", label: "Pedidos del turno" },
           ] as const).map((t) => (
             <button
               key={t.key}
@@ -251,6 +291,29 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
             </button>
           </form>
 
+          {/* Balance + corte: cerrar la caja del repartidor (solo roles financieros) */}
+          {canCut && (
+            <div className="space-y-3">
+              <div className="rounded-2xl bg-[var(--surf2)] border border-[var(--border)] p-4">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1">Balance a entregar</div>
+                <div className="text-2xl font-black text-white tabular-nums">${(summary?.balance ?? 0).toFixed(0)}</div>
+                <div className="text-[10px] text-[var(--text-secondary)] mt-1">
+                  Fondo ${(summary?.float ?? 0).toFixed(0)} + Cobrado ${(summary?.income ?? 0).toFixed(0)} − Gastos ${(summary?.expense ?? 0).toFixed(0)}
+                  {(summary?.returned ?? 0) > 0 ? ` − Devol. $${(summary?.returned ?? 0).toFixed(0)}` : ""}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCut}
+                disabled={cutting || movements.length === 0}
+                className="w-full py-3.5 rounded-xl font-black text-sm uppercase tracking-widest text-black transition-transform active:scale-95 disabled:opacity-40"
+                style={{ background: accent }}
+              >
+                {cutting ? "Cerrando corte…" : movements.length === 0 ? "Sin movimientos para cortar" : "Cerrar corte del repartidor"}
+              </button>
+            </div>
+          )}
+
           {/* Lista de Movimientos */}
           <div className="space-y-3">
             <h3 className="text-xs font-black uppercase tracking-widest text-white/40 ml-1">Pendiente de corte</h3>
@@ -269,9 +332,10 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${
                         m.type === 'INCOME' ? 'bg-green-500/10 text-green-400' :
                         m.type === 'EXPENSE' ? 'bg-red-500/10 text-red-400' :
+                        m.type === 'FLOAT' ? 'bg-amber-500/10 text-amber-400' :
                         'bg-blue-500/10 text-blue-400'
                       }`}>
-                        {m.type === 'INCOME' ? '↑' : m.type === 'EXPENSE' ? '↓' : '↺'}
+                        {m.type === 'INCOME' ? '↑' : m.type === 'EXPENSE' ? '↓' : m.type === 'FLOAT' ? '$' : '↺'}
                       </div>
                       <div>
                         <div className="text-xs font-bold text-white">{m.description || m.category}</div>
@@ -281,6 +345,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                     <div className={`text-sm font-black ${
                       m.type === 'INCOME' ? 'text-green-400' :
                       m.type === 'EXPENSE' ? 'text-red-400' :
+                      m.type === 'FLOAT' ? 'text-amber-400' :
                       'text-blue-400'
                     }`}>
                       {m.type === 'EXPENSE' ? '-' : ''}${m.amount.toFixed(0)}
@@ -325,9 +390,9 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
 
               {/* Lista de pedidos */}
               <div className="space-y-3">
-                <h3 className="text-xs font-black uppercase tracking-widest text-white/40 ml-1">Pedidos asignados hoy</h3>
+                <h3 className="text-xs font-black uppercase tracking-widest text-white/40 ml-1">Pedidos del turno (pendientes de corte)</h3>
                 {orders.length === 0 ? (
-                  <p className="text-sm text-[var(--text-secondary)] italic">No hay pedidos asignados hoy.</p>
+                  <p className="text-sm text-[var(--text-secondary)] italic">No hay pedidos en el turno actual.</p>
                 ) : (
                   <div className="space-y-2">
                     {orders.map((o) => (
