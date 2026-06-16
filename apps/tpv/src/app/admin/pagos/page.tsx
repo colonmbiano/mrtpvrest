@@ -77,10 +77,10 @@ export default function PagosAdmin() {
     color: string;
   }> = [
     { key: "acceptCash",     label: "Efectivo",          sub: "Cash drawer + corte ciego",   icon: <Banknote size={18} />,   color: "#88D66C" },
-    { key: "acceptCard",     label: "Tarjeta",           sub: "Crédito / débito presencial", icon: <CreditCard size={18} />, color: "#ffb84d" },
+    { key: "acceptCard",     label: "Tarjeta",           sub: "Crédito / débito presencial", icon: <CreditCard size={18} />, color: "#E0A22A" },
     { key: "acceptTransfer", label: "Transferencia",     sub: "SPEI / OXXO / digital",       icon: <Wifi size={18} />,       color: "#22D3EE" },
     { key: "acceptVoucher",  label: "Vales de despensa", sub: "Sodexo, Edenred, Si Vale",   icon: <Receipt size={18} />,    color: "#A78BFA" },
-    { key: "acceptCourtesy", label: "Cortesía",          sub: "Comp / on-the-house",         icon: <Gift size={18} />,       color: "#ffb84d" },
+    { key: "acceptCourtesy", label: "Cortesía",          sub: "Comp / on-the-house",         icon: <Gift size={18} />,       color: "#E0A22A" },
   ];
 
   return (
@@ -172,7 +172,7 @@ export default function PagosAdmin() {
                 </div>
                 <input
                   type="checkbox"
-                  className="scale-125 accent-[#ffb84d]"
+                  className="scale-125 accent-[var(--brand)]"
                   checked={Boolean((config as any)[m.key])}
                   onChange={(e) => setConfig({ ...config, [m.key]: e.target.checked })}
                 />
@@ -186,7 +186,7 @@ export default function PagosAdmin() {
           <label className="flex items-center gap-4 cursor-pointer">
             <input
               type="checkbox"
-              className="scale-125 accent-[#ffb84d]"
+              className="scale-125 accent-[var(--brand)]"
               checked={config.printReceiptDefault}
               onChange={(e) => setConfig({ ...config, printReceiptDefault: e.target.checked })}
             />

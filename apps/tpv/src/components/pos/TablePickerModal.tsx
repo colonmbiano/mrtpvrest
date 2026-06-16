@@ -129,14 +129,14 @@ export default function TablePickerModal({
 
   return (
     <div
-      className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       <div className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.5)] overflow-hidden">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-6 py-5 border-b border-white/10 bg-white/5">
           <div>
-            <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d]">ASIGNAR</span>
+            <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)]">ASIGNAR</span>
             <h3 className="text-2xl font-black text-white tracking-tight mt-1">Mesa para los comensales</h3>
             <p className="text-xs font-medium text-white/55 mt-1">
               {showOccupied
@@ -191,13 +191,13 @@ export default function TablePickerModal({
               </p>
               {tables.length === 0 ? (
                 <p className="text-white/30 text-xs font-medium">
-                  Crea mesas desde <span className="text-[#ffb84d] font-bold">Admin → Mesas</span>.
+                  Crea mesas desde <span className="text-[var(--brand)] font-bold">Admin → Mesas</span>.
                 </p>
               ) : !showOccupied && occupiedHidden > 0 ? (
                 <button
                   type="button"
                   onClick={() => setShowOccupied(true)}
-                  className="inline-flex items-center gap-2 px-5 h-11 rounded-2xl bg-[#ffb84d] text-[#0a0a0c] text-xs font-black uppercase tracking-widest active:scale-95"
+                  className="inline-flex items-center gap-2 px-5 h-11 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] text-xs font-black uppercase tracking-widest active:scale-95"
                 >
                   <Eye size={14} /> Ver ocupadas y liberar
                 </button>
@@ -217,7 +217,7 @@ export default function TablePickerModal({
                       const accent = occupied
                         ? "#FF8B6E"
                         : dirty
-                          ? "#ffb84d"
+                          ? "#E0A22A"
                           : "#88D66C";
                       return (
                         <div

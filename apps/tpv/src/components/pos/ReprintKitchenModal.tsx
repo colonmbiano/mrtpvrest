@@ -146,20 +146,20 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-[520px] max-h-[88vh] flex flex-col bg-[#0C0C0E] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-[520px] max-h-[88vh] flex flex-col bg-[var(--bg)] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Glow */}
         <div
           aria-hidden
           className="absolute pointer-events-none -top-24 -right-24 w-72 h-72 rounded-full opacity-30 blur-[80px]"
           style={{
             background:
-              "radial-gradient(circle, rgba(255,184,77,0.4) 0%, transparent 70%)",
+              "radial-gradient(circle, var(--brand-glow) 0%, transparent 70%)",
           }}
         />
 
         {/* HEADER */}
         <div className="relative z-10 p-5 border-b border-white/5 bg-white/5 backdrop-blur-md flex items-center gap-4 shrink-0">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[#ffb84d]/15 text-[#ffb84d] border border-[#ffb84d]/30 shrink-0">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[var(--brand-soft)] text-[var(--brand)] border border-[var(--brand)] shrink-0">
             <ChefHat size={22} />
           </div>
           <div className="flex-1 min-w-0">
@@ -171,7 +171,7 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
                 #{orderNumber}
               </h3>
               {tableNumber && (
-                <span className="text-[11px] font-bold text-[#ffb84d] uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-[var(--brand)] uppercase tracking-wider">
                   · Mesa {tableNumber}
                 </span>
               )}
@@ -187,11 +187,11 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
         </div>
 
         {/* WARNING BANNER */}
-        <div className="relative z-10 p-3 bg-[#ffb84d]/10 border-b border-[#ffb84d]/20 flex items-center gap-3 shrink-0">
-          <AlertTriangle size={16} className="text-[#ffb84d] shrink-0" />
-          <span className="text-[11px] font-bold text-[#ffb84d] leading-relaxed">
+        <div className="relative z-10 p-3 bg-[var(--brand-soft)] border-b border-[var(--brand)] flex items-center gap-3 shrink-0">
+          <AlertTriangle size={16} className="text-[var(--brand)] shrink-0" />
+          <span className="text-[11px] font-bold text-[var(--brand)] leading-relaxed">
             Cocina recibirá ticket marcado como
-            <span className="mono mx-1 px-1.5 py-0.5 bg-[#ffb84d]/15 rounded text-[10px]">
+            <span className="mono mx-1 px-1.5 py-0.5 bg-[var(--brand-soft)] rounded text-[10px]">
               *** REIMPRESION ***
             </span>
             para no preparar dos veces.
@@ -206,7 +206,7 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
             className="flex items-center gap-2 text-white active:scale-95 transition-transform"
           >
             {allSelected ? (
-              <CheckSquare size={18} className="text-[#ffb84d]" />
+              <CheckSquare size={18} className="text-[var(--brand)]" />
             ) : (
               <Square size={18} className="text-white/40" />
             )}
@@ -236,14 +236,14 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
                       onClick={() => toggleOne(it.id)}
                       className={`w-full min-h-[64px] p-3 rounded-2xl border-2 flex items-center gap-3 active:scale-[0.99] transition-all text-left ${
                         isOn
-                          ? "bg-[#ffb84d]/10 border-[#ffb84d]/40"
+                          ? "bg-[var(--brand-soft)] border-[var(--brand)]"
                           : "bg-white/[0.03] border-white/10"
                       }`}
                     >
                       <div
                         className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
                           isOn
-                            ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E]"
+                            ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)]"
                             : "bg-white/5 border-white/10 text-white/40"
                         }`}
                       >
@@ -251,7 +251,7 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-[13px] font-black text-white truncate">
-                          <span className="text-[#ffb84d] mr-2">
+                          <span className="text-[var(--brand)] mr-2">
                             {it.quantity}×
                           </span>
                           {it.name}
@@ -276,12 +276,12 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
         </div>
 
         {/* CTA */}
-        <div className="relative z-10 p-4 border-t border-white/5 bg-[#0C0C0E] shrink-0">
+        <div className="relative z-10 p-4 border-t border-white/5 bg-[var(--bg)] shrink-0">
           <button
             type="button"
             onClick={handlePrint}
             disabled={submitting || selected.size === 0}
-            className="w-full min-h-[64px] h-16 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.1em] text-[12px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)] disabled:opacity-50 disabled:active:scale-100"
+            className="w-full min-h-[64px] h-16 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.1em] text-[12px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)] disabled:opacity-50 disabled:active:scale-100"
           >
             <Printer size={16} strokeWidth={2.5} />
             {submitting

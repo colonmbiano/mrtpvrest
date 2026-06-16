@@ -60,7 +60,7 @@ const STATUS_TONE: Record<
   { ring: string; soft: string; text: string; dot: string }
 > = {
   AVAILABLE: { ring: "border-white/10",         soft: "bg-white/5",                text: "text-white/70",   dot: "bg-zinc-500" },
-  OCCUPIED:  { ring: "border-[#ffb84d]/40",     soft: "bg-[#ffb84d]/10",           text: "text-[#ffb84d]",  dot: "bg-[#ffb84d]" },
+  OCCUPIED:  { ring: "border-[var(--brand)]",     soft: "bg-[var(--brand-soft)]",           text: "text-[var(--brand)]",  dot: "bg-[var(--brand)]" },
   DIRTY:     { ring: "border-red-500/40",       soft: "bg-red-500/10",             text: "text-red-400",    dot: "bg-red-500" },
 };
 
@@ -191,7 +191,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
 
   return (
     <div
-      className="h-full flex flex-col bg-[#0C0C0E] text-white"
+      className="h-full flex flex-col bg-[var(--bg)] text-white"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* HEADER */}
@@ -278,7 +278,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
                       <div key={group.label ?? `g-${gi}`} className="space-y-3">
                         {group.label && (
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black tracking-[0.2em] text-[#ffb84d]/80 uppercase shrink-0">
+                            <span className="text-[10px] font-black tracking-[0.2em] text-[var(--brand)] uppercase shrink-0">
                               {group.label}
                             </span>
                             <span className="h-px flex-1 bg-white/10" />
@@ -290,7 +290,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
                             className="flex justify-between items-baseline gap-4 text-[13px] font-bold"
                           >
                             <span className="text-white/80 truncate flex-1 min-w-0">
-                              <span className="text-[#ffb84d] mr-2">{item.quantity}×</span>
+                              <span className="text-[var(--brand)] mr-2">{item.quantity}×</span>
                               {item.name}
                             </span>
                             <span className="tabular-nums text-white shrink-0">
@@ -312,7 +312,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
                 onClick={handleRequestBill}
                 className={`flex-col min-h-[64px] h-20 gap-2 rounded-2xl group ${
                   billRequested
-                    ? "bg-[#88D66C]/10 border-[#88D66C]/40 text-[#88D66C]"
+                    ? "bg-[var(--success-soft)] border-[var(--success)] text-[var(--success)]"
                     : "bg-white/5 border-white/10 text-white"
                 }`}
                 disabled={!order || billLoading}
@@ -362,13 +362,13 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
 
       {/* STICKY BOTTOM CTA */}
       {!isLoading && table && (
-        <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 pb-[calc(1rem_+_env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 sm:pb-[calc(1.5rem_+_env(safe-area-inset-bottom))] bg-[#0C0C0E]/95 border-t border-white/5 backdrop-blur-xl">
+        <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 pb-[calc(1rem_+_env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 sm:pb-[calc(1.5rem_+_env(safe-area-inset-bottom))] bg-[var(--bg)] border-t border-white/5 backdrop-blur-xl">
           {table.status === "DIRTY" ? (
             <button
               type="button"
               onClick={handleClearTable}
               disabled={clearing}
-              className="w-full min-h-[64px] h-16 rounded-3xl bg-[#88D66C] text-[#0C0C0E] font-black uppercase tracking-[0.1em] text-sm gap-3 shadow-[0_10px_30px_rgba(136,214,108,0.3)] active:scale-95 transition-transform flex items-center justify-center disabled:opacity-50"
+              className="w-full min-h-[64px] h-16 rounded-3xl bg-[var(--success)] text-[var(--brand-fg)] font-black uppercase tracking-[0.1em] text-sm gap-3 shadow-[0_10px_30px_var(--brand-glow)] active:scale-95 transition-transform flex items-center justify-center disabled:opacity-50"
             >
               <Brush size={20} strokeWidth={2.5} />
               {clearing ? "Marcando…" : "Marcar mesa limpia"}
@@ -377,7 +377,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
             <button
               type="button"
               onClick={handleAddProducts}
-              className="w-full min-h-[64px] h-16 rounded-3xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.1em] text-sm gap-3 shadow-[0_10px_30px_rgba(255,184,77,0.3)] active:scale-95 transition-transform flex items-center justify-center"
+              className="w-full min-h-[64px] h-16 rounded-3xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.1em] text-sm gap-3 shadow-[0_10px_30px_var(--brand-glow)] active:scale-95 transition-transform flex items-center justify-center"
             >
               {order ? (
                 <>

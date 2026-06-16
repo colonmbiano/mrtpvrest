@@ -112,9 +112,9 @@ export default function DiscountModal({
           onClick={onClose}
         />
 
-        <div className="relative w-full max-w-md bg-[#0C0C0E] border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+        <div className="relative w-full max-w-md bg-[var(--bg)] border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
           <div className="p-5 border-b border-white/5 flex items-center gap-3 shrink-0">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[#ffb84d]/15 text-[#ffb84d] border border-[#ffb84d]/30 shrink-0">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[var(--brand-soft)] text-[var(--brand)] border border-[var(--brand)] shrink-0">
               <Tag size={20} />
             </div>
             <div className="flex-1 min-w-0">
@@ -143,7 +143,7 @@ export default function DiscountModal({
                 onClick={() => setType("percent")}
                 className={`min-h-[56px] h-14 rounded-2xl border flex items-center justify-center gap-2 active:scale-95 transition-transform ${
                   type === "percent"
-                    ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E]"
+                    ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)]"
                     : "bg-white/5 border-white/10 text-white/70"
                 }`}
               >
@@ -157,7 +157,7 @@ export default function DiscountModal({
                 onClick={() => setType("fixed")}
                 className={`min-h-[56px] h-14 rounded-2xl border flex items-center justify-center gap-2 active:scale-95 transition-transform ${
                   type === "fixed"
-                    ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E]"
+                    ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)]"
                     : "bg-white/5 border-white/10 text-white/70"
                 }`}
               >
@@ -184,11 +184,11 @@ export default function DiscountModal({
                   setError("");
                 }}
                 placeholder={type === "percent" ? "10" : "50.00"}
-                className="mt-2 w-full h-14 min-h-[56px] bg-white/5 border border-white/10 rounded-2xl px-4 text-2xl font-black tabular-nums text-white outline-none focus:border-[#ffb84d]"
+                className="mt-2 w-full h-14 min-h-[56px] bg-white/5 border border-white/10 rounded-2xl px-4 text-2xl font-black tabular-nums text-white outline-none focus:border-[var(--brand)]"
                 autoFocus
               />
               {error && (
-                <p className="text-[11px] font-bold text-[#ef4444] mt-2">
+                <p className="text-[11px] font-bold text-[var(--danger)] mt-2">
                   {error}
                 </p>
               )}
@@ -201,7 +201,7 @@ export default function DiscountModal({
                   <span>Subtotal</span>
                   <span className="tabular-nums">${subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between items-baseline text-[12px] font-bold text-[#88D66C]">
+                <div className="flex justify-between items-baseline text-[12px] font-bold text-[var(--success)]">
                   <span>Descuento</span>
                   <span className="tabular-nums">− ${previewAmount.toFixed(2)}</span>
                 </div>
@@ -217,7 +217,7 @@ export default function DiscountModal({
             )}
 
             {requiresOverride && (
-              <p className="text-[11px] font-bold text-[#ffb84d] leading-relaxed">
+              <p className="text-[11px] font-bold text-[var(--warning)] leading-relaxed">
                 ⚠ Aplicar este descuento requiere autorización con PIN de
                 supervisor (ADMIN o MANAGER).
               </p>
@@ -237,7 +237,7 @@ export default function DiscountModal({
                 type="button"
                 disabled={!valid}
                 onClick={handlePrimary}
-                className="flex-[2] min-h-[56px] h-14 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.15em] text-[12px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)] disabled:opacity-30 disabled:active:scale-100"
+                className="flex-[2] min-h-[56px] h-14 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.15em] text-[12px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)] disabled:opacity-30 disabled:active:scale-100"
               >
                 {requiresOverride ? "Solicitar PIN" : (primaryLabel ?? "Aplicar descuento")}
               </button>

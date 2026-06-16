@@ -123,8 +123,8 @@ const matchesFilter = (order: DrawerOrder, filter: FilterKey): boolean => {
 const STATUS_TONE: Record<string, { dot: string; ring: string; chip: string }> = {
   PAID:         { dot: "bg-[#88D66C]", ring: "border-[#88D66C]/30", chip: "text-[#88D66C]" },
   READY:        { dot: "bg-[#88D66C]", ring: "border-[#88D66C]/40", chip: "text-[#88D66C]" },
-  PREPARING:    { dot: "bg-[#ffb84d]", ring: "border-[#ffb84d]/40", chip: "text-[#ffb84d]" },
-  CONFIRMED:    { dot: "bg-[#ffb84d]", ring: "border-[#ffb84d]/40", chip: "text-[#ffb84d]" },
+  PREPARING:    { dot: "bg-[#E0A22A]", ring: "border-[#E0A22A]/40", chip: "text-[#E0A22A]" },
+  CONFIRMED:    { dot: "bg-[#E0A22A]", ring: "border-[#E0A22A]/40", chip: "text-[#E0A22A]" },
   PENDING:      { dot: "bg-white/50",  ring: "border-white/15",     chip: "text-white/60" },
   OPEN:         { dot: "bg-white/50",  ring: "border-white/15",     chip: "text-white/60" },
   ON_THE_WAY:   { dot: "bg-blue-400", ring: "border-blue-400/40", chip: "text-blue-300" },
@@ -330,7 +330,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
       />
 
       {/* DRAWER */}
-      <aside className="relative w-full max-w-[560px] h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 ease-out overflow-hidden bg-[#0C0C0E] text-white border-l border-white/10">
+      <aside className="relative w-full max-w-[560px] h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 ease-out overflow-hidden bg-[var(--bg)] text-white border-l border-white/10">
         {/* Glows */}
         <div
           className="absolute pointer-events-none"
@@ -340,7 +340,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             top: -150,
             right: -250,
             background:
-              "radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)",
+              "radial-gradient(circle, var(--brand-glow) 0%, transparent 70%)",
           }}
         />
         <div
@@ -357,7 +357,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
 
         {/* HEADER */}
         <div className="relative z-10 p-5 border-b border-white/5 flex items-center gap-4 shrink-0 bg-white/5 backdrop-blur-md">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[#ffb84d]/15 text-[#ffb84d] border border-[#ffb84d]/30 shrink-0">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[var(--brand-soft)] text-[var(--brand)] border border-[var(--brand)] shrink-0">
             <Receipt size={22} />
           </div>
           <div className="flex-1 flex flex-col min-w-0">
@@ -386,7 +386,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
               title={selectionMode ? "Cancelar selección" : "Seleccionar varios tickets"}
               className={`w-12 h-12 min-h-[48px] rounded-2xl border flex items-center justify-center active:scale-95 transition-all shrink-0 ${
                 selectionMode
-                  ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E]"
+                  ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)]"
                   : "bg-white/5 border-white/10 text-white/70"
               }`}
             >
@@ -421,7 +421,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                       isActive
                         ? m.key === "paid"
                           ? "bg-[#88D66C] text-[#0C0C0E] shadow-[0_5px_20px_rgba(136,214,108,0.3)]"
-                          : "bg-[#ffb84d] text-[#0C0C0E] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                          : "bg-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
                         : "text-white/55"
                     }`}
                   >
@@ -441,7 +441,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                   onClick={() => setActiveFilter(f)}
                   className={`shrink-0 h-11 min-h-[44px] px-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.15em] whitespace-nowrap active:scale-95 transition-all border ${
                     isActive
-                      ? "bg-[#ffb84d] text-[#0C0C0E] border-[#ffb84d] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                      ? "bg-[var(--brand)] text-[var(--brand-fg)] border-[var(--brand)] shadow-[0_5px_20px_var(--brand-glow)]"
                       : "bg-white/5 text-white/60 border-white/10"
                   }`}
                 >
@@ -460,7 +460,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por cliente o #orden..."
-              className="w-full h-12 min-h-[48px] bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 text-[13px] text-white focus:outline-none focus:border-[#ffb84d] transition-colors placeholder:text-white/30"
+              className="w-full h-12 min-h-[48px] bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 text-[13px] text-white focus:outline-none focus:border-[var(--brand)] transition-colors placeholder:text-white/30"
             />
           </div>
 
@@ -550,7 +550,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     }
                     className={`relative px-3.5 py-2 rounded-xl border bg-white/5 backdrop-blur-md text-left flex flex-col gap-1.5 active:scale-[0.99] transition-all overflow-hidden ${
                       isSelected
-                        ? "border-[#ffb84d] bg-[#ffb84d]/10 shadow-[inset_0_0_0_1px_rgba(255,184,77,0.25)]"
+                        ? "border-[var(--brand)] bg-[var(--brand-soft)] shadow-[inset_0_0_0_1px_var(--brand-glow)]"
                         : tone.ring
                     }`}
                   >
@@ -559,7 +559,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                       isSelected ? (
                         <CheckCircle2
                           size={21}
-                          className="shrink-0 text-[#ffb84d]"
+                          className="shrink-0 text-[var(--brand)]"
                           strokeWidth={2.5}
                         />
                       ) : (
@@ -578,13 +578,13 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                           {order.customerName}
                         </h3>
                         {isSelected && canMergeOrders && (
-                          <span className="shrink-0 text-[8px] font-black uppercase tracking-[0.12em] text-[#ffb84d]">
+                          <span className="shrink-0 text-[8px] font-black uppercase tracking-[0.12em] text-[var(--brand)]">
                             {selectedIndex === 0 ? "Cuenta final" : "Se juntará"}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-white/45">
-                        <span className="text-[#ffb84d]">{order.type}</span>
+                        <span className="text-[var(--brand)]">{order.type}</span>
                         <span className="text-white/20">·</span>
                         <span className="tabular-nums">#{order.orderNumber}</span>
                         {order.driver && (
@@ -705,7 +705,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
         </div>
 
         {/* FOOTER */}
-        <div className="relative z-10 p-4 border-t border-white/5 bg-[#0C0C0E] shrink-0">
+        <div className="relative z-10 p-4 border-t border-white/5 bg-[var(--bg)] shrink-0">
           {selectionMode ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-baseline justify-between">
@@ -750,7 +750,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     type="button"
                     disabled={selectedOrders.length < 2}
                     onClick={() => setShowMergeConfirm(true)}
-                    className="flex-1 min-h-[52px] h-[52px] rounded-2xl bg-[#ffb84d] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                    className="flex-1 min-h-[52px] h-[52px] rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
                   >
                     <Merge size={17} strokeWidth={2.5} />
                     Juntar {selectedOrders.length || ""}
@@ -781,7 +781,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             onClick={() => !isMerging && setShowMergeConfirm(false)}
           />
           <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#111114] p-5 shadow-2xl">
-            <div className="w-12 h-12 rounded-2xl bg-[#ffb84d]/15 border border-[#ffb84d]/30 text-[#ffb84d] flex items-center justify-center mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center mb-4">
               <Merge size={21} />
             </div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">
@@ -817,7 +817,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                 type="button"
                 disabled={isMerging}
                 onClick={confirmMerge}
-                className="h-12 flex-[1.5] rounded-2xl bg-[#ffb84d] text-[11px] font-black uppercase tracking-[0.12em] text-[#0C0C0E] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60"
+                className="h-12 flex-[1.5] rounded-2xl bg-[var(--brand)] text-[11px] font-black uppercase tracking-[0.12em] text-[var(--brand-fg)] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60"
               >
                 {isMerging ? (
                   <>
@@ -861,7 +861,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
 
             <div className="mt-4 grid grid-cols-2 gap-2 max-h-[42vh] overflow-y-auto scrollbar-hide">
               {drivers.length === 0 ? (
-                <p className="col-span-2 text-center text-[12px] font-bold text-amber-400/90 py-6">
+                <p className="col-span-2 text-center text-[12px] font-bold text-[var(--warning)] py-6">
                   No hay repartidores activos.
                 </p>
               ) : (
@@ -885,7 +885,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                           {d.name}
                         </span>
                         {d.isAvailable === false && (
-                          <span className="block text-[9px] font-bold text-amber-400/80 uppercase tracking-widest">
+                          <span className="block text-[9px] font-bold text-[var(--warning)] uppercase tracking-widest">
                             Ocupado
                           </span>
                         )}

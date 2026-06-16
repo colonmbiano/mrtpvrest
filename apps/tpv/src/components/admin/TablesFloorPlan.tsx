@@ -291,7 +291,7 @@ export default function TablesFloorPlan({
             <h2 className="text-lg font-black text-white">
               {mode === "pick" ? "🪑 Selecciona una mesa" : "🪑 Mesas"}
             </h2>
-            <p className="text-[11px] font-bold mt-0.5" style={{ color: "var(--muted)" }}>
+            <p className="text-[11px] font-bold mt-0.5" style={{ color: "var(--text-secondary)" }}>
               {counts.available} libres · {counts.occupied} ocupadas · {counts.dirty} sucias
             </p>
           </div>
@@ -309,13 +309,13 @@ export default function TablesFloorPlan({
                 {editing ? "✓ Editando" : "✎ Editar layout"}
               </button>
             )}
-            <button onClick={onClose} className="text-2xl leading-none px-1" style={{ color: "var(--muted)" }} aria-label="Cerrar">✕</button>
+            <button onClick={onClose} className="text-2xl leading-none px-1" style={{ color: "var(--text-secondary)" }} aria-label="Cerrar">✕</button>
           </div>
         </div>
 
         {/* Body: canvas */}
         <div className="flex-1 overflow-auto p-4 sm:p-6 flex items-start justify-center" style={{ background: "var(--bg)" }}>
-          {loading && <div className="p-8 text-sm" style={{ color: "var(--muted)" }}>Cargando…</div>}
+          {loading && <div className="p-8 text-sm" style={{ color: "var(--text-secondary)" }}>Cargando…</div>}
           {!loading && error && (
             <div className="m-4 p-4 rounded-xl text-sm bg-red-500/10 text-red-400 border border-red-500/20">{error}</div>
           )}
@@ -336,7 +336,7 @@ export default function TablesFloorPlan({
               }}
             >
               {tables.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center text-center" style={{ color: "var(--muted)" }}>
+                <div className="absolute inset-0 flex items-center justify-center text-center" style={{ color: "var(--text-secondary)" }}>
                   <div>
                     <p className="text-5xl mb-3">🪑</p>
                     <p className="text-sm">No hay mesas. Activa &quot;Editar layout&quot; y agrega la primera.</p>
@@ -426,7 +426,7 @@ export default function TablesFloorPlan({
                             ev.stopPropagation();
                             setZonePickerId(zonePickerId === t.id ? null : t.id);
                           }}
-                          className="w-6 h-6 rounded-full text-[10px] font-bold bg-amber-500 text-black shadow"
+                          className="w-6 h-6 rounded-full text-[10px] font-bold bg-[var(--brand)] text-[var(--brand-fg)] shadow"
                           title="Asignar zona"
                         >
                           🏷
@@ -474,12 +474,12 @@ export default function TablesFloorPlan({
                         <button
                           onClick={() => assignZone(t.id, null)}
                           className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-white/5"
-                          style={{ color: !t.zoneId ? accent : "var(--muted)" }}
+                          style={{ color: !t.zoneId ? accent : "var(--text-secondary)" }}
                         >
                           — Sin zona
                         </button>
                         {zones.length === 0 && (
-                          <div className="px-3 py-2 text-[10px]" style={{ color: "var(--muted)" }}>
+                          <div className="px-3 py-2 text-[10px]" style={{ color: "var(--text-secondary)" }}>
                             Crea zonas en Configuración → 🏷️ Zonas
                           </div>
                         )}
@@ -543,7 +543,7 @@ export default function TablesFloorPlan({
                   <button
                     onClick={() => { setShowAdd(false); setNewName(""); setNewZoneId(""); }}
                     className="px-3 py-2 rounded-lg text-xs font-bold"
-                    style={{ color: "var(--muted)" }}
+                    style={{ color: "var(--text-secondary)" }}
                   >
                     Cancelar
                   </button>
@@ -568,7 +568,7 @@ export default function TablesFloorPlan({
             </>
           ) : (
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-[11px]" style={{ color: "var(--muted)" }}>
+              <span className="text-[11px]" style={{ color: "var(--text-secondary)" }}>
                 {mode === "pick"
                   ? "Toca una mesa libre para iniciar la cuenta."
                   : "Toca una mesa sucia para marcarla como limpia. Activa 'Editar layout' para mover/agregar/borrar."}

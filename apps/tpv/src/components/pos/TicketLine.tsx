@@ -68,10 +68,10 @@ const TicketLine: React.FC<TicketLineProps> = ({
   return (
     <div className="group flex items-center gap-3 py-2.5 border-b border-white/5 last:border-0">
       {/* STEPPER VERTICAL - TOUCH OPTIMIZED (compacto) */}
-      <div className="flex flex-col items-center w-9 self-center bg-[#121316] rounded-lg border border-white/5 overflow-hidden shrink-0">
+      <div className="flex flex-col items-center w-9 self-center bg-[var(--surface-1)] rounded-lg border border-white/5 overflow-hidden shrink-0">
         <button
           onClick={inc}
-          className="w-full h-8 flex items-center justify-center text-zinc-500 active:text-amber-500 active:bg-white/5 transition-all active:scale-90"
+          className="w-full h-8 flex items-center justify-center text-zinc-500 active:text-[var(--brand)] active:bg-white/5 transition-all active:scale-90"
         >
           <Plus size={15} strokeWidth={3} />
         </button>
@@ -101,7 +101,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
               </span>
               <Pencil
                 size={12}
-                className="mt-1 shrink-0 text-zinc-600 group-active/edit:text-amber-500 transition-colors"
+                className="mt-1 shrink-0 text-zinc-600 group-active/edit:text-[var(--brand)] transition-colors"
               />
             </button>
           ) : (
@@ -110,7 +110,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
             </span>
           )}
           <div className="flex shrink-0 items-center gap-1">
-            <span className="text-sm font-black text-amber-500 mono tabular-nums">
+            <span className="text-sm font-black text-[var(--brand)] mono tabular-nums">
               {currency}{(price * quantity).toFixed(2)}
             </span>
             {onRemove && (
@@ -135,11 +135,11 @@ const TicketLine: React.FC<TicketLineProps> = ({
             {modifiers.map((m, i) => (
               <span
                 key={i}
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#1a1b1f] border border-white/5 text-[9px] text-zinc-400 font-black uppercase tracking-wider"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[var(--surface-1)] border border-white/5 text-[9px] text-zinc-400 font-black uppercase tracking-wider"
               >
                 {m.name}
                 {m.priceAdd > 0 && (
-                  <span className="text-amber-500/80 mono">+{currency}{m.priceAdd.toFixed(2)}</span>
+                  <span className="text-[var(--brand)] mono">+{currency}{m.priceAdd.toFixed(2)}</span>
                 )}
               </span>
             ))}
@@ -161,12 +161,12 @@ const TicketLine: React.FC<TicketLineProps> = ({
               }}
               onBlur={commitEdit}
               placeholder="Nota para cocina..."
-              className="flex-1 min-w-0 h-8 min-h-[32px] bg-[#0a0a0c] border border-amber-500/30 rounded-lg px-2 text-[11px] text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-amber-500"
+              className="flex-1 min-w-0 h-8 min-h-[32px] bg-[var(--bg)] border border-[var(--brand)] rounded-lg px-2 text-[11px] text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-[var(--brand)]"
             />
             <button
               onClick={commitEdit}
               aria-label="Guardar nota"
-              className="w-8 h-8 min-h-[32px] rounded-lg bg-amber-500 text-black flex items-center justify-center active:scale-90 transition-transform"
+              className="w-8 h-8 min-h-[32px] rounded-lg bg-[var(--brand)] text-[var(--brand-fg)] flex items-center justify-center active:scale-90 transition-transform"
             >
               <Check size={14} strokeWidth={3} />
             </button>
@@ -177,7 +177,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
             onClick={onUpdateNotes ? startEdit : undefined}
             className="flex items-center gap-1.5 text-left mt-0.5 active:scale-[0.99] transition-transform"
           >
-            <MessageSquare size={10} className="text-amber-500/70 shrink-0" />
+            <MessageSquare size={10} className="text-[var(--brand)] shrink-0" />
             <p className="text-[10px] text-zinc-400 font-bold italic line-clamp-1 flex-1 min-w-0">
               {notes}
             </p>
@@ -186,7 +186,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
           <button
             type="button"
             onClick={startEdit}
-            className="flex items-center gap-1 mt-0.5 text-zinc-700 active:text-amber-500 transition-colors w-fit"
+            className="flex items-center gap-1 mt-0.5 text-zinc-700 active:text-[var(--brand)] transition-colors w-fit"
           >
             <MessageSquare size={10} />
             <span className="text-[9px] font-black uppercase tracking-widest">

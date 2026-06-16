@@ -78,7 +78,7 @@ const ZONE_ICONS = ["🪑", "🌴", "🛋️", "🍺", "🌿", "☀️", "🏠",
 const STATUS_META: Record<TableStatus, { label: string; color: string; bg: string; Icon: typeof CircleCheck }> = {
   AVAILABLE: { label: "Disponible", color: "#88D66C", bg: "rgba(136,214,108,0.10)", Icon: CircleCheck },
   OCCUPIED:  { label: "Ocupada",    color: "#FF8B6E", bg: "rgba(255,92,51,0.10)",  Icon: CircleAlert },
-  DIRTY:     { label: "Por limpiar", color: "#ffb84d", bg: "rgba(255,184,77,0.10)", Icon: CirclePause },
+  DIRTY:     { label: "Por limpiar", color: "var(--warning)", bg: "var(--warning-soft)", Icon: CirclePause },
 };
 
 export default function MesasAdminPage() {
@@ -451,13 +451,13 @@ export default function MesasAdminPage() {
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+          <div className="w-12 h-12 border-4 border-[var(--brand-soft)] border-t-[var(--brand)] rounded-full animate-spin" />
           <span className="text-zinc-500 font-bold uppercase tracking-widest text-[10px]">Cargando mesas…</span>
         </div>
       ) : tables.length === 0 ? (
         <EmptyState onCreate={openNew} />
       ) : visibleTables.length === 0 ? (
-        <div className="bg-[#121316] rounded-[2rem] p-14 border border-white/5 text-center">
+        <div className="bg-[var(--surface-1)] rounded-[2rem] p-14 border border-white/5 text-center">
           <p className="text-zinc-400 font-bold mb-1">Esta zona no tiene mesas todavía.</p>
           <p className="text-zinc-600 text-sm mb-6">Crea una mesa aquí o mueve una existente desde su chip de zona.</p>
           <button
@@ -501,7 +501,7 @@ export default function MesasAdminPage() {
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <form
             onSubmit={handleSave}
-            className="w-full max-w-lg bg-[#0a0a0c] p-8 rounded-[2rem] border border-white/10 shadow-2xl space-y-6 max-h-[90dvh] overflow-y-auto"
+            className="w-full max-w-lg bg-[var(--bg)] p-8 rounded-[2rem] border border-white/10 shadow-2xl space-y-6 max-h-[90dvh] overflow-y-auto"
           >
             <div className="flex items-start justify-between">
               <div>
@@ -517,7 +517,7 @@ export default function MesasAdminPage() {
 
             {/* Toggle alta en lote (solo al crear) */}
             {!editingId && (
-              <div className="flex gap-2 p-1 bg-[#121316] rounded-2xl border border-white/5">
+              <div className="flex gap-2 p-1 bg-[var(--surface-1)] rounded-2xl border border-white/5">
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, bulk: false })}
@@ -546,7 +546,7 @@ export default function MesasAdminPage() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder={form.bulk ? "Ej. Mesa, Barra, Terraza" : "Ej. Mesa 1, Barra A, Terraza 3"}
-                  className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500"
+                  className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)]"
                 />
               </div>
 
@@ -588,7 +588,7 @@ export default function MesasAdminPage() {
                     <select
                       value={form.zoneId ?? ""}
                       onChange={(e) => setForm({ ...form, zoneId: e.target.value || null })}
-                      className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl pl-5 pr-10 text-white font-bold focus:outline-none focus:border-amber-500 appearance-none"
+                      className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl pl-5 pr-10 text-white font-bold focus:outline-none focus:border-[var(--brand)] appearance-none"
                     >
                       <option value="">Sin zona</option>
                       {sortedZones.map((z) => (
@@ -617,7 +617,7 @@ export default function MesasAdminPage() {
               >
                 {saving ? (
                   <>
-                    <span className="w-4 h-4 border-2 border-[#0a0a0c]/30 border-t-[#0a0a0c] rounded-full animate-spin" />
+                    <span className="w-4 h-4 border-2 border-[var(--brand-fg)] border-t-[var(--brand-fg)] rounded-full animate-spin" />
                     Guardando…
                   </>
                 ) : editingId ? "Guardar cambios" : form.bulk ? `Crear ${Math.max(1, Math.min(50, form.quantity || 1))} mesas` : "Crear mesa"}
@@ -632,7 +632,7 @@ export default function MesasAdminPage() {
         <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <form
             onSubmit={handleSaveZone}
-            className="w-full max-w-md bg-[#0a0a0c] p-8 rounded-[2rem] border border-white/10 shadow-2xl space-y-6"
+            className="w-full max-w-md bg-[var(--bg)] p-8 rounded-[2rem] border border-white/10 shadow-2xl space-y-6"
           >
             <div className="flex items-start justify-between">
               <div>
@@ -654,7 +654,7 @@ export default function MesasAdminPage() {
                 value={zoneForm.name}
                 onChange={(e) => setZoneForm({ ...zoneForm, name: e.target.value })}
                 placeholder="Ej. Terraza, Barra, Patio, Salón VIP"
-                className="w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-amber-500"
+                className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)]"
               />
             </div>
 
@@ -664,7 +664,7 @@ export default function MesasAdminPage() {
                 <button
                   type="button"
                   onClick={() => setZoneForm({ ...zoneForm, icon: "" })}
-                  className={`h-11 rounded-xl flex items-center justify-center text-xs font-bold transition-all ${!zoneForm.icon ? "bg-iris-500 text-iris-fg" : "bg-[#121316] border border-white/5 text-zinc-500 hover:border-white/20"}`}
+                  className={`h-11 rounded-xl flex items-center justify-center text-xs font-bold transition-all ${!zoneForm.icon ? "bg-iris-500 text-iris-fg" : "bg-[var(--surface-1)] border border-white/5 text-zinc-500 hover:border-white/20"}`}
                   title="Sin icono"
                 >
                   <MapPin size={16} />
@@ -674,7 +674,7 @@ export default function MesasAdminPage() {
                     type="button"
                     key={emo}
                     onClick={() => setZoneForm({ ...zoneForm, icon: emo })}
-                    className={`h-11 rounded-xl flex items-center justify-center text-lg transition-all ${zoneForm.icon === emo ? "bg-iris-soft border border-iris-500 scale-105" : "bg-[#121316] border border-white/5 hover:border-white/20"}`}
+                    className={`h-11 rounded-xl flex items-center justify-center text-lg transition-all ${zoneForm.icon === emo ? "bg-iris-soft border border-iris-500 scale-105" : "bg-[var(--surface-1)] border border-white/5 hover:border-white/20"}`}
                   >
                     {emo}
                   </button>
@@ -708,7 +708,7 @@ export default function MesasAdminPage() {
               >
                 {savingZone ? (
                   <>
-                    <span className="w-4 h-4 border-2 border-[#0a0a0c]/30 border-t-[#0a0a0c] rounded-full animate-spin" />
+                    <span className="w-4 h-4 border-2 border-[var(--brand-fg)] border-t-[var(--brand-fg)] rounded-full animate-spin" />
                     Guardando…
                   </>
                 ) : zoneForm.id ? "Guardar zona" : "Crear zona"}
@@ -748,7 +748,7 @@ function TableGrid({
         return (
           <div
             key={t.id}
-            className="relative bg-[#121316] p-6 rounded-[2rem] border border-white/5 hover:border-iris-glow transition-all"
+            className="relative bg-[var(--surface-1)] p-6 rounded-[2rem] border border-white/5 hover:border-iris-glow transition-all"
           >
             <div className="flex justify-between items-start mb-5">
               <div
@@ -881,7 +881,7 @@ function ZoneChip({ active, onClick, onEdit, label, count, emoji, icon, muted }:
         <span
           role="button"
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className={`-mr-0.5 ml-0.5 w-5 h-5 rounded-full flex items-center justify-center transition-all ${active ? "hover:bg-black/15 text-[#0a0a0c]/70" : "opacity-0 group-hover:opacity-100 hover:bg-white/10 text-zinc-400"}`}
+          className={`-mr-0.5 ml-0.5 w-5 h-5 rounded-full flex items-center justify-center transition-all ${active ? "hover:bg-black/15 text-[var(--brand-fg)]" : "opacity-0 group-hover:opacity-100 hover:bg-white/10 text-zinc-400"}`}
           title={`Editar zona ${label}`}
         >
           <Edit3 size={11} />
@@ -912,7 +912,7 @@ function NumberStepper({ label, value, min, max, onChange }: {
           max={max}
           value={value}
           onChange={(e) => onChange(clamp(parseInt(e.target.value, 10) || min))}
-          className="flex-1 w-full h-14 bg-[#121316] border border-white/5 rounded-2xl px-3 text-white font-black text-center text-lg focus:outline-none focus:border-amber-500"
+          className="flex-1 w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-3 text-white font-black text-center text-lg focus:outline-none focus:border-[var(--brand)]"
         />
         <button
           type="button"
@@ -928,7 +928,7 @@ function NumberStepper({ label, value, min, max, onChange }: {
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-[#121316] rounded-[2.5rem] p-20 border border-white/5 text-center">
+    <div className="bg-[var(--surface-1)] rounded-[2.5rem] p-20 border border-white/5 text-center">
       <div className="w-20 h-20 bg-zinc-900 rounded-3xl flex items-center justify-center mx-auto mb-6 text-zinc-700">
         <Grid3x3 size={40} />
       </div>
@@ -952,14 +952,14 @@ const STAT_PALETTE: Record<string, { text: string; bg: string }> = {
   zinc:    { text: "text-zinc-300",    bg: "bg-zinc-500/10 text-zinc-400" },
   emerald: { text: "text-emerald-400", bg: "bg-emerald-500/10 text-emerald-400" },
   rose:    { text: "text-rose-400",    bg: "bg-rose-500/10 text-rose-400" },
-  amber:   { text: "text-amber-400",   bg: "bg-amber-500/10 text-amber-400" },
+  amber:   { text: "text-[var(--warning)]",   bg: "bg-[var(--warning-soft)] text-[var(--warning)]" },
 };
 
 function StatTile({ label, value, color, icon }: { label: string; value: number; color: string; icon: React.ReactNode }) {
   const fallback = STAT_PALETTE.zinc!;
   const palette  = STAT_PALETTE[color] ?? fallback;
   return (
-    <div className="bg-[#121316] p-5 rounded-3xl border border-white/5">
+    <div className="bg-[var(--surface-1)] p-5 rounded-3xl border border-white/5">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${palette.bg}`}>
         {icon}
       </div>

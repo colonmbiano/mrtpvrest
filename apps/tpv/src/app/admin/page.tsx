@@ -21,7 +21,7 @@ const SECTIONS = [
     label: "Analítica y Reportes",
     desc: "Ventas, productos top, rendimiento del turno",
     icon: BarChart3,
-    accent: "#ffb84d",
+    accent: "#34C988",
   },
   {
     href: "/admin/cortes",

@@ -183,7 +183,7 @@ export default function CentroSugerenciasPage() {
               <div className="text-right">
                 <div className="text-2xl font-black text-white tabular-nums">{fmtMoney(editedTotal)}</div>
                 {selectedGroup.supplier?.minOrderAmount && editedTotal < selectedGroup.supplier.minOrderAmount && (
-                  <div className="text-[10px] font-bold text-amber-300 mt-0.5">
+                  <div className="text-[10px] font-bold text-[var(--warning)] mt-0.5">
                     Por debajo del mínimo ({fmtMoney(selectedGroup.supplier.minOrderAmount)})
                   </div>
                 )}
@@ -210,7 +210,7 @@ export default function CentroSugerenciasPage() {
                                 <Zap size={9} /> Urgente
                               </span>
                             ) : (
-                              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[9px] font-black uppercase tracking-widest">
+                              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[var(--warning-soft)] border border-[var(--warning)] text-[var(--warning)] text-[9px] font-black uppercase tracking-widest">
                                 <Clock size={9} /> Pronto
                               </span>
                             )}
@@ -243,7 +243,7 @@ export default function CentroSugerenciasPage() {
                                 [it.ingredient.id]: { ...p[it.ingredient.id], qty: v },
                               }));
                             }}
-                            className="w-12 px-1 py-1 rounded-lg bg-white/5 border border-white/10 text-sm font-bold text-white text-center tabular-nums focus:outline-none focus:border-amber-400/60"
+                            className="w-12 px-1 py-1 rounded-lg bg-white/5 border border-white/10 text-sm font-bold text-white text-center tabular-nums focus:outline-none focus:border-[var(--brand)]"
                           />
                           <button
                             onClick={() => setOverrides((p) => ({
@@ -285,7 +285,7 @@ export default function CentroSugerenciasPage() {
               <button
                 disabled={editedItems.length === 0}
                 onClick={sendWhatsApp}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-black text-[#0a0a0c] bg-emerald-400 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-black text-[var(--brand-fg)] bg-emerald-400 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
               >
                 <MessageCircle size={14} strokeWidth={3} />
                 Enviar PO por WhatsApp

@@ -377,7 +377,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
 
   return (
     <div
-      className="h-full flex flex-col bg-[#0C0C0E] text-white"
+      className="h-full flex flex-col bg-[var(--bg)] text-white"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* HEADER */}
@@ -395,7 +395,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
           <div className="flex items-baseline gap-2">
             <h2 className="text-lg font-black leading-none truncate">{tableName ?? "Mesa"}</h2>
             {isAppendMode && activeOrderNumber && (
-              <span className="text-[11px] font-bold text-[#ffb84d]">
+              <span className="text-[11px] font-bold text-[var(--brand)]">
                 · #{activeOrderNumber}
               </span>
             )}
@@ -407,9 +407,9 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
             {cartCount} {cartCount === 1 ? "producto" : "productos"}
           </span>
         </div>
-        <div className="flex flex-col items-end px-3 py-1.5 rounded-2xl gap-0.5 bg-[#88D66C]/10 border border-[#88D66C]/30">
-          <span className="text-[9px] font-bold tracking-wider text-[#88D66C]">TOTAL</span>
-          <span className="text-sm font-bold tabular-nums text-[#88D66C]">
+        <div className="flex flex-col items-end px-3 py-1.5 rounded-2xl gap-0.5 bg-[var(--success-soft)] border border-[var(--success)]">
+          <span className="text-[9px] font-bold tracking-wider text-[var(--success)]">TOTAL</span>
+          <span className="text-sm font-bold tabular-nums text-[var(--success)]">
             ${total.toFixed(2)}
           </span>
         </div>
@@ -417,9 +417,9 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
 
       {/* APPEND BANNER */}
       {isAppendMode && (
-        <div className="px-4 py-3 bg-[#ffb84d]/10 border-b border-[#ffb84d]/20 flex items-center gap-3 shrink-0">
-          <PlusCircle size={16} className="text-[#ffb84d] shrink-0" />
-          <span className="text-[12px] font-bold text-[#ffb84d]">
+        <div className="px-4 py-3 bg-[var(--brand-soft)] border-b border-[var(--brand)] flex items-center gap-3 shrink-0">
+          <PlusCircle size={16} className="text-[var(--brand)] shrink-0" />
+          <span className="text-[12px] font-bold text-[var(--brand)]">
             Esta ronda se sumará a la cuenta abierta
           </span>
         </div>
@@ -433,7 +433,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar producto..."
-            className="w-full h-12 min-h-[48px] bg-white/5 border border-white/10 rounded-2xl pl-10 pr-4 text-[13px] focus:outline-none focus:border-[#ffb84d] text-white placeholder:text-white/30"
+            className="w-full h-12 min-h-[48px] bg-white/5 border border-white/10 rounded-2xl pl-10 pr-4 text-[13px] focus:outline-none focus:border-[var(--brand)] text-white placeholder:text-white/30"
           />
         </div>
       </div>
@@ -474,13 +474,13 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
       </div>
 
       {/* BOTTOM TICKET BAR */}
-      <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 pb-[calc(1rem_+_env(safe-area-inset-bottom))] border-t border-white/5 bg-[#0C0C0E]/95 backdrop-blur-xl flex flex-col gap-3 shadow-2xl">
+      <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 pb-[calc(1rem_+_env(safe-area-inset-bottom))] border-t border-white/5 bg-[var(--bg)] backdrop-blur-xl flex flex-col gap-3 shadow-2xl">
         <button
           onClick={() => cartCount > 0 && setShowSheet(true)}
           className="h-14 min-h-[56px] bg-white/5 border border-white/10 rounded-2xl flex items-center px-4 gap-3 active:scale-95 transition-all disabled:opacity-50"
           disabled={cartCount === 0}
         >
-          <div className="w-8 h-8 rounded-xl bg-[#ffb84d]/15 text-[#ffb84d] flex items-center justify-center font-black text-xs">
+          <div className="w-8 h-8 rounded-xl bg-[var(--brand-soft)] text-[var(--brand)] flex items-center justify-center font-black text-xs">
             {cartCount}
           </div>
           <div className="flex-1 text-left">
@@ -496,7 +496,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
           type="button"
           disabled={cartCount === 0 || submitting}
           onClick={handleSend}
-          className="w-full min-h-[64px] h-16 rounded-3xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.1em] text-sm gap-3 shadow-[0_10px_30px_rgba(255,184,77,0.3)] active:scale-95 transition-transform flex items-center justify-center disabled:opacity-50 disabled:active:scale-100"
+          className="w-full min-h-[64px] h-16 rounded-3xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.1em] text-sm gap-3 shadow-[0_10px_30px_var(--brand-glow)] active:scale-95 transition-transform flex items-center justify-center disabled:opacity-50 disabled:active:scale-100"
         >
           <Send size={18} strokeWidth={2.5} />
           {submitting
@@ -548,7 +548,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
           onClick={() => setShowSheet(false)}
         >
           <div
-            className="absolute bottom-0 left-0 right-0 max-h-[85%] bg-[#0C0C0E] border-t border-white/10 rounded-t-3xl flex flex-col"
+            className="absolute bottom-0 left-0 right-0 max-h-[85%] bg-[var(--bg)] border-t border-white/10 rounded-t-3xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-white/5 flex items-center justify-between shrink-0">
@@ -611,8 +611,8 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
               <section className="space-y-2">
                 {isAppendMode && (
                   <div className="flex items-center gap-2 px-1">
-                    <PlusCircle size={12} className="text-[#ffb84d]" />
-                    <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
+                    <PlusCircle size={12} className="text-[var(--brand)]" />
+                    <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
                       Agregando ahora · {cartCount} item
                       {cartCount === 1 ? "" : "s"}
                     </span>
@@ -645,7 +645,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                               </div>
                             )}
                             {l.notes && (
-                              <div className="text-[11px] text-[#ffb84d]/70 font-bold truncate">
+                              <div className="text-[11px] text-[var(--brand)] font-bold truncate">
                                 “{l.notes}”
                               </div>
                             )}
@@ -666,7 +666,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                             </span>
                             <button
                               onClick={() => changeQty(idx, 1)}
-                              className="w-10 h-10 min-h-[40px] rounded-xl bg-[#ffb84d]/15 border border-[#ffb84d]/40 text-[#ffb84d] flex items-center justify-center active:scale-95 transition-transform"
+                              className="w-10 h-10 min-h-[40px] rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center active:scale-95 transition-transform"
                               aria-label="Sumar"
                             >
                               <Plus size={14} />
@@ -688,7 +688,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                             onClick={() => setPickerIndex(idx)}
                             className={`flex-1 h-9 px-3 rounded-xl border text-[10px] font-black uppercase tracking-[0.15em] active:scale-95 transition-transform truncate ${
                               seatActive
-                                ? "bg-[#ffb84d]/15 border-[#ffb84d]/40 text-[#ffb84d]"
+                                ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
                                 : "bg-white/[0.03] border-white/10 text-white/40"
                             }`}
                           >
@@ -699,7 +699,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                             onClick={() => setPickerIndex(idx)}
                             className={`flex-1 h-9 px-3 rounded-xl border text-[10px] font-black uppercase tracking-[0.15em] active:scale-95 transition-transform truncate ${
                               courseActive
-                                ? "bg-[#ffb84d]/15 border-[#ffb84d]/40 text-[#ffb84d]"
+                                ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
                                 : "bg-white/[0.03] border-white/10 text-white/40"
                             }`}
                           >
@@ -721,7 +721,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                     <span>Ya en la cuenta</span>
                     <span className="tabular-nums">${lockedTotal.toFixed(2)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-[12px] font-bold text-[#ffb84d]">
+                  <div className="flex items-center justify-between text-[12px] font-bold text-[var(--brand)]">
                     <span>Ronda nueva</span>
                     <span className="tabular-nums">+ ${total.toFixed(2)}</span>
                   </div>

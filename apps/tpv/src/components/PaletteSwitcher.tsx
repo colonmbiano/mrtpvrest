@@ -2,9 +2,9 @@
 import { useThemeStore, type Palette } from "@/store/themeStore";
 
 const PALETTES: { id: Palette; label: string; color: string }[] = [
-  { id: "amber",  label: "Miel",   color: "#ffb84d" },
-  { id: "purple", label: "Cian",   color: "#3b82f6" },
-  { id: "green",  label: "Lima",   color: "#10b981" },
+  { id: "amber",  label: "Miel",   color: "#E0A22A" },
+  { id: "purple", label: "Cian",   color: "#9472FF" },
+  { id: "green",  label: "Lima",   color: "#34C988" },
 ];
 
 export default function PaletteSwitcher({

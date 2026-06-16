@@ -327,8 +327,8 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
             <button
               type="submit"
               disabled={adding}
-              className="w-full py-3 rounded-xl font-black text-sm uppercase tracking-widest text-black transition-transform active:scale-95 disabled:opacity-50"
-              style={{ background: accent }}
+              className="w-full py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-transform active:scale-95 disabled:opacity-50"
+              style={{ background: accent, color: "var(--brand-fg)" }}
             >
               {adding ? "Registrando..." : "Guardar Movimiento"}
             </button>
@@ -349,8 +349,8 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                 type="button"
                 onClick={handleCut}
                 disabled={cutting || movements.length === 0}
-                className="w-full py-3.5 rounded-xl font-black text-sm uppercase tracking-widest text-black transition-transform active:scale-95 disabled:opacity-40"
-                style={{ background: accent }}
+                className="w-full py-3.5 rounded-xl font-black text-sm uppercase tracking-widest transition-transform active:scale-95 disabled:opacity-40"
+                style={{ background: accent, color: "var(--brand-fg)" }}
               >
                 {cutting ? "Cerrando corte…" : movements.length === 0 ? "Sin movimientos para cortar" : "Cerrar corte del repartidor"}
               </button>
@@ -376,12 +376,15 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                   >
                     <div className="flex items-center justify-between p-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 ${
-                          m.type === 'INCOME' ? 'bg-green-500/10 text-green-400' :
-                          m.type === 'EXPENSE' ? 'bg-red-500/10 text-red-400' :
-                          m.type === 'FLOAT' ? 'bg-amber-500/10 text-amber-400' :
-                          'bg-blue-500/10 text-blue-400'
-                        }`}>
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 ${
+                            m.type === 'INCOME' ? 'bg-green-500/10 text-green-400' :
+                            m.type === 'EXPENSE' ? 'bg-red-500/10 text-red-400' :
+                            m.type === 'FLOAT' ? '' :
+                            'bg-blue-500/10 text-blue-400'
+                          }`}
+                          style={m.type === 'FLOAT' ? { color: "var(--warning)", background: "color-mix(in srgb, var(--warning) 12%, transparent)" } : undefined}
+                        >
                           {m.type === 'INCOME' ? '↑' : m.type === 'EXPENSE' ? '↓' : m.type === 'FLOAT' ? '$' : '↺'}
                         </div>
                         <div className="min-w-0">
@@ -399,12 +402,15 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                             className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md bg-white/5 text-white/70 border border-white/10 hover:text-white active:scale-95"
                           >📦 Inventariar</button>
                         ))}
-                        <div className={`text-sm font-black ${
-                          m.type === 'INCOME' ? 'text-green-400' :
-                          m.type === 'EXPENSE' ? 'text-red-400' :
-                          m.type === 'FLOAT' ? 'text-amber-400' :
-                          'text-blue-400'
-                        }`}>
+                        <div
+                          className={`text-sm font-black ${
+                            m.type === 'INCOME' ? 'text-green-400' :
+                            m.type === 'EXPENSE' ? 'text-red-400' :
+                            m.type === 'FLOAT' ? '' :
+                            'text-blue-400'
+                          }`}
+                          style={m.type === 'FLOAT' ? { color: "var(--warning)" } : undefined}
+                        >
                           {m.type === 'EXPENSE' ? '-' : ''}${m.amount.toFixed(0)}
                         </div>
                       </div>
@@ -442,8 +448,8 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                             type="button"
                             onClick={() => submitInventory(m.id)}
                             disabled={invSaving}
-                            className="flex-1 py-2 rounded-lg font-black text-xs uppercase tracking-widest text-black active:scale-95 disabled:opacity-50"
-                            style={{ background: accent }}
+                            className="flex-1 py-2 rounded-lg font-black text-xs uppercase tracking-widest active:scale-95 disabled:opacity-50"
+                            style={{ background: accent, color: "var(--brand-fg)" }}
                           >{invSaving ? "Guardando…" : "Guardar en inventario"}</button>
                         </div>
                       </div>
@@ -479,7 +485,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                       <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1">
                         {PAYMENT_LABELS[method] || method}
                       </div>
-                      <div className="text-base font-black" style={{ color: method === "CASH" ? "#88D66C" : "#fff" }}>
+                      <div className="text-base font-black" style={{ color: method === "CASH" ? "var(--success)" : "#fff" }}>
                         ${amount.toFixed(0)}
                       </div>
                     </div>
@@ -512,7 +518,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                             <div className="text-sm font-black text-white">${o.total.toFixed(0)}</div>
                             <div
                               className="text-[10px] font-bold"
-                              style={{ color: o.paymentMethod === "CASH" ? "#88D66C" : "var(--text-secondary)" }}
+                              style={{ color: o.paymentMethod === "CASH" ? "var(--success)" : "var(--text-secondary)" }}
                             >
                               {PAYMENT_LABELS[o.paymentMethod || "OTHER"] || o.paymentMethod}
                             </div>
@@ -524,7 +530,10 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                           </div>
                         )}
                         {o.paymentMethod === "CASH" && !o.cashCollected && (
-                          <div className="mt-1.5 inline-block text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          <div
+                            className="mt-1.5 inline-block text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border"
+                            style={{ color: "var(--warning)", background: "color-mix(in srgb, var(--warning) 12%, transparent)", borderColor: "color-mix(in srgb, var(--warning) 25%, transparent)" }}
+                          >
                             Efectivo sin liquidar
                           </div>
                         )}

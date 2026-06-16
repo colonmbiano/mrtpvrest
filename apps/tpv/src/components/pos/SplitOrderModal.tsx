@@ -64,9 +64,9 @@ export default function SplitOrderModal({
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={onClose} />
-      <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0C0C0E] shadow-2xl">
+      <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[var(--bg)] shadow-2xl">
         <header className="flex items-center gap-3 border-b border-white/10 p-5">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-400/30 bg-amber-400/10 text-amber-300">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]">
             <SplitSquareHorizontal size={20} />
           </div>
           <div className="min-w-0 flex-1">
@@ -98,14 +98,14 @@ export default function SplitOrderModal({
                 onClick={() => toggle(item.id)}
                 className={`flex w-full items-center gap-3 rounded-2xl border p-4 text-left ${
                   active
-                    ? "border-amber-400/50 bg-amber-400/10"
+                    ? "border-[var(--brand)] bg-[var(--brand-soft)]"
                     : "border-white/10 bg-white/[0.03]"
                 }`}
               >
                 <span
                   className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
                     active
-                      ? "border-amber-300 bg-amber-300 text-black"
+                      ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]"
                       : "border-white/20 text-transparent"
                   }`}
                 >
@@ -142,7 +142,7 @@ export default function SplitOrderModal({
             type="button"
             disabled={invalid || submitting}
             onClick={confirmSplit}
-            className="h-14 rounded-2xl bg-amber-300 px-6 text-xs font-black uppercase tracking-wider text-black disabled:opacity-30"
+            className="h-14 rounded-2xl bg-[var(--brand)] px-6 text-xs font-black uppercase tracking-wider text-[var(--brand-fg)] disabled:opacity-30"
           >
             {submitting ? "Dividiendo..." : "Crear ticket"}
           </button>

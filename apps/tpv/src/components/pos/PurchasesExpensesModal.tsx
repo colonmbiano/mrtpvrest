@@ -417,8 +417,8 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
-              <Wallet size={18} className="text-amber-400" />
+            <div className="w-10 h-10 rounded-2xl bg-[var(--brand-soft)] border border-[var(--brand)] flex items-center justify-center">
+              <Wallet size={18} className="text-[var(--brand)]" />
             </div>
             <div>
               <h2 className="text-lg font-black text-white tracking-tight">Compras y gastos</h2>
@@ -452,7 +452,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
                 onClick={() => setTab(t.id)}
                 className={`flex items-center gap-2 px-4 h-11 rounded-2xl text-[12px] font-black uppercase tracking-[0.15em] transition-all ${
                   isActive
-                    ? "bg-amber-500 text-[#0a0a0c] shadow-[0_4px_16px_rgba(255,184,77,0.3)]"
+                    ? "bg-[var(--brand)] text-[var(--brand-fg)] shadow-[0_4px_16px_var(--brand-glow)]"
                     : "bg-white/5 border border-white/10 text-white/60"
                 }`}
               >
@@ -527,7 +527,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
                     onClick={() => setPaymentMethod(pm)}
                     className={`h-12 rounded-2xl border text-[11px] font-black uppercase tracking-[0.1em] transition-all ${
                       isActive
-                        ? "bg-amber-500/15 border-amber-500/50 text-amber-400"
+                        ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
                         : "bg-white/5 border-white/10 text-white/60"
                     }`}
                   >
@@ -537,7 +537,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
               })}
             </div>
             {paymentMethod === "CASH_DRAWER" && (
-              <p className="mt-2 text-[10px] text-amber-400/80 flex items-center gap-1.5">
+              <p className="mt-2 text-[10px] text-[var(--warning)] flex items-center gap-1.5">
                 <AlertTriangle size={12} />
                 Se descontará del turno de caja abierto. Requiere turno activo.
               </p>
@@ -560,7 +560,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
               type="button"
               onClick={tab === "expense" ? submitExpense : submitPurchase}
               disabled={submitting}
-              className="flex-1 sm:flex-none h-11 px-6 rounded-2xl bg-amber-500 text-[#0a0a0c] text-[12px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(255,184,77,0.3)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 sm:flex-none h-11 px-6 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] text-[12px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-[0_4px_20px_var(--brand-glow)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
                 <>
@@ -610,14 +610,14 @@ function ExpenseTab(props: {
                 onClick={() => props.setCategoryId(isActive ? "" : c.id)}
                 className={`h-16 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all ${
                   isActive
-                    ? "bg-amber-500/15 border-amber-500/50"
+                    ? "bg-[var(--brand-soft)] border-[var(--brand)]"
                     : "bg-white/5 border-white/10"
                 }`}
               >
                 <span className="text-xl">{c.icon || "📝"}</span>
                 <span
                   className={`text-[9px] font-black uppercase tracking-wider ${
-                    isActive ? "text-amber-400" : "text-white/60"
+                    isActive ? "text-[var(--brand)]" : "text-white/60"
                   }`}
                 >
                   {c.name.replace(/_/g, " ")}
@@ -634,13 +634,13 @@ function ExpenseTab(props: {
           value={props.concept}
           onChange={(e) => props.setConcept(e.target.value)}
           placeholder="Ej. Pago CFE bimestre de mayo"
-          className="w-full h-12 bg-white/5 border border-white/10 rounded-xl px-4 text-sm text-white outline-none focus:border-amber-500/50"
+          className="w-full h-12 bg-white/5 border border-white/10 rounded-xl px-4 text-sm text-white outline-none focus:border-[var(--brand)]"
         />
       </Field>
 
       <Field label="Monto">
         <div className="relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-400 font-black">$</span>
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--brand)] font-black">$</span>
           <input
             type="number"
             inputMode="decimal"
@@ -649,7 +649,7 @@ function ExpenseTab(props: {
             placeholder="0.00"
             step="0.01"
             min="0"
-            className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 text-sm text-white outline-none focus:border-amber-500/50 tabular-nums"
+            className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 text-sm text-white outline-none focus:border-[var(--brand)] tabular-nums"
           />
         </div>
       </Field>
@@ -660,7 +660,7 @@ function ExpenseTab(props: {
           onChange={(e) => props.setNotes(e.target.value)}
           placeholder="Folio del recibo, nombre del proveedor, etc."
           rows={2}
-          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-500/50 resize-none"
+          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-[var(--brand)] resize-none"
         />
       </Field>
     </div>
@@ -689,7 +689,7 @@ function PurchaseTab(props: {
         <select
           value={props.supplierId}
           onChange={(e) => props.setSupplierId(e.target.value)}
-          className="w-full h-12 bg-white/5 border border-white/10 rounded-xl px-4 text-sm text-white outline-none focus:border-amber-500/50"
+          className="w-full h-12 bg-white/5 border border-white/10 rounded-xl px-4 text-sm text-white outline-none focus:border-[var(--brand)]"
         >
           <option value="">Selecciona proveedor…</option>
           {props.suppliers.map((s) => (
@@ -718,7 +718,7 @@ function PurchaseTab(props: {
             <button
               type="button"
               onClick={props.addLine}
-              className="h-8 px-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-black uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95"
+              className="h-8 px-3 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] text-[10px] font-black uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95"
             >
               <Plus size={12} /> Agregar
             </button>
@@ -730,7 +730,7 @@ function PurchaseTab(props: {
             <Camera size={28} className="text-white/30 mx-auto" />
             <p className="text-[12px] text-white/40">
               Toca <strong className="text-violet-300">&quot;Escanear ticket&quot;</strong> para llenar la lista con IA,
-              o <strong className="text-amber-400">&quot;Agregar&quot;</strong> para meterlos a mano.
+              o <strong className="text-[var(--brand)]">&quot;Agregar&quot;</strong> para meterlos a mano.
             </p>
           </div>
         ) : (
@@ -742,12 +742,12 @@ function PurchaseTab(props: {
                 key={idx}
                 className={`grid grid-cols-12 gap-2 items-center rounded-xl p-2 border ${
                   needsMatch
-                    ? "bg-amber-500/10 border-amber-500/30"
+                    ? "bg-[var(--warning-soft)] border-[var(--warning)]"
                     : "bg-white/5 border-white/10"
                 }`}
               >
                 {needsMatch && (
-                  <div className="col-span-12 flex items-center gap-2 text-[10px] font-bold text-amber-400 pb-1 pl-1">
+                  <div className="col-span-12 flex items-center gap-2 text-[10px] font-bold text-[var(--warning)] pb-1 pl-1">
                     <FileWarning size={12} />
                     <span>IA detectó &quot;{line.scannedName}&quot; — elige el ingrediente correcto:</span>
                   </div>
@@ -756,7 +756,7 @@ function PurchaseTab(props: {
                   value={line.ingredientId}
                   onChange={(e) => props.pickIngredient(idx, e.target.value)}
                   className={`col-span-12 sm:col-span-5 h-10 bg-white/5 border rounded-lg px-3 text-xs text-white outline-none ${
-                    needsMatch ? "border-amber-500/40" : "border-white/10"
+                    needsMatch ? "border-[var(--warning)]" : "border-white/10"
                   }`}
                 >
                   <option value="">Ingrediente…</option>
@@ -801,7 +801,7 @@ function PurchaseTab(props: {
 
       <div className="flex items-center justify-between pt-3 border-t border-white/5">
         <span className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40">Total</span>
-        <span className="text-2xl font-black tabular-nums text-amber-400">${props.purchaseTotal.toFixed(2)}</span>
+        <span className="text-2xl font-black tabular-nums text-[var(--brand)]">${props.purchaseTotal.toFixed(2)}</span>
       </div>
 
       <Field label="Notas (opcional)">
@@ -810,7 +810,7 @@ function PurchaseTab(props: {
           onChange={(e) => props.setNotes(e.target.value)}
           placeholder="Folio de la factura, observaciones de calidad, etc."
           rows={2}
-          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-500/50 resize-none"
+          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-[var(--brand)] resize-none"
         />
       </Field>
     </div>

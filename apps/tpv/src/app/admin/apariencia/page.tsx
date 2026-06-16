@@ -40,9 +40,9 @@ import {
 // ── Tipos locales ──────────────────────────────────────────────────────────
 
 const THEMES: Array<{ id: PaletteType; label: string; color: string }> = [
-  { id: "amber",  label: "Miel",  color: "#ffb84d" },
-  { id: "purple", label: "Cian",  color: "#3b82f6" },
-  { id: "green",  label: "Lima",  color: "#10b981" },
+  { id: "green",  label: "Fresco", color: "#34C988" },
+  { id: "amber",  label: "Miel",   color: "#E0A22A" },
+  { id: "purple", label: "Uva",    color: "#9472FF" },
 ];
 
 // ── Page ──────────────────────────────────────────────────────────────────
@@ -81,10 +81,10 @@ export default function AparienciaPage() {
 
       {/* AVISO MODO CLARO */}
       {mode === "light" && (
-        <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-4 mb-8 flex gap-3 items-start">
-          <Info size={18} className="text-amber-500 shrink-0 mt-0.5" />
+        <div className="rounded-2xl bg-[var(--warning-soft)] border border-[var(--warning)] p-4 mb-8 flex gap-3 items-start">
+          <Info size={18} className="text-[var(--warning)] shrink-0 mt-0.5" />
           <div>
-            <p className="text-xs font-black text-amber-300 uppercase tracking-widest mb-1">
+            <p className="text-xs font-black text-[var(--warning)] uppercase tracking-widest mb-1">
               Modo claro experimental
             </p>
             <p className="text-[11px] text-zinc-300 leading-relaxed">
@@ -97,7 +97,7 @@ export default function AparienciaPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* TAMAÑO DE LETRA */}
-        <section className="bg-[#121316] rounded-3xl border border-white/5 p-6">
+        <section className="bg-[var(--surface-1)] rounded-3xl border border-white/5 p-6">
           <div className="flex items-center gap-2 mb-4">
             <Type size={16} style={{ color: "var(--brand)" }} />
             <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">
@@ -118,8 +118,8 @@ export default function AparienciaPage() {
                   onClick={() => chooseUiScale(s)}
                   className={`flex flex-col items-center justify-center gap-1 min-h-[72px] py-3 rounded-2xl border transition-all active:scale-95 ${
                     active
-                      ? "bg-[#1a1b1f] text-white"
-                      : "bg-[#0a0a0c] border-white/5 text-zinc-500"
+                      ? "bg-[var(--surface-2)] text-white"
+                      : "bg-[var(--bg)] border-white/5 text-zinc-500"
                   }`}
                   style={active ? {
                     borderColor: "var(--brand)",
@@ -139,7 +139,7 @@ export default function AparienciaPage() {
         </section>
 
         {/* ANCHO PANEL TICKET */}
-        <section className="bg-[#121316] rounded-3xl border border-white/5 p-6">
+        <section className="bg-[var(--surface-1)] rounded-3xl border border-white/5 p-6">
           <div className="flex items-center gap-2 mb-4">
             <PanelRightClose size={16} style={{ color: "var(--brand)" }} />
             <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">
@@ -165,7 +165,7 @@ export default function AparienciaPage() {
                   className={`flex flex-col items-center justify-center gap-1 min-h-[72px] py-3 rounded-2xl border-2 transition-all active:scale-95 ${
                     active
                       ? "text-black font-black border-transparent"
-                      : "bg-[#0a0a0c] border-white/10 text-zinc-400 hover:text-white hover:border-white/30"
+                      : "bg-[var(--bg)] border-white/10 text-zinc-400 hover:text-white hover:border-white/30"
                   }`}
                   style={active ? {
                     background: "var(--brand)",
@@ -181,7 +181,7 @@ export default function AparienciaPage() {
         </section>
 
         {/* PALETA DE ACENTO */}
-        <section className="bg-[#121316] rounded-3xl border border-white/5 p-6">
+        <section className="bg-[var(--surface-1)] rounded-3xl border border-white/5 p-6">
           <div className="flex items-center gap-2 mb-4">
             <PaletteIcon size={16} style={{ color: "var(--brand)" }} />
             <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">
@@ -189,7 +189,7 @@ export default function AparienciaPage() {
             </h2>
           </div>
           <p className="text-[11px] font-medium text-zinc-500 mb-4">
-            Tema del color principal. El ámbar diseño operativo es el default.
+            Tema del color principal. El verde Fresco es el default.
           </p>
           <div className="grid grid-cols-3 gap-3">
             {THEMES.map((t) => {
@@ -201,8 +201,8 @@ export default function AparienciaPage() {
                   onClick={() => setPalette(t.id)}
                   className={`flex flex-col items-center justify-center gap-3 min-h-[80px] py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 ${
                     active
-                      ? "bg-[#1a1b1f] text-white"
-                      : "bg-[#0a0a0c] border-white/5 text-zinc-600"
+                      ? "bg-[var(--surface-2)] text-white"
+                      : "bg-[var(--bg)] border-white/5 text-zinc-600"
                   }`}
                   style={active ? {
                     borderColor: t.color,
@@ -218,12 +218,12 @@ export default function AparienciaPage() {
         </section>
 
         {/* MODO NOCTURNO / CLARO */}
-        <section className="bg-[#121316] rounded-3xl border border-white/5 p-6">
+        <section className="bg-[var(--surface-1)] rounded-3xl border border-white/5 p-6">
           <div className="flex items-center gap-2 mb-4">
             {mode === "dark" ? (
-              <Moon size={16} className="text-amber-500" />
+              <Moon size={16} className="text-[var(--brand)]" />
             ) : (
-              <Sun size={16} className="text-amber-500" />
+              <Sun size={16} className="text-[var(--brand)]" />
             )}
             <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">
               Modo {mode === "dark" ? "nocturno" : "claro"}
@@ -235,18 +235,18 @@ export default function AparienciaPage() {
           <button
             type="button"
             onClick={toggleMode}
-            className="w-full inline-flex items-center justify-between gap-3 px-5 h-14 rounded-2xl bg-[#0a0a0c] border border-white/5 active:scale-95 transition-all"
+            className="w-full inline-flex items-center justify-between gap-3 px-5 h-14 rounded-2xl bg-[var(--bg)] border border-white/5 active:scale-95 transition-all"
           >
             <span className="text-sm font-black uppercase tracking-widest text-white">
               {mode === "dark" ? "Cambiar a claro" : "Cambiar a nocturno"}
             </span>
             <div
               className="w-14 h-7 rounded-full relative transition-all duration-300"
-              style={{ background: mode === "dark" ? "#1a1b1f" : "#ffb84d" }}
+              style={{ background: mode === "dark" ? "var(--surface-2)" : "var(--brand)" }}
             >
               <div
                 className={`absolute top-1 w-5 h-5 rounded-full transition-all duration-300 shadow-lg ${
-                  mode === "dark" ? "left-1 bg-zinc-600" : "left-8 bg-[#0a0a0c]"
+                  mode === "dark" ? "left-1 bg-zinc-600" : "left-8 bg-[var(--bg)]"
                 }`}
               />
             </div>

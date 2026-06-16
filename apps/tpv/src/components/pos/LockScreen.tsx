@@ -52,13 +52,13 @@ const LockScreen: React.FC<LockScreenProps> = ({
   }, [pinInput, isVerifying, onSubmit]);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center font-mono overflow-y-auto overflow-x-hidden px-4 py-[max(1rem,env(safe-area-inset-top))]" style={{ background: "#0C0C0E" }}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center font-mono overflow-y-auto overflow-x-hidden px-4 py-[max(1rem,env(safe-area-inset-top))]" style={{ background: "var(--bg)" }}>
       {/* Halo Glows */}
       <div 
         className="absolute pointer-events-none"
         style={{
           width: 800, height: 800, top: -200, left: -200,
-          background: mode === "unlink" ? "radial-gradient(circle, #EF444420 0%, #EF444400 70%)" : "radial-gradient(circle, #FF840020 0%, #FF840000 70%)"
+          background: mode === "unlink" ? "radial-gradient(circle, #EF444420 0%, #EF444400 70%)" : "radial-gradient(circle, var(--brand-glow) 0%, transparent 70%)"
         }}
       />
       <div 

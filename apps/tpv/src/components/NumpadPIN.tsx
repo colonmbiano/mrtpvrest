@@ -110,9 +110,9 @@ export default function NumpadPIN({
   });
 
   const digitClass =
-    "aspect-square w-full rounded-lg border border-white/10 bg-white/[0.055] text-white font-black tabular-nums flex items-center justify-center active:scale-[0.98] active:bg-white/10 disabled:opacity-35 disabled:active:scale-100 transition-colors select-none focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70";
+    "aspect-square w-full rounded-lg border border-white/10 bg-white/[0.055] text-white font-black tabular-nums flex items-center justify-center active:scale-[0.98] active:bg-white/10 disabled:opacity-35 disabled:active:scale-100 transition-colors select-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]";
   const utilityClass =
-    "aspect-square w-full rounded-lg border border-white/10 bg-black/20 text-white/55 font-black flex items-center justify-center active:scale-[0.98] active:bg-white/10 disabled:opacity-35 disabled:active:scale-100 transition-colors select-none focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70";
+    "aspect-square w-full rounded-lg border border-white/10 bg-black/20 text-white/55 font-black flex items-center justify-center active:scale-[0.98] active:bg-white/10 disabled:opacity-35 disabled:active:scale-100 transition-colors select-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]";
   const canSubmit = pin.length === maxDigits && !disabled;
 
   return (
@@ -135,10 +135,10 @@ export default function NumpadPIN({
                 style={{
                   width: "clamp(10px, 2.8vmin, 20px)",
                   height: "clamp(10px, 2.8vmin, 20px)",
-                  background: filled ? "#ffb84d" : "transparent",
-                  borderColor: filled ? "#ffb84d" : "rgba(255,255,255,0.2)",
+                  background: filled ? "var(--brand)" : "transparent",
+                  borderColor: filled ? "var(--brand)" : "rgba(255,255,255,0.2)",
                   boxShadow: filled
-                    ? "0 0 16px rgba(255,184,77,0.45)"
+                    ? "0 0 16px var(--brand-glow)"
                     : "none",
                 }}
               />
@@ -217,7 +217,7 @@ export default function NumpadPIN({
           type="button"
           onClick={() => void handleSubmit()}
           disabled={!canSubmit}
-          className="min-h-[42px] w-full rounded-lg bg-[#ffb84d] px-4 text-sm font-black uppercase tracking-[0.2em] text-[#0a0a0c] transition-colors active:scale-[0.99] disabled:bg-white/10 disabled:text-white/30 disabled:active:scale-100 focus-visible:ring-2 focus-visible:ring-[#ffb84d]/70 sm:min-h-[48px]"
+          className="min-h-[42px] w-full rounded-lg bg-[var(--brand)] px-4 text-sm font-black uppercase tracking-[0.2em] text-[var(--brand-fg)] transition-colors active:scale-[0.99] disabled:bg-white/10 disabled:text-white/30 disabled:active:scale-100 focus-visible:ring-2 focus-visible:ring-[var(--brand)] sm:min-h-[48px]"
         >
           {disabled ? "Validando" : submitLabel}
         </button>

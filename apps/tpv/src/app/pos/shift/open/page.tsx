@@ -79,8 +79,8 @@ const ShiftOpenPage = () => {
 
   if (checking) {
     return (
-      <div className="min-h-[100dvh] bg-[#0a0a0c] flex items-center justify-center">
-        <div className="text-amber-500 animate-pulse font-black uppercase tracking-widest">
+      <div className="min-h-[100dvh] bg-[var(--bg)] flex items-center justify-center">
+        <div className="text-[var(--brand)] animate-pulse font-black uppercase tracking-widest">
           Verificando turno...
         </div>
       </div>
@@ -88,11 +88,11 @@ const ShiftOpenPage = () => {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-[#0a0a0c] flex flex-col font-sans text-white overflow-hidden relative">
+    <div className="min-h-[100dvh] bg-[var(--bg)] flex flex-col font-sans text-white overflow-hidden relative">
       {/* Glow Effects */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
-        <div className="absolute -top-60 -left-60 w-[600px] h-[600px] bg-amber-500/5 blur-[120px] rounded-full" />
-        <div className="absolute -bottom-60 -right-60 w-[600px] h-[600px] bg-amber-500/5 blur-[120px] rounded-full" />
+        <div className="absolute -top-60 -left-60 w-[600px] h-[600px] bg-[var(--brand-soft)] blur-[120px] rounded-full" />
+        <div className="absolute -bottom-60 -right-60 w-[600px] h-[600px] bg-[var(--brand-soft)] blur-[120px] rounded-full" />
       </div>
 
       <header className="h-20 flex items-center justify-between px-8 relative z-10">
@@ -104,17 +104,17 @@ const ShiftOpenPage = () => {
           <span>Volver al Hub</span>
         </button>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center">
-            <UtensilsCrossed size={16} className="text-black" />
+          <div className="w-8 h-8 rounded-lg bg-[var(--brand)] flex items-center justify-center">
+            <UtensilsCrossed size={16} className="text-[var(--brand-fg)]" />
           </div>
           <span className="font-black tracking-tighter text-xl">MRTPVREST</span>
         </div>
       </header>
 
       <main className="flex-1 flex items-center justify-center p-6 relative z-10">
-        <div className="w-full max-w-md bg-[#121316] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl">
+        <div className="w-full max-w-md bg-[var(--surface-1)] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl">
           <div className="text-center mb-10">
-            <div className="inline-block px-4 py-1.5 mb-6 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-amber-500 bg-amber-500/10 border border-amber-500/20">
+            <div className="inline-block px-4 py-1.5 mb-6 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-[var(--brand)] bg-[var(--brand-soft)] border border-[var(--brand)]">
               Apertura de Caja
             </div>
             <h1 className="text-4xl font-black tracking-tight mb-4">Iniciar Turno</h1>
@@ -129,19 +129,19 @@ const ShiftOpenPage = () => {
                 Fondo de caja inicial
               </label>
               <div className="relative group">
-                <span className="absolute left-6 top-1/2 -translate-y-1/2 text-3xl font-black text-amber-500 group-focus-within:scale-110 transition-transform">$</span>
+                <span className="absolute left-6 top-1/2 -translate-y-1/2 text-3xl font-black text-[var(--brand)] group-focus-within:scale-110 transition-transform">$</span>
                 <input
                   type="number"
                   value={openingFloat}
                   onChange={(e) => setOpeningFloat(e.target.value)}
                   placeholder="0.00"
-                  className="w-full h-24 bg-[#0a0a0c] border border-white/5 rounded-3xl pl-16 pr-8 text-4xl font-black mono tnum text-white focus:outline-none focus:border-amber-500 transition-all placeholder:text-zinc-800"
+                  className="w-full h-24 bg-[var(--bg)] border border-white/5 rounded-3xl pl-16 pr-8 text-4xl font-black mono tnum text-white focus:outline-none focus:border-[var(--brand)] transition-all placeholder:text-zinc-800"
                 />
               </div>
             </div>
 
-            <div className="bg-[#1a1b1f] border border-white/5 rounded-2xl p-6 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
+            <div className="bg-[var(--surface-1)] border border-white/5 rounded-2xl p-6 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-[var(--brand-soft)] flex items-center justify-center text-[var(--brand)]">
                 <span className="text-xl font-black">{currentEmployee?.name?.charAt(0).toUpperCase()}</span>
               </div>
               <div>
@@ -153,7 +153,7 @@ const ShiftOpenPage = () => {
             <button
               onClick={handleOpenShift}
               disabled={loading || !openingFloat}
-              className="w-full h-20 bg-amber-500 text-black rounded-2xl font-black uppercase tracking-[0.2em] text-sm shadow-[0_10px_40px_-10px_rgba(255,184,77,0.4)] hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-20 disabled:grayscale disabled:hover:scale-100"
+              className="w-full h-20 bg-[var(--brand)] text-[var(--brand-fg)] rounded-2xl font-black uppercase tracking-[0.2em] text-sm shadow-[0_10px_30px_var(--brand-glow)] hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-20 disabled:grayscale disabled:hover:scale-100"
             >
               {loading ? "Abriendo..." : "Abrir Turno Ahora"}
             </button>

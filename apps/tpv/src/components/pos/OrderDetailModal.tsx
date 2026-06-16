@@ -286,7 +286,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         onClick={selectableProduct ? () => toggleItem(itemId!) : undefined}
         className={`flex flex-col gap-2 p-3 rounded-2xl border transition-colors ${
           splitMode && isSelected
-            ? "bg-[#ffb84d]/10 border-[#ffb84d]/40"
+            ? "bg-[var(--brand-soft)] border-[var(--brand)]"
             : "bg-white/[0.03] border-white/5"
         } ${selectableProduct ? "cursor-pointer active:scale-[0.99]" : ""}`}
       >
@@ -294,7 +294,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           {splitMode ? (
             <span className="shrink-0 pt-0.5">
               {isSelected ? (
-                <CheckCircle2 size={20} className="text-[#ffb84d]" strokeWidth={2.5} />
+                <CheckCircle2 size={20} className="text-[var(--brand)]" strokeWidth={2.5} />
               ) : (
                 <Circle size={20} className="text-white/30" />
               )}
@@ -310,7 +310,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               >
                 <Minus size={14} />
               </button>
-              <span className="tabular-nums text-[14px] font-black text-[#ffb84d] w-7 text-center">
+              <span className="tabular-nums text-[14px] font-black text-[var(--brand)] w-7 text-center">
                 {updating ? "…" : it.quantity}
               </span>
               <button
@@ -318,13 +318,13 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 onClick={() => onUpdateItem(itemId, { quantity: it.quantity + 1 })}
                 disabled={updating}
                 aria-label="Sumar cantidad"
-                className="w-9 h-9 min-h-[36px] rounded-xl bg-[#ffb84d]/15 border border-[#ffb84d]/40 text-[#ffb84d] flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30"
+                className="w-9 h-9 min-h-[36px] rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30"
               >
                 <Plus size={14} />
               </button>
             </div>
           ) : (
-            <span className="text-[13px] font-bold text-[#ffb84d] tabular-nums shrink-0">
+            <span className="text-[13px] font-bold text-[var(--brand)] tabular-nums shrink-0">
               {it.quantity}×
             </span>
           )}
@@ -370,7 +370,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   if (e.key === "Escape") setNoteDraft(null);
                 }}
                 placeholder="Nota para cocina..."
-                className="flex-1 min-w-0 h-9 min-h-[36px] bg-white/5 border border-[#ffb84d]/30 rounded-xl px-3 text-[12px] text-white placeholder:text-white/30 outline-none focus:border-[#ffb84d]"
+                className="flex-1 min-w-0 h-9 min-h-[36px] bg-white/5 border border-[var(--brand)] rounded-xl px-3 text-[12px] text-white placeholder:text-white/30 outline-none focus:border-[var(--brand)]"
               />
               <button
                 type="button"
@@ -379,7 +379,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   setNoteDraft(null);
                 }}
                 aria-label="Guardar nota"
-                className="w-9 h-9 min-h-[36px] rounded-xl bg-[#ffb84d] text-[#0C0C0E] flex items-center justify-center active:scale-90 transition-transform"
+                className="w-9 h-9 min-h-[36px] rounded-xl bg-[var(--brand)] text-[var(--brand-fg)] flex items-center justify-center active:scale-90 transition-transform"
               >
                 <Check size={14} strokeWidth={3} />
               </button>
@@ -388,7 +388,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             <button
               type="button"
               onClick={() => setNoteDraft({ id: itemId, value: it.notes ?? "" })}
-              className="self-start text-[10px] font-black uppercase tracking-[0.15em] text-white/40 active:text-[#ffb84d] transition-colors"
+              className="self-start text-[10px] font-black uppercase tracking-[0.15em] text-white/40 active:text-[var(--brand)] transition-colors"
             >
               {it.notes ? "✎ Editar nota" : "+ Agregar nota"}
             </button>
@@ -411,7 +411,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
       {/* MODAL */}
       <div
-        className={`relative w-full flex flex-col bg-[#0C0C0E] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${
+        className={`relative w-full flex flex-col bg-[var(--bg)] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${
           expanded ? "max-w-[920px] max-h-[94vh]" : "max-w-[560px] max-h-[88vh]"
         }`}
       >
@@ -421,13 +421,13 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           className="absolute pointer-events-none -top-24 -right-24 w-72 h-72 rounded-full opacity-30 blur-[80px]"
           style={{
             background:
-              "radial-gradient(circle, rgba(255,184,77,0.4) 0%, transparent 70%)",
+              "radial-gradient(circle, var(--brand-glow) 0%, transparent 70%)",
           }}
         />
 
         {/* HEADER */}
         <div className="relative z-10 p-5 border-b border-white/5 bg-white/5 backdrop-blur-md flex items-center gap-3 shrink-0">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[#ffb84d]/15 text-[#ffb84d] border border-[#ffb84d]/30 shrink-0">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[var(--brand-soft)] text-[var(--brand)] border border-[var(--brand)] shrink-0">
             <Receipt size={22} />
           </div>
           <div className="flex-1 min-w-0">
@@ -445,14 +445,14 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     if (e.key === "Escape") setEditingName(false);
                   }}
                   placeholder="Nombre de la cuenta…"
-                  className="flex-1 min-w-0 h-9 min-h-[36px] bg-white/5 border border-[#ffb84d]/40 rounded-xl px-3 text-[15px] font-black text-white placeholder:text-white/30 placeholder:font-bold outline-none focus:border-[#ffb84d]"
+                  className="flex-1 min-w-0 h-9 min-h-[36px] bg-white/5 border border-[var(--brand)] rounded-xl px-3 text-[15px] font-black text-white placeholder:text-white/30 placeholder:font-bold outline-none focus:border-[var(--brand)]"
                 />
                 <button
                   type="button"
                   onClick={commitName}
                   disabled={savingName}
                   aria-label="Guardar nombre"
-                  className="w-9 h-9 min-h-[36px] rounded-xl bg-[#ffb84d] text-[#0C0C0E] flex items-center justify-center active:scale-90 transition-transform disabled:opacity-50 shrink-0"
+                  className="w-9 h-9 min-h-[36px] rounded-xl bg-[var(--brand)] text-[var(--brand-fg)] flex items-center justify-center active:scale-90 transition-transform disabled:opacity-50 shrink-0"
                 >
                   <Check size={16} strokeWidth={3} />
                 </button>
@@ -467,7 +467,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     type="button"
                     onClick={startEditName}
                     aria-label="Renombrar cuenta"
-                    className="shrink-0 w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/50 active:text-[#ffb84d] active:scale-95 transition-all"
+                    className="shrink-0 w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/50 active:text-[var(--brand)] active:scale-95 transition-all"
                   >
                     <Pencil size={13} />
                   </button>
@@ -476,7 +476,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             )}
             <div className="text-[11px] font-bold text-white/40 mt-1 truncate">
               #{orderNumber}
-              {orderType && <span className="text-[#ffb84d]"> · {orderType}</span>}
+              {orderType && <span className="text-[var(--brand)]"> · {orderType}</span>}
             </div>
           </div>
           <button
@@ -534,7 +534,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             {splitMode ? (
               <div className="space-y-3 mb-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
+                  <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
                     Dividir cuenta
                   </span>
                   <button
@@ -551,7 +551,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     onClick={() => switchMethod("product")}
                     className={`min-h-[40px] h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-colors border ${
                       splitMethod === "product"
-                        ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E]"
+                        ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)]"
                         : "bg-white/5 border-white/10 text-white/60"
                     }`}
                   >
@@ -562,7 +562,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     onClick={() => switchMethod("seat")}
                     className={`min-h-[40px] h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-colors border ${
                       splitMethod === "seat"
-                        ? "bg-[#ffb84d] border-[#ffb84d] text-[#0C0C0E]"
+                        ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)]"
                         : "bg-white/5 border-white/10 text-white/60"
                     }`}
                   >
@@ -612,12 +612,12 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       onClick={() => toggleSeat(key)}
                       className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl border text-left transition-colors ${
                         allIn
-                          ? "bg-[#ffb84d]/15 border-[#ffb84d]/40"
+                          ? "bg-[var(--brand-soft)] border-[var(--brand)]"
                           : "bg-white/5 border-white/10"
                       }`}
                     >
                       {allIn ? (
-                        <CheckCircle2 size={18} className="text-[#ffb84d]" strokeWidth={2.5} />
+                        <CheckCircle2 size={18} className="text-[var(--brand)]" strokeWidth={2.5} />
                       ) : (
                         <Circle size={18} className="text-white/30" />
                       )}
@@ -666,7 +666,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
         {/* FOOTER: confirmación de split o acciones normales */}
         {splitMode ? (
-          <div className="relative z-10 p-4 border-t border-white/5 bg-[#0C0C0E] flex items-center gap-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="relative z-10 p-4 border-t border-white/5 bg-[var(--bg)] flex items-center gap-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <div className="min-w-0 flex-1">
               <div className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">
                 Nuevo ticket · {selectedCount} item{selectedCount === 1 ? "" : "s"}
@@ -679,7 +679,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               type="button"
               onClick={confirmSplit}
               disabled={splitInvalid || splitting}
-              className="min-h-[52px] h-[52px] px-5 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+              className="min-h-[52px] h-[52px] px-5 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
             >
               <SplitSquareHorizontal size={17} strokeWidth={2.5} />
               {splitting ? "Dividiendo…" : "Dividir"}
@@ -687,13 +687,13 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           </div>
         ) : (
           hasActions && (
-            <div className="relative z-10 p-4 border-t border-white/5 bg-[#0C0C0E] flex flex-col gap-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="relative z-10 p-4 border-t border-white/5 bg-[var(--bg)] flex flex-col gap-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
               {/* AGREGAR PRODUCTOS — reabre la orden en el menú para sumar una ronda */}
               {onAddProducts && (
                 <button
                   type="button"
                   onClick={onAddProducts}
-                  className="w-full min-h-[52px] h-13 py-3 rounded-xl bg-[#ffb84d]/15 border border-[#ffb84d]/40 text-[#ffb84d] font-black uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                  className="w-full min-h-[52px] h-13 py-3 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] font-black uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
                 >
                   <ShoppingCart size={16} strokeWidth={2.5} />
                   Agregar productos
@@ -788,7 +788,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 <button
                   type="button"
                   onClick={onCharge}
-                  className="w-full min-h-[56px] h-14 rounded-xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)]"
+                  className="w-full min-h-[56px] h-14 rounded-xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)]"
                 >
                   <Banknote size={16} strokeWidth={2.5} />
                   Cobrar ahora

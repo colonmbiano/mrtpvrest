@@ -42,8 +42,8 @@ const CategoryRail: React.FC<CategoryRailProps> = ({
                 <span
                   className="text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded-full"
                   style={{
-                    background: isActive ? "rgba(255,132,0,0.18)" : "rgba(255,255,255,0.06)",
-                    color: isActive ? "#FF8400" : "#B8B9B6",
+                    background: isActive ? "var(--brand-soft)" : "rgba(255,255,255,0.06)",
+                    color: isActive ? "var(--brand)" : "#B8B9B6",
                     minWidth: 20,
                   }}
                 >

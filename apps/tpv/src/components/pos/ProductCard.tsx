@@ -90,7 +90,7 @@ function ProductCardBase({
       aria-disabled={!isAvailable}
       className="product-card relative flex flex-col text-left rounded-2xl overflow-hidden p-3 min-h-[120px] border border-white/5 active:scale-[0.97] active:brightness-125 transition-transform duration-100 disabled:active:scale-100 select-none"
       style={{
-        background: imageUrl ? "#0a0a0c" : tone.tile,
+        background: imageUrl ? "var(--bg)" : tone.tile,
         opacity: isAvailable ? 1 : 0.55,
         touchAction: "manipulation",
         WebkitTapHighlightColor: "transparent",
@@ -127,7 +127,7 @@ function ProductCardBase({
       {isFavorite && (
         <span
           aria-label="Favorito"
-          className="absolute z-10 left-2 top-3 w-6 h-6 rounded-full bg-[#ffb84d] text-black flex items-center justify-center"
+          className="absolute z-10 left-2 top-3 w-6 h-6 rounded-full bg-[var(--brand)] text-[var(--brand-fg)] flex items-center justify-center"
         >
           <Star size={12} strokeWidth={2.5} fill="currentColor" />
         </span>

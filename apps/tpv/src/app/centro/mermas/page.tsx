@@ -104,7 +104,7 @@ export default function CentroMermasPage() {
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-black text-[#0a0a0c] bg-amber-400 shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-black text-[var(--brand-fg)] bg-[var(--brand)] shadow-[0_10px_30px_var(--brand-glow)] active:scale-95 transition-all"
         >
           <Plus size={14} strokeWidth={3} /> Registrar merma
         </button>
@@ -248,7 +248,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-3xl bg-[#0e0e11] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.6)] p-6"
+        className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-3xl bg-[var(--surface-1)] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.6)] p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between mb-5">
@@ -268,7 +268,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
             Ingrediente
           </label>
           {selected ? (
-            <div className="flex items-center justify-between p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)]">
               <div>
                 <div className="text-sm font-bold text-white">{selected.name}</div>
                 <div className="text-[11px] text-white/50 tabular-nums">
@@ -277,7 +277,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
               </div>
               <button
                 onClick={() => { setSelected(null); setQuantity(""); }}
-                className="text-[11px] font-bold text-amber-300 hover:text-amber-200"
+                className="text-[11px] font-bold text-[var(--brand)] hover:text-[var(--brand)]"
               >
                 Cambiar
               </button>
@@ -289,7 +289,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar ingrediente…"
-                className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-amber-400/60"
+                className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-[var(--brand)]"
               />
               <ul className="mt-1.5 max-h-48 overflow-auto rounded-xl border border-white/5 divide-y divide-white/5">
                 {!ingredients ? (
@@ -330,7 +330,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             placeholder="0"
-            className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-lg font-bold tabular-nums focus:outline-none focus:border-amber-400/60 disabled:opacity-50"
+            className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-lg font-bold tabular-nums focus:outline-none focus:border-[var(--brand)] disabled:opacity-50"
           />
           {selected && qtyNum > selected.stock && (
             <p className="text-[11px] text-rose-300 mt-1">
@@ -351,7 +351,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
                 onClick={() => setReason(r)}
                 className={`px-2.5 py-2 rounded-xl text-[11px] font-bold transition-all ${
                   reason === r
-                    ? "text-[#0a0a0c] bg-amber-400"
+                    ? "text-[var(--brand-fg)] bg-[var(--brand)]"
                     : "text-white/70 bg-white/5 border border-white/10 hover:bg-white/10"
                 }`}
               >
@@ -371,7 +371,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
             onChange={(e) => setDetail(e.target.value.slice(0, 500))}
             rows={2}
             placeholder="Ej: bolsa de chiles abierta sin sellar correctamente"
-            className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-amber-400/60 resize-none"
+            className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-[var(--brand)] resize-none"
           />
         </section>
 
@@ -391,7 +391,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
           <button
             disabled={!canSubmit || submitting}
             onClick={submit}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-black text-[#0a0a0c] bg-amber-400 active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-black text-[var(--brand-fg)] bg-[var(--brand)] active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
           >
             {submitting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} strokeWidth={3} />}
             {submitting ? "Registrando…" : "Registrar merma"}

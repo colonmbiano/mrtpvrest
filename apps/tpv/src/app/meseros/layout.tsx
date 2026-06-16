@@ -87,14 +87,14 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
 
   return (
     <div
-      className="relative flex flex-col h-[100dvh] w-full bg-[#0a0a0c] text-white overflow-hidden"
+      className="relative flex flex-col h-[100dvh] w-full bg-[var(--bg)] text-white overflow-hidden"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* Ambient diseño operativo glow */}
       <div
         aria-hidden
         className="pointer-events-none absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full blur-[100px] opacity-40"
-        style={{ background: 'radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)' }}
+        style={{ background: 'radial-gradient(circle, var(--brand-glow) 0%, transparent 70%)' }}
       />
 
       {/* HEADER */}
@@ -106,7 +106,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
 
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-md px-3 py-1.5 rounded-full">
-            <div className="w-6 h-6 rounded-full bg-[#ffb84d] text-[#0a0a0c] text-[10px] flex items-center justify-center font-black">
+            <div className="w-6 h-6 rounded-full bg-[var(--brand)] text-[var(--brand-fg)] text-[10px] flex items-center justify-center font-black">
               {currentEmployee?.name?.substring(0, 2).toUpperCase() || "SR"}
             </div>
             <div className="flex flex-col leading-tight">
@@ -114,7 +114,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
                 {currentEmployee?.name?.toUpperCase() || "MESERO"}
               </span>
               {shiftStartAt && (
-                <span className="text-[9px] font-bold text-[#88D66C]">
+                <span className="text-[9px] font-bold text-[var(--success)]">
                   Turno desde{" "}
                   {new Date(shiftStartAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </span>
@@ -126,7 +126,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
             onClick={handleLock}
             aria-label="Bloquear terminal"
             title="Bloquear (conserva tu turno)"
-            className="w-10 h-10 min-h-[40px] rounded-full bg-white/5 border border-white/10 backdrop-blur-md flex items-center justify-center text-white/60 active:scale-95 transition-all hover:text-[#ffb84d] hover:border-[#ffb84d]/30"
+            className="w-10 h-10 min-h-[40px] rounded-full bg-white/5 border border-white/10 backdrop-blur-md flex items-center justify-center text-white/60 active:scale-95 transition-all hover:text-[var(--brand)] hover:border-[var(--brand)]"
           >
             <Lock size={16} strokeWidth={2.5} />
           </button>
@@ -149,7 +149,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
           onClick={() => setConfirmEndShift(false)}
         >
           <div
-            className="w-full max-w-sm bg-[#0C0C0E] border border-white/10 rounded-3xl p-6 space-y-5"
+            className="w-full max-w-sm bg-[var(--bg)] border border-white/10 rounded-3xl p-6 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="space-y-1.5">
@@ -198,7 +198,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
               prefetch={false}
               className={`flex-1 flex flex-col items-center justify-center gap-1 rounded-2xl active:scale-95 transition-transform ${
                 isActive
-                  ? "text-[#ffb84d] bg-[#ffb84d]/10 border border-[#ffb84d]/20"
+                  ? "text-[var(--brand)] bg-[var(--brand-soft)] border border-[var(--brand)]"
                   : "text-white/45"
               }`}
             >
@@ -211,7 +211,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
         <button
           type="button"
           onClick={handleTakeout}
-          className="flex-1 flex items-center justify-center gap-2 bg-[#ffb84d] text-[#0a0a0c] rounded-2xl mx-1 font-black text-[11px] uppercase tracking-widest shadow-[0_10px_30px_rgba(255,184,77,0.3)] active:scale-95 transition-transform"
+          className="flex-1 flex items-center justify-center gap-2 bg-[var(--brand)] text-[var(--brand-fg)] rounded-2xl mx-1 font-black text-[11px] uppercase tracking-widest shadow-[0_10px_30px_var(--brand-glow)] active:scale-95 transition-transform"
         >
           <ShoppingBag size={16} strokeWidth={2.5} />
           Llevar

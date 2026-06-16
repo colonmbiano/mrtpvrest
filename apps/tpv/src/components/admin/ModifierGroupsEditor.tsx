@@ -195,7 +195,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
 
             <div className="mt-3 space-y-2">
               {group.modifiers.map((modifier) => (
-                <div key={modifier.id} className="grid grid-cols-[1fr_88px_auto_auto] items-center gap-2 rounded-xl bg-[#0a0a0c] p-2">
+                <div key={modifier.id} className="grid grid-cols-[1fr_88px_auto_auto] items-center gap-2 rounded-xl bg-[var(--bg)] p-2">
                   <input
                     defaultValue={modifier.name}
                     onBlur={(e) => {
@@ -234,7 +234,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
                 placeholder="Nueva opcion"
                 value={form.name}
                 onChange={(e) => setModField(group.id, { name: e.target.value })}
-                className="rounded-xl border border-white/10 bg-[#0a0a0c] px-3 py-2 text-sm text-white outline-none"
+                className="rounded-xl border border-white/10 bg-[var(--bg)] px-3 py-2 text-sm text-white outline-none"
               />
               <input
                 type="number"
@@ -242,7 +242,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
                 placeholder="+$0"
                 value={form.priceAdd}
                 onChange={(e) => setModField(group.id, { priceAdd: e.target.value })}
-                className="rounded-xl border border-white/10 bg-[#0a0a0c] px-3 py-2 text-sm text-white outline-none"
+                className="rounded-xl border border-white/10 bg-[var(--bg)] px-3 py-2 text-sm text-white outline-none"
               />
               <button
                 type="button"
@@ -264,7 +264,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
             placeholder="Nombre del grupo"
             value={groupForm.name}
             onChange={(e) => setGroupForm((prev) => ({ ...prev, name: e.target.value }))}
-            className="w-full rounded-xl border border-white/10 bg-[#0a0a0c] px-3 py-3 text-sm font-bold text-white outline-none"
+            className="w-full rounded-xl border border-white/10 bg-[var(--bg)] px-3 py-3 text-sm font-bold text-white outline-none"
             required
           />
           <div className="mt-3 grid grid-cols-2 gap-3 text-xs font-bold text-zinc-400">
@@ -290,7 +290,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
                   min="0"
                   value={groupForm[key as keyof GroupForm] as string}
                   onChange={(e) => setGroupForm((prev) => ({ ...prev, [key]: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-[#0a0a0c] px-3 py-2 text-sm text-white outline-none"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-[var(--bg)] px-3 py-2 text-sm text-white outline-none"
                 />
               </label>
             ))}

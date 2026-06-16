@@ -6,8 +6,8 @@ import { X, Users, Clock } from "lucide-react";
  * Picker rápido para asignar seatNumber + course a un item del carrito.
  *
  * Diseño diseño operativo:
- *  - Fondo `bg-[#0C0C0E]`, glassmorphism `bg-white/5 backdrop-blur-md`.
- *  - Color activo `#ffb84d` (Ámbar Miel).
+ *  - Fondo `bg-[var(--bg)]`, glassmorphism `bg-white/5 backdrop-blur-md`.
+ *  - Color activo `var(--brand)`.
  *  - Botones táctiles `min-h-[64px]` con `active:scale-95`.
  *  - Sin hover.
  *
@@ -84,21 +84,21 @@ export default function SeatCoursePicker({
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-[460px] max-h-[88vh] flex flex-col bg-[#0C0C0E] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-[460px] max-h-[88vh] flex flex-col bg-[var(--bg)] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Glow */}
         <div
           aria-hidden
           className="absolute pointer-events-none -top-24 -right-24 w-72 h-72 rounded-full opacity-30 blur-[80px]"
           style={{
             background:
-              "radial-gradient(circle, rgba(255,184,77,0.4) 0%, transparent 70%)",
+              "radial-gradient(circle, var(--brand-glow) 0%, transparent 70%)",
           }}
         />
 
         {/* HEADER */}
         <div className="relative z-10 p-5 border-b border-white/5 bg-white/5 backdrop-blur-md flex items-center gap-4 shrink-0">
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-[#ffb84d] uppercase">
+            <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
               Asignar
             </span>
             <h3 className="text-[16px] font-black text-white truncate leading-tight">
@@ -119,7 +119,7 @@ export default function SeatCoursePicker({
           {/* SEAT */}
           <section>
             <div className="flex items-center gap-2 mb-3">
-              <Users size={14} className="text-[#ffb84d]" />
+              <Users size={14} className="text-[var(--brand)]" />
               <span className="text-[10px] font-black tracking-[0.25em] text-white/60 uppercase">
                 Asiento del comensal
               </span>
@@ -130,7 +130,7 @@ export default function SeatCoursePicker({
                 onClick={() => setSeat(null)}
                 className={`min-h-[56px] rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-transform ${
                   seat == null
-                    ? "bg-[#ffb84d] text-[#0C0C0E] border-[#ffb84d] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                    ? "bg-[var(--brand)] text-[var(--brand-fg)] border-[var(--brand)] shadow-[0_5px_20px_var(--brand-glow)]"
                     : "bg-white/5 border-white/10 text-white/60"
                 }`}
               >
@@ -143,7 +143,7 @@ export default function SeatCoursePicker({
                   onClick={() => setSeat(n)}
                   className={`min-h-[56px] rounded-2xl border tabular-nums font-black active:scale-95 transition-transform ${
                     seat === n
-                      ? "bg-[#ffb84d] text-[#0C0C0E] border-[#ffb84d] shadow-[0_5px_20px_rgba(255,184,77,0.3)] text-lg"
+                      ? "bg-[var(--brand)] text-[var(--brand-fg)] border-[var(--brand)] shadow-[0_5px_20px_var(--brand-glow)] text-lg"
                       : "bg-white/5 border-white/10 text-white text-[15px]"
                   }`}
                 >
@@ -156,7 +156,7 @@ export default function SeatCoursePicker({
           {/* COURSE */}
           <section>
             <div className="flex items-center gap-2 mb-3">
-              <Clock size={14} className="text-[#ffb84d]" />
+              <Clock size={14} className="text-[var(--brand)]" />
               <span className="text-[10px] font-black tracking-[0.25em] text-white/60 uppercase">
                 Tiempo de servicio
               </span>
@@ -167,7 +167,7 @@ export default function SeatCoursePicker({
                 onClick={() => setCrs(null)}
                 className={`min-h-[64px] rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-transform ${
                   crs == null
-                    ? "bg-[#ffb84d] text-[#0C0C0E] border-[#ffb84d] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                    ? "bg-[var(--brand)] text-[var(--brand-fg)] border-[var(--brand)] shadow-[0_5px_20px_var(--brand-glow)]"
                     : "bg-white/5 border-white/10 text-white/60"
                 }`}
               >
@@ -182,7 +182,7 @@ export default function SeatCoursePicker({
                     onClick={() => setCrs(opt.value)}
                     className={`min-h-[64px] rounded-2xl border text-[12px] font-black uppercase tracking-[0.15em] active:scale-95 transition-transform ${
                       active
-                        ? "bg-[#ffb84d] text-[#0C0C0E] border-[#ffb84d] shadow-[0_5px_20px_rgba(255,184,77,0.3)]"
+                        ? "bg-[var(--brand)] text-[var(--brand-fg)] border-[var(--brand)] shadow-[0_5px_20px_var(--brand-glow)]"
                         : "bg-white/5 border-white/10 text-white"
                     }`}
                   >
@@ -195,11 +195,11 @@ export default function SeatCoursePicker({
         </div>
 
         {/* FOOTER */}
-        <div className="relative z-10 p-4 border-t border-white/5 bg-[#0C0C0E] shrink-0">
+        <div className="relative z-10 p-4 border-t border-white/5 bg-[var(--bg)] shrink-0">
           <button
             type="button"
             onClick={handleConfirm}
-            className="w-full min-h-[64px] h-16 rounded-2xl bg-[#ffb84d] text-[#0C0C0E] font-black uppercase tracking-[0.1em] text-[12px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,184,77,0.3)]"
+            className="w-full min-h-[64px] h-16 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.1em] text-[12px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)]"
           >
             Aplicar
           </button>

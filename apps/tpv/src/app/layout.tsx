@@ -27,7 +27,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#0C0C0E",
+  themeColor: "#0E1512",
 };
 
 // Guard global contra el bug nativo de <input type="number">: con el campo
@@ -50,12 +50,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" data-theme="amber" data-mode="dark" suppressHydrationWarning>
+    <html lang="es" data-theme="green" data-mode="dark" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Syne:wght@600;700;800&family=DM+Mono:wght@400;500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=Onest:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
         <script dangerouslySetInnerHTML={{__html: NUMBER_WHEEL_GUARD_SCRIPT}} />
@@ -66,8 +66,11 @@ export default function RootLayout({
         style={{
           // Definimos los CSS vars que tailwind.config.ts referencia, ahora
           // que las fuentes vienen del <link> en lugar de next/font/google.
-          ["--font-syne" as any]: "'Syne', sans-serif",
-          ["--font-outfit" as any]: "'Outfit', system-ui, sans-serif",
+          // FRESCO: display → Schibsted Grotesk, cuerpo → Onest. Mantenemos
+          // los mismos nombres de variable (--font-syne/--font-outfit) para
+          // que font-display/font-syne/font-sans cambien sin tocar más código.
+          ["--font-syne" as any]: "'Schibsted Grotesk', system-ui, sans-serif",
+          ["--font-outfit" as any]: "'Onest', system-ui, sans-serif",
           ["--font-dm-mono" as any]: "'DM Mono', ui-monospace, monospace",
         }}
       >

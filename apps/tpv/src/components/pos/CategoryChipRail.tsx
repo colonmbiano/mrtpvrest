@@ -35,7 +35,7 @@ export default function CategoryChipRail({
               size={11}
               strokeWidth={2.5}
               fill="currentColor"
-              className="text-amber-400"
+              className="text-[var(--brand)]"
             />
             <span>Favoritos</span>
           </Chip>

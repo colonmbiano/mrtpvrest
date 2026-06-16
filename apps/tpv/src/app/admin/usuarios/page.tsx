@@ -97,13 +97,13 @@ interface Employee {
 }
 
 const ROLE_STYLE: Record<string, { bg: string; text: string }> = {
-  OWNER:    { bg: "bg-amber-500/10",   text: "text-amber-500" },
-  ADMIN:    { bg: "bg-amber-500/10",   text: "text-amber-500" },
+  OWNER:    { bg: "bg-[var(--brand-soft)]",   text: "text-[var(--brand)]" },
+  ADMIN:    { bg: "bg-[var(--brand-soft)]",   text: "text-[var(--brand)]" },
   MANAGER:  { bg: "bg-blue-500/10",    text: "text-blue-400" },
   CASHIER:  { bg: "bg-zinc-800",       text: "text-zinc-300" },
   WAITER:   { bg: "bg-emerald-500/10", text: "text-emerald-400" },
-  KITCHEN:  { bg: "bg-orange-500/10",  text: "text-orange-400" },
-  COOK:     { bg: "bg-orange-500/10",  text: "text-orange-400" },
+  KITCHEN:  { bg: "bg-[var(--brand-soft)]",  text: "text-[var(--brand)]" },
+  COOK:     { bg: "bg-[var(--brand-soft)]",  text: "text-[var(--brand)]" },
   DELIVERY: { bg: "bg-cyan-500/10",    text: "text-cyan-400" },
 };
 
@@ -242,7 +242,7 @@ function EmpleadosTab() {
 
         {loading ? (
           <div className="px-10 py-24 text-center">
-            <div className="w-10 h-10 border-4 border-[#ffb84d]/20 border-t-[#ffb84d] rounded-full animate-spin mx-auto mb-4" />
+            <div className="w-10 h-10 border-4 border-[var(--brand-soft)] border-t-[var(--brand)] rounded-full animate-spin mx-auto mb-4" />
             <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
               Sincronizando base de datos...
             </span>
@@ -374,7 +374,7 @@ function WarmToggle({
       <span
         className={`absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full transition-all ${
           active
-            ? "left-7 bg-[#0C0C0E]"
+            ? "left-7 bg-[var(--brand-fg)]"
             : "left-1 bg-white/70"
         }`}
       />
@@ -473,7 +473,7 @@ function EmployeeModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-3xl bg-[#0C0C0E] rounded-[2.5rem] border border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]"
+        className="w-full max-w-3xl bg-[var(--bg)] rounded-[2.5rem] border border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]"
       >
         {/* HEADER */}
         <div className="flex items-center justify-between p-7 sm:p-9 border-b border-white/5 bg-white/5 backdrop-blur-md shrink-0">
@@ -520,7 +520,7 @@ function EmployeeModal({
                   className="w-full h-14 min-h-[56px] px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-bold outline-none focus:border-iris-500 transition-colors appearance-none cursor-pointer"
                 >
                   {ROLES.map((r) => (
-                    <option key={r} value={r} className="bg-[#0C0C0E]">
+                    <option key={r} value={r} className="bg-[var(--bg)]">
                       {r}
                     </option>
                   ))}
@@ -676,7 +676,7 @@ function EmployeeModal({
         />
 
         {/* FOOTER */}
-        <div className="p-5 sm:p-7 border-t border-white/5 bg-[#0C0C0E] flex gap-3 shrink-0">
+        <div className="p-5 sm:p-7 border-t border-white/5 bg-[var(--bg)] flex gap-3 shrink-0">
           <button
             type="button"
             onClick={onClose}

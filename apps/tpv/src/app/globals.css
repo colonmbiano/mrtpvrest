@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   MRTPVREST · globals.css  —  reskin "FRESCO"
+   ------------------------------------------------------------
+   Acento por defecto: verde Fresco. Tipografía: Schibsted
+   Grotesk (display) + Onest (cuerpo) + DM Mono (cifras).
+   Las paletas amber/purple siguen disponibles como alternas
+   en Configuración (recoloreadas para convivir con Fresco).
+   ============================================================ */
+
 /* BUG-4: en Android+Capacitor el "300ms tap delay" hace que el primer
    click después de cerrar un modal se pierda. touch-action:manipulation
    en botones e interactivos elimina ese delay y libera el bloqueo
@@ -20,47 +29,54 @@
 }
 
 @layer base {
+  /* ─── Tema OSCURO (default) · Fresco ─── */
   :root {
-    --bg: #0C0C0E;
-    --surface-1: #131316;
-    --surface-2: #1c1c1f;
-    --surface-3: #22242a;
-    --surface-hover: #2a2c33;
-    --text-primary: #f7f8f8;
-    --text-secondary: #A1A1AA;
-    --text-muted: #8a8f98;
-    --text-disabled: #4c515a;
-    --border: #27272A;
-    --border-strong: rgba(255, 255, 255, 0.15);
+    --bg: #0E1512;
+    --surface-1: #16211C;
+    --surface-2: #111A16;
+    --surface-3: #1C2A23;
+    --surface-hover: #20302A;
+    --text-primary: #E8F0EB;
+    --text-secondary: #8DA396;
+    --text-muted: #5E7268;
+    --text-disabled: #44544B;
+    --border: #21302A;
+    --border-strong: rgba(232, 240, 235, 0.14);
     --border-focus: var(--brand);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-    --shadow-md: 0 8px 16px -4px rgba(0, 0, 0, 0.6);
-    --shadow-lg: 0 16px 32px -8px rgba(0, 0, 0, 0.8);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
+    --shadow-md: 0 8px 16px -4px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.55);
     --shadow-glow: 0 10px 40px -10px var(--brand-glow);
-    --brand: #FF8400;
-    --brand-hover: #ffa33d;
-    --brand-active: #e67700;
-    --brand-soft: rgba(255, 132, 0, 0.15);
-    --brand-glow: rgba(255, 132, 0, 0.35);
-    --brand-fg: #0a0a0c;
+
+    /* acento Fresco (verde) — oscuro */
+    --brand: #34C988;
+    --brand-hover: #2BB678;
+    --brand-active: #25A06A;
+    --brand-soft: rgba(52, 201, 136, 0.14);
+    --brand-glow: rgba(52, 201, 136, 0.30);
+    --brand-fg: #0B1410;
     --gold: var(--brand);
     --text: var(--text-primary);
-    --success: #10b981;
-    --success-soft: rgba(16, 185, 129, 0.12);
-    --warning: #f59e0b;
-    --warning-soft: rgba(245, 158, 11, 0.12);
-    --danger: #ef4444;
-    --danger-soft: rgba(239, 68, 68, 0.12);
-    --info: #3b82f6;
-    --info-soft: rgba(59, 130, 246, 0.12);
-    --radius-sm: 6px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
-    --radius-xl: 16px;
-    --radius-2xl: 24px;
+
+    --success: #34C988;
+    --success-soft: rgba(52, 201, 136, 0.14);
+    --warning: #E0A22A;
+    --warning-soft: rgba(224, 162, 42, 0.14);
+    --danger: #F2785A;
+    --danger-soft: rgba(242, 120, 90, 0.14);
+    --info: #4FA3E0;
+    --info-soft: rgba(79, 163, 224, 0.14);
+
+    --radius-sm: 11px;   /* chip / tecla */
+    --radius-md: 14px;   /* botón */
+    --radius-lg: 16px;   /* tarjeta */
+    --radius-xl: 18px;   /* contenedor */
+    --radius-2xl: 26px;  /* modal */
     --radius-full: 9999px;
-    --font-body: 'Outfit', system-ui, sans-serif;
-    --font-display: 'Outfit', system-ui, sans-serif;
+
+    /* tipografía Fresco — los <link> de layout.tsx cargan las familias */
+    --font-body: 'Onest', system-ui, sans-serif;
+    --font-display: 'Schibsted Grotesk', system-ui, sans-serif;
     --font-mono: 'DM Mono', monospace;
 
     /* Legacy aliases */
@@ -88,145 +104,189 @@
     --font-secondary: var(--font-body);
   }
 
-  [data-theme="amber"] {
-    --brand: #ffb84d;
-    --brand-hover: #ffc97a;
-    --brand-active: #e6a03e;
-    --brand-soft: rgba(255, 184, 77, 0.15);
-    --brand-glow: rgba(255, 184, 77, 0.35);
-    --brand-fg: #0a0a0c;
+  /* ─── Tema CLARO · Fresco ─── */
+  [data-mode="light"] {
+    --bg: #EEF2F0;
+    --surface-1: #FFFFFF;
+    --surface-2: #F6F9F7;
+    --surface-3: #E7EDEA;
+    --surface-hover: #DFE6E2;
+    --text-primary: #15201B;
+    --text-secondary: #5C6B62;
+    --text-muted: #93A399;
+    --text-disabled: #B6C2BB;
+    --border: #E1E8E4;
+    --border-strong: #CBD6D0;
+    --shadow-sm: 0 1px 2px rgba(20, 40, 30, 0.05);
+    --shadow-md: 0 8px 16px -4px rgba(30, 50, 40, 0.10);
+    --shadow-lg: 0 24px 60px -12px rgba(30, 50, 40, 0.14);
+
+    /* acento Fresco (verde) — claro */
+    --brand: #1F9D63;
+    --brand-hover: #178354;
+    --brand-active: #0F6E45;
+    --brand-soft: rgba(31, 157, 99, 0.12);
+    --brand-glow: rgba(31, 157, 99, 0.28);
+    --brand-fg: #FFFFFF;
+
+    --success: #1F9D63;
+    --success-soft: rgba(31, 157, 99, 0.12);
+    --warning: #B9852A;
+    --warning-soft: rgba(185, 133, 42, 0.12);
+    --danger: #C0512F;
+    --danger-soft: rgba(192, 81, 47, 0.10);
+    --info: #2E83C9;
+    --info-soft: rgba(46, 131, 201, 0.10);
   }
 
-  [data-mode="light"] {
-    --bg: #f7f8f8;
-    --surface-1: #ffffff;
-    --surface-2: #eff1f2;
-    --surface-3: #e6e9eb;
-    --surface-hover: #dee1e3;
-    --text-primary: #08090a;
-    --text-secondary: #4c515a;
-    --text-muted: #8a8f98;
-    --text-disabled: #b1b8c9;
-    --border: rgba(0, 0, 0, 0.08);
-    --border-strong: rgba(0, 0, 0, 0.15);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 8px 16px -4px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 16px 32px -8px rgba(0, 0, 0, 0.15);
+  /* ─── Paletas alternas (Configuración) ───
+     'green' = Fresco (igual al default). amber / purple quedan como
+     opciones; recoloreadas para convivir con las superficies Fresco. */
+  [data-theme="green"] {
+    --brand: #34C988;
+    --brand-hover: #2BB678;
+    --brand-active: #25A06A;
+    --brand-soft: rgba(52, 201, 136, 0.14);
+    --brand-glow: rgba(52, 201, 136, 0.30);
+    --brand-fg: #0B1410;
+  }
+  [data-mode="light"][data-theme="green"] {
+    --brand: #1F9D63;
+    --brand-hover: #178354;
+    --brand-active: #0F6E45;
+    --brand-soft: rgba(31, 157, 99, 0.12);
+    --brand-fg: #FFFFFF;
+  }
+
+  [data-theme="amber"] {
+    --brand: #E0A22A;
+    --brand-hover: #C98E1F;
+    --brand-active: #B07C18;
+    --brand-soft: rgba(224, 162, 42, 0.14);
+    --brand-glow: rgba(224, 162, 42, 0.30);
+    --brand-fg: #1A1408;
+  }
+  [data-mode="light"][data-theme="amber"] {
+    --brand: #B9852A;
+    --brand-fg: #FFFFFF;
+  }
+
+  [data-theme="purple"] {
+    --brand: #9472FF;
+    --brand-hover: #8460F5;
+    --brand-active: #7250E6;
+    --brand-soft: rgba(148, 114, 255, 0.16);
+    --brand-glow: rgba(148, 114, 255, 0.32);
+    --brand-fg: #0B0814;
+  }
+  [data-mode="light"][data-theme="purple"] {
+    --brand: #6D4FD6;
+    --brand-fg: #FFFFFF;
   }
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * MODO CLARO — overrides de utilidades hardcodeadas
- * El POS tiene muchas clases tipo bg-[#0a0a0c] / text-white / border-white/5
- * pegadas en JSX. Cuando el cajero activa el modo claro, esas clases ganan
- * por especificidad sobre las CSS vars y dejan zonas oscuras sueltas. Estos
- * overrides con !important fuerzan la inversión consistente.
+ * MODO CLARO — overrides de utilidades hardcodeadas (red de seguridad)
  *
- * Fuera de @layer base para que !important pegue por encima de utilities.
+ * El POS aún tiene clases con hex fijos (`bg-[#0a0a0c]`, `text-white`,
+ * `border-white/10`, stones…) que ganan por especificidad sobre los tokens.
+ * Estas reglas con !important las invierten en modo claro apuntando a los
+ * tokens Fresco (var(--bg) / var(--surface-*) / var(--text-*) / var(--border)),
+ * así que siguen automáticamente la paleta.
+ *
+ * NOTA: a medida que se migran los hex a tokens, estas reglas se vuelven
+ * inertes. Son removibles cuando `grep -E '#0a0a0c|#0c0c0e|#121316|bg-zinc|
+ * bg-stone|text-white'` dé ~0 en src/. Fuera de @layer base para que el
+ * !important pegue por encima de utilities.
  * ──────────────────────────────────────────────────────────────────────── */
 [data-mode="light"] .bg-\[\#0a0a0c\],
 [data-mode="light"] .bg-\[\#0C0C0E\],
-[data-mode="light"] .bg-\[\#0c0c0e\] {
+[data-mode="light"] .bg-\[\#0c0c0e\],
+[data-mode="light"] .bg-black,
+[data-mode="light"] .bg-zinc-900,
+[data-mode="light"] .bg-zinc-950,
+[data-mode="light"] .bg-stone-900 {
   background-color: var(--bg) !important;
 }
 
 [data-mode="light"] .bg-\[\#121316\],
 [data-mode="light"] .bg-\[\#131316\],
 [data-mode="light"] .bg-\[\#1a1b1f\],
-[data-mode="light"] .bg-\[\#1c1c1f\] {
+[data-mode="light"] .bg-\[\#1c1c1f\],
+[data-mode="light"] .bg-zinc-800,
+[data-mode="light"] .bg-stone-800,
+[data-mode="light"] .hover\:bg-stone-800:hover {
   background-color: var(--surface-1) !important;
 }
 
 [data-mode="light"] .bg-\[\#22242a\],
-[data-mode="light"] .bg-\[\#2a2c33\] {
+[data-mode="light"] .bg-\[\#2a2c33\],
+[data-mode="light"] .bg-zinc-700,
+[data-mode="light"] .bg-stone-700,
+[data-mode="light"] .active\:bg-stone-700:active {
   background-color: var(--surface-2) !important;
 }
 
-/* BUG-19: extender los overrides a las clases Tailwind oscuras puras
- * (bg-zinc-900 / bg-black) que el equipo confesó como deuda. Estaban
- * sueltas en sidebar de Configuración + varios modales y dejaban zonas
- * oscuras al cambiar a modo claro. Mantener la inversión consistente
- * sin tener que reemplazar 20+ archivos de golpe. */
-[data-mode="light"] .bg-black,
-[data-mode="light"] .bg-zinc-900,
-[data-mode="light"] .bg-zinc-950 {
-  background-color: var(--bg) !important;
-}
-[data-mode="light"] .bg-zinc-800 {
-  background-color: var(--surface-1) !important;
-}
-[data-mode="light"] .bg-zinc-700 {
-  background-color: var(--surface-2) !important;
-}
+/* Overlays con opacidad — backdrops de modales: invertimos pero conservamos
+   algo de oscurecido para que el modal flote. */
+[data-mode="light"] .bg-\[\#0a0a0c\]\/80 { background-color: rgba(20, 22, 26, 0.45) !important; }
+[data-mode="light"] .bg-\[\#0a0a0c\]\/85 { background-color: rgba(20, 22, 26, 0.50) !important; }
+[data-mode="light"] .bg-black\/80        { background-color: rgba(255, 255, 255, 0.85) !important; }
+[data-mode="light"] .bg-black\/20        { background-color: rgba(0, 0, 0, 0.06) !important; }
+[data-mode="light"] .bg-white\/5         { background-color: rgba(0, 0, 0, 0.04) !important; }
+[data-mode="light"] .bg-white\/10        { background-color: rgba(0, 0, 0, 0.08) !important; }
 
+/* Texto blanco / zinc / stone — el cuerpo de copy del POS asume fondo oscuro. */
 [data-mode="light"] .text-white,
 [data-mode="light"] .text-zinc-100,
-[data-mode="light"] .text-zinc-200 {
-  color: var(--text-primary) !important;
-}
-
+[data-mode="light"] .text-zinc-200,
+[data-mode="light"] .text-stone-200 { color: var(--text-primary) !important; }
+[data-mode="light"] .text-white\/85 { color: rgba(21, 32, 27, 0.85) !important; }
+[data-mode="light"] .text-white\/55 { color: rgba(21, 32, 27, 0.55) !important; }
+[data-mode="light"] .text-white\/40 { color: rgba(21, 32, 27, 0.40) !important; }
+[data-mode="light"] .text-white\/30 { color: rgba(21, 32, 27, 0.30) !important; }
 [data-mode="light"] .text-zinc-300,
-[data-mode="light"] .text-zinc-400 {
-  color: var(--text-secondary) !important;
-}
-
+[data-mode="light"] .text-zinc-400 { color: var(--text-secondary) !important; }
 [data-mode="light"] .text-zinc-500,
 [data-mode="light"] .text-zinc-600,
-[data-mode="light"] .text-zinc-700 {
-  color: var(--text-muted) !important;
-}
+[data-mode="light"] .text-zinc-700,
+[data-mode="light"] .text-stone-500,
+[data-mode="light"] .text-stone-600 { color: var(--text-muted) !important; }
 
+/* Bordes blancos translúcidos — invertir a los tokens de borde. */
 [data-mode="light"] .border-white\/5,
 [data-mode="light"] .border-white\/10,
-[data-mode="light"] .border-white\/20 {
-  border-color: var(--border) !important;
-}
+[data-mode="light"] .border-white\/20 { border-color: var(--border) !important; }
 
-/* El acento (--brand) NO se atenúa en modo claro — sigue siendo el mismo
- * amber/cian/lima vibrante. Esto preserva la identidad de marca y la
- * legibilidad de CTAs primarios sobre fondos blancos.
- *
- * Si más adelante se quieren tintes específicos por paleta en modo claro
- * (ej. amber más oscuro para mejor contraste sobre blanco), añadir reglas
- * combinadas [data-mode="light"][data-theme="amber"] acá.
- */
+/* El acento (--brand) NO se atenúa en modo claro: ya tiene su propio tinte
+   Fresco por [data-mode="light"]. Esto preserva CTAs legibles sobre blanco. */
 
 @layer base {
+  * { box-sizing: border-box; }
 
-  [data-theme="green"] {
-    --brand: #10b981;
-    --brand-hover: #059669;
-    --brand-active: #047857;
-    --brand-soft: rgba(16, 185, 129, 0.12);
-    --brand-glow: rgba(16, 185, 129, 0.35);
-    --brand-fg: #ffffff;
+  html, body {
+    height: 100%;
+    height: 100dvh;
   }
 
-  [data-theme="purple"] {
-    --brand: #5e6ad2;
-    --brand-hover: #7170ff;
-    --brand-active: #535fc0;
-    --brand-soft: rgba(94, 106, 210, 0.15);
-    --brand-glow: rgba(94, 106, 210, 0.35);
-    --brand-fg: #ffffff;
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.25s ease, color 0.25s ease;
+    overflow: hidden;
   }
 
-}
+  html, body {
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
 
-* { box-sizing: border-box; }
-
-html, body {
-  height: 100%;
-  height: 100dvh;
-}
-
-body {
-  background: var(--bg);
-  color: var(--text-primary);
-  font-family: var(--font-body);
-  -webkit-font-smoothing: antialiased;
-  transition: background-color 0.25s ease, color 0.25s ease;
-  overflow: hidden;
+  button, .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+  }
 }
 
 .scrollbar-hide {
@@ -250,19 +310,9 @@ body {
   overscroll-behavior-x: contain;
 }
 
-button, .no-select {
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-html, body {
-  overscroll-behavior: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
 .pos-shadow { box-shadow: var(--shadow-glow); }
 
-/* Utilities usadas por las pantallas de setup (LoginStep/LocationStep/DeviceStep) */
+/* Utility usada por las pantallas de setup (LoginStep/LocationStep/DeviceStep) */
 .rounded-m { border-radius: var(--radius-lg); }
 
 /* Glassmorphism container (usado en /locked, /hub y otros). */
@@ -272,23 +322,21 @@ html, body {
   -webkit-backdrop-filter: blur(12px) saturate(140%);
 }
 
-.glow-orange {
+/* Halos de fondo — ambos siguen el acento Fresco. .glow-orange se conserva
+   por compatibilidad de clase (usado en /setup), recoloreado a brand. */
+.glow-orange,
+.glow-green,
+.glow-brand {
   border-radius: 9999px;
-  background: radial-gradient(circle, rgba(255,132,0,0.18) 0%, transparent 70%);
+  background: radial-gradient(circle, var(--brand-glow) 0%, transparent 70%);
   filter: blur(40px);
-  opacity: 0.55;
-}
-
-.glow-green {
-  border-radius: 9999px;
-  background: radial-gradient(circle, rgba(136,214,108,0.14) 0%, transparent 70%);
-  filter: blur(40px);
-  opacity: 0.45;
+  opacity: 0.5;
 }
 
 @layer utilities {
   .eyebrow {
-    @apply text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500 leading-none;
+    @apply text-[11px] font-semibold uppercase tracking-[0.12em] leading-none;
+    color: var(--text-muted);
   }
   .mono {
     @apply font-mono;
@@ -298,84 +346,30 @@ html, body {
     font-variant-numeric: tabular-nums;
   }
   .input-admin {
-    @apply w-full rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 py-3 text-sm text-white outline-none transition-colors focus:border-amber-500/60;
+    @apply w-full rounded-2xl border px-4 py-3 text-sm outline-none transition-colors;
+    background-color: var(--bg);
+    border-color: var(--border);
+    color: var(--text-primary);
+  }
+  .input-admin:focus {
+    border-color: var(--brand);
   }
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   Light mode overrides para clases con hex hardcoded.
-
-   Muchos componentes del POS (SidebarTicket, ConfigMenu, PaymentModal,
-   shift/open, etc.) usan colores fijos `bg-[#0a0a0c]`, `bg-[#121316]`,
-   `text-white`, `text-zinc-500`... que no respetan los tokens CSS y por
-   tanto se quedan oscuros al cambiar a `data-mode="light"`. Migrar
-   archivo por archivo a `bg-surf-0` / `text-tx-pri` es muchísimo
-   refactor; en su lugar mapeamos las clases concretas a su contraparte
-   clara con `!important` solo cuando el body tiene `data-mode="light"`.
-
-   Esto es un parche pragmático — no la solución definitiva (los hex
-   hardcoded deberían migrarse a tokens en otra pasada). Pero deja el
-   modo claro USABLE en el flujo de cobro hoy mismo.
-   ───────────────────────────────────────────────────────────────────────── */
-[data-mode="light"] .bg-\[\#0a0a0c\] { background-color: #f7f8f8 !important; }
-[data-mode="light"] .bg-\[\#0C0C0E\] { background-color: #f7f8f8 !important; }
-[data-mode="light"] .bg-\[\#121316\] { background-color: #ffffff !important; }
-[data-mode="light"] .bg-\[\#1a1b1f\] { background-color: #eff1f2 !important; }
-[data-mode="light"] .bg-\[\#22242a\] { background-color: #e6e9eb !important; }
-
-/* Overlays con opacidad — se usan en backdrops de modales. Invertimos
-   pero conservamos algo de oscurecido para que el modal flote. */
-[data-mode="light"] .bg-\[\#0a0a0c\]\/80  { background-color: rgba(20,22,26,0.45) !important; }
-[data-mode="light"] .bg-\[\#0a0a0c\]\/85  { background-color: rgba(20,22,26,0.50) !important; }
-
-/* Texto blanco / zinc — el cuerpo de copy en el POS asume fondo oscuro. */
-[data-mode="light"] .text-white       { color: #08090a !important; }
-[data-mode="light"] .text-white\/85   { color: rgba(8,9,10,0.85) !important; }
-[data-mode="light"] .text-white\/55   { color: rgba(8,9,10,0.55) !important; }
-[data-mode="light"] .text-white\/40   { color: rgba(8,9,10,0.40) !important; }
-[data-mode="light"] .text-white\/30   { color: rgba(8,9,10,0.30) !important; }
-[data-mode="light"] .text-zinc-200    { color: #1f2024 !important; }
-[data-mode="light"] .text-zinc-300    { color: #2c2e34 !important; }
-[data-mode="light"] .text-zinc-400    { color: #4c515a !important; }
-[data-mode="light"] .text-zinc-500    { color: #6b7280 !important; }
-[data-mode="light"] .text-zinc-600    { color: #8a8f98 !important; }
-[data-mode="light"] .text-zinc-700    { color: #b1b8c9 !important; }
-[data-mode="light"] .text-stone-200   { color: #1f2024 !important; }
-[data-mode="light"] .text-stone-500   { color: #6b7280 !important; }
-[data-mode="light"] .text-stone-600   { color: #8a8f98 !important; }
-
-/* Stones del CategoryGrid drill-down. */
-[data-mode="light"] .bg-stone-900     { background-color: #ffffff !important; }
-[data-mode="light"] .hover\:bg-stone-800:hover { background-color: #eff1f2 !important; }
-[data-mode="light"] .active\:bg-stone-700:active { background-color: #e6e9eb !important; }
-[data-mode="light"] .bg-stone-800     { background-color: #eff1f2 !important; }
-[data-mode="light"] .bg-stone-700     { background-color: #e6e9eb !important; }
-
-/* Bordes blancos translúcidos — invertir a negros translúcidos. */
-[data-mode="light"] .border-white\/5  { border-color: rgba(0,0,0,0.06) !important; }
-[data-mode="light"] .border-white\/10 { border-color: rgba(0,0,0,0.10) !important; }
-[data-mode="light"] .border-white\/20 { border-color: rgba(0,0,0,0.18) !important; }
-
-/* Surfaces translúcidas tipo glassmorphism — invertir base. */
-[data-mode="light"] .bg-white\/5      { background-color: rgba(0,0,0,0.04) !important; }
-[data-mode="light"] .bg-white\/10     { background-color: rgba(0,0,0,0.08) !important; }
-[data-mode="light"] .bg-black\/80     { background-color: rgba(255,255,255,0.85) !important; }
-[data-mode="light"] .bg-black\/20     { background-color: rgba(0,0,0,0.06) !important; }
-
-/* Barra inferior tabs estación KDS y similares con fondo oscuro fijo
-   no se tocan: KDS app NO cambia de modo (siempre dark, alto contraste
-   para cocina). Esto solo aplica al TPV. */
-
+/* ────────────────────────────────────────────────────────────
+   FRESCO · pesos más suaves (humanización global)
+   El rediseño usa 600 como peso máximo en la mayoría de la UI.
+   Esto baja los font-black/extrabold sueltos en JSX sin tocar
+   decenas de archivos, y suaviza los bordes 2px → 1px.
+   ──────────────────────────────────────────────────────────── */
+.font-black { font-weight: 700 !important; }
+.font-extrabold { font-weight: 600 !important; }
+.border-2 { border-width: 1px !important; }
 
 /* ────────────────────────────────────────────────────────────────────
    A7 · Touch targets — Material Design 3 / Android Guidelines.
-   Mínimo 44×44 CSS px (≈8mm físicos) para todo control accionable
-   en plataforma táctil. Ayuda al cajero a no fallar taps en chips
-   pequeños, ✕ de modales, controles ± de cantidad, etc.
-
-   Aplicamos solo cuando @media (pointer: coarse) está activo, lo cual
-   detecta Android/iOS/tablet sin afectar mouse en escritorio (donde
-   un botón de 28px sí se puede clickear con precisión).
+   Mínimo 44×44 CSS px para todo control accionable en táctil.
+   Solo bajo @media (pointer: coarse) para no afectar mouse en escritorio.
    ──────────────────────────────────────────────────────────────────── */
 @media (pointer: coarse) {
   button:not(:disabled),
@@ -386,11 +380,9 @@ html, body {
     min-height: 44px;
     min-width: 44px;
   }
-  /* Inputs de texto/numéricos también en 44px para el teclado virtual. */
   input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
   select,
   textarea {
     min-height: 44px;
   }
 }
-

@@ -383,7 +383,7 @@ export default function WhatsappCapturePage() {
       <div
         aria-hidden
         className="pointer-events-none fixed -top-40 -right-40 h-[560px] w-[560px] rounded-full opacity-30 blur-[120px]"
-        style={{ background: "radial-gradient(circle, var(--brand-glow, rgba(255,184,77,0.5)) 0%, transparent 70%)" }}
+        style={{ background: "radial-gradient(circle, var(--brand-glow) 0%, transparent 70%)" }}
       />
 
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-7">
@@ -417,11 +417,11 @@ export default function WhatsappCapturePage() {
 
         {/* Éxito */}
         {createdOrder && (
-          <div className="mb-5 flex items-center justify-between gap-3 rounded-3xl border p-4" style={{ borderColor: "rgba(136,214,108,0.35)", background: "rgba(136,214,108,0.10)" }}>
+          <div className="mb-5 flex items-center justify-between gap-3 rounded-3xl border p-4" style={{ borderColor: "var(--success)", background: "var(--success-soft)" }}>
             <div className="flex items-center gap-3">
-              <CheckCircle2 size={22} className="text-[#88D66C]" />
+              <CheckCircle2 size={22} className="text-[var(--success)]" />
               <div>
-                <p className="text-sm font-black text-[#88D66C]">Pedido creado · {createdOrder.number}</p>
+                <p className="text-sm font-black text-[var(--success)]">Pedido creado · {createdOrder.number}</p>
                 <p className="text-xs font-semibold text-white/55">
                   Total {money(createdOrder.total)} · cayó en Pedidos Web (PENDING) — acéptalo en el TPV para mandar a cocina.
                 </p>
@@ -461,7 +461,7 @@ export default function WhatsappCapturePage() {
                 onClick={handleParse}
                 disabled={!rawText.trim() || products.length === 0}
                 className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-black uppercase tracking-wide transition active:scale-[0.98] disabled:opacity-40"
-                style={{ background: "var(--brand)", color: "var(--brand-fg, #0C0C0E)" }}
+                style={{ background: "var(--brand)", color: "var(--brand-fg)" }}
               >
                 <Sparkles size={16} /> Detectar pedido
               </button>
@@ -486,7 +486,7 @@ export default function WhatsappCapturePage() {
                       className="flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-[11px] font-black uppercase tracking-wide transition active:scale-95"
                       style={
                         active
-                          ? { background: "var(--brand)", color: "var(--brand-fg, #0C0C0E)", borderColor: "var(--brand)" }
+                          ? { background: "var(--brand)", color: "var(--brand-fg)", borderColor: "var(--brand)" }
                           : { background: "transparent", color: "rgba(255,255,255,0.6)", borderColor: "var(--border)" }
                       }
                     >
@@ -520,7 +520,7 @@ export default function WhatsappCapturePage() {
                     rows={2}
                     placeholder="Dirección de entrega (requerida)"
                     className="w-full resize-y rounded-2xl border bg-black/30 px-3 py-2.5 text-sm font-medium text-white outline-none placeholder:text-white/25 focus:border-[var(--brand)]"
-                    style={{ borderColor: deliveryAddress.trim() ? "var(--border)" : "rgba(248,113,113,0.5)" }}
+                    style={{ borderColor: deliveryAddress.trim() ? "var(--border)" : "var(--danger)" }}
                   />
                 )}
               </div>
@@ -572,7 +572,7 @@ export default function WhatsappCapturePage() {
 
             {/* Resumen + crear */}
             {lines.length > 0 && (
-              <div className="sticky bottom-3 rounded-3xl border bg-[#131316]/95 p-4 backdrop-blur-md" style={{ borderColor: "var(--border)" }}>
+              <div className="sticky bottom-3 rounded-3xl border bg-[var(--surface-1)] p-4 backdrop-blur-md" style={{ borderColor: "var(--border)" }}>
                 <div className="mb-3 flex items-end justify-between">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Total estimado</p>
@@ -584,12 +584,12 @@ export default function WhatsappCapturePage() {
                 </div>
 
                 {firstValidationError && (
-                  <p className="mb-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs font-bold text-amber-200">
+                  <p className="mb-2 rounded-xl border border-[var(--warning)] bg-[var(--warning-soft)] px-3 py-2 text-xs font-bold text-[var(--warning)]">
                     {firstValidationError}
                   </p>
                 )}
                 {error && (
-                  <p className="mb-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300">{error}</p>
+                  <p className="mb-2 rounded-xl border border-[var(--danger)] bg-[var(--danger-soft)] px-3 py-2 text-xs font-bold text-[var(--danger)]">{error}</p>
                 )}
 
                 <button
@@ -597,7 +597,7 @@ export default function WhatsappCapturePage() {
                   onClick={createOrder}
                   disabled={!canSubmit}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-sm font-black uppercase tracking-wide transition active:scale-[0.98] disabled:opacity-40"
-                  style={{ background: "var(--brand)", color: "var(--brand-fg, #0C0C0E)" }}
+                  style={{ background: "var(--brand)", color: "var(--brand-fg)" }}
                 >
                   {submitting ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                   {submitting ? "Creando…" : "Crear pedido"}
@@ -669,7 +669,7 @@ function LineCard({
   return (
     <div
       className="rounded-3xl border bg-white/[0.04] p-3.5"
-      style={{ borderColor: validationError ? "rgba(251,191,36,0.4)" : "var(--border)" }}
+      style={{ borderColor: validationError ? "var(--warning)" : "var(--border)" }}
     >
       <div className="flex items-start gap-3">
         {/* Cantidad */}
@@ -689,13 +689,13 @@ function LineCard({
             type="button"
             onClick={onOpenPicker}
             className="flex w-full items-center justify-between gap-2 rounded-2xl border bg-black/20 px-3 py-2.5 text-left active:scale-[0.99]"
-            style={{ borderColor: p ? "var(--border)" : "rgba(251,191,36,0.45)" }}
+            style={{ borderColor: p ? "var(--border)" : "var(--warning)" }}
           >
             <span className="min-w-0">
               {p ? (
                 <span className="block truncate text-sm font-black text-white">{p.name}</span>
               ) : (
-                <span className="block truncate text-sm font-bold text-amber-200">
+                <span className="block truncate text-sm font-bold text-[var(--warning)]">
                   {line.productQuery ? `¿"${line.productQuery}"?` : "Elegir producto"}
                 </span>
               )}
@@ -706,7 +706,7 @@ function LineCard({
 
           {/* Picker */}
           {pickerOpen && (
-            <div className="mt-2 rounded-2xl border bg-[#16161a] p-2" style={{ borderColor: "var(--border)" }}>
+            <div className="mt-2 rounded-2xl border bg-[var(--surface-2)] p-2" style={{ borderColor: "var(--border)" }}>
               <input
                 ref={inputRef}
                 value={query}
@@ -743,7 +743,7 @@ function LineCard({
                     type="button"
                     onClick={() => onVariant(active ? null : v.id)}
                     className="rounded-full border px-3 py-1.5 text-[11px] font-bold transition active:scale-95"
-                    style={active ? { background: "var(--brand)", color: "var(--brand-fg, #0C0C0E)", borderColor: "var(--brand)" } : { borderColor: "var(--border)", color: "rgba(255,255,255,0.7)" }}
+                    style={active ? { background: "var(--brand)", color: "var(--brand-fg)", borderColor: "var(--brand)" } : { borderColor: "var(--border)", color: "rgba(255,255,255,0.7)" }}
                   >
                     {v.name}{Number(v.price) ? ` · ${money(Number(v.price))}` : ""}
                   </button>
@@ -767,7 +767,7 @@ function LineCard({
                       type="button"
                       onClick={() => onToggleMod(g, m)}
                       className="rounded-full border px-3 py-1.5 text-[11px] font-bold transition active:scale-95"
-                      style={active ? { background: "var(--brand)", color: "var(--brand-fg, #0C0C0E)", borderColor: "var(--brand)" } : { borderColor: "var(--border)", color: "rgba(255,255,255,0.7)" }}
+                      style={active ? { background: "var(--brand)", color: "var(--brand-fg)", borderColor: "var(--brand)" } : { borderColor: "var(--border)", color: "rgba(255,255,255,0.7)" }}
                     >
                       {m.name}{Number(m.priceAdd) ? ` · ${money(Number(m.priceAdd))}` : ""}
                     </button>
@@ -786,7 +786,7 @@ function LineCard({
             style={{ borderColor: "var(--border)" }}
           />
 
-          {validationError && <p className="mt-1.5 text-[11px] font-bold text-amber-300">{validationError}</p>}
+          {validationError && <p className="mt-1.5 text-[11px] font-bold text-[var(--warning)]">{validationError}</p>}
         </div>
 
         {/* Eliminar */}

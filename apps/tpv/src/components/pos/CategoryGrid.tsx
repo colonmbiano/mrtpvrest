@@ -46,16 +46,16 @@ export default function CategoryGrid({
           type="button"
           onClick={onPickFavorites}
           aria-label={`Ver ${favoritesCount} platillos favoritos`}
-          className="group flex flex-col items-start gap-1 px-3 py-3 min-h-[88px] rounded-2xl bg-amber-500/10 active:bg-amber-500/20 active:scale-[0.98] transition-all duration-100 border border-amber-500/40 focus-visible:ring-2 focus-visible:ring-amber-500 outline-none text-left"
+          className="group flex flex-col items-start gap-1 px-3 py-3 min-h-[88px] rounded-2xl bg-[var(--brand-soft)] active:bg-[var(--brand-soft)] active:scale-[0.98] transition-all duration-100 border border-[var(--brand)] focus-visible:ring-2 focus-visible:ring-[var(--brand)] outline-none text-left"
         >
-          <div className="flex items-center gap-1.5 text-amber-400">
+          <div className="flex items-center gap-1.5 text-[var(--brand)]">
             <Star size={14} strokeWidth={2.5} fill="currentColor" />
             <span className="text-[9px] font-bold uppercase tracking-[0.15em]">Top</span>
           </div>
-          <span className="text-[11px] font-black uppercase tracking-[0.05em] text-amber-100 leading-tight line-clamp-2">
+          <span className="text-[11px] font-black uppercase tracking-[0.05em] text-[var(--brand)] leading-tight line-clamp-2">
             Favoritos
           </span>
-          <span className="text-[9px] font-bold text-amber-400/80 mt-auto">
+          <span className="text-[9px] font-bold text-[var(--brand)] mt-auto">
             {favoritesCount} platillo{favoritesCount !== 1 ? "s" : ""}
           </span>
         </button>
@@ -69,9 +69,9 @@ export default function CategoryGrid({
             type="button"
             onClick={() => onSelect(cat.id)}
             aria-label={`Ver productos de ${formatDisplayName(cat.name)}`}
-            className="group flex flex-col items-start gap-1 px-3 py-3 min-h-[88px] rounded-2xl bg-[#121316] active:bg-[#1a1b1e] active:scale-95 transition-all duration-150 border border-white/5 focus-visible:ring-2 focus-visible:ring-amber-500 outline-none text-left shadow-md"
+            className="group flex flex-col items-start gap-1 px-3 py-3 min-h-[88px] rounded-2xl bg-[var(--surface-1)] active:bg-[var(--surface-2)] active:scale-95 transition-all duration-150 border border-white/5 focus-visible:ring-2 focus-visible:ring-[var(--brand)] outline-none text-left shadow-md"
           >
-            <ChefHat size={12} className="text-zinc-500 group-active:text-amber-500 transition-colors" />
+            <ChefHat size={12} className="text-zinc-500 group-active:text-[var(--brand)] transition-colors" />
             <span className="text-[11px] font-black uppercase tracking-[0.05em] text-tx-pri leading-tight line-clamp-2">
               {formatDisplayName(cat.name)}
             </span>

@@ -56,9 +56,9 @@ export default function SeatTabs() {
             onClick={() => updateTicket({ activeSeat: n })}
             className="inline-flex items-center gap-2 px-4 h-11 rounded-2xl text-sm font-black tracking-tight active:scale-95 transition-transform flex-shrink-0"
             style={{
-              background: isActive ? "#ffb84d" : "rgba(255,255,255,0.05)",
-              color:      isActive ? "#0a0a0c" : "rgba(255,255,255,0.85)",
-              border:     `1px solid ${isActive ? "#ffb84d" : "rgba(255,255,255,0.10)"}`,
+              background: isActive ? "var(--brand)" : "rgba(255,255,255,0.05)",
+              color:      isActive ? "var(--brand-fg)" : "rgba(255,255,255,0.85)",
+              border:     `1px solid ${isActive ? "var(--brand)" : "rgba(255,255,255,0.10)"}`,
             }}
           >
             <span>{n}</span>
@@ -66,8 +66,8 @@ export default function SeatTabs() {
               <span
                 className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-black"
                 style={{
-                  background: isActive ? "rgba(10,10,12,0.20)" : "rgba(255,184,77,0.20)",
-                  color:      isActive ? "#0a0a0c" : "#ffb84d",
+                  background: isActive ? "rgba(10,10,12,0.20)" : "var(--brand-soft)",
+                  color:      isActive ? "var(--brand-fg)" : "var(--brand)",
                 }}
               >
                 {units}

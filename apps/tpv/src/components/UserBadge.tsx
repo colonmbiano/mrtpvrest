@@ -28,7 +28,7 @@ export default function UserBadge({ expanded = true, className = "" }: UserBadge
       className={`inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-md px-2 py-1.5 rounded-full ${className}`}
     >
       <div
-        className="w-7 h-7 rounded-full bg-[#ffb84d] text-[#0a0a0c] text-[11px] flex items-center justify-center font-black shrink-0"
+        className="w-7 h-7 rounded-full bg-[var(--brand)] text-[var(--brand-fg)] text-[11px] flex items-center justify-center font-black shrink-0"
         aria-hidden
       >
         {initial}
@@ -38,7 +38,7 @@ export default function UserBadge({ expanded = true, className = "" }: UserBadge
           <span className="text-[11px] font-black text-white truncate max-w-[160px]">
             {employee.name}
           </span>
-          <span className="text-[9px] font-black tracking-[0.2em] text-amber-500/80 uppercase">
+          <span className="text-[9px] font-black tracking-[0.2em] text-[var(--brand)] uppercase">
             {employee.role}
           </span>
         </div>

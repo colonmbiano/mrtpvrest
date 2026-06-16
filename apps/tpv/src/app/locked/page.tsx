@@ -115,7 +115,7 @@ export default function LockedPage() {
 
   return (
     <div
-      className="relative h-[100dvh] w-full overflow-hidden bg-[#0C0C0E]"
+      className="relative h-[100dvh] w-full overflow-hidden bg-[var(--bg)]"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       <div
@@ -123,12 +123,12 @@ export default function LockedPage() {
         className="pointer-events-none absolute inset-0 opacity-70"
         style={{
           background:
-            "linear-gradient(135deg, rgba(255,184,77,0.12), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.04), transparent 42%)",
+            "linear-gradient(135deg, var(--brand-glow), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.04), transparent 42%)",
         }}
       />
 
       <div className="fixed left-[max(0.75rem,env(safe-area-inset-left))] top-[max(0.75rem,env(safe-area-inset-top))] z-20 hidden items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md sm:flex">
-        <MapPin size={15} className="text-[#ffb84d]" strokeWidth={2.5} />
+        <MapPin size={15} className="text-[var(--brand)]" strokeWidth={2.5} />
         <span className="max-w-[220px] truncate text-[11px] font-black uppercase tracking-[0.18em] text-white/55">
           {locationName}
         </span>
@@ -149,7 +149,7 @@ export default function LockedPage() {
           {isOnline ? "Online" : "Offline"}
         </span>
         <span className="text-white/20">|</span>
-        <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.2em] text-[#ffb84d]">
+        <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--brand)]">
           {terminalKind}
         </span>
         <span className="min-w-0 truncate text-[11px] font-black text-white">
@@ -185,11 +185,11 @@ export default function LockedPage() {
           </div>
 
           <div className="relative z-10">
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-[#ffb84d]/25 bg-[#ffb84d]/10 text-[#ffb84d] sm:mb-4 sm:h-11 sm:w-11">
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)] sm:mb-4 sm:h-11 sm:w-11">
               <LockKeyhole size={24} strokeWidth={2.5} />
             </div>
 
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#ffb84d]">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--brand)]">
               Acceso de empleado
             </p>
             <h1 className="mt-1 text-[clamp(1.5rem,4.5vw,3rem)] font-black leading-[0.95] tracking-tight text-white sm:mt-2">
@@ -232,8 +232,8 @@ export default function LockedPage() {
                 <div
                   className="h-6 w-6 animate-spin rounded-full border-4"
                   style={{
-                    borderColor: "rgba(255,184,77,0.2)",
-                    borderTopColor: "#ffb84d",
+                    borderColor: "var(--brand-soft)",
+                    borderTopColor: "var(--brand)",
                   }}
                 />
                 <p className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-white/45">

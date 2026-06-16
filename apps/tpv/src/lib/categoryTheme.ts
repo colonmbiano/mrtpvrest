@@ -28,7 +28,7 @@ const TONES: Record<CategoryToneKey, CategoryTone> = {
   food: { key: "food", tile: "#1d1411", accent: "#ff8a3d", accentFg: "#0a0a0c" },
   drink: { key: "drink", tile: "#0f1822", accent: "#4d9fff", accentFg: "#0a0a0c" },
   modifier: { key: "modifier", tile: "#12181a", accent: "#88d66c", accentFg: "#0a0a0c" },
-  neutral: { key: "neutral", tile: "#161619", accent: "#ffb84d", accentFg: "#0a0a0c" },
+  neutral: { key: "neutral", tile: "#161619", accent: "#34C988", accentFg: "#0B1410" },
 };
 
 // Palabras clave para clasificar por nombre de categoría (sin acentos).

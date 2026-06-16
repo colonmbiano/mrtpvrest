@@ -558,7 +558,7 @@ export default function MenuEditorPage() {
           <Stat label="Promos" value={stats.promos} tone="red" />
         </section>
 
-        <div className="flex flex-col gap-4 rounded-[2rem] border border-white/10 bg-[#121316] p-4 shadow-2xl">
+        <div className="flex flex-col gap-4 rounded-[2rem] border border-white/10 bg-[var(--surface-1)] p-4 shadow-2xl">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="grid grid-cols-3 rounded-2xl bg-black/30 p-1">
               {[
@@ -580,9 +580,9 @@ export default function MenuEditorPage() {
               <div className="flex flex-col gap-3 md:flex-row">
                 <div className="relative md:w-80">
                   <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" size={16} />
-                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar producto..." className="h-12 w-full rounded-2xl border border-white/10 bg-[#0a0a0c] pl-11 pr-4 text-sm font-bold outline-none" />
+                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar producto..." className="h-12 w-full rounded-2xl border border-white/10 bg-[var(--bg)] pl-11 pr-4 text-sm font-bold outline-none" />
                 </div>
-                <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none">
+                <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none">
                   <option value="all">Todas las categorias</option>
                   {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                 </select>
@@ -633,11 +633,11 @@ export default function MenuEditorPage() {
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-5 left-1/2 z-[120] flex -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-2xl border border-iris-glow bg-[#121316] p-3 shadow-2xl">
+        <div className="fixed bottom-5 left-1/2 z-[120] flex -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-2xl border border-iris-glow bg-[var(--surface-1)] p-3 shadow-2xl">
           <span className="px-3 text-xs font-black uppercase text-iris-500">{selectedIds.size} seleccionados</span>
           <button onClick={() => bulkPatch({ isAvailable: true })} className="rounded-xl bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-400">Activar</button>
           <button onClick={() => bulkPatch({ isAvailable: false })} className="rounded-xl bg-red-500/10 px-3 py-2 text-xs font-black text-red-400">Agotar</button>
-          <select onChange={(e) => { bulkPatch({ categoryId: e.target.value }); e.target.value = ""; }} defaultValue="" className="rounded-xl border border-white/10 bg-[#0a0a0c] px-3 py-2 text-xs font-black">
+          <select onChange={(e) => { bulkPatch({ categoryId: e.target.value }); e.target.value = ""; }} defaultValue="" className="rounded-xl border border-white/10 bg-[var(--bg)] px-3 py-2 text-xs font-black">
             <option value="" disabled>Mover categoria</option>
             {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
           </select>
@@ -648,7 +648,7 @@ export default function MenuEditorPage() {
 
       {editorOpen && (
         <div className="fixed inset-0 z-[150] flex items-start justify-center overflow-y-auto bg-black/90 p-3 backdrop-blur-xl sm:p-6">
-          <form onSubmit={saveProduct} className="my-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#121316] shadow-2xl">
+          <form onSubmit={saveProduct} className="my-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[var(--surface-1)] shadow-2xl">
             <div className="flex flex-col gap-3 border-b border-white/10 bg-black/25 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.25em] text-iris-500">{editingItem ? "Editar producto" : "Nuevo producto"}</p>
@@ -681,7 +681,7 @@ export default function MenuEditorPage() {
               {editorTab === "basic" && (
                 <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
                   <div className="space-y-3">
-                    <div className="aspect-square overflow-hidden rounded-3xl border border-white/10 bg-[#0a0a0c]">
+                    <div className="aspect-square overflow-hidden rounded-3xl border border-white/10 bg-[var(--bg)]">
                       {imageFile || form.imageUrl ? (
                         <img src={imageFile ? URL.createObjectURL(imageFile) : form.imageUrl} alt="" className={`h-full w-full ${form.imageFit === "contain" ? "object-contain" : "object-cover"}`} />
                       ) : (
@@ -713,7 +713,7 @@ export default function MenuEditorPage() {
                       Subir foto
                       <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} className="hidden" />
                     </label>
-                    <input value={form.imageUrl} onChange={(e) => { setForm((prev) => ({ ...prev, imageUrl: e.target.value })); setImageFile(null); }} placeholder="o pega URL de imagen" className="w-full rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 py-3 text-sm outline-none" />
+                    <input value={form.imageUrl} onChange={(e) => { setForm((prev) => ({ ...prev, imageUrl: e.target.value })); setImageFile(null); }} placeholder="o pega URL de imagen" className="w-full rounded-2xl border border-white/10 bg-[var(--bg)] px-4 py-3 text-sm outline-none" />
                   </div>
 
                   <div className="grid gap-5 sm:grid-cols-2">
@@ -778,11 +778,11 @@ export default function MenuEditorPage() {
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <label className="flex flex-col gap-1">
                           <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Minimo (0 = opcional)</span>
-                          <input type="number" min={0} value={form.variantMinSelection} onChange={(e) => setForm((prev) => ({ ...prev, variantMinSelection: Math.max(0, parseInt(e.target.value, 10) || 0) }))} className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none" />
+                          <input type="number" min={0} value={form.variantMinSelection} onChange={(e) => setForm((prev) => ({ ...prev, variantMinSelection: Math.max(0, parseInt(e.target.value, 10) || 0) }))} className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none" />
                         </label>
                         <label className="flex flex-col gap-1">
                           <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Maximo (0 = sin tope)</span>
-                          <input type="number" min={0} value={form.variantMaxSelection} onChange={(e) => setForm((prev) => ({ ...prev, variantMaxSelection: Math.max(0, parseInt(e.target.value, 10) || 0) }))} className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none" />
+                          <input type="number" min={0} value={form.variantMaxSelection} onChange={(e) => setForm((prev) => ({ ...prev, variantMaxSelection: Math.max(0, parseInt(e.target.value, 10) || 0) }))} className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none" />
                         </label>
                       </div>
                     )}
@@ -797,7 +797,7 @@ export default function MenuEditorPage() {
                             <span className="font-black">{tpl.name}</span>
                             {active && <Check size={18} strokeWidth={4} />}
                           </div>
-                          <p className={`mt-1 text-[10px] font-black uppercase tracking-[0.16em] ${active ? "text-[#0a0a0c]/60" : "text-zinc-500"}`}>{tpl.options.length} opciones</p>
+                          <p className={`mt-1 text-[10px] font-black uppercase tracking-[0.16em] ${active ? "text-[var(--brand-fg)]" : "text-zinc-500"}`}>{tpl.options.length} opciones</p>
                         </button>
                       );
                     })}
@@ -839,7 +839,7 @@ export default function MenuEditorPage() {
 
       {scanState.active && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4">
-          <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#121316] p-8 text-center">
+          <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[var(--surface-1)] p-8 text-center">
             <Sparkles className={`mx-auto ${scanState.error ? "text-red-400" : "text-iris-500"}`} size={44} />
             <h3 className="mt-4 text-xl font-black">{scanState.error ? "No se pudo importar" : "Analizando menu"}</h3>
             <p className="mt-2 text-sm font-bold text-zinc-500">{scanState.error || scanState.label}</p>
@@ -851,9 +851,9 @@ export default function MenuEditorPage() {
 }
 
 function Stat({ label, value, tone = "zinc" }: { label: string; value: number; tone?: "zinc" | "green" | "amber" | "red" }) {
-  const color = tone === "green" ? "text-emerald-400" : tone === "amber" ? "text-amber-400" : tone === "red" ? "text-red-400" : "text-white";
+  const color = tone === "green" ? "text-emerald-400" : tone === "amber" ? "text-[var(--warning)]" : tone === "red" ? "text-red-400" : "text-white";
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#121316] p-4">
+    <div className="rounded-2xl border border-white/10 bg-[var(--surface-1)] p-4">
       <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">{label}</p>
       <p className={`mt-2 text-3xl font-black ${color}`}>{value}</p>
     </div>
@@ -876,7 +876,7 @@ function ProductsView(props: {
       {props.items.map((item) => {
         const selected = props.selectedIds.has(item.id);
         return (
-          <div key={item.id} className={`grid gap-3 rounded-2xl border p-4 md:grid-cols-[auto_1fr_auto] md:items-center ${selected ? "border-iris-glow bg-iris-soft" : "border-white/10 bg-[#0a0a0c]"}`}>
+          <div key={item.id} className={`grid gap-3 rounded-2xl border p-4 md:grid-cols-[auto_1fr_auto] md:items-center ${selected ? "border-iris-glow bg-iris-soft" : "border-white/10 bg-[var(--bg)]"}`}>
             <div className="flex items-center gap-3">
               <input type="checkbox" checked={selected} onChange={() => props.toggleSelect(item.id)} className="h-5 w-5 accent-iris-500" />
               <div className="h-16 w-16 overflow-hidden rounded-2xl bg-white/5">
@@ -886,7 +886,7 @@ function ProductsView(props: {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="truncate text-base font-black">{item.name}</h3>
-                {item.isFavorite && <Star size={14} className="text-amber-400" fill="currentColor" />}
+                {item.isFavorite && <Star size={14} className="text-[var(--brand)]" fill="currentColor" />}
                 {item.isPromo && <span className="rounded-full bg-red-500/10 px-2 py-1 text-[9px] font-black uppercase text-red-400">Promo</span>}
               </div>
               <p className="mt-1 text-xs font-bold text-zinc-500">
@@ -903,7 +903,7 @@ function ProductsView(props: {
                 {item.isAvailable ? <Check size={13} /> : <XCircle size={13} />}
                 {item.isAvailable ? "Activo" : "Agotado"}
               </button>
-              <button onClick={() => props.patchItem(item, { isFavorite: !item.isFavorite })} className={`flex h-11 w-11 items-center justify-center rounded-xl border ${item.isFavorite ? "border-amber-500/40 bg-amber-500/20 text-amber-400" : "border-white/10 bg-white/5 text-zinc-600"}`}>
+              <button onClick={() => props.patchItem(item, { isFavorite: !item.isFavorite })} className={`flex h-11 w-11 items-center justify-center rounded-xl border ${item.isFavorite ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]" : "border-white/10 bg-white/5 text-zinc-600"}`}>
                 <Star size={17} fill={item.isFavorite ? "currentColor" : "none"} />
               </button>
               <button onClick={() => props.openEditor(item)} className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-400">
@@ -932,13 +932,13 @@ function CategoriesView(props: {
   return (
     <div className="grid gap-3">
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-        <input value={props.newCategoryName} onChange={(e) => props.setNewCategoryName(e.target.value)} placeholder="Nueva categoria" className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none" />
+        <input value={props.newCategoryName} onChange={(e) => props.setNewCategoryName(e.target.value)} placeholder="Nueva categoria" className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none" />
         <button onClick={props.createCategory} className="h-12 rounded-2xl bg-iris-500 px-5 text-xs font-black uppercase text-iris-fg">Crear categoria</button>
       </div>
       {props.categories.map((cat) => {
         const count = props.items.filter((item) => item.categoryId === cat.id).length;
         return (
-          <div key={cat.id} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#0a0a0c] p-4 sm:flex-row sm:items-center">
+          <div key={cat.id} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[var(--bg)] p-4 sm:flex-row sm:items-center">
             <div className="flex-1">
               <h3 className="font-black">{cat.name}</h3>
               <p className="text-xs font-bold text-zinc-500">{count} producto(s)</p>
@@ -971,17 +971,17 @@ function VariantsView(props: {
     <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.9fr)_1.4fr]">
       <div className="space-y-3">
         <div className="grid gap-2">
-          <input value={props.newTemplateName} onChange={(e) => props.setNewTemplateName(e.target.value)} placeholder="Nuevo grupo: tamanos, sabores..." className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none" />
+          <input value={props.newTemplateName} onChange={(e) => props.setNewTemplateName(e.target.value)} placeholder="Nuevo grupo: tamanos, sabores..." className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none" />
           <button onClick={props.createTemplate} className="h-12 rounded-2xl bg-iris-500 px-5 text-xs font-black uppercase text-iris-fg">Crear grupo</button>
         </div>
         {props.templates.map((tpl) => (
-          <button key={tpl.id} onClick={() => props.setSelectedTemplateId(tpl.id)} className={`w-full rounded-2xl border p-4 text-left ${props.selectedTemplate?.id === tpl.id ? "border-iris-500 bg-iris-soft" : "border-white/10 bg-[#0a0a0c]"}`}>
+          <button key={tpl.id} onClick={() => props.setSelectedTemplateId(tpl.id)} className={`w-full rounded-2xl border p-4 text-left ${props.selectedTemplate?.id === tpl.id ? "border-iris-500 bg-iris-soft" : "border-white/10 bg-[var(--bg)]"}`}>
             <p className="font-black">{tpl.name}</p>
             <p className="text-xs font-bold text-zinc-500">{tpl.options.length} opciones</p>
           </button>
         ))}
       </div>
-      <div className="rounded-2xl border border-white/10 bg-[#0a0a0c] p-4">
+      <div className="rounded-2xl border border-white/10 bg-[var(--bg)] p-4">
         {props.selectedTemplate ? (
           <>
             <div className="mb-4 flex items-start justify-between gap-3">
@@ -1004,7 +1004,7 @@ function VariantsView(props: {
                 <div key={opt.id} className="flex items-center gap-3 rounded-2xl bg-white/5 p-3">
                   <div className="flex-1">
                     <p className="font-black">{opt.name}</p>
-                    <p className="text-xs font-bold text-amber-400">{opt.price > 0 ? `+$${opt.price}` : "Gratis"}</p>
+                    <p className="text-xs font-bold text-[var(--brand)]">{opt.price > 0 ? `+$${opt.price}` : "Gratis"}</p>
                   </div>
                   <button onClick={() => props.editTemplateOption(opt)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-black uppercase text-zinc-400">Editar</button>
                   <button onClick={() => props.deleteTemplateOption(opt)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-black uppercase text-red-400">Eliminar</button>
@@ -1058,8 +1058,8 @@ function InlineAdder({ name, price, setValue, onAdd, disabled }: {
 }) {
   return (
     <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_110px_auto]">
-      <input value={name} onChange={(e) => setValue({ name: e.target.value, price })} placeholder={disabled ? "Guarda primero" : "Nombre"} disabled={disabled} className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none disabled:opacity-40" />
-      <input value={price} onChange={(e) => setValue({ name, price: e.target.value })} type="number" placeholder="$0" disabled={disabled} className="h-12 rounded-2xl border border-white/10 bg-[#0a0a0c] px-4 text-sm font-bold outline-none disabled:opacity-40" />
+      <input value={name} onChange={(e) => setValue({ name: e.target.value, price })} placeholder={disabled ? "Guarda primero" : "Nombre"} disabled={disabled} className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none disabled:opacity-40" />
+      <input value={price} onChange={(e) => setValue({ name, price: e.target.value })} type="number" placeholder="$0" disabled={disabled} className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none disabled:opacity-40" />
       <button type="button" onClick={onAdd} disabled={disabled || !name.trim()} className="h-12 rounded-2xl bg-iris-500 px-5 text-xs font-black uppercase text-iris-fg disabled:opacity-40">Agregar</button>
     </div>
   );
@@ -1070,9 +1070,9 @@ function ItemOptionList({ options, onDelete }: { options: Array<{ id: string; na
   return (
     <div className="space-y-2">
       {options.map((option) => (
-        <div key={option.id} className="flex items-center gap-3 rounded-2xl bg-[#0a0a0c] p-3">
+        <div key={option.id} className="flex items-center gap-3 rounded-2xl bg-[var(--bg)] p-3">
           <span className="flex-1 text-sm font-black">{option.name}</span>
-          <span className="font-mono text-xs font-black text-amber-400">{option.price > 0 ? `+$${Number(option.price).toFixed(2)}` : "Gratis"}</span>
+          <span className="font-mono text-xs font-black text-[var(--brand)]">{option.price > 0 ? `+$${Number(option.price).toFixed(2)}` : "Gratis"}</span>
           <button type="button" onClick={() => onDelete(option.id)} className="flex h-9 w-9 items-center justify-center rounded-xl text-red-400"><Trash2 size={15} /></button>
         </div>
       ))}
