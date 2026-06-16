@@ -2,11 +2,15 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeftRight,
   ArrowRight,
   Bell,
   Bike,
+  CheckCircle2,
+  Circle,
   Coins,
   Globe,
+  Merge,
   LayoutGrid,
   ListChecks,
   Loader2,
@@ -105,6 +109,18 @@ interface OrderTypeSelectorProps {
   onManageTickets?: () => void;
   /** Abre el modal de configuración (tema / modo / bloquear terminal). */
   onConfigMenu?: () => void;
+  /** "Cambiar empleado" — cierra sesión y manda al PIN (1 toque). */
+  onSwitchEmployee?: () => void;
+  /** Habilita seleccionar varias cuentas para juntarlas / asignar repartidor
+   *  directamente en esta pantalla (sin abrir un cajón aparte). */
+  canMerge?: boolean;
+  /** Junta las cuentas seleccionadas: la PRIMERA es la cuenta final; el resto
+   *  se cierra tras mover sus productos. */
+  onMergeOrders?: (target: OpenAccount, sources: OpenAccount[]) => Promise<void>;
+  /** Asigna el repartidor elegido a TODAS las cuentas seleccionadas. */
+  onAssignDriver?: (accounts: OpenAccount[], driverId: string) => Promise<void>;
+  /** Repartidores activos para el selector de asignación. */
+  drivers?: { id: string; name: string; isAvailable?: boolean }[];
   /** Badge: pedidos web PENDING por aceptar. */
   webOrdersCount?: number;
   /** Badge: notificaciones sin leer. */
@@ -173,15 +189,16 @@ const FILTERS: { key: "ALL" | OrderType; label: string }[] = [
 // notificaciones) y los accesos operativos. Replica el rol del TopNavDropdown
 // del catálogo para que la pantalla principal también navegue y gestione.
 const SHORTCUTS = [
+  { label: "Ir a ventas",      icon: ShoppingCart,     action: "sales"     as const },
+  { label: "Abiertos",         icon: Receipt,          action: "tickets"   as const },
   { label: "Pedidos web",      icon: Globe,            action: "weborders" as const },
   { label: "Repartidores",     icon: Bike,             action: "drivers"   as const },
-  { label: "Notificaciones",   icon: Bell,             action: "notifs"    as const },
-  { label: "Ir a ventas",      icon: ShoppingCart,     action: "sales"     as const },
   { label: "Sucursal",         icon: LayoutGrid,       action: "hub"       as const },
   { label: "Corte de caja",    icon: Wallet,           action: "shift"     as const },
   { label: "Gastos y compras", icon: Coins,            action: "expenses"  as const },
   { label: "Configuración",    icon: SlidersHorizontal, action: "settings" as const },
   { label: "Panel central",    icon: Settings,         action: "config"    as const },
+  { label: "Cambiar empleado", icon: ArrowLeftRight,   action: "switch"    as const },
 ];
 
 // Hora exacta (HH:MM) + fecha corta (es-MX) para la columna de hora.
@@ -213,6 +230,11 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onNotifs,
   onManageTickets,
   onConfigMenu,
+  onSwitchEmployee,
+  canMerge = false,
+  onMergeOrders,
+  onAssignDriver,
+  drivers = [],
   webOrdersCount = 0,
   unreadNotifs = 0,
   mode = "open",
@@ -226,6 +248,75 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [filter, setFilter] = useState<"ALL" | OrderType>("ALL");
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Selección múltiple para juntar cuentas / asignar repartidor SIN abrir un
+  // cajón aparte (todo en esta pantalla principal). La PRIMERA seleccionada es
+  // la "cuenta final" del merge; el resto se cierra tras mover sus productos.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+  const [showDriverPicker, setShowDriverPicker] = useState(false);
+  const [assigningDriverId, setAssigningDriverId] = useState<string | null>(null);
+
+  const canSelect = !paidMode && (canMerge || Boolean(onAssignDriver));
+
+  const selectedAccounts = useMemo(
+    () =>
+      selectedIds
+        .map((id) => openAccounts.find((a) => a.id === id))
+        .filter((a): a is OpenAccount => Boolean(a)),
+    [selectedIds, openAccounts],
+  );
+  const selectedTotal = useMemo(
+    () => selectedAccounts.reduce((sum, a) => sum + a.total, 0),
+    [selectedAccounts],
+  );
+  const targetAccount = selectedAccounts[0];
+
+  const resetSelection = () => {
+    setSelectMode(false);
+    setSelectedIds([]);
+    setShowMergeConfirm(false);
+    setShowDriverPicker(false);
+    setAssigningDriverId(null);
+  };
+
+  const toggleSelectMode = () => {
+    if (selectMode) resetSelection();
+    else setSelectMode(true);
+  };
+
+  const toggleAccount = (id: string) => {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((x) => x !== id) : [...current, id],
+    );
+  };
+
+  const confirmMerge = async () => {
+    const [destination, ...sources] = selectedAccounts;
+    if (!onMergeOrders || !destination || sources.length === 0) return;
+    setIsMerging(true);
+    try {
+      await onMergeOrders(destination, sources);
+      resetSelection();
+    } catch {
+      // El caller muestra el error y refresca las cuentas.
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
+  const assignDriverToSelected = async (driverId: string) => {
+    if (!onAssignDriver || selectedAccounts.length === 0) return;
+    setAssigningDriverId(driverId);
+    try {
+      await onAssignDriver(selectedAccounts, driverId);
+      resetSelection();
+    } catch {
+      setAssigningDriverId(null);
+    }
+  };
 
   // Filtra las tarjetas a los tipos que la sucursal acepta. Si no se pasa
   // `allowedTypes` (o viene vacío) mostramos todos.
@@ -307,6 +398,14 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
     if (action === "expenses") onExpenses?.();
     if (action === "settings") onConfigMenu?.();
     if (action === "config") onConfig?.();
+    if (action === "tickets") {
+      // "Abiertos" trae a esta pantalla (ya estamos aquí) y entra al modo
+      // selección para juntar / asignar repartidor in-situ. Si el rol no puede
+      // seleccionar, cae al cajón completo (fallback).
+      if (canSelect) setSelectMode(true);
+      else onManageTickets?.();
+    }
+    if (action === "switch") onSwitchEmployee?.();
   };
 
   const enabledShortcuts = SHORTCUTS.filter((shortcut) => {
@@ -319,6 +418,8 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
     if (shortcut.action === "expenses") return Boolean(onExpenses);
     if (shortcut.action === "settings") return Boolean(onConfigMenu);
     if (shortcut.action === "config") return Boolean(onConfig);
+    if (shortcut.action === "tickets") return canSelect || Boolean(onManageTickets);
+    if (shortcut.action === "switch") return Boolean(onSwitchEmployee);
     return false;
   });
 
@@ -332,7 +433,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   return (
     <div
       className="fixed inset-0 z-50 flex min-h-[100dvh] flex-col overflow-hidden bg-[var(--bg)] px-3 py-[max(0.75rem,env(safe-area-inset-top))] text-white sm:px-5"
-      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
+      style={{ fontFamily: "var(--font-body)" }}
     >
       <div
         aria-hidden
@@ -346,6 +447,21 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
       {/* HEADER — título + usuario + menú desplegable (esquina) */}
       <header className="relative z-30 flex shrink-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
+          {onNotifs && (
+            <button
+              type="button"
+              onClick={() => onNotifs?.()}
+              aria-label="Notificaciones"
+              className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-secondary)] transition-all active:scale-95 hover:border-[var(--brand)] hover:text-[var(--brand)]"
+            >
+              <Bell size={18} />
+              {unreadNotifs > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--brand)] px-1 text-[9px] font-black text-[var(--brand-fg)]">
+                  {unreadNotifs > 99 ? "99+" : unreadNotifs}
+                </span>
+              )}
+            </button>
+          )}
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]">
             <Table2 size={20} strokeWidth={2.5} />
           </div>
@@ -374,13 +490,11 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-secondary)] transition-all active:scale-95 hover:border-[var(--brand)] hover:text-[var(--brand)]"
             >
               <Menu size={20} />
-              {/* Punto de aviso: hay pedidos web por aceptar o notifs sin leer. */}
-              {(webOrdersCount > 0 || unreadNotifs > 0) && (
+              {/* Punto de aviso: hay pedidos web por aceptar (las notificaciones
+                  tienen su propio botón de campana en la esquina izquierda). */}
+              {webOrdersCount > 0 && (
                 <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--brand)] px-1 text-[9px] font-black text-[var(--brand-fg)]">
-                  {(() => {
-                    const n = webOrdersCount + unreadNotifs;
-                    return n > 99 ? "99+" : n;
-                  })()}
+                  {webOrdersCount > 99 ? "99+" : webOrdersCount}
                 </span>
               )}
             </button>
@@ -429,7 +543,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
       {/* CUERPO — cuentas abiertas (izq) + tipo de pedido (der) */}
       <main className="relative z-10 mt-3 flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
         {/* CUENTAS ABIERTAS */}
-        <section className="flex min-h-0 flex-[2.2] flex-col rounded-xl border border-white/10 bg-white/[0.035] p-3 backdrop-blur-md">
+        <section className="flex min-h-0 flex-[2.2] lg:flex-[7] lg:order-2 flex-col rounded-xl border border-white/10 bg-white/[0.035] p-3 backdrop-blur-md">
           <div className="mb-2 flex shrink-0 flex-col gap-2">
             {/* TOGGLE Abiertas / Cobradas */}
             {onModeChange && (
@@ -443,7 +557,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                     <button
                       key={m.key}
                       type="button"
-                      onClick={() => onModeChange(m.key)}
+                      onClick={() => { resetSelection(); onModeChange(m.key); }}
                       className={`flex-1 rounded-lg py-2 text-[11px] font-black uppercase tracking-[0.15em] transition-all active:scale-95 ${
                         active
                           ? m.key === "paid"
@@ -489,16 +603,22 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               </div>
             </div>
 
-            {/* Abre el cajón completo: multiselección para juntar cuentas,
-                asignar repartidor y enviar a cocina (no cabe en las filas). */}
-            {onManageTickets && (
+            {/* Selección múltiple EN ESTA pantalla: juntar cuentas / asignar
+                repartidor sin abrir un cajón aparte. */}
+            {canSelect && (
               <button
                 type="button"
-                onClick={onManageTickets}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--brand)] bg-[var(--brand-soft)] py-2.5 text-[11px] font-black uppercase tracking-[0.12em] text-[var(--brand)] transition-transform active:scale-95"
+                onClick={toggleSelectMode}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-[11px] font-black uppercase tracking-[0.12em] transition-transform active:scale-95 ${
+                  selectMode
+                    ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]"
+                    : "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]"
+                }`}
               >
                 <ListChecks size={15} strokeWidth={2.5} />
-                Gestionar · juntar / repartidor / cocina
+                {selectMode
+                  ? `Cancelar selección${selectedAccounts.length ? ` · ${selectedAccounts.length}` : ""}`
+                  : "Seleccionar · juntar / repartidor"}
               </button>
             )}
           </div>
@@ -537,23 +657,39 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   // Los pedidos web se distinguen con acento índigo (icono + barra
                   // lateral + badge WEB) para detectarlos de un vistazo.
                   const iconAccent = acc.isWeb ? WEB_ACCENT : meta.accent;
+                  const isSelected = selectMode && selectedIds.includes(acc.id);
+                  const selIndex = selectedIds.indexOf(acc.id);
                   return (
                     <div
                       key={acc.id}
+                      role={selectMode ? "button" : undefined}
+                      tabIndex={selectMode ? 0 : undefined}
+                      aria-pressed={selectMode ? isSelected : undefined}
+                      onClick={selectMode ? () => toggleAccount(acc.id) : undefined}
                       aria-label={`Cuenta de ${title} por $${acc.total.toFixed(2)}${acc.isWeb ? " (pedido web)" : ""}`}
-                      className="relative flex flex-col gap-1.5 border-b border-white/[0.06] py-2 pl-3 pr-2 text-left transition-colors last:border-0"
+                      className={`relative flex flex-col gap-1.5 border-b border-white/[0.06] py-2 pl-3 pr-2 text-left transition-colors last:border-0 ${selectMode ? "cursor-pointer" : ""}`}
                       style={
-                        acc.isWeb
-                          ? { boxShadow: `inset 3px 0 0 ${WEB_ACCENT}`, backgroundColor: `${WEB_ACCENT}0d` }
-                          : undefined
+                        isSelected
+                          ? { boxShadow: "inset 0 0 0 1px var(--brand)", backgroundColor: "var(--brand-soft)", borderRadius: 12 }
+                          : acc.isWeb
+                            ? { boxShadow: `inset 3px 0 0 ${WEB_ACCENT}`, backgroundColor: `${WEB_ACCENT}0d` }
+                            : undefined
                       }
                     >
                     <div className="flex items-center gap-3">
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: dotFor(acc.status) }}
-                        aria-hidden
-                      />
+                      {selectMode ? (
+                        isSelected ? (
+                          <CheckCircle2 size={20} className="shrink-0 text-[var(--brand)]" strokeWidth={2.5} />
+                        ) : (
+                          <Circle size={20} className="shrink-0 text-white/30" />
+                        )
+                      ) : (
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: dotFor(acc.status) }}
+                          aria-hidden
+                        />
+                      )}
                       <span
                         className="flex h-9 w-11 shrink-0 items-center justify-center rounded-lg border"
                         style={{
@@ -570,6 +706,11 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                           <span className="truncate text-[15px] font-black leading-tight text-white">
                             {title}
                           </span>
+                          {isSelected && canMerge && (
+                            <span className="shrink-0 text-[8px] font-black uppercase tracking-[0.12em] text-[var(--brand)]">
+                              {selIndex === 0 ? "Cuenta final" : "Se juntará"}
+                            </span>
+                          )}
                           {acc.isWeb && (
                             <span
                               className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-px text-[8px] font-black tracking-[0.1em]"
@@ -650,8 +791,9 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
                     {/* Acciones por cuenta. En "Cobradas" (solo lectura) un único
                         botón reimprime el recibo; en "Abiertas" están Editar /
-                        Imprimir / Cobrar ("Cobrar" se oculta con hideMoney). */}
-                    {paidMode ? (
+                        Imprimir / Cobrar ("Cobrar" se oculta con hideMoney). En
+                        modo selección se ocultan (la fila es un toggle). */}
+                    {!selectMode && (paidMode ? (
                       <div className="flex items-stretch gap-2">
                         <button
                           type="button"
@@ -668,7 +810,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                           type="button"
                           aria-label={`Editar cuenta de ${title}`}
                           onClick={() => onOpenAccount?.(acc.id)}
-                          className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95 active:text-white"
+                          className="flex-1 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text-primary)] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                         >
                           <Pencil size={15} strokeWidth={2.5} /> Editar
                         </button>
@@ -676,7 +818,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                           type="button"
                           aria-label={`Imprimir cuenta de ${title}`}
                           onClick={() => onReprintAccount?.(acc.id)}
-                          className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95 active:text-white"
+                          className="flex-1 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text-primary)] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                         >
                           <Receipt size={15} strokeWidth={2.5} /> Imprimir
                         </button>
@@ -691,17 +833,55 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                           </button>
                         )}
                       </div>
-                    )}
+                    ))}
                     </div>
                   );
                 })}
               </div>
             )}
           </div>
+
+          {/* BARRA DE ACCIONES DE SELECCIÓN — juntar / asignar repartidor */}
+          {selectMode && (
+            <div className="mt-2 shrink-0 rounded-xl border border-white/10 bg-white/5 p-2">
+              <div className="mb-2 flex items-baseline justify-between px-1">
+                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">
+                  {selectedAccounts.length} seleccionada{selectedAccounts.length === 1 ? "" : "s"}
+                </span>
+                <span className="text-base font-black tabular-nums text-white">
+                  ${selectedTotal.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {Boolean(onAssignDriver) && (
+                  <button
+                    type="button"
+                    disabled={selectedAccounts.length < 1}
+                    onClick={() => setShowDriverPicker(true)}
+                    className="flex-1 min-h-[48px] h-12 rounded-xl bg-blue-400/15 border border-blue-400/40 text-blue-200 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                  >
+                    <Bike size={16} strokeWidth={2.5} />
+                    Repartidor
+                  </button>
+                )}
+                {canMerge && (
+                  <button
+                    type="button"
+                    disabled={selectedAccounts.length < 2}
+                    onClick={() => setShowMergeConfirm(true)}
+                    className="flex-1 min-h-[48px] h-12 rounded-xl bg-[var(--brand)] text-[var(--brand-fg)] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                  >
+                    <Merge size={16} strokeWidth={2.5} />
+                    Juntar {selectedAccounts.length || ""}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* TIPO DE PEDIDO */}
-        <aside className="flex shrink-0 flex-col gap-2.5 lg:w-[260px]">
+        <aside className="flex flex-col gap-2.5 lg:flex-[3] lg:order-1">
           <p className="px-1 text-[10px] font-black uppercase tracking-[0.22em] text-[var(--brand)]">
             Iniciar venta
           </p>
@@ -771,6 +951,113 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
           )}
         </aside>
       </main>
+
+      {/* CONFIRMAR UNIÓN (juntar cuentas) */}
+      {showMergeConfirm && targetAccount && selectedAccounts.length >= 2 && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-5">
+          <div
+            className="absolute inset-0 bg-black/75 backdrop-blur-md"
+            onClick={() => !isMerging && setShowMergeConfirm(false)}
+          />
+          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[var(--surface-1)] p-5 shadow-2xl">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]">
+              <Merge size={21} />
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Confirmar unión</p>
+            <h3 className="mt-1 text-xl font-black text-white">Juntar {selectedAccounts.length} cuentas</h3>
+            <p className="mt-2 text-[13px] font-semibold leading-relaxed text-white/55">
+              La cuenta final será #{targetAccount.orderNumber} de{" "}
+              <span className="text-white">{targetAccount.customerName}</span>. Las otras{" "}
+              {selectedAccounts.length - 1} se cerrarán tras mover sus productos.
+            </p>
+            <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <span className="text-[11px] font-black uppercase tracking-[0.12em] text-white/45">Nuevo total</span>
+              <span className="text-xl font-black tabular-nums text-white">${selectedTotal.toFixed(2)}</span>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                disabled={isMerging}
+                onClick={() => setShowMergeConfirm(false)}
+                className="h-12 flex-1 rounded-2xl border border-white/10 bg-white/5 text-[11px] font-black uppercase tracking-[0.12em] text-white/65 disabled:opacity-40"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                disabled={isMerging}
+                onClick={confirmMerge}
+                className="flex h-12 flex-[1.5] items-center justify-center gap-2 rounded-2xl bg-[var(--brand)] text-[11px] font-black uppercase tracking-[0.12em] text-[var(--brand-fg)] transition-transform active:scale-95 disabled:opacity-60"
+              >
+                {isMerging ? (<><Loader2 size={16} className="animate-spin" />Juntando</>) : (<><Merge size={16} />Confirmar</>)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ELEGIR REPARTIDOR */}
+      {showDriverPicker && selectedAccounts.length >= 1 && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-5">
+          <div
+            className="absolute inset-0 bg-black/75 backdrop-blur-md"
+            onClick={() => !assigningDriverId && setShowDriverPicker(false)}
+          />
+          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[var(--surface-1)] p-5 shadow-2xl">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-400/30 bg-blue-400/15 text-blue-300">
+              <Bike size={21} />
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Enviar a repartidor</p>
+            <h3 className="mt-1 text-xl font-black text-white">
+              {selectedAccounts.length} ticket{selectedAccounts.length === 1 ? "" : "s"} seleccionado{selectedAccounts.length === 1 ? "" : "s"}
+            </h3>
+            <p className="mt-2 text-[13px] font-semibold leading-relaxed text-white/55">
+              El repartidor que elijas recibirá {selectedAccounts.length === 1 ? "este pedido" : "estos pedidos"} y pasarán a{" "}
+              <span className="text-white">En camino</span>.
+            </p>
+            <div className="mt-4 grid max-h-[42vh] grid-cols-2 gap-2 overflow-y-auto scrollbar-hide">
+              {drivers.length === 0 ? (
+                <p className="col-span-2 py-6 text-center text-[12px] font-bold text-[var(--warning)]">
+                  No hay repartidores activos.
+                </p>
+              ) : (
+                drivers.map((d) => {
+                  const busy = assigningDriverId === d.id;
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      disabled={Boolean(assigningDriverId)}
+                      onClick={() => assignDriverToSelected(d.id)}
+                      className="flex min-h-[56px] items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left transition-transform active:scale-95 disabled:opacity-40 disabled:active:scale-100"
+                    >
+                      {busy ? (
+                        <Loader2 size={16} className="shrink-0 animate-spin text-blue-300" />
+                      ) : (
+                        <Bike size={15} className="shrink-0 text-blue-300" />
+                      )}
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-black text-white">{d.name}</span>
+                        {d.isAvailable === false && (
+                          <span className="block text-[9px] font-bold uppercase tracking-widest text-[var(--warning)]">Ocupado</span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <button
+              type="button"
+              disabled={Boolean(assigningDriverId)}
+              onClick={() => setShowDriverPicker(false)}
+              className="mt-4 h-12 w-full rounded-2xl border border-white/10 bg-white/5 text-[11px] font-black uppercase tracking-[0.12em] text-white/65 disabled:opacity-40"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

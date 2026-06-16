@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Search, ShoppingCart, UtensilsCrossed } from "lucide-react";
+import { Home, Search, ShoppingCart, UtensilsCrossed } from "lucide-react";
 import ConfigMenu from "@/components/pos/ConfigMenu";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
 import ReprintKitchenModal from "@/components/pos/ReprintKitchenModal";
@@ -40,7 +40,6 @@ import {
 } from "@/lib/printer-tcp";
 
 import SidebarTicket from "@/components/pos/SidebarTicket";
-import TopNavDropdown from "@/components/pos/TopNavDropdown";
 import TopActionsDropdown from "@/components/pos/TopActionsDropdown";
 import CatalogSettingsSheet from "@/components/modals/CatalogSettingsSheet";
 import VoiceOrderDictation from "@/components/pos/VoiceOrderDictation";
@@ -1468,22 +1467,18 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           {/* TOP BAR: busqueda rapida + cuentas frecuentes. */}
           <header className="z-10 flex h-14 shrink-0 items-center gap-2 border-b border-bd bg-surf-1 px-3">
             <div className="flex shrink-0 items-center gap-2">
-              <TopNavDropdown
-                onOpenMenu={() => setShowMenu(true)}
-                onOpenOrders={() => setShowOrders(true)}
-                onOpenNotifs={() => setShowNotifs((v) => !v)}
-                onOpenWebOrders={() => setShowWebOrders(true)}
-                onOpenExpenses={isLoanMode ? undefined : () => setShowExpenses(true)}
-                onSwitchEmployee={() => {
-                  // Cambiar empleado = cerrar sesión y mandar al PIN (1 toque),
-                  // mismo flujo que "Bloquear Terminal" del ConfigMenu.
-                  logout();
-                  router.replace("/locked");
-                }}
-                hasOpenOrders={openOrders.length > 0}
-                unreadNotifs={unreadCount}
-                webOrdersCount={pendingWebCount}
-              />
+              {/* La navegación vive en el Panel de Inicio (menú único). Desde el
+                  catálogo solo se regresa al Panel con este botón. */}
+              <button
+                type="button"
+                onClick={() => router.push("/pos/order-type")}
+                aria-label="Volver al inicio"
+                title="Inicio"
+                className="flex h-10 items-center gap-2 rounded-xl border border-bd bg-surf-2 px-3 text-tx-pri transition-all active:scale-95 hover:border-iris-500 hover:text-iris-500"
+              >
+                <Home size={18} />
+                <span className="text-[11px] font-black uppercase tracking-[0.1em]">Inicio</span>
+              </button>
             </div>
 
             <label className="relative min-w-[220px] flex-1">

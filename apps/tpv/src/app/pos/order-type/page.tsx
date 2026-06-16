@@ -851,6 +851,11 @@ export default function OrderTypePage() {
         onNotifs={() => setShowNotifs(true)}
         onManageTickets={() => setShowOrders(true)}
         onConfigMenu={() => setShowConfig(true)}
+        onSwitchEmployee={handleLogout}
+        canMerge={canMergeOpenOrders && !hideMoney}
+        onMergeOrders={handleMergeOpenOrders}
+        onAssignDriver={canMergeOpenOrders ? handleAssignDriverToOrders : undefined}
+        drivers={deliveryDrivers}
         webOrdersCount={pendingWebCount}
         unreadNotifs={unreadCount}
         allowedTypes={tpvConfig.allowedOrderTypes}

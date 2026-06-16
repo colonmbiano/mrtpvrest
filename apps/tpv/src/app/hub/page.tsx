@@ -157,8 +157,11 @@ function HubPageInner() {
           setWorkspaces(list);
 
           if (list.length === 0) return;
-          // Si solo hay uno y no estamos forzando, auto-seleccionar.
-          if (list.length === 1 && !force) {
+          // Una sola sucursal → entrar directo SIEMPRE (también con force):
+          // el selector de sucursal no aporta nada con un único workspace, así
+          // que ni en el arranque ni al tocar "Sucursal" debe aparecer. El
+          // selector solo tiene sentido (y se muestra) con 2+ sucursales.
+          if (list.length === 1) {
             const onlyWorkspace = list[0];
             if (onlyWorkspace) selectWorkspace(onlyWorkspace);
           }
@@ -185,7 +188,7 @@ function HubPageInner() {
   return (
     <div
       className="relative min-h-[100dvh] w-full overflow-hidden bg-[var(--bg)]"
-      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
+      style={{ fontFamily: "var(--font-body)" }}
     >
       {/* Ambient diseño operativo glows */}
       <div
