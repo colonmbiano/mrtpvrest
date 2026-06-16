@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Armchair,
   ArrowLeftRight,
   ArrowRight,
   Bell,
@@ -32,6 +33,7 @@ import {
 } from "lucide-react";
 import type { OrderType } from "@/components/tpv/TicketPanel";
 import UserBadge from "@/components/UserBadge";
+import { useThemeStore } from "@/store/themeStore";
 
 export type ExtendedOrderType = OrderType;
 
@@ -121,6 +123,9 @@ interface OrderTypeSelectorProps {
   onAssignDriver?: (accounts: OpenAccount[], driverId: string) => Promise<void>;
   /** Repartidores activos para el selector de asignación. */
   drivers?: { id: string; name: string; isAvailable?: boolean }[];
+  /** Logo del tenant (de la config del recibo). Si existe, reemplaza el icono
+   *  del header; si no, se muestra el icono por defecto. */
+  logoUrl?: string | null;
   /** Badge: pedidos web PENDING por aceptar. */
   webOrdersCount?: number;
   /** Badge: notificaciones sin leer. */
@@ -145,18 +150,45 @@ interface OrderTypeSelectorProps {
   allowedTypes?: OrderType[];
 }
 
+// Moto para Delivery — lucide no trae motocicleta, así que la dibujamos aquí
+// con el mismo estilo (stroke currentColor, mismas props que un icono lucide).
+function Moto({ size = 24, strokeWidth = 2, className }: { size?: number; strokeWidth?: number; className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="5" cy="16" r="3.4" />
+      <circle cx="19" cy="16" r="3.4" />
+      <path d="M8.4 16h7.2" />
+      <path d="M5 16 8 9.5h5l2.6 6.5" />
+      <path d="M13 9.5 15 6.5h3" />
+      <path d="M8 9.5h5" />
+    </svg>
+  );
+}
+
 type OrderTypeCard = {
   id: OrderType;
   title: string;
-  icon: typeof Utensils;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
   accent: string;
   shortcut: string;
 };
 
 const ORDER_TYPES: OrderTypeCard[] = [
-  { id: "DINE_IN",  title: "Comer Aquí",  icon: Utensils,    accent: "#34C988", shortcut: "1" },
+  { id: "DINE_IN",  title: "Comer Aquí",  icon: Armchair,    accent: "#34C988", shortcut: "1" },
   { id: "TAKEOUT",  title: "Para Llevar", icon: ShoppingBag, accent: "#3b82f6", shortcut: "2" },
-  { id: "DELIVERY", title: "Delivery",    icon: Bike,        accent: "#10b981", shortcut: "3" },
+  { id: "DELIVERY", title: "Delivery",    icon: Moto,        accent: "#F97316", shortcut: "3" },
 ];
 
 // Metadatos por tipo para las filas de cuentas abiertas (badge + icono + tono).
@@ -235,6 +267,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onMergeOrders,
   onAssignDriver,
   drivers = [],
+  logoUrl,
   webOrdersCount = 0,
   unreadNotifs = 0,
   mode = "open",
@@ -245,6 +278,11 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   allowedTypes,
 }) => {
   const paidMode = mode === "paid";
+  // Modo de tema (oscuro/claro) para decidir el fondo de las tarjetas de tipo
+  // de pedido: en oscuro las pintamos gris claro (resaltan como tarjetas
+  // claras); en claro mantienen el tinte de su color.
+  const themeMode = useThemeStore((s) => s.mode);
+  const darkCards = themeMode === "dark";
   const [menuOpen, setMenuOpen] = useState(false);
   const [filter, setFilter] = useState<"ALL" | OrderType>("ALL");
   const menuRef = useRef<HTMLDivElement>(null);
@@ -462,8 +500,12 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               )}
             </button>
           )}
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]">
-            <Table2 size={20} strokeWidth={2.5} />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo" className="h-full w-full object-cover" />
+            ) : (
+              <Table2 size={20} strokeWidth={2.5} />
+            )}
           </div>
           <div className="min-w-0">
             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-white/35">
@@ -893,31 +935,36 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   key={type.id}
                   type="button"
                   onClick={() => onSelect(type.id)}
-                  className="group relative flex min-h-[104px] flex-1 flex-col justify-center gap-3 rounded-2xl border border-white/10 bg-[var(--surface-1)] p-4 text-left transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[var(--brand)] lg:p-5"
-                  style={{ borderColor: `${type.accent}3a` }}
+                  className="group relative flex min-h-[120px] flex-1 flex-col items-center justify-center gap-3 rounded-2xl border p-5 text-center transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                  style={
+                    darkCards && type.id === "DINE_IN"
+                      ? { backgroundColor: "#D7DBE0", borderColor: "rgba(0,0,0,0.14)" }
+                      : { backgroundColor: `${type.accent}14`, borderColor: `${type.accent}55` }
+                  }
                 >
-                  <div className="flex items-center justify-between">
-                    <span
-                      className="flex h-12 w-12 items-center justify-center rounded-xl border"
-                      style={{
-                        backgroundColor: `${type.accent}1f`,
-                        borderColor: `${type.accent}40`,
-                        color: type.accent,
-                      }}
-                    >
-                      <Icon size={24} strokeWidth={2.5} />
-                    </span>
-                    <span className="text-[11px] font-black text-white/30">{type.shortcut}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-lg font-black leading-tight tracking-tight">
-                      {type.title}
-                    </h3>
-                    <ArrowRight
-                      strokeWidth={3}
-                      className="h-4 w-4 shrink-0 text-white/30 transition-transform group-active:translate-x-0.5"
-                    />
-                  </div>
+                  {/* Atajo de teclado, discreto en la esquina */}
+                  <span
+                    className="absolute right-3 top-2.5 text-[11px] font-black text-white/25"
+                    style={darkCards && type.id === "DINE_IN" ? { color: "rgba(0,0,0,0.3)" } : undefined}
+                  >
+                    {type.shortcut}
+                  </span>
+                  <span
+                    className="flex h-[68px] w-[68px] items-center justify-center rounded-2xl border"
+                    style={{
+                      backgroundColor: `${type.accent}29`,
+                      borderColor: `${type.accent}59`,
+                      color: type.accent,
+                    }}
+                  >
+                    <Icon size={36} strokeWidth={2.4} />
+                  </span>
+                  <h3
+                    className="text-2xl font-black leading-tight tracking-tight"
+                    style={darkCards && type.id === "DINE_IN" ? { color: "#1b1d21" } : undefined}
+                  >
+                    {type.title}
+                  </h3>
                 </button>
               );
             })}

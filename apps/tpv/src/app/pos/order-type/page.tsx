@@ -12,11 +12,9 @@ import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import NotificationsPanel from "@/components/pos/NotificationsPanel";
 import WebOrdersPanel from "@/components/pos/WebOrdersPanel";
 import DriversPanel from "@/components/admin/DriversPanel";
-import ConfigMenu from "@/components/pos/ConfigMenu";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
-import { useThemeStore, type Palette } from "@/store/themeStore";
 import { useNotifications, useNotifStore } from "@/hooks/useNotifications";
 import {
   usePrinters,
@@ -107,9 +105,6 @@ export default function OrderTypePage() {
   useNotifications({ onOrderNew: (order) => autoPrintWebOrderRef.current?.(order) });
   const unreadCount = useNotifStore((s) => s.unreadCount);
 
-  // Tema (paleta + modo claro/oscuro) para el modal de configuración.
-  const { palette, mode, setPalette, toggleMode } = useThemeStore();
-
   // Config remota de la sucursal: define qué tipos de orden acepta. Un bar
   // con allowedOrderTypes=["DINE_IN"] oculta las tarjetas Para Llevar/Delivery.
   const tpvConfig = useTpvConfig();
@@ -126,7 +121,6 @@ export default function OrderTypePage() {
   const [acceptingWebId, setAcceptingWebId] = useState<string | null>(null);
   // Cajón completo de tickets (juntar / repartidor / cocina) + config modal.
   const [showOrders, setShowOrders] = useState(false);
-  const [showConfig, setShowConfig] = useState(false);
   const [deliveryDrivers, setDeliveryDrivers] = useState<
     { id: string; name: string; isAvailable?: boolean }[]
   >([]);
@@ -825,6 +819,16 @@ export default function OrderTypePage() {
     }
     setAskingAdminPin(true);
   };
+  // "Configuración" → pestaña General de Ajustes (sesión, letra, ancho ticket,
+  // paleta, modo). Antes abría un modal flotante; ahora vive en Ajustes.
+  const goGeneral = () => {
+    const role = employee?.role;
+    if (role === "ADMIN" || role === "OWNER") {
+      router.push("/admin/apariencia");
+      return;
+    }
+    setAskingAdminPin(true);
+  };
 
   return (
     <div className="flex h-[100dvh] w-full bg-[var(--bg)] overflow-auto">
@@ -850,12 +854,13 @@ export default function OrderTypePage() {
         onDrivers={() => setShowDrivers(true)}
         onNotifs={() => setShowNotifs(true)}
         onManageTickets={() => setShowOrders(true)}
-        onConfigMenu={() => setShowConfig(true)}
+        onConfigMenu={goGeneral}
         onSwitchEmployee={handleLogout}
         canMerge={canMergeOpenOrders && !hideMoney}
         onMergeOrders={handleMergeOpenOrders}
         onAssignDriver={canMergeOpenOrders ? handleAssignDriverToOrders : undefined}
         drivers={deliveryDrivers}
+        logoUrl={ticketConfig?.logoUrl || null}
         webOrdersCount={pendingWebCount}
         unreadNotifs={unreadCount}
         allowedTypes={tpvConfig.allowedOrderTypes}
@@ -942,20 +947,6 @@ export default function OrderTypePage() {
         onSendToKitchen={handleSendOrdersToKitchen}
       />
 
-      {/* MODAL DE CONFIGURACIÓN — tema / modo claro-oscuro / bloquear terminal. */}
-      <ConfigMenu
-        isOpen={showConfig}
-        onClose={() => setShowConfig(false)}
-        onLogout={() => {
-          logout();
-          setShowConfig(false);
-          router.replace("/locked");
-        }}
-        currentTheme={palette}
-        onThemeChange={(p) => setPalette(p as Palette)}
-        isDark={mode === "dark"}
-        onToggleMode={toggleMode}
-      />
     </div>
   );
 }
