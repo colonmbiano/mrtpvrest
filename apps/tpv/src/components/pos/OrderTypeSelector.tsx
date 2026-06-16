@@ -33,7 +33,6 @@ import {
 } from "lucide-react";
 import type { OrderType } from "@/components/tpv/TicketPanel";
 import UserBadge from "@/components/UserBadge";
-import { useThemeStore } from "@/store/themeStore";
 
 export type ExtendedOrderType = OrderType;
 
@@ -278,11 +277,6 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   allowedTypes,
 }) => {
   const paidMode = mode === "paid";
-  // Modo de tema (oscuro/claro) para decidir el fondo de las tarjetas de tipo
-  // de pedido: en oscuro las pintamos gris claro (resaltan como tarjetas
-  // claras); en claro mantienen el tinte de su color.
-  const themeMode = useThemeStore((s) => s.mode);
-  const darkCards = themeMode === "dark";
   const [menuOpen, setMenuOpen] = useState(false);
   const [filter, setFilter] = useState<"ALL" | OrderType>("ALL");
   const menuRef = useRef<HTMLDivElement>(null);
@@ -936,17 +930,10 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   type="button"
                   onClick={() => onSelect(type.id)}
                   className="group relative flex min-h-[120px] flex-1 flex-col items-center justify-center gap-3 rounded-2xl border p-5 text-center transition-colors active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-                  style={
-                    darkCards && type.id === "DINE_IN"
-                      ? { backgroundColor: "#D7DBE0", borderColor: "rgba(0,0,0,0.14)" }
-                      : { backgroundColor: `${type.accent}14`, borderColor: `${type.accent}55` }
-                  }
+                  style={{ backgroundColor: `${type.accent}14`, borderColor: `${type.accent}55` }}
                 >
                   {/* Atajo de teclado, discreto en la esquina */}
-                  <span
-                    className="absolute right-3 top-2.5 text-[11px] font-black text-white/25"
-                    style={darkCards && type.id === "DINE_IN" ? { color: "rgba(0,0,0,0.3)" } : undefined}
-                  >
+                  <span className="absolute right-3 top-2.5 text-[11px] font-black text-white/25">
                     {type.shortcut}
                   </span>
                   <span
@@ -959,10 +946,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   >
                     <Icon size={36} strokeWidth={2.4} />
                   </span>
-                  <h3
-                    className="text-2xl font-black leading-tight tracking-tight"
-                    style={darkCards && type.id === "DINE_IN" ? { color: "#1b1d21" } : undefined}
-                  >
+                  <h3 className="text-2xl font-black leading-tight tracking-tight">
                     {type.title}
                   </h3>
                 </button>
