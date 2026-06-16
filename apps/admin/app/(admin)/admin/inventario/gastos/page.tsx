@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ChevronLeft, Wallet, Receipt, ShoppingCart,
+  ChevronLeft, Wallet, Receipt, ShoppingCart, Bike,
   Banknote, CreditCard, ArrowLeftRight, BarChart3, Tag,
 } from "lucide-react";
 import api from "@/lib/api";
@@ -19,15 +19,16 @@ interface Summary {
   range: { from: string; to: string };
   operatingExpenses: { total: number; previousTotal: number; delta: number; deltaPct: number | null; count: number };
   purchases: { total: number; previousTotal: number; delta: number; deltaPct: number | null; count: number };
+  driverExpenses: { total: number; previousTotal: number; delta: number; deltaPct: number | null; count: number };
   grandTotal: number;
   previousGrandTotal: number;
   byPaymentMethod: { CASH_DRAWER: number; CORPORATE_CARD: number; TRANSFER: number };
-  topCategories: Array<{ categoryId: string | null; name: string; icon: string; color: string | null; total: number; count: number }>;
+  topCategories: Array<{ categoryId?: string | null; name: string; icon: string; color: string | null; total: number; count: number }>;
 }
 
 interface Daily {
   range: { from: string; to: string };
-  days: Array<{ date: string; opExpenses: number; purchases: number; total: number }>;
+  days: Array<{ date: string; opExpenses: number; purchases: number; driver?: number; total: number }>;
 }
 
 function rangeFromPreset(p: PresetKey): { from: string; to: string } {
@@ -108,6 +109,9 @@ export default function GastosReportPage() {
   const purchasesDelta = summary
     ? deltaLabel(summary.purchases.total, summary.purchases.previousTotal)
     : undefined;
+  const driverDelta = summary
+    ? deltaLabel(summary.driverExpenses.total, summary.driverExpenses.previousTotal)
+    : undefined;
 
   return (
     <WtScreen>
@@ -136,7 +140,7 @@ export default function GastosReportPage() {
       ) : (
         <div className="space-y-5">
           {/* KPIs */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <StatTile
               icon={Wallet}
               value={money(summary.grandTotal)}
@@ -157,6 +161,13 @@ export default function GastosReportPage() {
               label={`Compras · ${summary.purchases.count} órdenes`}
               delta={purchasesDelta?.text}
               deltaUp={purchasesDelta?.up ?? true}
+            />
+            <StatTile
+              icon={Bike}
+              value={money(summary.driverExpenses.total)}
+              label={`Repartidores · ${summary.driverExpenses.count} mov.`}
+              delta={driverDelta?.text}
+              deltaUp={driverDelta?.up ?? true}
             />
           </div>
 
@@ -202,12 +213,12 @@ export default function GastosReportPage() {
             <WtCard className="p-4 md:p-5">
               <SectionHead title="Top categorías de gasto" />
               {summary.topCategories.length === 0 ? (
-                <EmptyState icon={Tag} title="Sin gastos operativos" hint="No hay gastos operativos en este rango." />
+                <EmptyState icon={Tag} title="Sin gastos" hint="No hay gastos en este rango." />
               ) : (
                 <div className="space-y-3">
                   {summary.topCategories.map((c) => {
-                    const pct = summary.operatingExpenses.total > 0
-                      ? (c.total / summary.operatingExpenses.total) * 100
+                    const pct = summary.grandTotal > 0
+                      ? (c.total / summary.grandTotal) * 100
                       : 0;
                     return (
                       <div key={c.categoryId || c.name}>

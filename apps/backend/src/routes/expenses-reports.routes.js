@@ -71,36 +71,66 @@ router.get('/expenses-summary', requireAdmin, async (req, res) => {
       }),
     ]);
 
+    // Gastos de REPARTIDOR (DriverCashMovement EXPENSE). No tienen FK a tenant,
+    // así que se scopean por los repartidores de la(s) sucursal(es). Son un
+    // tercer origen distinto de OperatingExpense y PurchaseOrder (no se
+    // doblan): el reporte los ignoraba por completo. La categoría ya es
+    // canónica (GASOLINA/COMPRAS/MANTENIMIENTO/CASETAS/OTROS) tras la Fase 1.
+    const drivers = await prisma.employee.findMany({
+      where: {
+        role: 'DELIVERY',
+        ...(req.query.locationId
+          ? { locationId: String(req.query.locationId) }
+          : { location: { restaurantId } }),
+      },
+      select: { id: true },
+    });
+    const driverIds = drivers.map((d) => d.id);
+    const [driverExp, driverExpPrev] = driverIds.length
+      ? await Promise.all([
+          prisma.driverCashMovement.findMany({
+            where: { driverId: { in: driverIds }, type: 'EXPENSE', createdAt: { gte: from, lte: to } },
+            select: { amount: true, category: true },
+          }),
+          prisma.driverCashMovement.findMany({
+            where: { driverId: { in: driverIds }, type: 'EXPENSE', createdAt: { gte: prevFrom, lte: prevTo } },
+            select: { amount: true },
+          }),
+        ])
+      : [[], []];
+
     const sumOp = opExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
     const sumPo = purchases.reduce((s, p) => s + Number(p.totalAmount || 0), 0);
+    const sumDrv = driverExp.reduce((s, m) => s + Number(m.amount || 0), 0);
     const sumOpPrev = opExpensesPrev.reduce((s, e) => s + Number(e.amount || 0), 0);
     const sumPoPrev = purchasesPrev.reduce((s, p) => s + Number(p.totalAmount || 0), 0);
+    const sumDrvPrev = driverExpPrev.reduce((s, m) => s + Number(m.amount || 0), 0);
 
-    // Breakdown por payment method (combinando gastos + compras)
+    // Breakdown por payment method (gastos + compras + repartidor). El gasto
+    // del repartidor se paga del efectivo que trae → cuenta como CASH_DRAWER.
     const byMethod = { CASH_DRAWER: 0, CORPORATE_CARD: 0, TRANSFER: 0 };
     for (const e of opExpenses) byMethod[e.paymentMethod] += Number(e.amount || 0);
     for (const p of purchases) byMethod[p.paymentMethod] += Number(p.totalAmount || 0);
+    byMethod.CASH_DRAWER += sumDrv;
 
-    // Top categorías de OperatingExpense
-    const byCategory = {};
-    for (const e of opExpenses) {
-      const key = e.categoryId || 'NONE';
-      if (!byCategory[key]) {
-        byCategory[key] = {
-          categoryId: e.categoryId,
-          name: e.category?.name || 'Sin categoría',
-          icon: e.category?.icon || '📝',
-          color: e.category?.color || null,
-          total: 0,
-          count: 0,
-        };
-      }
-      byCategory[key].total += Number(e.amount || 0);
-      byCategory[key].count += 1;
-    }
-    const topCategories = Object.values(byCategory)
+    // Top categorías UNIFICADAS por nombre — junta los 3 orígenes:
+    // OperatingExpense (su categoría), PurchaseOrder (→ COMPRAS) y gasto de
+    // repartidor (su categoría canónica). Las COMPRAS de compra y de repartidor
+    // se funden en un solo bucket.
+    const catMap = {};
+    const addCat = (name, icon, color, amount) => {
+      const label = (name || 'Sin categoría').toString();
+      const key = label.toUpperCase();
+      if (!catMap[key]) catMap[key] = { name: label, icon: icon || '📝', color: color || null, total: 0, count: 0 };
+      catMap[key].total += Number(amount || 0);
+      catMap[key].count += 1;
+    };
+    for (const e of opExpenses) addCat(e.category?.name, e.category?.icon, e.category?.color, e.amount);
+    for (const p of purchases) addCat('COMPRAS', '🛒', '#88D66C', p.totalAmount);
+    for (const m of driverExp) addCat(m.category, null, null, m.amount);
+    const topCategories = Object.values(catMap)
       .sort((a, b) => b.total - a.total)
-      .slice(0, 8);
+      .slice(0, 10);
 
     res.json({
       range: { from, to },
@@ -119,8 +149,15 @@ router.get('/expenses-summary', requireAdmin, async (req, res) => {
         deltaPct: sumPoPrev > 0 ? ((sumPo - sumPoPrev) / sumPoPrev) * 100 : null,
         count: purchases.length,
       },
-      grandTotal: sumOp + sumPo,
-      previousGrandTotal: sumOpPrev + sumPoPrev,
+      driverExpenses: {
+        total: sumDrv,
+        previousTotal: sumDrvPrev,
+        delta: sumDrv - sumDrvPrev,
+        deltaPct: sumDrvPrev > 0 ? ((sumDrv - sumDrvPrev) / sumDrvPrev) * 100 : null,
+        count: driverExp.length,
+      },
+      grandTotal: sumOp + sumPo + sumDrv,
+      previousGrandTotal: sumOpPrev + sumPoPrev + sumDrvPrev,
       byPaymentMethod: byMethod,
       topCategories,
     });
@@ -143,7 +180,16 @@ router.get('/expenses-daily', requireAdmin, async (req, res) => {
       ? { locationId: String(req.query.locationId) }
       : { location: { restaurantId } };
 
-    const [opExpenses, purchases] = await Promise.all([
+    const drivers = await prisma.employee.findMany({
+      where: {
+        role: 'DELIVERY',
+        ...(req.query.locationId ? { locationId: String(req.query.locationId) } : { location: { restaurantId } }),
+      },
+      select: { id: true },
+    });
+    const driverIds = drivers.map((d) => d.id);
+
+    const [opExpenses, purchases, driverExp] = await Promise.all([
       prisma.operatingExpense.findMany({
         where: { restaurantId, occurredAt: { gte: from, lte: to } },
         select: { amount: true, occurredAt: true },
@@ -152,6 +198,12 @@ router.get('/expenses-daily', requireAdmin, async (req, res) => {
         where: { ...locFilter, receivedAt: { gte: from, lte: to } },
         select: { totalAmount: true, receivedAt: true },
       }),
+      driverIds.length
+        ? prisma.driverCashMovement.findMany({
+            where: { driverId: { in: driverIds }, type: 'EXPENSE', createdAt: { gte: from, lte: to } },
+            select: { amount: true, createdAt: true },
+          })
+        : Promise.resolve([]),
     ]);
 
     // Bucketear por día (YYYY-MM-DD)
@@ -161,18 +213,24 @@ router.get('/expenses-daily', requireAdmin, async (req, res) => {
       return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date(d));
     }
     function bucket(k) {
-      if (!buckets.has(k)) buckets.set(k, { date: k, opExpenses: 0, purchases: 0, total: 0 });
+      if (!buckets.has(k)) buckets.set(k, { date: k, opExpenses: 0, purchases: 0, driver: 0, total: 0 });
       return buckets.get(k);
     }
+    const retotal = (b) => { b.total = b.opExpenses + b.purchases + b.driver; };
     for (const e of opExpenses) {
       const b = bucket(dateKey(e.occurredAt));
       b.opExpenses += Number(e.amount || 0);
-      b.total = b.opExpenses + b.purchases;
+      retotal(b);
     }
     for (const p of purchases) {
       const b = bucket(dateKey(p.receivedAt));
       b.purchases += Number(p.totalAmount || 0);
-      b.total = b.opExpenses + b.purchases;
+      retotal(b);
+    }
+    for (const m of driverExp) {
+      const b = bucket(dateKey(m.createdAt));
+      b.driver += Number(m.amount || 0);
+      retotal(b);
     }
 
     // Rellenar días faltantes con 0 (para que la sparkline sea continua)
@@ -182,7 +240,7 @@ router.get('/expenses-daily', requireAdmin, async (req, res) => {
     const end = new Date(to);
     while (cursor <= end) {
       const k = dateKey(cursor);
-      result.push(buckets.get(k) || { date: k, opExpenses: 0, purchases: 0, total: 0 });
+      result.push(buckets.get(k) || { date: k, opExpenses: 0, purchases: 0, driver: 0, total: 0 });
       cursor.setDate(cursor.getDate() + 1);
     }
 
