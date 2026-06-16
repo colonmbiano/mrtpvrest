@@ -503,6 +503,7 @@ export default function DriversPanel({
             onClose={() => setSelectedDriver(null)}
             onRefresh={() => fetchLive(true)}
             accent={accent}
+            canCut={canViewFinancial}
           />
         )}
       </div>

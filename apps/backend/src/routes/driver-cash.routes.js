@@ -100,14 +100,33 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
     const { date } = req.query;
-    // Día natural en hora de México (el servidor corre en UTC).
-    const { from, to } = localDayRange(date);
     const restaurantId = req.restaurantId || req.user?.restaurantId;
+
+    // Ventana de pedidos:
+    //  - Con ?date: día natural en hora de México (vista histórica).
+    //  - Sin ?date: PENDIENTE DE CORTE — pedidos desde el último corte del
+    //    repartidor (no por día natural: los turnos cruzan medianoche y el
+    //    corte se hace de madrugada). Así "pedidos" cuadra con los movimientos
+    //    (approved=false) y no se vacía después de las 00:00. Si nunca hubo
+    //    corte, tope de seguridad de 7 días para no traer todo el histórico.
+    let createdAtRange;
+    if (date) {
+      const { from, to } = localDayRange(date);
+      createdAtRange = { gte: from, lte: to };
+    } else {
+      const lastCut = await prisma.driverCashCut.findFirst({
+        where: { driverId: driver.id },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      });
+      const floor = lastCut?.createdAt || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      createdAtRange = { gt: floor };
+    }
 
     const orders = await prisma.order.findMany({
       where: {
         deliveryDriverId: driver.id,
-        createdAt: { gte: from, lte: to },
+        createdAt: createdAtRange,
         ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { restaurantId } : {}),
       },
       orderBy: { createdAt: 'asc' },
@@ -368,7 +387,7 @@ router.get('/shift-requests', authenticate, requireTenantAccess, requireRole('AD
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
-router.post('/:driverId/cut', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/:driverId/cut', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER'), async (req, res) => {
   try {
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
