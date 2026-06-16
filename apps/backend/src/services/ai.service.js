@@ -430,23 +430,26 @@ Genera las recetas automáticas para el siguiente platillo:
     const recetaData = aiResponse.recetas?.find(r => r.producto_id === menuItem.id) || aiResponse.recetas?.[0];
     if (!recetaData) throw new Error('La IA no devolvió receta para este platillo');
 
-    // Limpiar items previos de la receta si existen
-    const existingRecipe = await tx.recipe.findUnique({ where: { menuItemId } });
+    // Limpiar items previos de la receta BASE (variantId NULL) si existe.
+    // La unicidad ahora es (menuItemId, variantId), por eso findFirst + create
+    // manual en vez de upsert por menuItemId.
+    const existingRecipe = await tx.recipe.findFirst({ where: { menuItemId, variantId: null } });
     if (existingRecipe) {
       await tx.recipeItem.deleteMany({ where: { recipeId: existingRecipe.id } });
     }
 
-    const recipe = await tx.recipe.upsert({
-      where: { menuItemId },
-      update: {
-        preparationSteps: recetaData.instrucciones_cocina || []
-      },
-      create: {
-        menuItemId,
-        restaurantId: menuItem.restaurantId,
-        preparationSteps: recetaData.instrucciones_cocina || []
-      }
-    });
+    const recipe = existingRecipe
+      ? await tx.recipe.update({
+          where: { id: existingRecipe.id },
+          data: { preparationSteps: recetaData.instrucciones_cocina || [] }
+        })
+      : await tx.recipe.create({
+          data: {
+            menuItemId,
+            restaurantId: menuItem.restaurantId,
+            preparationSteps: recetaData.instrucciones_cocina || []
+          }
+        });
 
     for (const rawIng of (recetaData.insumos_inventario || [])) {
       const ingredientName = normalizeName(rawIng.nombre_insumo);
