@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { apiOrQueue } from "@/lib/offline";
 
 type Movement = {
   id: string;
@@ -77,6 +78,15 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
+
+  // Inventariar compras del repartidor (entrada de stock, SIN dinero). El gasto
+  // ya está en su corte; esto solo suma al inventario. Offline-first vía
+  // apiOrQueue (Idempotency-Key) — el backend es idempotente por movementId.
+  const [ingredients, setIngredients] = useState<Array<{ id: string; name: string; unit?: string }>>([]);
+  const [invFor, setInvFor] = useState<string | null>(null);
+  const [invLines, setInvLines] = useState<Array<{ ingredientId: string; qty: string }>>([{ ingredientId: "", qty: "" }]);
+  const [invSaving, setInvSaving] = useState(false);
+  const [invDone, setInvDone] = useState<Set<string>>(new Set());
 
   // Categorías canónicas — mismas que la app de delivery y el catálogo de gastos
   // (OperatingExpenseCategory), para que repartidor/turno/reportes coincidan.
@@ -158,6 +168,39 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
       alert("Error al registrar movimiento");
     } finally {
       setAdding(false);
+    }
+  }
+
+  // Catálogo de insumos (una vez) para inventariar las compras del repartidor.
+  useEffect(() => {
+    let cancelled = false;
+    api.get("/api/purchases/lookup/ingredients")
+      .then((r) => { if (!cancelled) setIngredients(Array.isArray(r.data) ? r.data : []); })
+      .catch(() => { /* sin inventario: el botón no aparece útil, no rompe */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  function openInventory(mId: string) {
+    setInvFor((cur) => (cur === mId ? null : mId));
+    setInvLines([{ ingredientId: "", qty: "" }]);
+  }
+  function setLine(i: number, patch: Partial<{ ingredientId: string; qty: string }>) {
+    setInvLines((prev) => prev.map((l, li) => (li === i ? { ...l, ...patch } : l)));
+  }
+  async function submitInventory(mId: string) {
+    const items = invLines
+      .filter((l) => l.ingredientId && Number(l.qty) > 0)
+      .map((l) => ({ ingredientId: l.ingredientId, qty: Number(l.qty) }));
+    if (items.length === 0) { alert("Agrega al menos un insumo con cantidad"); return; }
+    setInvSaving(true);
+    // Offline-first: si no hay red, se encola y sincroniza luego (idempotente).
+    const res = await apiOrQueue("adjustment", "POST", "/api/driver-cash/inventory-in", { movementId: mId, items });
+    setInvSaving(false);
+    if (res.ok) {
+      setInvDone((prev) => new Set(prev).add(mId));
+      setInvFor(null);
+    } else {
+      alert(res.error || "No se pudo inventariar");
     }
   }
 
@@ -323,35 +366,91 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
               <p className="text-sm text-[var(--text-secondary)] italic">Sin movimientos pendientes de corte.</p>
             ) : (
               <div className="space-y-2">
-                {movements.map((m) => (
+                {movements.map((m) => {
+                  const canInv = m.type === 'EXPENSE' && m.category === 'COMPRAS';
+                  const done = invDone.has(m.id);
+                  return (
                   <div
                     key={m.id}
-                    className="flex items-center justify-between p-3 rounded-xl bg-[var(--surf2)] border border-[var(--border)]"
+                    className="rounded-xl bg-[var(--surf2)] border border-[var(--border)] overflow-hidden"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${
-                        m.type === 'INCOME' ? 'bg-green-500/10 text-green-400' :
-                        m.type === 'EXPENSE' ? 'bg-red-500/10 text-red-400' :
-                        m.type === 'FLOAT' ? 'bg-amber-500/10 text-amber-400' :
-                        'bg-blue-500/10 text-blue-400'
-                      }`}>
-                        {m.type === 'INCOME' ? '↑' : m.type === 'EXPENSE' ? '↓' : m.type === 'FLOAT' ? '$' : '↺'}
+                    <div className="flex items-center justify-between p-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 ${
+                          m.type === 'INCOME' ? 'bg-green-500/10 text-green-400' :
+                          m.type === 'EXPENSE' ? 'bg-red-500/10 text-red-400' :
+                          m.type === 'FLOAT' ? 'bg-amber-500/10 text-amber-400' :
+                          'bg-blue-500/10 text-blue-400'
+                        }`}>
+                          {m.type === 'INCOME' ? '↑' : m.type === 'EXPENSE' ? '↓' : m.type === 'FLOAT' ? '$' : '↺'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-white truncate">{m.description || m.category}</div>
+                          <div className="text-[10px] text-[var(--text-secondary)]">{new Date(m.createdAt).toLocaleTimeString()}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-xs font-bold text-white">{m.description || m.category}</div>
-                        <div className="text-[10px] text-[var(--text-secondary)]">{new Date(m.createdAt).toLocaleTimeString()}</div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {canInv && (done ? (
+                          <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md bg-green-500/10 text-green-400 border border-green-500/20">✓ Inventariado</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openInventory(m.id)}
+                            className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md bg-white/5 text-white/70 border border-white/10 hover:text-white active:scale-95"
+                          >📦 Inventariar</button>
+                        ))}
+                        <div className={`text-sm font-black ${
+                          m.type === 'INCOME' ? 'text-green-400' :
+                          m.type === 'EXPENSE' ? 'text-red-400' :
+                          m.type === 'FLOAT' ? 'text-amber-400' :
+                          'text-blue-400'
+                        }`}>
+                          {m.type === 'EXPENSE' ? '-' : ''}${m.amount.toFixed(0)}
+                        </div>
                       </div>
                     </div>
-                    <div className={`text-sm font-black ${
-                      m.type === 'INCOME' ? 'text-green-400' :
-                      m.type === 'EXPENSE' ? 'text-red-400' :
-                      m.type === 'FLOAT' ? 'text-amber-400' :
-                      'text-blue-400'
-                    }`}>
-                      {m.type === 'EXPENSE' ? '-' : ''}${m.amount.toFixed(0)}
-                    </div>
+
+                    {invFor === m.id && !done && (
+                      <div className="border-t border-[var(--border)] p-3 space-y-2 bg-[var(--bg)]">
+                        <div className="text-[9px] font-black uppercase tracking-widest text-white/40">¿Qué insumos entraron? (suma al inventario, no toca el dinero)</div>
+                        {invLines.map((l, i) => (
+                          <div key={i} className="flex gap-2">
+                            <select
+                              value={l.ingredientId}
+                              onChange={(e) => setLine(i, { ingredientId: e.target.value })}
+                              className="flex-1 bg-[var(--surf2)] border border-[var(--border)] rounded-lg px-2 py-2 text-xs text-white outline-none"
+                            >
+                              <option value="">Insumo…</option>
+                              {ingredients.map((ing) => <option key={ing.id} value={ing.id}>{ing.name}</option>)}
+                            </select>
+                            <input
+                              type="number"
+                              value={l.qty}
+                              onChange={(e) => setLine(i, { qty: e.target.value })}
+                              placeholder="Cant."
+                              className="w-20 bg-[var(--surf2)] border border-[var(--border)] rounded-lg px-2 py-2 text-xs text-white outline-none"
+                            />
+                          </div>
+                        ))}
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setInvLines((prev) => [...prev, { ingredientId: "", qty: "" }])}
+                            className="text-[10px] font-bold px-3 py-2 rounded-lg border border-[var(--border)] text-white/60 hover:text-white"
+                          >+ línea</button>
+                          <button
+                            type="button"
+                            onClick={() => submitInventory(m.id)}
+                            disabled={invSaving}
+                            className="flex-1 py-2 rounded-lg font-black text-xs uppercase tracking-widest text-black active:scale-95 disabled:opacity-50"
+                            style={{ background: accent }}
+                          >{invSaving ? "Guardando…" : "Guardar en inventario"}</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
