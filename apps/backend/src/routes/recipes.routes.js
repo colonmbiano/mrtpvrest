@@ -170,6 +170,87 @@ router.post('/', requireAdmin, async (req, res) => {
   }
 });
 
+// ── Modificadores (extras) → consumo de inventario ───────────────────────
+// GET /api/recipes/modifiers — nombres distintos de modificadores del menú
+// con su receta (insumos que descuenta cada extra). Agrupado por nombre.
+router.get('/modifiers', requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const [mods, maps] = await Promise.all([
+      prisma.modifier.findMany({
+        where: { group: { menuItem: { restaurantId } } },
+        select: { name: true, priceAdd: true },
+      }),
+      prisma.modifierIngredient.findMany({
+        where: { restaurantId },
+        include: {
+          ingredient: { select: { id: true, name: true, baseUnit: true, cost: true } },
+          subRecipe: { select: { id: true, name: true, yieldUnit: true } },
+        },
+      }),
+    ]);
+
+    const nameMap = new Map();
+    for (const m of mods) {
+      const e = nameMap.get(m.name) || { name: m.name, priceAdd: 0, count: 0 };
+      e.priceAdd = Math.max(e.priceAdd, Number(m.priceAdd || 0));
+      e.count += 1;
+      nameMap.set(m.name, e);
+    }
+    const mapsByName = new Map();
+    for (const mm of maps) {
+      if (!mapsByName.has(mm.name)) mapsByName.set(mm.name, []);
+      mapsByName.get(mm.name).push(mm);
+    }
+    const result = [...nameMap.values()]
+      .sort((a, b) => b.priceAdd - a.priceAdd || a.name.localeCompare(b.name))
+      .map((n) => ({ ...n, items: mapsByName.get(n.name) || [] }));
+
+    res.json(result);
+  } catch (e) {
+    console.error('GET /api/recipes/modifiers:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/recipes/modifiers — define el consumo de un modificador (por nombre).
+// Body: { name, items: [{ ingredientId? | subRecipeId?, quantity, unit, wastagePercent? }] }
+// Reemplaza por completo el mapeo de ese nombre.
+router.post('/modifiers', requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { name, items = [] } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'name requerido' });
+
+    const normalized = validateItems(items);
+    if (normalized.error) return res.status(400).json({ error: normalized.error });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.modifierIngredient.deleteMany({ where: { restaurantId, name: String(name) } });
+      if (normalized.data.length > 0) {
+        await tx.modifierIngredient.createMany({
+          data: normalized.data.map((it) => ({
+            restaurantId,
+            name: String(name),
+            ingredientId: it.ingredientId,
+            subRecipeId: it.subRecipeId,
+            quantity: it.quantity,
+            unit: it.unit,
+            wastagePercent: it.wastagePercent,
+          })),
+        });
+      }
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('POST /api/recipes/modifiers:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
