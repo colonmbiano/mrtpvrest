@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LockKeyhole, MapPin, MonitorCheck } from "lucide-react";
+import { MapPin } from "lucide-react";
 import NumpadPIN from "@/components/NumpadPIN";
 import VersionTag from "@/components/VersionTag";
 import { useAuthStore } from "@/store/authStore";
@@ -159,24 +159,23 @@ export default function LockedPage() {
       <div
         className="relative z-10 flex h-full min-h-0 w-full flex-col items-center justify-center px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-[max(3.25rem,calc(env(safe-area-inset-top)+2.75rem))] sm:px-4 sm:pb-[max(1rem,env(safe-area-inset-bottom))] sm:pt-[max(4.25rem,calc(env(safe-area-inset-top)+3.5rem))]"
       >
-      <main className="flex max-h-full min-h-0 w-full max-w-[420px] flex-col items-center gap-4 overflow-y-auto scrollbar-hide rounded-2xl border border-white/10 bg-white/[0.045] p-5 text-center shadow-[0_30px_90px_rgba(0,0,0,0.45)] backdrop-blur-md sm:gap-5 sm:p-7 landscape:gap-3 landscape:p-4">
-        {/* HEADER centrado */}
-        <div className="flex flex-col items-center">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)] landscape:mb-2 landscape:h-10 landscape:w-10">
-            <LockKeyhole size={26} strokeWidth={2.5} />
+      <main className="flex max-h-full min-h-0 w-full max-w-[360px] flex-col items-center gap-6 overflow-y-auto scrollbar-hide px-2 text-center landscape:gap-4">
+        {/* HEADER — avatar redondo + nombre de terminal + indicación (mockup BLOQUEO) */}
+        <div className="flex flex-col items-center gap-3 landscape:gap-2">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--brand)] font-display text-2xl font-bold text-[var(--brand-fg)] landscape:h-14 landscape:w-14">
+            {terminalName.charAt(0).toUpperCase()}
           </div>
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--brand)]">
-            Acceso de empleado
-          </p>
-          <h1 className="mt-1 text-[clamp(1.4rem,5vw,2.4rem)] font-black leading-tight tracking-tight text-white">
-            {terminalName}
-          </h1>
-          <p className="mt-1.5 max-w-xs text-xs font-semibold leading-relaxed text-white/55 sm:text-sm landscape:hidden">
-            Ingresa el PIN de 4 dígitos para continuar con la venta.
-          </p>
+          <div>
+            <h1 className="font-display text-xl font-bold tracking-tight text-[var(--text-primary)] sm:text-2xl">
+              {terminalName}
+            </h1>
+            <p className="mt-0.5 text-sm text-[var(--text-secondary)]">
+              Ingresa tu PIN para continuar
+            </p>
+          </div>
         </div>
 
-        {/* NUMPAD (incluye los puntos del PIN + N/4) */}
+        {/* NUMPAD (puntos del PIN + teclado) */}
         <NumpadPIN
           onSubmit={handlePINSubmit}
           disabled={isValidating}
@@ -190,8 +189,8 @@ export default function LockedPage() {
         {(error || isValidating) && (
           <div className="w-full">
             {error && (
-              <div className="rounded-lg border border-red-400/25 bg-red-500/10 p-3">
-                <p className="text-sm font-bold text-red-300">{error}</p>
+              <div className="rounded-xl border border-[var(--danger)] bg-[var(--danger-soft)] p-3">
+                <p className="text-sm font-bold text-[var(--danger)]">{error}</p>
               </div>
             )}
             {isValidating && (
@@ -203,19 +202,13 @@ export default function LockedPage() {
                     borderTopColor: "var(--brand)",
                   }}
                 />
-                <p className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-white/45">
+                <p className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--text-muted)]">
                   Validando PIN
                 </p>
               </div>
             )}
           </div>
         )}
-
-        {/* TERMINAL VINCULADA */}
-        <div className="flex min-h-[40px] w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 text-xs font-bold text-white/45 landscape:hidden">
-          <MonitorCheck size={16} className="text-emerald-300" />
-          <span className="min-w-0 truncate">Terminal vinculada a {locationName}</span>
-        </div>
       </main>
       </div>
 
