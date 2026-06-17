@@ -193,10 +193,13 @@ export default function OrderTypePage() {
   useEffect(() => {
     let cancelled = false;
     // Diferido a microtask (patrón del resto del TPV): evita set-state-in-effect.
-    queueMicrotask(() => { if (!cancelled) fetchOpenOrders(); });
+    // Cargamos repartidores en el montaje (no solo al abrir el cajón) porque la
+    // selección inline del panel también ofrece "Asignar repartidor" y usa esta
+    // misma lista; sin esto el picker inline salía "No hay repartidores activos".
+    queueMicrotask(() => { if (!cancelled) { fetchOpenOrders(); fetchDeliveryDrivers(); } });
     const id = setInterval(fetchOpenOrders, 30000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [fetchOpenOrders]);
+  }, [fetchOpenOrders, fetchDeliveryDrivers]);
 
   // Al abrir el cajón, refrescamos órdenes y cargamos repartidores (para el
   // selector de asignación). La carga de "Cobradas" ya la dispara el efecto por
