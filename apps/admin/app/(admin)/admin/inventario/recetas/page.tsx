@@ -29,12 +29,19 @@ const BASE_UNIT_LABEL: Record<BaseUnit, string> = {
   GRAM: "g", ML: "ml", PIECE: "pz",
 };
 
+interface MenuItemVariant {
+  id: string;
+  name: string;
+  price: number;
+}
+
 interface MenuItem {
   id: string;
   name: string;
   price: number;
   imageUrl?: string;
   categoryId?: string;
+  variants?: MenuItemVariant[];
 }
 
 interface Ingredient {
@@ -91,6 +98,8 @@ export default function RecetasPage() {
   const [subRecipes, setSubRecipes] = useState<SubRecipe[]>([]);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<MenuItem | null>(null);
+  // Variante en edición: null = receta base del platillo.
+  const [variantId, setVariantId] = useState<string | null>(null);
 
   const [items, setItems] = useState<RecipeItem[]>([]);
   const [marginErrorPct, setMarginErrorPct] = useState<string>("0");
@@ -120,10 +129,22 @@ export default function RecetasPage() {
 
   async function selectItem(item: MenuItem) {
     setSelected(item);
+    setVariantId(null);
+    await loadRecipe(item.id, null);
+  }
+
+  async function pickVariant(vId: string | null) {
+    if (!selected) return;
+    setVariantId(vId);
+    await loadRecipe(selected.id, vId);
+  }
+
+  async function loadRecipe(menuItemId: string, vId: string | null) {
     setLoadingRecipe(true);
     setMsg(null);
     try {
-      const { data } = await api.get<RecipeData | null>(`/api/recipes/by-menu-item/${item.id}`);
+      const qs = vId ? `?variantId=${encodeURIComponent(vId)}` : "";
+      const { data } = await api.get<RecipeData | null>(`/api/recipes/by-menu-item/${menuItemId}${qs}`);
       if (data) {
         setItems(
           (data.items || []).map((r) => ({
@@ -218,10 +239,20 @@ export default function RecetasPage() {
     }, 0);
   }, [items]);
 
+  // Precio de referencia para el margen: el de la variante en edición si hay
+  // una seleccionada, si no el del platillo.
+  const effectivePrice = useMemo(() => {
+    if (variantId && selected?.variants) {
+      const v = selected.variants.find((x) => x.id === variantId);
+      if (v) return Number(v.price || 0);
+    }
+    return Number(selected?.price || 0);
+  }, [selected, variantId]);
+
   const marginDineIn = useMemo(() => {
-    if (!selected || !selected.price) return null;
-    return ((selected.price - totalCost) / selected.price) * 100;
-  }, [selected, totalCost]);
+    if (!effectivePrice) return null;
+    return ((effectivePrice - totalCost) / effectivePrice) * 100;
+  }, [effectivePrice, totalCost]);
 
   const marginDelivery = useMemo(() => {
     const p = parseFloat(priceDelivery);
@@ -249,6 +280,7 @@ export default function RecetasPage() {
     try {
       await api.post("/api/recipes", {
         menuItemId: selected.id,
+        variantId: variantId || undefined,
         marginErrorPct: parseFloat(marginErrorPct) || 0,
         targetMarginPct: targetMarginPct === "" ? null : parseFloat(targetMarginPct),
         priceDelivery: priceDelivery === "" ? null : parseFloat(priceDelivery),
@@ -434,7 +466,12 @@ export default function RecetasPage() {
                 <div className="min-w-0">
                   <h2 className="truncate font-display text-xl font-extrabold text-tx-hi">{selected.name}</h2>
                   <p className="text-sm text-tx-mut">
-                    Precio venta: <strong className="text-tx">{money(selected.price)}</strong>
+                    Precio venta: <strong className="text-tx">{money(effectivePrice)}</strong>
+                    {variantId && selected.variants && (
+                      <span className="ml-1 text-tx-mut">
+                        · variante <strong className="text-tx">{selected.variants.find((v) => v.id === variantId)?.name}</strong>
+                      </span>
+                    )}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">
@@ -446,6 +483,25 @@ export default function RecetasPage() {
                   </PrimaryBtn>
                 </div>
               </div>
+
+              {/* Selector de variante: cada variante (tamaño/sabor) lleva su
+                  propia receta para descontar su propio insumo. "Base" = receta
+                  del platillo cuando se vende sin variante. */}
+              {selected.variants && selected.variants.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Receta por variante</h3>
+                  <div className="flex flex-wrap gap-2">
+                    <VariantChip active={variantId === null} onClick={() => pickVariant(null)} disabled={loadingRecipe || saving}>
+                      Base
+                    </VariantChip>
+                    {selected.variants.map((v) => (
+                      <VariantChip key={v.id} active={variantId === v.id} onClick={() => pickVariant(v.id)} disabled={loadingRecipe || saving}>
+                        {v.name} · {money(v.price)}
+                      </VariantChip>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {msg && <Banner msg={msg} />}
 
@@ -588,6 +644,34 @@ function ChipBtn({
       style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
     >
       <Icon size={14} strokeWidth={2} /> {children}
+    </button>
+  );
+}
+
+function VariantChip({
+  active,
+  onClick,
+  disabled,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex min-h-9 items-center rounded-full px-3.5 text-xs font-bold transition-colors disabled:opacity-50"
+      style={{
+        background: active ? "var(--primary)" : "var(--surf-2)",
+        border: `1px solid ${active ? "var(--primary)" : "var(--bd-1)"}`,
+        color: active ? "var(--on-primary, #0b0b0d)" : "var(--tx)",
+      }}
+    >
+      {children}
     </button>
   );
 }

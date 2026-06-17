@@ -77,11 +77,14 @@ router.get('/', requireAdmin, async (req, res) => {
 });
 
 // GET /api/recipes/by-menu-item/:menuItemId — lee o devuelve null.
+// ?variantId=<id> lee la receta de esa variante; sin él, la receta BASE
+// (variantId NULL).
 router.get('/by-menu-item/:menuItemId', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const variantId = req.query.variantId ? String(req.query.variantId) : null;
     const recipe = await prisma.recipe.findFirst({
-      where: { menuItemId: req.params.menuItemId, restaurantId },
+      where: { menuItemId: req.params.menuItemId, restaurantId, variantId },
       include: {
         menuItem: { select: { id: true, name: true, price: true, imageUrl: true } },
         items: {
@@ -110,6 +113,7 @@ router.post('/', requireAdmin, async (req, res) => {
 
     const {
       menuItemId,
+      variantId = null,
       marginErrorPct = 0,
       targetMarginPct,
       priceDelivery,
@@ -123,14 +127,20 @@ router.post('/', requireAdmin, async (req, res) => {
     const mi = await prisma.menuItem.findFirst({ where: { id: menuItemId, restaurantId } });
     if (!mi) return res.status(404).json({ error: 'MenuItem no encontrado' });
 
+    // Si viene variantId, debe ser una variante de ESE platillo (evita
+    // colgar una receta de variante en el platillo equivocado).
+    const variant = variantId || null;
+    if (variant) {
+      const v = await prisma.menuItemVariant.findFirst({ where: { id: variant, menuItemId } });
+      if (!v) return res.status(400).json({ error: 'La variante no pertenece a este platillo' });
+    }
+
     const normalizedItems = validateItems(items);
     if (normalizedItems.error) return res.status(400).json({ error: normalizedItems.error });
 
     const recipe = await prisma.$transaction(async (tx) => {
-      // Upsert manual de la receta BASE del platillo (variantId NULL).
-      // La unicidad ahora es (menuItemId, variantId); este endpoint maneja la
-      // receta base, así que filtramos variantId null.
-      const existing = await tx.recipe.findFirst({ where: { menuItemId, variantId: null } });
+      // Upsert manual por (menuItemId, variantId). variantId NULL = receta base.
+      const existing = await tx.recipe.findFirst({ where: { menuItemId, variantId: variant } });
       const data = {
         restaurantId,
         marginErrorPct: Number(marginErrorPct) || 0,
@@ -140,7 +150,7 @@ router.post('/', requireAdmin, async (req, res) => {
       };
       const r = existing
         ? await tx.recipe.update({ where: { id: existing.id }, data })
-        : await tx.recipe.create({ data: { ...data, menuItemId } });
+        : await tx.recipe.create({ data: { ...data, menuItemId, variantId: variant } });
 
       // Reemplazo total de items para esta Recipe
       await tx.recipeItem.deleteMany({ where: { recipeId: r.id } });
