@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { useHydrated } from "@/hooks/useClientValue";
 import Link from "next/link";
-import { Printer, Monitor, MonitorPlay, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, Grid3x3, Palette, Layers, BookOpen, LogOut, TrendingUp, Scissors, SlidersHorizontal } from "lucide-react";
+import { Printer, Monitor, MonitorPlay, ArrowLeft, BarChart3, Users, CreditCard, ShieldCheck, Grid3x3, Layers, BookOpen, LogOut, TrendingUp, Scissors, SlidersHorizontal } from "lucide-react";
 import api from "@/lib/api";
 
 const ADMIN_ROLES = ["OWNER", "ADMIN", "MANAGER"] as const;

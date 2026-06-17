@@ -1,7 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Home, Search, ShoppingCart, UtensilsCrossed } from "lucide-react";
-import ConfigMenu from "@/components/pos/ConfigMenu";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
 import ReprintKitchenModal from "@/components/pos/ReprintKitchenModal";
 import SplitOrderModal from "@/components/pos/SplitOrderModal";
@@ -45,10 +44,9 @@ import CatalogSettingsSheet from "@/components/modals/CatalogSettingsSheet";
 import VoiceOrderDictation from "@/components/pos/VoiceOrderDictation";
 import { useUIStore } from "@/store/useUIStore";
 import ShiftModal from "@/components/admin/ShiftModal";
-import { useThemeStore, type Palette } from "@/store/themeStore";
 import NotificationsPanel from "@/components/pos/NotificationsPanel";
 import WebOrdersPanel from "@/components/pos/WebOrdersPanel";
-import { useNotifications, useNotifStore } from "@/hooks/useNotifications";
+import { useNotifications } from "@/hooks/useNotifications";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
 import MergeTableModal from "@/components/pos/MergeTableModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
@@ -92,7 +90,6 @@ function timeAgo(iso: string): string {
 export default function CashierLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const mounted = useHydrated();
-  const [showMenu, setShowMenu] = useState(false);
   const [askingAdminPin, setAskingAdminPin] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
@@ -110,14 +107,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // Lock in-flight para que flushPendingRound no POSTee la misma ronda 2x.
   const flushingRoundRef = useRef(false);
   useNotifications({ onOrderNew: (order) => autoPrintWebOrderRef.current?.(order) });
-  const unreadCount = useNotifStore((s) => s.unreadCount);
 
   // Mantener la pantalla encendida mientras esté abierto el shell de
   // cajero (Capacitor only — no-op en web). Si el cajero está esperando
   // al cliente, evita que la tablet apague la pantalla cada minuto.
   useKeepAwake(true);
 
-  const { palette, mode, setPalette, toggleMode } = useThemeStore();
   const isOrdersOpen = useUIStore((s) => s.isOrdersOpen);
   const activeTicket = useTicketStore((s) => s.getActiveTicket());
   const updateTicket = useTicketStore((s) => s.updateTicket);
@@ -1001,10 +996,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     itemsCount: Array.isArray(o.items) ? o.items.length : 0,
     address: o.deliveryAddress || o.address?.street || null,
   }));
-  // Solo los PENDING requieren acción del cajero → ese es el número del badge.
-  const pendingWebCount = webOrders.filter(
-    (o: any) => o.status === "PENDING",
-  ).length;
 
   const canMergeOpenOrders = currentEmployee?.role
     ? ["ADMIN", "SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"].includes(
@@ -1231,23 +1222,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       <PurchasesExpensesModal
         isOpen={showExpenses}
         onClose={() => setShowExpenses(false)}
-      />
-
-      <ConfigMenu
-        isOpen={showMenu}
-        onClose={() => setShowMenu(false)}
-        onLogout={() => {
-          // Bloquear Terminal: cerrar sesión Y mandar al lock screen.
-          // Antes solo limpiaba state y el cajero quedaba en /pos/menu sin
-          // empleado activo, sin pedirle PIN para volver a entrar.
-          logout();
-          setShowMenu(false);
-          router.replace("/locked");
-        }}
-        currentTheme={palette}
-        onThemeChange={(p) => setPalette(p as Palette)}
-        isDark={mode === "dark"}
-        onToggleMode={toggleMode}
       />
 
       <AdminPinGuardModal
