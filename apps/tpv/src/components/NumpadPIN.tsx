@@ -110,9 +110,9 @@ export default function NumpadPIN({
   });
 
   const digitClass =
-    "aspect-square w-full rounded-lg border border-white/10 bg-white/[0.055] text-white font-black tabular-nums flex items-center justify-center active:scale-[0.98] active:bg-white/10 disabled:opacity-35 disabled:active:scale-100 transition-colors select-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]";
+    "aspect-square w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] text-[var(--text-primary)] font-display font-semibold tabular-nums flex items-center justify-center active:scale-[0.98] active:bg-[var(--surface-2)] disabled:opacity-35 disabled:active:scale-100 transition-colors select-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]";
   const utilityClass =
-    "aspect-square w-full rounded-lg border border-white/10 bg-black/20 text-white/55 font-black flex items-center justify-center active:scale-[0.98] active:bg-white/10 disabled:opacity-35 disabled:active:scale-100 transition-colors select-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]";
+    "aspect-square w-full rounded-2xl text-[var(--text-secondary)] font-black flex items-center justify-center active:scale-[0.98] active:bg-[var(--surface-2)] disabled:opacity-35 disabled:active:scale-100 transition-colors select-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]";
   const canSubmit = pin.length === maxDigits && !disabled;
 
   return (
@@ -120,34 +120,27 @@ export default function NumpadPIN({
       className="mx-auto flex w-full max-w-[min(80vw,36dvh,400px)] flex-col sm:max-w-[min(72vw,36dvh,400px)] landscape:max-w-[min(36vw,36dvh,400px)]"
       style={{ gap: "clamp(5px, 1.4vmin, 14px)" }}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div
-          className="flex justify-center"
-          style={{ gap: "clamp(8px, 2vmin, 14px)" }}
-          aria-label={`${pin.length} de ${maxDigits} dígitos capturados`}
-        >
-          {Array.from({ length: maxDigits }).map((_, index) => {
-            const filled = index < pin.length;
-            return (
-              <div
-                key={index}
-                className="rounded-full border-2 transition-colors"
-                style={{
-                  width: "clamp(10px, 2.8vmin, 20px)",
-                  height: "clamp(10px, 2.8vmin, 20px)",
-                  background: filled ? "var(--brand)" : "transparent",
-                  borderColor: filled ? "var(--brand)" : "rgba(255,255,255,0.2)",
-                  boxShadow: filled
-                    ? "0 0 16px var(--brand-glow)"
-                    : "none",
-                }}
-              />
-            );
-          })}
-        </div>
-        <span className="shrink-0 text-[11px] font-black uppercase tracking-[0.18em] text-white/35">
-          {pin.length}/{maxDigits}
-        </span>
+      <div
+        className="flex justify-center"
+        style={{ gap: "clamp(8px, 2vmin, 14px)" }}
+        aria-label={`${pin.length} de ${maxDigits} dígitos capturados`}
+      >
+        {Array.from({ length: maxDigits }).map((_, index) => {
+          const filled = index < pin.length;
+          return (
+            <div
+              key={index}
+              className="rounded-full border-2 transition-colors"
+              style={{
+                width: "clamp(11px, 2.8vmin, 16px)",
+                height: "clamp(11px, 2.8vmin, 16px)",
+                background: filled ? "var(--brand)" : "var(--surface-1)",
+                borderColor: filled ? "var(--brand)" : "var(--border-strong)",
+                boxShadow: filled ? "0 0 16px var(--brand-glow)" : "none",
+              }}
+            />
+          );
+        })}
       </div>
 
       <div
@@ -170,17 +163,8 @@ export default function NumpadPIN({
           </button>
         ))}
 
-        <button
-          type="button"
-          onClick={handleClear}
-          disabled={disabled || pin.length === 0}
-          className={utilityClass}
-          style={{ minHeight: "clamp(44px, min(11vmin, 8.5dvh), 80px)" }}
-        >
-          <span className="text-[10px] uppercase tracking-[0.18em]">
-            Limpiar
-          </span>
-        </button>
+        {/* Celda vacía (sin "Limpiar", según el rediseño). Escape sigue limpiando. */}
+        <div aria-hidden />
 
         <button
           type="button"
