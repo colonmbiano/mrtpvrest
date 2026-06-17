@@ -77,11 +77,14 @@ router.get('/', requireAdmin, async (req, res) => {
 });
 
 // GET /api/recipes/by-menu-item/:menuItemId — lee o devuelve null.
+// ?variantId=<id> lee la receta de esa variante; sin él, la receta BASE
+// (variantId NULL).
 router.get('/by-menu-item/:menuItemId', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const variantId = req.query.variantId ? String(req.query.variantId) : null;
     const recipe = await prisma.recipe.findFirst({
-      where: { menuItemId: req.params.menuItemId, restaurantId },
+      where: { menuItemId: req.params.menuItemId, restaurantId, variantId },
       include: {
         menuItem: { select: { id: true, name: true, price: true, imageUrl: true } },
         items: {
@@ -110,6 +113,7 @@ router.post('/', requireAdmin, async (req, res) => {
 
     const {
       menuItemId,
+      variantId = null,
       marginErrorPct = 0,
       targetMarginPct,
       priceDelivery,
@@ -123,12 +127,20 @@ router.post('/', requireAdmin, async (req, res) => {
     const mi = await prisma.menuItem.findFirst({ where: { id: menuItemId, restaurantId } });
     if (!mi) return res.status(404).json({ error: 'MenuItem no encontrado' });
 
+    // Si viene variantId, debe ser una variante de ESE platillo (evita
+    // colgar una receta de variante en el platillo equivocado).
+    const variant = variantId || null;
+    if (variant) {
+      const v = await prisma.menuItemVariant.findFirst({ where: { id: variant, menuItemId } });
+      if (!v) return res.status(400).json({ error: 'La variante no pertenece a este platillo' });
+    }
+
     const normalizedItems = validateItems(items);
     if (normalizedItems.error) return res.status(400).json({ error: normalizedItems.error });
 
     const recipe = await prisma.$transaction(async (tx) => {
-      // Upsert manual (Recipe.menuItemId @unique)
-      const existing = await tx.recipe.findUnique({ where: { menuItemId } });
+      // Upsert manual por (menuItemId, variantId). variantId NULL = receta base.
+      const existing = await tx.recipe.findFirst({ where: { menuItemId, variantId: variant } });
       const data = {
         restaurantId,
         marginErrorPct: Number(marginErrorPct) || 0,
@@ -138,7 +150,7 @@ router.post('/', requireAdmin, async (req, res) => {
       };
       const r = existing
         ? await tx.recipe.update({ where: { id: existing.id }, data })
-        : await tx.recipe.create({ data: { ...data, menuItemId } });
+        : await tx.recipe.create({ data: { ...data, menuItemId, variantId: variant } });
 
       // Reemplazo total de items para esta Recipe
       await tx.recipeItem.deleteMany({ where: { recipeId: r.id } });
@@ -154,6 +166,87 @@ router.post('/', requireAdmin, async (req, res) => {
     res.json(recipe);
   } catch (e) {
     console.error('POST /api/recipes:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Modificadores (extras) → consumo de inventario ───────────────────────
+// GET /api/recipes/modifiers — nombres distintos de modificadores del menú
+// con su receta (insumos que descuenta cada extra). Agrupado por nombre.
+router.get('/modifiers', requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const [mods, maps] = await Promise.all([
+      prisma.modifier.findMany({
+        where: { group: { menuItem: { restaurantId } } },
+        select: { name: true, priceAdd: true },
+      }),
+      prisma.modifierIngredient.findMany({
+        where: { restaurantId },
+        include: {
+          ingredient: { select: { id: true, name: true, baseUnit: true, cost: true } },
+          subRecipe: { select: { id: true, name: true, yieldUnit: true } },
+        },
+      }),
+    ]);
+
+    const nameMap = new Map();
+    for (const m of mods) {
+      const e = nameMap.get(m.name) || { name: m.name, priceAdd: 0, count: 0 };
+      e.priceAdd = Math.max(e.priceAdd, Number(m.priceAdd || 0));
+      e.count += 1;
+      nameMap.set(m.name, e);
+    }
+    const mapsByName = new Map();
+    for (const mm of maps) {
+      if (!mapsByName.has(mm.name)) mapsByName.set(mm.name, []);
+      mapsByName.get(mm.name).push(mm);
+    }
+    const result = [...nameMap.values()]
+      .sort((a, b) => b.priceAdd - a.priceAdd || a.name.localeCompare(b.name))
+      .map((n) => ({ ...n, items: mapsByName.get(n.name) || [] }));
+
+    res.json(result);
+  } catch (e) {
+    console.error('GET /api/recipes/modifiers:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/recipes/modifiers — define el consumo de un modificador (por nombre).
+// Body: { name, items: [{ ingredientId? | subRecipeId?, quantity, unit, wastagePercent? }] }
+// Reemplaza por completo el mapeo de ese nombre.
+router.post('/modifiers', requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { name, items = [] } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'name requerido' });
+
+    const normalized = validateItems(items);
+    if (normalized.error) return res.status(400).json({ error: normalized.error });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.modifierIngredient.deleteMany({ where: { restaurantId, name: String(name) } });
+      if (normalized.data.length > 0) {
+        await tx.modifierIngredient.createMany({
+          data: normalized.data.map((it) => ({
+            restaurantId,
+            name: String(name),
+            ingredientId: it.ingredientId,
+            subRecipeId: it.subRecipeId,
+            quantity: it.quantity,
+            unit: it.unit,
+            wastagePercent: it.wastagePercent,
+          })),
+        });
+      }
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('POST /api/recipes/modifiers:', e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -236,7 +329,9 @@ router.get('/import/template/recetas', requireAdmin, async (req, res) => {
         select: {
           id: true, name: true, price: true,
           category: { select: { name: true, sortOrder: true } },
-          recipe: {
+          // Receta base (variantId NULL) para la plantilla de exportación.
+          recipes: {
+            where: { variantId: null },
             select: {
               priceDelivery: true, platformCommissionPct: true,
               items: {
@@ -563,7 +658,7 @@ router.post('/import/recetas/confirm', requireAdmin, async (req, res) => {
       }
 
       await prisma.$transaction(async (tx) => {
-        const existing = await tx.recipe.findUnique({ where: { menuItemId } });
+        const existing = await tx.recipe.findFirst({ where: { menuItemId, variantId: null } });
         const meta = {
           restaurantId,
           priceDelivery: d.priceDelivery != null ? Number(d.priceDelivery) : null,

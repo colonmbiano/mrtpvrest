@@ -52,14 +52,17 @@ async function computeRecipeCost(menuItemId, opts = {}) {
   const depth = opts.depth ?? 0
   if (depth > 4) return 0 // evita ciclos infinitos en subrecetas mal armadas
 
+  // Elegir UNA receta del platillo para no sumar items de varias variantes:
+  // base (variantId NULL) preferida, si solo hay por variante la primera.
+  const recipes = await prisma.recipe.findMany({
+    where: { menuItemId },
+    select: { id: true, variantId: true },
+  })
+  const chosen = recipes.find((r) => !r.variantId) || recipes[0]
+
   // Receta nueva (Recipe -> RecipeItem) o legacy (RecipeItem -> menuItemId).
   const items = await prisma.recipeItem.findMany({
-    where: {
-      OR: [
-        { menuItemId },
-        { recipe: { menuItemId } },
-      ],
-    },
+    where: chosen ? { recipeId: chosen.id } : { menuItemId },
     select: {
       quantity: true,
       wastagePercent: true,
@@ -123,7 +126,7 @@ router.get('/dishes', async (req, res) => {
         categoryId: true,
         category: { select: { id: true, name: true } },
         recipeItems: { select: { id: true } },
-        recipe: { select: { id: true } },
+        recipes: { select: { id: true } },
       },
       orderBy: { name: 'asc' },
     })
@@ -150,7 +153,7 @@ router.get('/dishes', async (req, res) => {
     let weightedMarginPct = 0
 
     for (const mi of menuItems) {
-      const hasRecipe = (mi.recipeItems?.length ?? 0) > 0 || mi.recipe != null
+      const hasRecipe = (mi.recipeItems?.length ?? 0) > 0 || (mi.recipes?.length ?? 0) > 0
       if (!hasRecipe) dishesWithoutRecipe++
 
       const foodCost = hasRecipe ? await computeRecipeCost(mi.id) : 0
