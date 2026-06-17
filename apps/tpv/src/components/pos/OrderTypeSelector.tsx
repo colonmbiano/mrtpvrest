@@ -423,7 +423,6 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
     setMenuOpen(false);
     if (action === "weborders") onWebOrders?.();
     if (action === "drivers") onDrivers?.();
-    if (action === "notifs") onNotifs?.();
     if (action === "sales") onSales?.();
     if (action === "hub") onHub?.();
     if (action === "shift") onShiftClose?.();
@@ -443,7 +442,6 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   const enabledShortcuts = SHORTCUTS.filter((shortcut) => {
     if (shortcut.action === "weborders") return Boolean(onWebOrders);
     if (shortcut.action === "drivers") return Boolean(onDrivers);
-    if (shortcut.action === "notifs") return Boolean(onNotifs);
     if (shortcut.action === "sales") return Boolean(onSales);
     if (shortcut.action === "hub") return Boolean(onHub);
     if (shortcut.action === "shift") return Boolean(onShiftClose);
@@ -455,10 +453,9 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
     return false;
   });
 
-  // Badge numérico por acceso (pedidos web pendientes / notificaciones sin leer).
+  // Badge numérico por acceso (pedidos web pendientes).
   const badgeFor = (action: (typeof SHORTCUTS)[number]["action"]): number => {
     if (action === "weborders") return webOrdersCount;
-    if (action === "notifs") return unreadNotifs;
     return 0;
   };
 

@@ -297,7 +297,6 @@ export default function OrderTypePage() {
         printedWebOrders.current.delete(id);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [printers, kitchenConfig, fetchOpenOrders]);
 
   // Mapeo a la forma de tarjeta/fila que consume OrderTypeSelector.
