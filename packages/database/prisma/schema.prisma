@@ -326,6 +326,7 @@ model Restaurant {
   ingredients          Ingredient[]
   recipes              Recipe[]
   subRecipes           SubRecipe[]
+  modifierIngredients  ModifierIngredient[]
   pricingPolicies      PricingPolicy[]
 
   // FASE COMPRAS/GASTOS · taxonomía de gastos operativos (luz/agua/sueldos/etc).
@@ -595,8 +596,9 @@ model MenuItem {
   complements    MenuItemComplement[]
   recipeItems    RecipeItem[]
 
-  // FASE INVENTARIO/COSTEO · escandallo final (1:1 opcional con Recipe)
-  recipe Recipe?
+  // FASE INVENTARIO/COSTEO · escandallos. Receta base (variantId NULL) y/o
+  // recetas por variante. Era 1:1; ahora 1:N para soportar receta por variante.
+  recipes Recipe[]
 
   printerGroups MenuItemPrinterGroup[]
 
@@ -1382,14 +1384,15 @@ model Ingredient {
   suppliers  IngredientSupplier[]
 
   // ── Relaciones ──
-  recipeItems        RecipeItem[]
-  subRecipeItems     SubRecipeItem[]
-  stockMovements     StockMovement[]
-  batches            InventoryBatch[]
-  purchaseOrderItems PurchaseOrderItem[]
-  physicalCountItems PhysicalCountItem[]
-  stockTransferItems StockTransferItem[]
-  costHistory        IngredientCostHistory[]
+  recipeItems         RecipeItem[]
+  subRecipeItems      SubRecipeItem[]
+  stockMovements      StockMovement[]
+  batches             InventoryBatch[]
+  purchaseOrderItems  PurchaseOrderItem[]
+  physicalCountItems  PhysicalCountItem[]
+  stockTransferItems  StockTransferItem[]
+  costHistory         IngredientCostHistory[]
+  modifierIngredients ModifierIngredient[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1847,6 +1850,7 @@ model MenuItemVariant {
   isAvailable Boolean  @default(true)
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
+  recipes     Recipe[]
 }
 
 model MenuItemComplement {
@@ -2491,6 +2495,7 @@ model SubRecipe {
   // Esta SubRecipe usada como item dentro de otra SubRecipe (anidación)
   usedAsNested  SubRecipeItem[] @relation("NestedSubRecipe")
   usedInRecipes RecipeItem[]
+  usedInModifiers ModifierIngredient[]
   preparationSteps String[]        @default([])
   isPendingReview  Boolean         @default(false)
   isActive      Boolean         @default(true)
@@ -2531,8 +2536,12 @@ model SubRecipeItem {
 
 model Recipe {
   id           String     @id @default(cuid())
-  menuItemId   String     @unique
+  menuItemId   String
   menuItem     MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  // Escandallo por variante: NULL = receta base del platillo; con valor = receta
+  // específica de esa variante (p.ej. Alambre 350gr Arrachera/Pollo/Res y Cerdo).
+  variantId    String?
+  variant      MenuItemVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
@@ -2556,8 +2565,32 @@ model Recipe {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
+  @@unique([menuItemId, variantId])
   @@index([restaurantId])
   @@map("recipes")
+}
+
+// ── ModifierIngredient ───────────────────────────────────────────────────
+// Consumo de inventario de un modificador/extra. Se mapea por NOMBRE a nivel
+// restaurante (order_item_modifiers guarda el nombre), así una sola regla
+// "Papas Gajo Extra → 150g papa" cubre el extra en todos los platillos.
+// Un modificador puede consumir varios insumos/subrecetas (varias filas).
+model ModifierIngredient {
+  id             String             @id @default(cuid())
+  restaurantId   String
+  restaurant     Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name           String
+  ingredientId   String?
+  ingredient     Ingredient?        @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  subRecipeId    String?
+  subRecipe      SubRecipe?         @relation(fields: [subRecipeId], references: [id], onDelete: Cascade)
+  quantity       Float
+  unit           IngredientBaseUnit @default(GRAM)
+  wastagePercent Float              @default(0)
+  createdAt      DateTime           @default(now())
+
+  @@index([restaurantId, name])
+  @@map("modifier_ingredients")
 }
 
 // ── PricingPolicy ────────────────────────────────────────────────────────

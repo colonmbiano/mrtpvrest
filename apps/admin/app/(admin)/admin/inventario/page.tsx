@@ -432,6 +432,7 @@ export default function InventarioPage() {
       <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-5">
         <ShortcutLink href="/admin/inventario/compras" icon={ShoppingCart} label="Compras & Bodega" />
         <ShortcutLink href="/admin/inventario/recetas" icon={ClipboardList} label="Recetas" />
+        <ShortcutLink href="/admin/inventario/extras" icon={Plus} label="Extras / Modificadores" />
         <ShortcutLink href="/admin/inventario/proveedores" icon={Factory} label="Proveedores" />
         <button
           type="button"
