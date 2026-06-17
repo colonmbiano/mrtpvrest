@@ -574,9 +574,9 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
       </header>
 
       {/* CUERPO — cuentas abiertas (izq) + tipo de pedido (der) */}
-      <main className="relative z-10 mt-3 flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
+      <main className="relative z-10 mt-3 flex min-h-0 flex-1 flex-col gap-3 landscape:flex-row">
         {/* CUENTAS ABIERTAS */}
-        <section className="flex min-h-0 flex-[2.2] md:flex-[7] md:order-2 flex-col rounded-xl border border-white/10 bg-white/[0.035] p-3 backdrop-blur-md">
+        <section className="flex min-h-0 flex-[2.2] landscape:flex-[7] landscape:order-2 flex-col rounded-xl border border-white/10 bg-white/[0.035] p-3 backdrop-blur-md">
           <div className="mb-2 flex shrink-0 flex-col gap-2">
             {/* TOGGLE Abiertas / Cobradas */}
             {onModeChange && (
@@ -914,11 +914,11 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
         </section>
 
         {/* TIPO DE PEDIDO */}
-        <aside className="flex flex-col gap-2.5 md:flex-[3] md:order-1">
+        <aside className="flex flex-col gap-2.5 landscape:flex-[3] landscape:order-1">
           <p className="px-1 text-[10px] font-black uppercase tracking-[0.22em] text-[var(--brand)]">
             Iniciar venta
           </p>
-          <div className="grid flex-1 grid-cols-3 gap-2.5 md:grid-cols-1">
+          <div className="grid flex-1 grid-cols-3 gap-2.5 landscape:grid-cols-1">
             {visibleTypes.map((type) => {
               const Icon = type.icon;
               return (
