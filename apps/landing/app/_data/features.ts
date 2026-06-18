@@ -176,6 +176,33 @@ export const features: Feature[] = [
       ['¿Controla inventario y costos?', 'Sí, maneja insumos, recetas y costo por platillo para ver tu margen real.'],
     ],
   },
+  {
+    slug: 'facturacion',
+    nav: 'Facturación por QR',
+    metaTitle: 'Punto de Venta con Facturación para Restaurantes (Autofactura QR) | MRTPVREST',
+    metaDescription:
+      'Punto de venta con autofactura por QR: el ticket imprime RFC, folio y un QR para que tus clientes obtengan su factura (CFDI) desde tu portal. Prueba gratis.',
+    eyebrow: 'Facturación · Autofactura QR',
+    h1: 'Facturación para tus clientes con autofactura por QR',
+    intro:
+      'MRTPVREST imprime en el ticket los datos fiscales del emisor y un bloque de autofactura: un QR y un folio que llevan a tu portal de facturación, donde el cliente obtiene su CFDI desde su teléfono, sin hacer fila en caja.',
+    image: '/showcase-warm/tpv.png',
+    bullets: [
+      { title: 'Autofactura por QR', text: 'El recibo incluye un QR de "¿Quieres tu factura?" que envía al cliente a tu portal de facturación para timbrar su CFDI.' },
+      { title: 'RFC y giro en el ticket', text: 'Configura el RFC y el giro del emisor para que aparezcan en el encabezado fiscal del recibo.' },
+      { title: 'Folio por orden', text: 'Un prefijo más el número de orden forman el folio (ej. MB-00123) para identificar cada comprobante.' },
+      { title: 'Sin filas para facturar', text: 'El cliente factura desde su teléfono cuando quiera; tu caja no se traba atendiendo facturas.' },
+    ],
+    pains: [
+      ['Filas para facturar', 'Clientes esperando en caja por su factura.', 'Autofactura por QR: el cliente factura desde su teléfono.'],
+      ['Datos fiscales a mano', 'Capturas RFC y folios uno por uno.', 'RFC, giro y folio impresos en cada ticket.'],
+      ['Facturación desconectada', 'El portal de facturas vive aparte del cobro.', 'El ticket lleva el QR directo a tu portal de facturación.'],
+    ],
+    faqs: [
+      ['¿MRTPVREST timbra mis facturas (CFDI)?', 'MRTPVREST imprime en el ticket un QR y folio que llevan a tu portal de facturación, donde tu cliente obtiene su CFDI. El timbrado lo realiza tu proveedor o portal de facturación, no el punto de venta.'],
+      ['¿Qué necesito para activar la autofactura por QR?', 'Configura en los ajustes del ticket el RFC del emisor, el prefijo de folio y la URL de tu portal de facturación; el recibo empieza a imprimir el bloque de factura con su QR.'],
+    ],
+  },
 ]
 
 export function getFeature(slug: string) {

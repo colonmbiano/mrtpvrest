@@ -175,6 +175,60 @@ export const verticals: Vertical[] = [
       ['¿Sirve para mesas grandes y cuentas familiares?', 'Sí, abres cuentas por mesa, agregas rondas y mueves productos entre comensales sin perder el total.'],
     ],
   },
+  {
+    slug: 'polleria-rosticeria',
+    nav: 'Pollería y rosticería',
+    metaTitle: 'Punto de Venta para Pollería y Rosticería | MRTPVREST',
+    metaDescription:
+      'Punto de venta para pollería y rosticería: vende pollos enteros, medios y por pieza con guarniciones, maneja mucho para llevar y delivery propio. Prueba gratis.',
+    eyebrow: 'Giro · Pollería y rosticería',
+    h1: 'Punto de venta para pollería: pollos enteros, medios y para llevar',
+    intro:
+      'La pollería vende pollos enteros, medios y por pieza, casi siempre para llevar y con sus guarniciones. MRTPVREST cobra rápido cada combinación, manda la orden a la rostiseria y conecta tu delivery propio para los pedidos a domicilio.',
+    image: '/showcase-warm/tpv.png',
+    highlights: [
+      { title: 'Entero, medio o pieza', text: 'Vende pollo entero, medio o por pieza con guarniciones y salsas como modificadores.' },
+      { title: 'Para llevar ágil', text: 'Flujo pensado para mostrador y mucho pedido para llevar en hora pico.' },
+      { title: 'Delivery propio', text: 'Reparto a domicilio con app de repartidor y caja conciliada al cierre.' },
+      { title: 'Combos y paquetes', text: 'Arma paquetes familiares con sus complementos para cobrarlos en un toque.' },
+    ],
+    pains: [
+      ['Combinaciones lentas', 'Cobrar entero, medio y guarniciones tarda.', 'Combinaciones y combos en un toque.'],
+      ['Mostrador saturado', 'Fila larga a la hora de la comida.', 'Cobro veloz pensado para para llevar.'],
+      ['Reparto sin control', 'Domicilios anotados en papel.', 'Delivery propio rastreado y conciliado.'],
+    ],
+    faqs: [
+      ['¿Puedo vender pollo entero, medio y por pieza?', 'Sí, manejas cada presentación con sus guarniciones y salsas como modificadores, y todo llega claro a la rostiseria.'],
+      ['¿Incluye reparto a domicilio?', 'Sí, con delivery propio, app de repartidor y corte de caja del repartidor ligado a sus entregas.'],
+    ],
+  },
+  {
+    slug: 'fonda-cocina-economica',
+    nav: 'Fonda y cocina económica',
+    metaTitle: 'Punto de Venta para Fonda y Cocina Económica | MRTPVREST',
+    metaDescription:
+      'Punto de venta para fonda y cocina económica: cobra comida corrida y menú del día rápido, controla la hora de la comida y cierra caja al turno. Prueba gratis.',
+    eyebrow: 'Giro · Fonda y cocina económica',
+    h1: 'Punto de venta para fonda: comida corrida y menú del día sin enredos',
+    intro:
+      'La fonda y la cocina económica viven de la hora de la comida: comida corrida, menú del día y mucho movimiento en poco tiempo. MRTPVREST cobra rápido cada menú con sus opciones, manda la comanda a cocina y cierra la caja al turno.',
+    image: '/showcase-warm/app-cliente.png',
+    highlights: [
+      { title: 'Menú del día', text: 'Configura la comida corrida con sus opciones de guisado, sopa y bebida en un solo cobro.' },
+      { title: 'Cobro de hora pico', text: 'Flujo táctil veloz para mover muchas comidas en la hora de la comida.' },
+      { title: 'Para llevar y a domicilio', text: 'Comida para llevar y delivery conectados a la misma caja y cocina.' },
+      { title: 'Caja al turno', text: 'Corte por turno con efectivo y transferencias para que el cierre cuadre.' },
+    ],
+    pains: [
+      ['Menú del día complicado', 'Cobrar opciones de guisado y bebida confunde.', 'Comida corrida con opciones en un solo toque.'],
+      ['Hora de la comida caótica', 'Mucha gente en poco tiempo.', 'Cobro veloz pensado para el rush del mediodía.'],
+      ['Caja informal', 'Ventas en libreta sin control.', 'Corte por turno claro y auditable.'],
+    ],
+    faqs: [
+      ['¿Sirve para comida corrida y menú del día?', 'Sí, configuras el menú del día con sus opciones (guisado, sopa, bebida) para cobrarlo rápido en un solo paso.'],
+      ['¿Ayuda a controlar la caja de una fonda?', 'Sí, el corte de caja por turno concilia efectivo y transferencias para ordenar las ventas del día.'],
+    ],
+  },
 ]
 
 export function getVertical(slug: string) {
