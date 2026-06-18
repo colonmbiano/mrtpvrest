@@ -1903,6 +1903,118 @@ router.put('/:id/void-payment', authenticate, requireTenantAccess, requirePermis
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── PUT /:id/correct-payment-method ───────────────────────────────────────
+// Corrige el MÉTODO de pago de una orden YA pagada sin reabrir el cobro. Caso
+// típico: el repartidor cobró en efectivo pero quedó registrado como
+// transferencia (o viceversa). El total NO se recalcula; solo cambia el método
+// y se reconcilia la caja del repartidor en la MISMA transacción:
+//   · pasa a CASH  → crea el movimiento DELIVERY/INCOME ligado a la orden (si
+//                    no existe) para que ese efectivo entre a su corte.
+//   · deja de ser CASH → borra ese movimiento, PERO solo si aún no está
+//                    aprobado: un corte ya cerrado es intocable (se reporta
+//                    `cashAdjusted: 'locked'` para avisar al operador).
+// Misma sensibilidad que void-payment ⇒ mismo permiso (reopen_table).
+const CORRECTABLE_PAYMENT_METHODS = new Set(['CASH', 'TRANSFER', 'CARD', 'OTHER']);
+router.put('/:id/correct-payment-method', authenticate, requireTenantAccess, requirePermission('reopen_table'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const newMethod = String(req.body?.paymentMethod || '').toUpperCase();
+    if (!CORRECTABLE_PAYMENT_METHODS.has(newMethod)) {
+      return res.status(400).json({ error: 'Método de pago inválido' });
+    }
+
+    const existing = await prisma.order.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Orden no encontrada' });
+    if (existing.restaurantId !== restaurantId) {
+      return res.status(403).json({ error: 'La orden pertenece a otro restaurante' });
+    }
+    if (existing.paymentStatus !== 'PAID') {
+      return res.status(400).json({ error: 'Solo se corrige el método de una orden ya pagada' });
+    }
+    if (existing.paymentMethod === newMethod) {
+      return res.status(400).json({ error: 'La orden ya tiene ese método de pago' });
+    }
+
+    const wasCash = existing.paymentMethod === 'CASH';
+    const willBeCash = newMethod === 'CASH';
+    const correctedBy =
+      req.user?.name || req.user?.email || `empleado#${req.user?.id}`;
+    const stamp = new Date().toISOString();
+    const auditNote = `[Método de pago corregido de ${existing.paymentMethod || '—'} a ${newMethod} por ${correctedBy} el ${stamp}]`;
+    const notes = existing.notes ? `${existing.notes}\n${auditNote}` : auditNote;
+
+    // 'created' | 'exists' | 'removed' | 'locked' | null — para que la UI avise.
+    let cashAdjusted = null;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const order = await tx.order.update({
+        where: { id },
+        data: {
+          paymentMethod: newMethod,
+          // El efectivo se marca como cobrado; al dejar de ser efectivo se limpia
+          // el rastro de cobro en mano (no aplica para transferencia/tarjeta).
+          cashCollected: willBeCash,
+          cashCollectedAt: willBeCash ? (existing.cashCollectedAt || new Date()) : null,
+          cashCollectedBy: willBeCash ? existing.cashCollectedBy : null,
+          notes,
+        },
+        include: {
+          user: { select: { name: true, phone: true } },
+          items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
+        },
+      });
+
+      // Reconciliar la caja SOLO si la orden tiene repartidor asignado.
+      if (existing.deliveryDriverId) {
+        const movement = await tx.driverCashMovement.findFirst({
+          where: {
+            driverId: existing.deliveryDriverId,
+            orderId: id,
+            category: 'DELIVERY',
+            type: 'INCOME',
+          },
+        });
+        if (willBeCash && !wasCash) {
+          if (movement) {
+            cashAdjusted = 'exists';
+          } else {
+            await tx.driverCashMovement.create({
+              data: {
+                driverId: existing.deliveryDriverId,
+                type: 'INCOME',
+                category: 'DELIVERY',
+                amount: Number(existing.total) || 0,
+                description: `Corrección a efectivo · ${existing.orderNumber || id}`,
+                orderId: id,
+              },
+            });
+            cashAdjusted = 'created';
+          }
+        } else if (!willBeCash && wasCash && movement) {
+          if (movement.approved) {
+            // Corte ya cerrado: no tocamos un período liquidado.
+            cashAdjusted = 'locked';
+          } else {
+            await tx.driverCashMovement.delete({ where: { id: movement.id } });
+            cashAdjusted = 'removed';
+          }
+        }
+      }
+
+      return order;
+    });
+
+    const io = req.app.get('io');
+    if (io && existing.locationId) {
+      io.to(`restaurant:${restaurantId}:location:${existing.locationId}:admins`)
+        .emit('order:updated', updated);
+    }
+
+    res.json({ order: updated, cashAdjusted });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── CHAT DE PEDIDO (requiere auth + tenant scope) ─────────────────────────
 
 router.get('/:id/messages', authenticate, requireTenantAccess, async (req, res) => {

@@ -72,6 +72,10 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   const [ordersSummary, setOrdersSummary] = useState<OrdersSummary | null>(null);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersLoaded, setOrdersLoaded] = useState(false);
+  // Corrección de método de pago: qué pedido tiene abierto el selector y si
+  // hay una corrección en vuelo (bloquea los botones para evitar doble envío).
+  const [correctingFor, setCorrectingFor] = useState<string | null>(null);
+  const [savingMethod, setSavingMethod] = useState(false);
 
   // Form state
   const [type, setType] = useState<"INCOME" | "EXPENSE" | "RETURN">("EXPENSE");
@@ -168,6 +172,43 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
       alert("Error al registrar movimiento");
     } finally {
       setAdding(false);
+    }
+  }
+
+  // Corrige el método de pago de un pedido YA cobrado (p. ej. el repartidor
+  // cobró en efectivo pero se registró como transferencia). El backend ajusta
+  // la caja del repartidor en la misma transacción: si pasa a efectivo, ese
+  // monto entra como ingreso a su corte; si deja de serlo, se retira (salvo que
+  // el corte ya esté cerrado, donde avisa con `cashAdjusted: 'locked'`).
+  async function correctPaymentMethod(order: DriverOrder, method: string) {
+    if (savingMethod) return;
+    setSavingMethod(true);
+    try {
+      const { data } = await api.put(`/api/orders/${order.id}/correct-payment-method`, {
+        paymentMethod: method,
+      });
+      // Refleja el cambio en la fila sin re-fetch inmediato.
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === order.id ? { ...o, paymentMethod: method, cashCollected: method === "CASH" } : o,
+        ),
+      );
+      setCorrectingFor(null);
+      // La caja cambió: recargar movimientos/resumen del repartidor y el panel.
+      fetchMovements();
+      fetchOrders();
+      onRefresh();
+      if (data?.cashAdjusted === "locked") {
+        alert(
+          "Método corregido. Aviso: el corte de este repartidor ya estaba cerrado, " +
+            "así que la caja no se ajustó automáticamente. Ajústalo a mano si aplica.",
+        );
+      }
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      alert(err?.response?.data?.error || "No se pudo corregir el método de pago");
+    } finally {
+      setSavingMethod(false);
     }
   }
 
@@ -537,6 +578,49 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                             Efectivo sin liquidar
                           </div>
                         )}
+
+                        {/* Corregir método de pago: para cuando el repartidor
+                            cobró distinto a lo registrado (efectivo ↔ transfer).
+                            Ajusta también la caja del repartidor en el backend. */}
+                        <div className="mt-2 pt-2 border-t border-[var(--border)]">
+                          {correctingFor === o.id ? (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] mr-0.5">
+                                Cobrado como:
+                              </span>
+                              {(["CASH", "TRANSFER", "CARD"] as const)
+                                .filter((m) => m !== o.paymentMethod)
+                                .map((m) => (
+                                  <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() => correctPaymentMethod(o, m)}
+                                    disabled={savingMethod}
+                                    className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg border active:scale-95 transition-transform disabled:opacity-50"
+                                    style={{ borderColor: accent, color: accent, background: `${accent}14` }}
+                                  >
+                                    {PAYMENT_LABELS[m]}
+                                  </button>
+                                ))}
+                              <button
+                                type="button"
+                                onClick={() => setCorrectingFor(null)}
+                                disabled={savingMethod}
+                                className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg text-[var(--text-secondary)] hover:text-white disabled:opacity-50"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setCorrectingFor(o.id)}
+                              className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-white transition-colors"
+                            >
+                              ✏️ Corregir método de pago
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
