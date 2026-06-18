@@ -234,7 +234,7 @@ export default function WaiterFloorPlanPage() {
 
         <div className="relative z-10 flex justify-between items-start gap-4">
           <div className="space-y-1.5 min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
+            <span className="text-[10px] font-semibold tracking-[0.14em] text-[var(--brand)] uppercase">
               Gestión de salón
             </span>
             <h1 className="text-[clamp(1.75rem,5vw,2.5rem)] font-black tracking-tight text-white truncate leading-none">
@@ -271,10 +271,10 @@ export default function WaiterFloorPlanPage() {
                     className={`w-2 h-2 rounded-full ${tone.dot} ${tone.pulse ? "animate-pulse" : ""
                       }`}
                   />
-                  <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${tone.fg}`}>
+                  <span className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${tone.fg}`}>
                     {PHASE_COPY[p]}
                   </span>
-                  <span className="text-[10px] font-black tabular-nums text-white/40">
+                  <span className="text-[10px] font-semibold tabular-nums text-white/40">
                     · {count}
                   </span>
                 </div>
@@ -288,7 +288,7 @@ export default function WaiterFloorPlanPage() {
           <div className="relative z-10 flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
             <button
               onClick={() => setActiveZone("all")}
-              className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all ${activeZone === "all"
+              className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-semibold uppercase tracking-[0.15em] active:scale-95 transition-all ${activeZone === "all"
                   ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
                   : "bg-white/5 border-white/10 text-white/60"
                 }`}
@@ -302,7 +302,7 @@ export default function WaiterFloorPlanPage() {
                 <button
                   key={z.id}
                   onClick={() => setActiveZone(z.id)}
-                  className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all flex items-center gap-2 ${isActive
+                  className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-semibold uppercase tracking-[0.15em] active:scale-95 transition-all flex items-center gap-2 ${isActive
                       ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
                       : "bg-white/5 border-white/10 text-white/60"
                     }`}
@@ -316,7 +316,7 @@ export default function WaiterFloorPlanPage() {
             {hasOrphans && (
               <button
                 onClick={() => setActiveZone(NO_ZONE)}
-                className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all ${activeZone === NO_ZONE
+                className={`shrink-0 h-12 min-h-[48px] px-5 rounded-2xl border text-[11px] font-semibold uppercase tracking-[0.15em] active:scale-95 transition-all ${activeZone === NO_ZONE
                     ? "bg-white/15 border-white/30 text-white"
                     : "bg-white/5 border-white/10 text-white/60"
                   }`}
@@ -336,7 +336,7 @@ export default function WaiterFloorPlanPage() {
               <AlertTriangle size={36} className="text-red-400" />
             </div>
             <div className="space-y-1.5 max-w-xs">
-              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-red-400">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-red-400">
                 Sin conexión
               </p>
               <p className="text-[13px] font-bold text-white/60">
@@ -347,7 +347,7 @@ export default function WaiterFloorPlanPage() {
               type="button"
               onClick={() => loadTables(false)}
               disabled={isRefreshing}
-              className="h-12 min-h-[48px] px-6 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] text-[11px] font-black uppercase tracking-[0.15em] flex items-center gap-2 active:scale-95 transition-transform disabled:opacity-50"
+              className="h-12 min-h-[48px] px-6 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] text-[11px] font-semibold uppercase tracking-[0.15em] flex items-center gap-2 active:scale-95 transition-transform disabled:opacity-50"
             >
               <RefreshCw size={16} strokeWidth={2.5} className={isRefreshing ? "animate-spin" : ""} />
               Reintentar
@@ -365,7 +365,7 @@ export default function WaiterFloorPlanPage() {
         ) : filteredTables.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-30 gap-4 py-20 text-center">
             <LayoutGrid size={80} className="text-white/30" />
-            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/40">
               Zona sin mesas configuradas
             </p>
           </div>
@@ -439,7 +439,7 @@ export default function WaiterFloorPlanPage() {
                       className={`shrink-0 ${tone.fg}`}
                     />
                     <span
-                      className={`text-[10px] font-black uppercase tracking-[0.2em] truncate ${tone.fg}`}
+                      className={`text-[10px] font-semibold uppercase tracking-[0.14em] truncate ${tone.fg}`}
                     >
                       {PHASE_COPY[phase]}
                     </span>

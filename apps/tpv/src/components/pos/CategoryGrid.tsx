@@ -52,7 +52,7 @@ export default function CategoryGrid({
             <Star size={14} strokeWidth={2.5} fill="currentColor" />
             <span className="text-[9px] font-bold uppercase tracking-[0.15em]">Top</span>
           </div>
-          <span className="text-[11px] font-black uppercase tracking-[0.05em] text-[var(--brand)] leading-tight line-clamp-2">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--brand)] leading-tight line-clamp-2">
             Favoritos
           </span>
           <span className="text-[9px] font-bold text-[var(--brand)] mt-auto">
@@ -72,7 +72,7 @@ export default function CategoryGrid({
             className="group flex flex-col items-start gap-1 px-3 py-3 min-h-[88px] rounded-2xl bg-[var(--surface-1)] active:bg-[var(--surface-2)] active:scale-95 transition-all duration-150 border border-white/5 focus-visible:ring-2 focus-visible:ring-[var(--brand)] outline-none text-left shadow-md"
           >
             <ChefHat size={12} className="text-zinc-500 group-active:text-[var(--brand)] transition-colors" />
-            <span className="text-[11px] font-black uppercase tracking-[0.05em] text-tx-pri leading-tight line-clamp-2">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-tx-pri leading-tight line-clamp-2">
               {formatDisplayName(cat.name)}
             </span>
             <span className="text-[9px] font-bold text-tx-mut mt-auto">

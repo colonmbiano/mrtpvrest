@@ -334,7 +334,7 @@ export default function CierreTurno() {
                       : '1px solid rgba(136,214,108,0.35)',
                   }}
                 >
-                  <span className="text-xs font-black tracking-widest text-white/70">
+                  <span className="text-xs font-semibold tracking-widest text-white/70">
                     {(variance ?? 0) === 0 ? 'CAJA CUADRADA' : (variance ?? 0) > 0 ? 'SOBRANTE' : 'FALTANTE'}
                   </span>
                   <span
@@ -358,7 +358,7 @@ export default function CierreTurno() {
           <div className="flex flex-col gap-2.5">
             <button
               onClick={() => printTicket(cs, showArqueo, true)}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-white bg-white/8 border border-white/15 active:scale-95 transition-transform"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-semibold text-white bg-white/8 border border-white/15 active:scale-95 transition-transform"
             >
               <Printer size={16} /> Reimprimir corte
             </button>
@@ -374,7 +374,7 @@ export default function CierreTurno() {
 
             <button
               onClick={() => router.replace('/hub')}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-black text-emerald-300 bg-emerald-400/10 border border-emerald-400/30 active:scale-95 transition-transform"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 min-h-[52px] text-sm font-semibold text-emerald-300 bg-emerald-400/10 border border-emerald-400/30 active:scale-95 transition-transform"
             >
               Listo
             </button>
@@ -429,7 +429,7 @@ export default function CierreTurno() {
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2.5 pl-1.5 pr-3.5 py-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10">
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black text-[var(--brand-fg)] bg-[var(--brand)]">
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold text-[var(--brand-fg)] bg-[var(--brand)]">
               {userInitial}
             </div>
             <div className="flex flex-col">
@@ -456,14 +456,14 @@ export default function CierreTurno() {
           <div className="rounded-3xl p-6 md:p-8 flex flex-col gap-5 bg-white/5 backdrop-blur-md border border-white/10">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex flex-col">
-                <h2 className="text-base font-black text-white">Total en caja</h2>
+                <h2 className="text-base font-semibold text-white">Total en caja</h2>
                 <p className="text-xs font-medium text-white/55">
                   Cuenta todo el efectivo de la caja y captura el total que se queda.
                 </p>
               </div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--brand-soft)] border border-[var(--brand)]">
                 <ShieldAlert size={11} className="text-[var(--brand)]" />
-                <span className="text-[10px] font-black tracking-widest text-[var(--brand)]">CORTE CIEGO</span>
+                <span className="text-[10px] font-semibold tracking-widest text-[var(--brand)]">CORTE CIEGO</span>
               </div>
             </div>
 
@@ -489,11 +489,11 @@ export default function CierreTurno() {
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Receipt size={15} className="text-[var(--brand)]" />
-                <span className="text-[11px] font-black tracking-[0.2em] text-white/55">GASTOS Y COMPRAS DEL TURNO</span>
+                <span className="text-[11px] font-semibold tracking-[0.14em] text-white/55">GASTOS Y COMPRAS DEL TURNO</span>
               </div>
               <button
                 onClick={() => setShowExpenses(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] text-[11px] font-black active:scale-95 transition-transform"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] text-[11px] font-semibold active:scale-95 transition-transform"
               >
                 <Plus size={14} strokeWidth={3} /> Registrar
               </button>
@@ -520,20 +520,20 @@ export default function CierreTurno() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold text-white truncate">{e.description}</p>
-                        <p className="text-[10px] font-black uppercase tracking-wider text-white/35">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
                           {(e.category || 'OTRO').replace(/_/g, ' ')}
                           {driver && <span className="text-sky-300"> · repartidor</span>}
                         </p>
                       </div>
-                      <span className="text-sm font-black tabular-nums text-[#ff8a5c] shrink-0">
+                      <span className="text-sm font-semibold tabular-nums text-[#ff8a5c] shrink-0">
                         −{fmtMoney(e.amount)}
                       </span>
                     </div>
                   );
                 })}
                 <div className="flex items-center justify-between pt-2 mt-1 border-t border-white/10">
-                  <span className="text-[11px] font-black tracking-[0.15em] text-white/40">TOTAL GASTOS</span>
-                  <span className="text-base font-black tabular-nums text-[#ff8a5c]">−{fmtMoney(totalExpenses)}</span>
+                  <span className="text-[11px] font-semibold tracking-[0.15em] text-white/40">TOTAL GASTOS</span>
+                  <span className="text-base font-semibold tabular-nums text-[#ff8a5c]">−{fmtMoney(totalExpenses)}</span>
                 </div>
               </div>
             )}
@@ -544,11 +544,11 @@ export default function CierreTurno() {
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Wallet size={15} className="text-emerald-400" />
-                <span className="text-[11px] font-black tracking-[0.2em] text-white/55">INGRESOS DE EFECTIVO</span>
+                <span className="text-[11px] font-semibold tracking-[0.14em] text-white/55">INGRESOS DE EFECTIVO</span>
               </div>
               <button
                 onClick={() => setShowCashIn(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-400/15 border border-emerald-400/30 text-emerald-300 text-[11px] font-black active:scale-95 transition-transform"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-400/15 border border-emerald-400/30 text-emerald-300 text-[11px] font-semibold active:scale-95 transition-transform"
               >
                 <Plus size={14} strokeWidth={3} /> Ingresar
               </button>
@@ -573,18 +573,18 @@ export default function CierreTurno() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-white truncate">{c.description}</p>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-white/35">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
                         {(c.category || 'CAMBIO').replace(/_/g, ' ')}
                       </p>
                     </div>
-                    <span className="text-sm font-black tabular-nums text-emerald-300 shrink-0">
+                    <span className="text-sm font-semibold tabular-nums text-emerald-300 shrink-0">
                       +{fmtMoney(c.amount)}
                     </span>
                   </div>
                 ))}
                 <div className="flex items-center justify-between pt-2 mt-1 border-t border-white/10">
-                  <span className="text-[11px] font-black tracking-[0.15em] text-white/40">TOTAL INGRESOS</span>
-                  <span className="text-base font-black tabular-nums text-emerald-300">+{fmtMoney(totalCashIn)}</span>
+                  <span className="text-[11px] font-semibold tracking-[0.15em] text-white/40">TOTAL INGRESOS</span>
+                  <span className="text-base font-semibold tabular-nums text-emerald-300">+{fmtMoney(totalCashIn)}</span>
                 </div>
               </div>
             )}
@@ -592,7 +592,7 @@ export default function CierreTurno() {
 
           {/* NOTAS */}
           <div className="rounded-3xl p-5 flex flex-col gap-2 bg-white/5 backdrop-blur-md border border-white/10">
-            <label className="text-[11px] font-black tracking-[0.2em] text-white/55">
+            <label className="text-[11px] font-semibold tracking-[0.14em] text-white/55">
               NOTAS / OBSERVACIONES
             </label>
             <textarea
@@ -609,7 +609,7 @@ export default function CierreTurno() {
         {/* RIGHT: confirmación */}
         <aside className="flex flex-col rounded-3xl overflow-hidden bg-white/5 backdrop-blur-md border border-white/10 sticky top-4 self-start">
           <div className="flex flex-col gap-1.5 px-6 py-6 border-b border-white/10">
-            <span className="text-[10px] font-black tracking-[0.25em] text-white/40">RESUMEN DEL CORTE</span>
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40">RESUMEN DEL CORTE</span>
             <span className="text-sm font-medium text-white/55">Total que se queda en caja</span>
             <span className="text-4xl font-black text-emerald-400 tracking-tight tabular-nums">
               {fmtMoney(counted || 0)}
@@ -617,7 +617,7 @@ export default function CierreTurno() {
           </div>
 
           <div className="flex-1 flex flex-col gap-4 px-6 py-5 overflow-auto">
-            <span className="text-[10px] font-black tracking-[0.2em] text-white/40">
+            <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40">
               INFORMATIVO · NO SE SUMA AL EFECTIVO
             </span>
             <SummaryCard
@@ -703,8 +703,8 @@ function SummaryCard({ icon, label, value }: { icon: React.ReactNode; label: str
         {icon}
       </div>
       <div className="flex-1">
-        <p className="text-[10px] font-black tracking-[0.18em] text-white/40">{label.toUpperCase()}</p>
-        <p className="text-sm font-black text-white tabular-nums">{value}</p>
+        <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40">{label.toUpperCase()}</p>
+        <p className="text-sm font-semibold text-white tabular-nums">{value}</p>
       </div>
     </div>
   );
@@ -713,8 +713,8 @@ function SummaryCard({ icon, label, value }: { icon: React.ReactNode; label: str
 function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className="flex items-center justify-between">
-      <span className={`text-sm ${strong ? 'font-black text-white' : 'font-medium text-white/60'}`}>{label}</span>
-      <span className={`tabular-nums ${strong ? 'text-base font-black text-white' : 'text-sm font-bold text-white/85'}`}>{value}</span>
+      <span className={`text-sm ${strong ? 'font-semibold text-white' : 'font-medium text-white/60'}`}>{label}</span>
+      <span className={`tabular-nums ${strong ? 'text-base font-semibold text-white' : 'text-sm font-bold text-white/85'}`}>{value}</span>
     </div>
   );
 }
@@ -747,7 +747,7 @@ function PinModal({
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-6">
       <div className="w-full max-w-xs rounded-3xl p-6 flex flex-col gap-4 bg-[#141416] border border-white/10">
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-black">PIN de administrador</h3>
+          <h3 className="text-base font-semibold">PIN de administrador</h3>
           <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95">
             <X size={16} />
           </button>
@@ -823,7 +823,7 @@ function CashInModal({
             <div className="w-9 h-9 rounded-2xl bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center">
               <Wallet size={16} className="text-emerald-400" />
             </div>
-            <h3 className="text-base font-black">Ingresar efectivo</h3>
+            <h3 className="text-base font-semibold">Ingresar efectivo</h3>
           </div>
           <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95">
             <X size={16} />
@@ -841,7 +841,7 @@ function CashInModal({
         />
 
         <div className="relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-400 font-black">$</span>
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-400 font-semibold">$</span>
           <input
             type="number"
             inputMode="decimal"
@@ -863,7 +863,7 @@ function CashInModal({
                 key={c.value}
                 type="button"
                 onClick={() => setCategory(c.value)}
-                className={`h-12 rounded-2xl border text-[10px] font-black uppercase tracking-wider transition-all ${
+                className={`h-12 rounded-2xl border text-[10px] font-semibold uppercase tracking-wider transition-all ${
                   active ? 'bg-emerald-400/15 border-emerald-400/50 text-emerald-300' : 'bg-white/5 border-white/10 text-white/60'
                 }`}
               >

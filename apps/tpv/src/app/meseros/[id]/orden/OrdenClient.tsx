@@ -389,7 +389,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
           <ChevronLeft size={18} />
         </button>
         <div className="flex flex-col flex-1 min-w-0">
-          <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+          <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
             {isAppendMode ? "Agregar a comanda" : "Nueva comanda"}
           </span>
           <div className="flex items-baseline gap-2">
@@ -480,14 +480,14 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
           className="h-14 min-h-[56px] bg-white/5 border border-white/10 rounded-2xl flex items-center px-4 gap-3 active:scale-95 transition-all disabled:opacity-50"
           disabled={cartCount === 0}
         >
-          <div className="w-8 h-8 rounded-xl bg-[var(--brand-soft)] text-[var(--brand)] flex items-center justify-center font-black text-xs">
+          <div className="w-8 h-8 rounded-xl bg-[var(--brand-soft)] text-[var(--brand)] flex items-center justify-center font-semibold text-xs">
             {cartCount}
           </div>
           <div className="flex-1 text-left">
             <div className="text-[10px] font-bold text-white/40 uppercase tracking-tighter leading-none">
               Comanda
             </div>
-            <div className="tabular-nums text-[14px] font-black">${total.toFixed(2)}</div>
+            <div className="tabular-nums text-[14px] font-semibold">${total.toFixed(2)}</div>
           </div>
           <ChevronLeft className="rotate-90 text-white/40" size={16} />
         </button>
@@ -553,7 +553,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
           >
             <div className="p-4 border-b border-white/5 flex items-center justify-between shrink-0">
               <div>
-                <div className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+                <div className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
                   {isAppendMode ? "Ronda nueva" : "Comanda"}
                 </div>
                 <div className="text-[16px] font-black">{tableName ?? "Mesa"}</div>
@@ -571,7 +571,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                 <section className="space-y-2">
                   <div className="flex items-center gap-2 px-1">
                     <Lock size={12} className="text-white/40" />
-                    <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+                    <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
                       Ya en la cuenta · {lockedItems.length} item
                       {lockedItems.length === 1 ? "" : "s"}
                     </span>
@@ -594,7 +594,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                             ${l.price.toFixed(2)} c/u
                           </div>
                         </div>
-                        <div className="tabular-nums text-[13px] font-black text-white/80 shrink-0">
+                        <div className="tabular-nums text-[13px] font-semibold text-white/80 shrink-0">
                           ${l.subtotal.toFixed(2)}
                         </div>
                       </div>
@@ -612,7 +612,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                 {isAppendMode && (
                   <div className="flex items-center gap-2 px-1">
                     <PlusCircle size={12} className="text-[var(--brand)]" />
-                    <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
+                    <span className="text-[10px] font-semibold tracking-[0.14em] text-[var(--brand)] uppercase">
                       Agregando ahora · {cartCount} item
                       {cartCount === 1 ? "" : "s"}
                     </span>
@@ -661,7 +661,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                             >
                               <Minus size={14} />
                             </button>
-                            <span className="tabular-nums text-[14px] font-black w-6 text-center">
+                            <span className="tabular-nums text-[14px] font-semibold w-6 text-center">
                               {l.quantity}
                             </span>
                             <button
@@ -686,7 +686,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                           <button
                             type="button"
                             onClick={() => setPickerIndex(idx)}
-                            className={`flex-1 h-9 px-3 rounded-xl border text-[10px] font-black uppercase tracking-[0.15em] active:scale-95 transition-transform truncate ${
+                            className={`flex-1 h-9 px-3 rounded-xl border text-[10px] font-semibold uppercase tracking-[0.15em] active:scale-95 transition-transform truncate ${
                               seatActive
                                 ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
                                 : "bg-white/[0.03] border-white/10 text-white/40"
@@ -697,7 +697,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                           <button
                             type="button"
                             onClick={() => setPickerIndex(idx)}
-                            className={`flex-1 h-9 px-3 rounded-xl border text-[10px] font-black uppercase tracking-[0.15em] active:scale-95 transition-transform truncate ${
+                            className={`flex-1 h-9 px-3 rounded-xl border text-[10px] font-semibold uppercase tracking-[0.15em] active:scale-95 transition-transform truncate ${
                               courseActive
                                 ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
                                 : "bg-white/[0.03] border-white/10 text-white/40"
@@ -729,7 +729,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
                 </>
               )}
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+                <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
                   {isAppendMode && lockedItems.length > 0
                     ? "Total cuenta"
                     : "Total"}

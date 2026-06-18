@@ -1428,7 +1428,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                 fontFamily: "'Outfit', system-ui, sans-serif",
               }}
             >
-              <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
+              <span className="text-[10px] font-semibold tracking-[0.25em] text-[var(--brand)] uppercase">
                 Modo préstamo
               </span>
               <span className="text-[11px] font-bold text-white/80 truncate">
@@ -1451,7 +1451,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                 className="flex h-10 items-center gap-2 rounded-xl border border-bd bg-surf-2 px-3 text-tx-pri transition-all active:scale-95 hover:border-iris-500 hover:text-iris-500"
               >
                 <Home size={18} />
-                <span className="text-[11px] font-black uppercase tracking-[0.1em]">Inicio</span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.1em]">Inicio</span>
               </button>
             </div>
 
@@ -1480,7 +1480,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                     key={type}
                     type="button"
                     onClick={() => updateTicket({ type: type as typeof activeTicket.type })}
-                    className={`h-11 min-w-[94px] rounded-lg border-2 px-3 text-[11px] font-black uppercase focus:outline-none focus:ring-2 focus:ring-iris-500 ${
+                    className={`h-11 min-w-[94px] rounded-lg border-2 px-3 text-[11px] font-semibold uppercase focus:outline-none focus:ring-2 focus:ring-iris-500 ${
                       active
                         ? "border-iris-500 bg-iris-soft text-iris-500"
                         : "border-bd bg-surf-2 text-tx-sec active:bg-surf-3"
@@ -1555,7 +1555,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           <div className="relative">
             <ShoppingCart size={24} />
             {itemCount > 0 && (
-              <span className="absolute -top-2 -right-2 min-w-[20px] h-[20px] px-1 rounded-full bg-surface-0 text-brand text-[10px] font-black flex items-center justify-center mono border border-brand/20">
+              <span className="absolute -top-2 -right-2 min-w-[20px] h-[20px] px-1 rounded-full bg-surface-0 text-brand text-[10px] font-semibold flex items-center justify-center mono border border-brand/20">
                 {itemCount}
               </span>
             )}

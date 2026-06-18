@@ -361,14 +361,14 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             <Receipt size={22} />
           </div>
           <div className="flex-1 flex flex-col min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
               {paidMode
                 ? "Tickets cobrados"
                 : selectionMode
                   ? "Seleccionar cuentas"
                   : "Tickets abiertos"}
             </span>
-            <span className="text-[16px] font-black text-white truncate leading-none">
+            <span className="text-[16px] font-semibold text-white truncate leading-none">
               {paidMode
                 ? `${orders.length} cobrado${orders.length === 1 ? "" : "s"} · último mes`
                 : selectionMode
@@ -417,7 +417,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     key={m.key}
                     type="button"
                     onClick={() => onModeChange(m.key)}
-                    className={`flex-1 h-11 min-h-[44px] rounded-xl text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-all ${
+                    className={`flex-1 h-11 min-h-[44px] rounded-xl text-[11px] font-semibold uppercase tracking-[0.15em] active:scale-95 transition-all ${
                       isActive
                         ? m.key === "paid"
                           ? "bg-[#88D66C] text-[#0C0C0E] shadow-[0_5px_20px_rgba(136,214,108,0.3)]"
@@ -439,7 +439,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                 <button
                   key={f}
                   onClick={() => setActiveFilter(f)}
-                  className={`shrink-0 h-11 min-h-[44px] px-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.15em] whitespace-nowrap active:scale-95 transition-all border ${
+                  className={`shrink-0 h-11 min-h-[44px] px-5 rounded-2xl text-[11px] font-semibold uppercase tracking-[0.15em] whitespace-nowrap active:scale-95 transition-all border ${
                     isActive
                       ? "bg-[var(--brand)] text-[var(--brand-fg)] border-[var(--brand)] shadow-[0_5px_20px_var(--brand-glow)]"
                       : "bg-white/5 text-white/60 border-white/10"
@@ -466,7 +466,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
 
           {/* ORDENAR */}
           <div className="flex items-center gap-2">
-            <span className="text-[9px] font-black uppercase tracking-[0.18em] text-white/30 shrink-0">
+            <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-white/30 shrink-0">
               Ordenar
             </span>
             <div className="flex gap-2 overflow-x-auto scrollbar-hide">
@@ -477,7 +477,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     key={s.key}
                     type="button"
                     onClick={() => setSortKey(s.key)}
-                    className={`shrink-0 h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.12em] whitespace-nowrap active:scale-95 transition-all border ${
+                    className={`shrink-0 h-9 px-4 rounded-xl text-[10px] font-semibold uppercase tracking-[0.12em] whitespace-nowrap active:scale-95 transition-all border ${
                       isActive
                         ? "bg-white/15 text-white border-white/25"
                         : "bg-white/5 text-white/45 border-white/10"
@@ -574,16 +574,16 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
-                        <h3 className="text-[15px] font-black text-white truncate leading-tight">
+                        <h3 className="text-[15px] font-semibold text-white truncate leading-tight">
                           {order.customerName}
                         </h3>
                         {isSelected && canMergeOrders && (
-                          <span className="shrink-0 text-[8px] font-black uppercase tracking-[0.12em] text-[var(--brand)]">
+                          <span className="shrink-0 text-[8px] font-semibold uppercase tracking-[0.12em] text-[var(--brand)]">
                             {selectedIndex === 0 ? "Cuenta final" : "Se juntará"}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-white/45">
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
                         <span className="text-[var(--brand)]">{order.type}</span>
                         <span className="text-white/20">·</span>
                         <span className="tabular-nums">#{order.orderNumber}</span>
@@ -642,7 +642,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                             hapticMedium();
                             onReprintOrder(order);
                           }}
-                          className="flex-1 h-9 rounded-lg bg-[#88D66C]/12 border border-[#88D66C]/30 text-[#88D66C] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                          className="flex-1 h-9 rounded-lg bg-[#88D66C]/12 border border-[#88D66C]/30 text-[#88D66C] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
                         >
                           <Receipt size={15} strokeWidth={2.5} /> Reimprimir recibo
                         </button>
@@ -662,7 +662,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                             hapticMedium();
                             onShowDetail(order);
                           }}
-                          className="flex-1 h-9 rounded-lg bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 active:text-white transition-transform"
+                          className="flex-1 h-9 rounded-lg bg-white/5 border border-white/10 text-white/75 text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 active:text-white transition-transform"
                         >
                           <Pencil size={15} strokeWidth={2.5} /> Editar
                         </button>
@@ -675,7 +675,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                             hapticMedium();
                             onReprintOrder(order);
                           }}
-                          className="flex-1 h-9 rounded-lg bg-white/5 border border-white/10 text-white/75 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 active:text-white transition-transform"
+                          className="flex-1 h-9 rounded-lg bg-white/5 border border-white/10 text-white/75 text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 active:text-white transition-transform"
                         >
                           <Receipt size={15} strokeWidth={2.5} /> Imprimir
                         </button>
@@ -709,7 +709,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
           {selectionMode ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-baseline justify-between">
-                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/40">
                   Total combinado
                 </span>
                 <span className="text-xl font-black tabular-nums text-white">
@@ -723,7 +723,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     disabled={selectedOrders.length < 1 || sendingKitchen}
                     onClick={handleSendKitchen}
                     aria-label="Enviar a cocina"
-                    className="flex-1 min-h-[52px] h-[52px] rounded-2xl bg-[#88D66C]/15 border border-[#88D66C]/40 text-[#88D66C] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                    className="flex-1 min-h-[52px] h-[52px] rounded-2xl bg-[#88D66C]/15 border border-[#88D66C]/40 text-[#88D66C] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
                   >
                     {sendingKitchen ? (
                       <Loader2 size={17} className="animate-spin" />
@@ -739,7 +739,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     disabled={selectedOrders.length < 1}
                     onClick={() => setShowDriverPicker(true)}
                     aria-label="Enviar a repartidor"
-                    className="flex-1 min-h-[52px] h-[52px] rounded-2xl bg-blue-400/15 border border-blue-400/40 text-blue-200 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                    className="flex-1 min-h-[52px] h-[52px] rounded-2xl bg-blue-400/15 border border-blue-400/40 text-blue-200 text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
                   >
                     <Bike size={17} strokeWidth={2.5} />
                     Repartidor
@@ -759,13 +759,13 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
               </div>
             </div>
           ) : paidMode ? (
-            <p className="text-center text-[10px] font-black uppercase tracking-[0.18em] text-white/30">
+            <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-white/30">
               Cobrados del último mes · guardado local
             </p>
           ) : (
             <button
               type="button"
-              className="w-full min-h-[48px] h-12 rounded-2xl bg-white/5 border border-white/10 text-white/80 text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+              className="w-full min-h-[48px] h-12 rounded-2xl bg-white/5 border border-white/10 text-white/80 text-[11px] font-semibold uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-transform"
             >
               Ver historial completo
               <ChevronRight size={16} />
@@ -784,7 +784,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             <div className="w-12 h-12 rounded-2xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center mb-4">
               <Merge size={21} />
             </div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
               Confirmar unión
             </p>
             <h3 className="mt-1 text-xl font-black text-white">
@@ -797,7 +797,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
               de mover sus productos.
             </p>
             <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-              <span className="text-[11px] font-black uppercase tracking-[0.12em] text-white/45">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">
                 Nuevo total
               </span>
               <span className="text-xl font-black tabular-nums text-white">
@@ -809,7 +809,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                 type="button"
                 disabled={isMerging}
                 onClick={() => setShowMergeConfirm(false)}
-                className="h-12 flex-1 rounded-2xl border border-white/10 bg-white/5 text-[11px] font-black uppercase tracking-[0.12em] text-white/65 disabled:opacity-40"
+                className="h-12 flex-1 rounded-2xl border border-white/10 bg-white/5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/65 disabled:opacity-40"
               >
                 Volver
               </button>
@@ -846,7 +846,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             <div className="w-12 h-12 rounded-2xl bg-blue-400/15 border border-blue-400/30 text-blue-300 flex items-center justify-center mb-4">
               <Bike size={21} />
             </div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
               Enviar a repartidor
             </p>
             <h3 className="mt-1 text-xl font-black text-white">
@@ -881,7 +881,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                         <Bike size={15} className="shrink-0 text-blue-300" />
                       )}
                       <span className="min-w-0">
-                        <span className="block text-sm font-black text-white truncate">
+                        <span className="block text-sm font-semibold text-white truncate">
                           {d.name}
                         </span>
                         {d.isAvailable === false && (
@@ -900,7 +900,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
               type="button"
               disabled={Boolean(assigningDriverId)}
               onClick={() => setShowDriverPicker(false)}
-              className="mt-4 h-12 w-full rounded-2xl border border-white/10 bg-white/5 text-[11px] font-black uppercase tracking-[0.12em] text-white/65 disabled:opacity-40"
+              className="mt-4 h-12 w-full rounded-2xl border border-white/10 bg-white/5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/65 disabled:opacity-40"
             >
               Cancelar
             </button>

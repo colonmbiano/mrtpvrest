@@ -140,10 +140,10 @@ export default function WebOrdersPanel({
             <Globe size={22} />
           </div>
           <div className="flex-1 flex flex-col min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
               Pedidos web
             </span>
-            <span className="text-[16px] font-black text-white truncate leading-none">
+            <span className="text-[16px] font-semibold text-white truncate leading-none">
               {pending.length > 0
                 ? `${pending.length} nuevo${pending.length === 1 ? "" : "s"} por aceptar`
                 : `${orders.length} en curso`}
@@ -227,7 +227,7 @@ function Section({
           className="w-1.5 h-1.5 rounded-full"
           style={{ background: accent }}
         />
-        <span className="text-[10px] font-black tracking-[0.2em] text-white/40 uppercase">
+        <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
           {title}
         </span>
       </div>
@@ -267,12 +267,12 @@ function WebOrderCard({
       {/* Encabezado: cliente + total */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[15px] font-black text-white truncate leading-tight">
+          <p className="text-[15px] font-semibold text-white truncate leading-tight">
             {order.customerName}
           </p>
           <div className="flex items-center gap-2 mt-1">
             <span
-              className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${typeTone}`}
+              className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md border ${typeTone}`}
             >
               {typeLabel}
             </span>

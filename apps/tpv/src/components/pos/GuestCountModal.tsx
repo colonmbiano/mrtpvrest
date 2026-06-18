@@ -62,7 +62,7 @@ export default function GuestCountModal({
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-6 py-5 border-b border-white/10 bg-white/5">
           <div>
-            <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)]">COMENSALES</span>
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-[var(--brand)]">COMENSALES</span>
             <h3 className="text-2xl font-black text-white tracking-tight mt-1">
               ¿Cuántos comensales?
             </h3>
@@ -97,7 +97,7 @@ export default function GuestCountModal({
               <Users size={28} className="text-[var(--brand)]" />
               <span>{guests}</span>
             </div>
-            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40 mt-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 mt-2">
               {guests === 1 ? "comensal" : "comensales"}
             </p>
           </div>
@@ -113,7 +113,7 @@ export default function GuestCountModal({
 
         {/* Quick grid */}
         <div className="px-6 pb-6">
-          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40 mb-3 px-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 mb-3 px-1">
             Selección rápida
           </p>
           <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
@@ -124,7 +124,7 @@ export default function GuestCountModal({
                   key={n}
                   type="button"
                   onClick={() => setGuests(n)}
-                  className="h-12 rounded-xl text-base font-black tracking-tight active:scale-90 transition-transform"
+                  className="h-12 rounded-xl text-base font-semibold tracking-tight active:scale-90 transition-transform"
                   style={{
                     background: active ? "var(--brand)" : "rgba(255,255,255,0.05)",
                     color: active ? "var(--brand-fg)" : "rgba(255,255,255,0.85)",
