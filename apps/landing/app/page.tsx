@@ -172,9 +172,10 @@ export default function HomePage() {
           <Image src="/brand/mrtpvrest-logo-current.png" alt="MRTPVREST" width={2400} height={810} priority />
         </a>
         <div className="nav-links" aria-label="Navegación principal">
-          <a href="#plataforma">Plataforma</a>
+          <Link href="/funciones">Funciones</Link>
           <a href="#apps">Apps</a>
           <a href="#precios">Precios</a>
+          <Link href="/comparativa/parrot">Comparativas</Link>
           <a href="#faq">FAQ</a>
         </div>
         <div className="nav-actions">
@@ -264,6 +265,14 @@ export default function HomePage() {
                 Descargar {label}
               </a>
             ))}
+          </div>
+          <div className="apk-downloads" aria-label="Explora las funciones">
+            <Link href="/funciones/punto-de-venta">Punto de venta</Link>
+            <Link href="/funciones/kds-cocina">KDS de cocina</Link>
+            <Link href="/funciones/delivery">Delivery</Link>
+            <Link href="/funciones/kiosko">Kiosko</Link>
+            <Link href="/funciones/app-cliente">App de cliente</Link>
+            <Link href="/funciones/administracion">Administración</Link>
           </div>
         </section>
 
@@ -382,7 +391,8 @@ export default function HomePage() {
       <footer className="site-footer">
         <span>© 2026 MRTPVREST</span>
         <div>
-          <a href="#apps">Apps</a>
+          <Link href="/funciones">Funciones</Link>
+          <Link href="/comparativa/parrot">Comparativas</Link>
           <a href="#precios">Precios</a>
           <a href="mailto:contacto@mrtpvrest.com">Contacto</a>
           <a href={apkUrl} download>APK</a>
