@@ -98,12 +98,78 @@ const faqs = [
   ['¿Qué pasa cuando termina el trial?', 'Decides si sigues con un plan. No necesitas tarjeta para probar y no hay bloqueo de datos al evaluar.'],
 ] as const
 
+const siteUrl = 'https://mrtpvrest.com'
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${siteUrl}/#organization`,
+      name: 'MRTPVREST',
+      url: siteUrl,
+      logo: `${siteUrl}/brand/mrtpvrest-logo.png`,
+      email: 'contacto@mrtpvrest.com',
+      description:
+        'Software de punto de venta para restaurantes que conecta caja, cocina, delivery, kiosko y administración en tiempo real.',
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${siteUrl}/#website`,
+      url: siteUrl,
+      name: 'MRTPVREST',
+      inLanguage: 'es-MX',
+      publisher: { '@id': `${siteUrl}/#organization` },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      '@id': `${siteUrl}/#software`,
+      name: 'MRTPVREST',
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web, Android',
+      inLanguage: 'es-MX',
+      url: siteUrl,
+      description:
+        'Punto de venta para restaurantes con TPV, KDS de cocina, delivery, kiosko de autoservicio, app de cliente y administración en tiempo real.',
+      publisher: { '@id': `${siteUrl}/#organization` },
+      offers: plans.map((plan) => ({
+        '@type': 'Offer',
+        name: plan.name,
+        price: plan.price.replace('$', ''),
+        priceCurrency: 'USD',
+        url: `${siteUrl}/#precios`,
+      })),
+      aggregateRating: {
+        '@type': 'AggregateRating',
+        ratingValue: '5',
+        reviewCount: testimonials.length,
+      },
+    },
+    {
+      '@type': 'FAQPage',
+      '@id': `${siteUrl}/#faq`,
+      mainEntity: faqs.map(([question, answer]) => ({
+        '@type': 'Question',
+        name: question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: answer,
+        },
+      })),
+    },
+  ],
+}
+
 export default function HomePage() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
       <nav className="site-nav" id="inicio">
         <a className="brand" href="#inicio" aria-label="MRTPVREST inicio">
-          <Image src="/brand/mrtpvrest-logo-current.png" alt="MRTPVREST" width={2400} height={810} priority unoptimized />
+          <Image src="/brand/mrtpvrest-logo-current.png" alt="MRTPVREST" width={2400} height={810} priority />
         </a>
         <div className="nav-links" aria-label="Navegación principal">
           <a href="#plataforma">Plataforma</a>
@@ -120,13 +186,13 @@ export default function HomePage() {
       <main>
         <section className="hero">
           <div className="hero-copy">
-            <div className="eyebrow"><span /> Plataforma POS para restaurantes LATAM</div>
+            <div className="eyebrow"><span /> Punto de venta para restaurantes LATAM</div>
             <h1>
-              <span className="hero-brand-word">MRTPVREST</span> controla tu restaurante en tiempo real
+              <span className="hero-brand-word">MRTPVREST</span> es el punto de venta que controla tu restaurante en tiempo real
             </h1>
             <p>
-              Conecta caja, cocina, delivery, kiosko, clientes y administración en una sola operación rápida,
-              cálida y lista para turnos intensos.
+              El punto de venta para restaurantes que conecta caja, cocina, delivery, kiosko, clientes y
+              administración en una sola operación rápida, cálida y lista para turnos intensos.
             </p>
             <div className="hero-actions">
               <a className="btn btn-primary" href={registerUrl}>Registrar mi restaurante</a>
@@ -142,10 +208,10 @@ export default function HomePage() {
           </div>
           <div className="hero-visual">
             <div className="logo-plate">
-              <Image src="/brand/mrtpvrest-logo-current.png" alt="Logotipo MRTPVREST" width={2400} height={810} priority unoptimized />
+              <Image src="/brand/mrtpvrest-logo-current.png" alt="Logotipo MRTPVREST" width={2400} height={810} priority />
             </div>
             <div className="hero-photo">
-              <Image src="/people/hero-owner.png" alt="Dueño de restaurante usando MRTPVREST en una tablet" fill priority unoptimized sizes="(max-width: 900px) 100vw, 48vw" />
+              <Image src="/people/hero-owner.png" alt="Dueño de restaurante usando MRTPVREST en una tablet" fill priority sizes="(max-width: 900px) 100vw, 48vw" />
               <div className="live-badge"><span /> Sistema en operación real</div>
             </div>
           </div>
@@ -184,7 +250,7 @@ export default function HomePage() {
           <div className="apps-grid">
             {apps.map((app, index) => (
               <a className={`app-card ${app.tone}`} href={app.href} key={app.title}>
-                <Image src={app.src} alt={`${app.title}: ${app.text}`} width={1536} height={672} loading="eager" unoptimized sizes="(max-width: 900px) 100vw, 50vw" />
+                <Image src={app.src} alt={`${app.title}: ${app.text}`} width={1536} height={672} loading="lazy" sizes="(max-width: 900px) 100vw, 50vw" />
                 <span>
                   <strong>{app.title}</strong>
                   <small>{app.text}</small>
@@ -230,13 +296,13 @@ export default function HomePage() {
             </div>
             <div className="photo-wall">
               <div className="photo-main">
-                <Image src="/people/restaurant-team.png" alt="Equipo de restaurante coordinando operación con MRTPVREST" fill loading="eager" unoptimized sizes="(max-width: 900px) 100vw, 52vw" />
+                <Image src="/people/restaurant-team.png" alt="Equipo de restaurante coordinando operación con MRTPVREST" fill loading="lazy" sizes="(max-width: 900px) 100vw, 52vw" />
               </div>
               <div className="photo-small">
-                <Image src="/people/kitchen-kds.png" alt="Cocina usando una pantalla KDS conectada" fill loading="eager" unoptimized sizes="(max-width: 900px) 50vw, 24vw" />
+                <Image src="/people/kitchen-kds.png" alt="Cocina usando una pantalla KDS conectada" fill loading="lazy" sizes="(max-width: 900px) 50vw, 24vw" />
               </div>
               <div className="photo-small warm">
-                <Image src="/people/hero-owner.png" alt="Dueño revisando ventas en una tablet" fill loading="eager" unoptimized sizes="(max-width: 900px) 50vw, 24vw" />
+                <Image src="/people/hero-owner.png" alt="Dueño revisando ventas en una tablet" fill loading="lazy" sizes="(max-width: 900px) 50vw, 24vw" />
               </div>
             </div>
           </div>
@@ -253,7 +319,7 @@ export default function HomePage() {
                 <div className="stars">★★★★★</div>
                 <p>“{item.quote}”</p>
                 <div className="author">
-                  <Image src={item.avatar} alt={item.name} width={56} height={56} loading="eager" unoptimized />
+                  <Image src={item.avatar} alt={item.name} width={56} height={56} loading="lazy" />
                   <span>
                     <strong>{item.name}</strong>
                     <small>{item.business}</small>
