@@ -293,6 +293,7 @@ const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePer
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
 const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals } = require('../lib/money');
+const { nextOrderNumber } = require('../lib/order-number');
 const { releaseTableAfterPayment } = require('../services/table-lifecycle.service');
 const audit = require('../lib/audit-logger');
 const {
@@ -593,7 +594,6 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       }
     }
 
-    const orderNumber = 'TPV-' + Date.now().toString().slice(-6);
     const isDineInTab = (orderType === 'DINE_IN') && !!tableId;
     const paidOnCreate = Boolean(
       paymentMethod && ['DELIVERED', 'COMPLETED', 'PAID'].includes(String(status || '').toUpperCase())
@@ -811,6 +811,10 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         });
         customerId = customer.id;
       }
+
+      // Folio secuencial continuo por restaurante. Atómico dentro de esta misma
+      // $transaction: si la creación falla, el folio hace rollback (sin huecos).
+      const orderNumber = await nextOrderNumber(tx, restaurantId);
 
       const created = await tx.order.create({
         data: {
@@ -1790,8 +1794,8 @@ async function splitOrderHandler(req, res) {
         });
 
     const result = await prisma.$transaction(async (tx) => {
-      const orderNumber =
-        'TPV-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 900 + 100);
+      // El split genera un ticket nuevo → consume su propio folio de la serie.
+      const orderNumber = await nextOrderNumber(tx, source.restaurantId);
 
       const created = await tx.order.create({
         data: {

@@ -7,6 +7,7 @@
 
 const { computeDeliveryFee } = require('../../lib/delivery-fee');
 const { resolveProviderForRestaurant } = require('../../lib/payment-providers');
+const { nextOrderNumber } = require('../../lib/order-number');
 const { effectivePrice } = require('./catalog');
 const { upsertContact } = require('./contacts');
 
@@ -100,7 +101,8 @@ async function createBotOrder({ prisma, io, restaurant, config, data }) {
           : 'CASH';
 
   const estimatedMinutes = Number(config?.estimatedDelivery) || 30;
-  const orderNumber = 'WA-' + Date.now().toString().slice(-6);
+  // Folio secuencial continuo por restaurante (misma serie que TPV/web/kiosko).
+  const orderNumber = await nextOrderNumber(prisma, restaurant.id);
 
   const order = await prisma.order.create({
     data: {
