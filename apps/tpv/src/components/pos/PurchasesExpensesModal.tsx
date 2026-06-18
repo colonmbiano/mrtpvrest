@@ -450,7 +450,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
                 key={t.id}
                 type="button"
                 onClick={() => setTab(t.id)}
-                className={`flex items-center gap-2 px-4 h-11 rounded-2xl text-[12px] font-black uppercase tracking-[0.15em] transition-all ${
+                className={`flex items-center gap-2 px-4 h-11 rounded-2xl text-[12px] font-semibold uppercase tracking-[0.15em] transition-all ${
                   isActive
                     ? "bg-[var(--brand)] text-[var(--brand-fg)] shadow-[0_4px_16px_var(--brand-glow)]"
                     : "bg-white/5 border border-white/10 text-white/60"
@@ -516,7 +516,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
           {/* Payment method — solo en tabs de captura, no en historial */}
           {tab !== "history" && (
           <div className="mt-6">
-            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40 mb-2">Método de pago</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 mb-2">Método de pago</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {(Object.keys(PAYMENT_LABELS) as PaymentMethod[]).map((pm) => {
                 const isActive = paymentMethod === pm;
@@ -525,7 +525,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
                     key={pm}
                     type="button"
                     onClick={() => setPaymentMethod(pm)}
-                    className={`h-12 rounded-2xl border text-[11px] font-black uppercase tracking-[0.1em] transition-all ${
+                    className={`h-12 rounded-2xl border text-[11px] font-semibold uppercase tracking-[0.1em] transition-all ${
                       isActive
                         ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
                         : "bg-white/5 border-white/10 text-white/60"
@@ -551,7 +551,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="h-11 px-5 rounded-2xl bg-white/5 border border-white/10 text-white/60 text-[11px] font-black uppercase tracking-[0.15em] active:scale-95"
+            className="h-11 px-5 rounded-2xl bg-white/5 border border-white/10 text-white/60 text-[11px] font-semibold uppercase tracking-[0.15em] active:scale-95"
           >
             Cerrar
           </button>
@@ -597,7 +597,7 @@ function ExpenseTab(props: {
   return (
     <div className="space-y-5">
       <div>
-        <label className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40 block mb-2">
+        <label className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 block mb-2">
           Categoría
         </label>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -616,7 +616,7 @@ function ExpenseTab(props: {
               >
                 <span className="text-xl">{c.icon || "📝"}</span>
                 <span
-                  className={`text-[9px] font-black uppercase tracking-wider ${
+                  className={`text-[9px] font-semibold uppercase tracking-wider ${
                     isActive ? "text-[var(--brand)]" : "text-white/60"
                   }`}
                 >
@@ -640,7 +640,7 @@ function ExpenseTab(props: {
 
       <Field label="Monto">
         <div className="relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--brand)] font-black">$</span>
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--brand)] font-semibold">$</span>
           <input
             type="number"
             inputMode="decimal"
@@ -702,7 +702,7 @@ function PurchaseTab(props: {
 
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40">
+          <label className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40">
             Productos comprados
           </label>
           <div className="flex items-center gap-2">
@@ -710,7 +710,7 @@ function PurchaseTab(props: {
               type="button"
               onClick={props.onScanReceipt}
               disabled={props.scanning}
-              className="h-8 px-3 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300 text-[10px] font-black uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95 disabled:opacity-50"
+              className="h-8 px-3 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300 text-[10px] font-semibold uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95 disabled:opacity-50"
             >
               {props.scanning ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
               {props.scanning ? "Escaneando…" : "Escanear ticket"}
@@ -718,7 +718,7 @@ function PurchaseTab(props: {
             <button
               type="button"
               onClick={props.addLine}
-              className="h-8 px-3 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] text-[10px] font-black uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95"
+              className="h-8 px-3 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] text-[10px] font-semibold uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95"
             >
               <Plus size={12} /> Agregar
             </button>
@@ -800,7 +800,7 @@ function PurchaseTab(props: {
       </div>
 
       <div className="flex items-center justify-between pt-3 border-t border-white/5">
-        <span className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40">Total</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40">Total</span>
         <span className="text-2xl font-black tabular-nums text-[var(--brand)]">${props.purchaseTotal.toFixed(2)}</span>
       </div>
 
@@ -820,7 +820,7 @@ function PurchaseTab(props: {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40 block mb-2">
+      <label className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 block mb-2">
         {label}
       </label>
       {children}
@@ -872,14 +872,14 @@ function HistoryTab({
 
       {/* Lista */}
       <div className="flex items-center justify-between pt-2">
-        <span className="text-[10px] font-black uppercase tracking-[0.25em] text-white/40">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40">
           Movimientos de hoy ({items.length})
         </span>
         <button
           type="button"
           onClick={onRefresh}
           disabled={loading}
-          className="h-8 px-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-[10px] font-black uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95 disabled:opacity-50"
+          className="h-8 px-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-[10px] font-semibold uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95 disabled:opacity-50"
         >
           <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
           Refrescar
@@ -926,7 +926,7 @@ function HistoryTab({
                   ${item.amount.toFixed(2)}
                 </p>
                 <p
-                  className={`text-[9px] font-black uppercase tracking-wider ${
+                  className={`text-[9px] font-semibold uppercase tracking-wider ${
                     item.paymentMethod === "CASH_DRAWER"
                       ? "text-amber-400"
                       : item.paymentMethod === "CORPORATE_CARD"
@@ -966,7 +966,7 @@ function SummaryCard({
   }[color];
   return (
     <div className={`p-3 rounded-xl border ${tone}`}>
-      <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">{label}</p>
+      <p className="text-[9px] font-semibold uppercase tracking-[0.14em] opacity-70">{label}</p>
       <p className="text-lg font-black tabular-nums mt-0.5">${amount.toFixed(2)}</p>
     </div>
   );

@@ -163,7 +163,7 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
             <ChefHat size={22} />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
               Reimprimir comanda
             </span>
             <div className="flex items-baseline gap-2">
@@ -210,7 +210,7 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
             ) : (
               <Square size={18} className="text-white/40" />
             )}
-            <span className="text-[11px] font-black uppercase tracking-[0.2em]">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">
               {allSelected ? "Quitar todos" : "Seleccionar todos"}
             </span>
           </button>
@@ -250,7 +250,7 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
                         {isOn ? <CheckSquare size={16} /> : <Square size={16} />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-black text-white truncate">
+                        <div className="text-[13px] font-semibold text-white truncate">
                           <span className="text-[var(--brand)] mr-2">
                             {it.quantity}×
                           </span>

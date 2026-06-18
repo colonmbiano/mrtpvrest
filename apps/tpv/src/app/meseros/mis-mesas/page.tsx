@@ -101,7 +101,7 @@ export default function WaiterMyTablesPage() {
 
               <div className="flex-1 min-w-0 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[14px] font-black">
+                  <span className="text-[14px] font-semibold">
                     {table.zone?.name || "Sin zona"} · {table.capacity}p
                   </span>
                   {isLong && <Chip variant="brand" className="h-5">+1H</Chip>}
@@ -117,7 +117,7 @@ export default function WaiterMyTablesPage() {
                         <Clock size={12} />
                         <span className="mono tnum text-[11px] font-bold">{elapsed}m</span>
                       </div>
-                      <div className="text-[10px] font-black uppercase tracking-tighter text-tx-mut">
+                      <div className="text-[10px] font-semibold uppercase tracking-tighter text-tx-mut">
                         {order._count.items} ítems
                       </div>
                     </div>
@@ -143,7 +143,7 @@ export default function WaiterMyTablesPage() {
             <div className="w-16 h-16 rounded-full border-2 border-dashed border-tx-pri flex items-center justify-center">
               <CheckCircle2 size={32} />
             </div>
-            <p className="text-xs font-black uppercase tracking-widest">No hay mesas activas</p>
+            <p className="text-xs font-semibold uppercase tracking-widest">No hay mesas activas</p>
           </div>
         )}
       </div>

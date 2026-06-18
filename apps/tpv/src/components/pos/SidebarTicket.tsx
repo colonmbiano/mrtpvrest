@@ -263,7 +263,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
   // Badge "cliente frecuente" reutilizado en TAKEOUT y DELIVERY.
   const customerHintBadge = customerHint && customerHint.ordersCount > 0 ? (
-    <div className="flex items-center gap-1.5 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-400/90">
+    <div className="flex items-center gap-1.5 px-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-emerald-400/90">
       <User size={11} className="shrink-0" />
       <span>
         Cliente frecuente · {customerHint.ordersCount}{" "}
@@ -1026,7 +1026,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                 onChange={(e) => useTicketStore.getState().updateTicket({ address: e.target.value })}
               />
               {!ticket.address?.trim() && (
-                <span className="text-[8px] font-black tracking-[0.2em] uppercase text-[var(--warning)] shrink-0">
+                <span className="text-[8px] font-semibold tracking-[0.14em] uppercase text-[var(--warning)] shrink-0">
                   Req
                 </span>
               )}
@@ -1041,7 +1041,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                 onChange={(e) => useTicketStore.getState().updateTicket({ phone: e.target.value })}
               />
               {!ticket.phone?.trim() && (
-                <span className="text-[8px] font-black tracking-[0.2em] uppercase text-[var(--warning)] shrink-0">
+                <span className="text-[8px] font-semibold tracking-[0.14em] uppercase text-[var(--warning)] shrink-0">
                   Req
                 </span>
               )}

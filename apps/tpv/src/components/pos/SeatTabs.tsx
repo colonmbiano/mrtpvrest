@@ -42,7 +42,7 @@ export default function SeatTabs() {
       className="flex items-center gap-2 overflow-x-auto px-3 sm:px-4 lg:px-6 pt-2 pb-2 scrollbar-hide"
       style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
-      <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 flex-shrink-0 pr-2">
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 flex-shrink-0 pr-2">
         <Users size={12} /> Comensal
       </span>
 
@@ -54,7 +54,7 @@ export default function SeatTabs() {
             key={n}
             type="button"
             onClick={() => updateTicket({ activeSeat: n })}
-            className="inline-flex items-center gap-2 px-4 h-11 rounded-2xl text-sm font-black tracking-tight active:scale-95 transition-transform flex-shrink-0"
+            className="inline-flex items-center gap-2 px-4 h-11 rounded-2xl text-sm font-semibold tracking-tight active:scale-95 transition-transform flex-shrink-0"
             style={{
               background: isActive ? "var(--brand)" : "rgba(255,255,255,0.05)",
               color:      isActive ? "var(--brand-fg)" : "rgba(255,255,255,0.85)",
@@ -64,7 +64,7 @@ export default function SeatTabs() {
             <span>{n}</span>
             {units > 0 && (
               <span
-                className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-black"
+                className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-semibold"
                 style={{
                   background: isActive ? "rgba(10,10,12,0.20)" : "var(--brand-soft)",
                   color:      isActive ? "var(--brand-fg)" : "var(--brand)",
@@ -80,7 +80,7 @@ export default function SeatTabs() {
       <button
         type="button"
         onClick={() => updateTicket({ activeSeat: null })}
-        className="inline-flex items-center gap-2 px-4 h-11 rounded-2xl text-sm font-black tracking-tight active:scale-95 transition-transform flex-shrink-0"
+        className="inline-flex items-center gap-2 px-4 h-11 rounded-2xl text-sm font-semibold tracking-tight active:scale-95 transition-transform flex-shrink-0"
         style={{
           background: active === null ? "#88D66C" : "rgba(255,255,255,0.05)",
           color:      active === null ? "#0a0a0c" : "rgba(255,255,255,0.85)",
@@ -92,7 +92,7 @@ export default function SeatTabs() {
         <span className="hidden sm:inline">Compartido</span>
         {sharedUnits > 0 && (
           <span
-            className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-black"
+            className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-semibold"
             style={{
               background: active === null ? "rgba(10,10,12,0.20)" : "rgba(136,214,108,0.20)",
               color:      active === null ? "#0a0a0c" : "#88D66C",

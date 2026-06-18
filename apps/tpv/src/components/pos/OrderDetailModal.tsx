@@ -310,7 +310,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               >
                 <Minus size={14} />
               </button>
-              <span className="tabular-nums text-[14px] font-black text-[var(--brand)] w-7 text-center">
+              <span className="tabular-nums text-[14px] font-semibold text-[var(--brand)] w-7 text-center">
                 {updating ? "…" : it.quantity}
               </span>
               <button
@@ -338,7 +338,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             )}
           </div>
 
-          <div className="tabular-nums text-[13px] font-black text-white shrink-0">
+          <div className="tabular-nums text-[13px] font-semibold text-white shrink-0">
             ${it.subtotal.toFixed(2)}
           </div>
 
@@ -388,7 +388,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             <button
               type="button"
               onClick={() => setNoteDraft({ id: itemId, value: it.notes ?? "" })}
-              className="self-start text-[10px] font-black uppercase tracking-[0.15em] text-white/40 active:text-[var(--brand)] transition-colors"
+              className="self-start text-[10px] font-semibold uppercase tracking-[0.15em] text-white/40 active:text-[var(--brand)] transition-colors"
             >
               {it.notes ? "✎ Editar nota" : "+ Agregar nota"}
             </button>
@@ -431,7 +431,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             <Receipt size={22} />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
               Detalle ticket
             </span>
             {editingName ? (
@@ -445,7 +445,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     if (e.key === "Escape") setEditingName(false);
                   }}
                   placeholder="Nombre de la cuenta…"
-                  className="flex-1 min-w-0 h-9 min-h-[36px] bg-white/5 border border-[var(--brand)] rounded-xl px-3 text-[15px] font-black text-white placeholder:text-white/30 placeholder:font-bold outline-none focus:border-[var(--brand)]"
+                  className="flex-1 min-w-0 h-9 min-h-[36px] bg-white/5 border border-[var(--brand)] rounded-xl px-3 text-[15px] font-semibold text-white placeholder:text-white/30 placeholder:font-bold outline-none focus:border-[var(--brand)]"
                 />
                 <button
                   type="button"
@@ -503,7 +503,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           {/* META */}
           <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-2 border-b border-white/5">
             <div className="p-3 rounded-xl bg-white/5 border border-white/10">
-              <div className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase mb-1">
+              <div className="text-[9px] font-semibold tracking-[0.14em] text-white/40 uppercase mb-1">
                 Cliente
               </div>
               <div className="text-[13px] font-bold text-white truncate">
@@ -511,7 +511,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               </div>
             </div>
             <div className="p-3 rounded-xl bg-white/5 border border-white/10">
-              <div className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase mb-1">
+              <div className="text-[9px] font-semibold tracking-[0.14em] text-white/40 uppercase mb-1">
                 {tableName ? "Mesa" : "Apertura"}
               </div>
               <div className="text-[13px] font-bold text-white truncate">
@@ -520,7 +520,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             </div>
             {status && (
               <div className="col-span-2 sm:col-span-1 p-3 rounded-xl bg-white/5 border border-white/10">
-                <div className="text-[9px] font-black tracking-[0.2em] text-white/40 uppercase mb-1">
+                <div className="text-[9px] font-semibold tracking-[0.14em] text-white/40 uppercase mb-1">
                   Estado
                 </div>
                 <div className="text-[13px] font-bold text-[#88D66C]">{status}</div>
@@ -534,13 +534,13 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             {splitMode ? (
               <div className="space-y-3 mb-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
+                  <span className="text-[10px] font-semibold tracking-[0.25em] text-[var(--brand)] uppercase">
                     Dividir cuenta
                   </span>
                   <button
                     type="button"
                     onClick={exitSplit}
-                    className="min-h-[36px] h-9 px-3 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] flex items-center gap-1.5 bg-white/5 border border-white/10 text-white/60 active:scale-95 transition-transform"
+                    className="min-h-[36px] h-9 px-3 rounded-xl text-[10px] font-semibold uppercase tracking-[0.15em] flex items-center gap-1.5 bg-white/5 border border-white/10 text-white/60 active:scale-95 transition-transform"
                   >
                     <X size={12} /> Cancelar
                   </button>
@@ -549,7 +549,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={() => switchMethod("product")}
-                    className={`min-h-[40px] h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-colors border ${
+                    className={`min-h-[40px] h-10 rounded-xl text-[10px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-colors border ${
                       splitMethod === "product"
                         ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)]"
                         : "bg-white/5 border-white/10 text-white/60"
@@ -560,7 +560,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={() => switchMethod("seat")}
-                    className={`min-h-[40px] h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-colors border ${
+                    className={`min-h-[40px] h-10 rounded-xl text-[10px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-colors border ${
                       splitMethod === "seat"
                         ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)]"
                         : "bg-white/5 border-white/10 text-white/60"
@@ -577,13 +577,13 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             ) : (
               canEditItems && items.length > 0 && (
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+                  <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
                     Productos · {items.length}
                   </span>
                   <button
                     type="button"
                     onClick={() => setEditing((v) => !v)}
-                    className={`min-h-[36px] h-9 px-3 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] flex items-center gap-1.5 active:scale-95 transition-transform ${
+                    className={`min-h-[36px] h-9 px-3 rounded-xl text-[10px] font-semibold uppercase tracking-[0.15em] flex items-center gap-1.5 active:scale-95 transition-transform ${
                       editing
                         ? "bg-[#ef4444]/15 border border-[#ef4444]/40 text-[#ef4444]"
                         : "bg-white/5 border border-white/10 text-white/60"
@@ -621,7 +621,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       ) : (
                         <Circle size={18} className="text-white/30" />
                       )}
-                      <span className="text-[11px] font-black uppercase tracking-[0.15em] text-white flex-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-white flex-1">
                         {label}
                       </span>
                       <span className="text-[10px] font-bold text-white/40">
@@ -654,7 +654,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               </div>
             )}
             <div className="flex justify-between items-baseline pt-1">
-              <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+              <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
                 Total
               </span>
               <span className="tabular-nums text-3xl font-black text-white">
@@ -668,7 +668,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         {splitMode ? (
           <div className="relative z-10 p-4 border-t border-white/5 bg-[var(--bg)] flex items-center gap-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/40">
                 Nuevo ticket · {selectedCount} item{selectedCount === 1 ? "" : "s"}
               </div>
               <div className="text-xl font-black tabular-nums text-white">
@@ -693,7 +693,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 <button
                   type="button"
                   onClick={onAddProducts}
-                  className="w-full min-h-[52px] h-13 py-3 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] font-black uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                  className="w-full min-h-[52px] h-13 py-3 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] font-semibold uppercase tracking-[0.1em] text-[11px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
                 >
                   <ShoppingCart size={16} strokeWidth={2.5} />
                   Agregar productos
@@ -707,7 +707,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     <button
                       type="button"
                       onClick={onReprint}
-                      className="min-h-[48px] h-12 rounded-xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                      className="min-h-[48px] h-12 rounded-xl bg-white/5 border border-white/10 text-white font-semibold uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
                     >
                       <Printer size={16} />
                       Cuenta
@@ -717,7 +717,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     <button
                       type="button"
                       onClick={onReprintKitchen}
-                      className="min-h-[48px] h-12 rounded-xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                      className="min-h-[48px] h-12 rounded-xl bg-white/5 border border-white/10 text-white font-semibold uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
                     >
                       <ChefHat size={16} />
                       Comanda
@@ -731,7 +731,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={onChangeType}
-                    className="min-h-[48px] h-12 rounded-xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                    className="min-h-[48px] h-12 rounded-xl bg-white/5 border border-white/10 text-white font-semibold uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
                   >
                     <Repeat size={16} />
                     Cambiar tipo
@@ -742,7 +742,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={onMergeOrTransfer}
-                    className="min-h-[48px] h-12 rounded-xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                    className="min-h-[48px] h-12 rounded-xl bg-white/5 border border-white/10 text-white font-semibold uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
                   >
                     <ArrowRightLeft size={16} />
                     Mover mesa
@@ -753,7 +753,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={enterSplit}
-                    className="min-h-[48px] h-12 rounded-xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                    className="min-h-[48px] h-12 rounded-xl bg-white/5 border border-white/10 text-white font-semibold uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
                   >
                     <SplitSquareHorizontal size={16} />
                     Dividir
@@ -764,7 +764,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={onAssignDriver}
-                    className="min-h-[48px] h-12 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 font-black uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                    className="min-h-[48px] h-12 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 font-semibold uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
                   >
                     <Bike size={16} />
                     Asignar Rep.
@@ -776,7 +776,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 <button
                   type="button"
                   onClick={onCancelOrder}
-                  className="w-full min-h-[48px] h-12 rounded-xl bg-[#ef4444]/10 border border-[#ef4444]/30 text-[#ef4444] font-black uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                  className="w-full min-h-[48px] h-12 rounded-xl bg-[#ef4444]/10 border border-[#ef4444]/30 text-[#ef4444] font-semibold uppercase tracking-[0.1em] text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-transform"
                 >
                   <Trash2 size={16} />
                   Eliminar ticket

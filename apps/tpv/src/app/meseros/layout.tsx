@@ -100,13 +100,13 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
       {/* HEADER */}
       <header className="relative z-10 h-16 px-5 bg-white/5 backdrop-blur-md border-b border-white/10 flex items-center justify-between shrink-0">
         <div className="flex flex-col">
-          <span className="text-[10px] font-black tracking-[0.25em] text-white/40">VISTA</span>
-          <span className="text-[15px] font-black text-white tracking-tight">Salón · Centro</span>
+          <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40">VISTA</span>
+          <span className="text-[15px] font-semibold text-white tracking-tight">Salón · Centro</span>
         </div>
 
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-md px-3 py-1.5 rounded-full">
-            <div className="w-6 h-6 rounded-full bg-[var(--brand)] text-[var(--brand-fg)] text-[10px] flex items-center justify-center font-black">
+            <div className="w-6 h-6 rounded-full bg-[var(--brand)] text-[var(--brand-fg)] text-[10px] flex items-center justify-center font-semibold">
               {currentEmployee?.name?.substring(0, 2).toUpperCase() || "SR"}
             </div>
             <div className="flex flex-col leading-tight">
@@ -163,7 +163,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
               <button
                 type="button"
                 onClick={() => setConfirmEndShift(false)}
-                className="flex-1 h-12 min-h-[48px] rounded-2xl bg-white/5 border border-white/10 text-[11px] font-black uppercase tracking-[0.15em] text-white/70 active:scale-95 transition-transform"
+                className="flex-1 h-12 min-h-[48px] rounded-2xl bg-white/5 border border-white/10 text-[11px] font-semibold uppercase tracking-[0.15em] text-white/70 active:scale-95 transition-transform"
               >
                 Cancelar
               </button>
@@ -203,7 +203,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
               }`}
             >
               <Icon size={20} />
-              <span className="text-[9px] font-black uppercase tracking-widest">{tab.label}</span>
+              <span className="text-[9px] font-semibold uppercase tracking-widest">{tab.label}</span>
             </Link>
           );
         })}
