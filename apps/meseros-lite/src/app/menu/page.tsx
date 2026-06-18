@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Minus, Plus, RotateCw, Search, WifiOff, X } from "lucide-react";
+import { Check, ChevronUp, Minus, Plus, RotateCw, Search, WifiOff, X } from "lucide-react";
 import type { OrderStatus } from "@mrtpvrest/types";
 import api from "@/lib/api";
 import { apiOrQueue } from "@/lib/offline";
@@ -61,6 +61,7 @@ interface MenuItem {
   isAvailable?: boolean;
   isFavorite?: boolean;
   isPopular?: boolean;
+  isPromo?: boolean;
   hasVariants?: boolean;
   variants?: MenuVariant[];
   complements?: MenuComplement[];
@@ -103,6 +104,17 @@ function writeCache<T>(key: string, value: T) {
   } catch {
     return;
   }
+}
+
+// Un producto está "en promo" si tiene el flag isPromo o un promoPrice válido
+// (positivo y menor al precio normal). Usado por el strip de sugerencias de venta.
+function isOnPromo(product: MenuItem): boolean {
+  return Boolean(
+    product.isPromo ||
+      (typeof product.promoPrice === "number" &&
+        product.promoPrice > 0 &&
+        product.promoPrice < product.price),
+  );
 }
 
 function printerGroupIdsOf(product: MenuItem | undefined): string[] {
@@ -172,6 +184,9 @@ export default function MenuPage() {
   const [status, setStatus] = useState<CatalogStatus>("loading");
   const [lastAddedName, setLastAddedName] = useState<string | null>(null);
   const [configProduct, setConfigProduct] = useState<MenuItem | null>(null);
+  // Panel de comanda inferior (portrait): colapsado muestra solo el resumen
+  // para dar más espacio al grid; expandido muestra toda la comanda con +/-.
+  const [ticketExpanded, setTicketExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -239,11 +254,20 @@ export default function MenuPage() {
     });
   }, [activeCategoryId, products, query]);
 
+  // Sugerencias de venta: productos en promo + populares para que el mesero
+  // los ofrezca (upsell). Promos primero. Usa el catálogo que ya está cargado
+  // (incl. caché offline), sin llamadas extra. Tope de 10 para no saturar.
+  const suggestions = useMemo(() => {
+    return products
+      .filter((product) => product.isAvailable !== false && (isOnPromo(product) || product.isPopular))
+      .sort((a, b) => Number(isOnPromo(b)) - Number(isOnPromo(a)))
+      .slice(0, 10);
+  }, [products]);
+
   const total = ticketItems.reduce((sum, item) => sum + item.total, 0);
   const itemCount = ticketItems.reduce((sum, item) => sum + item.quantity, 0);
   const accumulatedItemCount = previousItemCount + itemCount;
   const accumulatedTotal = previousTotal + total;
-  const latestTicketItems = ticketItems.slice(-1).reverse();
 
   const handleAddItem = (product: MenuItem) => {
     if (hasConfigurableOptions(product)) {
@@ -426,68 +450,78 @@ export default function MenuPage() {
   };
 
   return (
-    <section className="min-h-screen bg-[var(--bg)] px-4 py-4 pb-80 text-[var(--text-primary)] lg:pb-4">
-      <header className="mb-4 flex items-center justify-between gap-3">
+    <section className="min-h-screen bg-[var(--bg)] px-4 py-4 pb-56 text-[var(--text-primary)] lg:pb-4">
+      <header className="mb-3 flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-bold uppercase tracking-wide text-[var(--brand)]">
-            {activeTableId ? "Comanda rapida" : "Pedido para llevar"}
+          <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--brand)]">
+            {activeTableId ? "Comanda" : "Pedido para llevar"}
           </p>
-          <h1 className="truncate text-3xl font-black text-[var(--text-primary)]">
+          <h1 className="truncate text-xl font-black leading-tight text-[var(--text-primary)]">
             {activeTableName || (activeTableId ? `Mesa ${activeTableId.replace("mesa-", "")}` : "Para llevar")}
           </h1>
         </div>
         <button
           type="button"
           onClick={loadCatalog}
-          className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-1)] text-[var(--brand)] active:scale-95 transition-all duration-150"
+          className="flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-1)] text-[var(--brand)] active:scale-95 transition-all duration-150"
           aria-label="Actualizar catalogo"
         >
-          <RotateCw size={26} />
+          <RotateCw size={22} />
         </button>
       </header>
 
       {!activeTableId && (
-        <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3">
-          <label
-            htmlFor="takeout-name"
-            className="text-xs font-black uppercase text-[var(--text-muted)]"
-          >
-            Nombre del cliente (opcional)
-          </label>
-          <input
-            id="takeout-name"
-            type="text"
-            value={takeoutName}
-            onChange={(event) => setTakeoutName(event.target.value)}
-            placeholder="Para llevar"
-            autoComplete="off"
-            className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-lg font-bold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--brand)]"
-          />
-        </div>
+        <input
+          id="takeout-name"
+          type="text"
+          value={takeoutName}
+          onChange={(event) => setTakeoutName(event.target.value)}
+          placeholder="Nombre del cliente (opcional)"
+          autoComplete="off"
+          aria-label="Nombre del cliente para llevar"
+          className="mb-3 h-[52px] w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4 text-base font-bold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--brand)]"
+        />
       )}
 
-      <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3 lg:hidden">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-black uppercase text-[var(--text-muted)]">Ticket visible</p>
-            <p className="truncate text-lg font-black text-[var(--text-primary)]">
-              {lastAddedName
-                ? `Agregado: ${lastAddedName}`
-                : latestTicketItems[0]
-                  ? `Ultimo: ${latestTicketItems[0].name}`
-                  : activeOrderId
-                    ? `${previousItemCount} productos ya guardados`
-                    : "Aun sin productos"}
-            </p>
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="text-xs font-black uppercase text-[var(--text-muted)]">
-              {accumulatedItemCount} items
-            </p>
-            <p className="text-2xl font-black text-[var(--brand)]">{money(accumulatedTotal)}</p>
+      {suggestions.length > 0 && (
+        <div className="mb-3">
+          <p className="mb-1.5 text-[11px] font-black uppercase tracking-widest text-[var(--text-muted)]">
+            Sugerencias de venta
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {suggestions.map((product) => {
+              const promo = isOnPromo(product);
+              return (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => handleAddItem(product)}
+                  className="flex min-h-[58px] shrink-0 flex-col items-start justify-center gap-0.5 rounded-lg border border-[var(--brand)] bg-[var(--surface-1)] px-3 py-1.5 text-left active:scale-95 transition-all duration-150"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="rounded bg-[var(--brand)] px-1.5 py-0.5 text-[10px] font-black uppercase text-[var(--brand-fg)]">
+                      {promo ? "Promo" : "Popular"}
+                    </span>
+                    <span className="text-sm font-black text-[var(--text-primary)]">{product.name}</span>
+                  </span>
+                  <span className="text-sm font-black text-[var(--brand)]">
+                    {promo && product.promoPrice ? (
+                      <>
+                        <span className="mr-1 text-xs font-bold text-[var(--text-muted)] line-through">
+                          {money(product.price)}
+                        </span>
+                        {money(product.promoPrice)}
+                      </>
+                    ) : (
+                      money(product.price)
+                    )}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
-      </div>
+      )}
 
       <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_340px]">
         <div className="min-w-0">
@@ -515,13 +549,13 @@ export default function MenuPage() {
             </section>
           )}
 
-          <div className="mb-3 flex min-h-[64px] items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4">
-            <Search size={24} className="shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
+          <div className="mb-3 flex min-h-[52px] items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4">
+            <Search size={22} className="shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar platillo"
-              className="h-12 min-w-0 flex-1 bg-[var(--surface-1)] text-xl font-bold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
+              className="h-11 min-w-0 flex-1 bg-[var(--surface-1)] text-lg font-bold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
             />
           </div>
 
@@ -530,7 +564,7 @@ export default function MenuPage() {
               type="button"
               onClick={() => setActiveCategoryId("all")}
               className={[
-                "min-h-[64px] shrink-0 rounded-lg border px-5 text-base font-black",
+                "min-h-[52px] shrink-0 rounded-lg border px-5 text-base font-black",
                 "active:scale-95 transition-all duration-150",
                 activeCategoryId === "all"
                   ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]"
@@ -545,7 +579,7 @@ export default function MenuPage() {
                 type="button"
                 onClick={() => setActiveCategoryId(category.id)}
                 className={[
-                  "min-h-[64px] shrink-0 rounded-lg border px-5 text-base font-black",
+                  "min-h-[52px] shrink-0 rounded-lg border px-5 text-base font-black",
                   "active:scale-95 transition-all duration-150",
                   activeCategoryId === category.id
                     ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]"
@@ -691,81 +725,110 @@ export default function MenuPage() {
         </aside>
       </div>
 
-      <aside className="fixed bottom-20 left-0 right-0 z-40 border-t border-[var(--border)] bg-[var(--surface-1)] p-2 lg:hidden">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-black uppercase text-[var(--text-muted)]">Comanda local</p>
-            <p className="text-lg font-black text-[var(--text-primary)]">
-              {accumulatedItemCount} productos
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs font-black uppercase text-[var(--text-muted)]">Total</p>
-            <p className="text-2xl font-black text-[var(--brand)]">{money(accumulatedTotal)}</p>
-          </div>
-        </div>
-
-        {latestTicketItems.length === 0 ? (
-          <p className="min-h-[56px] rounded-lg border border-[var(--border)] bg-[var(--surface-3)] px-4 py-4 text-center text-base font-bold text-[var(--text-muted)]">
-            {activeOrderId
-              ? `${previousItemCount} productos anteriores. Agrega productos para una nueva ronda.`
-              : "Toca un producto para verlo aqui."}
-          </p>
-        ) : (
-          <div className="grid gap-2">
-            {latestTicketItems.map((item) => (
-              <article
-                key={item.lineId}
-                className="grid min-h-[56px] grid-cols-[1fr_auto] items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-3)] px-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-base font-black text-[var(--text-primary)]">{item.name}</p>
-                  <p className="text-sm font-bold text-[var(--text-muted)]">
-                    {item.quantity} x {money(item.unitPrice)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => decrementItem(item.lineId)}
-                    className="flex min-h-[56px] min-w-[56px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
-                    aria-label={`Quitar ${item.name}`}
-                  >
-                    <Minus size={22} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => incrementItem(item.lineId)}
-                    className="flex min-h-[56px] min-w-[56px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
-                    aria-label={`Agregar ${item.name}`}
-                  >
-                    <Plus size={22} />
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-
+      <aside className="fixed bottom-20 left-0 right-0 z-40 border-t border-[var(--border)] bg-[var(--surface-1)] lg:hidden">
+        {/* Cabecera: resumen siempre visible + toggle para ver toda la comanda. */}
         <button
           type="button"
-          onClick={handleSaveTicket}
-          disabled={saving || ticketItems.length === 0}
-          className={[
-            "mt-2 min-h-[64px] w-full rounded-lg border px-5 text-lg font-black",
-            "active:scale-95 transition-all duration-150",
-            saving || ticketItems.length === 0
-              ? "border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-muted)]"
-              : "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]",
-          ].join(" ")}
+          onClick={() => setTicketExpanded((open) => !open)}
+          aria-expanded={ticketExpanded}
+          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left active:scale-[0.99] transition-all duration-150"
         >
-          {saving ? "Guardando..." : activeOrderId ? "Agregar nueva ronda" : "Guardar comanda"}
+          <span className="flex min-w-0 items-center gap-2">
+            <ChevronUp
+              size={20}
+              className={`shrink-0 text-[var(--text-muted)] transition-transform duration-200 ${ticketExpanded ? "" : "rotate-180"}`}
+              aria-hidden="true"
+            />
+            <span className="min-w-0">
+              <span className="block text-[11px] font-black uppercase text-[var(--text-muted)]">
+                {ticketExpanded ? "Toca para contraer" : "Comanda · toca para ver"}
+              </span>
+              <span className="block truncate text-base font-black text-[var(--text-primary)]">
+                {lastAddedName && !ticketExpanded
+                  ? `+ ${lastAddedName}`
+                  : `${accumulatedItemCount} producto${accumulatedItemCount === 1 ? "" : "s"}`}
+              </span>
+            </span>
+          </span>
+          <span className="shrink-0 text-right">
+            <span className="block text-[11px] font-black uppercase text-[var(--text-muted)]">Total</span>
+            <span className="block text-2xl font-black text-[var(--brand)]">{money(accumulatedTotal)}</span>
+          </span>
         </button>
-        {(saveError || saveMessage) && (
-          <p className="mt-2 rounded-lg border border-[var(--brand)] bg-[var(--surface-3)] p-3 text-center text-sm font-black text-[var(--brand)]">
-            {saveError || saveMessage}
-          </p>
+
+        {/* Comanda completa: se revela al expandir, con scroll y +/- por línea.
+            Render condicional (no animamos height: barato en tablets de gama baja). */}
+        {ticketExpanded && (
+          <div className="max-h-[50vh] overflow-y-auto px-3">
+          {ticketItems.length === 0 ? (
+            <p className="mb-2 rounded-lg border border-[var(--border)] bg-[var(--surface-3)] px-4 py-4 text-center text-base font-bold text-[var(--text-muted)]">
+              {activeOrderId
+                ? `${previousItemCount} productos anteriores. Agrega para una nueva ronda.`
+                : "Toca un producto para agregarlo."}
+            </p>
+          ) : (
+            <div className="grid gap-2 pb-2">
+              {ticketItems.map((item) => (
+                <article
+                  key={item.lineId}
+                  className="grid min-h-[56px] grid-cols-[1fr_auto] items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-3)] px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-black text-[var(--text-primary)]">{item.name}</p>
+                    <p className="text-sm font-bold text-[var(--text-muted)]">
+                      {item.quantity} x {money(item.unitPrice)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => decrementItem(item.lineId)}
+                      className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
+                      aria-label={`Quitar ${item.name}`}
+                    >
+                      <Minus size={20} />
+                    </button>
+                    <span className="min-w-[26px] text-center text-lg font-black text-[var(--text-primary)]">
+                      {item.quantity}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => incrementItem(item.lineId)}
+                      className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
+                      aria-label={`Agregar ${item.name}`}
+                    >
+                      <Plus size={20} />
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+          </div>
         )}
+
+        {/* Guardar: siempre visible, sin importar si la comanda está expandida. */}
+        <div className="px-3 pb-2 pt-1">
+          <button
+            type="button"
+            onClick={handleSaveTicket}
+            disabled={saving || ticketItems.length === 0}
+            className={[
+              "min-h-[56px] w-full rounded-lg border px-5 text-lg font-black",
+              "active:scale-95 transition-all duration-150",
+              saving || ticketItems.length === 0
+                ? "border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-muted)]"
+                : "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]",
+            ].join(" ")}
+          >
+            {saving ? "Guardando..." : activeOrderId ? "Agregar nueva ronda" : "Guardar comanda"}
+          </button>
+          {(saveError || saveMessage) && (
+            <p className="mt-2 rounded-lg border border-[var(--brand)] bg-[var(--surface-3)] p-3 text-center text-sm font-black text-[var(--brand)]">
+              {saveError || saveMessage}
+            </p>
+          )}
+        </div>
       </aside>
 
       {configProduct && (
