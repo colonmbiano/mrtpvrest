@@ -175,7 +175,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
           <div key={group.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-black text-white">{group.name}</p>
+                <p className="text-sm font-semibold text-white">{group.name}</p>
                 <p className="text-[11px] font-bold text-zinc-500">
                   {group.multiSelect ? "Multiple" : "Unica"}
                   {group.required ? " · obligatorio" : " · opcional"}
@@ -184,10 +184,10 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
                 </p>
               </div>
               <div className="flex gap-2">
-                <button type="button" onClick={() => openEditGroup(group)} className="rounded-xl border border-white/10 px-3 py-2 text-[10px] font-black uppercase text-zinc-400">
+                <button type="button" onClick={() => openEditGroup(group)} className="rounded-xl border border-white/10 px-3 py-2 text-[10px] font-semibold uppercase text-zinc-400">
                   Editar
                 </button>
-                <button type="button" onClick={() => deleteGroup(group.id)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[10px] font-black uppercase text-red-400">
+                <button type="button" onClick={() => deleteGroup(group.id)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[10px] font-semibold uppercase text-red-400">
                   Borrar
                 </button>
               </div>
@@ -214,7 +214,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
                     }}
                     className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-right text-xs text-white outline-none"
                   />
-                  <label className="flex items-center gap-1 text-[10px] font-black uppercase text-zinc-500">
+                  <label className="flex items-center gap-1 text-[10px] font-semibold uppercase text-zinc-500">
                     <input
                       type="checkbox"
                       checked={modifier.isDefault}
@@ -283,7 +283,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
               ["Max", "maxSelection"],
               ["Gratis", "freeModifiersLimit"],
             ] as const).map(([label, key]) => (
-              <label key={key} className="text-[10px] font-black uppercase text-zinc-500">
+              <label key={key} className="text-[10px] font-semibold uppercase text-zinc-500">
                 {label}
                 <input
                   type="number"
@@ -296,7 +296,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
             ))}
           </div>
           <div className="mt-4 flex gap-3">
-            <button type="button" onClick={() => setShowGroupForm(false)} className="flex-1 rounded-xl border border-white/10 py-3 text-xs font-black uppercase text-zinc-400">
+            <button type="button" onClick={() => setShowGroupForm(false)} className="flex-1 rounded-xl border border-white/10 py-3 text-xs font-semibold uppercase text-zinc-400">
               Cancelar
             </button>
             <button type="submit" disabled={savingGroup} className="flex-1 rounded-xl bg-iris-500 py-3 text-xs font-black uppercase text-iris-fg disabled:opacity-40">
@@ -305,7 +305,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
           </div>
         </form>
       ) : (
-        <button type="button" onClick={openNewGroup} className="rounded-2xl border border-dashed border-iris-glow py-3 text-xs font-black uppercase tracking-[0.18em] text-iris-500">
+        <button type="button" onClick={openNewGroup} className="rounded-2xl border border-dashed border-iris-glow py-3 text-xs font-semibold uppercase tracking-[0.14em] text-iris-500">
           + Nuevo grupo de modificadores
         </button>
       )}

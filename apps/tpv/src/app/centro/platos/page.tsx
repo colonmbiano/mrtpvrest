@@ -119,7 +119,7 @@ export default function CentroPlatosPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-white/40">
         <Loader2 className="animate-spin mb-3" size={26} />
-        <span className="text-[10px] font-black uppercase tracking-[0.3em]">Calculando food cost…</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.3em]">Calculando food cost…</span>
       </div>
     );
   }
@@ -142,7 +142,7 @@ export default function CentroPlatosPage() {
             <button
               key={r.key}
               onClick={() => setRange(r.key)}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-black transition-all ${
+              className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
                 range === r.key
                   ? "text-[var(--brand-fg)] bg-[var(--brand)]"
                   : "text-white/70 bg-white/5 border border-white/10 hover:bg-white/10"
@@ -188,7 +188,7 @@ export default function CentroPlatosPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="border-b border-white/10 bg-white/5">
-              <tr className="text-[10px] font-black tracking-[0.18em] uppercase text-white/40">
+              <tr className="text-[10px] font-semibold tracking-[0.14em] uppercase text-white/40">
                 <SortableTh label="Plato"     active={sortKey === "name"}         desc={sortDesc} onClick={() => toggleSort("name")} />
                 <th className="px-3 py-3">Precio</th>
                 <th className="px-3 py-3">Food cost</th>
@@ -209,7 +209,7 @@ export default function CentroPlatosPage() {
                       {!d.hasRecipe && (
                         <span
                           title="Sin receta — food cost no calculable"
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[var(--warning-soft)] border border-[var(--warning)] text-[var(--warning)] text-[9px] font-black uppercase tracking-widest"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[var(--warning-soft)] border border-[var(--warning)] text-[var(--warning)] text-[9px] font-semibold uppercase tracking-widest"
                         >
                           <AlertTriangle size={9} /> Sin receta
                         </span>
@@ -221,13 +221,13 @@ export default function CentroPlatosPage() {
                   </td>
                   <td className="px-3 py-3 text-sm font-semibold text-white tabular-nums">{fmtMoney(d.price)}</td>
                   <td className="px-3 py-3 text-sm font-semibold text-white/70 tabular-nums">{fmtMoney(d.foodCost)}</td>
-                  <td className={`px-3 py-3 text-sm font-black tabular-nums ${fcColor(d.foodCostPct, d.hasRecipe)}`}>
+                  <td className={`px-3 py-3 text-sm font-semibold tabular-nums ${fcColor(d.foodCostPct, d.hasRecipe)}`}>
                     {d.hasRecipe ? fmtPct(d.foodCostPct) : "—"}
                   </td>
                   <td className="px-3 py-3 text-sm font-semibold text-white tabular-nums">{fmtMoney(d.margin)}</td>
                   <td className="px-3 py-3 text-sm font-bold text-white/80 tabular-nums">{d.hasRecipe ? fmtPct(d.marginPct) : "—"}</td>
                   <td className="px-3 py-3 text-sm font-bold text-white tabular-nums">{d.unitsSold}</td>
-                  <td className="px-3 py-3 text-sm font-black text-emerald-300 tabular-nums">{fmtMoney(d.totalMargin)}</td>
+                  <td className="px-3 py-3 text-sm font-semibold text-emerald-300 tabular-nums">{fmtMoney(d.totalMargin)}</td>
                 </tr>
               ))}
             </tbody>
@@ -254,8 +254,8 @@ function MiniStat({ label, value, tone }: { label: string; value: string; tone: 
   const t = tone === "rose" ? "text-rose-300" : tone === "emerald" ? "text-emerald-300" : "text-amber-300";
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[9px] font-black tracking-[0.22em] uppercase text-white/40">{label}</span>
-      <span className={`text-base font-black ${t} tabular-nums`}>{value}</span>
+      <span className="text-[9px] font-semibold tracking-[0.14em] uppercase text-white/40">{label}</span>
+      <span className={`text-base font-semibold ${t} tabular-nums`}>{value}</span>
     </div>
   );
 }

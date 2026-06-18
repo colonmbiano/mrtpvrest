@@ -123,7 +123,7 @@ export default function AdminLandingPage() {
 
                 {/* Texto */}
                 <div className="flex flex-col min-w-0 flex-1">
-                  <span className="text-sm font-black text-white tracking-tight">
+                  <span className="text-sm font-semibold text-white tracking-tight">
                     {s.label}
                   </span>
                   <span className="text-[11px] font-medium text-white/55 truncate">

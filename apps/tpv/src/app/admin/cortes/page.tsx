@@ -148,7 +148,7 @@ export default function CortesPage() {
           <div className="flex items-center gap-3">
             {(offline || fromCache) && (
               <span
-                className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[11px] font-black uppercase tracking-wider"
+                className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-wider"
                 style={{
                   background: offline ? "var(--danger-soft)" : "var(--surface-2)",
                   color: offline ? "var(--danger)" : "var(--text-secondary)",
@@ -163,7 +163,7 @@ export default function CortesPage() {
             <button
               onClick={refresh}
               disabled={refreshing}
-              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50"
               style={{ background: "var(--brand)", color: "var(--brand-fg)", boxShadow: "0 8px 16px var(--brand-glow)" }}
             >
               <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} /> Actualizar
@@ -207,12 +207,12 @@ export default function CortesPage() {
       {loading && rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 opacity-60">
           <RefreshCw size={28} className="animate-spin mb-3" style={{ color: "var(--brand)" }} />
-          <span className="text-xs font-black uppercase tracking-widest text-tx-mut">Cargando cortes…</span>
+          <span className="text-xs font-semibold uppercase tracking-widest text-tx-mut">Cargando cortes…</span>
         </div>
       ) : rows.length === 0 ? (
         <AdminCard className="py-16 flex flex-col items-center text-center">
           <ScrollText size={36} className="mb-3 opacity-40" />
-          <p className="text-base font-black">Sin cortes</p>
+          <p className="text-base font-semibold">Sin cortes</p>
           <p className="text-xs text-tx-mut mt-1">No hay cortes para este filtro en esta sucursal.</p>
         </AdminCard>
       ) : (
@@ -237,7 +237,7 @@ function Kpi({ icon, label, value, accent }: { icon: ReactNode; label: string; v
         </span>
       </div>
       <div className="text-xl font-black tabular-nums tracking-tight leading-none">{value}</div>
-      <div className="text-[10px] font-black uppercase tracking-widest text-tx-mut">{label}</div>
+      <div className="text-[10px] font-semibold uppercase tracking-widest text-tx-mut">{label}</div>
     </div>
   );
 }
@@ -255,11 +255,11 @@ function CorteCard({ row, open, onToggle }: { row: Row; open: boolean; onToggle:
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-base font-black tracking-tight truncate">{row.who}</span>
-            <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md"
+            <span className="text-base font-semibold tracking-tight truncate">{row.who}</span>
+            <span className="text-[9px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-md"
               style={{ background: `${accent}1A`, color: accent }}>{isShift ? "Caja" : "Repartidor"}</span>
             {isShift && (row.data as CashShift).isOpen && (
-              <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md"
+              <span className="text-[9px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-md"
                 style={{ background: "var(--danger-soft)", color: "var(--danger)" }}>Abierto</span>
             )}
           </div>
@@ -267,7 +267,7 @@ function CorteCard({ row, open, onToggle }: { row: Row; open: boolean; onToggle:
         </div>
         <div className="text-right flex-shrink-0">
           <div className="text-lg font-black tabular-nums leading-none">{fmtMoney(row.balance)}</div>
-          <div className="text-[9px] font-black uppercase tracking-widest text-tx-mut mt-1">{isShift ? "En caja" : "Entregado"}</div>
+          <div className="text-[9px] font-semibold uppercase tracking-widest text-tx-mut mt-1">{isShift ? "En caja" : "Entregado"}</div>
         </div>
         {open
           ? <ChevronDown size={20} className="text-tx-mut flex-shrink-0" />
@@ -286,8 +286,8 @@ function CorteCard({ row, open, onToggle }: { row: Row; open: boolean; onToggle:
 function Cell({ label, value, tone }: { label: string; value: string; tone?: "ok" | "err" }) {
   return (
     <div className="rounded-xl p-3 bg-surf-2 border border-border">
-      <div className="text-[9px] font-black uppercase tracking-widest text-tx-mut mb-1">{label}</div>
-      <div className="text-base font-black tabular-nums"
+      <div className="text-[9px] font-semibold uppercase tracking-widest text-tx-mut mb-1">{label}</div>
+      <div className="text-base font-semibold tabular-nums"
         style={{ color: tone === "err" ? "var(--danger)" : tone === "ok" ? "var(--success)" : "var(--text-primary)" }}>
         {value}
       </div>
@@ -343,15 +343,15 @@ function DriverDetail({ c }: { c: DriverCut }) {
 function Detail({ title, items }: { title: string; items: Array<{ id: string; description: string; amount: number; category: string }> }) {
   return (
     <div>
-      <div className="text-[10px] font-black uppercase tracking-widest text-tx-mut mb-2">{title}</div>
+      <div className="text-[10px] font-semibold uppercase tracking-widest text-tx-mut mb-2">{title}</div>
       <div className="rounded-xl bg-surf-2 border border-border divide-y divide-border/40">
         {items.map((it) => (
           <div key={it.id} className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-sm font-medium text-tx-sec truncate">{it.description || "—"}</span>
-              <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-surf-3 text-tx-mut flex-shrink-0">{it.category}</span>
+              <span className="text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-surf-3 text-tx-mut flex-shrink-0">{it.category}</span>
             </div>
-            <span className="text-sm font-black tabular-nums flex-shrink-0">{fmtMoney(it.amount)}</span>
+            <span className="text-sm font-semibold tabular-nums flex-shrink-0">{fmtMoney(it.amount)}</span>
           </div>
         ))}
       </div>
