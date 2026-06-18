@@ -117,7 +117,7 @@ function ProductCardBase({
 
       {hasPromo && (
         <span
-          className="relative z-10 self-start px-2 py-0.5 rounded-md text-[9px] font-black tracking-widest text-black"
+          className="relative z-10 self-start px-2 py-0.5 rounded-md text-[9px] font-semibold tracking-widest text-black"
           style={{ background: tone.accent }}
         >
           PROMO
@@ -136,7 +136,7 @@ function ProductCardBase({
       {isPopular && (
         <span
           aria-label="Popular"
-          className="absolute z-10 right-2 top-3 inline-flex h-6 items-center gap-1 rounded-full bg-rose-500 px-2 text-[9px] font-black tracking-widest text-white"
+          className="absolute z-10 right-2 top-3 inline-flex h-6 items-center gap-1 rounded-full bg-rose-500 px-2 text-[9px] font-semibold tracking-widest text-white"
         >
           <Flame size={12} strokeWidth={2.5} fill="currentColor" />
           TOP
@@ -144,7 +144,7 @@ function ProductCardBase({
       )}
 
       {!isAvailable && (
-        <span className="absolute z-10 inset-x-2 top-3 px-2 py-0.5 rounded-md text-[9px] font-black tracking-widest bg-red-500 text-white text-center">
+        <span className="absolute z-10 inset-x-2 top-3 px-2 py-0.5 rounded-md text-[9px] font-semibold tracking-widest bg-red-500 text-white text-center">
           AGOTADO
         </span>
       )}
@@ -152,7 +152,7 @@ function ProductCardBase({
       {quantityInTicket > 0 && isAvailable && (
         <span
           aria-label={`${quantityInTicket} en comanda`}
-          className="absolute z-20 left-2 bottom-2 min-w-[26px] h-[26px] px-1.5 rounded-full bg-[var(--brand)] text-[var(--brand-fg)] text-[11px] font-black tabular-nums flex items-center justify-center"
+          className="absolute z-20 left-2 bottom-2 min-w-[26px] h-[26px] px-1.5 rounded-full bg-[var(--brand)] text-[var(--brand-fg)] text-[11px] font-semibold tabular-nums flex items-center justify-center"
         >
           ×{quantityInTicket}
         </span>

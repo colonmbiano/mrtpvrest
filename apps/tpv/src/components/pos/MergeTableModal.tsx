@@ -126,7 +126,7 @@ export default function MergeTableModal({
             <Users size={20} />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+            <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
               Mover / fusionar cuenta
             </span>
             <h3 className="text-lg font-black text-white truncate">
@@ -172,7 +172,7 @@ export default function MergeTableModal({
                   }`}
                 >
                   <div className="flex-1 min-w-0 text-left">
-                    <div className="text-[13px] font-black truncate">
+                    <div className="text-[13px] font-semibold truncate">
                       {label} <span className="text-[var(--brand)]">· #{o.orderNumber}</span>
                     </div>
                     <div className="text-[11px] font-bold text-white/50 truncate">
@@ -180,7 +180,7 @@ export default function MergeTableModal({
                       {(o.itemsCount ?? 0) === 1 ? "" : "s"}
                     </div>
                   </div>
-                  <div className="tabular-nums text-[14px] font-black">
+                  <div className="tabular-nums text-[14px] font-semibold">
                     ${o.total.toFixed(2)}
                   </div>
                 </button>
@@ -202,7 +202,7 @@ export default function MergeTableModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-full min-h-[44px] h-11 rounded-2xl text-white/50 font-black uppercase tracking-[0.15em] text-[11px] active:text-white transition-colors"
+            className="w-full min-h-[44px] h-11 rounded-2xl text-white/50 font-semibold uppercase tracking-[0.15em] text-[11px] active:text-white transition-colors"
           >
             Cancelar
           </button>

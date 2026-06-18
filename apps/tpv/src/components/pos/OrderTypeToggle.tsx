@@ -33,7 +33,7 @@ const OrderTypeToggle: React.FC<OrderTypeToggleProps> = ({
             onClick={() => onChange(opt.id as OrderType)}
             className={`
               min-w-0 flex-1 h-11 flex items-center justify-center gap-1.5 rounded-lg px-2
-              text-[10px] font-black uppercase tracking-[0.06em] transition-all active:scale-95
+              text-[10px] font-semibold uppercase tracking-[0.06em] transition-all active:scale-95
               ${isActive
                 ? "bg-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_15px_var(--brand-glow)]"
                 : "text-zinc-400 active:bg-white/5 active:text-white"}

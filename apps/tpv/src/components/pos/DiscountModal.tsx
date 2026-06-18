@@ -118,7 +118,7 @@ export default function DiscountModal({
               <Tag size={20} />
             </div>
             <div className="flex-1 min-w-0">
-              <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+              <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
                 Aplicar descuento
               </span>
               <h3 className="text-lg font-black text-white truncate">
@@ -148,7 +148,7 @@ export default function DiscountModal({
                 }`}
               >
                 <Percent size={16} />
-                <span className="font-black text-sm uppercase tracking-widest">
+                <span className="font-semibold text-sm uppercase tracking-widest">
                   Porcentaje
                 </span>
               </button>
@@ -162,7 +162,7 @@ export default function DiscountModal({
                 }`}
               >
                 <DollarSign size={16} />
-                <span className="font-black text-sm uppercase tracking-widest">
+                <span className="font-semibold text-sm uppercase tracking-widest">
                   Monto
                 </span>
               </button>
@@ -170,7 +170,7 @@ export default function DiscountModal({
 
             {/* INPUT */}
             <div>
-              <label className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+              <label className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
                 {type === "percent" ? "% Descuento" : "$ Descuento"}
               </label>
               <input
@@ -206,7 +206,7 @@ export default function DiscountModal({
                   <span className="tabular-nums">− ${previewAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between items-baseline pt-2 border-t border-white/10">
-                  <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+                  <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
                     Total
                   </span>
                   <span className="tabular-nums text-2xl font-black text-white">
@@ -229,7 +229,7 @@ export default function DiscountModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 min-h-[56px] h-14 rounded-2xl bg-white/5 border border-white/10 text-white/70 font-black uppercase tracking-[0.15em] text-[11px] active:scale-95 transition-transform"
+                className="flex-1 min-h-[56px] h-14 rounded-2xl bg-white/5 border border-white/10 text-white/70 font-semibold uppercase tracking-[0.15em] text-[11px] active:scale-95 transition-transform"
               >
                 Cancelar
               </button>
@@ -246,7 +246,7 @@ export default function DiscountModal({
               <button
                 type="button"
                 onClick={() => { onSecondary(); onClose(); }}
-                className="w-full min-h-[48px] h-12 rounded-2xl bg-transparent border border-white/10 text-white/50 font-black uppercase tracking-[0.15em] text-[11px] active:scale-95 transition-transform"
+                className="w-full min-h-[48px] h-12 rounded-2xl bg-transparent border border-white/10 text-white/50 font-semibold uppercase tracking-[0.15em] text-[11px] active:scale-95 transition-transform"
               >
                 {secondaryLabel}
               </button>

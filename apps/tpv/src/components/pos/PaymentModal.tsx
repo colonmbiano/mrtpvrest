@@ -442,7 +442,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         <div className="relative z-10 px-7 sm:px-10 pt-7 sm:pt-9 pb-0 shrink-0">
           <div className="flex items-start justify-between gap-4 mb-6">
             <div className="space-y-1 min-w-0">
-              <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
+              <span className="text-[10px] font-semibold tracking-[0.25em] text-[var(--brand)] uppercase">
                 Orden #{orderNumber}
                 {tableName ? ` · Mesa ${tableName}` : ""}
               </span>
@@ -488,7 +488,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                       <Tag size={18} />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">
+                      <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
                         Descuento final
                       </h3>
                       <p className="text-xs font-medium text-white/45 mt-1">
@@ -502,7 +502,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                     type="button"
                     onClick={() => setShowDiscount(true)}
                     disabled={discountSaving}
-                    className="min-h-[48px] px-5 rounded-2xl bg-[#88D66C]/10 border border-[#88D66C]/30 text-[#88D66C] text-[10px] font-black uppercase tracking-[0.15em] active:scale-95 transition-transform disabled:opacity-40"
+                    className="min-h-[48px] px-5 rounded-2xl bg-[#88D66C]/10 border border-[#88D66C]/30 text-[#88D66C] text-[10px] font-semibold uppercase tracking-[0.15em] active:scale-95 transition-transform disabled:opacity-40"
                   >
                     {discountSaving
                       ? "Guardando..."
@@ -522,12 +522,12 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Bike size={16} className="text-[var(--brand)]" />
-                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
                       Asignar repartidor
                     </h3>
                   </div>
                   {driverId && (
-                    <span className="text-[10px] font-black tracking-widest uppercase text-emerald-400">
+                    <span className="text-[10px] font-semibold tracking-widest uppercase text-emerald-400">
                       Listo
                     </span>
                   )}
@@ -550,7 +550,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                           .catch(() => setDrivers([]))
                           .finally(() => setDriversLoading(false));
                       }}
-                      className="text-[10px] font-black uppercase tracking-widest text-[var(--brand)] hover:underline w-fit"
+                      className="text-[10px] font-semibold uppercase tracking-widest text-[var(--brand)] hover:underline w-fit"
                     >
                       Reintentar
                     </button>
@@ -570,7 +570,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                               : "bg-white/[0.03] border-white/10 text-white/75"
                           }`}
                         >
-                          <span className="block text-sm font-black truncate">
+                          <span className="block text-sm font-semibold truncate">
                             {d.name}
                           </span>
                           {d.isAvailable === false && (
@@ -628,7 +628,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           <aside className="hidden md:flex w-[340px] shrink-0 bg-white/[0.03] border-l border-white/5 p-7 flex-col">
             <div className="flex-1 overflow-y-auto scrollbar-hide space-y-6">
               <div>
-                <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+                <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
                   Resumen del pedido
                 </span>
                 {/* BUG-22: nombres largos quedaban truncados en el resumen
@@ -687,7 +687,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
 
             <div className="pt-5 border-t border-white/5 flex items-baseline justify-between">
-              <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+              <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
                 Total
               </span>
               <span className="tabular-nums text-4xl font-black text-white tracking-tight">
@@ -707,7 +707,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
               type="button"
               onClick={() => setPrintReceipt((v) => !v)}
               aria-pressed={printReceipt}
-              className={`min-h-[52px] w-full rounded-2xl border flex items-center justify-center gap-2.5 font-black uppercase tracking-[0.18em] text-[11px] active:scale-[0.98] transition-all ${
+              className={`min-h-[52px] w-full rounded-2xl border flex items-center justify-center gap-2.5 font-semibold uppercase tracking-[0.14em] text-[11px] active:scale-[0.98] transition-all ${
                 printReceipt
                   ? "bg-[#88d66c]/15 border-[#88d66c]/50 text-[#88d66c]"
                   : "bg-white/5 border-white/10 text-white/45"
@@ -723,7 +723,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="flex-1 min-h-[64px] h-16 rounded-2xl bg-white/5 border border-white/10 text-white/70 font-black uppercase tracking-[0.2em] text-[11px] active:scale-95 active:text-white transition-transform disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex-1 min-h-[64px] h-16 rounded-2xl bg-white/5 border border-white/10 text-white/70 font-semibold uppercase tracking-[0.14em] text-[11px] active:scale-95 active:text-white transition-transform disabled:opacity-30 disabled:cursor-not-allowed"
           >
             Cancelar
           </button>
@@ -738,7 +738,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                   ? "Selecciona un repartidor antes de cobrar"
                   : undefined
             }
-            className="flex-[2] min-h-[64px] h-16 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.2em] text-[11px] flex items-center justify-center gap-3 active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)] disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed"
+            className="flex-[2] min-h-[64px] h-16 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.14em] text-[11px] flex items-center justify-center gap-3 active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)] disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed"
           >
             <CheckCircle2 size={20} strokeWidth={2.5} />
             {submitting
@@ -789,7 +789,7 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`min-h-[44px] h-11 px-5 rounded-xl text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-2 active:scale-95 transition-all ${
+      className={`min-h-[44px] h-11 px-5 rounded-xl text-[11px] font-semibold uppercase tracking-[0.14em] flex items-center gap-2 active:scale-95 transition-all ${
         active
           ? "bg-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
           : "bg-transparent text-white/60"
@@ -846,7 +846,7 @@ function MethodGrid({
             }`}
           >
             <Icon size={24} strokeWidth={2} />
-            <span className="text-[10px] font-black uppercase tracking-[0.15em]">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em]">
               {m.label}
             </span>
           </button>
@@ -923,7 +923,7 @@ function TotalView({
           <div className="space-y-6">
             <div className="flex justify-between items-end gap-4">
               <div className="space-y-1 min-w-0">
-                <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+                <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
                   Monto recibido
                 </span>
                 <div className="text-5xl font-black tabular-nums text-white leading-none truncate">
@@ -931,7 +931,7 @@ function TotalView({
                 </div>
               </div>
               <div className="space-y-1 text-right shrink-0">
-                <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
+                <span className="text-[10px] font-semibold tracking-[0.25em] text-[var(--brand)] uppercase">
                   Cambio
                 </span>
                 <div className="text-3xl font-black tabular-nums text-[var(--brand)] leading-none">
@@ -965,13 +965,13 @@ function TotalView({
                 en que el cliente paga un monto fuera de las sugerencias. */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+                <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
                   O teclea el monto
                 </span>
                 <button
                   type="button"
                   onClick={clearCash}
-                  className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white/70 active:scale-95 transition px-2 py-1"
+                  className="text-[10px] font-semibold uppercase tracking-widest text-white/40 hover:text-white/70 active:scale-95 transition px-2 py-1"
                 >
                   Limpiar
                 </button>
@@ -1001,7 +1001,7 @@ function TotalView({
               <h3 className="text-xl font-black text-white tracking-tight">
                 Esperando terminal...
               </h3>
-              <p className="text-[10px] text-white/50 font-bold uppercase tracking-[0.2em]">
+              <p className="text-[10px] text-white/50 font-bold uppercase tracking-[0.14em]">
                 Cobrar al confirmar — el TPV procesa por separado
               </p>
             </div>
@@ -1044,7 +1044,7 @@ function TotalView({
       </div>
 
       <div className="md:hidden flex justify-between items-baseline pt-2 border-t border-white/5">
-        <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+        <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
           Total
         </span>
         <span className="tabular-nums text-3xl font-black text-white">
@@ -1107,7 +1107,7 @@ function SplitView({
         <button
           type="button"
           onClick={() => onModeChange("EQUAL")}
-          className={`min-h-[44px] h-11 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-all ${
+          className={`min-h-[44px] h-11 rounded-xl text-[11px] font-semibold uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-all ${
             mode === "EQUAL"
               ? "bg-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
               : "bg-transparent text-white/60"
@@ -1119,7 +1119,7 @@ function SplitView({
         <button
           type="button"
           onClick={() => onModeChange("BY_SEAT")}
-          className={`min-h-[44px] h-11 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-all ${
+          className={`min-h-[44px] h-11 rounded-xl text-[11px] font-semibold uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-all ${
             mode === "BY_SEAT"
               ? "bg-[var(--brand)] text-[var(--brand-fg)] shadow-[0_5px_20px_var(--brand-glow)]"
               : "bg-transparent text-white/60"
@@ -1144,7 +1144,7 @@ function SplitView({
 
       {/* Método de pago para los N tickets */}
       <div>
-        <p className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase mb-3">
+        <p className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase mb-3">
           Método (aplicado a cada parte)
         </p>
         <MethodGrid method={method} onChange={onMethodChange} />
@@ -1169,7 +1169,7 @@ function EqualSplit({
   return (
     <div className="rounded-3xl bg-white/5 border border-white/10 p-7 space-y-7">
       <div className="flex flex-col items-center text-center gap-2">
-        <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+        <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
           Comensales
         </span>
         <div className="flex items-center gap-4">
@@ -1199,7 +1199,7 @@ function EqualSplit({
 
       <div className="flex items-center justify-between p-5 rounded-2xl bg-[var(--brand-soft)] border border-[var(--brand)]">
         <div>
-          <div className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
+          <div className="text-[10px] font-semibold tracking-[0.25em] text-[var(--brand)] uppercase">
             Cada parte paga
           </div>
           <div className="text-[10px] font-bold text-white/40 mt-1 tabular-nums">
@@ -1231,7 +1231,7 @@ function SeatSplit({
         <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 text-white/40 flex items-center justify-center mx-auto">
           <Users size={24} />
         </div>
-        <h4 className="text-[13px] font-black text-white tracking-tight uppercase">
+        <h4 className="text-[13px] font-semibold text-white tracking-tight uppercase">
           Sin asientos asignados
         </h4>
         <p className="text-[11px] font-medium text-white/50 leading-relaxed max-w-xs mx-auto">
@@ -1257,10 +1257,10 @@ function SeatSplit({
         >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center font-black tabular-nums text-[15px]">
+              <div className="w-10 h-10 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center font-semibold tabular-nums text-[15px]">
                 {seat.seatNumber}
               </div>
-              <span className="text-[12px] font-black uppercase tracking-[0.2em] text-white">
+              <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white">
                 Asiento {seat.seatNumber}
               </span>
             </div>
@@ -1296,10 +1296,10 @@ function SeatSplit({
       ))}
 
       <div className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/5">
-        <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+        <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
           Suma de asientos
         </span>
-        <span className="tabular-nums text-[15px] font-black text-white">
+        <span className="tabular-nums text-[15px] font-semibold text-white">
           ${total.toFixed(2)}
         </span>
       </div>
@@ -1323,11 +1323,11 @@ function TipPicker({
   return (
     <div>
       <div className="flex items-baseline justify-between mb-3">
-        <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+        <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
           Propina (opcional)
         </span>
         {selected > 0 && (
-          <span className="text-[11px] font-black text-[var(--brand)] tabular-nums">
+          <span className="text-[11px] font-semibold text-[var(--brand)] tabular-nums">
             +${amount.toFixed(2)}
           </span>
         )}
@@ -1336,7 +1336,7 @@ function TipPicker({
         <button
           type="button"
           onClick={() => onChange(0)}
-          className={`min-h-[56px] h-14 rounded-2xl border font-black tabular-nums text-[11px] uppercase tracking-widest active:scale-95 transition-transform ${
+          className={`min-h-[56px] h-14 rounded-2xl border font-semibold tabular-nums text-[11px] uppercase tracking-widest active:scale-95 transition-transform ${
             selected === 0
               ? "bg-white/15 border-white/30 text-white"
               : "bg-white/5 border-white/10 text-white/60"
@@ -1358,7 +1358,7 @@ function TipPicker({
                   : "bg-white/5 border-white/10 text-white"
               }`}
             >
-              <span className="font-black text-[14px]">{pct}%</span>
+              <span className="font-semibold text-[14px]">{pct}%</span>
               <span
                 className={`text-[10px] tabular-nums ${
                   active ? "text-[var(--brand-fg)]" : "text-white/40"

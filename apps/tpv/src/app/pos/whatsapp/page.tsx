@@ -400,7 +400,7 @@ export default function WhatsappCapturePage() {
               <ArrowLeft size={18} strokeWidth={2.5} />
             </button>
             <div className="min-w-0">
-              <span className="block text-[10px] font-black uppercase tracking-[0.25em]" style={{ color: "var(--brand)" }}>
+              <span className="block text-[10px] font-semibold uppercase tracking-[0.25em]" style={{ color: "var(--brand)" }}>
                 Captura
               </span>
               <h1 className="flex items-center gap-2 text-2xl font-black leading-none tracking-tight sm:text-3xl">
@@ -410,7 +410,7 @@ export default function WhatsappCapturePage() {
             </div>
           </div>
           <div className="hidden text-right sm:block">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">{locationName || "Sucursal"}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">{locationName || "Sucursal"}</p>
             <p className="text-[11px] font-bold text-white/30">{currentEmployee?.name || ""}</p>
           </div>
         </header>
@@ -421,7 +421,7 @@ export default function WhatsappCapturePage() {
             <div className="flex items-center gap-3">
               <CheckCircle2 size={22} className="text-[var(--success)]" />
               <div>
-                <p className="text-sm font-black text-[var(--success)]">Pedido creado · {createdOrder.number}</p>
+                <p className="text-sm font-semibold text-[var(--success)]">Pedido creado · {createdOrder.number}</p>
                 <p className="text-xs font-semibold text-white/55">
                   Total {money(createdOrder.total)} · cayó en Pedidos Web (PENDING) — acéptalo en el TPV para mandar a cocina.
                 </p>
@@ -438,11 +438,11 @@ export default function WhatsappCapturePage() {
           <div className="space-y-5">
             <div className="rounded-3xl border bg-white/5 p-4 backdrop-blur-md sm:p-5" style={{ borderColor: "var(--border)" }}>
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-white/45">Mensaje de WhatsApp</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/45">Mensaje de WhatsApp</p>
                 <button
                   type="button"
                   onClick={pasteFromClipboard}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-white/70 active:scale-95"
+                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/70 active:scale-95"
                   style={{ borderColor: "var(--border)" }}
                 >
                   <ClipboardPaste size={13} /> Pegar
@@ -473,7 +473,7 @@ export default function WhatsappCapturePage() {
 
             {/* Cliente / entrega */}
             <div className="rounded-3xl border bg-white/5 p-4 backdrop-blur-md sm:p-5" style={{ borderColor: "var(--border)" }}>
-              <p className="mb-3 text-xs font-black uppercase tracking-[0.2em] text-white/45">Cliente y entrega</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-white/45">Cliente y entrega</p>
 
               <div className="mb-3 grid grid-cols-3 gap-2">
                 {ORDER_TYPES.map((t) => {
@@ -483,7 +483,7 @@ export default function WhatsappCapturePage() {
                       key={t.key}
                       type="button"
                       onClick={() => setOrderType(t.key)}
-                      className="flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-[11px] font-black uppercase tracking-wide transition active:scale-95"
+                      className="flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-[11px] font-semibold uppercase tracking-wide transition active:scale-95"
                       style={
                         active
                           ? { background: "var(--brand)", color: "var(--brand-fg)", borderColor: "var(--brand)" }
@@ -530,13 +530,13 @@ export default function WhatsappCapturePage() {
           {/* ── Columna derecha: líneas + crear ─────────────────────────────── */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-white/45">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/45">
                 Productos {matchedLines.length > 0 && `· ${matchedLines.length}`}
               </p>
               <button
                 type="button"
                 onClick={addBlankLine}
-                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-white/70 active:scale-95"
+                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/70 active:scale-95"
                 style={{ borderColor: "var(--border)" }}
               >
                 <Plus size={13} /> Agregar
@@ -575,7 +575,7 @@ export default function WhatsappCapturePage() {
               <div className="sticky bottom-3 rounded-3xl border bg-[var(--surface-1)] p-4 backdrop-blur-md" style={{ borderColor: "var(--border)" }}>
                 <div className="mb-3 flex items-end justify-between">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Total estimado</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">Total estimado</p>
                     <p className="text-[11px] font-semibold text-white/30">El definitivo lo calcula el servidor</p>
                   </div>
                   <p className="text-2xl font-black tracking-tight" style={{ color: "var(--brand)" }}>
@@ -693,7 +693,7 @@ function LineCard({
           >
             <span className="min-w-0">
               {p ? (
-                <span className="block truncate text-sm font-black text-white">{p.name}</span>
+                <span className="block truncate text-sm font-semibold text-white">{p.name}</span>
               ) : (
                 <span className="block truncate text-sm font-bold text-[var(--warning)]">
                   {line.productQuery ? `¿"${line.productQuery}"?` : "Elegir producto"}
@@ -755,7 +755,7 @@ function LineCard({
           {/* Grupos de modificadores / complementos */}
           {groups.map((g) => (
             <div key={g.id} className="mt-2">
-              <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">
                 {g.name}{g.required ? " ·obligatorio" : ""}
               </p>
               <div className="flex flex-wrap gap-1.5">

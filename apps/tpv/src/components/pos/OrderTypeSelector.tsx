@@ -485,7 +485,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
             >
               <Bell size={18} />
               {unreadNotifs > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--brand)] px-1 text-[9px] font-black text-[var(--brand-fg)]">
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--brand)] px-1 text-[9px] font-semibold text-[var(--brand-fg)]">
                   {unreadNotifs > 99 ? "99+" : unreadNotifs}
                 </span>
               )}
@@ -499,7 +499,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-white/35">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-white/35">
               Panel operativo
             </p>
             <h1 className="truncate text-lg font-black leading-tight tracking-tight">
@@ -526,7 +526,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               {/* Punto de aviso: hay pedidos web por aceptar (las notificaciones
                   tienen su propio botón de campana en la esquina izquierda). */}
               {webOrdersCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--brand)] px-1 text-[9px] font-black text-[var(--brand-fg)]">
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--brand)] px-1 text-[9px] font-semibold text-[var(--brand-fg)]">
                   {webOrdersCount > 99 ? "99+" : webOrdersCount}
                 </span>
               )}
@@ -550,7 +550,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       <Icon size={18} />
                       <span className="flex-1 text-left text-sm font-bold">{shortcut.label}</span>
                       {badge > 0 && (
-                        <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[var(--brand)] px-1.5 text-[10px] font-black text-[var(--brand-fg)]">
+                        <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[var(--brand)] px-1.5 text-[10px] font-semibold text-[var(--brand-fg)]">
                           {badge > 99 ? "99+" : badge}
                         </span>
                       )}
@@ -591,7 +591,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       key={m.key}
                       type="button"
                       onClick={() => { resetSelection(); onModeChange(m.key); }}
-                      className={`flex-1 rounded-lg py-2 text-[11px] font-black uppercase tracking-[0.15em] transition-all active:scale-95 ${
+                      className={`flex-1 rounded-lg py-2 text-[11px] font-semibold uppercase tracking-[0.15em] transition-all active:scale-95 ${
                         active
                           ? m.key === "paid"
                             ? "bg-[#88D66C] text-[#0c0c0e]"
@@ -608,7 +608,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
             <div className="flex items-center justify-between gap-3">
               <p
-                className="text-[10px] font-black uppercase tracking-[0.22em]"
+                className="text-[10px] font-semibold uppercase tracking-[0.14em]"
                 style={{ color: paidMode ? "#88D66C" : "var(--brand)" }}
               >
                 {paidMode
@@ -623,7 +623,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       key={f.key}
                       type="button"
                       onClick={() => setFilter(f.key)}
-                      className={`shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all active:scale-95 ${
+                      className={`shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] transition-all active:scale-95 ${
                         active
                           ? "bg-[var(--brand)] text-[var(--brand-fg)]"
                           : "border border-white/10 bg-white/5 text-white/55"
@@ -642,7 +642,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               <button
                 type="button"
                 onClick={toggleSelectMode}
-                className={`flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-[11px] font-black uppercase tracking-[0.12em] transition-transform active:scale-95 ${
+                className={`flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-transform active:scale-95 ${
                   selectMode
                     ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]"
                     : "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]"
@@ -660,14 +660,14 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
             {paidMode && paidLoading && openAccounts.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center opacity-50">
                 <Loader2 size={36} className="animate-spin text-white/40" />
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
                   Cargando cobrados…
                 </p>
               </div>
             ) : visibleAccounts.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center opacity-40">
                 <Receipt size={40} className="text-white/30" />
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
                   {paidMode
                     ? openAccounts.length === 0
                       ? "Sin tickets cobrados este mes"
@@ -736,17 +736,17 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="truncate text-[15px] font-black leading-tight text-white">
+                          <span className="truncate text-[15px] font-semibold leading-tight text-white">
                             {title}
                           </span>
                           {isSelected && canMerge && (
-                            <span className="shrink-0 text-[8px] font-black uppercase tracking-[0.12em] text-[var(--brand)]">
+                            <span className="shrink-0 text-[8px] font-semibold uppercase tracking-[0.12em] text-[var(--brand)]">
                               {selIndex === 0 ? "Cuenta final" : "Se juntará"}
                             </span>
                           )}
                           {acc.isWeb && (
                             <span
-                              className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-px text-[8px] font-black tracking-[0.1em]"
+                              className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-px text-[8px] font-semibold tracking-[0.1em]"
                               style={{ backgroundColor: `${WEB_ACCENT}26`, color: "#aab2f0" }}
                             >
                               <Globe size={9} strokeWidth={3} />
@@ -754,12 +754,12 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                             </span>
                           )}
                           <span
-                            className="shrink-0 rounded px-1.5 py-px text-[8px] font-black tracking-[0.1em]"
+                            className="shrink-0 rounded px-1.5 py-px text-[8px] font-semibold tracking-[0.1em]"
                             style={{ backgroundColor: `${meta.accent}1f`, color: meta.accent }}
                           >
                             {meta.label}
                           </span>
-                          <span className="shrink-0 text-[9px] font-black tabular-nums text-white/30">
+                          <span className="shrink-0 text-[9px] font-semibold tabular-nums text-white/30">
                             #{acc.orderNumber}
                           </span>
                         </div>
@@ -809,7 +809,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
                       {/* COLUMNA DE HORA */}
                       <div className="w-[58px] shrink-0 border-l border-white/[0.07] pl-2.5 text-right">
-                        <div className="text-[13px] font-black tabular-nums text-white/75">
+                        <div className="text-[13px] font-semibold tabular-nums text-white/75">
                           {clock.time}
                         </div>
                         {clock.date && (
@@ -817,7 +817,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                         )}
                       </div>
 
-                      <span className="w-[74px] shrink-0 text-right text-[15px] font-black tabular-nums text-white">
+                      <span className="w-[74px] shrink-0 text-right text-[15px] font-semibold tabular-nums text-white">
                         ${acc.total.toFixed(2)}
                       </span>
                     </div>
@@ -832,7 +832,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                           type="button"
                           aria-label={`Reimprimir recibo de ${title}`}
                           onClick={() => onReprintPaid?.(acc.id)}
-                          className="flex-1 h-10 rounded-xl bg-[#88D66C]/12 border border-[#88D66C]/30 text-[#88D66C] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                          className="flex-1 h-10 rounded-xl bg-[#88D66C]/12 border border-[#88D66C]/30 text-[#88D66C] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                         >
                           <Receipt size={15} strokeWidth={2.5} /> Reimprimir recibo
                         </button>
@@ -843,7 +843,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                           type="button"
                           aria-label={`Editar cuenta de ${title}`}
                           onClick={() => onOpenAccount?.(acc.id)}
-                          className="flex-1 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text-primary)] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                          className="flex-1 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text-primary)] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                         >
                           <Pencil size={15} strokeWidth={2.5} /> Editar
                         </button>
@@ -851,7 +851,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                           type="button"
                           aria-label={`Imprimir cuenta de ${title}`}
                           onClick={() => onReprintAccount?.(acc.id)}
-                          className="flex-1 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text-primary)] text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                          className="flex-1 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text-primary)] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                         >
                           <Receipt size={15} strokeWidth={2.5} /> Imprimir
                         </button>
@@ -878,10 +878,10 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
           {selectMode && (
             <div className="mt-2 shrink-0 rounded-xl border border-white/10 bg-white/5 p-2">
               <div className="mb-2 flex items-baseline justify-between px-1">
-                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/40">
                   {selectedAccounts.length} seleccionada{selectedAccounts.length === 1 ? "" : "s"}
                 </span>
-                <span className="text-base font-black tabular-nums text-white">
+                <span className="text-base font-semibold tabular-nums text-white">
                   ${selectedTotal.toFixed(2)}
                 </span>
               </div>
@@ -891,7 +891,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                     type="button"
                     disabled={selectedAccounts.length < 1}
                     onClick={() => setShowDriverPicker(true)}
-                    className="flex-1 min-h-[48px] h-12 rounded-xl bg-blue-400/15 border border-blue-400/40 text-blue-200 text-[11px] font-black uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                    className="flex-1 min-h-[48px] h-12 rounded-xl bg-blue-400/15 border border-blue-400/40 text-blue-200 text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
                   >
                     <Bike size={16} strokeWidth={2.5} />
                     Repartidor
@@ -915,7 +915,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
         {/* TIPO DE PEDIDO */}
         <aside className="flex flex-col gap-2.5 landscape:flex-[3] landscape:order-1">
-          <p className="px-1 text-[10px] font-black uppercase tracking-[0.22em] text-[var(--brand)]">
+          <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--brand)]">
             Iniciar venta
           </p>
           <div className="grid flex-1 grid-cols-3 gap-2.5 landscape:grid-cols-1">
@@ -930,7 +930,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   style={{ backgroundColor: `${type.accent}14`, borderColor: `${type.accent}55` }}
                 >
                   {/* Atajo de teclado, discreto en la esquina */}
-                  <span className="absolute right-3 top-2.5 text-[11px] font-black text-white/25">
+                  <span className="absolute right-3 top-2.5 text-[11px] font-semibold text-white/25">
                     {type.shortcut}
                   </span>
                   <span
@@ -968,7 +968,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                 <MessageCircle size={22} strokeWidth={2.5} />
               </span>
               <div className="min-w-0 flex-1">
-                <h3 className="text-[15px] font-black leading-tight tracking-tight">Pedidos WhatsApp</h3>
+                <h3 className="text-[15px] font-semibold leading-tight tracking-tight">Pedidos WhatsApp</h3>
                 <p className="text-[10px] font-bold text-white/40">Capturar pedido del chat</p>
               </div>
               <ArrowRight
@@ -991,7 +991,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]">
               <Merge size={21} />
             </div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Confirmar unión</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">Confirmar unión</p>
             <h3 className="mt-1 text-xl font-black text-white">Juntar {selectedAccounts.length} cuentas</h3>
             <p className="mt-2 text-[13px] font-semibold leading-relaxed text-white/55">
               La cuenta final será #{targetAccount.orderNumber} de{" "}
@@ -999,7 +999,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               {selectedAccounts.length - 1} se cerrarán tras mover sus productos.
             </p>
             <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-              <span className="text-[11px] font-black uppercase tracking-[0.12em] text-white/45">Nuevo total</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">Nuevo total</span>
               <span className="text-xl font-black tabular-nums text-white">${selectedTotal.toFixed(2)}</span>
             </div>
             <div className="mt-5 flex gap-2">
@@ -1007,7 +1007,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                 type="button"
                 disabled={isMerging}
                 onClick={() => setShowMergeConfirm(false)}
-                className="h-12 flex-1 rounded-2xl border border-white/10 bg-white/5 text-[11px] font-black uppercase tracking-[0.12em] text-white/65 disabled:opacity-40"
+                className="h-12 flex-1 rounded-2xl border border-white/10 bg-white/5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/65 disabled:opacity-40"
               >
                 Volver
               </button>
@@ -1035,7 +1035,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-400/30 bg-blue-400/15 text-blue-300">
               <Bike size={21} />
             </div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Enviar a repartidor</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">Enviar a repartidor</p>
             <h3 className="mt-1 text-xl font-black text-white">
               {selectedAccounts.length} ticket{selectedAccounts.length === 1 ? "" : "s"} seleccionado{selectedAccounts.length === 1 ? "" : "s"}
             </h3>
@@ -1065,7 +1065,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                         <Bike size={15} className="shrink-0 text-blue-300" />
                       )}
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-black text-white">{d.name}</span>
+                        <span className="block truncate text-sm font-semibold text-white">{d.name}</span>
                         {d.isAvailable === false && (
                           <span className="block text-[9px] font-bold uppercase tracking-widest text-[var(--warning)]">Ocupado</span>
                         )}
@@ -1079,7 +1079,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               type="button"
               disabled={Boolean(assigningDriverId)}
               onClick={() => setShowDriverPicker(false)}
-              className="mt-4 h-12 w-full rounded-2xl border border-white/10 bg-white/5 text-[11px] font-black uppercase tracking-[0.12em] text-white/65 disabled:opacity-40"
+              className="mt-4 h-12 w-full rounded-2xl border border-white/10 bg-white/5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/65 disabled:opacity-40"
             >
               Cancelar
             </button>

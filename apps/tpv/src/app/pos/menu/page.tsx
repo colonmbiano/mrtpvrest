@@ -439,7 +439,7 @@ function DrilldownHeader({
           className="flex h-11 items-center gap-1.5 rounded-lg border-2 border-bd bg-surf-2 px-3 text-tx-pri active:bg-surf-3 focus:outline-none focus:ring-2 focus:ring-iris-500"
         >
           <ChevronLeft size={20} strokeWidth={3} />
-          <span className="text-[13px] font-black uppercase">Categorías</span>
+          <span className="text-[13px] font-semibold uppercase">Categorías</span>
         </button>
         <span className="min-w-0 flex-1 truncate text-[18px] font-black text-tx-pri">
           {title}
@@ -503,7 +503,7 @@ function CategoryGrid({
               <span className="line-clamp-2 pt-1 text-[17px] font-black leading-tight">
                 {category.name}
               </span>
-              <span className="text-[12px] font-black uppercase opacity-60">
+              <span className="text-[12px] font-semibold uppercase opacity-60">
                 {counts[category.id] ?? counts[category.name] ?? 0} items
               </span>
             </button>
@@ -542,8 +542,8 @@ function CategoryButton({
       className={`flex flex-col justify-center rounded-lg border-2 px-3 text-left shadow-[0_4px_12px_rgba(0,0,0,0.35)] ${palette} focus:outline-none focus:ring-2 focus:ring-iris-500`}
       style={{ width: 116, minWidth: 116, height: 58 }}
     >
-      <span className="block truncate text-[13px] font-black leading-tight">{label}</span>
-      <span className="mt-0.5 block text-[11px] font-black uppercase text-current opacity-70">
+      <span className="block truncate text-[13px] font-semibold leading-tight">{label}</span>
+      <span className="mt-0.5 block text-[11px] font-semibold uppercase text-current opacity-70">
         {count} items
       </span>
     </button>
@@ -644,12 +644,12 @@ function ProductTile({
     >
       <span aria-hidden className={`absolute inset-x-0 top-0 h-1.5 ${palette.accent}`} />
       {quantity > 0 && (
-        <span className="absolute right-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-iris-500 px-2 text-[12px] font-black text-iris-fg">
+        <span className="absolute right-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-iris-500 px-2 text-[12px] font-semibold text-iris-fg">
           x{quantity}
         </span>
       )}
       {product.isAvailable === false && (
-        <span className="mb-2 inline-flex self-start rounded-md bg-surf-3 px-2 py-1 text-[10px] font-black uppercase text-tx-sec">
+        <span className="mb-2 inline-flex self-start rounded-md bg-surf-3 px-2 py-1 text-[10px] font-semibold uppercase text-tx-sec">
           Agotado
         </span>
       )}
@@ -795,7 +795,7 @@ function QuickModifierPanel({
           <ChevronLeft size={23} strokeWidth={3} />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-black uppercase text-tx-mut">
+          <p className="text-[11px] font-semibold uppercase text-tx-mut">
             {initial ? "Editar producto" : "Modificadores rapidos"}
           </p>
           <h2 className="truncate text-[22px] font-black text-tx-pri">{product.name}</h2>
@@ -867,7 +867,7 @@ function QuickModifierPanel({
                         {active && <Check size={15} strokeWidth={3} />}
                       </span>
                       <span className="min-w-0 flex-1 text-[15px] font-black">{modifier.name}</span>
-                      <span className="text-[14px] font-black tabular-nums">
+                      <span className="text-[14px] font-semibold tabular-nums">
                         {modifier.priceAdd > 0 ? `+$${modifier.priceAdd.toFixed(0)}` : "$0"}
                       </span>
                     </button>
@@ -919,7 +919,7 @@ function QuickModifierPanel({
               <button
                 type="button"
                 onClick={() => stepQty(1)}
-                className="flex h-14 items-center justify-center rounded-lg border-2 border-bd bg-surf-1 text-[13px] font-black uppercase text-tx-mut active:bg-surf-3 focus:outline-none focus:ring-2 focus:ring-iris-500"
+                className="flex h-14 items-center justify-center rounded-lg border-2 border-bd bg-surf-1 text-[13px] font-semibold uppercase text-tx-mut active:bg-surf-3 focus:outline-none focus:ring-2 focus:ring-iris-500"
               >
                 C
               </button>
@@ -955,10 +955,10 @@ function QuickModifierPanel({
       </div>
 
       <footer className="shrink-0 border-t border-bd bg-surf-1 p-4">
-        {validationError && <p className="mb-2 text-[13px] font-black text-danger">{validationError}</p>}
+        {validationError && <p className="mb-2 text-[13px] font-semibold text-danger">{validationError}</p>}
         <div className="flex items-center gap-4">
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-black uppercase text-tx-mut">Total configurado</p>
+            <p className="text-[11px] font-semibold uppercase text-tx-mut">Total configurado</p>
             <p className="text-[15px] font-bold text-tx-sec">${unitPrice.toFixed(2)} por unidad</p>
           </div>
           <span className="text-[28px] font-black tabular-nums text-tx-pri">${totalPrice.toFixed(2)}</span>
@@ -989,7 +989,7 @@ function OptionSection({
     <section className="mb-5">
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <h3 className="text-[17px] font-black text-tx-pri">{title}</h3>
-        <span className="text-[11px] font-black uppercase text-tx-mut">{helper}</span>
+        <span className="text-[11px] font-semibold uppercase text-tx-mut">{helper}</span>
       </div>
       {children}
     </section>
@@ -1010,7 +1010,7 @@ function EmptyState({ query }: { query: string }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-bd bg-surf-1 p-6 text-center">
       <Search size={34} className="text-tx-mut" />
-      <p className="text-[16px] font-black text-tx-sec">
+      <p className="text-[16px] font-semibold text-tx-sec">
         {query.trim() ? "Sin resultados para la busqueda" : "Sin productos en esta categoria"}
       </p>
     </div>

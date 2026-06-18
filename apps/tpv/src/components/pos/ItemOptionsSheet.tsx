@@ -43,7 +43,7 @@ export default function ItemOptionsSheet({
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
               Acciones rápidas
             </span>
             <h3 className="text-lg font-black text-white truncate">
@@ -78,7 +78,7 @@ export default function ItemOptionsSheet({
           }}
         >
           {available ? <EyeOff size={18} /> : <Eye size={18} />}
-          <span className="font-black text-sm tracking-tight">
+          <span className="font-semibold text-sm tracking-tight">
             {available ? "Marcar agotado" : "Marcar disponible"}
           </span>
         </button>
@@ -105,7 +105,7 @@ export default function ItemOptionsSheet({
             strokeWidth={2.5}
             fill={favorite ? "currentColor" : "none"}
           />
-          <span className="font-black text-sm tracking-tight">
+          <span className="font-semibold text-sm tracking-tight">
             {favorite ? "Quitar de favoritos" : "Marcar como favorito"}
           </span>
         </button>

@@ -111,7 +111,7 @@ const ChangeOrderTypeModal: React.FC<ChangeOrderTypeModalProps> = ({
             <ShoppingBag size={22} />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+            <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
               Reasignar orden
             </span>
             <h3 className="text-[18px] font-black text-white truncate leading-none mt-0.5">
@@ -146,12 +146,12 @@ const ChangeOrderTypeModal: React.FC<ChangeOrderTypeModalProps> = ({
                   }`}
                 >
                   {isCurrent && (
-                    <span className="absolute top-2 right-2 text-[8px] font-black tracking-[0.15em] uppercase px-1.5 py-0.5 rounded-md bg-white/10 text-white/50">
+                    <span className="absolute top-2 right-2 text-[8px] font-semibold tracking-[0.15em] uppercase px-1.5 py-0.5 rounded-md bg-white/10 text-white/50">
                       Actual
                     </span>
                   )}
                   <Icon size={26} strokeWidth={2} />
-                  <span className="text-[12px] font-black uppercase tracking-wider text-center leading-tight">
+                  <span className="text-[12px] font-semibold uppercase tracking-wider text-center leading-tight">
                     {label}
                   </span>
                   <span className="text-[9px] font-bold uppercase tracking-wide text-white/40">
@@ -164,7 +164,7 @@ const ChangeOrderTypeModal: React.FC<ChangeOrderTypeModalProps> = ({
 
           {needsAddress && (
             <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-black tracking-[0.2em] text-white/40 uppercase">
+              <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
                 Dirección de entrega
               </span>
               <div className="relative">

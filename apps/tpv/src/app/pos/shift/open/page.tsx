@@ -80,7 +80,7 @@ const ShiftOpenPage = () => {
   if (checking) {
     return (
       <div className="min-h-[100dvh] bg-[var(--bg)] flex items-center justify-center">
-        <div className="text-[var(--brand)] animate-pulse font-black uppercase tracking-widest">
+        <div className="text-[var(--brand)] animate-pulse font-semibold uppercase tracking-widest">
           Verificando turno...
         </div>
       </div>
@@ -114,7 +114,7 @@ const ShiftOpenPage = () => {
       <main className="flex-1 flex items-center justify-center p-6 relative z-10">
         <div className="w-full max-w-md bg-[var(--surface-1)] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl">
           <div className="text-center mb-10">
-            <div className="inline-block px-4 py-1.5 mb-6 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-[var(--brand)] bg-[var(--brand-soft)] border border-[var(--brand)]">
+            <div className="inline-block px-4 py-1.5 mb-6 rounded-full text-[10px] font-semibold uppercase tracking-[0.3em] text-[var(--brand)] bg-[var(--brand-soft)] border border-[var(--brand)]">
               Apertura de Caja
             </div>
             <h1 className="text-4xl font-black tracking-tight mb-4">Iniciar Turno</h1>
@@ -125,7 +125,7 @@ const ShiftOpenPage = () => {
 
           <div className="space-y-8">
             <div className="space-y-3">
-              <label className="text-[11px] font-black uppercase tracking-[0.2em] text-zinc-500 ml-1">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500 ml-1">
                 Fondo de caja inicial
               </label>
               <div className="relative group">
@@ -142,11 +142,11 @@ const ShiftOpenPage = () => {
 
             <div className="bg-[var(--surface-1)] border border-white/5 rounded-2xl p-6 flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-[var(--brand-soft)] flex items-center justify-center text-[var(--brand)]">
-                <span className="text-xl font-black">{currentEmployee?.name?.charAt(0).toUpperCase()}</span>
+                <span className="text-xl font-semibold">{currentEmployee?.name?.charAt(0).toUpperCase()}</span>
               </div>
               <div>
-                <span className="block text-[10px] font-black uppercase tracking-widest text-zinc-500">Operador</span>
-                <span className="text-sm font-black text-white">{currentEmployee?.name}</span>
+                <span className="block text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Operador</span>
+                <span className="text-sm font-semibold text-white">{currentEmployee?.name}</span>
               </div>
             </div>
 
@@ -160,7 +160,7 @@ const ShiftOpenPage = () => {
 
             <button
               onClick={logout}
-              className="w-full h-12 text-[11px] font-black uppercase tracking-[0.2em] text-zinc-600 hover:text-white transition-colors"
+              className="w-full h-12 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-600 hover:text-white transition-colors"
             >
               Cerrar Sesión
             </button>
@@ -168,7 +168,7 @@ const ShiftOpenPage = () => {
         </div>
       </main>
 
-      <footer className="h-16 flex items-center justify-center text-[10px] font-black uppercase tracking-[0.2em] text-zinc-700">
+      <footer className="h-16 flex items-center justify-center text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-700">
         MRTPVREST System · v2.4.0 · diseño operativo UI
       </footer>
     </div>

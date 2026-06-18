@@ -136,7 +136,7 @@ export default function TablePickerModal({
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-6 py-5 border-b border-white/10 bg-white/5">
           <div>
-            <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)]">ASIGNAR</span>
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-[var(--brand)]">ASIGNAR</span>
             <h3 className="text-2xl font-black text-white tracking-tight mt-1">Mesa para los comensales</h3>
             <p className="text-xs font-medium text-white/55 mt-1">
               {showOccupied
@@ -159,7 +159,7 @@ export default function TablePickerModal({
           <button
             type="button"
             onClick={() => setShowOccupied((v) => !v)}
-            className="inline-flex items-center gap-2 px-4 h-10 rounded-2xl bg-white/5 border border-white/10 text-xs font-black uppercase tracking-widest text-white/85 active:scale-95"
+            className="inline-flex items-center gap-2 px-4 h-10 rounded-2xl bg-white/5 border border-white/10 text-xs font-semibold uppercase tracking-widest text-white/85 active:scale-95"
           >
             {showOccupied ? <EyeOff size={14} /> : <Eye size={14} />}
             {showOccupied ? "Solo libres" : "Mostrar todas"}
@@ -207,7 +207,7 @@ export default function TablePickerModal({
             <div className="flex flex-col gap-6">
               {Object.entries(grouped).map(([zone, list]) => (
                 <div key={zone}>
-                  <p className="text-[10px] font-black tracking-[0.25em] text-white/40 mb-3 px-1">
+                  <p className="text-[10px] font-semibold tracking-[0.25em] text-white/40 mb-3 px-1">
                     {zone}
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -231,14 +231,14 @@ export default function TablePickerModal({
                             className="flex flex-col items-center justify-center gap-1 flex-1 active:scale-95 transition-transform"
                           >
                             <MapPin size={20} style={{ color: accent }} />
-                            <span className="text-base font-black text-white tracking-tight">{t.name}</span>
+                            <span className="text-base font-semibold text-white tracking-tight">{t.name}</span>
                             {t.capacity ? (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white/55">
                                 <Users size={10} /> {t.capacity}
                               </span>
                             ) : null}
                             {occupied && (
-                              <span className="text-[9px] font-black tracking-widest mt-0.5 px-2 py-0.5 rounded-full"
+                              <span className="text-[9px] font-semibold tracking-widest mt-0.5 px-2 py-0.5 rounded-full"
                                 style={{ background: "rgba(255,139,110,0.15)", color: "#FF8B6E" }}
                               >
                                 + RONDA
@@ -248,7 +248,7 @@ export default function TablePickerModal({
 
                           {(occupied || dirty) && (
                             <span
-                              className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded text-[8px] font-black tracking-widest"
+                              className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded text-[8px] font-semibold tracking-widest"
                               style={{ background: accent + "20", color: accent }}
                             >
                               {occupied ? "OCUPADA" : "POR LIMPIAR"}
