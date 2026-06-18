@@ -224,6 +224,10 @@ export default function CierreTurno() {
         notes: notes.trim() || null,
       });
       localStorage.removeItem(`cierre-draft-${shift.id}`);
+      // Ya no hay turno abierto en la caja: dejamos el cache en false para que,
+      // al volver al /hub (botón "Listo"), redirija a /pos/shift/open y no a
+      // /pos/order-type como si la sesión siguiera abierta.
+      localStorage.setItem('tpv-shift-open', 'false');
       // Aseguramos el contado en el objeto (por si el backend no lo refleja al vuelo).
       const closedWithCount: Shift = { ...closed, closingFloat: closed.closingFloat ?? counted };
       setClosedShift(closedWithCount);
