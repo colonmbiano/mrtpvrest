@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Search, X, Plus, Minus, Check, Delete } from "lucide-react";
 import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
 import api from "@/lib/api";
+import { formatModifierGroupName } from "@/lib/formatDisplayName";
 import { useCatalogPrefs, type CatalogDensity } from "@/store/catalogPrefsStore";
 import { hapticLight } from "@/lib/haptics";
 import {
@@ -504,7 +505,7 @@ function CategoryGrid({
                 {category.name}
               </span>
               <span className="text-[12px] font-semibold uppercase opacity-60">
-                {counts[category.id] ?? counts[category.name] ?? 0} items
+                {itemsLabel(counts[category.id] ?? counts[category.name] ?? 0)}
               </span>
             </button>
           );
@@ -512,6 +513,11 @@ function CategoryGrid({
       </div>
     </div>
   );
+}
+
+// "1 item" / "N items" — evita el "1 ITEMS" agramatical.
+function itemsLabel(n: number): string {
+  return `${n} ${n === 1 ? "item" : "items"}`;
 }
 
 function CategoryButton({
@@ -544,7 +550,7 @@ function CategoryButton({
     >
       <span className="block truncate text-[13px] font-semibold leading-tight">{label}</span>
       <span className="mt-0.5 block text-[11px] font-semibold uppercase text-current opacity-70">
-        {count} items
+        {itemsLabel(count)}
       </span>
     </button>
   );
@@ -846,7 +852,7 @@ function QuickModifierPanel({
           return (
             <OptionSection
               key={group.id}
-              title={group.name}
+              title={formatModifierGroupName(group.name)}
               helper={`${group.multiSelect ? `${min > 0 ? `Min ${min} / ` : ""}${max > 0 ? `Max ${max}` : "Varios"}` : "Elige 1"}${free > 0 ? ` / ${free} sin costo` : ""}`}
             >
               <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">

@@ -35,6 +35,7 @@ import {
 } from "@/lib/paid-tickets-cache";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
+import { ORDER_TYPE_BADGE } from "@/lib/orderTypes";
 import { toast } from "sonner";
 
 /**
@@ -67,12 +68,8 @@ const ORDER_TYPE_OF = (t: unknown): ExtendedOrderType =>
 const ONLINE_SOURCES = new Set(["ONLINE", "STORE", "WHATSAPP"]);
 
 // Etiqueta de tipo y "hace X" para el shape DrawerOrder del cajón (igual que
-// el layout del menú).
-const ORDER_TYPE_LABEL: Record<string, string> = {
-  DINE_IN: "MESA",
-  TAKEOUT: "LLEVAR",
-  DELIVERY: "DOMICILIO",
-};
+// el layout del menú). Fuente única: lib/orderTypes.
+const ORDER_TYPE_LABEL = ORDER_TYPE_BADGE;
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   const m = Math.max(0, Math.floor(ms / 60000));

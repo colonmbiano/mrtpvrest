@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { Armchair, ShoppingBag, Truck } from "lucide-react";
+import { ORDER_TYPE_SHORT } from "@/lib/orderTypes";
 
 export type OrderType = "DINE_IN" | "TAKEOUT" | "DELIVERY";
 
@@ -16,9 +17,9 @@ const OrderTypeToggle: React.FC<OrderTypeToggleProps> = ({
   allowedTypes = ["DINE_IN", "TAKEOUT", "DELIVERY"],
 }) => {
   const options = [
-    { id: "DINE_IN",  label: "Mesa",    icon: Armchair },
-    { id: "TAKEOUT",  label: "Llevar", icon: ShoppingBag },
-    { id: "DELIVERY", label: "Domic.",   icon: Truck },
+    { id: "DINE_IN",  label: ORDER_TYPE_SHORT.DINE_IN,  icon: Armchair },
+    { id: "TAKEOUT",  label: ORDER_TYPE_SHORT.TAKEOUT,  icon: ShoppingBag },
+    { id: "DELIVERY", label: ORDER_TYPE_SHORT.DELIVERY, icon: Truck },
   ].filter(opt => allowedTypes.includes(opt.id as OrderType));
 
   return (

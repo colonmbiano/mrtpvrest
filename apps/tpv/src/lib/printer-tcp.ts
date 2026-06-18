@@ -15,6 +15,7 @@
  */
 
 import type { Plugin } from "@capacitor/core";
+import { ORDER_TYPE_ACTION } from "@/lib/orderTypes";
 
 // API del plugin `capacitor-tcp-socket` v7+. Tipo local — no exponemos
 // el namespace completo del paquete para no acoplarnos.
@@ -571,11 +572,8 @@ export interface ReceiptInput {
 const fmtMoney = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2 });
 
-const ORDER_TYPE_LABEL: Record<string, string> = {
-  DINE_IN:  "Comer aquí",
-  TAKEOUT:  "Para llevar",
-  DELIVERY: "A domicilio",
-};
+// Etiqueta de tipo de orden para el recibo — fuente única en lib/orderTypes.
+const ORDER_TYPE_LABEL = ORDER_TYPE_ACTION;
 
 // Método de pago → español. Mapa explícito (no hardcode en el render) para que
 // agregar un método nuevo sea una sola línea. Cubre todo el enum PaymentMethod.

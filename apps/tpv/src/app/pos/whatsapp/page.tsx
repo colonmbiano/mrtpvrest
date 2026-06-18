@@ -44,6 +44,7 @@ import {
   type OrderType,
 } from "@/lib/wa-parse";
 import { getLocationId } from "@/lib/tenant";
+import { ORDER_TYPE_ACTION } from "@/lib/orderTypes";
 
 const CATALOG_CACHE_KEY = "tpv-catalog-cache-v1";
 
@@ -59,9 +60,9 @@ type Line = {
 };
 
 const ORDER_TYPES: { key: OrderType; label: string; icon: typeof Bike }[] = [
-  { key: "DINE_IN", label: "Comer aquí", icon: UtensilsCrossed },
-  { key: "TAKEOUT", label: "Para llevar", icon: ShoppingBag },
-  { key: "DELIVERY", label: "Domicilio", icon: Bike },
+  { key: "DINE_IN", label: ORDER_TYPE_ACTION.DINE_IN, icon: UtensilsCrossed },
+  { key: "TAKEOUT", label: ORDER_TYPE_ACTION.TAKEOUT, icon: ShoppingBag },
+  { key: "DELIVERY", label: ORDER_TYPE_ACTION.DELIVERY, icon: Bike },
 ];
 
 function uid(): string {

@@ -120,6 +120,13 @@ export default function TablePickerModal({
     (acc[key] ||= []).push(t);
     return acc;
   }, {});
+  // Orden natural por nombre dentro de cada zona: "Mesa 2" antes que "Mesa 10"
+  // (el orden lexicográfico ponía Mesa 10/11/12 antes que Mesa 2).
+  for (const key of Object.keys(grouped)) {
+    grouped[key].sort((a, b) =>
+      String(a.name).localeCompare(String(b.name), "es-MX", { numeric: true, sensitivity: "base" }),
+    );
+  }
 
   const occupiedHidden = !showOccupied
     ? tables.filter((t) => t.status === "OCCUPIED").length

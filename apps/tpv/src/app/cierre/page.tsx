@@ -58,6 +58,9 @@ interface Shift {
 const fmtMoney = (n: number) =>
   Number(n || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 });
 
+// Monto con signo negativo SOLO si hay algo que restar (evita "−$0.00").
+const fmtNeg = (n: number) => (Number(n) > 0 ? `−${fmtMoney(n)}` : fmtMoney(n));
+
 function elapsed(opened: string) {
   const ms = Date.now() - new Date(opened).getTime();
   const h = Math.floor(ms / 3600000);
@@ -315,7 +318,7 @@ export default function CierreTurno() {
             {Number(cs.totalCashIn || 0) > 0 && (
               <Line label="Ingresos de efectivo" value={`+${fmtMoney(cs.totalCashIn || 0)}`} />
             )}
-            <Line label="Gastos" value={`−${fmtMoney(cs.totalExpenses || 0)}`} />
+            <Line label="Gastos" value={fmtNeg(cs.totalExpenses || 0)} />
             <div className="border-t border-white/10 my-1" />
             <Line label="Efectivo contado" value={fmtMoney(cs.closingFloat || 0)} strong />
 
@@ -526,14 +529,14 @@ export default function CierreTurno() {
                         </p>
                       </div>
                       <span className="text-sm font-semibold tabular-nums text-[#ff8a5c] shrink-0">
-                        −{fmtMoney(e.amount)}
+                        {fmtNeg(e.amount)}
                       </span>
                     </div>
                   );
                 })}
                 <div className="flex items-center justify-between pt-2 mt-1 border-t border-white/10">
                   <span className="text-[11px] font-semibold tracking-[0.15em] text-white/40">TOTAL GASTOS</span>
-                  <span className="text-base font-semibold tabular-nums text-[#ff8a5c]">−{fmtMoney(totalExpenses)}</span>
+                  <span className="text-base font-semibold tabular-nums text-[#ff8a5c]">{fmtNeg(totalExpenses)}</span>
                 </div>
               </div>
             )}
@@ -633,7 +636,7 @@ export default function CierreTurno() {
             <SummaryCard
               icon={<Receipt size={14} className="text-[#ff8a5c]" />}
               label="Gastos del turno"
-              value={`−${fmtMoney(totalExpenses)}`}
+              value={fmtNeg(totalExpenses)}
             />
             {totalCashIn > 0 && (
               <SummaryCard

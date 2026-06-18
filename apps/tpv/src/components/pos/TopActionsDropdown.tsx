@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   MoreVertical,
   Trash2,
+  Eraser,
   Printer,
   RefreshCw,
   Wallet,
@@ -174,13 +175,16 @@ export default function TopActionsDropdown({
 
           <div className="h-[1px] w-full bg-white/5 my-1" />
 
+          {/* Vaciar = quitar los productos de la cuenta (local). Distinto de
+              "Eliminar ticket", que cancela la orden en el backend. Iconos y
+              tonos distintos para que no se confundan. */}
           <button
             onClick={() => handleAction(onClearTicket)}
             disabled={!hasItems}
-            className="flex items-center gap-3 px-3 py-3 rounded-xl text-red-500 hover:bg-red-500/10 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 mt-1"
+            className="flex items-center gap-3 px-3 py-3 rounded-xl text-amber-400 hover:bg-amber-400/10 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 mt-1"
           >
-            <Trash2 size={16} />
-            <span className="text-xs font-bold">Despejar ticket</span>
+            <Eraser size={16} />
+            <span className="text-xs font-bold">Vaciar productos</span>
           </button>
 
           <button

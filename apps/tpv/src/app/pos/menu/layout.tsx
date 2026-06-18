@@ -52,12 +52,7 @@ import MergeTableModal from "@/components/pos/MergeTableModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import ChangeOrderTypeModal from "@/components/pos/ChangeOrderTypeModal";
-
-const ORDER_TYPE_LABEL: Record<string, string> = {
-  DINE_IN: "MESA",
-  TAKEOUT: "LLEVAR",
-  DELIVERY: "DOMICILIO",
-};
+import { ORDER_TYPE_BADGE as ORDER_TYPE_LABEL } from "@/lib/orderTypes";
 
 const ACTIVE_STATUSES = new Set([
   "PENDING",

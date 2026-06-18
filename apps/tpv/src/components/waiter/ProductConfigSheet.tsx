@@ -14,6 +14,7 @@ import {
   flattenSelections,
   getValidationError,
 } from "@/lib/modifiers";
+import { formatModifierGroupName } from "@/lib/formatDisplayName";
 
 /**
  * ProductConfigSheet — bottom sheet de variantes/modificadores/complementos
@@ -180,7 +181,7 @@ export default function ProductConfigSheet({
               <section key={group.id} className="space-y-2">
                 <div className="flex items-baseline justify-between px-1">
                   <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
-                    {group.name}
+                    {formatModifierGroupName(group.name)}
                   </span>
                   <span className="text-[10px] font-bold text-white/30 uppercase">{helper}</span>
                 </div>
