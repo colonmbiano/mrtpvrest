@@ -260,7 +260,7 @@ export default function DevicesTab() {
                   <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${kds ? "bg-emerald-500/10 text-emerald-500" : "bg-iris-soft text-iris-500"}`}>
                     {kds ? <Monitor size={24} /> : <PrinterIcon size={24} />}
                   </div>
-                  <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl ${kds ? "bg-emerald-500/10 text-emerald-500" : "bg-iris-soft text-iris-500"}`}>
+                  <span className={`text-[10px] font-semibold uppercase tracking-widest px-3 py-1.5 rounded-xl ${kds ? "bg-emerald-500/10 text-emerald-500" : "bg-iris-soft text-iris-500"}`}>
                     {kds && p.stations && p.stations.length > 0 ? p.stations.join(" · ") : p.type}
                   </span>
                 </div>
@@ -280,7 +280,7 @@ export default function DevicesTab() {
                   <button
                     onClick={() => handleTest(p)}
                     disabled={testingId === p.id}
-                    className="w-full h-12 bg-white/5 hover:bg-white/10 text-zinc-300 rounded-xl text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                    className="w-full h-12 bg-white/5 hover:bg-white/10 text-zinc-300 rounded-xl text-xs font-semibold uppercase tracking-widest transition-all disabled:opacity-50"
                   >
                     {testingId === p.id ? "Conectando..." : kds && (!p.ip || p.ip === "0.0.0.0") ? "KDS por socket" : "Test de Impresión"}
                   </button>
@@ -314,19 +314,19 @@ export default function DevicesTab() {
               <button type="button" onClick={() => setForm({ ...form, isKDS: false, type: "CASHIER" })}
                 className="flex flex-col items-start gap-1 p-4 rounded-2xl border transition-all active:scale-95 text-left"
                 style={{ background: !form.isKDS ? "var(--brand-soft)" : "var(--surface-1)", borderColor: !form.isKDS ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
-                <span className="text-sm font-black text-white">Impresora física</span>
+                <span className="text-sm font-semibold text-white">Impresora física</span>
                 <span className="text-[10px] font-bold text-zinc-500">Térmica ESC/POS</span>
               </button>
               <button type="button" onClick={() => setForm({ ...form, isKDS: true, type: "KITCHEN" })}
                 className="flex flex-col items-start gap-1 p-4 rounded-2xl border transition-all active:scale-95 text-left"
                 style={{ background: form.isKDS ? "var(--brand-soft)" : "var(--surface-1)", borderColor: form.isKDS ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
-                <span className="text-sm font-black text-white">Pantalla KDS</span>
+                <span className="text-sm font-semibold text-white">Pantalla KDS</span>
                 <span className="text-[10px] font-bold text-zinc-500">Tablet de cocina</span>
               </button>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Nombre</label>
+              <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">Nombre</label>
               <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)]"
                 placeholder={form.isKDS ? "Ej. KDS Parrilla" : "Ej. Comandas Cocina"} />
@@ -335,7 +335,7 @@ export default function DevicesTab() {
             {!form.isKDS && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Rol</label>
+                  <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">Rol</label>
                   <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}
                     className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)] appearance-none">
                     <option value="CASHIER">Caja / Recibos</option>
@@ -346,7 +346,7 @@ export default function DevicesTab() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Conexión</label>
+                  <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">Conexión</label>
                   <select value={form.connectionType} onChange={(e) => setForm({ ...form, connectionType: e.target.value as FormState["connectionType"] })}
                     className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)] appearance-none">
                     <option value="NETWORK">Ethernet / WiFi</option>
@@ -359,7 +359,7 @@ export default function DevicesTab() {
 
             {form.isKDS && (
               <div className="space-y-2.5">
-                <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Estaciones que vigila</label>
+                <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">Estaciones que vigila</label>
                 <div className="grid grid-cols-2 gap-2">
                   {STATIONS.map((s) => {
                     const active = form.stations.includes(s.code);
@@ -368,7 +368,7 @@ export default function DevicesTab() {
                         className="flex items-center gap-3 p-3 rounded-xl border transition-all active:scale-95"
                         style={{ background: active ? "var(--brand-soft)" : "var(--surface-1)", borderColor: active ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
                         <span className="w-3 h-3 rounded-full" style={{ background: active ? "var(--brand)" : "rgba(255,255,255,0.10)" }} />
-                        <span className="text-sm font-black text-white">{s.label}</span>
+                        <span className="text-sm font-semibold text-white">{s.label}</span>
                       </button>
                     );
                   })}
@@ -379,7 +379,7 @@ export default function DevicesTab() {
             {(form.isKDS || form.connectionType === "NETWORK") && (
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2 space-y-1.5">
-                  <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">
+                  <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">
                     {form.isKDS ? "IP local de la tablet" : "Dirección IP"}
                   </label>
                   <input value={form.ip} onChange={(e) => setForm({ ...form, ip: sanitizeIpInput(e.target.value) })}
@@ -388,7 +388,7 @@ export default function DevicesTab() {
                     placeholder={form.isKDS ? "192.168.1.x (vacío = solo socket)" : "192.168.1..."} required={!form.isKDS} />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Puerto</label>
+                  <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">Puerto</label>
                   <input type="number" value={form.port} onChange={(e) => setForm({ ...form, port: parseInt(e.target.value, 10) || 9100 })}
                     className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)]" />
                 </div>
@@ -408,7 +408,7 @@ export default function DevicesTab() {
             {editingId && (
               <button type="button" onClick={() => { const p = printers.find((x) => x.id === editingId); if (p) handleTest(p); }}
                 disabled={testingId === editingId}
-                className="w-full h-12 rounded-2xl bg-white/5 hover:bg-white/10 text-iris-500 border border-iris-glow font-black uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-50">
+                className="w-full h-12 rounded-2xl bg-white/5 hover:bg-white/10 text-iris-500 border border-iris-glow font-semibold uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-50">
                 {testingId === editingId ? "Enviando…" : "🖨️ Test de Impresión"}
               </button>
             )}

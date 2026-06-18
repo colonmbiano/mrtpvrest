@@ -271,7 +271,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
 
               {/* Ventas por método */}
               <div className="rounded-2xl border p-4" style={{ background: "var(--surf2)", borderColor: "var(--border)" }}>
-                <div className="text-xs font-black uppercase tracking-wider mb-3" style={{ color: "var(--muted)" }}>Ventas por método de pago</div>
+                <div className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--muted)" }}>Ventas por método de pago</div>
                 {[
                   { label: "💵 Efectivo",       value: isClosed ? shift.totalCash     : null, color: "#22c55e" },
                   { label: "💳 Tarjeta",         value: isClosed ? shift.totalCard     : null, color: "#3b82f6" },
@@ -281,7 +281,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
                   <div key={row.label} className="flex justify-between items-center py-2 border-b last:border-0"
                     style={{ borderColor: "var(--border)" }}>
                     <span className="text-sm" style={{ color: "var(--muted)" }}>{row.label}</span>
-                    <span className="font-syne font-black text-sm" style={{ color: row.color }}>
+                    <span className="font-syne font-semibold text-sm" style={{ color: row.color }}>
                       {row.value != null ? `$${row.value.toFixed(0)}` : "—"}
                     </span>
                   </div>
@@ -339,7 +339,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
               {/* ── INGRESOS DE EFECTIVO (cambio/feria) ── */}
               {!isClosed && (
                 <button onClick={() => setAddingCash(true)}
-                  className="w-full py-3 rounded-2xl font-syne font-black text-sm"
+                  className="w-full py-3 rounded-2xl font-syne font-semibold text-sm"
                   style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>
                   + Ingresar efectivo / cambio
                 </button>
@@ -347,7 +347,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
 
               {addingCash && (
                 <div className="rounded-2xl border p-4 flex flex-col gap-3" style={{ background: "var(--surf2)", borderColor: "#22c55e" }}>
-                  <div className="text-xs font-black uppercase tracking-wider" style={{ color: "#22c55e" }}>Ingreso de efectivo</div>
+                  <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#22c55e" }}>Ingreso de efectivo</div>
                   <input value={cashDesc} onChange={e => setCashDesc(e.target.value)}
                     placeholder="Descripción * (ej. Cambio para caja)"
                     className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
@@ -369,7 +369,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
                       Cancelar
                     </button>
                     <button onClick={addCashIn} disabled={savingCash}
-                      className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: "#22c55e", color: "#000" }}>
+                      className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: "#22c55e", color: "#000" }}>
                       {savingCash ? "Guardando..." : "Guardar"}
                     </button>
                   </div>
@@ -394,7 +394,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
                           {new Date(ci.createdAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
                         </div>
                       </div>
-                      <div className="font-syne font-black" style={{ color: "#22c55e" }}>+${ci.amount.toFixed(0)}</div>
+                      <div className="font-syne font-semibold" style={{ color: "#22c55e" }}>+${ci.amount.toFixed(0)}</div>
                       {!isClosed && (
                         <button onClick={() => deleteCashIn(ci.id)}
                           className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
@@ -409,7 +409,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
               {/* ── GASTOS ── */}
               {!isClosed && (
                 <button onClick={() => setAddingExp(true)}
-                  className="w-full py-3 rounded-2xl font-syne font-black text-sm"
+                  className="w-full py-3 rounded-2xl font-syne font-semibold text-sm"
                   style={{ background: "var(--gold)", color: "#000" }}>
                   + Registrar gasto
                 </button>
@@ -417,7 +417,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
 
               {addingExp && (
                 <div className="rounded-2xl border p-4 flex flex-col gap-3" style={{ background: "var(--surf2)", borderColor: "var(--gold)" }}>
-                  <div className="text-xs font-black uppercase tracking-wider" style={{ color: "var(--gold)" }}>Nuevo gasto</div>
+                  <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--gold)" }}>Nuevo gasto</div>
                   <input value={expDesc} onChange={e => setExpDesc(e.target.value)}
                     placeholder="Descripción *"
                     className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
@@ -439,7 +439,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
                       Cancelar
                     </button>
                     <button onClick={addExpense} disabled={savingExp}
-                      className="flex-1 py-2 rounded-xl text-xs font-black" style={{ background: "var(--gold)", color: "#000" }}>
+                      className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: "var(--gold)", color: "#000" }}>
                       {savingExp ? "Guardando..." : "Guardar"}
                     </button>
                   </div>
@@ -469,7 +469,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
                           {new Date(exp.createdAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
                         </div>
                       </div>
-                      <div className="font-syne font-black" style={{ color: "#ef4444" }}>${exp.amount.toFixed(0)}</div>
+                      <div className="font-syne font-semibold" style={{ color: "#ef4444" }}>${exp.amount.toFixed(0)}</div>
                       {!isClosed && (
                         <button onClick={() => deleteExpense(exp.id)}
                           className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
@@ -516,7 +516,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
 
               {/* Resumen rápido */}
               <div className="rounded-2xl border p-4" style={{ background: "var(--surf2)", borderColor: "var(--border)" }}>
-                <div className="text-xs font-black uppercase tracking-wider mb-3" style={{ color: "var(--muted)" }}>Resumen al cierre</div>
+                <div className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--muted)" }}>Resumen al cierre</div>
                 <div className="flex justify-between text-sm py-1">
                   <span style={{ color: "var(--muted)" }}>Fondo inicial</span>
                   <span className="font-bold">${shift.openingFloat.toFixed(0)}</span>

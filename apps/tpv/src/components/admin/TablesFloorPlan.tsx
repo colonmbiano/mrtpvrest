@@ -404,7 +404,7 @@ export default function TablesFloorPlan({
                     ) : (
                       <>
                         <span className="table-glyph mb-1" aria-hidden="true" />
-                        <div className="font-black text-sm text-white">{t.name}</div>
+                        <div className="font-semibold text-sm text-white">{t.name}</div>
                         <div className="text-[10px] font-bold mt-0.5" style={{ color: ring }}>
                           {minutesOpen != null ? `${minutesOpen}m abierta` : sty.label}
                         </div>
@@ -535,7 +535,7 @@ export default function TablesFloorPlan({
                   </select>
                   <button
                     onClick={addTable}
-                    className="px-3 py-2 rounded-lg text-xs font-black uppercase"
+                    className="px-3 py-2 rounded-lg text-xs font-semibold uppercase"
                     style={{ background: accent, color: "#000" }}
                   >
                     Agregar
@@ -560,7 +560,7 @@ export default function TablesFloorPlan({
               <button
                 onClick={saveLayout}
                 disabled={!dirty || saving}
-                className="px-4 py-2 rounded-lg text-xs font-black uppercase disabled:opacity-40"
+                className="px-4 py-2 rounded-lg text-xs font-semibold uppercase disabled:opacity-40"
                 style={{ background: accent, color: "#000" }}
               >
                 {saving ? "Guardando…" : dirty ? "Guardar layout" : "Sin cambios"}

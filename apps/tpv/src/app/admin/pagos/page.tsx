@@ -117,7 +117,7 @@ export default function PagosAdmin() {
         {/* Tax + Tip */}
         <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div className="rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10">
-            <p className="text-[10px] font-black tracking-[0.2em] text-white/40 mb-2">IVA POR DEFECTO (%)</p>
+            <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 mb-2">IVA POR DEFECTO (%)</p>
             <input
               type="number"
               min={0}
@@ -132,7 +132,7 @@ export default function PagosAdmin() {
             </p>
           </div>
           <div className="rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10">
-            <p className="text-[10px] font-black tracking-[0.2em] text-white/40 mb-2">PROPINA SUGERIDA (%)</p>
+            <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 mb-2">PROPINA SUGERIDA (%)</p>
             <input
               type="number"
               min={0}
@@ -151,8 +151,8 @@ export default function PagosAdmin() {
         {/* Methods */}
         <section className="rounded-3xl overflow-hidden mb-6 bg-white/5 backdrop-blur-md border border-white/10">
           <div className="px-6 py-4 border-b border-white/10">
-            <p className="text-[10px] font-black tracking-[0.2em] text-white/40">MÉTODOS DE PAGO</p>
-            <p className="text-sm font-black text-white">Habilitar / deshabilitar opciones en el TPV</p>
+            <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40">MÉTODOS DE PAGO</p>
+            <p className="text-sm font-semibold text-white">Habilitar / deshabilitar opciones en el TPV</p>
           </div>
           <div className="divide-y divide-white/5">
             {methods.map((m) => (
@@ -167,7 +167,7 @@ export default function PagosAdmin() {
                   {m.icon}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-black text-white">{m.label}</p>
+                  <p className="text-sm font-semibold text-white">{m.label}</p>
                   <p className="text-[11px] font-medium text-white/55">{m.sub}</p>
                 </div>
                 <input
@@ -191,7 +191,7 @@ export default function PagosAdmin() {
               onChange={(e) => setConfig({ ...config, printReceiptDefault: e.target.checked })}
             />
             <div>
-              <p className="text-sm font-black text-white">Imprimir ticket por defecto</p>
+              <p className="text-sm font-semibold text-white">Imprimir ticket por defecto</p>
               <p className="text-[11px] font-medium text-white/55">
                 Cuando se cobra una orden, el ticket se envía a impresora automáticamente.
               </p>

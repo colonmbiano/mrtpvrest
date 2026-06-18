@@ -391,7 +391,7 @@ export default function MesasAdminPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={openNewZone}
-              className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-zinc-200 px-5 py-3 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 transition-all border border-white/10"
+              className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-zinc-200 px-5 py-3 rounded-2xl font-semibold uppercase tracking-widest text-xs active:scale-95 transition-all border border-white/10"
             >
               <Layers size={16} /> Nueva Zona
             </button>
@@ -443,7 +443,7 @@ export default function MesasAdminPage() {
         />
         <button
           onClick={openNewZone}
-          className="shrink-0 flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-iris-soft text-iris-500 hover:bg-iris-soft font-black uppercase tracking-wider text-[11px] active:scale-95 transition-all border border-iris-glow"
+          className="shrink-0 flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-iris-soft text-iris-500 hover:bg-iris-soft font-semibold uppercase tracking-wider text-[11px] active:scale-95 transition-all border border-iris-glow"
         >
           <Plus size={14} /> Zona
         </button>
@@ -476,7 +476,7 @@ export default function MesasAdminPage() {
                 {g.icon
                   ? <span className="text-base leading-none">{g.icon}</span>
                   : <MapPin size={16} className="text-iris-500" />}
-                <h2 className="text-sm font-black uppercase tracking-[0.2em] text-zinc-300">{g.label}</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-zinc-300">{g.label}</h2>
                 <span className="text-[10px] font-bold text-zinc-500">{g.list.length} mesa{g.list.length !== 1 ? "s" : ""}</span>
               </div>
               <TableGrid
@@ -521,14 +521,14 @@ export default function MesasAdminPage() {
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, bulk: false })}
-                  className={`flex-1 h-11 rounded-xl font-black uppercase tracking-wider text-[11px] transition-all ${!form.bulk ? "bg-iris-500 text-iris-fg" : "text-zinc-400 hover:text-white"}`}
+                  className={`flex-1 h-11 rounded-xl font-semibold uppercase tracking-wider text-[11px] transition-all ${!form.bulk ? "bg-iris-500 text-iris-fg" : "text-zinc-400 hover:text-white"}`}
                 >
                   Una mesa
                 </button>
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, bulk: true })}
-                  className={`flex-1 h-11 rounded-xl font-black uppercase tracking-wider text-[11px] transition-all ${form.bulk ? "bg-iris-500 text-iris-fg" : "text-zinc-400 hover:text-white"}`}
+                  className={`flex-1 h-11 rounded-xl font-semibold uppercase tracking-wider text-[11px] transition-all ${form.bulk ? "bg-iris-500 text-iris-fg" : "text-zinc-400 hover:text-white"}`}
                 >
                   Crear varias
                 </button>
@@ -537,7 +537,7 @@ export default function MesasAdminPage() {
 
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">
+                <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">
                   {form.bulk ? "Prefijo" : "Nombre"}
                 </label>
                 <input
@@ -583,7 +583,7 @@ export default function MesasAdminPage() {
                   onChange={(v) => setForm({ ...form, capacity: v })}
                 />
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Zona</label>
+                  <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">Zona</label>
                   <div className="relative">
                     <select
                       value={form.zoneId ?? ""}
@@ -647,7 +647,7 @@ export default function MesasAdminPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Nombre de la zona</label>
+              <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">Nombre de la zona</label>
               <input
                 required
                 autoFocus
@@ -659,7 +659,7 @@ export default function MesasAdminPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Icono (opcional)</label>
+              <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">Icono (opcional)</label>
               <div className="grid grid-cols-8 gap-2">
                 <button
                   type="button"
@@ -758,7 +758,7 @@ function TableGrid({
                 <StatusIcon size={24} />
               </div>
               <span
-                className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl"
+                className="text-[10px] font-semibold uppercase tracking-widest px-3 py-1.5 rounded-xl"
                 style={{ background: meta.bg, color: meta.color }}
               >
                 {meta.label}
@@ -866,7 +866,7 @@ function ZoneChip({ active, onClick, onEdit, label, count, emoji, icon, muted }:
   return (
     <div
       onClick={onClick}
-      className={`group shrink-0 flex items-center gap-2 h-9 pl-3.5 pr-2.5 rounded-full font-black uppercase tracking-wider text-[11px] cursor-pointer transition-all active:scale-95 border ${
+      className={`group shrink-0 flex items-center gap-2 h-9 pl-3.5 pr-2.5 rounded-full font-semibold uppercase tracking-wider text-[11px] cursor-pointer transition-all active:scale-95 border ${
         active
           ? "bg-iris-500 text-iris-fg border-iris-500"
           : muted
@@ -899,12 +899,12 @@ function NumberStepper({ label, value, min, max, onChange }: {
   const clamp = (v: number) => Math.max(min, Math.min(max, v));
   return (
     <div className="space-y-1.5">
-      <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">{label}</label>
+      <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">{label}</label>
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => onChange(clamp(value - 1))}
-          className="w-12 h-14 rounded-2xl bg-white/5 border border-white/10 text-white font-black active:scale-95"
+          className="w-12 h-14 rounded-2xl bg-white/5 border border-white/10 text-white font-semibold active:scale-95"
         >−</button>
         <input
           type="number"
@@ -917,7 +917,7 @@ function NumberStepper({ label, value, min, max, onChange }: {
         <button
           type="button"
           onClick={() => onChange(clamp(value + 1))}
-          className="w-12 h-14 rounded-2xl bg-white/5 border border-white/10 text-white font-black active:scale-95"
+          className="w-12 h-14 rounded-2xl bg-white/5 border border-white/10 text-white font-semibold active:scale-95"
         >+</button>
       </div>
     </div>
@@ -964,7 +964,7 @@ function StatTile({ label, value, color, icon }: { label: string; value: number;
         {icon}
       </div>
       <p className={`text-3xl font-black tracking-tight ${palette.text}`}>{value}</p>
-      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mt-1">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mt-1">{label}</p>
     </div>
   );
 }

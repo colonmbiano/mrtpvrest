@@ -531,7 +531,7 @@ export default function MenuEditorPage() {
         action={
           <div className="flex flex-wrap gap-3">
             <label
-              className="inline-flex h-12 cursor-pointer items-center gap-2 rounded-2xl border px-4 text-xs font-black uppercase tracking-[0.16em]"
+              className="inline-flex h-12 cursor-pointer items-center gap-2 rounded-2xl border px-4 text-xs font-semibold uppercase tracking-[0.16em]"
               style={{ borderColor: "var(--brand-glow)", background: "var(--brand-soft)", color: "var(--brand)" }}
             >
               <Sparkles size={16} />
@@ -569,7 +569,7 @@ export default function MenuEditorPage() {
                 const active = section === id;
                 const IconCmp = Icon as typeof Settings2;
                 return (
-                  <button key={id as string} onClick={() => setSection(id as Section)} className={`flex h-12 items-center justify-center gap-2 rounded-xl text-[10px] font-black uppercase tracking-[0.16em] ${active ? "bg-iris-500 text-iris-fg" : "text-zinc-500"}`}>
+                  <button key={id as string} onClick={() => setSection(id as Section)} className={`flex h-12 items-center justify-center gap-2 rounded-xl text-[10px] font-semibold uppercase tracking-[0.16em] ${active ? "bg-iris-500 text-iris-fg" : "text-zinc-500"}`}>
                     <IconCmp size={15} />
                     <span className="hidden sm:inline">{label as string}</span>
                   </button>
@@ -634,14 +634,14 @@ export default function MenuEditorPage() {
 
       {selectedIds.size > 0 && (
         <div className="fixed bottom-5 left-1/2 z-[120] flex -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-2xl border border-iris-glow bg-[var(--surface-1)] p-3 shadow-2xl">
-          <span className="px-3 text-xs font-black uppercase text-iris-500">{selectedIds.size} seleccionados</span>
-          <button onClick={() => bulkPatch({ isAvailable: true })} className="rounded-xl bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-400">Activar</button>
-          <button onClick={() => bulkPatch({ isAvailable: false })} className="rounded-xl bg-red-500/10 px-3 py-2 text-xs font-black text-red-400">Agotar</button>
-          <select onChange={(e) => { bulkPatch({ categoryId: e.target.value }); e.target.value = ""; }} defaultValue="" className="rounded-xl border border-white/10 bg-[var(--bg)] px-3 py-2 text-xs font-black">
+          <span className="px-3 text-xs font-semibold uppercase text-iris-500">{selectedIds.size} seleccionados</span>
+          <button onClick={() => bulkPatch({ isAvailable: true })} className="rounded-xl bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-400">Activar</button>
+          <button onClick={() => bulkPatch({ isAvailable: false })} className="rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-400">Agotar</button>
+          <select onChange={(e) => { bulkPatch({ categoryId: e.target.value }); e.target.value = ""; }} defaultValue="" className="rounded-xl border border-white/10 bg-[var(--bg)] px-3 py-2 text-xs font-semibold">
             <option value="" disabled>Mover categoria</option>
             {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
           </select>
-          <button onClick={bulkDelete} className="rounded-xl bg-red-500/10 px-3 py-2 text-xs font-black text-red-400">Eliminar</button>
+          <button onClick={bulkDelete} className="rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-400">Eliminar</button>
           <button onClick={() => setSelectedIds(new Set())} className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-zinc-400"><X size={16} /></button>
         </div>
       )}
@@ -651,7 +651,7 @@ export default function MenuEditorPage() {
           <form onSubmit={saveProduct} className="my-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[var(--surface-1)] shadow-2xl">
             <div className="flex flex-col gap-3 border-b border-white/10 bg-black/25 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-iris-500">{editingItem ? "Editar producto" : "Nuevo producto"}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-iris-500">{editingItem ? "Editar producto" : "Nuevo producto"}</p>
                 <h2 className="mt-1 text-2xl font-black">{form.name || "Producto sin nombre"}</h2>
               </div>
               <button type="button" onClick={() => setEditorOpen(false)} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/5 text-zinc-400">
@@ -669,7 +669,7 @@ export default function MenuEditorPage() {
                 const IconCmp = Icon as typeof Edit2;
                 const active = editorTab === id;
                 return (
-                  <button key={id as string} type="button" onClick={() => setEditorTab(id as EditorTab)} className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[9px] font-black uppercase tracking-[0.12em] sm:flex-row sm:text-[10px] ${active ? "bg-white/5 text-iris-500" : "text-zinc-600"}`}>
+                  <button key={id as string} type="button" onClick={() => setEditorTab(id as EditorTab)} className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[9px] font-semibold uppercase tracking-[0.12em] sm:flex-row sm:text-[10px] ${active ? "bg-white/5 text-iris-500" : "text-zinc-600"}`}>
                     <IconCmp size={15} />
                     {label as string}
                   </button>
@@ -687,7 +687,7 @@ export default function MenuEditorPage() {
                       ) : (
                         <div className="flex h-full flex-col items-center justify-center gap-2 text-zinc-700">
                           <ImagePlus size={34} />
-                          <span className="text-[10px] font-black uppercase tracking-[0.2em]">Sin foto</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.14em]">Sin foto</span>
                         </div>
                       )}
                     </div>
@@ -700,7 +700,7 @@ export default function MenuEditorPage() {
                               key={val}
                               type="button"
                               onClick={() => setForm((prev) => ({ ...prev, imageFit: val }))}
-                              className={`h-10 rounded-2xl border text-[11px] font-black uppercase tracking-[0.12em] transition-colors ${active ? "border-iris-500 bg-iris-500 text-iris-fg" : "border-white/10 bg-white/5 text-zinc-400"}`}
+                              className={`h-10 rounded-2xl border text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${active ? "border-iris-500 bg-iris-500 text-iris-fg" : "border-white/10 bg-white/5 text-zinc-400"}`}
                             >
                               {label}
                             </button>
@@ -708,7 +708,7 @@ export default function MenuEditorPage() {
                         })}
                       </div>
                     )}
-                    <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 text-xs font-black uppercase tracking-[0.14em] text-zinc-300">
+                    <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-300">
                       <ImagePlus size={16} />
                       Subir foto
                       <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} className="hidden" />
@@ -718,7 +718,7 @@ export default function MenuEditorPage() {
 
                   <div className="grid gap-5 sm:grid-cols-2">
                     <Field label="Nombre" className="sm:col-span-2">
-                      <input autoFocus value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} className="input-admin text-lg font-black" required />
+                      <input autoFocus value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} className="input-admin text-lg font-semibold" required />
                     </Field>
                     <Field label="Precio base">
                       <input type="number" step="0.01" value={form.price} onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))} className="input-admin font-mono text-lg font-black" required />
@@ -755,7 +755,7 @@ export default function MenuEditorPage() {
                           {days.map(([key, label]) => {
                             const active = form.activeDays.includes(key);
                             return (
-                              <button key={key} type="button" onClick={() => setForm((prev) => ({ ...prev, activeDays: active ? prev.activeDays.filter((day) => day !== key) : [...prev.activeDays, key] }))} className={`rounded-xl px-4 py-2 text-xs font-black ${active ? "bg-red-500 text-white" : "bg-white/5 text-zinc-500"}`}>
+                              <button key={key} type="button" onClick={() => setForm((prev) => ({ ...prev, activeDays: active ? prev.activeDays.filter((day) => day !== key) : [...prev.activeDays, key] }))} className={`rounded-xl px-4 py-2 text-xs font-semibold ${active ? "bg-red-500 text-white" : "bg-white/5 text-zinc-500"}`}>
                                 {label}
                               </button>
                             );
@@ -777,11 +777,11 @@ export default function MenuEditorPage() {
                     {form.variantMultiSelect && (
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <label className="flex flex-col gap-1">
-                          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Minimo (0 = opcional)</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Minimo (0 = opcional)</span>
                           <input type="number" min={0} value={form.variantMinSelection} onChange={(e) => setForm((prev) => ({ ...prev, variantMinSelection: Math.max(0, parseInt(e.target.value, 10) || 0) }))} className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none" />
                         </label>
                         <label className="flex flex-col gap-1">
-                          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Maximo (0 = sin tope)</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Maximo (0 = sin tope)</span>
                           <input type="number" min={0} value={form.variantMaxSelection} onChange={(e) => setForm((prev) => ({ ...prev, variantMaxSelection: Math.max(0, parseInt(e.target.value, 10) || 0) }))} className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none" />
                         </label>
                       </div>
@@ -794,10 +794,10 @@ export default function MenuEditorPage() {
                       return (
                         <button key={tpl.id} type="button" onClick={() => toggleTemplate(tpl.id)} className={`rounded-2xl border p-4 text-left ${active ? "border-iris-500 bg-iris-500 text-iris-fg" : "border-white/10 bg-white/5 text-white"}`}>
                           <div className="flex items-start justify-between gap-3">
-                            <span className="font-black">{tpl.name}</span>
+                            <span className="font-semibold">{tpl.name}</span>
                             {active && <Check size={18} strokeWidth={4} />}
                           </div>
-                          <p className={`mt-1 text-[10px] font-black uppercase tracking-[0.16em] ${active ? "text-[var(--brand-fg)]" : "text-zinc-500"}`}>{tpl.options.length} opciones</p>
+                          <p className={`mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${active ? "text-[var(--brand-fg)]" : "text-zinc-500"}`}>{tpl.options.length} opciones</p>
                         </button>
                       );
                     })}
@@ -827,7 +827,7 @@ export default function MenuEditorPage() {
             </div>
 
             <div className="flex gap-3 border-t border-white/10 bg-black/30 p-4">
-              <button type="button" onClick={() => setEditorOpen(false)} className="h-14 rounded-2xl border border-white/10 px-6 text-xs font-black uppercase tracking-[0.16em] text-zinc-400">Cerrar</button>
+              <button type="button" onClick={() => setEditorOpen(false)} className="h-14 rounded-2xl border border-white/10 px-6 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">Cerrar</button>
               <button type="submit" disabled={saving} className="flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-iris-500 text-xs font-black uppercase tracking-[0.16em] text-iris-fg disabled:opacity-50">
                 {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                 Guardar producto
@@ -854,7 +854,7 @@ function Stat({ label, value, tone = "zinc" }: { label: string; value: number; t
   const color = tone === "green" ? "text-emerald-400" : tone === "amber" ? "text-[var(--warning)]" : tone === "red" ? "text-red-400" : "text-white";
   return (
     <div className="rounded-2xl border border-white/10 bg-[var(--surface-1)] p-4">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">{label}</p>
       <p className={`mt-2 text-3xl font-black ${color}`}>{value}</p>
     </div>
   );
@@ -885,9 +885,9 @@ function ProductsView(props: {
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="truncate text-base font-black">{item.name}</h3>
+                <h3 className="truncate text-base font-semibold">{item.name}</h3>
                 {item.isFavorite && <Star size={14} className="text-[var(--brand)]" fill="currentColor" />}
-                {item.isPromo && <span className="rounded-full bg-red-500/10 px-2 py-1 text-[9px] font-black uppercase text-red-400">Promo</span>}
+                {item.isPromo && <span className="rounded-full bg-red-500/10 px-2 py-1 text-[9px] font-semibold uppercase text-red-400">Promo</span>}
               </div>
               <p className="mt-1 text-xs font-bold text-zinc-500">
                 {item.category?.name || "Sin categoria"} ·{" "}
@@ -899,7 +899,7 @@ function ProductsView(props: {
               <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-700">ID {item.id.slice(-6).toUpperCase()}</p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              <button onClick={() => props.patchItem(item, { isAvailable: !item.isAvailable })} className={`inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-[10px] font-black uppercase ${item.isAvailable ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : "border-red-500/20 bg-red-500/10 text-red-400"}`}>
+              <button onClick={() => props.patchItem(item, { isAvailable: !item.isAvailable })} className={`inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-[10px] font-semibold uppercase ${item.isAvailable ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : "border-red-500/20 bg-red-500/10 text-red-400"}`}>
                 {item.isAvailable ? <Check size={13} /> : <XCircle size={13} />}
                 {item.isAvailable ? "Activo" : "Agotado"}
               </button>
@@ -940,11 +940,11 @@ function CategoriesView(props: {
         return (
           <div key={cat.id} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[var(--bg)] p-4 sm:flex-row sm:items-center">
             <div className="flex-1">
-              <h3 className="font-black">{cat.name}</h3>
+              <h3 className="font-semibold">{cat.name}</h3>
               <p className="text-xs font-bold text-zinc-500">{count} producto(s)</p>
             </div>
-            <button onClick={() => props.renameCategory(cat)} className="rounded-xl border border-white/10 px-4 py-2 text-xs font-black uppercase text-zinc-400">Editar</button>
-            <button onClick={() => props.deleteCategory(cat)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-xs font-black uppercase text-red-400">Eliminar</button>
+            <button onClick={() => props.renameCategory(cat)} className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase text-zinc-400">Editar</button>
+            <button onClick={() => props.deleteCategory(cat)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-xs font-semibold uppercase text-red-400">Eliminar</button>
           </div>
         );
       })}
@@ -976,7 +976,7 @@ function VariantsView(props: {
         </div>
         {props.templates.map((tpl) => (
           <button key={tpl.id} onClick={() => props.setSelectedTemplateId(tpl.id)} className={`w-full rounded-2xl border p-4 text-left ${props.selectedTemplate?.id === tpl.id ? "border-iris-500 bg-iris-soft" : "border-white/10 bg-[var(--bg)]"}`}>
-            <p className="font-black">{tpl.name}</p>
+            <p className="font-semibold">{tpl.name}</p>
             <p className="text-xs font-bold text-zinc-500">{tpl.options.length} opciones</p>
           </button>
         ))}
@@ -990,8 +990,8 @@ function VariantsView(props: {
                 <p className="text-xs font-bold text-zinc-500">Opciones reutilizables</p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => props.renameTemplate(props.selectedTemplate!)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-black uppercase text-zinc-400">Editar</button>
-                <button onClick={() => props.deleteTemplate(props.selectedTemplate!)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-black uppercase text-red-400">Eliminar</button>
+                <button onClick={() => props.renameTemplate(props.selectedTemplate!)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold uppercase text-zinc-400">Editar</button>
+                <button onClick={() => props.deleteTemplate(props.selectedTemplate!)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-semibold uppercase text-red-400">Eliminar</button>
               </div>
             </div>
             <div className="grid gap-2 sm:grid-cols-[1fr_100px_auto]">
@@ -1003,11 +1003,11 @@ function VariantsView(props: {
               {props.selectedTemplate.options.map((opt) => (
                 <div key={opt.id} className="flex items-center gap-3 rounded-2xl bg-white/5 p-3">
                   <div className="flex-1">
-                    <p className="font-black">{opt.name}</p>
+                    <p className="font-semibold">{opt.name}</p>
                     <p className="text-xs font-bold text-[var(--brand)]">{opt.price > 0 ? `+$${opt.price}` : "Gratis"}</p>
                   </div>
-                  <button onClick={() => props.editTemplateOption(opt)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-black uppercase text-zinc-400">Editar</button>
-                  <button onClick={() => props.deleteTemplateOption(opt)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-black uppercase text-red-400">Eliminar</button>
+                  <button onClick={() => props.editTemplateOption(opt)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold uppercase text-zinc-400">Editar</button>
+                  <button onClick={() => props.deleteTemplateOption(opt)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-semibold uppercase text-red-400">Eliminar</button>
                 </div>
               ))}
             </div>
@@ -1023,7 +1023,7 @@ function VariantsView(props: {
 function Field({ label, className = "", children }: { label: string; className?: string; children: React.ReactNode }) {
   return (
     <label className={`block ${className}`}>
-      <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">{label}</span>
+      <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">{label}</span>
       {children}
     </label>
   );
@@ -1032,7 +1032,7 @@ function Field({ label, className = "", children }: { label: string; className?:
 function Switch({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
   return (
     <button type="button" onClick={() => onChange(!checked)} className="flex h-14 items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 text-left">
-      <span className="text-xs font-black uppercase tracking-[0.16em] text-zinc-300">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-300">{label}</span>
       <span className={`relative h-7 w-12 rounded-full ${checked ? "bg-iris-500" : "bg-white/10"}`}>
         <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} />
       </span>
@@ -1066,13 +1066,13 @@ function InlineAdder({ name, price, setValue, onAdd, disabled }: {
 }
 
 function ItemOptionList({ options, onDelete }: { options: Array<{ id: string; name: string; price: number }>; onDelete: (id: string) => void }) {
-  if (options.length === 0) return <p className="rounded-2xl border border-dashed border-white/10 py-8 text-center text-xs font-black uppercase tracking-[0.16em] text-zinc-600">Sin opciones</p>;
+  if (options.length === 0) return <p className="rounded-2xl border border-dashed border-white/10 py-8 text-center text-xs font-semibold uppercase tracking-[0.16em] text-zinc-600">Sin opciones</p>;
   return (
     <div className="space-y-2">
       {options.map((option) => (
         <div key={option.id} className="flex items-center gap-3 rounded-2xl bg-[var(--bg)] p-3">
-          <span className="flex-1 text-sm font-black">{option.name}</span>
-          <span className="font-mono text-xs font-black text-[var(--brand)]">{option.price > 0 ? `+$${Number(option.price).toFixed(2)}` : "Gratis"}</span>
+          <span className="flex-1 text-sm font-semibold">{option.name}</span>
+          <span className="font-mono text-xs font-semibold text-[var(--brand)]">{option.price > 0 ? `+$${Number(option.price).toFixed(2)}` : "Gratis"}</span>
           <button type="button" onClick={() => onDelete(option.id)} className="flex h-9 w-9 items-center justify-center rounded-xl text-red-400"><Trash2 size={15} /></button>
         </div>
       ))}

@@ -166,7 +166,7 @@ export default function RoutingTab() {
       {legacyCount > 0 && (
         <div className="flex items-center justify-between gap-4 bg-iris-soft border border-iris-glow rounded-2xl p-5">
           <div>
-            <p className="text-sm font-black text-iris-500">{legacyCount} impresora(s) con ruteo legacy</p>
+            <p className="text-sm font-semibold text-iris-500">{legacyCount} impresora(s) con ruteo legacy</p>
             <p className="text-xs text-zinc-400 font-medium mt-1">Migra las categorías por-impresora a grupos para tener una sola fuente de ruteo.</p>
           </div>
           <button onClick={migrateLegacy} className="flex items-center gap-2 bg-iris-500 text-iris-fg px-5 py-3 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 shrink-0">
@@ -208,14 +208,14 @@ export default function RoutingTab() {
                 <h3 className="text-xl font-black text-white tracking-tight mb-4">{formatDisplayName(g.name)}</h3>
                 <div className="space-y-3">
                   <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 flex items-center gap-1.5"><PrinterIcon size={10} /> Impresoras ({g.members.length})</p>
+                    <p className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500 mb-1.5 flex items-center gap-1.5"><PrinterIcon size={10} /> Impresoras ({g.members.length})</p>
                     <div className="flex flex-wrap gap-1.5">
                       {g.members.length === 0 ? <span className="text-[10px] text-zinc-600 italic">Sin impresoras</span> :
                         g.members.map((m) => <span key={m.printerId} className="text-[10px] font-bold text-zinc-300 bg-white/5 border border-white/10 rounded-lg px-2 py-1">{m.printer?.name ?? "?"}</span>)}
                     </div>
                   </div>
                   <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 flex items-center gap-1.5"><Tag size={10} /> Categorías ({g.categories.length})</p>
+                    <p className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500 mb-1.5 flex items-center gap-1.5"><Tag size={10} /> Categorías ({g.categories.length})</p>
                     <div className="flex flex-wrap gap-1.5">
                       {g.categories.length === 0 ? <span className="text-[10px] text-zinc-600 italic">Sin categorías</span> :
                         g.categories.map((c) => <span key={c.categoryId} className="text-[10px] font-bold text-iris-500 bg-iris-soft border border-iris-glow rounded-lg px-2 py-1">{c.category?.name ?? "?"}</span>)}
@@ -249,7 +249,7 @@ export default function RoutingTab() {
               return (
                 <div key={item.id} className="bg-[var(--surface-1)] border border-white/5 rounded-2xl p-4">
                   <div className="flex items-center justify-between gap-3 mb-3">
-                    <span className="text-sm font-black text-white truncate">{formatDisplayName(item.name)}</span>
+                    <span className="text-sm font-semibold text-white truncate">{formatDisplayName(item.name)}</span>
                     {savingItem === item.id && <span className="text-[10px] text-iris-500 font-bold">Guardando…</span>}
                   </div>
                   {groups.length === 0 ? (
@@ -260,7 +260,7 @@ export default function RoutingTab() {
                         const active = itemGroupIds.has(g.id);
                         return (
                           <button key={g.id} type="button" disabled={savingItem === item.id} onClick={() => toggleItemGroup(item, g.id)}
-                            className="text-[11px] font-black rounded-lg px-3 py-1.5 border transition-all active:scale-95 disabled:opacity-50"
+                            className="text-[11px] font-semibold rounded-lg px-3 py-1.5 border transition-all active:scale-95 disabled:opacity-50"
                             style={{ background: active ? "var(--brand-soft)" : "var(--bg)", borderColor: active ? "var(--brand)" : "rgba(255,255,255,0.08)", color: active ? "var(--brand)" : "#a1a1aa" }}>
                             {g.name}
                           </button>
@@ -287,13 +287,13 @@ export default function RoutingTab() {
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
               <div className="space-y-1.5">
-                <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">Nombre del grupo</label>
+                <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">Nombre del grupo</label>
                 <input required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="Ej. Cocina caliente, Barra, Postre"
                   className="w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)]" />
               </div>
               <div>
-                <p className="text-[11px] font-black text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2"><PrinterIcon size={12} /> Impresoras ({form.printerIds.length})</p>
+                <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2"><PrinterIcon size={12} /> Impresoras ({form.printerIds.length})</p>
                 {printers.length === 0 ? <p className="text-zinc-600 text-sm italic">Crea impresoras en el tab Dispositivos.</p> : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {printers.map((p) => {
@@ -304,7 +304,7 @@ export default function RoutingTab() {
                           style={{ background: active ? "var(--brand-soft)" : "var(--surface-1)", borderColor: active ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
                           <span className="w-3 h-3 rounded-full" style={{ background: active ? "var(--brand)" : "rgba(255,255,255,0.10)" }} />
                           <div className="flex flex-col flex-1 min-w-0">
-                            <span className="text-sm font-black text-white truncate">{formatDisplayName(p.name)}</span>
+                            <span className="text-sm font-semibold text-white truncate">{formatDisplayName(p.name)}</span>
                             <span className="text-[10px] text-zinc-500 truncate">{p.type} · {p.ip || "sin IP"}</span>
                           </div>
                         </button>
@@ -314,7 +314,7 @@ export default function RoutingTab() {
                 )}
               </div>
               <div>
-                <p className="text-[11px] font-black text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2"><Tag size={12} /> Categorías ({form.categoryIds.length})</p>
+                <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2"><Tag size={12} /> Categorías ({form.categoryIds.length})</p>
                 {categories.length === 0 ? <p className="text-zinc-600 text-sm italic">Crea categorías en /admin/menu.</p> : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {categories.map((c) => {
@@ -324,7 +324,7 @@ export default function RoutingTab() {
                           className="flex items-center gap-2 p-2.5 rounded-xl border transition-all active:scale-95 text-left"
                           style={{ background: active ? "var(--brand-soft)" : "var(--surface-1)", borderColor: active ? "var(--brand)" : "rgba(255,255,255,0.05)" }}>
                           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: active ? "var(--brand)" : "rgba(255,255,255,0.10)" }} />
-                          <span className="text-[12px] font-black text-white truncate">{formatDisplayName(c.name)}</span>
+                          <span className="text-[12px] font-semibold text-white truncate">{formatDisplayName(c.name)}</span>
                         </button>
                       );
                     })}

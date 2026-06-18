@@ -94,11 +94,11 @@ export default function CentroMermasPage() {
       <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div className="flex flex-wrap gap-5">
           <div className="flex flex-col">
-            <span className="text-[9px] font-black tracking-[0.25em] text-white/40 uppercase">Total registros</span>
+            <span className="text-[9px] font-semibold tracking-[0.25em] text-white/40 uppercase">Total registros</span>
             <span className="text-xl font-black text-white tabular-nums">{rows?.length ?? "—"}</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-[9px] font-black tracking-[0.25em] text-white/40 uppercase">Costo acumulado</span>
+            <span className="text-[9px] font-semibold tracking-[0.25em] text-white/40 uppercase">Costo acumulado</span>
             <span className="text-xl font-black text-rose-300 tabular-nums">{fmtMoney(totalCost)}</span>
           </div>
         </div>
@@ -119,7 +119,7 @@ export default function CentroMermasPage() {
       {!rows ? (
         <div className="flex flex-col items-center justify-center py-20 text-white/40">
           <Loader2 className="animate-spin mb-3" size={26} />
-          <span className="text-[10px] font-black uppercase tracking-[0.3em]">Cargando mermas…</span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.3em]">Cargando mermas…</span>
         </div>
       ) : rows.length === 0 ? (
         <div className="rounded-2xl bg-white/5 border border-white/10 p-10 text-center text-white/40">
@@ -132,7 +132,7 @@ export default function CentroMermasPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead className="border-b border-white/10 bg-white/5">
-                <tr className="text-[10px] font-black tracking-[0.18em] uppercase text-white/40">
+                <tr className="text-[10px] font-semibold tracking-[0.14em] uppercase text-white/40">
                   <th className="px-3 py-3">Fecha</th>
                   <th className="px-3 py-3">Ingrediente</th>
                   <th className="px-3 py-3">Cantidad</th>
@@ -155,11 +155,11 @@ export default function CentroMermasPage() {
                       {r.quantity} {r.ingredient?.unit || r.unit}
                     </td>
                     <td className="px-3 py-3">
-                      <span className={`inline-block px-2.5 py-1 rounded-md border text-[10px] font-black uppercase tracking-widest ${REASON_TONES[r.reason]}`}>
+                      <span className={`inline-block px-2.5 py-1 rounded-md border text-[10px] font-semibold uppercase tracking-widest ${REASON_TONES[r.reason]}`}>
                         {REASON_LABELS[r.reason] || r.reason}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-sm font-black text-rose-300 tabular-nums">{fmtMoney(r.costImpact)}</td>
+                    <td className="px-3 py-3 text-sm font-semibold text-rose-300 tabular-nums">{fmtMoney(r.costImpact)}</td>
                     <td className="px-3 py-3 text-[12px] text-white/60">{r.registeredBy?.name || "—"}</td>
                   </tr>
                 ))}
@@ -264,7 +264,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
 
         {/* Ingrediente */}
         <section className="mb-4">
-          <label className="text-[10px] font-black tracking-[0.22em] text-white/40 uppercase mb-1.5 block">
+          <label className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase mb-1.5 block">
             Ingrediente
           </label>
           {selected ? (
@@ -318,7 +318,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
 
         {/* Cantidad */}
         <section className="mb-4">
-          <label className="text-[10px] font-black tracking-[0.22em] text-white/40 uppercase mb-1.5 block">
+          <label className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase mb-1.5 block">
             Cantidad ({selected?.unit || "unidad"})
           </label>
           <input
@@ -341,7 +341,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
 
         {/* Razón */}
         <section className="mb-4">
-          <label className="text-[10px] font-black tracking-[0.22em] text-white/40 uppercase mb-1.5 block">
+          <label className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase mb-1.5 block">
             Razón
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
@@ -363,7 +363,7 @@ function RegisterWasteModal({ onClose, onSuccess }: { onClose: () => void; onSuc
 
         {/* Detalle */}
         <section className="mb-5">
-          <label className="text-[10px] font-black tracking-[0.22em] text-white/40 uppercase mb-1.5 block">
+          <label className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase mb-1.5 block">
             Nota (opcional)
           </label>
           <textarea
