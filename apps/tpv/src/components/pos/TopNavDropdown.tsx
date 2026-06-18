@@ -137,13 +137,13 @@ export default function TopNavDropdown({
             <div className="px-3 py-3 border-b border-white/5 mb-2 flex items-center gap-3">
               <button
                 onClick={() => { setIsOpen(false); onOpenMenu(); }}
-                className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black bg-[var(--surface-1)] border border-white/10 text-[var(--brand)] shrink-0"
+                className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold bg-[var(--surface-1)] border border-white/10 text-[var(--brand)] shrink-0"
               >
                 {currentEmployee?.name?.charAt(0).toUpperCase() || "E"}
               </button>
               <div className="flex flex-col min-w-0">
                 <span className="text-sm font-bold text-white truncate">{currentEmployee?.name || "Sin sesión"}</span>
-                <span className="text-[10px] font-black text-[var(--brand)] uppercase tracking-widest">{currentEmployee?.role || "—"}</span>
+                <span className="text-[10px] font-semibold text-[var(--brand)] uppercase tracking-widest">{currentEmployee?.role || "—"}</span>
               </div>
             </div>
 
@@ -163,7 +163,7 @@ export default function TopNavDropdown({
                 <item.icon size={18} />
                 <span className="text-sm font-bold">{item.label}</span>
                 {(item as any).badge > 0 && (
-                  <span className="ml-auto bg-[#5e6ad2] text-white px-1.5 py-0.5 rounded-md text-[10px] font-black min-w-[20px] text-center">
+                  <span className="ml-auto bg-[#5e6ad2] text-white px-1.5 py-0.5 rounded-md text-[10px] font-semibold min-w-[20px] text-center">
                     {(item as any).badge}
                   </span>
                 )}
@@ -185,7 +185,7 @@ export default function TopNavDropdown({
               </div>
               <span className="text-sm font-bold">Notificaciones</span>
               {unreadNotifs > 0 && (
-                <span className="ml-auto bg-[var(--brand)] text-[var(--brand-fg)] px-1.5 py-0.5 rounded-md text-[10px] font-black">
+                <span className="ml-auto bg-[var(--brand)] text-[var(--brand-fg)] px-1.5 py-0.5 rounded-md text-[10px] font-semibold">
                   {unreadNotifs}
                 </span>
               )}

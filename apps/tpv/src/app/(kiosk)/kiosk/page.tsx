@@ -393,7 +393,7 @@ export default function KioskPage() {
           {cart.length > 0 && (
             <>
               <span className="hidden sm:inline">{formatPrice(cartTotal(cart))}</span>
-              <span className="absolute -top-2 -right-2 w-5 h-5 bg-white text-black text-[10px] font-black rounded-full flex items-center justify-center">
+              <span className="absolute -top-2 -right-2 w-5 h-5 bg-white text-black text-[10px] font-semibold rounded-full flex items-center justify-center">
                 {cart.reduce((s, c) => s + c.quantity, 0)}
               </span>
             </>

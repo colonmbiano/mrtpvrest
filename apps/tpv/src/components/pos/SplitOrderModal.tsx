@@ -70,7 +70,7 @@ export default function SplitOrderModal({
             <SplitSquareHorizontal size={20} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/40">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
               Dividir ticket
             </p>
             <h3 className="truncate text-lg font-black text-white">#{orderNumber}</h3>
@@ -112,7 +112,7 @@ export default function SplitOrderModal({
                   <Check size={15} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-black text-white">
+                  <span className="block truncate text-sm font-semibold text-white">
                     {item.quantity}x {item.name}
                   </span>
                   {item.seatNumber ? (
@@ -121,7 +121,7 @@ export default function SplitOrderModal({
                     </span>
                   ) : null}
                 </span>
-                <span className="text-sm font-black tabular-nums text-white">
+                <span className="text-sm font-semibold tabular-nums text-white">
                   ${item.subtotal.toFixed(2)}
                 </span>
               </button>
@@ -131,7 +131,7 @@ export default function SplitOrderModal({
 
         <footer className="flex items-center gap-3 border-t border-white/10 p-5">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-black uppercase tracking-wider text-white/40">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
               Nuevo ticket · {selected.size} productos
             </p>
             <p className="text-xl font-black tabular-nums text-white">

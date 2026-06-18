@@ -78,7 +78,7 @@ function Chip({
           ? { background: accent, borderColor: accent, color: "#0a0a0c" }
           : undefined
       }
-      className={`shrink-0 inline-flex items-center gap-1.5 h-9 min-h-[36px] px-4 rounded-full border text-[11px] font-black uppercase tracking-[0.1em] transition-transform duration-100 active:scale-95 whitespace-nowrap ${
+      className={`shrink-0 inline-flex items-center gap-1.5 h-9 min-h-[36px] px-4 rounded-full border text-[11px] font-semibold uppercase tracking-[0.1em] transition-transform duration-100 active:scale-95 whitespace-nowrap ${
         active
           ? accent
             ? ""

@@ -98,10 +98,10 @@ export default function SeatCoursePicker({
         {/* HEADER */}
         <div className="relative z-10 p-5 border-b border-white/5 bg-white/5 backdrop-blur-md flex items-center gap-4 shrink-0">
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-[var(--brand)] uppercase">
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-[var(--brand)] uppercase">
               Asignar
             </span>
-            <h3 className="text-[16px] font-black text-white truncate leading-tight">
+            <h3 className="text-[16px] font-semibold text-white truncate leading-tight">
               {itemName}
             </h3>
           </div>
@@ -120,7 +120,7 @@ export default function SeatCoursePicker({
           <section>
             <div className="flex items-center gap-2 mb-3">
               <Users size={14} className="text-[var(--brand)]" />
-              <span className="text-[10px] font-black tracking-[0.25em] text-white/60 uppercase">
+              <span className="text-[10px] font-semibold tracking-[0.25em] text-white/60 uppercase">
                 Asiento del comensal
               </span>
             </div>
@@ -128,7 +128,7 @@ export default function SeatCoursePicker({
               <button
                 type="button"
                 onClick={() => setSeat(null)}
-                className={`min-h-[56px] rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-transform ${
+                className={`min-h-[56px] rounded-2xl border text-[11px] font-semibold uppercase tracking-[0.15em] active:scale-95 transition-transform ${
                   seat == null
                     ? "bg-[var(--brand)] text-[var(--brand-fg)] border-[var(--brand)] shadow-[0_5px_20px_var(--brand-glow)]"
                     : "bg-white/5 border-white/10 text-white/60"
@@ -141,7 +141,7 @@ export default function SeatCoursePicker({
                   key={n}
                   type="button"
                   onClick={() => setSeat(n)}
-                  className={`min-h-[56px] rounded-2xl border tabular-nums font-black active:scale-95 transition-transform ${
+                  className={`min-h-[56px] rounded-2xl border tabular-nums font-semibold active:scale-95 transition-transform ${
                     seat === n
                       ? "bg-[var(--brand)] text-[var(--brand-fg)] border-[var(--brand)] shadow-[0_5px_20px_var(--brand-glow)] text-lg"
                       : "bg-white/5 border-white/10 text-white text-[15px]"
@@ -157,7 +157,7 @@ export default function SeatCoursePicker({
           <section>
             <div className="flex items-center gap-2 mb-3">
               <Clock size={14} className="text-[var(--brand)]" />
-              <span className="text-[10px] font-black tracking-[0.25em] text-white/60 uppercase">
+              <span className="text-[10px] font-semibold tracking-[0.25em] text-white/60 uppercase">
                 Tiempo de servicio
               </span>
             </div>
@@ -165,7 +165,7 @@ export default function SeatCoursePicker({
               <button
                 type="button"
                 onClick={() => setCrs(null)}
-                className={`min-h-[64px] rounded-2xl border text-[11px] font-black uppercase tracking-[0.15em] active:scale-95 transition-transform ${
+                className={`min-h-[64px] rounded-2xl border text-[11px] font-semibold uppercase tracking-[0.15em] active:scale-95 transition-transform ${
                   crs == null
                     ? "bg-[var(--brand)] text-[var(--brand-fg)] border-[var(--brand)] shadow-[0_5px_20px_var(--brand-glow)]"
                     : "bg-white/5 border-white/10 text-white/60"
@@ -180,7 +180,7 @@ export default function SeatCoursePicker({
                     key={opt.value}
                     type="button"
                     onClick={() => setCrs(opt.value)}
-                    className={`min-h-[64px] rounded-2xl border text-[12px] font-black uppercase tracking-[0.15em] active:scale-95 transition-transform ${
+                    className={`min-h-[64px] rounded-2xl border text-[12px] font-semibold uppercase tracking-[0.15em] active:scale-95 transition-transform ${
                       active
                         ? "bg-[var(--brand)] text-[var(--brand-fg)] border-[var(--brand)] shadow-[0_5px_20px_var(--brand-glow)]"
                         : "bg-white/5 border-white/10 text-white"

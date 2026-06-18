@@ -203,7 +203,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
           <ChevronLeft size={20} />
         </button>
         <div className="flex flex-col min-w-0">
-          <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+          <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
             {table?.zone
               ? `${table.zone.icon ? table.zone.icon + " " : ""}${table.zone.name}`
               : "Detalle de mesa"}
@@ -236,7 +236,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
                 {table.name.replace(/^Mesa\s+/i, "").slice(0, 3).toUpperCase()}
               </div>
               <div className="flex-1 space-y-1 min-w-0">
-                <div className={`font-black uppercase tracking-widest text-xs ${tone.text}`}>
+                <div className={`font-semibold uppercase tracking-widest text-xs ${tone.text}`}>
                   {STATUS_COPY[table.status]}
                 </div>
                 {order ? (
@@ -244,7 +244,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
                     <div className="text-[13px] font-bold text-white/70 truncate">
                       {order.customerName || "Sin nombre"} · desde {formatTime(order.createdAt)}
                     </div>
-                    <div className={`tabular-nums text-[12px] font-black ${tone.text}`}>
+                    <div className={`tabular-nums text-[12px] font-semibold ${tone.text}`}>
                       {elapsedMinutes(order.createdAt, now)} min en mesa · #{order.orderNumber}
                     </div>
                   </>
@@ -260,7 +260,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
             {order && (
               <div className="p-5 sm:p-6 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-md space-y-5">
                 <div className="flex justify-between items-end gap-3">
-                  <span className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+                  <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
                     Cuenta acumulada
                   </span>
                   <div className="tabular-nums text-2xl sm:text-3xl font-black">
@@ -278,7 +278,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
                       <div key={group.label ?? `g-${gi}`} className="space-y-3">
                         {group.label && (
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black tracking-[0.2em] text-[var(--brand)] uppercase shrink-0">
+                            <span className="text-[10px] font-semibold tracking-[0.14em] text-[var(--brand)] uppercase shrink-0">
                               {group.label}
                             </span>
                             <span className="h-px flex-1 bg-white/10" />
@@ -322,7 +322,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
                 ) : (
                   <Banknote size={20} className="group-active:scale-110 transition-transform" />
                 )}
-                <span className="text-[11px] font-black uppercase tracking-tighter">
+                <span className="text-[11px] font-semibold uppercase tracking-tighter">
                   {billLoading ? "Enviando…" : billRequested ? "Cuenta solicitada" : "Pedir cuenta"}
                 </span>
               </Button>
@@ -331,7 +331,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
                 className="flex-col min-h-[64px] h-20 gap-2 rounded-2xl group bg-white/5 border-white/10 text-white"
               >
                 <Bell size={20} className="group-active:scale-110 transition-transform" />
-                <span className="text-[11px] font-black uppercase tracking-tighter">
+                <span className="text-[11px] font-semibold uppercase tracking-tighter">
                   Llamar TPV
                 </span>
               </Button>
@@ -341,7 +341,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
                 disabled={!order}
               >
                 <Split size={20} className="group-active:scale-110 transition-transform" />
-                <span className="text-[11px] font-black uppercase tracking-tighter">
+                <span className="text-[11px] font-semibold uppercase tracking-tighter">
                   Dividir cuenta
                 </span>
               </Button>
@@ -351,7 +351,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
                 disabled={!order}
               >
                 <Move size={20} className="group-active:scale-110 transition-transform" />
-                <span className="text-[11px] font-black uppercase tracking-tighter">
+                <span className="text-[11px] font-semibold uppercase tracking-tighter">
                   Cambiar mesa
                 </span>
               </Button>
