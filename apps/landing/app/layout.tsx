@@ -18,14 +18,30 @@ const jetBrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://mrtpvrest.com'),
-  title: 'MRTPVREST | POS Warm Tech para restaurantes',
+  title: 'Software de Punto de Venta para Restaurantes | MRTPVREST',
   description:
-    'Controla tu restaurante en tiempo real con TPV, KDS, delivery, kiosko, app cliente y administración en una sola plataforma.',
-  keywords: ['POS', 'punto de venta', 'restaurante', 'KDS', 'delivery', 'kiosko', 'TPV', 'México', 'Latam'],
+    'Punto de venta para restaurantes que conecta caja, cocina (KDS), delivery, kiosko y administración en tiempo real. Prueba 14 días gratis, sin tarjeta.',
+  keywords: [
+    'punto de venta para restaurantes',
+    'software para restaurantes',
+    'sistema de punto de venta restaurante',
+    'sistema de comandas',
+    'KDS cocina',
+    'POS restaurante',
+    'TPV restaurante',
+    'delivery',
+    'kiosko autoservicio',
+    'México',
+    'LATAM',
+  ],
   authors: [{ name: 'MRTPVREST' }],
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
-    title: 'MRTPVREST | POS Warm Tech para restaurantes',
-    description: 'Caja, cocina, delivery y reportes conectados en tiempo real para restaurantes LATAM.',
+    title: 'Software de Punto de Venta para Restaurantes | MRTPVREST',
+    description:
+      'Caja, cocina, delivery, kiosko y reportes conectados en tiempo real. El punto de venta para restaurantes LATAM.',
     url: 'https://mrtpvrest.com',
     siteName: 'MRTPVREST',
     locale: 'es_MX',
@@ -34,8 +50,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'MRTPVREST | POS Warm Tech para restaurantes',
-    description: 'Ecosistema POS para operar restaurantes en tiempo real.',
+    title: 'Software de Punto de Venta para Restaurantes | MRTPVREST',
+    description: 'Punto de venta para restaurantes: caja, cocina, delivery y reportes en tiempo real.',
     images: ['/brand/mrtpvrest-logo.png'],
   },
   icons: {
