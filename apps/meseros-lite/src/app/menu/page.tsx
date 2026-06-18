@@ -159,16 +159,25 @@ function variantPriceLabel(product: MenuItem, variant: MenuVariant) {
 
 export default function MenuPage() {
   const router = useRouter();
-  const [categories, setCategories] = useState<MenuCategory[]>([]);
-  const [products, setProducts] = useState<MenuItem[]>([]);
+  // Prefill desde caché como estado inicial lazy (no en un effect): evita el
+  // setState síncrono de montaje y muestra el catálogo guardado al instante.
+  const [categories, setCategories] = useState<MenuCategory[]>(() =>
+    readCache<MenuCategory[]>(categoriesCacheKey, []),
+  );
+  const [products, setProducts] = useState<MenuItem[]>(() =>
+    readCache<MenuItem[]>(productsCacheKey, []),
+  );
   const [activeCategoryId, setActiveCategoryId] = useState<string>("all");
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<CatalogStatus>("idle");
+  const [status, setStatus] = useState<CatalogStatus>("loading");
   const [lastAddedName, setLastAddedName] = useState<string | null>(null);
   const [configProduct, setConfigProduct] = useState<MenuItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [saveError, setSaveError] = useState("");
+  // Nombre del cliente para pedidos PARA LLEVAR (sin mesa). Opcional; si se
+  // deja vacío la comanda se rotula "Para llevar".
+  const [takeoutName, setTakeoutName] = useState("");
 
   const ticketItems = useWaiterOrderStore((state) => state.ticketItems);
   const addItem = useWaiterOrderStore((state) => state.addItem);
@@ -182,8 +191,9 @@ export default function MenuPage() {
   const previousTotal = useWaiterOrderStore((state) => state.previousTotal ?? 0);
   const previousItems = useWaiterOrderStore((state) => state.previousItems ?? []);
 
-  const loadCatalog = async () => {
-    setStatus("loading");
+  // Fetch puro: sin setState síncrono antes del primer await, para que el
+  // effect de montaje no dispare react-hooks/set-state-in-effect.
+  const applyCatalog = async () => {
     try {
       const [categoriesResponse, productsResponse] = await Promise.all([
         api.get<MenuCategory[]>("/api/menu/categories"),
@@ -205,10 +215,17 @@ export default function MenuPage() {
     }
   };
 
+  // Wrapper para eventos (botón reintentar): muestra el flash de carga.
+  const loadCatalog = () => {
+    setStatus("loading");
+    void applyCatalog();
+  };
+
   useEffect(() => {
-    setCategories(readCache<MenuCategory[]>(categoriesCacheKey, []));
-    setProducts(readCache<MenuItem[]>(productsCacheKey, []));
-    void loadCatalog();
+    // applyCatalog sólo hace setState tras el await del fetch (microtask), no
+    // es un cascading render síncrono; el rule lo marca por análisis estático.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void applyCatalog();
   }, []);
 
   const visibleProducts = useMemo(() => {
@@ -297,6 +314,7 @@ export default function MenuPage() {
       orderNumber,
       orderType: activeTableId ? "DINE_IN" : "TAKEOUT",
       tableNumber: activeTableName ? activeTableName.replace(/^mesa\s+/i, "") : null,
+      customerName: activeTableId ? null : takeoutName.trim() || "Para llevar",
       items: printItems,
       config: kitchenConfig ?? undefined,
     });
@@ -352,7 +370,9 @@ export default function MenuPage() {
             tableId: realTableId,
             tableNumber,
             numberOfGuests: activeTableId ? 1 : null,
-            customerName: tableLabel || "Meseros Lite",
+            customerName: activeTableId
+              ? tableLabel || "Meseros Lite"
+              : takeoutName.trim() || "Para llevar",
             paymentMethod: "PENDING",
             items,
             subtotal: total,
@@ -371,6 +391,7 @@ export default function MenuPage() {
 
       clearTicket();
       setLastAddedName(null);
+      setTakeoutName("");
       const baseMessage = result.queued
         ? `${activeOrderId ? "Nueva ronda" : "Comanda"} en cola. Se enviara al volver internet.`
         : activeOrderId
@@ -405,31 +426,51 @@ export default function MenuPage() {
   };
 
   return (
-    <section className="min-h-screen bg-[#0a0a0c] px-4 py-4 pb-80 text-neutral-200 lg:pb-4">
+    <section className="min-h-screen bg-[var(--bg)] px-4 py-4 pb-80 text-[var(--text-primary)] lg:pb-4">
       <header className="mb-4 flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-bold uppercase tracking-wide text-[#ffb84d]">
-            Comanda rapida
+          <p className="text-sm font-bold uppercase tracking-wide text-[var(--brand)]">
+            {activeTableId ? "Comanda rapida" : "Pedido para llevar"}
           </p>
-          <h1 className="truncate text-3xl font-black text-neutral-200">
-            {activeTableName || (activeTableId ? `Mesa ${activeTableId.replace("mesa-", "")}` : "Sin mesa activa")}
+          <h1 className="truncate text-3xl font-black text-[var(--text-primary)]">
+            {activeTableName || (activeTableId ? `Mesa ${activeTableId.replace("mesa-", "")}` : "Para llevar")}
           </h1>
         </div>
         <button
           type="button"
           onClick={loadCatalog}
-          className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-neutral-800 bg-[#121214] text-[#ffb84d] active:scale-95 transition-all duration-150"
+          className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-1)] text-[var(--brand)] active:scale-95 transition-all duration-150"
           aria-label="Actualizar catalogo"
         >
           <RotateCw size={26} />
         </button>
       </header>
 
-      <div className="mb-3 rounded-lg border border-neutral-800 bg-[#121214] p-3 lg:hidden">
+      {!activeTableId && (
+        <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3">
+          <label
+            htmlFor="takeout-name"
+            className="text-xs font-black uppercase text-[var(--text-muted)]"
+          >
+            Nombre del cliente (opcional)
+          </label>
+          <input
+            id="takeout-name"
+            type="text"
+            value={takeoutName}
+            onChange={(event) => setTakeoutName(event.target.value)}
+            placeholder="Para llevar"
+            autoComplete="off"
+            className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-lg font-bold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--brand)]"
+          />
+        </div>
+      )}
+
+      <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3 lg:hidden">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-black uppercase text-neutral-500">Ticket visible</p>
-            <p className="truncate text-lg font-black text-neutral-100">
+            <p className="text-xs font-black uppercase text-[var(--text-muted)]">Ticket visible</p>
+            <p className="truncate text-lg font-black text-[var(--text-primary)]">
               {lastAddedName
                 ? `Agregado: ${lastAddedName}`
                 : latestTicketItems[0]
@@ -440,10 +481,10 @@ export default function MenuPage() {
             </p>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-xs font-black uppercase text-neutral-500">
+            <p className="text-xs font-black uppercase text-[var(--text-muted)]">
               {accumulatedItemCount} items
             </p>
-            <p className="text-2xl font-black text-[#ffb84d]">{money(accumulatedTotal)}</p>
+            <p className="text-2xl font-black text-[var(--brand)]">{money(accumulatedTotal)}</p>
           </div>
         </div>
       </div>
@@ -451,36 +492,36 @@ export default function MenuPage() {
       <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_340px]">
         <div className="min-w-0">
           {activeOrderId && previousItems.length > 0 && (
-            <section className="mb-3 rounded-lg border border-neutral-800 bg-[#121214] p-3">
+            <section className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-xs font-black uppercase text-[#ffb84d]">
+                <p className="text-xs font-black uppercase text-[var(--brand)]">
                   Ya guardado en la cuenta
                 </p>
-                <p className="text-sm font-black text-neutral-300">{money(previousTotal)}</p>
+                <p className="text-sm font-black text-[var(--text-secondary)]">{money(previousTotal)}</p>
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {previousItems.map((item) => (
                   <div
                     key={item.id}
-                    className="min-w-[180px] rounded-lg border border-neutral-800 bg-[#18181b] p-3"
+                    className="min-w-[180px] rounded-lg border border-[var(--border)] bg-[var(--surface-3)] p-3"
                   >
-                    <p className="truncate text-sm font-black text-neutral-100">
-                      <span className="text-[#ffb84d]">{item.quantity}x</span> {item.name}
+                    <p className="truncate text-sm font-black text-[var(--text-primary)]">
+                      <span className="text-[var(--brand)]">{item.quantity}x</span> {item.name}
                     </p>
-                    <p className="mt-1 text-sm font-bold text-neutral-500">{money(item.total)}</p>
+                    <p className="mt-1 text-sm font-bold text-[var(--text-muted)]">{money(item.total)}</p>
                   </div>
                 ))}
               </div>
             </section>
           )}
 
-          <div className="mb-3 flex min-h-[64px] items-center gap-3 rounded-lg border border-neutral-800 bg-[#121214] px-4">
-            <Search size={24} className="shrink-0 text-neutral-500" aria-hidden="true" />
+          <div className="mb-3 flex min-h-[64px] items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4">
+            <Search size={24} className="shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar platillo"
-              className="h-12 min-w-0 flex-1 bg-[#121214] text-xl font-bold text-neutral-100 outline-none placeholder:text-neutral-500"
+              className="h-12 min-w-0 flex-1 bg-[var(--surface-1)] text-xl font-bold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
             />
           </div>
 
@@ -492,8 +533,8 @@ export default function MenuPage() {
                 "min-h-[64px] shrink-0 rounded-lg border px-5 text-base font-black",
                 "active:scale-95 transition-all duration-150",
                 activeCategoryId === "all"
-                  ? "border-[#ffb84d] bg-[#ffb84d] text-[#0a0a0c]"
-                  : "border-neutral-800 bg-[#121214] text-neutral-200",
+                  ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]"
+                  : "border-[var(--border)] bg-[var(--surface-1)] text-[var(--text-primary)]",
               ].join(" ")}
             >
               Todo
@@ -507,8 +548,8 @@ export default function MenuPage() {
                   "min-h-[64px] shrink-0 rounded-lg border px-5 text-base font-black",
                   "active:scale-95 transition-all duration-150",
                   activeCategoryId === category.id
-                    ? "border-[#ffb84d] bg-[#ffb84d] text-[#0a0a0c]"
-                    : "border-neutral-800 bg-[#121214] text-neutral-200",
+                    ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]"
+                    : "border-[var(--border)] bg-[var(--surface-1)] text-[var(--text-primary)]",
                 ].join(" ")}
               >
                 {category.name}
@@ -517,23 +558,23 @@ export default function MenuPage() {
           </div>
 
           {status === "offline" && (
-            <div className="mb-3 flex min-h-[64px] items-center gap-3 rounded-lg border border-[#ffb84d] bg-[#121214] px-4 text-[#ffb84d]">
+            <div className="mb-3 flex min-h-[64px] items-center gap-3 rounded-lg border border-[var(--brand)] bg-[var(--surface-1)] px-4 text-[var(--brand)]">
               <WifiOff size={24} />
               <p className="text-base font-black">Catalogo local activo</p>
             </div>
           )}
 
           {(saveError || saveMessage) && (
-            <div className="mb-3 rounded-lg border border-[#ffb84d] bg-[#121214] p-4">
-              <p className="text-base font-black text-[#ffb84d]">
+            <div className="mb-3 rounded-lg border border-[var(--brand)] bg-[var(--surface-1)] p-4">
+              <p className="text-base font-black text-[var(--brand)]">
                 {saveError || saveMessage}
               </p>
             </div>
           )}
 
           {status === "error" ? (
-            <div className="flex min-h-[220px] items-center justify-center rounded-lg border border-neutral-800 bg-[#121214] p-6 text-center">
-              <p className="text-xl font-black text-neutral-300">
+            <div className="flex min-h-[220px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-6 text-center">
+              <p className="text-xl font-black text-[var(--text-secondary)]">
                 No hay catalogo local y la API no respondio.
               </p>
             </div>
@@ -546,15 +587,15 @@ export default function MenuPage() {
                     key={product.id}
                     type="button"
                     onClick={() => handleAddItem(product)}
-                    className="flex min-h-[124px] flex-col justify-between rounded-lg border border-neutral-800 bg-[#121214] p-4 text-left active:scale-95 transition-all duration-150"
+                    className="flex min-h-[124px] flex-col justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4 text-left active:scale-95 transition-all duration-150"
                   >
-                    <span className="line-clamp-2 text-xl font-black leading-tight text-neutral-100">
+                    <span className="line-clamp-2 text-xl font-black leading-tight text-[var(--text-primary)]">
                       {product.name}
                     </span>
                     <span className="mt-4 flex items-end justify-between gap-2">
-                      <span className="text-2xl font-black text-[#ffb84d]">{money(price)}</span>
+                      <span className="text-2xl font-black text-[var(--brand)]">{money(price)}</span>
                       {hasConfigurableOptions(product) && (
-                        <span className="rounded-md border border-[#ffb84d] px-2 py-1 text-xs font-black uppercase text-[#ffb84d]">
+                        <span className="rounded-md border border-[var(--brand)] px-2 py-1 text-xs font-black uppercase text-[var(--brand)]">
                           Opciones
                         </span>
                       )}
@@ -566,40 +607,40 @@ export default function MenuPage() {
           )}
         </div>
 
-        <aside className="hidden rounded-lg border border-neutral-800 bg-[#121214] p-4 lg:block">
+        <aside className="hidden rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4 lg:block">
           {activeOrderId && (
-            <div className="mb-3 rounded-lg border border-[#ffb84d] bg-[#18181b] p-3">
-              <p className="text-xs font-black uppercase text-[#ffb84d]">Cuenta abierta</p>
-              <p className="mt-1 text-base font-black text-neutral-100">
+            <div className="mb-3 rounded-lg border border-[var(--brand)] bg-[var(--surface-3)] p-3">
+              <p className="text-xs font-black uppercase text-[var(--brand)]">Cuenta abierta</p>
+              <p className="mt-1 text-base font-black text-[var(--text-primary)]">
                 {previousItemCount} productos anteriores · {money(previousTotal)}
               </p>
-              <p className="mt-1 text-sm font-bold text-neutral-500">
+              <p className="mt-1 text-sm font-bold text-[var(--text-muted)]">
                 Abajo se muestran solo los productos de la nueva ronda.
               </p>
             </div>
           )}
-          <div className="mb-4 flex items-center justify-between border-b border-neutral-800 pb-3">
+          <div className="mb-4 flex items-center justify-between border-b border-[var(--border)] pb-3">
             <div>
-              <p className="text-xs font-black uppercase text-neutral-500">{ticketStatus}</p>
-              <h2 className="text-2xl font-black text-neutral-100">Ticket</h2>
+              <p className="text-xs font-black uppercase text-[var(--text-muted)]">{ticketStatus}</p>
+              <h2 className="text-2xl font-black text-[var(--text-primary)]">Ticket</h2>
             </div>
             <div className="text-right">
-              <p className="text-xs font-black uppercase text-neutral-500">Items</p>
-              <p className="text-2xl font-black text-[#ffb84d]">{itemCount}</p>
+              <p className="text-xs font-black uppercase text-[var(--text-muted)]">Items</p>
+              <p className="text-2xl font-black text-[var(--brand)]">{itemCount}</p>
             </div>
           </div>
 
           <div className="max-h-[42vh] space-y-3 overflow-y-auto pr-1">
             {ticketItems.length === 0 ? (
-              <p className="py-10 text-center text-base font-bold text-neutral-500">
+              <p className="py-10 text-center text-base font-bold text-[var(--text-muted)]">
                 Agrega productos con un toque.
               </p>
             ) : (
               ticketItems.map((item) => (
-                <article key={item.lineId} className="rounded-lg border border-neutral-800 bg-[#18181b] p-3">
+                <article key={item.lineId} className="rounded-lg border border-[var(--border)] bg-[var(--surface-3)] p-3">
                   <div className="flex justify-between gap-3">
-                    <p className="text-base font-black leading-tight text-neutral-100">{item.name}</p>
-                    <p className="shrink-0 text-base font-black text-[#ffb84d]">
+                    <p className="text-base font-black leading-tight text-[var(--text-primary)]">{item.name}</p>
+                    <p className="shrink-0 text-base font-black text-[var(--brand)]">
                       {money(item.total)}
                     </p>
                   </div>
@@ -607,16 +648,16 @@ export default function MenuPage() {
                     <button
                       type="button"
                       onClick={() => decrementItem(item.lineId)}
-                      className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-neutral-700 bg-[#121214] text-neutral-200 active:scale-95 transition-all duration-150"
+                      className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
                       aria-label={`Quitar ${item.name}`}
                     >
                       <Minus size={24} />
                     </button>
-                    <span className="px-4 text-2xl font-black text-neutral-100">{item.quantity}</span>
+                    <span className="px-4 text-2xl font-black text-[var(--text-primary)]">{item.quantity}</span>
                     <button
                       type="button"
                       onClick={() => incrementItem(item.lineId)}
-                      className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-neutral-700 bg-[#121214] text-neutral-200 active:scale-95 transition-all duration-150"
+                      className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
                       aria-label={`Agregar ${item.name}`}
                     >
                       <Plus size={24} />
@@ -627,10 +668,10 @@ export default function MenuPage() {
             )}
           </div>
 
-          <div className="mt-4 border-t border-neutral-800 pt-4">
+          <div className="mt-4 border-t border-[var(--border)] pt-4">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-lg font-black text-neutral-300">Total</span>
-              <span className="text-3xl font-black text-[#ffb84d]">{money(total)}</span>
+              <span className="text-lg font-black text-[var(--text-secondary)]">Total</span>
+              <span className="text-3xl font-black text-[var(--brand)]">{money(total)}</span>
             </div>
             <button
               type="button"
@@ -640,8 +681,8 @@ export default function MenuPage() {
                 "min-h-[72px] w-full rounded-lg border px-5 text-xl font-black",
                 "active:scale-95 transition-all duration-150",
                 saving || ticketItems.length === 0
-                  ? "border-neutral-800 bg-[#18181b] text-neutral-500"
-                  : "border-[#ffb84d] bg-[#ffb84d] text-[#0a0a0c]",
+                  ? "border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-muted)]"
+                  : "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]",
               ].join(" ")}
             >
               {saving ? "Guardando..." : activeOrderId ? "Agregar nueva ronda" : "Guardar comanda"}
@@ -650,22 +691,22 @@ export default function MenuPage() {
         </aside>
       </div>
 
-      <aside className="fixed bottom-20 left-0 right-0 z-40 border-t border-neutral-800 bg-[#121214] p-2 lg:hidden">
+      <aside className="fixed bottom-20 left-0 right-0 z-40 border-t border-[var(--border)] bg-[var(--surface-1)] p-2 lg:hidden">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-black uppercase text-neutral-500">Comanda local</p>
-            <p className="text-lg font-black text-neutral-100">
+            <p className="text-xs font-black uppercase text-[var(--text-muted)]">Comanda local</p>
+            <p className="text-lg font-black text-[var(--text-primary)]">
               {accumulatedItemCount} productos
             </p>
           </div>
           <div className="text-right">
-            <p className="text-xs font-black uppercase text-neutral-500">Total</p>
-            <p className="text-2xl font-black text-[#ffb84d]">{money(accumulatedTotal)}</p>
+            <p className="text-xs font-black uppercase text-[var(--text-muted)]">Total</p>
+            <p className="text-2xl font-black text-[var(--brand)]">{money(accumulatedTotal)}</p>
           </div>
         </div>
 
         {latestTicketItems.length === 0 ? (
-          <p className="min-h-[56px] rounded-lg border border-neutral-800 bg-[#18181b] px-4 py-4 text-center text-base font-bold text-neutral-500">
+          <p className="min-h-[56px] rounded-lg border border-[var(--border)] bg-[var(--surface-3)] px-4 py-4 text-center text-base font-bold text-[var(--text-muted)]">
             {activeOrderId
               ? `${previousItemCount} productos anteriores. Agrega productos para una nueva ronda.`
               : "Toca un producto para verlo aqui."}
@@ -675,11 +716,11 @@ export default function MenuPage() {
             {latestTicketItems.map((item) => (
               <article
                 key={item.lineId}
-                className="grid min-h-[56px] grid-cols-[1fr_auto] items-center gap-2 rounded-lg border border-neutral-800 bg-[#18181b] px-3"
+                className="grid min-h-[56px] grid-cols-[1fr_auto] items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-3)] px-3"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-base font-black text-neutral-100">{item.name}</p>
-                  <p className="text-sm font-bold text-neutral-500">
+                  <p className="truncate text-base font-black text-[var(--text-primary)]">{item.name}</p>
+                  <p className="text-sm font-bold text-[var(--text-muted)]">
                     {item.quantity} x {money(item.unitPrice)}
                   </p>
                 </div>
@@ -687,7 +728,7 @@ export default function MenuPage() {
                   <button
                     type="button"
                     onClick={() => decrementItem(item.lineId)}
-                    className="flex min-h-[56px] min-w-[56px] items-center justify-center rounded-lg border border-neutral-700 bg-[#121214] text-neutral-200 active:scale-95 transition-all duration-150"
+                    className="flex min-h-[56px] min-w-[56px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
                     aria-label={`Quitar ${item.name}`}
                   >
                     <Minus size={22} />
@@ -695,7 +736,7 @@ export default function MenuPage() {
                   <button
                     type="button"
                     onClick={() => incrementItem(item.lineId)}
-                    className="flex min-h-[56px] min-w-[56px] items-center justify-center rounded-lg border border-neutral-700 bg-[#121214] text-neutral-200 active:scale-95 transition-all duration-150"
+                    className="flex min-h-[56px] min-w-[56px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
                     aria-label={`Agregar ${item.name}`}
                   >
                     <Plus size={22} />
@@ -714,14 +755,14 @@ export default function MenuPage() {
             "mt-2 min-h-[64px] w-full rounded-lg border px-5 text-lg font-black",
             "active:scale-95 transition-all duration-150",
             saving || ticketItems.length === 0
-              ? "border-neutral-800 bg-[#18181b] text-neutral-500"
-              : "border-[#ffb84d] bg-[#ffb84d] text-[#0a0a0c]",
+              ? "border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-muted)]"
+              : "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]",
           ].join(" ")}
         >
           {saving ? "Guardando..." : activeOrderId ? "Agregar nueva ronda" : "Guardar comanda"}
         </button>
         {(saveError || saveMessage) && (
-          <p className="mt-2 rounded-lg border border-[#ffb84d] bg-[#18181b] p-3 text-center text-sm font-black text-[#ffb84d]">
+          <p className="mt-2 rounded-lg border border-[var(--brand)] bg-[var(--surface-3)] p-3 text-center text-sm font-black text-[var(--brand)]">
             {saveError || saveMessage}
           </p>
         )}
@@ -860,17 +901,17 @@ function LiteProductConfigurator({
   );
 
   return (
-    <div className="fixed inset-0 z-[80] bg-[#0a0a0c] text-neutral-200">
+    <div className="fixed inset-0 z-[80] bg-[var(--bg)] text-[var(--text-primary)]">
       <div className="flex h-screen flex-col">
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-neutral-800 bg-[#121214] p-4">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-1)] p-4">
           <div className="min-w-0">
-            <p className="text-xs font-black uppercase text-[#ffb84d]">Configurar producto</p>
-            <h2 className="truncate text-2xl font-black text-neutral-100">{product.name}</h2>
+            <p className="text-xs font-black uppercase text-[var(--brand)]">Configurar producto</p>
+            <h2 className="truncate text-2xl font-black text-[var(--text-primary)]">{product.name}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-neutral-800 bg-[#18181b] text-neutral-200 active:scale-95 transition-all duration-150"
+            className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
             aria-label="Cerrar configurador"
           >
             <X size={26} />
@@ -881,8 +922,8 @@ function LiteProductConfigurator({
           {variants.length > 0 && (
             <section>
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-lg font-black text-neutral-100">Variantes</h3>
-                <p className="text-sm font-black uppercase text-neutral-500">Elige una o mas</p>
+                <h3 className="text-lg font-black text-[var(--text-primary)]">Variantes</h3>
+                <p className="text-sm font-black uppercase text-[var(--text-muted)]">Elige una o mas</p>
               </div>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                 {variants.map((variant) => {
@@ -893,13 +934,13 @@ function LiteProductConfigurator({
                       type="button"
                       onClick={() => toggleVariant(variant.id)}
                       className={[
-                        "min-h-[72px] rounded-lg border bg-[#121214] p-3 text-left",
+                        "min-h-[72px] rounded-lg border bg-[var(--surface-1)] p-3 text-left",
                         "active:scale-95 transition-all duration-150",
-                        selected ? "border-[#ffb84d]" : "border-neutral-800",
+                        selected ? "border-[var(--brand)]" : "border-[var(--border)]",
                       ].join(" ")}
                     >
-                      <p className="text-base font-black text-neutral-100">{variant.name}</p>
-                      <p className="mt-1 text-xl font-black text-[#ffb84d]">
+                      <p className="text-base font-black text-[var(--text-primary)]">{variant.name}</p>
+                      <p className="mt-1 text-xl font-black text-[var(--brand)]">
                         {variantPriceLabel(product, variant)}
                       </p>
                     </button>
@@ -917,8 +958,8 @@ function LiteProductConfigurator({
             return (
               <section key={group.id}>
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-black text-neutral-100">{group.name}</h3>
-                  <p className="text-sm font-black uppercase text-neutral-500">
+                  <h3 className="text-lg font-black text-[var(--text-primary)]">{group.name}</h3>
+                  <p className="text-sm font-black uppercase text-[var(--text-muted)]">
                     {group.multiSelect
                       ? `${min > 0 ? `Min ${min}` : "Opcional"}${max > 0 ? ` / Max ${max}` : ""}`
                       : "Elige 1"}
@@ -933,23 +974,23 @@ function LiteProductConfigurator({
                         type="button"
                         onClick={() => toggleModifier(group, modifier)}
                         className={[
-                          "grid min-h-[64px] grid-cols-[32px_1fr_auto] items-center gap-3 rounded-lg border bg-[#121214] px-3 text-left",
+                          "grid min-h-[64px] grid-cols-[32px_1fr_auto] items-center gap-3 rounded-lg border bg-[var(--surface-1)] px-3 text-left",
                           "active:scale-95 transition-all duration-150",
-                          selectedModifier ? "border-[#ffb84d]" : "border-neutral-800",
+                          selectedModifier ? "border-[var(--brand)]" : "border-[var(--border)]",
                         ].join(" ")}
                       >
                         <span
                           className={[
                             "flex h-8 w-8 items-center justify-center rounded-md border",
                             selectedModifier
-                              ? "border-[#ffb84d] bg-[#ffb84d] text-[#0a0a0c]"
-                              : "border-neutral-700 bg-[#18181b] text-neutral-500",
+                              ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]"
+                              : "border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-muted)]",
                           ].join(" ")}
                         >
                           {selectedModifier && <Check size={18} strokeWidth={3} />}
                         </span>
-                        <span className="text-base font-black text-neutral-100">{modifier.name}</span>
-                        <span className="text-sm font-black text-[#ffb84d]">
+                        <span className="text-base font-black text-[var(--text-primary)]">{modifier.name}</span>
+                        <span className="text-sm font-black text-[var(--brand)]">
                           {modifier.priceAdd > 0 ? `+${money(modifier.priceAdd)}` : "Incluido"}
                         </span>
                       </button>
@@ -962,24 +1003,24 @@ function LiteProductConfigurator({
 
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-black text-neutral-100">Cantidad</h3>
-              <p className="text-sm font-black uppercase text-neutral-500">Antes de agregar</p>
+              <h3 className="text-lg font-black text-[var(--text-primary)]">Cantidad</h3>
+              <p className="text-sm font-black uppercase text-[var(--text-muted)]">Antes de agregar</p>
             </div>
             <div className="grid grid-cols-[72px_1fr_72px] gap-3">
               <button
                 type="button"
                 onClick={() => setQuantity((current) => Math.max(1, current - 1))}
-                className="flex min-h-[72px] items-center justify-center rounded-lg border border-neutral-800 bg-[#121214] active:scale-95 transition-all duration-150"
+                className="flex min-h-[72px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-1)] active:scale-95 transition-all duration-150"
               >
                 <Minus size={26} />
               </button>
-              <div className="grid min-h-[72px] place-items-center rounded-lg border border-neutral-800 bg-[#121214] text-3xl font-black text-neutral-100">
+              <div className="grid min-h-[72px] place-items-center rounded-lg border border-[var(--border)] bg-[var(--surface-1)] text-3xl font-black text-[var(--text-primary)]">
                 {quantity}
               </div>
               <button
                 type="button"
                 onClick={() => setQuantity((current) => Math.min(99, current + 1))}
-                className="flex min-h-[72px] items-center justify-center rounded-lg border border-neutral-800 bg-[#121214] active:scale-95 transition-all duration-150"
+                className="flex min-h-[72px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-1)] active:scale-95 transition-all duration-150"
               >
                 <Plus size={26} />
               </button>
@@ -987,30 +1028,30 @@ function LiteProductConfigurator({
           </section>
 
           <label className="grid gap-2">
-            <span className="text-sm font-black uppercase text-neutral-500">Nota cocina</span>
+            <span className="text-sm font-black uppercase text-[var(--text-muted)]">Nota cocina</span>
             <textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value.slice(0, 200))}
               rows={3}
               maxLength={200}
               placeholder="Sin cebolla, bien dorado..."
-              className="min-h-[96px] resize-none rounded-lg border border-neutral-800 bg-[#121214] p-4 text-lg font-bold text-neutral-100 outline-none placeholder:text-neutral-500"
+              className="min-h-[96px] resize-none rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4 text-lg font-bold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
             />
           </label>
         </div>
 
-        <footer className="fixed bottom-20 left-0 right-0 z-[90] border-t border-neutral-800 bg-[#121214] p-3">
+        <footer className="fixed bottom-20 left-0 right-0 z-[90] border-t border-[var(--border)] bg-[var(--surface-1)] p-3">
           {validationError && (
-            <p className="mb-2 rounded-lg border border-[#ffb84d] bg-[#18181b] p-3 text-center text-sm font-black text-[#ffb84d]">
+            <p className="mb-2 rounded-lg border border-[var(--brand)] bg-[var(--surface-3)] p-3 text-center text-sm font-black text-[var(--brand)]">
               {validationError}
             </p>
           )}
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-black uppercase text-neutral-500">Total</p>
-              <p className="text-3xl font-black text-[#ffb84d]">{money(totalPrice)}</p>
+              <p className="text-xs font-black uppercase text-[var(--text-muted)]">Total</p>
+              <p className="text-3xl font-black text-[var(--brand)]">{money(totalPrice)}</p>
             </div>
-            <p className="text-right text-sm font-bold text-neutral-400">
+            <p className="text-right text-sm font-bold text-[var(--text-secondary)]">
               {money(unitPrice)} por unidad
             </p>
           </div>
@@ -1031,8 +1072,8 @@ function LiteProductConfigurator({
               "min-h-[72px] w-full rounded-lg border px-5 text-xl font-black",
               "active:scale-95 transition-all duration-150",
               validationError
-                ? "border-neutral-800 bg-[#18181b] text-neutral-500"
-                : "border-[#ffb84d] bg-[#ffb84d] text-[#0a0a0c]",
+                ? "border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-muted)]"
+                : "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]",
             ].join(" ")}
           >
             Agregar al ticket

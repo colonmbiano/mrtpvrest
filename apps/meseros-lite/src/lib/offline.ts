@@ -100,6 +100,17 @@ export async function syncOfflineQueue() {
         }
         store.markSynced(transaction.id);
       } catch (err: unknown) {
+        if (isNetworkError(err)) {
+          // La red se cayó a mitad de la pasada: NO es culpa de esta comanda,
+          // así que no gastamos su presupuesto de reintentos (si no, 5 cortes
+          // de WiFi marcarían una comanda válida como fallo permanente, justo
+          // el escenario para el que existe esta app). Cortamos la pasada y la
+          // cola se reintenta intacta al volver la conexión (online / 5s).
+          store.noteNetworkRetry(transaction.id, errorMessage(err));
+          break;
+        }
+        // Error real (4xx: datos inválidos, turno cerrado, mesa inválida):
+        // esta comanda sí es mala. Cuenta contra MAX_SYNC_RETRIES.
         store.markFailed(transaction.id, errorMessage(err));
       }
     }

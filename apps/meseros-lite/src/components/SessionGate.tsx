@@ -1,24 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useEmployeeSessionStore } from "@/store/useEmployeeSessionStore";
 
 const publicRoutes = ["/setup", "/pin"];
 
+// Detecta el montaje en cliente sin setState-en-effect: el snapshot del
+// servidor es false y el del cliente true, así que `ready` pasa a true tras
+// la hidratación. Evita el mismatch SSR de la sesión persistida en localStorage.
+const subscribeNoop = () => () => {};
+
 export default function SessionGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const ready = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
   const isAuthenticated = useEmployeeSessionStore((state) => state.isAuthenticated);
   const isPublicRoute = publicRoutes.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`),
   );
-
-  useEffect(() => {
-    setReady(true);
-  }, []);
 
   useEffect(() => {
     if (!ready || isPublicRoute) return;
@@ -33,7 +38,7 @@ export default function SessionGate({ children }: { children: React.ReactNode })
   }, [isAuthenticated, isPublicRoute, ready, router]);
 
   if (!ready) {
-    return <main className="h-screen bg-[#0a0a0c]" />;
+    return <main className="h-screen bg-[var(--bg)]" />;
   }
 
   return (

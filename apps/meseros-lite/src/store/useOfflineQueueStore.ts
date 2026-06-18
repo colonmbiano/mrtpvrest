@@ -31,6 +31,9 @@ interface OfflineQueueState {
   addToQueue: (transaction: Omit<OfflineTransaction, "retryCount">) => void;
   markSynced: (transactionId: string) => void;
   markFailed: (transactionId: string, error: string) => void;
+  // Registra un fallo de red transitorio SIN gastar presupuesto de reintentos:
+  // la comanda es válida, fue la conexión la que se cayó. Se reintenta intacta.
+  noteNetworkRetry: (transactionId: string, error: string) => void;
   clearSynced: () => void;
   retryFailed: () => void;
   setSyncInProgress: (inProgress: boolean) => void;
@@ -66,6 +69,14 @@ export const useOfflineQueueStore = create<OfflineQueueState>()(
               failedPermanently: retryCount >= MAX_SYNC_RETRIES,
             };
           }),
+        })),
+      noteNetworkRetry: (transactionId, error) =>
+        set((state) => ({
+          queue: state.queue.map((transaction) =>
+            transaction.id === transactionId
+              ? { ...transaction, lastError: error }
+              : transaction,
+          ),
         })),
       clearSynced: () =>
         set((state) => ({
