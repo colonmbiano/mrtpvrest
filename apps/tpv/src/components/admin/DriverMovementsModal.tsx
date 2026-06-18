@@ -255,7 +255,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className="relative py-3 px-4 text-xs font-black uppercase tracking-widest transition-colors"
+              className="relative py-3 px-4 text-xs font-semibold uppercase tracking-widest transition-colors"
               style={{ color: tab === t.key ? "#fff" : "var(--text-secondary)" }}
             >
               {t.label}
@@ -273,7 +273,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
           {/* Formulario */}
           <form onSubmit={handleAddMovement} className="space-y-4 bg-[var(--surf2)] p-4 rounded-2xl border border-[var(--border)]">
-            <h3 className="text-xs font-black uppercase tracking-widest text-white/40">Registrar Nuevo</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-white/40">Registrar Nuevo</h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Tipo</label>
@@ -359,7 +359,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
 
           {/* Lista de Movimientos */}
           <div className="space-y-3">
-            <h3 className="text-xs font-black uppercase tracking-widest text-white/40 ml-1">Pendiente de corte</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-white/40 ml-1">Pendiente de corte</h3>
             {loading ? (
               <p className="text-sm text-[var(--text-secondary)] animate-pulse">Cargando movimientos...</p>
             ) : movements.length === 0 ? (
@@ -394,16 +394,16 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {canInv && (done ? (
-                          <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md bg-green-500/10 text-green-400 border border-green-500/20">✓ Inventariado</span>
+                          <span className="text-[9px] font-semibold uppercase tracking-wider px-2 py-1 rounded-md bg-green-500/10 text-green-400 border border-green-500/20">✓ Inventariado</span>
                         ) : (
                           <button
                             type="button"
                             onClick={() => openInventory(m.id)}
-                            className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md bg-white/5 text-white/70 border border-white/10 hover:text-white active:scale-95"
+                            className="text-[9px] font-semibold uppercase tracking-wider px-2 py-1 rounded-md bg-white/5 text-white/70 border border-white/10 hover:text-white active:scale-95"
                           >📦 Inventariar</button>
                         ))}
                         <div
-                          className={`text-sm font-black ${
+                          className={`text-sm font-semibold ${
                             m.type === 'INCOME' ? 'text-green-400' :
                             m.type === 'EXPENSE' ? 'text-red-400' :
                             m.type === 'FLOAT' ? '' :
@@ -418,7 +418,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
 
                     {invFor === m.id && !done && (
                       <div className="border-t border-[var(--border)] p-3 space-y-2 bg-[var(--bg)]">
-                        <div className="text-[9px] font-black uppercase tracking-widest text-white/40">¿Qué insumos entraron? (suma al inventario, no toca el dinero)</div>
+                        <div className="text-[9px] font-semibold uppercase tracking-widest text-white/40">¿Qué insumos entraron? (suma al inventario, no toca el dinero)</div>
                         {invLines.map((l, i) => (
                           <div key={i} className="flex gap-2">
                             <select
@@ -495,7 +495,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
 
               {/* Lista de pedidos */}
               <div className="space-y-3">
-                <h3 className="text-xs font-black uppercase tracking-widest text-white/40 ml-1">Pedidos del turno (pendientes de corte)</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-white/40 ml-1">Pedidos del turno (pendientes de corte)</h3>
                 {orders.length === 0 ? (
                   <p className="text-sm text-[var(--text-secondary)] italic">No hay pedidos en el turno actual.</p>
                 ) : (
@@ -507,7 +507,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <div className="text-xs font-black text-white truncate">
+                            <div className="text-xs font-semibold text-white truncate">
                               {o.customer || "Público General"}
                             </div>
                             <div className="text-[10px] text-[var(--text-secondary)]">
@@ -515,7 +515,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                             </div>
                           </div>
                           <div className="text-right shrink-0">
-                            <div className="text-sm font-black text-white">${o.total.toFixed(0)}</div>
+                            <div className="text-sm font-semibold text-white">${o.total.toFixed(0)}</div>
                             <div
                               className="text-[10px] font-bold"
                               style={{ color: o.paymentMethod === "CASH" ? "var(--success)" : "var(--text-secondary)" }}

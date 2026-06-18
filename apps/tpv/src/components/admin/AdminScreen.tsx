@@ -80,7 +80,7 @@ export function AdminHeader({
         {back && <BackButton ariaLabel="Volver al panel admin" />}
         <div className="min-w-0 space-y-1.5">
           <span
-            className="block text-[10px] font-black uppercase tracking-[0.25em]"
+            className="block text-[10px] font-semibold uppercase tracking-[0.25em]"
             style={{ color: "var(--brand)" }}
           >
             {eyebrow}
@@ -128,7 +128,7 @@ export function AdminTabs<T extends string>({
             key={t.key}
             type="button"
             onClick={() => onChange(t.key)}
-            className="inline-flex shrink-0 items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-black tracking-tight transition-all active:scale-95"
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold tracking-tight transition-all active:scale-95"
             style={
               active
                 ? { background: "var(--brand)", color: "var(--brand-fg)" }

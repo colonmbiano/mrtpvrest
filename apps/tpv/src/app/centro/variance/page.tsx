@@ -78,7 +78,7 @@ export default function CentroVariancePage() {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-white/40">
         <Loader2 className="animate-spin mb-3" size={26} />
-        <span className="text-[10px] font-black uppercase tracking-[0.3em]">Calculando variance…</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.3em]">Calculando variance…</span>
       </div>
     );
   }
@@ -91,13 +91,13 @@ export default function CentroVariancePage() {
       <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div className="flex flex-wrap gap-5">
           <div className="flex flex-col">
-            <span className="text-[9px] font-black tracking-[0.25em] text-white/40 uppercase">Impacto total</span>
+            <span className="text-[9px] font-semibold tracking-[0.25em] text-white/40 uppercase">Impacto total</span>
             <span className={`text-xl font-black tabular-nums ${data.totalCostImpact > 0 ? "text-rose-300" : "text-emerald-300"}`}>
               {fmtMoney(data.totalCostImpact)}
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-[9px] font-black tracking-[0.25em] text-white/40 uppercase">Ingredientes</span>
+            <span className="text-[9px] font-semibold tracking-[0.25em] text-white/40 uppercase">Ingredientes</span>
             <span className="text-xl font-black text-white tabular-nums">{data.variances.length}</span>
           </div>
         </div>
@@ -106,7 +106,7 @@ export default function CentroVariancePage() {
             <button
               key={r.key}
               onClick={() => setRange(r.key)}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-black transition-all ${
+              className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
                 range === r.key
                   ? "text-[var(--brand-fg)] bg-[var(--brand)]"
                   : "text-white/70 bg-white/5 border border-white/10 hover:bg-white/10"
@@ -140,7 +140,7 @@ export default function CentroVariancePage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="border-b border-white/10 bg-white/5">
-              <tr className="text-[10px] font-black tracking-[0.18em] uppercase text-white/40">
+              <tr className="text-[10px] font-semibold tracking-[0.14em] uppercase text-white/40">
                 <th className="px-3 py-3">Ingrediente</th>
                 <th className="px-3 py-3">Teórico</th>
                 <th className="px-3 py-3">Real</th>
@@ -164,11 +164,11 @@ export default function CentroVariancePage() {
                     <td className={`px-3 py-3 text-sm font-bold tabular-nums ${sev.text}`}>
                       {v.variancePct > 0 ? "+" : ""}{v.variancePct.toFixed(1)}%
                     </td>
-                    <td className={`px-3 py-3 text-sm font-black tabular-nums ${v.costImpact > 0 ? "text-rose-300" : "text-emerald-300"}`}>
+                    <td className={`px-3 py-3 text-sm font-semibold tabular-nums ${v.costImpact > 0 ? "text-rose-300" : "text-emerald-300"}`}>
                       {fmtMoney(v.costImpact)}
                     </td>
                     <td className="px-3 py-3">
-                      <span className={`inline-flex items-center gap-1.5 text-[10px] font-black tracking-widest ${sev.text}`}>
+                      <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold tracking-widest ${sev.text}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${sev.dot}`} />
                         {v.severity}
                       </span>

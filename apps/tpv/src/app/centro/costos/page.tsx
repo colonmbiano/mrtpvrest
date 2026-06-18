@@ -136,7 +136,7 @@ export default function CentroCostosPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-white/40">
         <Loader2 className="animate-spin mb-3" size={26} />
-        <span className="text-[10px] font-black uppercase tracking-[0.3em]">Cargando histórico…</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.3em]">Cargando histórico…</span>
       </div>
     );
   }
@@ -146,10 +146,10 @@ export default function CentroCostosPage() {
       {/* Lista */}
       <section className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
         <header className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-          <h3 className="text-[11px] font-black tracking-[0.25em] text-white/50 uppercase">
+          <h3 className="text-[11px] font-semibold tracking-[0.25em] text-white/50 uppercase">
             Ingredientes
           </h3>
-          <span className="text-[10px] font-black text-white/30">{list.length}</span>
+          <span className="text-[10px] font-semibold text-white/30">{list.length}</span>
         </header>
         <ul className="divide-y divide-white/5 max-h-[70vh] overflow-auto">
           {list.map((row) => {
@@ -170,7 +170,7 @@ export default function CentroCostosPage() {
                     {isFlat ? (
                       <span className="text-[11px] font-bold text-white/40">—</span>
                     ) : (
-                      <span className={`inline-flex items-center gap-0.5 text-[11px] font-black tabular-nums ${isUp ? "text-rose-300" : "text-emerald-300"}`}>
+                      <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold tabular-nums ${isUp ? "text-rose-300" : "text-emerald-300"}`}>
                         {isUp ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
                         {isUp ? "+" : ""}{row.changePct30d.toFixed(1)}%
                       </span>
@@ -213,13 +213,13 @@ function CostDetail({ data }: { data: CostHistoryResponse }) {
   return (
     <div className="flex flex-col h-full overflow-auto">
       <header className="px-5 py-4 border-b border-white/10">
-        <h2 className="text-base font-black text-white">{data.name}</h2>
+        <h2 className="text-base font-semibold text-white">{data.name}</h2>
         <div className="flex items-baseline gap-3 mt-1">
           <span className="text-2xl font-black text-white tabular-nums">
             {data.currentCost.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2, maximumFractionDigits: 4 })}
           </span>
           <span className="text-[11px] text-white/40">/ {data.unit}</span>
-          <span className={`ml-auto text-[12px] font-black tabular-nums ${data.changePct30d > 0 ? "text-rose-300" : data.changePct30d < 0 ? "text-emerald-300" : "text-white/40"}`}>
+          <span className={`ml-auto text-[12px] font-semibold tabular-nums ${data.changePct30d > 0 ? "text-rose-300" : data.changePct30d < 0 ? "text-emerald-300" : "text-white/40"}`}>
             {data.changePct30d > 0 ? "+" : ""}{data.changePct30d.toFixed(1)}% · 30d
           </span>
         </div>
@@ -250,7 +250,7 @@ function CostDetail({ data }: { data: CostHistoryResponse }) {
 
       {/* Cambios recientes */}
       <section className="px-5 py-4">
-        <h3 className="text-[10px] font-black tracking-[0.25em] text-white/50 uppercase mb-2">
+        <h3 className="text-[10px] font-semibold tracking-[0.25em] text-white/50 uppercase mb-2">
           Últimos cambios
         </h3>
         {data.history.length === 0 ? (
@@ -264,7 +264,7 @@ function CostDetail({ data }: { data: CostHistoryResponse }) {
                   <div className="text-[10px] text-white/40">{h.reason || "manual_update"}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-black text-white tabular-nums">{fmtMoney(h.cost)}</div>
+                  <div className="text-sm font-semibold text-white tabular-nums">{fmtMoney(h.cost)}</div>
                   {h.purchaseCost != null && (
                     <div className="text-[10px] text-white/40 tabular-nums">paquete {fmtMoney(h.purchaseCost)}</div>
                   )}
@@ -278,14 +278,14 @@ function CostDetail({ data }: { data: CostHistoryResponse }) {
       {/* Platos afectados */}
       {data.affectedDishes.length > 0 && (
         <section className="px-5 py-4 border-t border-white/10">
-          <h3 className="text-[10px] font-black tracking-[0.25em] text-white/50 uppercase mb-2">
+          <h3 className="text-[10px] font-semibold tracking-[0.25em] text-white/50 uppercase mb-2">
             Platos afectados
           </h3>
           <ul className="flex flex-col divide-y divide-white/5">
             {data.affectedDishes.slice(0, 10).map((d) => (
               <li key={d.menuItemId} className="flex items-center justify-between py-2">
                 <span className="text-sm font-semibold text-white truncate">{d.name}</span>
-                <span className={`text-[12px] font-black tabular-nums ${d.marginImpactPct < 0 ? "text-rose-300" : "text-emerald-300"}`}>
+                <span className={`text-[12px] font-semibold tabular-nums ${d.marginImpactPct < 0 ? "text-rose-300" : "text-emerald-300"}`}>
                   {d.marginImpactPct > 0 ? "+" : ""}{d.marginImpactPct.toFixed(2)} pts
                 </span>
               </li>

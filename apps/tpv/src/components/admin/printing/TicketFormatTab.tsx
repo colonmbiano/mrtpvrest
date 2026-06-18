@@ -173,11 +173,11 @@ export default function TicketFormatTab() {
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={cfg.logoUrl} alt="Logo" className="w-full h-full object-contain" />
                     ) : (
-                      <span className="text-[9px] text-zinc-500 font-black uppercase text-center px-1">Sin logo</span>
+                      <span className="text-[9px] text-zinc-500 font-semibold uppercase text-center px-1">Sin logo</span>
                     )}
                   </div>
                   <div className="flex flex-col gap-2">
-                    <label className="h-10 px-4 inline-flex items-center rounded-xl bg-[var(--surface-1)] border border-white/5 text-[11px] font-black uppercase tracking-widest text-zinc-300 hover:border-iris-glow cursor-pointer transition-colors">
+                    <label className="h-10 px-4 inline-flex items-center rounded-xl bg-[var(--surface-1)] border border-white/5 text-[11px] font-semibold uppercase tracking-widest text-zinc-300 hover:border-iris-glow cursor-pointer transition-colors">
                       {uploading ? "Subiendo…" : "Subir logo"}
                       <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} disabled={uploading} />
                     </label>
@@ -310,7 +310,7 @@ export default function TicketFormatTab() {
                     onClick={() => setCfg({ ...cfg, kitchenFontSize: opt.id })}
                     className={`flex flex-col items-center justify-center gap-0.5 h-16 rounded-2xl border transition-all ${active ? "bg-iris-500 border-iris-500 text-iris-fg" : "bg-[var(--surface-1)] border-white/5 text-zinc-300 hover:border-iris-glow"}`}
                   >
-                    <span className="text-xs font-black uppercase tracking-widest">{opt.label}</span>
+                    <span className="text-xs font-semibold uppercase tracking-widest">{opt.label}</span>
                     <span className={`text-[10px] font-bold ${active ? "text-[var(--brand-fg)]" : "text-zinc-500"}`}>{opt.hint} ancho</span>
                   </button>
                 );
@@ -367,7 +367,7 @@ export default function TicketFormatTab() {
 function SubPill({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
     <button onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${active ? "bg-iris-500 text-iris-fg" : "bg-[var(--surface-1)] text-zinc-400 hover:text-white"}`}>
+      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-widest transition-all ${active ? "bg-iris-500 text-iris-fg" : "bg-[var(--surface-1)] text-zinc-400 hover:text-white"}`}>
       {icon}{label}
     </button>
   );
@@ -376,7 +376,7 @@ function SubPill({ active, onClick, icon, label }: { active: boolean; onClick: (
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-[11px] font-black text-zinc-500 uppercase tracking-wider ml-1">{label}</label>
+      <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider ml-1">{label}</label>
       {children}
     </div>
   );
@@ -395,7 +395,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-black text-iris-500 uppercase tracking-[0.2em] pt-3 pb-1">
+    <p className="text-[10px] font-semibold text-iris-500 uppercase tracking-[0.14em] pt-3 pb-1">
       {children}
     </p>
   );
@@ -422,7 +422,7 @@ function Segmented({
             onClick={() => onChange(opt.id)}
             className={`flex flex-col items-center justify-center gap-0.5 h-14 rounded-2xl border transition-all ${active ? "bg-iris-500 border-iris-500 text-iris-fg" : "bg-[var(--surface-1)] border-white/5 text-zinc-300 hover:border-iris-glow"}`}
           >
-            <span className="text-[11px] font-black uppercase tracking-widest">{opt.label}</span>
+            <span className="text-[11px] font-semibold uppercase tracking-widest">{opt.label}</span>
             {opt.hint && <span className={`text-[9px] font-bold ${active ? "text-[var(--brand-fg)]" : "text-zinc-500"}`}>{opt.hint}</span>}
           </button>
         );
@@ -453,7 +453,7 @@ function FontPicker({ value, onChange }: { value: string; onChange: (v: string) 
             onClick={() => onChange(o.id)}
             className={`flex flex-col gap-1 p-3 rounded-2xl border text-left transition-all ${active ? "bg-iris-500/10 border-iris-500" : "bg-[var(--surface-1)] border-white/5 hover:border-iris-glow"}`}
           >
-            <span className={`text-[11px] font-black uppercase tracking-widest ${active ? "text-iris-500" : "text-zinc-300"}`}>{o.label}</span>
+            <span className={`text-[11px] font-semibold uppercase tracking-widest ${active ? "text-iris-500" : "text-zinc-300"}`}>{o.label}</span>
             <span className="text-[9px] font-bold text-zinc-500">{o.note}</span>
             <div className="mt-1 rounded-md bg-white text-black px-2 py-1.5 overflow-hidden">
               <div style={{ fontFamily: "'Courier New', ui-monospace, monospace", fontSize: o.fontPx, lineHeight: 1.3, letterSpacing: o.ls, transform: `scaleX(${o.scaleX})`, transformOrigin: "left" }}>
@@ -490,7 +490,7 @@ function SizePicker({ value, onChange }: { value: string; onChange: (v: string) 
             onClick={() => onChange(o.id)}
             className={`flex flex-col gap-1.5 p-2 rounded-2xl border transition-all ${active ? "bg-iris-500/10 border-iris-500" : "bg-[var(--surface-1)] border-white/5 hover:border-iris-glow"}`}
           >
-            <span className={`text-[11px] font-black uppercase tracking-widest text-center ${active ? "text-iris-500" : "text-zinc-300"}`}>{o.label}</span>
+            <span className={`text-[11px] font-semibold uppercase tracking-widest text-center ${active ? "text-iris-500" : "text-zinc-300"}`}>{o.label}</span>
             <div className="rounded-md bg-white text-black flex items-center justify-center h-11 overflow-hidden">
               <span style={{ fontFamily: "'Courier New', ui-monospace, monospace", fontSize: o.px, fontWeight: 700, lineHeight: 1 }}>$210</span>
             </div>

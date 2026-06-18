@@ -62,7 +62,7 @@ export default function CentroResumenPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-white/40">
         <Loader2 className="animate-spin mb-3" size={26} />
-        <span className="text-[10px] font-black uppercase tracking-[0.3em]">Cargando KPIs…</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.3em]">Cargando KPIs…</span>
       </div>
     );
   }
@@ -108,10 +108,10 @@ export default function CentroResumenPage() {
       {/* Panel: Alertas */}
       <section className="rounded-2xl bg-white/5 border border-white/10 p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-[11px] font-black tracking-[0.25em] text-white/50 uppercase">
+          <h3 className="text-[11px] font-semibold tracking-[0.25em] text-white/50 uppercase">
             Alertas
           </h3>
-          <span className="text-[10px] font-black tracking-widest text-white/30">
+          <span className="text-[10px] font-semibold tracking-widest text-white/30">
             {data.alerts.length} {data.alerts.length === 1 ? "evento" : "eventos"}
           </span>
         </div>
@@ -133,7 +133,7 @@ export default function CentroResumenPage() {
                   {a.cta && (
                     <Link
                       href={a.cta.href}
-                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black bg-white/10 hover:bg-white/15 transition-colors"
+                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold bg-white/10 hover:bg-white/15 transition-colors"
                     >
                       {a.cta.label} <ArrowRight size={11} strokeWidth={3} />
                     </Link>
@@ -155,7 +155,7 @@ export default function CentroResumenPage() {
               {data.last30d.risingCosts.map((r) => (
                 <li key={r.ingredientId} className="flex items-center justify-between py-2.5">
                   <span className="text-sm font-semibold text-white truncate">{r.name}</span>
-                  <span className="text-sm font-black text-rose-300 tabular-nums">
+                  <span className="text-sm font-semibold text-rose-300 tabular-nums">
                     +{r.changePct.toFixed(1)}%
                   </span>
                 </li>
@@ -172,7 +172,7 @@ export default function CentroResumenPage() {
               {data.last30d.topVarianceIngredients.map((v, i) => (
                 <li key={i} className="flex items-center justify-between py-2.5">
                   <span className="text-sm font-semibold text-white truncate">{v.name}</span>
-                  <span className="text-sm font-black text-amber-300 tabular-nums">
+                  <span className="text-sm font-semibold text-amber-300 tabular-nums">
                     {fmtMoney(Math.abs(v.costImpact))}
                   </span>
                 </li>
@@ -184,7 +184,7 @@ export default function CentroResumenPage() {
 
       {/* 30d resumen línea */}
       <section className="rounded-2xl bg-white/5 border border-white/10 p-5">
-        <h3 className="text-[11px] font-black tracking-[0.25em] text-white/50 uppercase mb-3">
+        <h3 className="text-[11px] font-semibold tracking-[0.25em] text-white/50 uppercase mb-3">
           Últimos 30 días
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -227,7 +227,7 @@ function KpiCard({
   return (
     <div className="rounded-2xl bg-white/5 border border-white/10 p-4 flex flex-col gap-2.5">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-black tracking-[0.2em] text-white/40 uppercase leading-tight">
+        <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase leading-tight">
           {label}
         </span>
         <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${accentMap.bg} border ${accentMap.border}`}>
@@ -250,13 +250,13 @@ function Panel({ title, cta, children }: { title: string; cta?: { label: string;
   return (
     <section className="rounded-2xl bg-white/5 border border-white/10 p-5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[11px] font-black tracking-[0.25em] text-white/50 uppercase">
+        <h3 className="text-[11px] font-semibold tracking-[0.25em] text-white/50 uppercase">
           {title}
         </h3>
         {cta && (
           <Link
             href={cta.href}
-            className="inline-flex items-center gap-1.5 text-[10px] font-black tracking-widest text-[var(--brand)] hover:text-[var(--brand)]"
+            className="inline-flex items-center gap-1.5 text-[10px] font-semibold tracking-widest text-[var(--brand)] hover:text-[var(--brand)]"
           >
             {cta.label} <ArrowRight size={11} strokeWidth={3} />
           </Link>
@@ -271,7 +271,7 @@ function Mini({ label, value, tone }: { label: string; value: string; tone?: "ro
   const valueTone = tone === "rose" ? "text-rose-300" : tone === "emerald" ? "text-emerald-300" : "text-white";
   return (
     <div className="rounded-xl bg-white/5 border border-white/10 p-3 flex flex-col gap-1">
-      <span className="text-[9px] font-black tracking-[0.22em] text-white/40 uppercase">{label}</span>
+      <span className="text-[9px] font-semibold tracking-[0.14em] text-white/40 uppercase">{label}</span>
       <span className={`text-base font-black ${valueTone} tabular-nums`}>{value}</span>
     </div>
   );
