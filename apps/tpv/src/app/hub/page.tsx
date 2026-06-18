@@ -117,22 +117,16 @@ function HubPageInner() {
     queueMicrotask(() => {
       if (cancelled) return;
 
-      // Atajo silencioso: si ya hay workspace activo en localStorage Y no
-      // estamos forzando, usamos cache local para no mostrar un loader
-      // parecido a re-login mientras la red decide el turno.
+      // Terminal ya ligada a un workspace (caso normal: la sucursal se fija al
+      // instalar el TPV). No mostramos el selector — pero SIEMPRE verificamos el
+      // turno en vivo contra el backend para decidir la ruta. Confiar en el
+      // cache local rompía el cierre: si quedaba pegado en 'true', el hub mandaba
+      // al POS y la única forma de corregirlo era re-seleccionar la sucursal.
       const persistedId = typeof window !== 'undefined'
         ? localStorage.getItem('activeWorkspaceId')
         : null;
 
       if (persistedId && !force) {
-        const cachedShiftOpen = typeof window !== 'undefined'
-          ? localStorage.getItem('tpv-shift-open')
-          : null;
-        if (cachedShiftOpen === 'true' || cachedShiftOpen === 'false') {
-          router.replace(cachedShiftOpen === 'false' ? '/pos/shift/open' : '/pos/order-type');
-          return;
-        }
-
         (async () => {
           try {
             const { data } = await api.get('/api/shifts/active');
@@ -141,7 +135,14 @@ function HubPageInner() {
             localStorage.setItem('tpv-shift-open', isShiftOpen ? 'true' : 'false');
             router.replace(isShiftOpen ? '/pos/order-type' : '/pos/shift/open');
           } catch {
-            if (!cancelled) router.replace('/pos/order-type');
+            // Sin red: caemos al último estado conocido del cache. Si no hay
+            // cache, asumimos turno cerrado (mejor pedir abrir turno que dejar
+            // vender sin caja abierta).
+            if (cancelled) return;
+            const cachedShiftOpen = typeof window !== 'undefined'
+              ? localStorage.getItem('tpv-shift-open')
+              : null;
+            router.replace(cachedShiftOpen === 'true' ? '/pos/order-type' : '/pos/shift/open');
           }
         })();
         return;
