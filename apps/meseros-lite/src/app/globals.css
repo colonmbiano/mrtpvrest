@@ -2,12 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   MRTPVREST · Meseros Lite — tema "FRESCO" (verde) tokenizado
+   ------------------------------------------------------------
+   Mismos tokens de color que el TPV (paleta verde Fresco), pero
+   PLANO a propósito: sin glassmorphism, sin blur, sin glow, sin
+   sombras complejas. La app corre en tablets Android de gama
+   baja y debe mantener el render barato. Un solo tema (verde
+   oscuro), sin selector de paleta ni modo claro.
+   ============================================================ */
+
 :root {
-  --solid-base: #0a0a0c;
-  --solid-card: #121214;
-  --solid-text: #e5e5e5;
-  --solid-muted: #a3a3a3;
-  --solid-honey: #ffb84d;
+  /* superficies */
+  --bg: #0e1512;
+  --surface-1: #16211c;
+  --surface-2: #111a16;
+  --surface-3: #1c2a23;
+
+  /* texto */
+  --text-primary: #e8f0eb;
+  --text-secondary: #8da396;
+  --text-muted: #5e7268;
+  --text-disabled: #44544b;
+
+  /* bordes */
+  --border: #21302a;
+  --border-strong: rgba(232, 240, 235, 0.14);
+
+  /* acento Fresco (verde) */
+  --brand: #34c988;
+  --brand-hover: #2bb678;
+  --brand-active: #25a06a;
+  --brand-soft: rgba(52, 201, 136, 0.14);
+  --brand-fg: #0b1410;
+
+  /* estados */
+  --success: #34c988;
+  --warning: #e0a22a;
+  --danger: #f2785a;
+  --info: #4fa3e0;
+
+  /* tipografía (los next/font de layout.tsx inyectan las familias) */
+  --font-body: var(--font-onest), system-ui, sans-serif;
+  --font-display: var(--font-schibsted), system-ui, sans-serif;
+  --font-mono: var(--font-dm-mono), monospace;
 }
 
 *,
@@ -21,8 +59,9 @@ body {
   width: 100%;
   min-height: 100%;
   margin: 0;
-  background: var(--solid-base);
-  color: var(--solid-text);
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
   touch-action: manipulation;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -41,6 +80,13 @@ input {
 button {
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* cifras tabulares para totales/dinero */
+.mono,
+.tnum {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 ::-webkit-scrollbar {

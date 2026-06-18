@@ -51,15 +51,15 @@ export default function PinPage() {
   };
 
   return (
-    <section className="min-h-screen bg-[#0a0a0c] px-5 py-5 text-neutral-200">
+    <section className="min-h-screen bg-[var(--bg)] px-5 py-5 text-[var(--text-primary)]">
       <div className="mx-auto grid max-w-md gap-4">
-        <header className="rounded-lg border border-neutral-800 bg-[#121214] p-5 text-center">
-          <LockKeyhole className="mx-auto mb-3 text-[#ffb84d]" size={42} />
-          <p className="text-sm font-black uppercase tracking-wide text-[#ffb84d]">
+        <header className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-5 text-center">
+          <LockKeyhole className="mx-auto mb-3 text-[var(--brand)]" size={42} />
+          <p className="text-sm font-black uppercase tracking-wide text-[var(--brand)]">
             Entrada de mesero
           </p>
-          <h1 className="mt-1 text-3xl font-black text-neutral-100">PIN de turno</h1>
-          <p className="mt-2 text-base font-bold text-neutral-400">
+          <h1 className="mt-1 text-3xl font-black text-[var(--text-primary)]">PIN de turno</h1>
+          <p className="mt-2 text-base font-bold text-[var(--text-secondary)]">
             Cada comanda queda ligada al empleado activo.
           </p>
         </header>
@@ -68,21 +68,21 @@ export default function PinPage() {
           <button
             type="button"
             onClick={() => router.replace("/setup")}
-            className="min-h-[72px] rounded-lg border border-[#ffb84d] bg-[#18181b] px-5 text-lg font-black text-[#ffb84d] active:scale-95 transition-all duration-150"
+            className="min-h-[72px] rounded-lg border border-[var(--brand)] bg-[var(--surface-3)] px-5 text-lg font-black text-[var(--brand)] active:scale-95 transition-all duration-150"
           >
             Configurar restaurante y sucursal
           </button>
         )}
 
-        <div className="rounded-lg border border-neutral-800 bg-[#121214] p-4">
-          <div className="mb-4 flex min-h-[72px] items-center justify-center rounded-lg border border-neutral-800 bg-[#0a0a0c]">
-            <span className="text-4xl font-black tracking-wide text-neutral-100">
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
+          <div className="mb-4 flex min-h-[72px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg)]">
+            <span className="text-4xl font-black tracking-wide text-[var(--text-primary)]">
               {pin ? "•".repeat(pin.length) : "----"}
             </span>
           </div>
 
           {error && (
-            <p className="mb-4 rounded-lg border border-[#ffb84d] bg-[#18181b] p-3 text-center text-sm font-black text-[#ffb84d]">
+            <p className="mb-4 rounded-lg border border-[var(--brand)] bg-[var(--surface-3)] p-3 text-center text-sm font-black text-[var(--brand)]">
               {error}
             </p>
           )}
@@ -94,7 +94,7 @@ export default function PinPage() {
                 type="button"
                 onClick={() => appendDigit(digit)}
                 disabled={loading}
-                className="min-h-[72px] rounded-lg border border-neutral-800 bg-[#18181b] text-3xl font-black text-neutral-100 active:scale-95 transition-all duration-150"
+                className="min-h-[72px] rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-3xl font-black text-[var(--text-primary)] active:scale-95 transition-all duration-150"
               >
                 {digit}
               </button>
@@ -103,7 +103,7 @@ export default function PinPage() {
               type="button"
               onClick={() => setPin((current) => current.slice(0, -1))}
               disabled={loading}
-              className="flex min-h-[72px] items-center justify-center rounded-lg border border-neutral-800 bg-[#18181b] text-neutral-200 active:scale-95 transition-all duration-150"
+              className="flex min-h-[72px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
               aria-label="Borrar digito"
             >
               <Delete size={30} />
@@ -112,7 +112,7 @@ export default function PinPage() {
               type="button"
               onClick={() => appendDigit("0")}
               disabled={loading}
-              className="min-h-[72px] rounded-lg border border-neutral-800 bg-[#18181b] text-3xl font-black text-neutral-100 active:scale-95 transition-all duration-150"
+              className="min-h-[72px] rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-3xl font-black text-[var(--text-primary)] active:scale-95 transition-all duration-150"
             >
               0
             </button>
@@ -123,7 +123,7 @@ export default function PinPage() {
                 setPin("");
               }}
               disabled={loading}
-              className="flex min-h-[72px] items-center justify-center rounded-lg border border-neutral-800 bg-[#18181b] text-neutral-200 active:scale-95 transition-all duration-150"
+              className="flex min-h-[72px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
               aria-label="Limpiar PIN"
             >
               <RotateCcw size={30} />
@@ -138,8 +138,8 @@ export default function PinPage() {
               "mt-3 min-h-[72px] w-full rounded-lg border px-5 text-xl font-black",
               "active:scale-95 transition-all duration-150",
               loading || !configured
-                ? "border-neutral-800 bg-[#18181b] text-neutral-500"
-                : "border-[#ffb84d] bg-[#ffb84d] text-[#0a0a0c]",
+                ? "border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-muted)]"
+                : "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]",
             ].join(" ")}
           >
             {loading ? "Validando..." : "Entrar a mesas"}
@@ -150,7 +150,7 @@ export default function PinPage() {
           <button
             type="button"
             onClick={() => router.replace("/setup")}
-            className="flex min-h-[64px] items-center justify-center gap-2 rounded-lg border border-neutral-800 bg-[#121214] px-4 text-base font-black text-neutral-300 active:scale-95 transition-all duration-150"
+            className="flex min-h-[64px] items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4 text-base font-black text-[var(--text-secondary)] active:scale-95 transition-all duration-150"
           >
             <ArrowLeft size={22} />
             Cambiar restaurante o sucursal

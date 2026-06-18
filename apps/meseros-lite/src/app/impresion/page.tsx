@@ -66,16 +66,16 @@ export default function ImpresionPage() {
   };
 
   return (
-    <section className="min-h-screen bg-[#0a0a0c] px-5 py-5 pb-28 text-neutral-200">
+    <section className="min-h-screen bg-[var(--bg)] px-5 py-5 pb-28 text-[var(--text-primary)]">
       <header className="mb-5 flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm font-bold uppercase tracking-wide text-[#ffb84d]">Configuracion TPV</p>
-          <h1 className="truncate text-3xl font-black text-neutral-200">Impresion</h1>
+          <p className="text-sm font-bold uppercase tracking-wide text-[var(--brand)]">Configuracion TPV</p>
+          <h1 className="truncate text-3xl font-black text-[var(--text-primary)]">Impresion</h1>
         </div>
         <button
           type="button"
           onClick={() => router.replace("/perfil")}
-          className="flex min-h-[56px] items-center gap-2 rounded-lg border border-neutral-800 bg-[#121214] px-4 text-base font-black text-neutral-300 active:scale-95 transition-all duration-150"
+          className="flex min-h-[56px] items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4 text-base font-black text-[var(--text-secondary)] active:scale-95 transition-all duration-150"
         >
           <ArrowLeft size={20} />
           Volver
@@ -87,19 +87,19 @@ export default function ImpresionPage() {
           className={[
             "mb-4 rounded-lg border p-4 text-base font-black",
             error
-              ? "border-[#ff6b6b] bg-[#121214] text-[#ff6b6b]"
-              : "border-[#ffb84d] bg-[#121214] text-[#ffb84d]",
+              ? "border-[var(--danger)] bg-[var(--surface-1)] text-[var(--danger)]"
+              : "border-[var(--brand)] bg-[var(--surface-1)] text-[var(--brand)]",
           ].join(" ")}
         >
           {error || message}
         </p>
       )}
 
-      <article className="mb-4 rounded-lg border border-neutral-800 bg-[#121214] p-5">
+      <article className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-lg font-black text-neutral-100">Auto-imprimir desde esta tablet</p>
-            <p className="mt-1 text-sm font-bold text-neutral-400">
+            <p className="text-lg font-black text-[var(--text-primary)]">Auto-imprimir desde esta tablet</p>
+            <p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">
               Preferencia local. Las impresoras, el ruteo y el formato son los mismos del TPV.
             </p>
           </div>
@@ -110,13 +110,13 @@ export default function ImpresionPage() {
             onClick={() => setAutoPrint(!autoPrint)}
             className={[
               "relative h-11 w-20 shrink-0 rounded-full border transition-all duration-150",
-              autoPrint ? "border-[#88d66c] bg-[#88d66c]" : "border-neutral-700 bg-[#18181b]",
+              autoPrint ? "border-[var(--success)] bg-[var(--success)]" : "border-[var(--border-strong)] bg-[var(--surface-3)]",
             ].join(" ")}
             aria-label="Activar auto-impresion"
           >
             <span
               className={[
-                "absolute top-1 h-8 w-8 rounded-full bg-[#0a0a0c] transition-all duration-150",
+                "absolute top-1 h-8 w-8 rounded-full bg-[var(--bg)] transition-all duration-150",
                 autoPrint ? "left-11" : "left-1",
               ].join(" ")}
             />
@@ -124,11 +124,11 @@ export default function ImpresionPage() {
         </div>
       </article>
 
-      <article className="mb-4 rounded-lg border border-neutral-800 bg-[#121214] p-5">
+      <article className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-lg font-black text-neutral-100">Configuracion central</p>
-            <p className="mt-1 text-sm font-bold text-neutral-400">
+            <p className="text-lg font-black text-[var(--text-primary)]">Configuracion central</p>
+            <p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">
               {lastSync
                 ? `${printers.length} impresora${printers.length === 1 ? "" : "s"} · actualizada ${new Date(
                     lastSync,
@@ -140,7 +140,7 @@ export default function ImpresionPage() {
             type="button"
             onClick={syncPrinters}
             disabled={loading}
-            className="flex min-h-[64px] items-center gap-2 rounded-lg border border-[#ffb84d] bg-[#18181b] px-4 text-base font-black text-[#ffb84d] active:scale-95 transition-all duration-150 disabled:opacity-50"
+            className="flex min-h-[64px] items-center gap-2 rounded-lg border border-[var(--brand)] bg-[var(--surface-3)] px-4 text-base font-black text-[var(--brand)] active:scale-95 transition-all duration-150 disabled:opacity-50"
           >
             <RefreshCw size={22} className={loading ? "animate-spin" : ""} />
             Actualizar
@@ -149,10 +149,10 @@ export default function ImpresionPage() {
       </article>
 
       {printers.length === 0 ? (
-        <div className="grid gap-3 rounded-lg border border-neutral-800 bg-[#121214] p-5 text-center">
-          <Printer className="mx-auto text-[#ffb84d]" size={34} />
-          <p className="text-xl font-black text-neutral-100">No hay impresoras configuradas</p>
-          <p className="text-base font-bold text-neutral-400">
+        <div className="grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-5 text-center">
+          <Printer className="mx-auto text-[var(--brand)]" size={34} />
+          <p className="text-xl font-black text-[var(--text-primary)]">No hay impresoras configuradas</p>
+          <p className="text-base font-bold text-[var(--text-secondary)]">
             Agregalas en TPV / Administracion / Impresion. Meseros Lite las recibira automaticamente.
           </p>
         </div>
@@ -161,11 +161,11 @@ export default function ImpresionPage() {
           {printers.map((printer) => (
             <article
               key={printer.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-neutral-800 bg-[#121214] p-4"
+              className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4"
             >
               <div className="min-w-0">
-                <p className="truncate text-lg font-black text-neutral-100">{printer.name}</p>
-                <p className="mt-1 text-sm font-bold text-neutral-400">
+                <p className="truncate text-lg font-black text-[var(--text-primary)]">{printer.name}</p>
+                <p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">
                   {stationOf(printer)} · {printer.ip || "sin IP"}
                   {printer.port ? `:${printer.port}` : ""} · {printer.connectionType}
                   {printer.isActive ? "" : " · inactiva"}
@@ -180,7 +180,7 @@ export default function ImpresionPage() {
                   !printer.ip ||
                   printer.ip === "0.0.0.0"
                 }
-                className="flex min-h-[64px] shrink-0 items-center justify-center rounded-lg border border-[#ffb84d] bg-[#18181b] px-4 text-base font-black text-[#ffb84d] active:scale-95 transition-all duration-150 disabled:border-neutral-800 disabled:text-neutral-600"
+                className="flex min-h-[64px] shrink-0 items-center justify-center rounded-lg border border-[var(--brand)] bg-[var(--surface-3)] px-4 text-base font-black text-[var(--brand)] active:scale-95 transition-all duration-150 disabled:border-[var(--border)] disabled:text-[var(--text-muted)]"
               >
                 {testingId === printer.id ? "Enviando..." : "Probar"}
               </button>

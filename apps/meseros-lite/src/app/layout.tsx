@@ -1,13 +1,28 @@
 import type { Metadata, Viewport } from "next";
-import { Outfit } from "next/font/google";
+import { Schibsted_Grotesk, Onest, DM_Mono } from "next/font/google";
 import OfflineSyncInitializer from "@/components/OfflineSyncInitializer";
 import PrinterConfigInitializer from "@/components/PrinterConfigInitializer";
 import SessionGate from "@/components/SessionGate";
 import "./globals.css";
 
-const outfit = Outfit({
+// Mismas familias que el TPV (tema Fresco): Schibsted Grotesk para títulos,
+// Onest para cuerpo, DM Mono para cifras/dinero.
+const schibsted = Schibsted_Grotesk({
   subsets: ["latin"],
-  variable: "--font-outfit",
+  variable: "--font-schibsted",
+  display: "swap",
+});
+
+const onest = Onest({
+  subsets: ["latin"],
+  variable: "--font-onest",
+  display: "swap",
+});
+
+const dmMono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-dm-mono",
   display: "swap",
 });
 
@@ -22,7 +37,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#0a0a0c",
+  themeColor: "#0e1512",
 };
 
 // Guard global contra el bug nativo de <input type="number">: con el campo
@@ -41,8 +56,8 @@ const NUMBER_WHEEL_GUARD_SCRIPT = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={outfit.variable}>
-      <body className="min-h-screen overflow-hidden bg-[#0a0a0c] font-sans text-neutral-200">
+    <html lang="es" className={`${schibsted.variable} ${onest.variable} ${dmMono.variable}`}>
+      <body className="min-h-screen overflow-hidden bg-[var(--bg)] font-sans text-[var(--text-primary)]">
         <script dangerouslySetInnerHTML={{__html: NUMBER_WHEEL_GUARD_SCRIPT}} />
         <OfflineSyncInitializer />
         <PrinterConfigInitializer />
