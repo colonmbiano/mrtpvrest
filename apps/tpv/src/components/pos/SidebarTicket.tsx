@@ -930,6 +930,13 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // subtotal "fantasma" y la orden del backend seguían pegados y la próxima
   // venta se metía a la misma orden.
   const handleClearTicket = () => {
+    // Vaciar el ticket es destructivo (borra la comanda en construcción).
+    // Si hay algo cargado, pedir confirmación para evitar perderlo por un
+    // tap accidental en el basurero.
+    const hasSomething = ticket.items.length > 0 || previousItems.length > 0;
+    if (hasSomething && !window.confirm("¿Vaciar el ticket? Se quitarán todos los productos de esta cuenta.")) {
+      return;
+    }
     clearActiveItems();
     clearActiveOrder();
     setPreviousItems([]);

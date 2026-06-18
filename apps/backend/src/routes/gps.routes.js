@@ -153,20 +153,36 @@ router.get('/live', authenticate, requireTenantAccess, requireRole('ADMIN', 'MAN
         ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { location: { restaurantId } } : {}),
       },
     });
+    // Una ruta abierta (endAt null) que lleva horas sin un solo ping GPS es
+    // basura: el repartidor cerró la app o nunca llamó a /route/end. Antes esto
+    // dejaba "En ruta desde hace 73h" pegado para siempre. Aquí se auto-cierra
+    // (self-healing) para que el contador "en ruta" refleje la realidad.
+    const STALE_ROUTE_MS = 6 * 60 * 60 * 1000; // 6 h sin señal => ruta muerta
+    const now = Date.now();
     const result = await Promise.all(drivers.map(async d => {
       const last = await prisma.driverLocation.findFirst({
         where: { driverId: d.id },
         orderBy: { createdAt: 'desc' },
       });
-      const route = await prisma.driverRoute.findFirst({
+      let route = await prisma.driverRoute.findFirst({
         where: { driverId: d.id, endAt: null },
         orderBy: { startAt: 'desc' },
       });
+      if (route) {
+        const lastSignal = last ? new Date(last.createdAt).getTime() : new Date(route.startAt).getTime();
+        if (now - lastSignal > STALE_ROUTE_MS) {
+          await prisma.driverRoute.update({
+            where: { id: route.id },
+            data: { endAt: new Date() },
+          });
+          route = null; // deja de contar como "en ruta"
+        }
+      }
       return {
         driver: { id: d.id, name: d.name, photo: d.photo },
         location: last,
         activeRoute: route,
-        online: last ? (Date.now() - new Date(last.createdAt).getTime()) < 3 * 60 * 1000 : false,
+        online: last ? (now - new Date(last.createdAt).getTime()) < 3 * 60 * 1000 : false,
       };
     }));
     res.json({ drivers: result, origin: getOrigin() });

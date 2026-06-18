@@ -145,6 +145,13 @@ router.post('/me/shift/end', authenticate, requireTenantAccess, requireEmployee,
       where: { employeeId: req.user.id, endAt: null },
       data: { endAt: new Date() },
     });
+    // Cerrar también cualquier ruta de reparto abierta: cerrar turno = ya no
+    // está en ruta. Sin esto, la ruta quedaba con endAt null para siempre y el
+    // monitor mostraba "En ruta desde hace 73h". No-op para no-repartidores.
+    await prisma.driverRoute.updateMany({
+      where: { driverId: req.user.id, endAt: null },
+      data: { endAt: new Date() },
+    });
     res.json({ ok: true, closed: count });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

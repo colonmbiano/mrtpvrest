@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { X, Armchair, ShoppingBag, Bike, MapPin, Check } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { ORDER_TYPE_SHORT } from "@/lib/orderTypes";
 
 /**
  * ChangeOrderTypeModal — flujo vivo (local-state, igual que pos/OrderDetailModal
@@ -29,9 +30,9 @@ interface ChangeOrderTypeModalProps {
 }
 
 const TYPES: { id: OrderType; label: string; sub: string; Icon: typeof Armchair }[] = [
-  { id: "DINE_IN", label: "Mesa", sub: "Comer aquí", Icon: Armchair },
-  { id: "TAKEOUT", label: "Para llevar", sub: "Mostrador", Icon: ShoppingBag },
-  { id: "DELIVERY", label: "A domicilio", sub: "Envío", Icon: Bike },
+  { id: "DINE_IN", label: ORDER_TYPE_SHORT.DINE_IN, sub: "Comer aquí", Icon: Armchair },
+  { id: "TAKEOUT", label: ORDER_TYPE_SHORT.TAKEOUT, sub: "Mostrador", Icon: ShoppingBag },
+  { id: "DELIVERY", label: ORDER_TYPE_SHORT.DELIVERY, sub: "Envío", Icon: Bike },
 ];
 
 const ChangeOrderTypeModal: React.FC<ChangeOrderTypeModalProps> = ({

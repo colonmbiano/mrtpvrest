@@ -87,7 +87,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: "/admin/tickets",    label: "Tickets",               icon: Monitor },
     { href: "/admin/usuarios",   label: "Personal",              icon: Users },
     { href: "/admin/pagos",      label: "Pagos",                 icon: CreditCard },
-    { href: "/admin/apariencia", label: "General",               icon: SlidersHorizontal },
+    { href: "/admin/apariencia", label: "Apariencia",            icon: SlidersHorizontal },
     { href: "/admin/pantalla",   label: "Pantalla",              icon: MonitorPlay },
     { href: "/admin/seguridad",  label: "Seguridad",             icon: ShieldCheck },
   ];

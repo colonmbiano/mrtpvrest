@@ -97,7 +97,7 @@ export default function AparienciaPage() {
     <AdminScreen>
       <AdminHeader
         icon={SlidersHorizontal}
-        title="General"
+        title="Apariencia"
         subtitle="Sesión, tipografía, ancho del panel ticket, paleta y modo nocturno."
       />
 

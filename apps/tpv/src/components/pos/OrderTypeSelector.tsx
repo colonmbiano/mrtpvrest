@@ -32,6 +32,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { OrderType } from "@/components/tpv/TicketPanel";
+import { ORDER_TYPE_ACTION, ORDER_TYPE_BADGE, ORDER_TYPE_SHORT } from "@/lib/orderTypes";
 import UserBadge from "@/components/UserBadge";
 
 export type ExtendedOrderType = OrderType;
@@ -185,16 +186,16 @@ type OrderTypeCard = {
 };
 
 const ORDER_TYPES: OrderTypeCard[] = [
-  { id: "DINE_IN",  title: "Comer Aquí",  icon: Armchair,    accent: "#34C988", shortcut: "1" },
-  { id: "TAKEOUT",  title: "Para Llevar", icon: ShoppingBag, accent: "#3b82f6", shortcut: "2" },
-  { id: "DELIVERY", title: "Delivery",    icon: Moto,        accent: "#F97316", shortcut: "3" },
+  { id: "DINE_IN",  title: ORDER_TYPE_ACTION.DINE_IN,  icon: Armchair,    accent: "#34C988", shortcut: "1" },
+  { id: "TAKEOUT",  title: ORDER_TYPE_ACTION.TAKEOUT,  icon: ShoppingBag, accent: "#3b82f6", shortcut: "2" },
+  { id: "DELIVERY", title: ORDER_TYPE_ACTION.DELIVERY, icon: Moto,        accent: "#F97316", shortcut: "3" },
 ];
 
 // Metadatos por tipo para las filas de cuentas abiertas (badge + icono + tono).
 const TYPE_META: Record<OrderType, { label: string; icon: typeof Utensils; accent: string }> = {
-  DINE_IN:  { label: "MESA",      icon: Utensils,    accent: "#E0A22A" },
-  TAKEOUT:  { label: "LLEVAR",    icon: ShoppingBag, accent: "#3b82f6" },
-  DELIVERY: { label: "DOMICILIO", icon: Bike,        accent: "#10b981" },
+  DINE_IN:  { label: ORDER_TYPE_BADGE.DINE_IN,  icon: Utensils,    accent: "#E0A22A" },
+  TAKEOUT:  { label: ORDER_TYPE_BADGE.TAKEOUT,  icon: ShoppingBag, accent: "#3b82f6" },
+  DELIVERY: { label: ORDER_TYPE_BADGE.DELIVERY, icon: Bike,        accent: "#10b981" },
 };
 
 // Punto de estado por estado de la orden.
@@ -210,9 +211,9 @@ const dotFor = (status: string) => STATUS_DOT[status] ?? "rgba(255,255,255,0.5)"
 // Filtros de la lista de cuentas.
 const FILTERS: { key: "ALL" | OrderType; label: string }[] = [
   { key: "ALL",      label: "Todas" },
-  { key: "DINE_IN",  label: "Mesa" },
-  { key: "TAKEOUT",  label: "Llevar" },
-  { key: "DELIVERY", label: "Domicilio" },
+  { key: "DINE_IN",  label: ORDER_TYPE_SHORT.DINE_IN },
+  { key: "TAKEOUT",  label: ORDER_TYPE_SHORT.TAKEOUT },
+  { key: "DELIVERY", label: ORDER_TYPE_SHORT.DELIVERY },
 ];
 
 // Accesos del menú desplegable (esquina del header). Combina navegación
@@ -227,7 +228,7 @@ const SHORTCUTS = [
   { label: "Sucursal",         icon: LayoutGrid,       action: "hub"       as const },
   { label: "Corte de caja",    icon: Wallet,           action: "shift"     as const },
   { label: "Gastos y compras", icon: Coins,            action: "expenses"  as const },
-  { label: "Configuración",    icon: SlidersHorizontal, action: "settings" as const },
+  { label: "Apariencia",       icon: SlidersHorizontal, action: "settings" as const },
   { label: "Panel central",    icon: Settings,         action: "config"    as const },
   { label: "Cambiar empleado", icon: ArrowLeftRight,   action: "switch"    as const },
 ];
