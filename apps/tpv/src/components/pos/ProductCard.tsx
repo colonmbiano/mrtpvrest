@@ -152,7 +152,7 @@ function ProductCardBase({
       {quantityInTicket > 0 && isAvailable && (
         <span
           aria-label={`${quantityInTicket} en comanda`}
-          className="absolute z-20 left-2 bottom-2 min-w-[26px] h-[26px] px-1.5 rounded-full bg-[#88d66c] text-black text-[11px] font-black tabular-nums flex items-center justify-center"
+          className="absolute z-20 left-2 bottom-2 min-w-[26px] h-[26px] px-1.5 rounded-full bg-[var(--brand)] text-[var(--brand-fg)] text-[11px] font-black tabular-nums flex items-center justify-center"
         >
           ×{quantityInTicket}
         </span>
@@ -164,7 +164,7 @@ function ProductCardBase({
         className="relative z-10 flex flex-col gap-0.5 rounded-lg"
         style={imageUrl ? { background: "#0a0a0ccc", padding: "4px 6px", margin: "-4px -6px" } : undefined}
       >
-        <span className="text-[11px] font-black leading-tight text-white tracking-tight line-clamp-2 pr-8">
+        <span className="text-[11px] font-bold leading-tight text-white tracking-tight line-clamp-2 pr-8">
           {name}
         </span>
         <div className="flex items-baseline gap-1.5">
