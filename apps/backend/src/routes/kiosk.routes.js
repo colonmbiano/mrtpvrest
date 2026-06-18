@@ -4,6 +4,7 @@ const express = require('express')
 const router  = express.Router()
 const { prisma } = require('@mrtpvrest/database')
 const { requireModule, MODULES } = require('../lib/modules')
+const { nextOrderNumber } = require('../lib/order-number')
 const {
   resolveProviderForRestaurant,
   SUPPORTED_KEYS,
@@ -127,7 +128,10 @@ router.post('/orders', async (req, res) => {
       })
     }
 
-    const orderNumber = `K-${Date.now()}`
+    // Folio secuencial continuo por restaurante (misma serie que TPV/web).
+    // El kiosko crea sin transacción; un fallo posterior solo dejaría un hueco
+    // en la serie, no un folio duplicado.
+    const orderNumber = await nextOrderNumber(prisma, restaurantId)
 
     // Crear orden con paymentMethod QR_CODE (provider-agnostic)
     const order = await prisma.order.create({

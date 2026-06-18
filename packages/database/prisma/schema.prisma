@@ -687,7 +687,12 @@ model Order {
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   location     Location?  @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  orderNumber String   @unique
+  // orderNumber · folio secuencial continuo POR RESTAURANTE (1, 2, 3...).
+  // Lo asigna un contador atómico (ver lib/order-number.js + model Counter);
+  // antes era 'TPV-' + fragmento del timestamp, que no contaba nada real.
+  // La unicidad es por restaurante (@@unique abajo), NO global: cada negocio
+  // tiene su propia serie 1..N sin chocar con la de otro tenant.
+  orderNumber String
   // clientOrderId · idempotencia DB-level para replays de la cola offline
   // del TPV. El cliente genera el id antes de mandar (uuid o txId del outbox)
   // y el backend lo usa como llave única: si ya existe, devuelve la orden
@@ -781,10 +786,34 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([restaurantId, orderNumber])
   @@index([tableId])
   @@index([customerId])
   @@index([createdById])
   @@map("orders")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COUNTER — Contadores secuenciales atómicos por restaurante.
+// Hoy un solo scope ("order") = folio continuo de órdenes (1, 2, 3...). El
+// valor se incrementa DENTRO de la misma $transaction que crea la orden, así
+// dos cobros simultáneos nunca sacan el mismo folio ni se saltan números.
+// Ver helper apps/backend/src/lib/order-number.js. Sin relación Prisma a
+// Restaurant a propósito (es metadata interna, no se navega desde el tenant).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Counter {
+  id           String @id @default(cuid())
+  restaurantId String
+  // scope: tipo de serie. "order" = folio de órdenes. Deja la puerta abierta a
+  // futuras series (cotizaciones, compras...) sin otra tabla.
+  scope        String @default("order")
+  value        Int    @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, scope])
+  @@map("counters")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -24,6 +24,7 @@ const {
 } = require('../lib/payment-providers');
 // Cálculo de envío: fuente única compartida con el chatbot de WhatsApp.
 const { computeDeliveryFee } = require('../lib/delivery-fee');
+const { nextOrderNumber } = require('../lib/order-number');
 const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
 const { addLoyaltyPoints, genLoyaltyQr } = require('../services/loyalty.service');
@@ -747,9 +748,6 @@ router.post('/orders', async (req, res) => {
         pointsDiscount = Math.round(pointsUsed * ppv * 100) / 100;
       }
     }
-    const orderNumberPrefix = source === 'KIOSK' ? 'KIOSK-' : 'WEB-';
-    const orderNumber = orderNumberPrefix + Date.now().toString().slice(-6);
-
     // Crear la orden CON el consumo de cupón y puntos en la misma transacción:
     // si algo falla, no queda orden con descuento aplicado pero cupón/puntos
     // sin consumir (ni al revés). Los consumos son condicionales en el WHERE
@@ -787,6 +785,10 @@ router.post('/orders', async (req, res) => {
 
       const finalDiscount = Math.round((discount + pointsDiscount) * 100) / 100;
       const finalTotal = Math.max(0, subtotal - finalDiscount + deliveryFee + tip);
+
+      // Folio secuencial continuo por restaurante (misma serie que el TPV),
+      // atómico dentro de esta tx que ya consume cupón/puntos.
+      const orderNumber = await nextOrderNumber(tx, restaurant.id);
 
       const created = await tx.order.create({
         data: {
@@ -1045,8 +1047,16 @@ router.post('/coupon/validate', async (req, res) => {
 // status + estimatedMinutes — payload mínimo para no saturar al pollear.
 router.get('/orders/by-number/:orderNumber', async (req, res) => {
   try {
-    const order = await prisma.order.findUnique({
-      where: { orderNumber: req.params.orderNumber },
+    // orderNumber ya NO es único global (es único por restaurante), así que
+    // scopeamos por el restaurante del header — que el kiosko siempre manda
+    // (lib/api.ts) — y usamos findFirst. Sin header, fallback al folio solo.
+    const restaurantId = req.headers['x-restaurant-id'] || req.query.restaurantId || undefined;
+    const order = await prisma.order.findFirst({
+      where: {
+        orderNumber: req.params.orderNumber,
+        ...(restaurantId ? { restaurantId } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
       select: {
         id: true,
         orderNumber: true,
