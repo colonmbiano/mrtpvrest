@@ -173,7 +173,7 @@ export default function HomePage() {
         </a>
         <div className="nav-links" aria-label="Navegación principal">
           <Link href="/funciones">Funciones</Link>
-          <a href="#apps">Apps</a>
+          <Link href="/punto-de-venta">Giros</Link>
           <a href="#precios">Precios</a>
           <Link href="/comparativa/parrot">Comparativas</Link>
           <a href="#faq">FAQ</a>
@@ -392,6 +392,7 @@ export default function HomePage() {
         <span>© 2026 MRTPVREST</span>
         <div>
           <Link href="/funciones">Funciones</Link>
+          <Link href="/punto-de-venta">Giros</Link>
           <Link href="/comparativa/parrot">Comparativas</Link>
           <a href="#precios">Precios</a>
           <a href="mailto:contacto@mrtpvrest.com">Contacto</a>
