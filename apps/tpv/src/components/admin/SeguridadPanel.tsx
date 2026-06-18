@@ -119,8 +119,8 @@ export default function SeguridadPanel() {
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="rounded-3xl overflow-hidden col-span-full bg-white/5 backdrop-blur-md border border-white/10">
           <div className="px-6 py-4 border-b border-white/10">
-            <p className="text-[10px] font-black tracking-[0.2em] text-white/40">POLÍTICAS DE AUTORIZACIÓN</p>
-            <p className="text-sm font-black text-white">Acciones que requieren PIN del supervisor</p>
+            <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40">POLÍTICAS DE AUTORIZACIÓN</p>
+            <p className="text-sm font-semibold text-white">Acciones que requieren PIN del supervisor</p>
           </div>
           <div className="divide-y divide-white/5">
             {/* BUG-21: el checkbox nativo era poco visible en dark + el
@@ -145,7 +145,7 @@ export default function SeguridadPanel() {
                     <Lock size={16} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-black text-white">{p.label}</p>
+                    <p className="text-sm font-semibold text-white">{p.label}</p>
                     <p className="text-[11px] font-medium text-white/55">{p.sub}</p>
                   </div>
                   {/* BUG-18: usar var(--brand) en vez de hex hardcoded
@@ -170,7 +170,7 @@ export default function SeguridadPanel() {
         </div>
 
         <div className="rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10">
-          <p className="text-[10px] font-black tracking-[0.2em] text-white/40 mb-2">PIN SI DESCUENTO &gt; (%)</p>
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 mb-2">PIN SI DESCUENTO &gt; (%)</p>
           <input
             type="number"
             min={0}
@@ -184,7 +184,7 @@ export default function SeguridadPanel() {
           </p>
         </div>
         <div className="rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10">
-          <p className="text-[10px] font-black tracking-[0.2em] text-white/40 mb-2">BLOQUEO AUTOMÁTICO (MIN)</p>
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 mb-2">BLOQUEO AUTOMÁTICO (MIN)</p>
           <input
             type="number"
             min={1}
@@ -203,8 +203,8 @@ export default function SeguridadPanel() {
       <section className="rounded-3xl overflow-hidden bg-white/5 backdrop-blur-md border border-white/10">
         <div className="px-6 py-4 flex items-center justify-between border-b border-white/10">
           <div>
-            <p className="text-[10px] font-black tracking-[0.2em] text-white/40">BITÁCORA DE ACCESO</p>
-            <p className="text-sm font-black flex items-center gap-2 text-white">
+            <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40">BITÁCORA DE ACCESO</p>
+            <p className="text-sm font-semibold flex items-center gap-2 text-white">
               <Activity size={14} style={{ color: "var(--brand)" }} /> Últimos 50 eventos
             </p>
           </div>
@@ -223,7 +223,7 @@ export default function SeguridadPanel() {
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <span
-                    className="text-[10px] font-black tracking-widest px-2 py-0.5 rounded-full border"
+                    className="text-[10px] font-semibold tracking-widest px-2 py-0.5 rounded-full border"
                     style={{ background: "var(--brand-soft)", color: "var(--brand)", borderColor: "var(--brand-glow)" }}
                   >
                     {l.action}

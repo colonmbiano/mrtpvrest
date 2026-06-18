@@ -41,7 +41,7 @@ export default function KDSMessages() {
           color: messages.length > 0 ? "#f59e0b" : "var(--muted)"}}>
         📺 KDS
         {messages.length > 0 && (
-          <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-xs font-black flex items-center justify-center"
+          <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-xs font-semibold flex items-center justify-center"
             style={{background:"#ef4444",color:"#fff"}}>
             {messages.length}
           </span>

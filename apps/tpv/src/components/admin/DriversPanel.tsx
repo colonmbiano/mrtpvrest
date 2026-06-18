@@ -287,14 +287,14 @@ export default function DriversPanel({
                 style={{ background: "var(--surf2)" }}
               >
                 <Banknote size={16} style={{ color: accent }} />
-                <span className="text-sm font-black text-white">Pendientes de cobro</span>
+                <span className="text-sm font-semibold text-white">Pendientes de cobro</span>
                 <span
-                  className="text-[10px] font-black px-1.5 py-0.5 rounded-md"
+                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
                   style={{ background: `${accent}22`, color: accent }}
                 >
                   {pending.length}
                 </span>
-                <span className="ml-auto text-sm font-black" style={{ color: accent }}>
+                <span className="ml-auto text-sm font-semibold" style={{ color: accent }}>
                   ${pending.reduce((s, o) => s + (o.total || 0), 0).toFixed(0)}
                 </span>
               </div>
@@ -304,7 +304,7 @@ export default function DriversPanel({
                   type="button"
                   onClick={confirmAll}
                   disabled={confirmingAll || confirmingId !== null}
-                  className="w-full min-h-[44px] flex items-center justify-center gap-2 text-[12px] font-black uppercase tracking-wider border-b disabled:opacity-50 active:scale-[0.99] transition-transform"
+                  className="w-full min-h-[44px] flex items-center justify-center gap-2 text-[12px] font-semibold uppercase tracking-wider border-b disabled:opacity-50 active:scale-[0.99] transition-transform"
                   style={{ borderColor: "var(--border)", background: `${accent}14`, color: accent }}
                 >
                   {confirmingAll ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
@@ -336,7 +336,7 @@ export default function DriversPanel({
                       </div>
                       <div className="text-right shrink-0">
                         <div className="text-[9px] uppercase font-bold" style={{ color: "var(--text-secondary)" }}>Total</div>
-                        <div className="text-sm font-black" style={{ color: accent }}>${(o.total || 0).toFixed(0)}</div>
+                        <div className="text-sm font-semibold" style={{ color: accent }}>${(o.total || 0).toFixed(0)}</div>
                       </div>
                       <button
                         type="button"
@@ -371,7 +371,7 @@ export default function DriversPanel({
               <button
                 type="button"
                 onClick={() => fetchLive(false)}
-                className="min-h-[44px] px-4 rounded-xl border border-red-400/30 bg-red-400/10 font-black uppercase tracking-wider text-[11px] flex items-center gap-2 active:scale-95 transition-transform"
+                className="min-h-[44px] px-4 rounded-xl border border-red-400/30 bg-red-400/10 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-2 active:scale-95 transition-transform"
               >
                 <RefreshCw size={15} />
                 Reintentar
@@ -413,7 +413,7 @@ export default function DriversPanel({
                     }}
                   >
                     <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0 overflow-hidden"
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0 overflow-hidden"
                       style={{ background: "var(--surf2)", border: "1px solid var(--border)" }}
                     >
                       {d.driver.photo ? (
@@ -440,23 +440,23 @@ export default function DriversPanel({
                             style={{ background: "color-mix(in srgb, var(--warning) 12%, transparent)", borderColor: "color-mix(in srgb, var(--warning) 25%, transparent)" }}
                           >
                             <div className="text-[9px] font-bold uppercase leading-none mb-0.5" style={{ color: "var(--warning)" }}>Fondo</div>
-                            <div className="text-xs font-black" style={{ color: "var(--warning)" }}>${(d.cash.float || 0).toFixed(0)}</div>
+                            <div className="text-xs font-semibold" style={{ color: "var(--warning)" }}>${(d.cash.float || 0).toFixed(0)}</div>
                           </div>
                           <div className="px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/20">
                             <div className="text-[9px] text-green-400 font-bold uppercase leading-none mb-0.5">Ingresos</div>
-                            <div className="text-xs font-black text-green-400">${d.cash.income.toFixed(0)}</div>
+                            <div className="text-xs font-semibold text-green-400">${d.cash.income.toFixed(0)}</div>
                           </div>
                           <div className="px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/20">
                             <div className="text-[9px] text-red-400 font-bold uppercase leading-none mb-0.5">Gastos</div>
-                            <div className="text-xs font-black text-red-400">${d.cash.expense.toFixed(0)}</div>
+                            <div className="text-xs font-semibold text-red-400">${d.cash.expense.toFixed(0)}</div>
                           </div>
                           <div className="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20">
                             <div className="text-[9px] text-blue-400 font-bold uppercase leading-none mb-0.5">Entregas</div>
-                            <div className="text-xs font-black text-blue-400">{d.cash.deliveries}</div>
+                            <div className="text-xs font-semibold text-blue-400">{d.cash.deliveries}</div>
                           </div>
                           <div className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 ml-auto">
                             <div className="text-[9px] text-white/40 font-bold uppercase leading-none mb-0.5">Saldo</div>
-                            <div className="text-xs font-black text-white">${d.cash.balance.toFixed(0)}</div>
+                            <div className="text-xs font-semibold text-white">${d.cash.balance.toFixed(0)}</div>
                           </div>
                         </div>
                       )}

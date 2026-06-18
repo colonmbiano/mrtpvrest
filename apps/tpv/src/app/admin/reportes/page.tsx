@@ -170,7 +170,7 @@ export default function ReportesPage() {
         <div className="rounded-2xl p-8 flex flex-col gap-6 min-h-[460px] bg-surface-1 border border-border shadow-sm">
           <div className="flex items-start justify-between">
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-black tracking-widest text-tx-mut uppercase">VENTAS POR DÍA</span>
+              <span className="text-[10px] font-semibold tracking-widest text-tx-mut uppercase">VENTAS POR DÍA</span>
               <h2 className="text-xl font-black tracking-tight">Tendencia de ingresos</h2>
             </div>
             <div className="flex items-center gap-4">
@@ -184,7 +184,7 @@ export default function ReportesPage() {
                 <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border"
                   style={{ background: 'var(--brand-soft)', border: '1px solid var(--brand-glow)', color: 'var(--brand)' }}>
                   <ArrowUpRight size={14} />
-                  <span className="text-[11px] font-black">
+                  <span className="text-[11px] font-semibold">
                     {dayLabel(peak.date)}
                   </span>
                 </div>
@@ -205,7 +205,7 @@ export default function ReportesPage() {
               return (
                 <div key={d.date} className="flex-1 h-full flex flex-col items-center gap-2 justify-end group">
                   <div className="relative w-full flex flex-col items-center group">
-                    <span className="absolute -top-7 text-[10px] font-black tabular-nums opacity-0 group-hover:opacity-100 transition-all transform -translate-y-1 group-hover:translate-y-0"
+                    <span className="absolute -top-7 text-[10px] font-semibold tabular-nums opacity-0 group-hover:opacity-100 transition-all transform -translate-y-1 group-hover:translate-y-0"
                       style={{ color: isPeak ? 'var(--brand)' : 'var(--text-secondary)' }}>
                       {fmtMoney(d.revenue).replace('$', '')}
                     </span>
@@ -229,10 +229,10 @@ export default function ReportesPage() {
         <aside className="rounded-2xl flex flex-col overflow-hidden bg-surface-1 border border-border shadow-sm">
           <div className="flex items-center justify-between px-6 py-5 border-b border-border bg-surface-2/50">
             <div className="flex flex-col">
-              <span className="text-[10px] font-black tracking-widest text-tx-mut uppercase">RANKING</span>
-              <h3 className="text-base font-black tracking-tight">Top Productos</h3>
+              <span className="text-[10px] font-semibold tracking-widest text-tx-mut uppercase">RANKING</span>
+              <h3 className="text-base font-semibold tracking-tight">Top Productos</h3>
             </div>
-            <span className="inline-flex items-center px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest bg-surface-3 text-tx-sec">
+            <span className="inline-flex items-center px-3 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-widest bg-surface-3 text-tx-sec">
               {period === '7D' ? '7 Días' : period === '30D' ? '30 Días' : 'Año'}
             </span>
           </div>
@@ -247,7 +247,7 @@ export default function ReportesPage() {
             {topItems.map((it, idx) => {
               return (
                 <div key={it.name + idx} className="flex items-center gap-4 py-4 px-2 hover:bg-surface-hover rounded-xl transition-all group">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black shadow-sm transition-transform group-hover:scale-110"
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-semibold shadow-sm transition-transform group-hover:scale-110"
                     style={{
                       background: idx < 3 ? 'var(--brand-soft)' : 'var(--surface-2)',
                       color: idx < 3 ? 'var(--brand)' : 'var(--text-muted)',
@@ -256,12 +256,12 @@ export default function ReportesPage() {
                     {idx + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-black text-tx-pri truncate">{it.name}</p>
+                    <p className="text-sm font-semibold text-tx-pri truncate">{it.name}</p>
                     <p className="text-[10px] font-bold text-tx-mut uppercase tracking-widest">
                       {fmtCount(it.quantity)} Vendidos
                     </p>
                   </div>
-                  <span className="text-sm font-black tabular-nums" style={{ color: 'var(--success)' }}>
+                  <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--success)' }}>
                     {fmtMoney(it.total)}
                   </span>
                 </div>
@@ -271,8 +271,8 @@ export default function ReportesPage() {
 
           <div className="px-6 py-5 bg-surface-2/50 border-t border-border flex items-center justify-between">
             <div className="flex flex-col">
-              <span className="text-[9px] font-black text-tx-mut uppercase tracking-widest">Total SKU</span>
-              <span className="text-sm font-black">{topItems.length}</span>
+              <span className="text-[9px] font-semibold text-tx-mut uppercase tracking-widest">Total SKU</span>
+              <span className="text-sm font-semibold">{topItems.length}</span>
             </div>
             <button className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-md"
               style={{ background: 'var(--brand)', color: 'var(--brand-fg)' }}>
@@ -304,7 +304,7 @@ function KPICard({ icon, label, value, delta, inverted = false, loading, themeCo
           {icon}
         </div>
         {!loading && (
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black tabular-nums transition-all"
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold tabular-nums transition-all"
             style={{ background: `${color}15`, color }}>
             {positive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
             {Math.abs(delta).toFixed(1)}%
@@ -312,7 +312,7 @@ function KPICard({ icon, label, value, delta, inverted = false, loading, themeCo
         )}
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-[10px] font-black tracking-widest text-tx-mut uppercase">
+        <span className="text-[10px] font-semibold tracking-widest text-tx-mut uppercase">
           {label}
         </span>
         <span className="text-2xl font-black tabular-nums tracking-tight text-tx-pri">

@@ -206,7 +206,7 @@ function EmpleadosTab() {
         </p>
         <button
           onClick={() => setCreating(true)}
-          className="h-14 min-h-[64px] px-8 rounded-2xl font-black uppercase tracking-[0.2em] text-xs flex items-center gap-3 active:scale-95 transition-transform"
+          className="h-14 min-h-[64px] px-8 rounded-2xl font-black uppercase tracking-[0.14em] text-xs flex items-center gap-3 active:scale-95 transition-transform"
           style={{ background: "var(--brand)", color: "var(--brand-fg)", boxShadow: "0 10px 30px var(--brand-glow)" }}
         >
           <Plus size={20} strokeWidth={3} /> Nuevo empleado
@@ -225,14 +225,14 @@ function EmpleadosTab() {
       </div>
 
       {error && (
-        <div className="mb-10 rounded-3xl p-5 text-sm font-black uppercase tracking-widest bg-red-500/10 border border-red-500/20 text-red-400">
+        <div className="mb-10 rounded-3xl p-5 text-sm font-semibold uppercase tracking-widest bg-red-500/10 border border-red-500/20 text-red-400">
           Error: {error}
         </div>
       )}
 
       {/* TABLE */}
       <div className="rounded-[2.5rem] bg-white/5 backdrop-blur-md border border-white/10 shadow-2xl overflow-hidden">
-        <div className="grid grid-cols-[1fr_160px_160px_140px_160px] gap-6 px-10 py-6 text-[10px] font-black tracking-[0.3em] uppercase bg-black/20 text-white/40 border-b border-white/5">
+        <div className="grid grid-cols-[1fr_160px_160px_140px_160px] gap-6 px-10 py-6 text-[10px] font-semibold tracking-[0.3em] uppercase bg-black/20 text-white/40 border-b border-white/5">
           <span>Identidad</span>
           <span>Jerarquía</span>
           <span>Contacto</span>
@@ -243,13 +243,13 @@ function EmpleadosTab() {
         {loading ? (
           <div className="px-10 py-24 text-center">
             <div className="w-10 h-10 border-4 border-[var(--brand-soft)] border-t-[var(--brand)] rounded-full animate-spin mx-auto mb-4" />
-            <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+            <span className="text-[10px] font-semibold text-white/40 uppercase tracking-widest">
               Sincronizando base de datos...
             </span>
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-10 py-24 text-center opacity-40">
-            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40 italic">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/40 italic">
               {search ? "No hay coincidencias para el filtro" : "Lista de personal vacía"}
             </p>
           </div>
@@ -269,7 +269,7 @@ function EmpleadosTab() {
                       {emp.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex flex-col">
-                      <span className="font-black text-white tracking-tight">{emp.name}</span>
+                      <span className="font-semibold text-white tracking-tight">{emp.name}</span>
                       <span className="text-[10px] text-white/40 font-bold uppercase">
                         ID: {emp.id.slice(-6).toUpperCase()}
                       </span>
@@ -277,18 +277,18 @@ function EmpleadosTab() {
                   </div>
                   <div>
                     <span
-                      className={`inline-flex items-center px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-white/5 ${style.bg} ${style.text}`}
+                      className={`inline-flex items-center px-3 py-1 rounded-lg text-[9px] font-semibold uppercase tracking-widest border border-white/5 ${style.bg} ${style.text}`}
                     >
                       {emp.role}
                     </span>
                   </div>
-                  <span className="text-[13px] font-black tabular-nums text-white/60">
+                  <span className="text-[13px] font-semibold tabular-nums text-white/60">
                     {emp.phone || "—"}
                   </span>
                   <div className="flex justify-center">
                     <button
                       onClick={() => handleToggle(emp)}
-                      className={`min-h-[40px] h-10 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-transform flex items-center gap-2 border ${
+                      className={`min-h-[40px] h-10 px-4 rounded-xl text-[9px] font-semibold uppercase tracking-widest active:scale-95 transition-transform flex items-center gap-2 border ${
                         emp.isActive
                           ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                           : "bg-white/5 text-white/40 border-white/10"
@@ -478,7 +478,7 @@ function EmployeeModal({
         {/* HEADER */}
         <div className="flex items-center justify-between p-7 sm:p-9 border-b border-white/5 bg-white/5 backdrop-blur-md shrink-0">
           <div className="flex flex-col gap-1 min-w-0">
-            <span className="text-[10px] font-black tracking-[0.25em] text-iris-500 uppercase">
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-iris-500 uppercase">
               Expediente de Personal
             </span>
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight truncate">
@@ -533,7 +533,7 @@ function EmployeeModal({
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 placeholder="+52 000 000 0000"
-                className="w-full h-14 min-h-[56px] px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-black tabular-nums outline-none focus:border-iris-500 transition-colors placeholder:text-white/30"
+                className="w-full h-14 min-h-[56px] px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-semibold tabular-nums outline-none focus:border-iris-500 transition-colors placeholder:text-white/30"
               />
             </Field>
 
@@ -558,7 +558,7 @@ function EmployeeModal({
                   <KeyRound size={20} strokeWidth={2.5} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-[15px] font-black text-white tracking-tight">
+                  <h3 className="text-[15px] font-semibold text-white tracking-tight">
                     Permisos operativos especiales
                   </h3>
                   <p className="text-[11px] font-bold text-white/50 mt-0.5 leading-relaxed">
@@ -567,7 +567,7 @@ function EmployeeModal({
                   </p>
                 </div>
               </div>
-              <span className="shrink-0 mt-1 px-3 h-7 rounded-full bg-iris-soft border border-iris-glow text-iris-500 text-[10px] font-black tracking-widest uppercase tabular-nums flex items-center">
+              <span className="shrink-0 mt-1 px-3 h-7 rounded-full bg-iris-soft border border-iris-glow text-iris-500 text-[10px] font-semibold tracking-widest uppercase tabular-nums flex items-center">
                 {activeSpecialCount} / {SPECIAL_PERMS.length}
               </span>
             </header>
@@ -599,7 +599,7 @@ function EmployeeModal({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline gap-2">
                         <span
-                          className={`text-[13px] font-black tracking-tight leading-snug ${
+                          className={`text-[13px] font-semibold tracking-tight leading-snug ${
                             active ? "text-white" : "text-white/85"
                           }`}
                         >
@@ -629,7 +629,7 @@ function EmployeeModal({
           <section>
             <div className="flex items-center gap-3 mb-5 ml-1">
               <ShieldCheck size={18} className="text-white/50" />
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/50">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
                 Privilegios del sistema (legacy)
               </p>
             </div>
@@ -649,7 +649,7 @@ function EmployeeModal({
                         setForm({ ...form, [p.key]: e.target.checked })
                       }
                     />
-                    <span className="text-[11px] font-black uppercase tracking-widest text-white/60 group-active:text-white">
+                    <span className="text-[11px] font-semibold uppercase tracking-widest text-white/60 group-active:text-white">
                       {p.label}
                     </span>
                   </label>
@@ -659,7 +659,7 @@ function EmployeeModal({
           </section>
 
           {err && (
-            <div className="rounded-2xl p-5 text-[10px] font-black uppercase tracking-widest bg-red-500/10 border border-red-500/20 text-red-400">
+            <div className="rounded-2xl p-5 text-[10px] font-semibold uppercase tracking-widest bg-red-500/10 border border-red-500/20 text-red-400">
               {err}
             </div>
           )}
@@ -681,7 +681,7 @@ function EmployeeModal({
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="flex-1 min-h-[64px] h-16 rounded-2xl bg-white/5 border border-white/10 text-white/70 font-black uppercase tracking-[0.2em] text-[11px] active:scale-95 active:text-white transition-transform"
+            className="flex-1 min-h-[64px] h-16 rounded-2xl bg-white/5 border border-white/10 text-white/70 font-semibold uppercase tracking-[0.14em] text-[11px] active:scale-95 active:text-white transition-transform"
           >
             Cancelar
           </button>
@@ -689,7 +689,7 @@ function EmployeeModal({
             type="submit"
             onClick={submit}
             disabled={submitting}
-            className="flex-[2] min-h-[64px] h-16 rounded-2xl bg-iris-500 text-iris-fg font-black uppercase tracking-[0.2em] text-[11px] active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)] disabled:opacity-30 disabled:active:scale-100"
+            className="flex-[2] min-h-[64px] h-16 rounded-2xl bg-iris-500 text-iris-fg font-black uppercase tracking-[0.14em] text-[11px] active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)] disabled:opacity-30 disabled:active:scale-100"
           >
             {submitting
               ? "Procesando..."
@@ -706,7 +706,7 @@ function EmployeeModal({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2.5">
-      <label className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase ml-1">
+      <label className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase ml-1">
         {label}
       </label>
       {children}

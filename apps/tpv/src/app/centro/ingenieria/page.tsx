@@ -70,7 +70,7 @@ export default function CentroIngenieriaPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-white/40">
         <Loader2 className="animate-spin mb-3" size={26} />
-        <span className="text-[10px] font-black uppercase tracking-[0.3em]">Calculando matriz…</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.3em]">Calculando matriz…</span>
       </div>
     );
   }
@@ -82,15 +82,15 @@ export default function CentroIngenieriaPage() {
       {/* Resumen */}
       <section className="flex flex-wrap items-center gap-5">
         <div className="flex flex-col">
-          <span className="text-[9px] font-black tracking-[0.25em] text-white/40 uppercase">Margen prom.</span>
+          <span className="text-[9px] font-semibold tracking-[0.25em] text-white/40 uppercase">Margen prom.</span>
           <span className="text-lg font-black text-white tabular-nums">{fmtMoney(data.thresholds.avgMargin)}</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-[9px] font-black tracking-[0.25em] text-white/40 uppercase">Venta prom.</span>
+          <span className="text-[9px] font-semibold tracking-[0.25em] text-white/40 uppercase">Venta prom.</span>
           <span className="text-lg font-black text-white tabular-nums">{data.thresholds.avgUnitsSold.toFixed(1)} uds</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-[9px] font-black tracking-[0.25em] text-white/40 uppercase">Platos</span>
+          <span className="text-[9px] font-semibold tracking-[0.25em] text-white/40 uppercase">Platos</span>
           <span className="text-lg font-black text-white tabular-nums">{totalDishes}</span>
         </div>
       </section>
@@ -105,7 +105,7 @@ export default function CentroIngenieriaPage() {
 
       {/* Recomendaciones */}
       <section className="rounded-2xl bg-white/5 border border-white/10 p-5">
-        <h3 className="text-[11px] font-black tracking-[0.25em] text-white/50 uppercase mb-3">
+        <h3 className="text-[11px] font-semibold tracking-[0.25em] text-white/50 uppercase mb-3">
           Recomendaciones automáticas
         </h3>
         {data.recommendations.length === 0 ? (
@@ -117,7 +117,7 @@ export default function CentroIngenieriaPage() {
               return (
                 <li key={r.dishId} className="flex items-center justify-between gap-3 py-2.5">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${q.bg} ${q.text} border ${q.border} text-[9px] font-black uppercase tracking-widest`}>
+                    <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${q.bg} ${q.text} border ${q.border} text-[9px] font-semibold uppercase tracking-widest`}>
                       <q.Icon size={9} /> {q.label}
                     </span>
                     <span className="text-sm font-bold text-white truncate">{r.name}</span>
@@ -145,10 +145,10 @@ function QuadrantCard({ quad, dishes }: { quad: QuadKey; dishes: Dish[] }) {
             <q.Icon size={14} strokeWidth={2.5} />
           </div>
           <div className="flex flex-col leading-tight">
-            <span className="text-[10px] font-black tracking-[0.2em] text-white/40 uppercase">
+            <span className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
               {q.tagline}
             </span>
-            <span className={`text-sm font-black ${q.text}`}>{q.label}</span>
+            <span className={`text-sm font-semibold ${q.text}`}>{q.label}</span>
           </div>
         </div>
         <span className="text-2xl font-black text-white tabular-nums">{dishes.length}</span>

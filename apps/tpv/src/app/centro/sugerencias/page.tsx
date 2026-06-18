@@ -108,7 +108,7 @@ export default function CentroSugerenciasPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-white/40">
         <Loader2 className="animate-spin mb-3" size={26} />
-        <span className="text-[10px] font-black uppercase tracking-[0.3em]">Calculando sugerencias…</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.3em]">Calculando sugerencias…</span>
       </div>
     );
   }
@@ -129,8 +129,8 @@ export default function CentroSugerenciasPage() {
       {/* Lista de proveedores */}
       <section className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
         <header className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-          <h3 className="text-[11px] font-black tracking-[0.25em] text-white/50 uppercase">Proveedores</h3>
-          <span className="text-[10px] font-black text-white/30">{data.suggestions.length}</span>
+          <h3 className="text-[11px] font-semibold tracking-[0.25em] text-white/50 uppercase">Proveedores</h3>
+          <span className="text-[10px] font-semibold text-white/30">{data.suggestions.length}</span>
         </header>
         <ul className="divide-y divide-white/5 max-h-[70vh] overflow-auto">
           {data.suggestions.map((g) => {
@@ -151,7 +151,7 @@ export default function CentroSugerenciasPage() {
                     </div>
                   </div>
                   {g.urgentCount > 0 && (
-                    <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[9px] font-black uppercase tracking-widest">
+                    <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[9px] font-semibold uppercase tracking-widest">
                       <Zap size={9} /> {g.urgentCount}
                     </span>
                   )}
@@ -172,7 +172,7 @@ export default function CentroSugerenciasPage() {
           <>
             <header className="px-5 py-4 border-b border-white/10 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-base font-black text-white">
+                <h2 className="text-base font-semibold text-white">
                   {selectedGroup.supplier?.name || "Sin proveedor asignado"}
                 </h2>
                 <p className="text-[11px] text-white/40 mt-0.5">
@@ -206,11 +206,11 @@ export default function CentroSugerenciasPage() {
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-bold text-white truncate">{it.ingredient.name}</span>
                             {it.urgency === "URGENTE" ? (
-                              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[9px] font-black uppercase tracking-widest">
+                              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[9px] font-semibold uppercase tracking-widest">
                                 <Zap size={9} /> Urgente
                               </span>
                             ) : (
-                              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[var(--warning-soft)] border border-[var(--warning)] text-[var(--warning)] text-[9px] font-black uppercase tracking-widest">
+                              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[var(--warning-soft)] border border-[var(--warning)] text-[var(--warning)] text-[9px] font-semibold uppercase tracking-widest">
                                 <Clock size={9} /> Pronto
                               </span>
                             )}
@@ -256,7 +256,7 @@ export default function CentroSugerenciasPage() {
                             <Plus size={12} className="text-white/70" />
                           </button>
                         </div>
-                        <div className="w-20 text-right text-sm font-black text-white tabular-nums">
+                        <div className="w-20 text-right text-sm font-semibold text-white tabular-nums">
                           {fmtMoney(qty * it.unitPrice)}
                         </div>
                         <button

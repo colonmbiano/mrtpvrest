@@ -84,7 +84,7 @@ export default function CentroLayout({ children }: { children: React.ReactNode }
     return (
       <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-[var(--bg)] text-white">
         <div className="w-12 h-12 border-4 border-[var(--brand-soft)] border-t-[var(--brand)] rounded-full animate-spin mb-4" />
-        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--text-muted)]">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[var(--text-muted)]">
           Verificando credenciales…
         </span>
       </div>
@@ -105,7 +105,7 @@ export default function CentroLayout({ children }: { children: React.ReactNode }
     return (
       <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-[var(--bg)] text-white">
         <div className="w-12 h-12 border-4 border-[var(--brand-soft)] border-t-[var(--brand)] rounded-full animate-spin mb-4" />
-        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--text-muted)]">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[var(--text-muted)]">
           Verificando módulo…
         </span>
       </div>
@@ -162,7 +162,7 @@ export default function CentroLayout({ children }: { children: React.ReactNode }
               <BarChart3 size={16} className="text-[var(--brand)]" strokeWidth={2.5} />
             </div>
             <div className="flex flex-col leading-tight">
-              <span className="text-[9px] font-black tracking-[0.25em] text-white/40 uppercase">
+              <span className="text-[9px] font-semibold tracking-[0.25em] text-white/40 uppercase">
                 Centro
               </span>
               <span className="text-sm font-bold text-white">Financiero</span>
@@ -173,7 +173,7 @@ export default function CentroLayout({ children }: { children: React.ReactNode }
         <div className="flex items-center gap-2">
           <div className="hidden md:flex flex-col items-end leading-tight">
             <span className="text-[11px] font-bold text-white">{employee.name}</span>
-            <span className="text-[9px] font-black tracking-[0.18em] text-white/40 uppercase">
+            <span className="text-[9px] font-semibold tracking-[0.14em] text-white/40 uppercase">
               {employee.role}
             </span>
           </div>

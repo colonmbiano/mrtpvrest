@@ -61,7 +61,7 @@ export default function Sidebar() {
             <span className="text-2xl">🍔</span>
           )}
           <div>
-            <div className="font-syne font-black text-sm leading-tight" style={{color:"var(--text)"}}>Restaurante Demo</div>
+            <div className="font-syne font-semibold text-sm leading-tight" style={{color:"var(--text)"}}>Restaurante Demo</div>
             <div className="text-xs font-bold" style={{color:"var(--gold)"}}>Panel Admin</div>
           </div>
         </div>
@@ -73,7 +73,7 @@ export default function Sidebar() {
           const items = NAV.filter(i => i.section === section.key);
           return (
             <div key={section.key} className="mb-2">
-              <div className="px-4 py-1 text-xs font-black uppercase tracking-wider mb-1"
+              <div className="px-4 py-1 text-xs font-semibold uppercase tracking-wider mb-1"
                 style={{color: section.color, opacity: 0.7}}>
                 {section.label}
               </div>
