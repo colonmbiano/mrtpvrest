@@ -11,6 +11,7 @@ export function SiteNav() {
       <div className="nav-links" aria-label="Navegación principal">
         <Link href="/funciones">Funciones</Link>
         <Link href="/punto-de-venta">Giros</Link>
+        <Link href="/blog">Blog</Link>
         <Link href="/#precios">Precios</Link>
         <Link href="/comparativa/parrot">Comparativas</Link>
       </div>
@@ -29,6 +30,7 @@ export function SiteFooter() {
       <div>
         <Link href="/funciones">Funciones</Link>
         <Link href="/punto-de-venta">Giros</Link>
+        <Link href="/blog">Blog</Link>
         <Link href="/comparativa/parrot">Comparativas</Link>
         <Link href="/#precios">Precios</Link>
         <a href={`mailto:${contactEmail}`}>Contacto</a>

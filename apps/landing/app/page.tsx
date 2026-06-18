@@ -393,6 +393,7 @@ export default function HomePage() {
         <div>
           <Link href="/funciones">Funciones</Link>
           <Link href="/punto-de-venta">Giros</Link>
+          <Link href="/blog">Blog</Link>
           <Link href="/comparativa/parrot">Comparativas</Link>
           <a href="#precios">Precios</a>
           <a href="mailto:contacto@mrtpvrest.com">Contacto</a>
