@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "@/lib/api";
+import { getApiUrl } from "@/lib/config";
 
 interface Plan {
   id: string;
@@ -51,15 +52,22 @@ export default function RegisterPage() {
       .finally(() => setPlansLoading(false));
   }, []);
 
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const canNext1 = restaurantName.trim().length > 0 && ownerName.trim().length > 0 && selectedPlanId.length > 0;
-  const canNext2 = email.trim().length > 0 && password.length >= 8 && terms;
+  const canNext2 = emailValid && password.length >= 8 && terms;
 
   const selectedPlan = plans.find(p => p.id === selectedPlanId) || null;
 
   const handleResend = async () => {
     setResending(true);
     try {
-      await api.post("/api/auth/resend-verification", { email });
+      // resend-verification exige Bearer token; usamos fetch directo (no el
+      // interceptor de `api`) para que un 401 no dispare el logout/redirect.
+      const token = localStorage.getItem("accessToken");
+      await fetch(`${getApiUrl()}/api/auth/resend-verification`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setResendDone(true);
       setTimeout(() => setResendDone(false), 5000);
     } catch { /* silencioso */ }
@@ -71,13 +79,19 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
     try {
-      await api.post("/api/auth/register-tenant", {
+      const { data } = await api.post("/api/auth/register-tenant", {
         restaurantName,
         ownerName,
         email,
         password,
         planId: selectedPlanId || undefined,
       });
+      // El backend ya devuelve sesión al registrar. La guardamos para que el
+      // reenvío de verificación vaya autenticado (resend-verification exige
+      // Bearer token) y no rebote al usuario a /login.
+      if (data?.accessToken) localStorage.setItem("accessToken", data.accessToken);
+      if (data?.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
+      if (data?.user) localStorage.setItem("user", JSON.stringify(data.user));
       const domain = email.split("@")[1];
       if (domain) setEmailDomain(domain);
       setStep(3);
@@ -146,6 +160,7 @@ export default function RegisterPage() {
               <div key={f.label} style={{ marginBottom: 16 }}>
                 <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>{f.label} <span style={{ color: "#ef4444" }}>*</span></label>
                 <input value={f.value} onChange={e => f.set(e.target.value)} placeholder={f.ph}
+                  onKeyDown={e => { if (e.key === "Enter" && canNext1) { setStep(2); setError(""); } }}
                   style={{ width: "100%", padding: "11px 14px", background: "var(--surf2)", border: "1px solid var(--border2)", borderRadius: 10, color: "var(--text)", fontSize: 13, outline: "none", fontFamily: "'DM Sans',sans-serif" }} />
               </div>
             ))}
@@ -220,7 +235,9 @@ export default function RegisterPage() {
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>Correo electrónico <span style={{ color: "#ef4444" }}>*</span></label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="juan@mirestaurante.com"
+                onKeyDown={e => { if (e.key === "Enter" && canNext2 && !loading) handleSubmit(); }}
                 style={{ width: "100%", padding: "11px 14px", background: "var(--surf2)", border: "1px solid var(--border2)", borderRadius: 10, color: "var(--text)", fontSize: 13, outline: "none" }} />
+              {email.length > 0 && !emailValid && <p style={{ color: "#ef4444", fontSize: 11, marginTop: 4 }}>Correo electrónico no válido</p>}
             </div>
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
@@ -229,15 +246,23 @@ export default function RegisterPage() {
               </div>
               <div style={{ position: "relative" }}>
                 <input type={showPass ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
+                  onKeyDown={e => { if (e.key === "Enter" && canNext2 && !loading) handleSubmit(); }}
                   style={{ width: "100%", padding: "11px 44px 11px 14px", background: "var(--surf2)", border: "1px solid var(--border2)", borderRadius: 10, color: "var(--text)", fontSize: 13, outline: "none" }} />
-                <button type="button" onClick={() => setShowPass(s => !s)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 15 }}>
+                <button type="button" onClick={() => setShowPass(s => !s)} aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 15 }}>
                   {showPass ? "🙈" : "👁️"}
                 </button>
               </div>
               {password.length > 0 && password.length < 8 && <p style={{ color: "#ef4444", fontSize: 11, marginTop: 4 }}>Mínimo 8 caracteres</p>}
             </div>
             <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", marginTop: 8 }}>
-              <div onClick={() => setTerms(t => !t)} style={{
+              <div
+                role="checkbox"
+                aria-checked={terms}
+                aria-label="Aceptar términos y política de privacidad"
+                tabIndex={0}
+                onClick={() => setTerms(t => !t)}
+                onKeyDown={e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); setTerms(t => !t); } }}
+                style={{
                 marginTop: 2, width: 18, height: 18, borderRadius: 5, flexShrink: 0, border: `1px solid ${terms ? "var(--brand-primary)" : "var(--border2)"}`,
                 background: terms ? "var(--brand-primary)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center",
               }}>
