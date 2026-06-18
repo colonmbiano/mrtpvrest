@@ -947,7 +947,6 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   return (
     <aside
       className="w-full h-full min-h-0 bg-[var(--bg)] flex flex-col relative z-20 overflow-hidden"
-      style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
     >
       {/* HEADER DEL TICKET */}
       <div className="flex shrink-0 flex-col gap-2.5 border-b border-white/10 bg-[var(--bg)] p-3">
@@ -957,10 +956,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           allowedTypes={tpvConfig.allowedOrderTypes}
         />
         <div className="flex items-center justify-between">
-          <h2 className="min-w-0 flex-1 truncate text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+          <h2 className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
             {activeTicketName || "Orden en curso"}
           </h2>
-          <span className="rounded-md border border-[var(--brand)] bg-[var(--brand-soft)] px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[var(--brand)]">
+          <span className="rounded-md border border-[var(--brand)] bg-[var(--brand-soft)] px-2 py-1 text-[9px] font-semibold uppercase tracking-widest text-[var(--brand)]">
             ID: {String(ticket.id).slice(-4)}
           </span>
         </div>
@@ -979,7 +978,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           ) : (
             <div className="flex h-10 min-w-0 flex-1 items-center gap-2 px-1 text-zinc-400">
               <MapPin size={15} className="text-emerald-400/70 shrink-0" />
-              <span className="text-[11px] font-black uppercase tracking-[0.18em] truncate">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] truncate">
                 {ticket.tableName || ticket.table || "Sin mesa"}
               </span>
               {(ticket.numberOfGuests ?? 0) > 0 && (
@@ -1060,7 +1059,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           <div className="space-y-2 mb-4">
             <div className="flex items-center gap-3">
               <div className="h-[1px] flex-1 bg-white/5" />
-              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
                 Rondas anteriores
               </span>
               <div className="h-[1px] flex-1 bg-white/5" />
@@ -1092,7 +1091,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             {ticket.items.length > 0 && (
               <div className="flex items-center gap-3">
                 <div className="h-[1px] flex-1 bg-[var(--brand-soft)]" />
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--brand)]">
+                <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--brand)]">
                   Nueva ronda
                 </span>
                 <div className="h-[1px] flex-1 bg-[var(--brand-soft)]" />
@@ -1106,7 +1105,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] text-zinc-500">
               <ShoppingCart size={34} />
             </div>
-            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-zinc-500">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
               Ticket vacío
             </p>
           </div>
@@ -1161,7 +1160,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             </div>
           )}
           <div className="mt-0.5 flex items-baseline justify-between border-t border-white/10 pt-1.5">
-            <span className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-300">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
               Total
             </span>
             <span className="mono text-2xl font-black leading-none tabular-nums text-[var(--brand)]">
@@ -1182,7 +1181,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               <button
                 onClick={handleSendToKitchen}
                 disabled={processing}
-                className="flex-1 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[11px] font-black uppercase tracking-widest text-[var(--brand)] active:bg-[var(--brand-soft)] transition-transform duration-100 active:scale-[0.97] flex items-center justify-center gap-1.5 disabled:opacity-40"
+                className="flex-1 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[11px] font-bold uppercase tracking-widest text-[var(--brand)] active:bg-[var(--brand-soft)] transition-transform duration-100 active:scale-[0.97] flex items-center justify-center gap-1.5 disabled:opacity-40"
               >
                 <Save size={16} strokeWidth={2.5} /> Guardar Orden
               </button>
@@ -1193,7 +1192,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                     useUIStore.getState().setIsOrdersOpen(true);
                   });
                 }}
-                className="flex-1 rounded-xl bg-surface-2 border border-border text-[11px] font-black uppercase tracking-widest text-zinc-300 active:text-white active:bg-zinc-800 transition-transform duration-100 active:scale-[0.97] flex items-center justify-center gap-1.5"
+                className="flex-1 rounded-xl bg-surface-2 border border-border text-[11px] font-bold uppercase tracking-widest text-zinc-300 active:text-white active:bg-zinc-800 transition-transform duration-100 active:scale-[0.97] flex items-center justify-center gap-1.5"
               >
                 <Receipt size={16} strokeWidth={2.5} /> Tickets Abiertos
               </button>
@@ -1228,7 +1227,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                 }
                 className={`flex-[2] rounded-xl text-[12px] font-black tracking-[0.15em] uppercase flex items-center justify-center gap-2 transition-transform duration-100 active:scale-[0.97] disabled:opacity-40 disabled:grayscale ${
                   isShiftOpen
-                    ? "bg-[#88d66c] text-black active:bg-[#7ac75e]"
+                    ? "bg-[var(--brand)] text-[var(--brand-fg)] active:bg-[var(--brand-active)]"
                     : "bg-red-500 text-white active:bg-red-600"
                 }`}
               >
