@@ -144,7 +144,7 @@ export default function MenuPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, soldByWeight:false });
+  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, saleUnit:"PIECE" });
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -316,7 +316,7 @@ export default function MenuPage() {
   function openForm(item?: any) {
     if (item) {
       setEditItem(item);
-      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0, availableOnline:item.availableOnline ?? true, soldByWeight:!!item.soldByWeight });
+      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0, availableOnline:item.availableOnline ?? true, saleUnit:(item.saleUnit || (item.soldByWeight ? "WEIGHT" : "PIECE")) });
       setImagePreview(item.imageUrl||"");
       api.get(`/api/menu/items/${item.id}`).then(r => {
         setComplements(r.data.complements || []);
@@ -327,7 +327,7 @@ export default function MenuPage() {
       }).catch(() => { setComplements([]); setVariants([]); setInitialTemplateIds([]); });
     } else {
       setEditItem(null);
-      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, soldByWeight:false });
+      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, saleUnit:"PIECE" });
       setImagePreview("");
       setComplements([]);
       setVariants([]);
@@ -951,17 +951,37 @@ export default function MenuPage() {
                   <input placeholder="Hamburguesa" value={form.name} onChange={e => setForm(p => ({...p,name:e.target.value}))} required className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
                 </div>
                 <div className="col-span-2">
-                  <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">{form.soldByWeight ? "Precio por kg" : "Precio Base"}</label>
+                  <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">
+                    {form.saleUnit === "WEIGHT" ? "Precio por kg" : form.saleUnit === "ORDER" ? "Precio por orden" : "Precio Base"}
+                  </label>
                   <input placeholder="89.00" value={form.price} onChange={e => setForm(p => ({...p,price:e.target.value}))} onWheel={e => e.currentTarget.blur()} required type="number" inputMode="decimal" className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }} />
                 </div>
                 <div className="col-span-2">
-                  <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl px-4 py-3" style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }}>
-                    <span>
-                      <span className="block text-sm font-semibold text-tx">Vender por peso (kg)</span>
-                      <span className="block text-xs text-tx-mut">El precio se cobra por kilogramo y el cajero captura los kg en báscula.</span>
-                    </span>
-                    <input type="checkbox" checked={form.soldByWeight} onChange={e => setForm(p => ({...p, soldByWeight: e.target.checked}))} className="h-5 w-5 shrink-0 accent-[var(--brand-primary)]" />
-                  </label>
+                  <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Unidad de venta</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { v: "PIECE", label: "Por pieza", hint: "Cantidad entera" },
+                      { v: "WEIGHT", label: "Por kilo", hint: "Báscula (kg)" },
+                      { v: "ORDER", label: "Por orden", hint: "Ración/combo" },
+                    ] as const).map(opt => {
+                      const active = form.saleUnit === opt.v;
+                      return (
+                        <button
+                          key={opt.v}
+                          type="button"
+                          onClick={() => setForm(p => ({ ...p, saleUnit: opt.v }))}
+                          className="flex flex-col items-start gap-0.5 rounded-xl px-3 py-2.5 text-left transition-all"
+                          style={{
+                            background: active ? "var(--iris-soft)" : "var(--surf-2)",
+                            border: `1.5px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`,
+                          }}
+                        >
+                          <span className="text-sm font-semibold text-tx">{opt.label}</span>
+                          <span className="text-[10px] text-tx-mut">{opt.hint}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="col-span-2">
                   <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Categoría</label>
