@@ -4,6 +4,12 @@ import api from '@/lib/api';
 
 let syncInterval: NodeJS.Timeout | null = null;
 
+// Timeout para escrituras críticas (apiOrQueue) y sus replays. Acota el
+// cold-start del backend para que la operación caiga a cola en vez de
+// colgar la pantalla. NO se aplica al axios global (api.ts) porque hay
+// requests legítimamente largos (reportes/PDF).
+const QUEUE_TIMEOUT_MS = 15000;
+
 // ── apiOrQueue ─────────────────────────────────────────────────────────
 //
 // Wrapper para escrituras críticas que deben sobrevivir a un corte de
@@ -104,7 +110,11 @@ export async function apiOrQueue<T = any>(
     // el mismo txId → al replay-earse el backend NO lo dedupea (la llamada
     // online original nunca registró la key) → ronda/cobro DUPLICADO. Con la
     // misma key en ambos caminos, el middleware de idempotencia los une.
-    const cfg = { headers: { 'Idempotency-Key': txId } };
+    // timeout acotado: un backend dormido (cold-start de Railway) que tarda
+    // demasiado cae a ECONNABORTED → isNetworkError → cola, en vez de colgar
+    // la UI. Si el request lento SÍ llegó al server, la misma Idempotency-Key
+    // en el replay garantiza que no se duplique (turno/orden únicos).
+    const cfg = { headers: { 'Idempotency-Key': txId }, timeout: QUEUE_TIMEOUT_MS };
     const res =
       method === 'POST'
         ? await api.post<T>(path, bodyOut, cfg)
@@ -194,7 +204,7 @@ export async function syncOfflineQueue() {
           // Shape nuevo (apiOrQueue) — replay directo con Idempotency-Key
           // para que el backend deduplique si por alguna razón este tx
           // se replay-eara dos veces (sync corre 2x antes de markSynced).
-          const cfg = { headers: { 'Idempotency-Key': transaction.id } };
+          const cfg = { headers: { 'Idempotency-Key': transaction.id }, timeout: QUEUE_TIMEOUT_MS };
           if (replay.method.toUpperCase() === 'POST') {
             await api.post(replay.path, replay.body || {}, cfg);
           } else if (replay.method.toUpperCase() === 'PUT') {

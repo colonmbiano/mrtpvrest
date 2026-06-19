@@ -115,6 +115,7 @@ function PendingDrawer({
     payment: "Pago",
     adjustment: "Ajuste",
     override: "Override",
+    shift: "Apertura de turno",
   };
 
   return (

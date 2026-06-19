@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import api from "@/lib/api";
+import { apiOrQueue } from "@/lib/offline";
 import { UtensilsCrossed, ArrowLeft, Users } from "lucide-react";
 
 const ShiftOpenPage = () => {
@@ -59,15 +60,33 @@ const ShiftOpenPage = () => {
 
     setLoading(true);
     try {
-      await api.post("/api/shifts/open", {
+      // apiOrQueue: si hay red abre el turno normal; si no (o cold-start /
+      // error de red) lo ENCOLA con Idempotency-Key y entramos optimistamente
+      // al POS. El backend asigna req.shiftId a las órdenes al sincronizar, y
+      // la idempotencia global garantiza que el replay no cree turnos dobles.
+      // Solo los 4xx legítimos (permisos/plan/validación) bloquean la entrada.
+      const res = await apiOrQueue("shift", "POST", "/api/shifts/open", {
         openingFloat: Number(openingFloat),
         employeeId: currentEmployee.id,
         employeeName: currentEmployee.name,
       });
-      localStorage.setItem("tpv-shift-open", "true");
-      router.replace("/pos/order-type");
-    } catch (err: any) {
-      alert(err.response?.data?.error || "Error al abrir el turno");
+
+      if (res.ok) {
+        localStorage.setItem("tpv-shift-open", "true");
+        router.replace("/pos/order-type");
+        return;
+      }
+
+      // Error legítimo del servidor (no se encoló). Mensaje diferenciado para
+      // que el cajero sepa si es permisos vs. otra cosa, en vez de la alerta
+      // genérica de antes.
+      if (res.status === 403) {
+        alert(res.error || "No tienes permisos para abrir turno en esta sucursal.");
+      } else if (res.status === 400) {
+        alert(res.error || "Datos inválidos para abrir el turno.");
+      } else {
+        alert(res.error || "Error al abrir el turno");
+      }
     } finally {
       setLoading(false);
     }

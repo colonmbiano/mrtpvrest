@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { apiOrQueue } from "@/lib/offline";
 
 const EXPENSE_CATEGORIES = [
   { value: "SUPPLIES", label: "🛒 Insumos" },
@@ -76,15 +77,41 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
     if (!openingFloat) { alert("Ingresa el fondo de caja"); return; }
     setOpening(true);
     try {
-      const { data } = await api.post("/api/shifts/open", {
-        openingFloat: Number(openingFloat),
+      const floatNum = Number(openingFloat);
+      // Mismo camino que /pos/shift/open: online abre normal, offline encola
+      // con Idempotency-Key y entramos optimistamente. Solo 4xx legítimos
+      // (permisos/plan/validación) bloquean.
+      const res = await apiOrQueue("shift", "POST", "/api/shifts/open", {
+        openingFloat: floatNum,
         employeeId: employee.id,
         employeeName: employee.name,
       });
-      setShift(data);
-      setTab("summary");
-    } catch (e: any) { alert(e.response?.data?.error || "Error"); }
-    finally { setOpening(false); }
+
+      if (res.ok) {
+        // Online: el backend devuelve el CashShift. Offline (encolado): no hay
+        // objeto del server, así que armamos uno optimista para que el modal
+        // muestre el resumen. Los movimientos/cierre necesitan red y shift.id.
+        setShift(
+          res.data ?? {
+            id: null,
+            isOpen: true,
+            openingFloat: floatNum,
+            openedAt: new Date().toISOString(),
+            employeeName: employee.name,
+            expenses: [],
+            cashIns: [],
+            _optimistic: true,
+          },
+        );
+        if (typeof window !== "undefined") {
+          localStorage.setItem("tpv-shift-open", "true");
+        }
+        setTab("summary");
+        return;
+      }
+
+      alert(res.error || "Error");
+    } finally { setOpening(false); }
   }
 
   async function addExpense() {
