@@ -67,6 +67,8 @@ export type Product = {
   variantMultiSelect?: boolean;
   variantMinSelection?: number;
   variantMaxSelection?: number;
+  // Venta por peso: el `price` es por kg y el TPV pide los kg al agregarlo.
+  soldByWeight?: boolean;
   variants?: MenuItemVariant[];
   complements?: MenuItemComplement[];
   modifierGroups?: ModifierGroup[];
@@ -75,6 +77,9 @@ export type Product = {
 export type CartItem = Product & {
   menuItemId: string;
   quantity: number;
+  // Peso vendido en kg para líneas por báscula (soldByWeight). Cuando está
+  // presente, `quantity` queda en 1 y subtotal = price (por kg) × weightKg.
+  weightKg?: number | null;
   subtotal: number;
   notes?: string;
   variantId?: string | null;
@@ -247,7 +252,9 @@ export const useTicketStore = create<TicketState>()(persist((_set, get) => {
           : null;
         const tagged: CartItem = { ...item, seatNumber: seat };
         const incomingModKey = modifierKey(tagged.modifiers);
-        const existing = t.items.find(
+        // Las líneas por peso NO se fusionan: cada pesada (1.5 kg, 2.3 kg…) es
+        // su propio renglón aunque sea el mismo producto.
+        const existing = tagged.weightKg != null ? undefined : t.items.find(
           (ci) =>
             ci.menuItemId === tagged.menuItemId &&
             ci.variantId === tagged.variantId &&
@@ -281,6 +288,8 @@ export const useTicketStore = create<TicketState>()(persist((_set, get) => {
         const items = t.items
           .map((ci, idx) => {
             if (idx !== index) return ci;
+            // Líneas por peso: el stepper no aplica (el peso se edita aparte).
+            if (ci.weightKg != null) return ci;
             const newQty = Math.max(0, ci.quantity + delta);
             return { ...ci, quantity: newQty, subtotal: newQty * ci.price };
           })

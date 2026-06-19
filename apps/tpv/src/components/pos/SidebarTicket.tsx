@@ -273,7 +273,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   ) : null;
 
   const historySubtotal = useMemo(() =>
-    previousItems.reduce((acc, item) => acc + (item.price * item.quantity), 0),
+    // Preferimos el subtotal real del backend (correcto para líneas por peso,
+    // donde price es por kg y quantity=1); fallback a price×quantity legacy.
+    previousItems.reduce((acc, item) => acc + (item.subtotal != null ? Number(item.subtotal) : item.price * item.quantity), 0),
   [previousItems]);
 
   const currentSubtotal = ticket.items.reduce((acc, item) => acc + item.subtotal, 0);
@@ -297,7 +299,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         name: it.name as string,
         qty: it.quantity as number,
         unitPrice: it.price as number,
-        total: (it.price as number) * (it.quantity as number),
+        total: it.subtotal != null ? Number(it.subtotal) : (it.price as number) * (it.quantity as number),
         note: (it.notes as string) || undefined,
       })),
       // Ronda actual
@@ -364,6 +366,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       return {
         name: it.name,
         quantity: it.quantity,
+        weightKg: it.weightKg ?? null,
         price: it.price,
         notes: it.notes,
         seatNumber: it.seatNumber ?? null,
@@ -910,6 +913,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     return items.map(it => ({
       name: it.menuItem?.name || it.name,
       quantity: it.quantity,
+      weightKg: it.weightKg != null ? Number(it.weightKg) : null,
       price: it.price,
       notes: it.notes,
       seatNumber: it.seatNumber ?? null,
@@ -1082,6 +1086,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                   id={item.id}
                   name={item.menuItem?.name || item.name}
                   quantity={item.quantity}
+                  weightKg={item.weightKg != null ? Number(item.weightKg) : null}
                   price={item.price}
                   notes={item.notes}
                   modifiers={item.modifiers?.map((m: any) => ({
@@ -1122,6 +1127,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               key={`${item.id}-${idx}`}
               name={item.name}
               quantity={item.quantity}
+              weightKg={item.weightKg ?? null}
               price={item.price}
               notes={item.notes}
               modifiers={item.modifiers?.map(m => ({ name: m.name, priceAdd: m.priceAdd }))}
@@ -1269,7 +1275,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             ...previousItems.map((i) => ({
               name: i.menuItem?.name || i.name,
               quantity: i.quantity,
-              subtotal: i.price * i.quantity,
+              subtotal: i.subtotal != null ? Number(i.subtotal) : i.price * i.quantity,
               seatNumber: i.seatNumber ?? null,
             })),
             ...ticket.items.map((i) => ({

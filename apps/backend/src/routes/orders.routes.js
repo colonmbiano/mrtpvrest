@@ -188,8 +188,15 @@ async function discountInventory(prisma, orderItems, orderId, restaurantId, loca
 
       let cmvUnitario = 0;
 
+      // Multiplicador del consumo: para productos por peso, la receta está
+      // definida POR KG, así que se descuenta proporcional a los kg vendidos
+      // (weightKg). Para productos por pieza, por unidades (quantity).
+      const consumptionMultiplier = oi.weightKg != null
+        ? Number(oi.weightKg)
+        : Number(oi.quantity || 1);
+
       for (const [, { ingredient, qtyPerUnit }] of aggregated) {
-        const needed = qtyPerUnit * Number(oi.quantity || 1);
+        const needed = qtyPerUnit * consumptionMultiplier;
         const unitCost = Number(ingredient.cost || 0);
         cmvUnitario += qtyPerUnit * unitCost; // CMV por 1 unidad del MenuItem
 
@@ -318,6 +325,18 @@ function extractIds(value, key) {
   return Array.isArray(value)
     ? value.map((entry) => entry?.[key]).filter(Boolean)
     : [];
+}
+
+// Resuelve el peso (kg) de una línea vendida por báscula. Devuelve el peso
+// redondeado a 3 decimales SOLO si el producto es soldByWeight y el cliente
+// mandó un peso > 0; en cualquier otro caso null (producto por pieza). El
+// servidor es quien decide: un weightKg en el payload de un producto normal
+// se ignora, igual que el precio nunca se confía del cliente.
+function resolveWeightKg(menuItem, rawWeightKg) {
+  if (!menuItem || menuItem.soldByWeight !== true) return null;
+  const w = Number(rawWeightKg);
+  if (!Number.isFinite(w) || w <= 0) return null;
+  return Math.round(w * 1000) / 1000;
 }
 
 function appendComplementNotes(notes, complements) {
@@ -669,6 +688,14 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       }
 
       const unitPrice = variantSelection.basePrice + unitExtra;
+      // Venta por peso: si el producto es soldByWeight y el cliente mandó un
+      // weightKg válido, la línea se cobra price/kg × kg con quantity=1. El
+      // multiplicador del subtotal es el peso; el precio sigue saliendo del
+      // servidor (anti-manipulación). Productos por pieza: weightKg=null y
+      // multiplicador = quantity, como siempre.
+      const weightKg = resolveWeightKg(menuItem, item.weightKg);
+      const lineQty = weightKg != null ? 1 : item.quantity;
+      const lineMultiplier = weightKg != null ? weightKg : item.quantity;
       const seatRaw = Number(item.seatNumber);
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
         ? Math.floor(seatRaw)
@@ -682,8 +709,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         menuItemId: item.menuItemId,
         name: variantSelection.name,
         price: unitPrice,
-        quantity: item.quantity,
-        subtotal: unitPrice * item.quantity,
+        quantity: lineQty,
+        weightKg,
+        subtotal: unitPrice * lineMultiplier,
         notes: appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants),
         seatNumber,
         course,
@@ -726,7 +754,8 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           .filter(Boolean)
           .sort()
           .join('+');
-        return `${it.menuItemId}:${it.quantity}:${Number(it.price).toFixed(2)}:${it.seatNumber ?? ''}:${mods}`;
+        const w = it.weightKg != null ? Number(it.weightKg).toFixed(3) : '';
+        return `${it.menuItemId}:${it.quantity}:${w}:${Number(it.price).toFixed(2)}:${it.seatNumber ?? ''}:${mods}`;
       })
       .sort()
       .join('|');
@@ -990,7 +1019,10 @@ async function addRoundHandler(req, res) {
       }
 
       const price = variantSelection.basePrice + unitExtra;
-      const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+      // Venta por peso (ver create-order): peso × precio/kg, quantity=1.
+      const weightKg = resolveWeightKg(menuItem, item.weightKg);
+      const qty = weightKg != null ? 1 : Math.max(1, parseInt(item.quantity, 10) || 1);
+      const lineMultiplier = weightKg != null ? weightKg : qty;
       const seatRaw = Number(item.seatNumber);
       const seatNumber = Number.isFinite(seatRaw) && seatRaw >= 1 && seatRaw <= 50
         ? Math.floor(seatRaw)
@@ -1002,7 +1034,8 @@ async function addRoundHandler(req, res) {
         name: variantSelection.name,
         price,
         quantity: qty,
-        subtotal: price * qty,
+        weightKg,
+        subtotal: price * lineMultiplier,
         notes: appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants),
         seatNumber,
         course,
@@ -1091,7 +1124,7 @@ router.post('/:id/rounds', authenticate, requireTenantAccess, requireRole('ADMIN
 // por socket para refresco en vivo de admin/cocina.
 router.put('/items/:itemId', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER'), async (req, res) => {
   try {
-    const { quantity, notes } = req.body || {};
+    const { quantity, notes, weightKg } = req.body || {};
     const restaurantId = req.user?.restaurantId || req.restaurantId;
 
     const orderItem = await prisma.orderItem.findUnique({
@@ -1113,21 +1146,33 @@ router.put('/items/:itemId', authenticate, requireTenantAccess, requireRole('ADM
     }
 
     // Validar inputs. Si no viene quantity/notes válido, no-op para ese campo.
-    const newQty = quantity !== undefined
-      ? Math.max(1, Math.min(99, parseInt(quantity, 10) || orderItem.quantity))
-      : orderItem.quantity;
     const newNotes = notes !== undefined
       ? (typeof notes === 'string' ? notes.slice(0, 200) : null)
       : orderItem.notes;
 
-    // Subtotal del item = price unitario × quantity. price ya incluye los
-    // modificadores aplicados al item (ver lógica de POST /tpv).
-    const newSubtotal = orderItem.price * newQty;
+    // Línea por peso: se edita weightKg (decimal), quantity queda en 1 y el
+    // subtotal = price/kg × kg. Línea por pieza: se edita quantity (entero).
+    const isWeightLine = orderItem.weightKg != null;
+    let newQty = orderItem.quantity;
+    let newWeightKg = isWeightLine ? Number(orderItem.weightKg) : null;
+    if (isWeightLine) {
+      if (weightKg !== undefined) {
+        const w = Number(weightKg);
+        if (Number.isFinite(w) && w > 0) newWeightKg = Math.round(w * 1000) / 1000;
+      }
+      newQty = 1;
+    } else if (quantity !== undefined) {
+      newQty = Math.max(1, Math.min(99, parseInt(quantity, 10) || orderItem.quantity));
+    }
+
+    // Subtotal del item = price unitario × (kg | quantity). price ya incluye
+    // los modificadores aplicados al item (ver lógica de POST /tpv).
+    const newSubtotal = orderItem.price * (isWeightLine ? newWeightKg : newQty);
 
     const updatedOrder = await prisma.$transaction(async (tx) => {
       await tx.orderItem.update({
         where: { id: req.params.itemId },
-        data: { quantity: newQty, subtotal: newSubtotal, notes: newNotes },
+        data: { quantity: newQty, weightKg: newWeightKg, subtotal: newSubtotal, notes: newNotes },
       });
 
       const remaining = await tx.orderItem.findMany({

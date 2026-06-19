@@ -8,6 +8,10 @@ const { z } = require('zod');
 const cartItemSchema = z.object({
   menuItemId: z.string().min(1),
   quantity:   z.coerce.number().int().positive(),
+  // Peso en KG para productos vendidos por báscula (MenuItem.soldByWeight).
+  // Decimal positivo; el servidor decide si lo respeta (solo si el producto
+  // es por peso) y cobra price/kg × weightKg. Tope defensivo de 10000 kg.
+  weightKg:   z.coerce.number().positive().max(10000).optional().nullable(),
   // El TPV envía price y modifiers; toleramos ambos extra fields.
   price:      z.coerce.number().nonnegative().optional(),
   notes:      z.string().max(500).optional(),

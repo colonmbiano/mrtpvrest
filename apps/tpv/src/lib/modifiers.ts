@@ -146,6 +146,9 @@ export interface OrderItemPayloadInput {
   menuItemId: string;
   variantId?: string | null;
   quantity: number;
+  // Peso en kg para líneas vendidas por báscula (soldByWeight). El backend
+  // solo lo respeta si el producto es por peso; cobra price/kg × kg.
+  weightKg?: number | null;
   notes?: string | null;
   seatNumber?: number | null;
   modifiers?: ModifierSelection[];
@@ -159,6 +162,7 @@ export function buildOrderItemsPayload(items: OrderItemPayloadInput[]) {
     menuItemId: item.menuItemId,
     variantId: item.variantId ?? null,
     quantity: item.quantity,
+    ...(item.weightKg != null ? { weightKg: item.weightKg } : {}),
     notes: item.notes || "",
     seatNumber: item.seatNumber ?? null,
     ...splitModifierSelections(item.modifiers || []),
