@@ -444,6 +444,8 @@ export interface TicketItem {
   // Peso en kg para líneas por báscula. Cuando está presente, `price` es por
   // kg y el total de la línea = price × weightKg (no price × quantity).
   weightKg?: number | null;
+  // Unidad de medida mostrada (pz/orden/bolsa/…). Cosmética: "$X / unit".
+  unit?: string | null;
   price: number;
   notes?: string | null;
   modifiers?: TicketModifier[] | null;
@@ -1139,9 +1141,12 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
     const lineTotal = wKg != null ? item.price * wKg : item.price * item.quantity;
     // Renglón 1: nombre + total de la línea (alineado a la derecha).
     d += formatNameAmountLine(item.name, showPrices ? fmtMoney(lineTotal) : "", lw);
+    // Sufijo de unidad en el precio unitario: "/kg" por peso, "/{unit}" si el
+    // producto tiene una unidad distinta de pieza (orden/bolsa/…), nada si pz.
+    const unitSuffix = kgLabel ? "/kg" : (item.unit && item.unit !== "pz" ? `/${item.unit}` : "");
     // Renglón 2: cantidad/peso × precio unitario (o solo cantidad si se ocultan).
     d += showPrices
-      ? "  " + `${kgLabel ?? item.quantity} x ${fmtMoney(item.price)}${kgLabel ? "/kg" : ""}` + "\n"
+      ? "  " + `${kgLabel ?? item.quantity} x ${fmtMoney(item.price)}${unitSuffix}` + "\n"
       : "  " + `x ${kgLabel ?? item.quantity}` + "\n";
     if (showMods) {
       for (const m of item.modifiers || []) {

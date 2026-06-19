@@ -18,6 +18,8 @@ export interface LiteTicketItem {
   // Peso en kg para líneas vendidas por báscula (producto soldByWeight).
   // Cuando está presente, quantity=1, unitPrice es por kg y total = unitPrice × weightKg.
   weightKg?: number | null;
+  // Unidad de medida mostrada (pz/orden/bolsa/…). Cosmética.
+  unit?: string;
   unitPrice: number;
   total: number;
   variantId?: string | null;

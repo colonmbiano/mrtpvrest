@@ -10,6 +10,8 @@ interface TicketLineProps {
   // Peso en kg para líneas por báscula. Cuando está presente, `price` es por
   // kg, el total = price × weightKg y se oculta el stepper de unidades.
   weightKg?: number | null;
+  // Unidad de medida mostrada (pz/orden/bolsa/…). Cosmética en el "$X / unit".
+  unit?: string;
   notes?: string;
   modifiers?: { name: string; priceAdd: number }[];
   onUpdateQty?: (qty: number) => void;
@@ -28,6 +30,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
   price,
   quantity,
   weightKg,
+  unit,
   notes,
   modifiers,
   onUpdateQty,
@@ -45,6 +48,9 @@ const TicketLine: React.FC<TicketLineProps> = ({
   // Línea por peso: el multiplicador del total es el peso (kg), no las unidades.
   const isWeight = weightKg != null;
   const lineTotal = isWeight ? price * (weightKg as number) : price * quantity;
+  // Texto de precio unitario: "/ kg" si es por peso; "/ {unit}" si tiene una
+  // unidad distinta de pieza; "c/u" para piezas.
+  const perUnitLabel = isWeight ? "/ kg" : unit && unit !== "pz" ? `/ ${unit}` : "c/u";
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(notes ?? "");
@@ -147,7 +153,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
 
         {/* Precio unitario discreto bajo el nombre */}
         <span className="text-[10px] text-zinc-600 font-bold mono tabular-nums">
-          {currency}{price.toFixed(2)} {isWeight ? "/ kg" : "c/u"}
+          {currency}{price.toFixed(2)} {perUnitLabel}
         </span>
 
         {modifiers && modifiers.length > 0 && (
