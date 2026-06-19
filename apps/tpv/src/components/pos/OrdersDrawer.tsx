@@ -780,7 +780,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             className="absolute inset-0 bg-black/75 backdrop-blur-md"
             onClick={() => !isMerging && setShowMergeConfirm(false)}
           />
-          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#111114] p-5 shadow-2xl">
+          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[var(--surface-1)] p-5 shadow-2xl">
             <div className="w-12 h-12 rounded-2xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center mb-4">
               <Merge size={21} />
             </div>
@@ -842,7 +842,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             className="absolute inset-0 bg-black/75 backdrop-blur-md"
             onClick={() => !assigningDriverId && setShowDriverPicker(false)}
           />
-          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#111114] p-5 shadow-2xl">
+          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[var(--surface-1)] p-5 shadow-2xl">
             <div className="w-12 h-12 rounded-2xl bg-blue-400/15 border border-blue-400/30 text-blue-300 flex items-center justify-center mb-4">
               <Bike size={21} />
             </div>
