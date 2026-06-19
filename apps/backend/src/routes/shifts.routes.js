@@ -374,6 +374,60 @@ router.post('/:id/reveal', requireLocation, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── POST previsualizar el corte EN VIVO de un turno ABIERTO (PIN admin) ───
+// El corte ciego oculta los totales al cajero hasta el cierre. Este endpoint
+// deja a un supervisor (PIN con privilegios) ver la venta total y el efectivo
+// esperado ANTES de cerrar, SIN tocar el turno. A diferencia de /reveal —que
+// lee los snapshots guardados, en 0/null hasta cerrar— aquí se calcula en vivo
+// con el MISMO criterio que el cierre (liveShiftTotals). Opcionalmente recibe
+// countedCash para mostrar el desfase tentativo contra lo contado.
+router.post('/:id/preview', requireLocation, async (req, res) => {
+  try {
+    const { pin, countedCash } = req.body || {};
+    if (!pin) return res.status(400).json({ error: 'PIN requerido', code: 'PIN_REQUIRED' });
+
+    const shift = await prisma.cashShift.findFirst({
+      where: { id: req.params.id, locationId: req.locationId },
+      include: { expenses: true, cashIns: true },
+    });
+    if (!shift) return res.status(404).json({ error: 'Turno no encontrado en esta sucursal' });
+
+    // Validar PIN contra empleados de la sucursal (bcrypt o legacy/offlinePin).
+    // Mismo patrón que /reveal y el login por PIN.
+    const candidates = await prisma.employee.findMany({
+      where: { locationId: req.locationId, isActive: true },
+      select: { id: true, name: true, role: true, canManageShifts: true, pin: true, offlinePin: true },
+    });
+    const sha256Pin = crypto.createHash('sha256').update(String(pin)).digest('hex');
+    let emp = null;
+    for (const c of candidates) {
+      if (c.pin && c.pin.startsWith('$2')) {
+        if (await bcrypt.compare(String(pin), c.pin)) { emp = c; break; }
+      } else if (c.pin && c.pin === String(pin)) { emp = c; break; }
+      else if (c.offlinePin && c.offlinePin === sha256Pin) { emp = c; break; }
+    }
+    if (!emp) return res.status(401).json({ error: 'PIN incorrecto', code: 'INVALID_PIN' });
+
+    const privileged =
+      ['ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER'].includes(emp.role) || emp.canManageShifts === true;
+    if (!privileged) {
+      return res.status(403).json({ error: 'Este PIN no tiene permiso para ver el total', code: 'NOT_AUTHORIZED' });
+    }
+
+    const totals = await liveShiftTotals(shift);
+    const counted = Number(countedCash);
+    const variance = Number.isFinite(counted) ? counted - totals.expectedCash : null;
+    res.json({
+      revealedBy: emp.name,
+      isOpen: shift.isOpen,
+      openingFloat: shift.openingFloat,
+      ...totals, // totalCash/Card/Transfer/Courtesy, totalExpenses, totalCashIn, totalSales, expectedCash, ordersCount
+      countedCash: Number.isFinite(counted) ? counted : null,
+      variance,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── POST agregar gasto al turno (scoped a sucursal) ──────────────────────
 router.post('/:id/expenses', requireLocation, async (req, res) => {
   try {
