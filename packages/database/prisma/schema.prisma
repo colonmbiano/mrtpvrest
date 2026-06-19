@@ -585,6 +585,11 @@ model MenuItem {
   // conteo entero (mismo flujo, solo cambia la etiqueta "pza"/"orden");
   // WEIGHT activa la captura de peso. Fuente de verdad de la unidad.
   saleUnit        String   @default("PIECE")
+  // Unidad de medida MOSTRADA del producto (etiqueta libre seleccionable:
+  // "pz","kg","g","L","ml","orden","bolsa","lata","caja","paquete","docena"…).
+  // Cosmética (se ve en POS/ticket como "$X / unit"); el comportamiento de
+  // cobro/captura lo dicta saleUnit/soldByWeight, no este campo.
+  unit            String   @default("pz")
   // DERIVADO de saleUnit (=="WEIGHT"). Se mantiene sincronizado en las
   // escrituras del catálogo para que la lógica de cobro/inventario por peso
   // (orders.routes: resolveWeightKg) siga consultando un booleano simple.

@@ -31,6 +31,17 @@ function normalizeSaleUnit(saleUnit, soldByWeight) {
   return 'PIECE'
 }
 
+// Unidad de medida mostrada (etiqueta libre). Sanea: trim, minúsculas-ish,
+// máx 12 chars. Si no viene, la deriva de la unidad de venta (kg/orden/pz)
+// para un default coherente. No se valida contra una lista cerrada a
+// propósito (el admin puede usar "bolsa", "lata", "docena", etc.).
+function normalizeMeasureUnit(unit, saleUnit) {
+  if (typeof unit === 'string' && unit.trim()) return unit.trim().slice(0, 12)
+  if (saleUnit === 'WEIGHT') return 'kg'
+  if (saleUnit === 'ORDER') return 'orden'
+  return 'pz'
+}
+
 function getTodayDay() {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Mexico_City', weekday: 'long'
@@ -245,10 +256,12 @@ router.get('/items/:id', async (req, res) => {
 
 router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, soldByWeight, saleUnit } = req.body
+    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, soldByWeight, saleUnit, unit } = req.body
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
-    // Unidad de venta normalizada; soldByWeight se deriva de ella (compat).
-    const unit = normalizeSaleUnit(saleUnit, soldByWeight)
+    // Unidad de venta (comportamiento) normalizada; soldByWeight deriva de ella.
+    const sUnit = normalizeSaleUnit(saleUnit, soldByWeight)
+    // Unidad de medida MOSTRADA (etiqueta libre, cosmética).
+    const measureUnit = normalizeMeasureUnit(unit, sUnit)
 
     const category = await prisma.category.findUnique({ where: { id: categoryId, restaurantId: req.user?.restaurantId || req.restaurantId } });
     if (!category) return res.status(400).json({ error: 'Categoría inválida para este restaurante' });
@@ -272,8 +285,9 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
         variantMultiSelect: !!variantMultiSelect,
         variantMinSelection: Math.max(0, parseInt(variantMinSelection, 10) || 0),
         variantMaxSelection: Math.max(0, parseInt(variantMaxSelection, 10) || 0),
-        saleUnit: unit,
-        soldByWeight: unit === 'WEIGHT',
+        saleUnit: sUnit,
+        soldByWeight: sUnit === 'WEIGHT',
+        unit: measureUnit,
         restaurantId: req.user?.restaurantId || req.restaurantId
       },
     })
@@ -290,7 +304,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
 router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId
-    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, soldByWeight, saleUnit } = req.body
+    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, soldByWeight, saleUnit, unit } = req.body
     const existingItem = await prisma.menuItem.findFirst({
       where: { id: req.params.id, restaurantId },
       select: { price: true, isPromo: true, promoPrice: true },
@@ -329,9 +343,10 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
         ...(variantMaxSelection !== undefined && { variantMaxSelection: Math.max(0, parseInt(variantMaxSelection, 10) || 0) }),
         // saleUnit (o soldByWeight legacy) → mantener ambos sincronizados.
         ...((saleUnit !== undefined || soldByWeight !== undefined) && (() => {
-          const unit = normalizeSaleUnit(saleUnit, soldByWeight)
-          return { saleUnit: unit, soldByWeight: unit === 'WEIGHT' }
+          const sUnit = normalizeSaleUnit(saleUnit, soldByWeight)
+          return { saleUnit: sUnit, soldByWeight: sUnit === 'WEIGHT' }
         })()),
+        ...(unit !== undefined && { unit: normalizeMeasureUnit(unit, normalizeSaleUnit(saleUnit, soldByWeight)) }),
       },
     })
     if (variantTemplateIds !== undefined) {

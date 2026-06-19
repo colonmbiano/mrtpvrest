@@ -144,7 +144,7 @@ export default function MenuPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, saleUnit:"PIECE" });
+  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, saleUnit:"PIECE", unit:"pz" });
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -316,7 +316,7 @@ export default function MenuPage() {
   function openForm(item?: any) {
     if (item) {
       setEditItem(item);
-      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0, availableOnline:item.availableOnline ?? true, saleUnit:(item.saleUnit || (item.soldByWeight ? "WEIGHT" : "PIECE")) });
+      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0, availableOnline:item.availableOnline ?? true, saleUnit:(item.saleUnit || (item.soldByWeight ? "WEIGHT" : "PIECE")), unit:(item.unit || "pz") });
       setImagePreview(item.imageUrl||"");
       api.get(`/api/menu/items/${item.id}`).then(r => {
         setComplements(r.data.complements || []);
@@ -327,7 +327,7 @@ export default function MenuPage() {
       }).catch(() => { setComplements([]); setVariants([]); setInitialTemplateIds([]); });
     } else {
       setEditItem(null);
-      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, saleUnit:"PIECE" });
+      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, saleUnit:"PIECE", unit:"pz" });
       setImagePreview("");
       setComplements([]);
       setVariants([]);
@@ -982,6 +982,20 @@ export default function MenuPage() {
                       );
                     })}
                   </div>
+                </div>
+                <div className="col-span-2">
+                  <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Unidad de medida (etiqueta)</label>
+                  <select
+                    value={form.unit}
+                    onChange={e => setForm(p => ({ ...p, unit: e.target.value }))}
+                    className="min-h-11 w-full rounded-xl px-4 text-sm text-tx outline-none"
+                    style={{ background: "var(--surf-2)", border: "1.5px solid var(--bd-1)" }}
+                  >
+                    {["pz","kg","g","L","ml","orden","bolsa","lata","caja","paquete","docena","porción"].map(u => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-tx-mut">Cómo se muestra en el ticket (ej. “$120 / {form.unit}”). No cambia el cobro.</p>
                 </div>
                 <div className="col-span-2">
                   <label className="mb-1 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Categoría</label>
