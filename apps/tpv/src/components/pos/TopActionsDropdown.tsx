@@ -79,7 +79,7 @@ export default function TopActionsDropdown({
     <div className="relative z-50" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#6b5641] bg-[#1e1b18] text-[#f8e8d0] shadow-[0_4px_12px_rgba(44,31,19,0.22)] transition-all active:scale-95 hover:border-[var(--brand)] hover:text-[var(--brand)]"
+        className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-1)] text-[var(--text-secondary)] shadow-[var(--shadow-sm)] transition-all active:scale-95 hover:border-[var(--brand)] hover:text-[var(--brand)]"
       >
         <MoreVertical size={20} />
       </button>
