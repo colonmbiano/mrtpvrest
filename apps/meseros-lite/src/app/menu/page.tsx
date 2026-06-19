@@ -63,6 +63,8 @@ interface MenuItem {
   isPopular?: boolean;
   isPromo?: boolean;
   hasVariants?: boolean;
+  // Venta por peso: el precio es por kg y al tocarlo se pide el peso en báscula.
+  soldByWeight?: boolean;
   variants?: MenuVariant[];
   complements?: MenuComplement[];
   modifierGroups?: MenuModifierGroup[];
@@ -184,6 +186,7 @@ export default function MenuPage() {
   const [status, setStatus] = useState<CatalogStatus>("loading");
   const [lastAddedName, setLastAddedName] = useState<string | null>(null);
   const [configProduct, setConfigProduct] = useState<MenuItem | null>(null);
+  const [weightProduct, setWeightProduct] = useState<MenuItem | null>(null);
   // Panel de comanda inferior (portrait): colapsado muestra solo el resumen
   // para dar más espacio al grid; expandido muestra toda la comanda con +/-.
   const [ticketExpanded, setTicketExpanded] = useState(false);
@@ -270,11 +273,35 @@ export default function MenuPage() {
   const accumulatedTotal = previousTotal + total;
 
   const handleAddItem = (product: MenuItem) => {
+    if (product.soldByWeight) {
+      setWeightProduct(product);
+      return;
+    }
     if (hasConfigurableOptions(product)) {
       setConfigProduct(product);
       return;
     }
     addConfiguredItem({ product, unitPrice: product.promoPrice || product.price });
+  };
+
+  // Agrega un producto vendido por peso (kg): unitPrice es por kg, la línea
+  // guarda weightKg y cobra unitPrice × kg (quantity=1).
+  const addWeightItem = (product: MenuItem, kg: number) => {
+    setSaveError("");
+    setSaveMessage("");
+    const weightKg = Math.round(kg * 1000) / 1000;
+    addItem({
+      menuItemId: product.id,
+      name: product.name,
+      quantity: 1,
+      weightKg,
+      unitPrice: product.promoPrice || product.price,
+      variantId: null,
+      variantIds: [],
+      variantName: null,
+      modifiers: [],
+    });
+    setLastAddedName(product.name);
   };
 
   const addConfiguredItem = ({
@@ -362,6 +389,7 @@ export default function MenuPage() {
     const items = ticketItems.map((item) => ({
       menuItemId: item.menuItemId,
       quantity: item.quantity,
+      weightKg: item.weightKg != null ? item.weightKg : undefined,
       notes: item.notes || "",
       variantId: item.variantId || undefined,
       variantIds: item.variantIds && item.variantIds.length > 0 ? item.variantIds : undefined,
@@ -678,25 +706,36 @@ export default function MenuPage() {
                       {money(item.total)}
                     </p>
                   </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => decrementItem(item.lineId)}
-                      className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
-                      aria-label={`Quitar ${item.name}`}
-                    >
-                      <Minus size={24} />
-                    </button>
-                    <span className="px-4 text-2xl font-black text-[var(--text-primary)]">{item.quantity}</span>
-                    <button
-                      type="button"
-                      onClick={() => incrementItem(item.lineId)}
-                      className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
-                      aria-label={`Agregar ${item.name}`}
-                    >
-                      <Plus size={24} />
-                    </button>
-                  </div>
+                  {item.weightKg != null ? (
+                    <div className="mt-3 flex items-center justify-between">
+                      <span className="text-lg font-black text-[var(--text-primary)]">
+                        {item.weightKg} kg
+                      </span>
+                      <span className="text-sm font-bold text-[var(--text-muted)]">
+                        {money(item.unitPrice)} / kg
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="mt-3 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => decrementItem(item.lineId)}
+                        className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
+                        aria-label={`Quitar ${item.name}`}
+                      >
+                        <Minus size={24} />
+                      </button>
+                      <span className="px-4 text-2xl font-black text-[var(--text-primary)]">{item.quantity}</span>
+                      <button
+                        type="button"
+                        onClick={() => incrementItem(item.lineId)}
+                        className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
+                        aria-label={`Agregar ${item.name}`}
+                      >
+                        <Plus size={24} />
+                      </button>
+                    </div>
+                  )}
                 </article>
               ))
             )}
@@ -776,30 +815,36 @@ export default function MenuPage() {
                   <div className="min-w-0">
                     <p className="truncate text-base font-black text-[var(--text-primary)]">{item.name}</p>
                     <p className="text-sm font-bold text-[var(--text-muted)]">
-                      {item.quantity} x {money(item.unitPrice)}
+                      {item.weightKg != null
+                        ? `${item.weightKg} kg × ${money(item.unitPrice)}/kg`
+                        : `${item.quantity} x ${money(item.unitPrice)}`}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => decrementItem(item.lineId)}
-                      className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
-                      aria-label={`Quitar ${item.name}`}
-                    >
-                      <Minus size={20} />
-                    </button>
-                    <span className="min-w-[26px] text-center text-lg font-black text-[var(--text-primary)]">
-                      {item.quantity}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => incrementItem(item.lineId)}
-                      className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
-                      aria-label={`Agregar ${item.name}`}
-                    >
-                      <Plus size={20} />
-                    </button>
-                  </div>
+                  {item.weightKg != null ? (
+                    <span className="text-base font-black text-[var(--brand)]">{money(item.total)}</span>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => decrementItem(item.lineId)}
+                        className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
+                        aria-label={`Quitar ${item.name}`}
+                      >
+                        <Minus size={20} />
+                      </button>
+                      <span className="min-w-[26px] text-center text-lg font-black text-[var(--text-primary)]">
+                        {item.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => incrementItem(item.lineId)}
+                        className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
+                        aria-label={`Agregar ${item.name}`}
+                      >
+                        <Plus size={20} />
+                      </button>
+                    </div>
+                  )}
                 </article>
               ))}
             </div>
@@ -841,7 +886,108 @@ export default function MenuPage() {
           }}
         />
       )}
+
+      {weightProduct && (
+        <LiteWeightEntry
+          product={weightProduct}
+          onClose={() => setWeightProduct(null)}
+          onConfirm={(kg) => {
+            addWeightItem(weightProduct, kg);
+            setWeightProduct(null);
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+// Captura de peso (kg) para productos vendidos por báscula. unitPrice es por
+// kg; muestra el total en vivo. Chips rápidos + entrada decimal libre.
+function LiteWeightEntry({
+  product,
+  onClose,
+  onConfirm,
+}: {
+  product: MenuItem;
+  onClose: () => void;
+  onConfirm: (kg: number) => void;
+}) {
+  const pricePerKg = product.promoPrice || product.price;
+  const [value, setValue] = useState("");
+  const kg = Number(value);
+  const valid = Number.isFinite(kg) && kg > 0;
+  const total = valid ? pricePerKg * kg : 0;
+  const submit = () => {
+    if (valid) onConfirm(kg);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-t-2xl border border-[var(--border)] bg-[var(--surface-2)] p-5 sm:rounded-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="text-xl font-black text-[var(--text-primary)]">{product.name}</p>
+        <p className="mb-4 text-sm font-bold text-[var(--text-muted)]">{money(pricePerKg)} / kg</p>
+
+        <label className="mb-1 block text-xs font-black uppercase tracking-widest text-[var(--text-muted)]">
+          Peso (kg)
+        </label>
+        <input
+          autoFocus
+          type="number"
+          inputMode="decimal"
+          step="0.001"
+          min="0"
+          placeholder="1.5"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") submit();
+          }}
+          className="mb-3 min-h-[60px] w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 text-3xl font-black text-[var(--text-primary)] outline-none"
+        />
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          {[0.25, 0.5, 0.75, 1, 1.5, 2].map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => setValue(String(q))}
+              className="rounded-full border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2 text-sm font-black text-[var(--text-primary)] active:scale-95 transition-all"
+            >
+              {q} kg
+            </button>
+          ))}
+        </div>
+
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-sm font-bold text-[var(--text-muted)]">Total</span>
+          <span className="text-2xl font-black text-[var(--brand)]">{money(total)}</span>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-[56px] flex-1 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] font-black text-[var(--text-primary)] active:scale-95 transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={!valid}
+            onClick={submit}
+            className="min-h-[56px] flex-1 rounded-xl bg-[var(--brand)] font-black text-[var(--brand-fg)] active:scale-95 transition-all disabled:opacity-40"
+          >
+            Agregar
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
