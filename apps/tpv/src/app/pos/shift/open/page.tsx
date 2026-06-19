@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import api from "@/lib/api";
-import { UtensilsCrossed, ArrowLeft } from "lucide-react";
+import { UtensilsCrossed, ArrowLeft, Users } from "lucide-react";
 
 const ShiftOpenPage = () => {
   const router = useRouter();
@@ -71,6 +71,16 @@ const ShiftOpenPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Volver al teclado de PIN para que entre otro empleado. Mantiene la
+  // responsabilidad: cada cajero abre/maneja su turno con su propio PIN
+  // (logout NO borra el cache offline de empleados, así que el siguiente
+  // login local sigue funcionando sin red). El nuevo empleado aterriza en
+  // /hub tras el PIN y desde ahí vuelve a esta pantalla a abrir su turno.
+  const handleSwitchEmployee = () => {
+    logout();
+    router.replace("/locked");
   };
 
   if (isLocked) {
@@ -141,13 +151,21 @@ const ShiftOpenPage = () => {
             </div>
 
             <div className="bg-[var(--surface-1)] border border-white/5 rounded-2xl p-6 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-[var(--brand-soft)] flex items-center justify-center text-[var(--brand)]">
+              <div className="w-12 h-12 rounded-xl bg-[var(--brand-soft)] flex items-center justify-center text-[var(--brand)] shrink-0">
                 <span className="text-xl font-semibold">{currentEmployee?.name?.charAt(0).toUpperCase()}</span>
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <span className="block text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Operador</span>
-                <span className="text-sm font-semibold text-white">{currentEmployee?.name}</span>
+                <span className="block text-sm font-semibold text-white truncate">{currentEmployee?.name}</span>
               </div>
+              <button
+                type="button"
+                onClick={handleSwitchEmployee}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3.5 h-10 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-white text-[10px] font-semibold uppercase tracking-[0.14em] active:scale-95 transition-all"
+              >
+                <Users size={14} />
+                Cambiar
+              </button>
             </div>
 
             <button
@@ -159,7 +177,7 @@ const ShiftOpenPage = () => {
             </button>
 
             <button
-              onClick={logout}
+              onClick={() => { logout(); router.replace("/locked"); }}
               className="w-full h-12 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-600 hover:text-white transition-colors"
             >
               Cerrar Sesión
