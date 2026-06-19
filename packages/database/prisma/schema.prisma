@@ -580,6 +580,13 @@ model MenuItem {
   barcode         String?
   activeDays      String[]
   hasVariants     Boolean  @default(false)
+  // Venta por peso (báscula): cuando es true, `price`/`promoPrice` se
+  // interpretan como PRECIO POR KG y la línea se cobra peso × precio/kg.
+  // El TPV captura los kg (decimal) en vez del stepper de unidades y el
+  // OrderItem guarda el peso en `OrderItem.weightKg`. El inventario por
+  // receta también se descuenta proporcional al peso. Default false: el
+  // catálogo existente se sigue vendiendo por pieza.
+  soldByWeight    Boolean  @default(false)
   // Cuando variantMultiSelect=true el TPV deja elegir varias variantes
   // (ej. varios sabores de boneless) en vez de una sola. min/max=0 = sin
   // tope por ese lado. Sólo aplica al modo multi; el single-select clásico
@@ -892,6 +899,12 @@ model OrderItem {
   name       String
   price      Float
   quantity   Int
+  // Peso vendido en KG para productos `MenuItem.soldByWeight`. Cuando está
+  // presente, `quantity` queda en 1 y la línea se cobró como
+  // `price (por kg) × weightKg`; el inventario se descontó proporcional al
+  // peso. Null para los productos por pieza (la inmensa mayoría). Decimal
+  // (no Float) por la regla de dinero/precisión del proyecto.
+  weightKg   Decimal?            @db.Decimal(10, 3)
   subtotal   Float
   notes      String?
   modifiers  OrderItemModifier[]

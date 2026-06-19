@@ -7,6 +7,9 @@ interface TicketLineProps {
   name: string;
   price: number;
   quantity: number;
+  // Peso en kg para líneas por báscula. Cuando está presente, `price` es por
+  // kg, el total = price × weightKg y se oculta el stepper de unidades.
+  weightKg?: number | null;
   notes?: string;
   modifiers?: { name: string; priceAdd: number }[];
   onUpdateQty?: (qty: number) => void;
@@ -24,6 +27,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
   name,
   price,
   quantity,
+  weightKg,
   notes,
   modifiers,
   onUpdateQty,
@@ -37,6 +41,10 @@ const TicketLine: React.FC<TicketLineProps> = ({
   const inc = () => (onIncrease ? onIncrease() : onUpdateQty?.(quantity + 1));
   const dec = () =>
     onDecrease ? onDecrease() : onUpdateQty?.(Math.max(0, quantity - 1));
+
+  // Línea por peso: el multiplicador del total es el peso (kg), no las unidades.
+  const isWeight = weightKg != null;
+  const lineTotal = isWeight ? price * (weightKg as number) : price * quantity;
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(notes ?? "");
@@ -67,24 +75,36 @@ const TicketLine: React.FC<TicketLineProps> = ({
     
   return (
     <div className="group flex items-center gap-3 py-2.5 border-b border-white/5 last:border-0">
-      {/* STEPPER VERTICAL - TOUCH OPTIMIZED (compacto) */}
-      <div className="flex flex-col items-center w-9 self-center bg-[var(--surface-1)] rounded-lg border border-white/5 overflow-hidden shrink-0">
-        <button
-          onClick={inc}
-          className="w-full h-8 flex items-center justify-center text-zinc-500 active:text-[var(--brand)] active:bg-white/5 transition-all active:scale-90"
-        >
-          <Plus size={15} strokeWidth={3} />
-        </button>
-        <span className="text-[13px] font-semibold text-white mono tnum leading-none py-0.5">
-          {quantity}
-        </span>
-        <button
-          onClick={dec}
-          className="w-full h-8 flex items-center justify-center text-zinc-500 active:text-red-500 active:bg-white/5 transition-all active:scale-90"
-        >
-          <Minus size={15} strokeWidth={3} />
-        </button>
-      </div>
+      {/* Línea por peso: badge de kg (sin stepper). Por unidad: stepper. */}
+      {isWeight ? (
+        <div className="flex w-12 flex-col items-center self-center rounded-lg border border-white/5 bg-[var(--surface-1)] px-1 py-1.5 shrink-0">
+          <span className="text-[13px] font-semibold text-white mono tnum leading-none">
+            {(weightKg as number).toFixed(3).replace(/\.?0+$/, "")}
+          </span>
+          <span className="mt-0.5 text-[8px] font-bold uppercase tracking-widest text-zinc-500">
+            kg
+          </span>
+        </div>
+      ) : (
+        /* STEPPER VERTICAL - TOUCH OPTIMIZED (compacto) */
+        <div className="flex flex-col items-center w-9 self-center bg-[var(--surface-1)] rounded-lg border border-white/5 overflow-hidden shrink-0">
+          <button
+            onClick={inc}
+            className="w-full h-8 flex items-center justify-center text-zinc-500 active:text-[var(--brand)] active:bg-white/5 transition-all active:scale-90"
+          >
+            <Plus size={15} strokeWidth={3} />
+          </button>
+          <span className="text-[13px] font-semibold text-white mono tnum leading-none py-0.5">
+            {quantity}
+          </span>
+          <button
+            onClick={dec}
+            className="w-full h-8 flex items-center justify-center text-zinc-500 active:text-red-500 active:bg-white/5 transition-all active:scale-90"
+          >
+            <Minus size={15} strokeWidth={3} />
+          </button>
+        </div>
+      )}
 
       {/* INFO PRODUCTO */}
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
@@ -111,7 +131,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
           )}
           <div className="flex shrink-0 items-center gap-1">
             <span className="text-sm font-semibold text-[var(--brand)] mono tabular-nums">
-              {currency}{(price * quantity).toFixed(2)}
+              {currency}{lineTotal.toFixed(2)}
             </span>
             {onRemove && (
               <button
@@ -127,7 +147,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
 
         {/* Precio unitario discreto bajo el nombre */}
         <span className="text-[10px] text-zinc-600 font-bold mono tabular-nums">
-          {currency}{price.toFixed(2)} c/u
+          {currency}{price.toFixed(2)} {isWeight ? "/ kg" : "c/u"}
         </span>
 
         {modifiers && modifiers.length > 0 && (

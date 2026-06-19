@@ -441,6 +441,9 @@ export interface TicketModifier {
 export interface TicketItem {
   name: string;
   quantity: number;
+  // Peso en kg para líneas por báscula. Cuando está presente, `price` es por
+  // kg y el total de la línea = price × weightKg (no price × quantity).
+  weightKg?: number | null;
   price: number;
   notes?: string | null;
   modifiers?: TicketModifier[] | null;
@@ -861,7 +864,11 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
 
   const renderItem = (item: TicketItem) => {
     let s = itemSizeOn + itemBoldOn;
-    s += `${item.quantity}x ${item.name}\n`;
+    // Línea por peso: cocina ve "1.5 kg" en vez de "1x".
+    const qtyLabel = item.weightKg != null
+      ? `${Number(item.weightKg).toFixed(3).replace(/\.?0+$/, "")} kg`
+      : `${item.quantity}x`;
+    s += `${qtyLabel} ${item.name}\n`;
     if (cfg.showModifiers && item.modifiers && item.modifiers.length > 0) {
       s += itemSizeOff;
       for (const m of item.modifiers) s += `  + ${m.name}\n`;
@@ -1126,13 +1133,16 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
     // impresa: la línea salía inflada (p.ej. Alitas 110 → 115, KFC 115 → 145)
     // mientras el TOTAL —derivado de input.total/order.total— quedaba correcto,
     // dando un ticket cuyas líneas no cuadran con su total.
-    const lineTotal = item.price * item.quantity;
+    // Línea por peso: total = price/kg × kg; renglón 2 muestra "kg x $/kg".
+    const wKg = item.weightKg != null ? Number(item.weightKg) : null;
+    const kgLabel = wKg != null ? `${wKg.toFixed(3).replace(/\.?0+$/, "")} kg` : null;
+    const lineTotal = wKg != null ? item.price * wKg : item.price * item.quantity;
     // Renglón 1: nombre + total de la línea (alineado a la derecha).
     d += formatNameAmountLine(item.name, showPrices ? fmtMoney(lineTotal) : "", lw);
-    // Renglón 2: cantidad × precio unitario (o solo "x N" si se ocultan precios).
+    // Renglón 2: cantidad/peso × precio unitario (o solo cantidad si se ocultan).
     d += showPrices
-      ? "  " + `${item.quantity} x ${fmtMoney(item.price)}` + "\n"
-      : "  " + `x ${item.quantity}` + "\n";
+      ? "  " + `${kgLabel ?? item.quantity} x ${fmtMoney(item.price)}${kgLabel ? "/kg" : ""}` + "\n"
+      : "  " + `x ${kgLabel ?? item.quantity}` + "\n";
     if (showMods) {
       for (const m of item.modifiers || []) {
         // Subline con sangría: "+ Nombre        +monto" alineado a la derecha.
