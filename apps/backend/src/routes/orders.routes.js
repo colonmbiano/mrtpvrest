@@ -407,6 +407,12 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
             user: { select: { name: true, phone: true } },
             items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
             address: true,
+            // Sin esta relación, las cuentas DINE_IN llegaban al TPV con
+            // `table` undefined; como las órdenes guardan `tableId` (no
+            // `tableNumber`), el selector caía a customerName y toda mesa
+            // aparecía como "Publico General" (indistinguible entre sí y
+            // mezclada con las del TPV principal). El TPV usa table.name.
+            table: { select: { id: true, name: true } },
           },
     });
 
