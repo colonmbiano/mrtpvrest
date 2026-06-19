@@ -411,7 +411,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col rounded-3xl bg-[#0F0F12] border border-white/10 shadow-2xl"
+        className="w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col rounded-3xl bg-[var(--surface-1)] border border-white/10 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -693,7 +693,7 @@ function PurchaseTab(props: {
         >
           <option value="">Selecciona proveedor…</option>
           {props.suppliers.map((s) => (
-            <option key={s.id} value={s.id} className="bg-[#0F0F12]">
+            <option key={s.id} value={s.id} className="bg-[var(--surface-1)]">
               {s.name}
             </option>
           ))}
@@ -761,7 +761,7 @@ function PurchaseTab(props: {
                 >
                   <option value="">Ingrediente…</option>
                   {props.ingredients.map((i) => (
-                    <option key={i.id} value={i.id} className="bg-[#0F0F12]">
+                    <option key={i.id} value={i.id} className="bg-[var(--surface-1)]">
                       {i.name} ({i.baseUnit.toLowerCase()})
                     </option>
                   ))}
