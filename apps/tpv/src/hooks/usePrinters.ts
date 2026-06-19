@@ -2,7 +2,43 @@
 import { useEffect, useState, useCallback } from "react";
 import { useClientValue } from "@/hooks/useClientValue";
 import api from "@/lib/api";
+import { getLocationId } from "@/lib/tenant";
 import type { PrinterRecord, KitchenTicketConfig, ReceiptInput } from "@/lib/printer-tcp";
+
+// ── Cache local-first de config de impresión ────────────────────────────
+//
+// El transporte de impresión ya es 100% local (TCP nativo al puerto 9100),
+// pero la CONFIG (IP/puerto/estaciones de cada impresora y el formato del
+// ticket) se baja del backend. Sin caché, arrancar/recargar el TPV sin red
+// dejaba la lista vacía → no imprimía nada aunque la impresora estuviera en
+// la misma LAN. Cacheamos en localStorage con patrón stale-while-revalidate,
+// scoped por sucursal para no imprimir con la config de otra sucursal si la
+// terminal cambia de workspace.
+const PRINTERS_CACHE_PREFIX = "tpv-printers-cache-";
+const TICKET_CONFIG_CACHE_PREFIX = "tpv-ticket-config-cache-";
+
+function cacheKey(prefix: string): string {
+  return `${prefix}${getLocationId() || "default"}`;
+}
+
+function readCache<T>(prefix: string): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(cacheKey(prefix));
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(prefix: string, value: unknown): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(cacheKey(prefix), JSON.stringify(value));
+  } catch {
+    /* cuota llena / modo privado — no crítico, seguimos con memoria */
+  }
+}
 
 /**
  * Carga + normaliza las impresoras de la sucursal y se mantiene viva en
@@ -35,11 +71,20 @@ export function usePrinters() {
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
+    // Stale-while-revalidate: pintamos la última lista conocida de inmediato
+    // (impresión instantánea aun offline), luego revalidamos contra el backend.
+    const cached = readCache<PrinterRecord[]>(PRINTERS_CACHE_PREFIX);
+    if (Array.isArray(cached) && cached.length > 0) setPrinters(cached);
+
     try {
       const { data } = await api.get<RawPrinter[]>("/api/printers");
-      setPrinters(Array.isArray(data) ? normalize(data) : []);
+      const normalized = Array.isArray(data) ? normalize(data) : [];
+      setPrinters(normalized);
+      writeCache(PRINTERS_CACHE_PREFIX, normalized);
     } catch {
-      setPrinters([]);
+      // Sin red / backend caído: mantenemos lo cacheado (no vaciamos la lista).
+      // Si no había caché, queda [] y la impresión avisará "sin impresoras".
+      if (!Array.isArray(cached) || cached.length === 0) setPrinters([]);
     } finally {
       setLoaded(true);
     }
@@ -230,11 +275,17 @@ export function useKitchenConfig() {
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
+    // Cache del DTO crudo (compartido con useFullTicketConfig); aquí lo mapeamos.
+    const cached = readCache<TicketConfigDTO>(TICKET_CONFIG_CACHE_PREFIX);
+    if (cached) setConfig(mapToKitchenConfig(cached));
+
     try {
       const { data } = await api.get<TicketConfigDTO>("/api/printers/ticket-config");
       setConfig(mapToKitchenConfig(data));
+      writeCache(TICKET_CONFIG_CACHE_PREFIX, data);
     } catch {
-      setConfig(null);
+      // Sin red: caemos al DTO cacheado; si no hay, null → defaults del builder.
+      if (!cached) setConfig(null);
     } finally {
       setLoaded(true);
     }
@@ -258,11 +309,16 @@ export function useFullTicketConfig() {
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
+    const cached = readCache<TicketConfigDTO>(TICKET_CONFIG_CACHE_PREFIX);
+    if (cached) setConfig(cached);
+
     try {
       const { data } = await api.get<TicketConfigDTO>("/api/printers/ticket-config");
       setConfig(data);
+      writeCache(TICKET_CONFIG_CACHE_PREFIX, data);
     } catch {
-      setConfig(null);
+      // Sin red: mantenemos el DTO cacheado en vez de perder la config.
+      if (!cached) setConfig(null);
     } finally {
       setLoaded(true);
     }
