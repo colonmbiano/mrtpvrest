@@ -580,12 +580,16 @@ model MenuItem {
   barcode         String?
   activeDays      String[]
   hasVariants     Boolean  @default(false)
-  // Venta por peso (báscula): cuando es true, `price`/`promoPrice` se
-  // interpretan como PRECIO POR KG y la línea se cobra peso × precio/kg.
-  // El TPV captura los kg (decimal) en vez del stepper de unidades y el
-  // OrderItem guarda el peso en `OrderItem.weightKg`. El inventario por
-  // receta también se descuenta proporcional al peso. Default false: el
-  // catálogo existente se sigue vendiendo por pieza.
+  // Unidad de venta del producto: "PIECE" (por pieza, default), "WEIGHT"
+  // (por kilo / báscula) u "ORDER" (por orden/ración). PIECE y ORDER son
+  // conteo entero (mismo flujo, solo cambia la etiqueta "pza"/"orden");
+  // WEIGHT activa la captura de peso. Fuente de verdad de la unidad.
+  saleUnit        String   @default("PIECE")
+  // DERIVADO de saleUnit (=="WEIGHT"). Se mantiene sincronizado en las
+  // escrituras del catálogo para que la lógica de cobro/inventario por peso
+  // (orders.routes: resolveWeightKg) siga consultando un booleano simple.
+  // Cuando es true, `price`/`promoPrice` se interpretan como PRECIO POR KG,
+  // el TPV captura los kg y el OrderItem guarda el peso en `weightKg`.
   soldByWeight    Boolean  @default(false)
   // Cuando variantMultiSelect=true el TPV deja elegir varias variantes
   // (ej. varios sabores de boneless) en vez de una sola. min/max=0 = sin
