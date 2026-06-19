@@ -48,6 +48,14 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
   const [opening, setOpening]   = useState(false);
   const [closing, setClosing]   = useState(false);
 
+  // Previsualización del total con PIN de admin (corte ciego: el cajero no ve
+  // el total hasta cerrar, pero un supervisor puede revisarlo antes del cierre).
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewPin, setPreviewPin]   = useState("");
+  const [previewData, setPreviewData] = useState<any>(null);
+  const [previewErr, setPreviewErr]   = useState("");
+  const [loadingPreview, setLoadingPreview] = useState(false);
+
   async function fetchShift() {
     setLoading(true);
     try {
@@ -125,6 +133,24 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
       await api.delete(`/api/shifts/cash-ins/${id}`);
       setShift((s: any) => ({ ...s, cashIns: s.cashIns.filter((c: any) => c.id !== id) }));
     } catch {}
+  }
+
+  async function loadPreview() {
+    if (!previewPin) { setPreviewErr("Ingresa el PIN de admin"); return; }
+    setLoadingPreview(true);
+    setPreviewErr("");
+    try {
+      const { data } = await api.post(`/api/shifts/${shift.id}/preview`, {
+        pin: previewPin,
+        // Si el cajero ya capturó el fondo de cierre, mostramos el desfase tentativo.
+        countedCash: closingFloat ? Number(closingFloat) : undefined,
+      });
+      setPreviewData(data);
+      setPreviewPin("");
+    } catch (e: any) {
+      setPreviewErr(e.response?.data?.error || "No se pudo obtener el total");
+      setPreviewData(null);
+    } finally { setLoadingPreview(false); }
   }
 
   async function closeShift() {
@@ -536,6 +562,83 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
                   <span className="font-bold">{shift.expenses?.length || 0}</span>
                 </div>
               </div>
+
+              {/* ── Ver total con PIN de admin (antes de cerrar) ── */}
+              {!showPreview && !previewData && (
+                <button onClick={() => setShowPreview(true)}
+                  className="w-full py-3 rounded-2xl font-syne font-semibold text-sm"
+                  style={{ background: "var(--surf2)", color: "var(--gold)", border: "1px solid var(--border)" }}>
+                  👁️ Ver total (PIN admin)
+                </button>
+              )}
+
+              {showPreview && !previewData && (
+                <div className="rounded-2xl border p-4 flex flex-col gap-3" style={{ background: "var(--surf2)", borderColor: "var(--gold)" }}>
+                  <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--gold)" }}>
+                    PIN de admin para revelar el total
+                  </div>
+                  <input type="password" inputMode="numeric" value={previewPin}
+                    onChange={e => { setPreviewPin(e.target.value); setPreviewErr(""); }}
+                    onKeyDown={e => { if (e.key === "Enter") loadPreview(); }}
+                    placeholder="••••" autoFocus
+                    className="w-full px-4 py-3 rounded-xl text-lg font-black outline-none text-center tracking-[0.5em]"
+                    style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--gold)" }} />
+                  {previewErr && <div className="text-xs text-center" style={{ color: "#ef4444" }}>{previewErr}</div>}
+                  <div className="flex gap-2">
+                    <button onClick={() => { setShowPreview(false); setPreviewPin(""); setPreviewErr(""); }}
+                      className="flex-1 py-2 rounded-xl text-xs font-bold border" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+                      Cancelar
+                    </button>
+                    <button onClick={loadPreview} disabled={loadingPreview}
+                      className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: "var(--gold)", color: "#000" }}>
+                      {loadingPreview ? "Cargando..." : "Ver total"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {previewData && (
+                <div className="rounded-2xl border p-4 flex flex-col gap-1" style={{ background: "rgba(245,166,35,0.06)", borderColor: "rgba(245,166,35,0.3)" }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--gold)" }}>
+                      Total en vivo · {previewData.revealedBy}
+                    </span>
+                    <button onClick={() => { setPreviewData(null); setShowPreview(false); }}
+                      className="text-xs" style={{ color: "var(--muted)" }}>Ocultar ✕</button>
+                  </div>
+                  {[
+                    { label: "💵 Efectivo", v: previewData.totalCash, c: "#22c55e" },
+                    { label: "💳 Tarjeta", v: previewData.totalCard, c: "#3b82f6" },
+                    { label: "📲 Transferencia", v: previewData.totalTransfer, c: "#8b5cf6" },
+                    { label: "🎁 Cortesía", v: previewData.totalCourtesy, c: "#f59e0b" },
+                  ].map(r => (
+                    <div key={r.label} className="flex justify-between text-sm py-1">
+                      <span style={{ color: "var(--muted)" }}>{r.label}</span>
+                      <span className="font-syne font-semibold" style={{ color: r.c }}>${(r.v || 0).toFixed(0)}</span>
+                    </div>
+                  ))}
+                  <div className="h-px my-1" style={{ background: "var(--border)" }} />
+                  <div className="flex justify-between text-sm py-1">
+                    <span style={{ color: "var(--muted)" }}>Total ventas</span>
+                    <span className="font-black" style={{ color: "#22c55e" }}>${(previewData.totalSales || 0).toFixed(0)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm py-1">
+                    <span style={{ color: "var(--muted)" }}>Efectivo esperado en caja</span>
+                    <span className="font-black" style={{ color: "var(--gold)" }}>${(previewData.expectedCash || 0).toFixed(0)}</span>
+                  </div>
+                  {previewData.variance != null && (
+                    <div className="flex justify-between text-sm py-1">
+                      <span style={{ color: "var(--muted)" }}>Desfase vs contado</span>
+                      <span className="font-black" style={{ color: previewData.variance < 0 ? "#ef4444" : "#22c55e" }}>
+                        {previewData.variance >= 0 ? "+" : ""}${previewData.variance.toFixed(0)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="text-[10px] mt-1" style={{ color: "var(--muted)" }}>
+                    Pedidos: {previewData.ordersCount} · cálculo en vivo, el turno sigue abierto
+                  </div>
+                </div>
+              )}
 
               <button onClick={closeShift} disabled={closing}
                 className="w-full py-4 rounded-2xl font-syne font-black text-base"
