@@ -234,17 +234,39 @@
 [data-mode="light"] .bg-black\/80        { background-color: rgba(255, 255, 255, 0.85) !important; }
 [data-mode="light"] .bg-black\/20        { background-color: rgba(0, 0, 0, 0.06) !important; }
 [data-mode="light"] .bg-white\/5         { background-color: rgba(0, 0, 0, 0.04) !important; }
+[data-mode="light"] .bg-white\/8         { background-color: rgba(0, 0, 0, 0.06) !important; }
 [data-mode="light"] .bg-white\/10        { background-color: rgba(0, 0, 0, 0.08) !important; }
+[data-mode="light"] .bg-white\/15        { background-color: rgba(0, 0, 0, 0.10) !important; }
+[data-mode="light"] .bg-white\/30        { background-color: rgba(0, 0, 0, 0.22) !important; }
+[data-mode="light"] .bg-white\/40        { background-color: rgba(0, 0, 0, 0.30) !important; }
+[data-mode="light"] .bg-white\/50        { background-color: rgba(0, 0, 0, 0.38) !important; }
+[data-mode="light"] .bg-white\/70        { background-color: rgba(0, 0, 0, 0.52) !important; }
+[data-mode="light"] .bg-white\/\[0\.02\]  { background-color: rgba(0, 0, 0, 0.02) !important; }
+[data-mode="light"] .bg-white\/\[0\.03\]  { background-color: rgba(0, 0, 0, 0.03) !important; }
+[data-mode="light"] .bg-white\/\[0\.035\] { background-color: rgba(0, 0, 0, 0.035) !important; }
+[data-mode="light"] .bg-white\/\[0\.04\]  { background-color: rgba(0, 0, 0, 0.04) !important; }
+[data-mode="light"] .bg-white\/\[0\.06\]  { background-color: rgba(0, 0, 0, 0.06) !important; }
 
 /* Texto blanco / zinc / stone — el cuerpo de copy del POS asume fondo oscuro. */
 [data-mode="light"] .text-white,
 [data-mode="light"] .text-zinc-100,
 [data-mode="light"] .text-zinc-200,
 [data-mode="light"] .text-stone-200 { color: var(--text-primary) !important; }
+[data-mode="light"] .text-white\/90 { color: rgba(21, 32, 27, 0.90) !important; }
 [data-mode="light"] .text-white\/85 { color: rgba(21, 32, 27, 0.85) !important; }
+[data-mode="light"] .text-white\/80 { color: rgba(21, 32, 27, 0.82) !important; }
+[data-mode="light"] .text-white\/75 { color: rgba(21, 32, 27, 0.78) !important; }
+[data-mode="light"] .text-white\/70 { color: rgba(21, 32, 27, 0.72) !important; }
+[data-mode="light"] .text-white\/65 { color: rgba(21, 32, 27, 0.67) !important; }
+[data-mode="light"] .text-white\/60 { color: rgba(21, 32, 27, 0.62) !important; }
 [data-mode="light"] .text-white\/55 { color: rgba(21, 32, 27, 0.55) !important; }
-[data-mode="light"] .text-white\/40 { color: rgba(21, 32, 27, 0.40) !important; }
-[data-mode="light"] .text-white\/30 { color: rgba(21, 32, 27, 0.30) !important; }
+[data-mode="light"] .text-white\/50 { color: rgba(21, 32, 27, 0.52) !important; }
+[data-mode="light"] .text-white\/45 { color: rgba(21, 32, 27, 0.48) !important; }
+[data-mode="light"] .text-white\/40 { color: rgba(21, 32, 27, 0.42) !important; }
+[data-mode="light"] .text-white\/35 { color: rgba(21, 32, 27, 0.38) !important; }
+[data-mode="light"] .text-white\/30 { color: rgba(21, 32, 27, 0.34) !important; }
+[data-mode="light"] .text-white\/25 { color: rgba(21, 32, 27, 0.30) !important; }
+[data-mode="light"] .text-white\/20 { color: rgba(21, 32, 27, 0.26) !important; }
 [data-mode="light"] .text-zinc-300,
 [data-mode="light"] .text-zinc-400 { color: var(--text-secondary) !important; }
 [data-mode="light"] .text-zinc-500,
@@ -255,8 +277,14 @@
 
 /* Bordes blancos translúcidos — invertir a los tokens de borde. */
 [data-mode="light"] .border-white\/5,
+[data-mode="light"] .border-white\/8,
 [data-mode="light"] .border-white\/10,
-[data-mode="light"] .border-white\/20 { border-color: var(--border) !important; }
+[data-mode="light"] .border-white\/15,
+[data-mode="light"] .border-white\/20,
+[data-mode="light"] .border-white\/\[0\.06\],
+[data-mode="light"] .border-white\/\[0\.07\] { border-color: var(--border) !important; }
+[data-mode="light"] .border-white\/25,
+[data-mode="light"] .border-white\/30 { border-color: var(--border-strong) !important; }
 
 /* El acento (--brand) NO se atenúa en modo claro: ya tiene su propio tinte
    Fresco por [data-mode="light"]. Esto preserva CTAs legibles sobre blanco. */
