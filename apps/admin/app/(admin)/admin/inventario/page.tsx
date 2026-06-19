@@ -110,6 +110,7 @@ export default function InventarioPage() {
   const [adjustModal, setAdjustModal] = useState<Ingredient | null>(null);
   const [adjustQty, setAdjustQty]     = useState("");
   const [adjustType, setAdjustType]   = useState("IN");
+  const [adjustUnit, setAdjustUnit]   = useState("kg");
   const [adjustReason, setAdjustReason] = useState("");
   const [adjustSaving, setAdjustSaving] = useState(false);
   const [shoppingList, setShoppingList] = useState<SuggestionGroup[] | null>(null);
@@ -132,6 +133,23 @@ export default function InventarioPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
 
   const UNITS = ["pz","kg","g","l","ml","bolsa","lata","caja","sobre","rollo"];
+
+  // Conversión de la unidad de captura → unidad base del insumo (lo que guarda
+  // el stock). El insumo se compra en kg/L pero el inventario vive en g/ml; sin
+  // esto, teclear "100" sumaba 100 g en vez de 100 kg.
+  const UNIT_FAMILIES = {
+    GRAM:  [{ value: "kg", label: "kg", factor: 1000 }, { value: "g", label: "g", factor: 1 }],
+    ML:    [{ value: "L", label: "L", factor: 1000 }, { value: "ml", label: "ml", factor: 1 }],
+    PIECE: [{ value: "pz", label: "pz", factor: 1 }],
+  };
+  const unitOptionsFor = (baseUnit?: string) =>
+    UNIT_FAMILIES[(baseUnit as keyof typeof UNIT_FAMILIES)] ?? UNIT_FAMILIES.PIECE;
+  const defaultUnitFor = (baseUnit?: string) => (baseUnit === "GRAM" ? "kg" : baseUnit === "ML" ? "L" : "pz");
+  const baseUnitLabel = (baseUnit?: string) => (baseUnit === "GRAM" ? "g" : baseUnit === "ML" ? "ml" : "pz");
+  const toBaseQty = (qty: number, unit: string, baseUnit?: string) => {
+    const o = unitOptionsFor(baseUnit).find((u) => u.value === unit);
+    return qty * (o?.factor ?? 1);
+  };
 
   const fetchAll = useCallback(async (_locationId: string) => {
     try {
@@ -294,6 +312,7 @@ export default function InventarioPage() {
     setAdjustModal(ing);
     setAdjustQty("");
     setAdjustType("IN");
+    setAdjustUnit(defaultUnitFor(ing.baseUnit));
     setAdjustReason("");
   }
 
@@ -302,10 +321,12 @@ export default function InventarioPage() {
     if (!adjustModal) return;
     setAdjustSaving(true);
     try {
+      // Convertimos a la unidad base del insumo antes de enviar (el endpoint
+      // recibe siempre la unidad base: g/ml/pz).
       await api.post("/api/inventory/movements", {
         ingredientId: adjustModal.id,
         type: adjustType,
-        quantity: Number(adjustQty),
+        quantity: toBaseQty(Number(adjustQty), adjustUnit, adjustModal.baseUnit),
         reason: adjustReason || undefined,
       });
       setAdjustModal(null);
@@ -757,7 +778,7 @@ export default function InventarioPage() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="font-display text-xl font-extrabold text-tx-hi">Ajustar stock</h2>
-                <p className="mt-0.5 text-[11px] text-tx-mut">{adjustModal.name} · actual {adjustModal.stock} {adjustModal.unit}</p>
+                <p className="mt-0.5 text-[11px] text-tx-mut">{adjustModal.name} · actual {adjustModal.stock} {baseUnitLabel(adjustModal.baseUnit)}</p>
               </div>
               <button onClick={() => setAdjustModal(null)} aria-label="Cerrar"
                 className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut"
@@ -780,14 +801,30 @@ export default function InventarioPage() {
               </div>
               <div>
                 <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
-                  {adjustType === "ADJUST" ? "Stock real contado" : "Cantidad"} ({adjustModal.unit})
+                  {adjustType === "ADJUST" ? "Stock real contado" : "Cantidad"}
                 </label>
-                <input
-                  type="number" step="0.01" min="0" required autoFocus
-                  value={adjustQty} onChange={e => setAdjustQty(e.target.value)}
-                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
-                  style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="number" step="0.001" min="0" required autoFocus
+                    value={adjustQty} onChange={e => setAdjustQty(e.target.value)}
+                    className="min-w-0 flex-1 rounded-xl px-4 py-2.5 text-sm outline-none"
+                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
+                  />
+                  <select
+                    value={adjustUnit} onChange={e => setAdjustUnit(e.target.value)}
+                    className="rounded-xl px-3 py-2.5 text-sm outline-none"
+                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
+                  >
+                    {unitOptionsFor(adjustModal.baseUnit).map(u => (
+                      <option key={u.value} value={u.value}>{u.label}</option>
+                    ))}
+                  </select>
+                </div>
+                {adjustQty && adjustUnit !== baseUnitLabel(adjustModal.baseUnit) && (
+                  <p className="mt-1.5 text-[11px] text-tx-mut">
+                    = {toBaseQty(Number(adjustQty), adjustUnit, adjustModal.baseUnit).toLocaleString("es-MX")} {baseUnitLabel(adjustModal.baseUnit)}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Motivo (opcional)</label>
