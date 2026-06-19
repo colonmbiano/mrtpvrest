@@ -426,6 +426,12 @@ export default function MenuPage() {
               ? tableLabel || "Meseros Lite"
               : takeoutName.trim() || "Para llevar",
             paymentMethod: "PENDING",
+            // Mesa con cuenta ya abierta (la abrió el TPV principal u otro
+            // mesero, o el cache de mesas estaba viejo) → agregar la ronda a esa
+            // cuenta en vez de un 409 que perdía la comanda. El mesero eligió una
+            // mesa física concreta: sus items pertenecen a esa cuenta. Sin esto,
+            // además, el replay offline a una mesa ocupada fallaba permanente.
+            ...(realTableId ? { appendToOpenTab: true } : {}),
             items,
             subtotal: total,
             discount: 0,
