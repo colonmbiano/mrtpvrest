@@ -784,7 +784,7 @@ function TableGrid({
                 {pickerOpen && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute left-0 top-full mt-2 z-30 w-48 max-h-60 overflow-y-auto bg-[#16171b] border border-white/10 rounded-2xl shadow-2xl p-1.5"
+                    className="absolute left-0 top-full mt-2 z-30 w-48 max-h-60 overflow-y-auto bg-[var(--surface-1)] border border-white/10 rounded-2xl shadow-2xl p-1.5"
                   >
                     <ZonePickerItem
                       label="Sin zona" active={!(t.zoneId ?? t.zone?.id)}

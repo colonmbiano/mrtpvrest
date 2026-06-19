@@ -297,7 +297,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
               key={t.key}
               onClick={() => setTab(t.key)}
               className="relative py-3 px-4 text-xs font-semibold uppercase tracking-widest transition-colors"
-              style={{ color: tab === t.key ? "#fff" : "var(--text-secondary)" }}
+              style={{ color: tab === t.key ? "var(--text-primary)" : "var(--text-secondary)" }}
             >
               {t.label}
               {tab === t.key && (
@@ -526,7 +526,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                       <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1">
                         {PAYMENT_LABELS[method] || method}
                       </div>
-                      <div className="text-base font-black" style={{ color: method === "CASH" ? "var(--success)" : "#fff" }}>
+                      <div className="text-base font-black" style={{ color: method === "CASH" ? "var(--success)" : "var(--text-primary)" }}>
                         ${amount.toFixed(0)}
                       </div>
                     </div>

@@ -1149,7 +1149,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       <div className="relative mt-auto shrink-0 overflow-hidden border-t border-white/10 bg-[var(--surface-1)]">
         {/* BLOQUE DE TOTALES — Subtotal, IVA (16%), Descuento, Total.
             Estilo e-commerce: rows alineadas con valores tabulares. */}
-        <div className="relative z-10 flex flex-col gap-1.5 border-b border-white/10 bg-[#0d0e11] px-4 py-3">
+        <div className="relative z-10 flex flex-col gap-1.5 border-b border-white/10 bg-[var(--surface-2)] px-4 py-3">
           <div className="flex justify-between items-baseline text-[11px]">
             <span className="font-bold uppercase tracking-[0.15em] text-zinc-500">
               Subtotal

@@ -748,7 +748,7 @@ function PinModal({
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-6">
-      <div className="w-full max-w-xs rounded-3xl p-6 flex flex-col gap-4 bg-[#141416] border border-white/10">
+      <div className="w-full max-w-xs rounded-3xl p-6 flex flex-col gap-4 bg-[var(--surface-1)] border border-white/10">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold">PIN de administrador</h3>
           <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95">
@@ -820,7 +820,7 @@ function CashInModal({
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-sm p-6" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-3xl p-6 flex flex-col gap-4 bg-[#141416] border border-white/10" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-sm rounded-3xl p-6 flex flex-col gap-4 bg-[var(--surface-1)] border border-white/10" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-2xl bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center">

@@ -127,7 +127,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 onClick={() => setAvatarOpen(false)}
                 className="fixed inset-0 z-40 bg-transparent cursor-default"
               />
-              <div className="absolute left-full top-0 ml-3 w-64 rounded-2xl bg-[#141417] border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.5)] p-4 z-50">
+              <div className="absolute left-full top-0 ml-3 w-64 rounded-2xl bg-[var(--surface-1)] border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.5)] p-4 z-50">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl bg-iris-soft flex items-center justify-center text-iris-500 font-black border border-iris-glow shrink-0">
                     {employee.name.charAt(0).toUpperCase()}
