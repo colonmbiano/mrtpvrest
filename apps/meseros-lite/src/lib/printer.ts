@@ -221,6 +221,10 @@ export interface TicketModifier {
 export interface TicketItem {
   name: string;
   quantity: number;
+  // Peso en kg para líneas por báscula: total = price/kg × kg, quantity=1.
+  weightKg?: number | null;
+  // Unidad de medida mostrada (pz/orden/bolsa/…). Cosmética.
+  unit?: string | null;
   price: number;
   notes?: string | null;
   modifiers?: TicketModifier[] | null;
@@ -338,7 +342,11 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
 
   for (const item of input.items) {
     d += itemSizeOn + CMD.BOLD_ON;
-    d += `${item.quantity}x ${item.name}\n`;
+    // Por peso: "1.5 kg"; por pieza/orden: "Nx".
+    const qtyLabel = item.weightKg != null
+      ? `${Number(item.weightKg).toFixed(3).replace(/\.?0+$/, "")} ${item.unit || "kg"}`
+      : `${item.quantity}x`;
+    d += `${qtyLabel} ${item.name}\n`;
     if (cfg.showModifiers && item.modifiers && item.modifiers.length > 0) {
       d += itemSizeOff;
       for (const m of item.modifiers) d += `  + ${m.name}\n`;
@@ -376,10 +384,16 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   d += CMD.LINE + CMD.ALIGN_LEFT;
 
   for (const item of input.items) {
+    // Por peso: total = price/kg × kg y etiqueta "1.5 kg"; por pieza: × cantidad.
+    const wKg = item.weightKg != null ? Number(item.weightKg) : null;
+    const mult = wKg != null ? wKg : item.quantity;
+    const qtyLabel = wKg != null
+      ? `${wKg.toFixed(3).replace(/\.?0+$/, "")} ${item.unit || "kg"}`
+      : `${item.quantity}x`;
     const lineTotal =
-      item.price * item.quantity +
+      item.price * mult +
       (item.modifiers || []).reduce((s, m) => s + (m.priceAdd || 0), 0) * item.quantity;
-    d += row(`${item.quantity}x ${truncate(item.name, 18)}`, fmtMoney(lineTotal));
+    d += row(`${qtyLabel} ${truncate(item.name, 18)}`, fmtMoney(lineTotal));
     if (item.modifiers && item.modifiers.length > 0) {
       for (const m of item.modifiers) {
         const extra = m.priceAdd ? ` (+${fmtMoney(m.priceAdd)})` : "";

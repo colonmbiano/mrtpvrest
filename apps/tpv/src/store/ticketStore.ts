@@ -69,6 +69,8 @@ export type Product = {
   variantMaxSelection?: number;
   // Venta por peso: el `price` es por kg y el TPV pide los kg al agregarlo.
   soldByWeight?: boolean;
+  // Unidad de medida MOSTRADA (etiqueta: pz/kg/orden/bolsa/…). Cosmética.
+  unit?: string;
   variants?: MenuItemVariant[];
   complements?: MenuItemComplement[];
   modifierGroups?: ModifierGroup[];

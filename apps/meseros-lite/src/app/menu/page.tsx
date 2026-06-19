@@ -65,6 +65,8 @@ interface MenuItem {
   hasVariants?: boolean;
   // Venta por peso: el precio es por kg y al tocarlo se pide el peso en báscula.
   soldByWeight?: boolean;
+  // Unidad de medida mostrada (pz/kg/orden/bolsa/…). Cosmética.
+  unit?: string;
   variants?: MenuVariant[];
   complements?: MenuComplement[];
   modifierGroups?: MenuModifierGroup[];
@@ -295,6 +297,7 @@ export default function MenuPage() {
       name: product.name,
       quantity: 1,
       weightKg,
+      unit: product.unit || "kg",
       unitPrice: product.promoPrice || product.price,
       variantId: null,
       variantIds: [],
@@ -334,6 +337,7 @@ export default function MenuPage() {
       menuItemId: product.id,
       name: itemName,
       quantity,
+      unit: product.unit || "pz",
       unitPrice,
       variantId: variants?.[0]?.id || null,
       variantIds: variants?.map((variant) => variant.id) || [],
@@ -355,6 +359,8 @@ export default function MenuPage() {
     const printItems: TicketItem[] = ticketItems.map((item) => ({
       name: item.name,
       quantity: item.quantity,
+      weightKg: item.weightKg ?? null,
+      unit: item.unit ?? null,
       price: item.unitPrice,
       notes: item.notes,
       modifiers: item.modifiers.map((modifier) => ({ name: modifier.name, priceAdd: modifier.priceAdd })),
@@ -823,7 +829,7 @@ export default function MenuPage() {
                     <p className="text-sm font-bold text-[var(--text-muted)]">
                       {item.weightKg != null
                         ? `${item.weightKg} kg × ${money(item.unitPrice)}/kg`
-                        : `${item.quantity} x ${money(item.unitPrice)}`}
+                        : `${item.quantity} x ${money(item.unitPrice)}${item.unit && item.unit !== "pz" ? `/${item.unit}` : ""}`}
                     </p>
                   </div>
                   {item.weightKg != null ? (

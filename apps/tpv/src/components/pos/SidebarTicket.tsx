@@ -367,6 +367,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         name: it.name,
         quantity: it.quantity,
         weightKg: it.weightKg ?? null,
+        unit: it.unit ?? null,
         price: it.price,
         notes: it.notes,
         seatNumber: it.seatNumber ?? null,
@@ -914,6 +915,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       name: it.menuItem?.name || it.name,
       quantity: it.quantity,
       weightKg: it.weightKg != null ? Number(it.weightKg) : null,
+      unit: it.menuItem?.unit ?? it.unit ?? null,
       price: it.price,
       notes: it.notes,
       seatNumber: it.seatNumber ?? null,
@@ -1087,6 +1089,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                   name={item.menuItem?.name || item.name}
                   quantity={item.quantity}
                   weightKg={item.weightKg != null ? Number(item.weightKg) : null}
+                  unit={item.menuItem?.unit ?? item.unit}
                   price={item.price}
                   notes={item.notes}
                   modifiers={item.modifiers?.map((m: any) => ({
@@ -1128,6 +1131,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               name={item.name}
               quantity={item.quantity}
               weightKg={item.weightKg ?? null}
+              unit={item.unit}
               price={item.price}
               notes={item.notes}
               modifiers={item.modifiers?.map(m => ({ name: m.name, priceAdd: m.priceAdd }))}
