@@ -15,6 +15,9 @@ export interface LiteTicketItem {
   menuItemId: string;
   name: string;
   quantity: number;
+  // Peso en kg para líneas vendidas por báscula (producto soldByWeight).
+  // Cuando está presente, quantity=1, unitPrice es por kg y total = unitPrice × weightKg.
+  weightKg?: number | null;
   unitPrice: number;
   total: number;
   variantId?: string | null;
@@ -120,7 +123,10 @@ export const useWaiterOrderStore = create<WaiterOrderState>()(
             {
               ...item,
               lineId: makeLineId(),
-              total: item.unitPrice * item.quantity,
+              // Líneas por peso: total = precio/kg × kg; por pieza: × cantidad.
+              total: item.weightKg != null
+                ? item.unitPrice * item.weightKg
+                : item.unitPrice * item.quantity,
             },
           ],
           lastLocalChangeAt: touchLocalChange(),
@@ -128,7 +134,8 @@ export const useWaiterOrderStore = create<WaiterOrderState>()(
       incrementItem: (lineId) =>
         set((state) => ({
           ticketItems: state.ticketItems.map((item) =>
-            item.lineId === lineId
+            // El stepper no aplica a líneas por peso (el peso se fija al agregar).
+            item.lineId === lineId && item.weightKg == null
               ? {
                   ...item,
                   quantity: item.quantity + 1,
@@ -142,7 +149,7 @@ export const useWaiterOrderStore = create<WaiterOrderState>()(
         set((state) => ({
           ticketItems: state.ticketItems
             .map((item) =>
-              item.lineId === lineId
+              item.lineId === lineId && item.weightKg == null
                 ? {
                     ...item,
                     quantity: item.quantity - 1,
