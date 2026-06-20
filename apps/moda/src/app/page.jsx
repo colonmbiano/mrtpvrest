@@ -221,6 +221,7 @@ function TopBar({ query, setQuery, role, setRole, theme, setTheme, setNavOpen })
 }
 function Sidebar({ screen, go, navOpen, setNavOpen }) {
   const close=()=>setNavOpen&&setNavOpen(false);
+  const data=useData();
   return (<>
     {navOpen && <div className="fixed inset-0 bg-black/40 z-40 lg:hidden" onClick={close}/>}
     <aside className={"bg-card border-r border-line flex-col w-[264px] shrink-0 fixed inset-y-0 left-0 z-50 lg:static lg:w-[224px] lg:z-auto "+(navOpen?"flex":"hidden lg:flex")}>
@@ -240,13 +241,11 @@ function Sidebar({ screen, go, navOpen, setNavOpen }) {
           );
         })}
       </nav>
-      <div className="p-4 border-t border-line space-y-2 text-[12px]">
-        <Row k="Tienda" v="Polanco" icon="store"/>
-        <div className="flex gap-4">
-          <span className="text-ink-400">Caja: <span className="text-ink-700 font-medium">01</span></span>
-          <span className="text-ink-400">Turno: <span className="text-brand-600 font-medium">Abierto</span></span>
-        </div>
-        <Row k="Conexión" v={<span className="text-brand-600 font-medium">Online</span>} icon="wifi"/>
+      <div className="p-4 border-t border-line space-y-2.5 text-[12px]">
+        <Row k="Tienda" v={Retail.getLinkedName().location || (data.demo?"Demostración":"—")} icon="store"/>
+        {data.session?.name && <Row k="Cajero" v={data.session.name} icon="users"/>}
+        <div className="flex items-center gap-2 text-ink-400"><Icon n="wifi" s={14}/><span>Conexión: <span className={data.online?"text-brand-600 font-medium":"text-ink-500 font-medium"}>{data.online?"Online":(data.demo?"Demo":"Sin conexión")}</span></span></div>
+        {(data.session||data.demo) && <button onClick={()=>{ close(); data.logout&&data.logout(); }} className="w-full mt-1 h-9 rounded-lg border border-line hover:bg-surf text-ink-600 text-[12px] font-medium inline-flex items-center justify-center gap-2"><Icon n="lock" s={14}/>Cerrar sesión</button>}
       </div>
     </aside>
   </>);
@@ -1173,26 +1172,83 @@ function BootSplash(){
     </div></div>);
 }
 
-function LoginScreen({ onLogin, onDemo }){
-  const [pin,setPin]=useState("");
-  const [loc,setLoc]=useState("");
-  const [url,setUrl]=useState("");
-  const [cfg,setCfg]=useState(false);
-  const [busy,setBusy]=useState(false);
-  const [err,setErr]=useState("");
-  useEffect(()=>{ setUrl(getApiUrl()); const t=getTenant(); setLoc(t.locationId||""); },[]);
-  const submit=async()=>{
+// Setup de dispositivo (estilo TPV): login admin → elegir sucursal → vincular.
+function SetupScreen({ onLinked, onDemo }){
+  const [step,setStep]=useState("login");
+  const [email,setEmail]=useState(""); const [password,setPassword]=useState("");
+  const [url,setUrl]=useState(""); const [cfg,setCfg]=useState(false);
+  const [ws,setWs]=useState([]);
+  const [busy,setBusy]=useState(false); const [err,setErr]=useState("");
+  useEffect(()=>{ setUrl(getApiUrl()); },[]);
+  const doLogin=async()=>{
     setErr("");
-    if(pin.length<4){ setErr("Ingresa tu PIN de 4 dígitos."); return; }
-    if(!loc.trim()){ setErr("Configura la sucursal (locationId) antes de entrar."); setCfg(true); return; }
+    if(!email.trim()||!password){ setErr("Ingresa correo y contraseña."); return; }
     setBusy(true);
     try{
       if(url.trim()) setApiUrl(url.trim());
-      setTenant({ locationId: loc.trim() });
-      const emp=await Retail.loginPin(pin, loc.trim());
+      await Retail.adminLogin(email.trim(), password);
+      const list=await Retail.fetchWorkspaces();
+      if(!list.length){ setErr("Tu usuario no tiene sucursales."); setBusy(false); return; }
+      setWs(list); setStep("location");
+    }catch(e){ setErr(e?.status===401||e?.status===400?"Correo o contraseña incorrectos.":(e?.message||"No se pudo conectar.")); }
+    finally{ setBusy(false); }
+  };
+  const pick=(w)=>{ Retail.linkLocation(w); onLinked(); };
+  return (<div className="h-full grid place-items-center bg-body p-6 overflow-y-auto">
+    <div className="w-full max-w-[400px] py-6">
+      <div className="text-center mb-6">
+        <div className="text-3xl font-bold tracking-tight text-ink-900">MODA<span className="text-brand-600">+</span></div>
+        <div className="text-[10px] tracking-[0.28em] text-ink-400 mt-1">SMART RETAIL FLOW</div>
+      </div>
+      <div className="bg-card border border-line rounded-2xl shadow-sm p-6">
+        {step==="login" ? (<>
+          <div className="text-[15px] font-semibold text-ink-900 text-center">Configurar dispositivo</div>
+          <div className="text-[12px] text-ink-400 text-center mt-1 mb-5">Inicia sesión con tu cuenta de administrador</div>
+          {err && <div className="text-[12px] text-red-500 text-center mb-3">{err}</div>}
+          <div className="space-y-3">
+            <div><div className="text-[11px] text-ink-500 mb-1">Correo</div>
+              <input value={email} onChange={e=>setEmail(e.target.value)} type="email" autoCapitalize="none" placeholder="admin@tunegocio.com" className="w-full h-11 rounded-xl border border-line bg-surf px-3 text-sm outline-none focus:border-brand-500"/></div>
+            <div><div className="text-[11px] text-ink-500 mb-1">Contraseña</div>
+              <input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="••••••••" onKeyDown={e=>{if(e.key==="Enter")doLogin();}} className="w-full h-11 rounded-xl border border-line bg-surf px-3 text-sm outline-none focus:border-brand-500"/></div>
+          </div>
+          <button onClick={doLogin} disabled={busy} className="w-full h-12 mt-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm inline-flex items-center justify-center gap-2 disabled:opacity-50">{busy?<span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin"/>:<><Icon n="check" s={16} c="#fff"/>Continuar</>}</button>
+          <button onClick={()=>setCfg(c=>!c)} className="w-full mt-3 text-[11px] text-ink-400 hover:text-ink-700 flex items-center justify-center gap-1.5"><Icon n="gear" s={13}/>Configurar conexión</button>
+          {cfg && <div className="mt-3 pt-3 border-t border-line"><div className="text-[11px] text-ink-500 mb-1">URL del backend</div>
+            <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://api.mrtpvrest.com" className="w-full h-9 rounded-lg border border-line bg-surf px-3 text-[12px] outline-none focus:border-brand-500"/></div>}
+        </>) : (<>
+          <div className="text-[15px] font-semibold text-ink-900 text-center">Elige la sucursal</div>
+          <div className="text-[12px] text-ink-400 text-center mt-1 mb-4">Este dispositivo quedará ligado a la tienda seleccionada</div>
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+            {ws.map(w=>(
+              <button key={w.id} onClick={()=>pick(w)} className="w-full flex items-center justify-between gap-3 p-3 rounded-xl border border-line hover:border-brand-500 hover:bg-brand-50 text-left transition-colors">
+                <div className="min-w-0"><div className="text-[14px] font-semibold text-ink-900 truncate">{w.name}</div>
+                  <div className="text-[11px] text-ink-400 truncate">{w.restaurantName}</div></div>
+                <span className={"text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 "+(w.businessType==="RETAIL"?"bg-brand-100 text-brand-700":"bg-surf text-ink-400")}>{w.businessType}</span>
+              </button>))}
+          </div>
+          <button onClick={()=>setStep("login")} className="w-full mt-4 text-[11px] text-ink-400 hover:text-ink-700">← Volver</button>
+        </>)}
+      </div>
+      <button onClick={onDemo} className="w-full mt-4 text-[12px] text-ink-400 hover:text-brand-600 transition-colors">Explorar en modo demostración →</button>
+    </div>
+  </div>);
+}
+
+function LoginScreen({ onLogin, onDemo, onRelink }){
+  const [pin,setPin]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState("");
+  const [loc,setLoc]=useState({location:"",restaurant:""});
+  useEffect(()=>{ setLoc(Retail.getLinkedName()); },[]);
+  const submit=async()=>{
+    setErr("");
+    if(pin.length<4){ setErr("Ingresa tu PIN de 4 dígitos."); return; }
+    setBusy(true);
+    try{
+      const emp=await Retail.loginPin(pin, getTenant().locationId||"");
       await onLogin(emp);
     }catch(e){
-      setErr(e?.status===401 || e?.status===400 ? "PIN o sucursal incorrectos." : (e?.message||"No se pudo iniciar sesión."));
+      setErr(e?.status===401 || e?.status===400 ? "PIN incorrecto." : (e?.message||"No se pudo iniciar sesión."));
       setPin("");
     }finally{ setBusy(false); }
   };
@@ -1205,7 +1261,7 @@ function LoginScreen({ onLogin, onDemo }){
       </div>
       <div className="bg-card border border-line rounded-2xl shadow-sm p-6">
         <div className="text-[14px] font-semibold text-ink-900 text-center">Ingresa tu PIN</div>
-        <div className="text-[12px] text-ink-400 text-center mt-1">Acceso de empleado</div>
+        <div className="text-[12px] text-ink-400 text-center mt-1">{loc.location ? loc.location : "Acceso de empleado"}</div>
         <div className="flex justify-center gap-3 my-5">
           {[0,1,2,3].map(i=>(<div key={i} className={"w-3.5 h-3.5 rounded-full border "+(pin.length>i?"bg-brand-500 border-brand-500":"border-line")}/>))}
         </div>
@@ -1217,13 +1273,7 @@ function LoginScreen({ onLogin, onDemo }){
           <button onClick={()=>key("0")} className="h-12 rounded-xl border border-line bg-surf hover:bg-card tnum text-lg text-ink-900">0</button>
           <button onClick={()=>key("ok")} disabled={busy} className="h-12 rounded-xl bg-brand-600 hover:bg-brand-700 text-white grid place-items-center disabled:opacity-50">{busy?<span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin"/>:<Icon n="check" s={18} c="#fff"/>}</button>
         </div>
-        <button onClick={()=>setCfg(c=>!c)} className="w-full mt-4 text-[11px] text-ink-400 hover:text-ink-700 flex items-center justify-center gap-1.5"><Icon n="gear" s={13}/>Configurar conexión</button>
-        {cfg && <div className="mt-3 space-y-2 pt-3 border-t border-line">
-          <div><div className="text-[11px] text-ink-500 mb-1">URL del backend</div>
-            <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://api.mrtpvrest.com" className="w-full h-9 rounded-lg border border-line bg-surf px-3 text-[12px] outline-none focus:border-brand-500"/></div>
-          <div><div className="text-[11px] text-ink-500 mb-1">Sucursal (locationId)</div>
-            <input value={loc} onChange={e=>setLoc(e.target.value)} placeholder="cmp53hk1l…" className="w-full h-9 rounded-lg border border-line bg-surf px-3 text-[12px] tnum outline-none focus:border-brand-500"/></div>
-        </div>}
+        <button onClick={onRelink} className="w-full mt-4 text-[11px] text-ink-400 hover:text-ink-700 flex items-center justify-center gap-1.5"><Icon n="store" s={13}/>Cambiar sucursal</button>
       </div>
       <button onClick={onDemo} className="w-full mt-4 text-[12px] text-ink-400 hover:text-brand-600 transition-colors">Explorar en modo demostración →</button>
     </div>
@@ -1235,6 +1285,7 @@ function Root(){
   const [online,setOnline]=useState(false);
   const [session,setSession]=useState(null);
   const [demo,setDemo]=useState(false);
+  const [linked,setLinked]=useState(false);
   const [ready,setReady]=useState(false);
 
   const loadCatalog=async()=>{
@@ -1252,6 +1303,7 @@ function Root(){
       if(rid||lid) setTenant({ restaurantId:rid||undefined, locationId:lid||undefined });
       if(api||rid||lid) window.history.replaceState({}, "", window.location.pathname);
     }
+    setLinked(Retail.isLinked());
     try{ const s=Retail.getSession(); if(s && getToken()){ setSession(s); await loadCatalog(); } }
     catch{ /* sesión corrupta → login */ }
     setReady(true);
@@ -1285,8 +1337,13 @@ function Root(){
   })(); },[]);
 
   if(!ready) return <div className="h-screen"><BootSplash/></div>;
-  if(!session && !demo){
-    return <div className="h-screen"><LoginScreen onDemo={()=>setDemo(true)} onLogin={async(emp)=>{ setSession(emp); await loadCatalog(); }}/></div>;
+  if(!demo && !linked){
+    return <div className="h-screen"><SetupScreen onDemo={()=>setDemo(true)} onLinked={()=>setLinked(true)}/></div>;
+  }
+  if(!demo && !session){
+    return <div className="h-screen"><LoginScreen onDemo={()=>setDemo(true)}
+      onLogin={async(emp)=>{ setSession(emp); await loadCatalog(); }}
+      onRelink={()=>{ Retail.unlink(); setSession(null); setLinked(false); }}/></div>;
   }
   const value={ products, online, demo, session,
     refreshCatalog:loadCatalog,
