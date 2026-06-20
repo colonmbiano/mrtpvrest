@@ -214,64 +214,82 @@ router.post('/bulk-confirm', authenticate, requireTenantAccess, requireAdmin, as
     if (!Array.isArray(items) || items.length === 0)
       return res.status(400).json({ error: 'No hay ingredientes para confirmar' });
 
-    const results = await Promise.all(items.map(async item => {
-      const { name, totalCost, quantityFound, unit } = item;
-      const factor = parseFloat(quantityFound) || 1;
-      const cost = parseFloat(totalCost) / factor;
-      const addedStock = parseFloat(quantityFound) || 0;
+    // Validar y normalizar ANTES de tocar la BD: sin esto, un totalCost/qty no
+    // numérico escribía NaN en cost/stock. quantityFound funciona como cantidad
+    // a sumar y como factor de conversión (debe ser > 0 para no dividir por 0).
+    const clean = [];
+    for (const item of items) {
+      const name = String(item?.name ?? '').trim();
+      const totalCost = Number(item?.totalCost);
+      const quantityFound = Number(item?.quantityFound);
+      if (!name) return res.status(400).json({ error: 'Hay un ingrediente sin nombre' });
+      if (!Number.isFinite(quantityFound) || quantityFound <= 0)
+        return res.status(400).json({ error: `Cantidad inválida para "${name}"` });
+      if (!Number.isFinite(totalCost) || totalCost < 0)
+        return res.status(400).json({ error: `Costo total inválido para "${name}"` });
+      clean.push({ name, totalCost, quantityFound, unit: item?.unit ? String(item.unit) : null });
+    }
 
-      const existing = await prisma.ingredient.findFirst({
-        where: { locationId, name: { equals: name, mode: 'insensitive' } }
-      });
+    // Una sola transacción para todo el lote: si un item falla, no quedan
+    // ingredientes parcialmente importados. Secuencial dentro de la tx para
+    // evitar la race del findFirst+update por nombre.
+    const results = await prisma.$transaction(async (tx) => {
+      const out = [];
+      for (const it of clean) {
+        const factor = it.quantityFound;
+        const cost = it.totalCost / factor;
 
-      if (existing) {
-        return prisma.$transaction(async (tx) => {
+        const existing = await tx.ingredient.findFirst({
+          where: { locationId, name: { equals: it.name, mode: 'insensitive' } },
+        });
+
+        if (existing) {
           await recordCostChange(
             tx,
             existing.id,
-            { cost, purchaseCost: parseFloat(totalCost), conversionFactor: factor },
+            { cost, purchaseCost: it.totalCost, conversionFactor: factor },
             { changedBy: req.user?.id ?? null, reason: 'bulk_import' },
-          )
-          return tx.ingredient.update({
+          );
+          out.push(await tx.ingredient.update({
             where: { id: existing.id },
             data: {
               cost,
-              purchaseCost: parseFloat(totalCost),
+              purchaseCost: it.totalCost,
               conversionFactor: factor,
-              stock: existing.stock + addedStock,
-              ...(unit && { unit }),
+              stock: { increment: it.quantityFound },
+              ...(it.unit && { unit: it.unit }),
             },
-          })
-        })
-      }
+          }));
+          continue;
+        }
 
-      // En el create no hay history previo, pero queremos el primer datapoint
-      // para que la gráfica de costos arranque desde la primera compra.
-      return prisma.$transaction(async (tx) => {
+        // En el create no hay history previo, pero queremos el primer datapoint
+        // para que la gráfica de costos arranque desde la primera compra.
         const created = await tx.ingredient.create({
           data: {
-            restaurantId, locationId, name,
-            unit: unit || 'pz',
-            stock: addedStock,
+            restaurantId, locationId, name: it.name,
+            unit: it.unit || 'pz',
+            stock: it.quantityFound,
             minStock: 0,
             cost,
-            purchaseCost: parseFloat(totalCost),
+            purchaseCost: it.totalCost,
             conversionFactor: factor,
-          }
-        })
+          },
+        });
         await tx.ingredientCostHistory.create({
           data: {
             ingredientId: created.id,
             cost,
-            purchaseCost: parseFloat(totalCost),
+            purchaseCost: it.totalCost,
             conversionFactor: factor,
             changedBy: req.user?.id ?? null,
             reason: 'bulk_import',
           },
-        })
-        return created
-      })
-    }));
+        });
+        out.push(created);
+      }
+      return out;
+    }, { timeout: 20000 });
 
     res.json({ ok: true, count: results.length });
   } catch (e) {
@@ -324,8 +342,13 @@ router.get('/movements', authenticate, requireTenantAccess, requireAdmin, async 
     const locationId = req.headers['x-location-id'] || req.query.locationId;
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
+    // StockMovement no está en SCOPED_MODELS (location-only, sin restaurantId),
+    // así que el tenant-guard no lo cubre: scope-amos a mano vía la relación
+    // location para no filtrar el libro mayor de otra sucursal/tenant. Para
+    // SUPER_ADMIN (restaurantId null) se omite y queda legítimamente cross-tenant.
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
     const take = Math.min(parseInt(req.query.limit, 10) || 100, 500);
-    const where = { locationId };
+    const where = { locationId, ...(restaurantId ? { location: { restaurantId } } : {}) };
     if (req.query.ingredientId) where.ingredientId = String(req.query.ingredientId);
     if (req.query.type) {
       const t = String(req.query.type).toUpperCase();
@@ -377,42 +400,53 @@ router.post('/movements', authenticate, requireTenantAccess, requireAdmin, async
       return res.status(404).json({ error: 'Ingrediente no encontrado en esta sucursal' });
     }
 
-    // Mapear type legacy → delta y nuevo stock.
-    let delta;
-    if (typeU === 'IN') {
-      delta = qty;
-    } else if (typeU === 'OUT') {
-      if (ingredient.stock - qty < 0) {
-        return res.status(409).json({ error: 'Stock insuficiente', current: ingredient.stock });
+    // Stock atómico: IN/OUT usan increment/decrement condicional dentro de la
+    // transacción (no set absoluto sobre una lectura previa) para no perder
+    // movimientos concurrentes ni sobrevender. ADJUST sí es absoluto (conteo
+    // físico) pero leemos el stock previo dentro de la tx para el delta exacto.
+    const INSUFFICIENT = 'INSUFFICIENT_STOCK';
+    const ING_SELECT = { id: true, name: true, unit: true, stock: true, minStock: true };
+    let updated, movement;
+    try {
+      ({ updated, movement } = await prisma.$transaction(async (tx) => {
+        let upd, delta;
+        if (typeU === 'IN') {
+          upd = await tx.ingredient.update({ where: { id: ingredientId }, data: { stock: { increment: qty } }, select: ING_SELECT });
+          delta = qty;
+        } else if (typeU === 'OUT') {
+          const r = await tx.ingredient.updateMany({ where: { id: ingredientId, locationId, stock: { gte: qty } }, data: { stock: { decrement: qty } } });
+          if (r.count === 0) { const e = new Error(INSUFFICIENT); e.code = INSUFFICIENT; throw e; }
+          upd = await tx.ingredient.findUnique({ where: { id: ingredientId }, select: ING_SELECT });
+          delta = -qty;
+        } else { // ADJUST: quantity es el stock absoluto nuevo
+          const before = await tx.ingredient.findUnique({ where: { id: ingredientId }, select: { stock: true } });
+          upd = await tx.ingredient.update({ where: { id: ingredientId }, data: { stock: qty }, select: ING_SELECT });
+          delta = qty - Number(before.stock);
+        }
+        const newStock = Number(upd.stock);
+        const mov = await tx.stockMovement.create({
+          data: {
+            ingredientId,
+            locationId,
+            delta,
+            unit: ingredient.baseUnit,
+            reason: TYPE_TO_REASON[typeU],
+            refType: orderId ? 'order' : null,
+            refId: orderId || null,
+            balanceAfter: newStock,
+            userId,
+            notes: reason || null,
+          },
+        });
+        return { updated: upd, movement: mov };
+      }));
+    } catch (e) {
+      if (e.code === INSUFFICIENT) {
+        const cur = await prisma.ingredient.findUnique({ where: { id: ingredientId }, select: { stock: true } }).catch(() => null);
+        return res.status(409).json({ error: 'Stock insuficiente', current: cur?.stock ?? null });
       }
-      delta = -qty;
-    } else { // ADJUST: quantity es el stock absoluto nuevo
-      delta = qty - Number(ingredient.stock);
+      throw e;
     }
-
-    const newStock = Number(ingredient.stock) + delta;
-
-    const [updated, movement] = await prisma.$transaction([
-      prisma.ingredient.update({
-        where: { id: ingredientId },
-        data: { stock: newStock },
-        select: { id: true, name: true, unit: true, stock: true, minStock: true },
-      }),
-      prisma.stockMovement.create({
-        data: {
-          ingredientId,
-          locationId,
-          delta,
-          unit: ingredient.baseUnit,
-          reason: TYPE_TO_REASON[typeU],
-          refType: orderId ? 'order' : null,
-          refId: orderId || null,
-          balanceAfter: newStock,
-          userId,
-          notes: reason || null,
-        },
-      }),
-    ]);
 
     const lowStock = updated.minStock > 0 && updated.stock <= updated.minStock;
     if (lowStock) notifyLowStock(updated, locationId).catch(() => {});
@@ -602,6 +636,9 @@ router.get('/waste', authenticate, requireTenantAccess, requireAdmin, async (req
     const locationId = req.headers['x-location-id'] || req.query.locationId;
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
+    // WasteLog/StockMovement no están guardados (location-only): scope explícito
+    // por restaurante vía la relación location para no leer mermas ajenas.
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
     const take = Math.min(parseInt(req.query.limit, 10) || 100, 500);
     const fromQuery = req.query.from ? new Date(String(req.query.from)) : null;
     const toQuery = req.query.to ? new Date(String(req.query.to)) : null;
@@ -610,6 +647,7 @@ router.get('/waste', authenticate, requireTenantAccess, requireAdmin, async (req
       where: {
         stockMovement: {
           locationId,
+          ...(restaurantId ? { location: { restaurantId } } : {}),
           ...(fromQuery || toQuery
             ? { createdAt: { ...(fromQuery ? { gte: fromQuery } : {}), ...(toQuery ? { lte: toQuery } : {}) } }
             : {}),
@@ -689,14 +727,23 @@ router.post('/waste', authenticate, requireTenantAccess, requireAdmin, async (re
     }
 
     const delta = -qty;
-    const newStock = Number(ingredient.stock) + delta;
+    const WASTE_INSUFFICIENT = 'WASTE_INSUFFICIENT_STOCK';
 
-    const result = await prisma.$transaction(async (tx) => {
-      const updatedIng = await tx.ingredient.update({
+    let result;
+    try {
+      result = await prisma.$transaction(async (tx) => {
+      // Decremento atómico condicional: si otro movimiento dejó el stock por
+      // debajo de qty entre la lectura previa y aquí, count===0 y abortamos.
+      const dec = await tx.ingredient.updateMany({
+        where: { id: ingredientId, locationId, stock: { gte: qty } },
+        data: { stock: { decrement: qty } },
+      });
+      if (dec.count === 0) { const e = new Error(WASTE_INSUFFICIENT); e.code = WASTE_INSUFFICIENT; throw e; }
+      const updatedIng = await tx.ingredient.findUnique({
         where: { id: ingredientId },
-        data: { stock: newStock },
         select: { id: true, name: true, unit: true, stock: true, minStock: true },
       });
+      const newStock = Number(updatedIng.stock);
 
       const movement = await tx.stockMovement.create({
         data: {
@@ -734,7 +781,14 @@ router.post('/waste', authenticate, requireTenantAccess, requireAdmin, async (re
       });
 
       return { movement, wasteLog, ingredient: updatedIng };
-    });
+      });
+    } catch (e) {
+      if (e.code === WASTE_INSUFFICIENT) {
+        const cur = await prisma.ingredient.findUnique({ where: { id: ingredientId }, select: { stock: true } }).catch(() => null);
+        return res.status(409).json({ error: 'Stock insuficiente para registrar la merma', current: cur?.stock ?? null });
+      }
+      throw e;
+    }
 
     const lowStock = result.ingredient.minStock > 0 && result.ingredient.stock <= result.ingredient.minStock;
     if (lowStock) notifyLowStock(result.ingredient, locationId).catch(() => {});
