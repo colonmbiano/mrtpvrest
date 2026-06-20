@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Shirt,
-  Store,
+  Download,
   LogOut,
   ChevronDown,
   ShoppingBag,
@@ -20,6 +20,7 @@ type NavItem = { href: string; label: string; icon: LucideIcon };
 const NAV: NavItem[] = [
   { href: "/", label: "Resumen", icon: LayoutDashboard },
   { href: "/catalogo", label: "Catálogo & Stock", icon: Shirt },
+  { href: "/descargas", label: "Descargar la caja", icon: Download },
 ];
 
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
