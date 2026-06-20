@@ -39,13 +39,18 @@ const corsOptions = {
     const isMrtpv = host === 'mrtpvrest.com' || host.endsWith('.mrtpvrest.com');
     const isVercel = process.env.ALLOW_VERCEL_PREVIEWS === 'true' && host.endsWith('.vercel.app');
     const isLocal = host === 'localhost' || host === '127.0.0.1' || origin.startsWith('capacitor://');
+    // App de escritorio MODA+ (Tauri v2): el webview corre desde un origen propio,
+    // tauri://localhost (macOS/Linux) y http://tauri.localhost (Windows/WebView2).
+    // Sin esto, el fetch del webview va con Origin: http(s)://tauri.localhost y CORS
+    // lo bloquea → la caja de escritorio "no se conecta al servidor".
+    const isTauri = origin.startsWith('tauri://') || host === 'tauri.localhost';
     // Extensión de Chrome del TPV (apps/wa-chrome): lee pedidos de WhatsApp y
     // los manda a los endpoints públicos de /api/store. Sin cookies/credenciales,
     // y esos endpoints ya son públicos, así que permitir chrome-extension:// no
     // amplía la superficie.
     const isExtension = origin.startsWith('chrome-extension://');
 
-    if (isMrtpv || isVercel || isLocal || isExtension) {
+    if (isMrtpv || isVercel || isLocal || isTauri || isExtension) {
       callback(null, true);
     } else {
       console.log('CORS Blocked Origin:', origin);
