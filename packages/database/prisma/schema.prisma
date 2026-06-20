@@ -974,8 +974,12 @@ model OrderItemModifier {
   id          String    @id @default(cuid())
   orderItemId String
   orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  modifierId  String
-  modifier    Modifier  @relation(fields: [modifierId], references: [id])
+  // El nombre y el precio quedan congelados como snapshot (name/priceAdd), así que
+  // el historial de la orden NO depende del Modifier vivo. Por eso, al borrar un
+  // modificador del menú que ya se usó en órdenes, la FK pone modifierId en null
+  // (SetNull) en lugar de bloquear el borrado con Restrict.
+  modifierId  String?
+  modifier    Modifier? @relation(fields: [modifierId], references: [id], onDelete: SetNull)
   name        String
   priceAdd    Float
 
