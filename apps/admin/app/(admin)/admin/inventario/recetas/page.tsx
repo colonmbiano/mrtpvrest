@@ -433,7 +433,7 @@ export default function RecetasPage() {
                   >
                     {item.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={item.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-xl object-cover" />
+                      <img src={item.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-xl object-contain" style={{ background: "var(--surf-2)" }} />
                     ) : (
                       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-tx-mut" style={{ background: "var(--surf-2)" }}>
                         <NotebookText size={16} strokeWidth={1.9} />

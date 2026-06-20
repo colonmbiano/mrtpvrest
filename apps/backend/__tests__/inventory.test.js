@@ -4,8 +4,10 @@
 jest.mock('@mrtpvrest/database', () => ({
   prisma: {
     supplier: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), findUnique: jest.fn() },
-    ingredient: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), findUnique: jest.fn() },
+    ingredient: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), delete: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn() },
     stockMovement: { findMany: jest.fn(), create: jest.fn() },
+    ingredientCostHistory: { create: jest.fn() },
+    wasteLog: { create: jest.fn() },
     $transaction: jest.fn(),
     location: { findUnique: jest.fn() },
     pushSubscription: { findMany: jest.fn() },
@@ -61,13 +63,31 @@ describe('GET /api/inventory/alerts', () => {
 describe('POST /api/inventory/movements', () => {
   beforeEach(() => jest.clearAllMocks());
 
+  // El handler usa $transaction interactivo: invocamos el callback con un tx
+  // que delega en los mocks de prisma para reflejar el stock atómico.
+  function interactiveTx() {
+    prisma.$transaction.mockImplementation(async (arg) => {
+      if (typeof arg === 'function') {
+        return arg({
+          ingredient: prisma.ingredient,
+          stockMovement: prisma.stockMovement,
+          ingredientCostHistory: prisma.ingredientCostHistory,
+          wasteLog: prisma.wasteLog,
+        });
+      }
+      return arg;
+    });
+  }
+
   it('records IN movement and returns no lowStock', async () => {
     const ingredient = { id: 'i1', locationId: 'loc1', stock: 5, minStock: 2, name: 'Tomate', unit: 'kg' };
     const updated = { id: 'i1', name: 'Tomate', unit: 'kg', stock: 8, minStock: 2 };
-    const movement = { id: 'm1', ingredientId: 'i1', type: 'IN', quantity: 3 };
+    const movement = { id: 'm1', ingredientId: 'i1', delta: 3, reason: 'PURCHASE' };
 
     prisma.ingredient.findUnique.mockResolvedValue(ingredient);
-    prisma.$transaction.mockResolvedValue([updated, movement]);
+    prisma.ingredient.update.mockResolvedValue(updated);
+    prisma.stockMovement.create.mockResolvedValue(movement);
+    interactiveTx();
     prisma.pushSubscription.findMany.mockResolvedValue([]);
 
     const app = buildApp();
@@ -84,10 +104,14 @@ describe('POST /api/inventory/movements', () => {
   it('records OUT movement and flags lowStock', async () => {
     const ingredient = { id: 'i1', locationId: 'loc1', stock: 1.5, minStock: 2, name: 'Tomate', unit: 'kg' };
     const updated = { id: 'i1', name: 'Tomate', unit: 'kg', stock: 0.5, minStock: 2 };
-    const movement = { id: 'm1', ingredientId: 'i1', type: 'OUT', quantity: 1 };
+    const movement = { id: 'm1', ingredientId: 'i1', delta: -1, reason: 'ADJUSTMENT' };
 
-    prisma.ingredient.findUnique.mockResolvedValue(ingredient);
-    prisma.$transaction.mockResolvedValue([updated, movement]);
+    prisma.ingredient.findUnique
+      .mockResolvedValueOnce(ingredient)   // lookup inicial
+      .mockResolvedValue(updated);          // re-fetch dentro de la tx
+    prisma.ingredient.updateMany.mockResolvedValue({ count: 1 });
+    prisma.stockMovement.create.mockResolvedValue(movement);
+    interactiveTx();
     prisma.pushSubscription.findMany.mockResolvedValue([]);
     prisma.location.findUnique.mockResolvedValue(null);
 
@@ -105,6 +129,8 @@ describe('POST /api/inventory/movements', () => {
     prisma.ingredient.findUnique.mockResolvedValue({
       id: 'i1', locationId: 'loc1', stock: 0.5, minStock: 2, name: 'Tomate', unit: 'kg',
     });
+    prisma.ingredient.updateMany.mockResolvedValue({ count: 0 }); // decremento condicional falla
+    interactiveTx();
 
     const app = buildApp();
     const res = await request(app)
