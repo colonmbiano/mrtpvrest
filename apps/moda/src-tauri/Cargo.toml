@@ -1,0 +1,22 @@
+[package]
+name = "moda-pos"
+version = "0.1.0"
+description = "MODA+ Retail POS"
+authors = ["mrtpvrest"]
+edition = "2021"
+
+[lib]
+name = "moda_pos_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Impresión térmica ESC/POS (recibo + etiqueta de SKU). Cablear el comando
+# `print_receipt` en src/lib.rs con una de estas crates:
+# escpos = "0.x"            # ESC/POS sobre TCP (puerto 9100) o USB

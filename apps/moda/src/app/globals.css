@@ -1,0 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root{--body:#dfe5e2;--app:#f6f8f7;--card:#ffffff;--titlebar:#eef2f0;--line:#e8edea;--ink-900:#1b2520;--ink-700:#374640;--ink-500:#6b7a72;--ink-400:#93a199}
+[data-theme="dark"]{--body:#0a0f0d;--app:#0f1714;--card:#18211d;--titlebar:#0d1411;--line:#26322b;--ink-900:#eef3f0;--ink-700:#c4cfc9;--ink-500:#8f9d94;--ink-400:#6d7a71}
+
+html,body{height:100%;margin:0}
+body{background:var(--body);font-family:Inter,sans-serif}
+.tnum{font-variant-numeric:tabular-nums;font-family:'DM Mono',monospace}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#cfd8d3;border-radius:8px;border:2px solid transparent;background-clip:content-box}
