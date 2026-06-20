@@ -339,6 +339,18 @@ model Restaurant {
   // FASE COMPRAS · repartos de Bodega Central a sucursales
   stockTransfers StockTransfer[]
 
+  // RETAIL · núcleo separado para tiendas de ropa/SKU. No reutiliza MenuItem
+  // ni Ingredient para evitar acoplar el TPV retail al dominio restaurante.
+  retailProducts       RetailProduct[]
+  retailSkus           RetailSku[]
+  retailStockBalances  RetailStockByLocation[]
+  retailStockMovements RetailStockMovement[]
+  retailSales          RetailSale[]
+  retailTransfers      RetailTransfer[]
+  retailDevices        RetailDevice[]
+  retailSyncOutbox     RetailSyncOutbox[]
+  retailCashShifts     RetailCashShift[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -428,6 +440,15 @@ model Location {
 
   // FASE COMPRAS/GASTOS · gastos operativos registrados desde el TPV
   operatingExpenses OperatingExpense[]
+
+  // RETAIL · stock, ventas, traspasos y dispositivos por sucursal.
+  retailStockBalances  RetailStockByLocation[]
+  retailStockMovements RetailStockMovement[]
+  retailSales          RetailSale[]
+  retailTransfersFrom  RetailTransfer[]      @relation("RetailTransferFromLocation")
+  retailTransferItemsTo RetailTransferItem[]  @relation("RetailTransferToLocation")
+  retailDevices        RetailDevice[]
+  retailCashShifts     RetailCashShift[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1370,6 +1391,7 @@ model Ingredient {
 
   name        String
   description String?
+  imageUrl    String?
 
   // ── Taxonomía referenciable (TIPO + CATEGORIA) ──
   typeId     String?
@@ -2884,6 +2906,399 @@ model StockTransferItem {
   @@index([ingredientId])
   @@index([toLocationId])
   @@map("stock_transfer_items")
+}
+
+// ── RETAIL CORE · tiendas de ropa / SKU exacto ─────────────────────────────
+//
+// Este bloque es deliberadamente paralelo al dominio restaurante. El prototipo
+// "Ropa Santo Tomás" mostró que MenuItem+Ingredient sirve como demo, pero no
+// como base productiva para talla/color/SKU/offline. Retail usa su propio
+// catálogo, existencias, ventas, traspasos y outbox.
+
+enum RetailSaleStatus {
+  COMPLETED
+  CANCELLED
+  PARTIAL_RETURN
+  RETURNED
+}
+
+enum RetailPaymentMethod {
+  CASH
+  CARD_PRESENT
+  TRANSFER
+  COURTESY
+}
+
+enum RetailTransferStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
+}
+
+enum RetailStockMovementReason {
+  PURCHASE
+  SALE
+  RETURN
+  CANCEL
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
+  PHYSICAL_COUNT
+}
+
+enum RetailOutboxStatus {
+  PENDING
+  APPLIED
+  FAILED
+}
+
+model RetailProduct {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  brand       String?
+  category    String?
+  gender      String?
+  season      String?
+  imageUrl    String?
+  isActive    Boolean @default(true)
+
+  skus RetailSku[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, isActive])
+  @@index([restaurantId, category])
+  @@map("retail_products")
+}
+
+model RetailSku {
+  id           String        @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  productId    String
+  product      RetailProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  sku      String
+  barcode  String?
+  size     String?
+  color    String?
+  material String?
+  style    String?
+  price    Decimal @db.Decimal(12, 2)
+  cost     Decimal @default(0) @db.Decimal(12, 2)
+  imageUrl String?
+  isActive Boolean @default(true)
+
+  stockBalances RetailStockByLocation[]
+  movements     RetailStockMovement[]
+  saleLines     RetailSaleLine[]
+  transferItems RetailTransferItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, sku])
+  @@unique([restaurantId, barcode])
+  @@index([productId])
+  @@index([restaurantId, isActive])
+  @@map("retail_skus")
+}
+
+model RetailStockByLocation {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  locationId   String
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  skuId        String
+  sku          RetailSku  @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
+  qty    Decimal @default(0) @db.Decimal(12, 3)
+  minQty Decimal @default(0) @db.Decimal(12, 3)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([locationId, skuId])
+  @@index([restaurantId, locationId])
+  @@index([skuId])
+  @@map("retail_stock_by_location")
+}
+
+model RetailStockMovement {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  locationId   String
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  skuId        String
+  sku          RetailSku  @relation(fields: [skuId], references: [id])
+
+  delta   Decimal @db.Decimal(12, 3)
+  reason  RetailStockMovementReason
+  refType String?
+  refId   String?
+
+  balanceAfter   Decimal  @db.Decimal(12, 3)
+  unitCostAtMove Decimal? @db.Decimal(12, 4)
+  notes          String?
+  createdById    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([restaurantId, createdAt])
+  @@index([locationId, createdAt])
+  @@index([skuId, createdAt])
+  @@index([refType, refId])
+  @@map("retail_stock_movements")
+}
+
+model RetailSale {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  locationId   String
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  deviceId     String?
+  device       RetailDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  shiftId      String?
+  shift        RetailCashShift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  clientSaleId String
+  folio        String
+  status       RetailSaleStatus @default(COMPLETED)
+
+  subtotal Decimal @db.Decimal(12, 2)
+  discount Decimal @default(0) @db.Decimal(12, 2)
+  tax      Decimal @default(0) @db.Decimal(12, 2)
+  total    Decimal @db.Decimal(12, 2)
+
+  customerName  String?
+  customerPhone String?
+  notes         String?
+  createdById   String?
+  syncedAt      DateTime?
+
+  lines    RetailSaleLine[]
+  payments RetailPayment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, clientSaleId])
+  @@unique([locationId, folio])
+  @@index([restaurantId, createdAt])
+  @@index([locationId, createdAt])
+  @@index([shiftId])
+  @@map("retail_sales")
+}
+
+model RetailSaleLine {
+  id     String     @id @default(cuid())
+  saleId String
+  sale   RetailSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  skuId  String
+  sku    RetailSku  @relation(fields: [skuId], references: [id])
+
+  skuCode       String
+  productName   String
+  variantLabel  String?
+  quantity      Decimal @db.Decimal(12, 3)
+  unitPrice     Decimal @db.Decimal(12, 2)
+  discount      Decimal @default(0) @db.Decimal(12, 2)
+  subtotal      Decimal @db.Decimal(12, 2)
+  costSnapshot  Decimal @default(0) @db.Decimal(14, 4)
+
+  @@index([saleId])
+  @@index([skuId])
+  @@map("retail_sale_lines")
+}
+
+model RetailPayment {
+  id     String     @id @default(cuid())
+  saleId String
+  sale   RetailSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  method RetailPaymentMethod
+  amount Decimal @db.Decimal(12, 2)
+  reference String?
+
+  createdAt DateTime @default(now())
+
+  @@index([saleId])
+  @@map("retail_payments")
+}
+
+model RetailTransfer {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  fromLocationId String
+  fromLocation   Location @relation("RetailTransferFromLocation", fields: [fromLocationId], references: [id], onDelete: Cascade)
+
+  status    RetailTransferStatus @default(COMPLETED)
+  notes     String?
+  totalCost Decimal              @default(0) @db.Decimal(12, 2)
+
+  items RetailTransferItem[]
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([restaurantId, createdAt])
+  @@index([fromLocationId])
+  @@map("retail_transfers")
+}
+
+model RetailTransferItem {
+  id         String         @id @default(cuid())
+  transferId String
+  transfer   RetailTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  skuId      String
+  sku        RetailSku      @relation(fields: [skuId], references: [id])
+
+  toLocationId String
+  toLocation   Location @relation("RetailTransferToLocation", fields: [toLocationId], references: [id], onDelete: Cascade)
+
+  qty            Decimal  @db.Decimal(12, 3)
+  unitCostAtMove Decimal? @db.Decimal(12, 4)
+
+  @@index([transferId])
+  @@index([skuId])
+  @@index([toLocationId])
+  @@map("retail_transfer_items")
+}
+
+model RetailDevice {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  locationId   String
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  name       String
+  deviceKey  String
+  platform   String  @default("WINDOWS")
+  isActive   Boolean @default(true)
+  lastSyncAt DateTime?
+
+  sales  RetailSale[]
+  outbox RetailSyncOutbox[]
+  shifts RetailCashShift[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, deviceKey])
+  @@index([restaurantId, locationId])
+  @@map("retail_devices")
+}
+
+model RetailSyncOutbox {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  deviceId     String?
+  device       RetailDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  clientEventId String
+  eventType     String
+  payload       Json
+  status        RetailOutboxStatus @default(PENDING)
+  attempts      Int                @default(0)
+  lastError     String?
+  appliedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, clientEventId])
+  @@index([restaurantId, status, createdAt])
+  @@index([deviceId, createdAt])
+  @@map("retail_sync_outbox")
+}
+
+enum RetailShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum RetailCashMovementType {
+  CASH_IN
+  CASH_OUT
+  EXPENSE
+}
+
+// Turno/caja de la tienda retail. Equivalente al CashShift del restaurante pero
+// tenant-scoped (restaurantId) y en Decimal. Una sola caja ABIERTA por sucursal
+// a la vez. Las ventas retail se enlazan a la caja abierta (shiftId) para cuadrar
+// el corte: esperado = openingFloat + ventas en efectivo + entradas - salidas.
+model RetailCashShift {
+  id           String        @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  locationId   String
+  location     Location      @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  deviceId     String?
+  device       RetailDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  openedById   String?
+  openedByName String?
+  closedById   String?
+
+  status   RetailShiftStatus @default(OPEN)
+  openedAt DateTime          @default(now())
+  closedAt DateTime?
+
+  openingFloat Decimal  @default(0) @db.Decimal(12, 2)
+  countedCash  Decimal? @db.Decimal(12, 2)
+  // Corte ciego: el cajero declara su conteo sin ver el esperado. El esperado y
+  // la diferencia se calculan al cierre (null mientras la caja está abierta).
+  expectedCash Decimal? @db.Decimal(12, 2)
+  difference   Decimal? @db.Decimal(12, 2)
+  blindClose   Boolean  @default(false)
+
+  // Snapshots denormalizados al cierre (para el reporte, sin recomputar).
+  totalCashSales     Decimal @default(0) @db.Decimal(12, 2)
+  totalCardSales     Decimal @default(0) @db.Decimal(12, 2)
+  totalTransferSales Decimal @default(0) @db.Decimal(12, 2)
+  totalCashIn        Decimal @default(0) @db.Decimal(12, 2)
+  totalCashOut       Decimal @default(0) @db.Decimal(12, 2)
+  salesCount         Int     @default(0)
+  notes              String?
+
+  sales     RetailSale[]
+  movements RetailCashMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, status])
+  @@index([locationId, status])
+  @@map("retail_cash_shifts")
+}
+
+model RetailCashMovement {
+  id      String          @id @default(cuid())
+  shiftId String
+  shift   RetailCashShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  type        RetailCashMovementType
+  amount      Decimal @db.Decimal(12, 2)
+  reason      String?
+  category    String?
+  createdById String?
+
+  createdAt DateTime @default(now())
+
+  @@index([shiftId])
+  @@map("retail_cash_movements")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
