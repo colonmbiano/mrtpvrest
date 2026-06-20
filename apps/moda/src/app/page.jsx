@@ -1269,6 +1269,21 @@ function Root(){
     }catch{ /* web o plugin ausente */ }
   })(); },[]);
 
+  // OTA de escritorio (Tauri): busca un instalador firmado más nuevo en GitHub
+  // Releases, lo descarga, instala y relanza. Solo corre dentro de la app Tauri.
+  useEffect(()=>{ (async()=>{
+    if(!(typeof window!=="undefined" && (window.__TAURI__ || window.__TAURI_INTERNALS__))) return;
+    try{
+      const { check }=await import("@tauri-apps/plugin-updater");
+      const update=await check();
+      if(update){
+        await update.downloadAndInstall();
+        const { relaunch }=await import("@tauri-apps/plugin-process");
+        await relaunch();
+      }
+    }catch{ /* sin red / sin release / fuera de Tauri */ }
+  })(); },[]);
+
   if(!ready) return <div className="h-screen"><BootSplash/></div>;
   if(!session && !demo){
     return <div className="h-screen"><LoginScreen onDemo={()=>setDemo(true)} onLogin={async(emp)=>{ setSession(emp); await loadCatalog(); }}/></div>;
