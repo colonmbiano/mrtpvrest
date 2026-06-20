@@ -42,6 +42,43 @@ const {
 
 const router = express.Router();
 
+const OTA_APPS = {
+  tpv: {
+    appId: 'com.mrtpvrest.tpv',
+    workflow: 'tpv-ota-release.yml',
+  },
+  delivery: {
+    appId: 'com.mrtpvrest.delivery',
+    workflow: 'delivery-ota-release.yml',
+  },
+  kiosk: {
+    appId: 'com.mrtpvrest.kiosk',
+    workflow: 'kiosk-ota-release.yml',
+  },
+  kds: {
+    appId: 'com.mrtpvrest.kds',
+    workflow: 'kds-ota-release.yml',
+  },
+  'meseros-lite': {
+    appId: 'com.mrtpvrest.meseroslite',
+    workflow: 'meseros-lite-ota-release.yml',
+  },
+  inventario: {
+    appId: 'com.mrtpvrest.inventario',
+    workflow: 'inventario-ota-release.yml',
+  },
+  moda: {
+    appId: 'com.mrtpvrest.moda',
+    workflow: 'moda-ota-release.yml',
+  },
+};
+
+const resolveOtaApp = (raw) => {
+  const value = String(raw || 'tpv').trim();
+  if (OTA_APPS[value]) return OTA_APPS[value];
+  return Object.values(OTA_APPS).find((app) => app.appId === value) || OTA_APPS.tpv;
+};
+
 const requireSuperAdmin = (req, res, next) => {
   if (req.user && req.user.role === 'SUPER_ADMIN') return next();
   return res.status(403).json({ error: 'Solo SUPER_ADMIN puede gestionar OTA' });
@@ -220,6 +257,7 @@ router.post('/trigger-build', authenticate, requireSuperAdmin, async (req, res) 
     const channel = req.body?.channel || 'production';
     const notes = req.body?.notes || '';
     const ref = req.body?.ref || 'master';
+    const otaApp = resolveOtaApp(req.body?.appKey || req.body?.app || req.body?.appId);
 
     const ghToken = process.env.GITHUB_TOKEN;
     const ghRepo = process.env.GITHUB_REPO;
@@ -229,7 +267,7 @@ router.post('/trigger-build', authenticate, requireSuperAdmin, async (req, res) 
       });
     }
 
-    const url = `https://api.github.com/repos/${ghRepo}/actions/workflows/tpv-ota-release.yml/dispatches`;
+    const url = `https://api.github.com/repos/${ghRepo}/actions/workflows/${otaApp.workflow}/dispatches`;
     const r = await fetch(url, {
       method: 'POST',
       headers: {
@@ -252,7 +290,8 @@ router.post('/trigger-build', authenticate, requireSuperAdmin, async (req, res) 
     // que el SaaS ofrezca un link directo al run.
     res.json({
       ok: true,
-      actionsUrl: `https://github.com/${ghRepo}/actions/workflows/tpv-ota-release.yml`,
+      appId: otaApp.appId,
+      actionsUrl: `https://github.com/${ghRepo}/actions/workflows/${otaApp.workflow}`,
     });
   } catch (e) {
     console.error('POST /api/ota/trigger-build:', e);

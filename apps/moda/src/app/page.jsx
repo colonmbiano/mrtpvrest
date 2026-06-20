@@ -1257,6 +1257,18 @@ function Root(){
     setReady(true);
   })(); },[]);
 
+  // OTA (Capgo): avisa que el bundle cargó OK. Si no se llama (default 10s), el
+  // plugin asume bundle roto y revierte al anterior al próximo arranque — la
+  // salvaguarda que evita que un mal release deje el APK muerto. Solo nativo.
+  useEffect(()=>{ (async()=>{
+    try{
+      const { Capacitor }=await import("@capacitor/core");
+      if(!Capacitor.isNativePlatform?.()) return;
+      const { CapacitorUpdater }=await import("@capgo/capacitor-updater");
+      await CapacitorUpdater.notifyAppReady();
+    }catch{ /* web o plugin ausente */ }
+  })(); },[]);
+
   if(!ready) return <div className="h-screen"><BootSplash/></div>;
   if(!session && !demo){
     return <div className="h-screen"><LoginScreen onDemo={()=>setDemo(true)} onLogin={async(emp)=>{ setSession(emp); await loadCatalog(); }}/></div>;
