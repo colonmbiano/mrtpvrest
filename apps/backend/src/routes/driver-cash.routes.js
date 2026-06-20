@@ -172,14 +172,44 @@ router.post('/:driverId/float', authenticate, requireTenantAccess, requireAdmin,
     if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 50000) {
       return res.status(400).json({ error: 'amount invalido' });
     }
-    const movement = await prisma.driverCashMovement.create({
-      data: {
-        driverId: driver.id,
-        type: 'FLOAT',
-        category: 'CAMBIO',
-        amount: numericAmount,
-        description: description || 'Fondo de cambio asignado',
-      },
+    // El fondo de cambio es efectivo REAL de la caja que pasa a manos del
+    // repartidor. Se refleja como ShiftCashIn en el turno abierto para que "sume
+    // al total de la caja": el cierre lo espera de vuelta (como efectivo + el
+    // gasto que se haya cubierto con él). Mismo criterio que el fondo para
+    // compras en POST /movements; evita el sobrante fantasma.
+    let openShift = null;
+    if (driver.locationId) {
+      openShift = await prisma.cashShift.findFirst({
+        where: { locationId: driver.locationId, isOpen: true },
+        orderBy: { openedAt: 'desc' },
+        select: { id: true },
+      });
+    }
+    const movement = await prisma.$transaction(async (tx) => {
+      const mov = await tx.driverCashMovement.create({
+        data: {
+          driverId: driver.id,
+          type: 'FLOAT',
+          category: 'CAMBIO',
+          amount: numericAmount,
+          description: description || 'Fondo de cambio asignado',
+        },
+      });
+      if (openShift) {
+        await tx.shiftCashIn.create({
+          data: {
+            shiftId: openShift.id,
+            description: `Fondo repartidor ${driver.name}${description ? `: ${description}` : ''}`,
+            amount: numericAmount,
+            category: 'FONDO_REPARTIDOR',
+          },
+        });
+        await tx.cashShift.update({
+          where: { id: openShift.id },
+          data: { totalCashIn: { increment: numericAmount } },
+        });
+      }
+      return mov;
     });
     const io = req.app.get('io');
     if (io) io.to(`driver:${driver.id}`).emit('cashUpdated', { driverId: driver.id });
@@ -226,15 +256,27 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
 
     const photoUrl = req.file ? await uploadPhoto(req.file.buffer, 'driver-cash') : null;
 
-    // Si es un GASTO del repartidor (gasolina, etc.), reflejarlo en el corte
-    // de caja: ese gasto se paga con efectivo que el cierre espera de vuelta
-    // en caja (la venta de delivery ya cuenta como totalCash), así que debe
-    // restar del efectivo esperado. Lo vinculamos al turno abierto de la
-    // sucursal del repartidor creando un ShiftExpense + incrementando el cache
-    // totalExpenses. El efectivo cobrado (INCOME) NO se toca: ya está contado
-    // vía la venta de la orden, sumarlo sería doble-conteo.
+    // Reflejo en el corte de la CAJA PRINCIPAL según el tipo de movimiento.
+    // Regla de oro (modelo de una sola caja, sin doble gasto ni doble ingreso):
+    //
+    //  - GASTO del repartidor → ShiftExpense (resta del efectivo esperado): ese
+    //    gasto se cubre con efectivo de la caja (fondo entregado o efectivo de
+    //    entregas que el cierre espera de vuelta), así que debe restar.
+    //
+    //  - INGRESO que NO es cobro de entrega (p. ej. el FONDO PARA COMPRAS que la
+    //    caja le entrega al repartidor) → ShiftCashIn (suma al efectivo esperado):
+    //    es dinero REAL de la caja, solo que en manos del repartidor. Debe "sumar
+    //    al total de la caja" para que el gasto que salga de ese fondo quede
+    //    respaldado. SIN esto, el gasto se restaba del esperado sin haber sumado
+    //    el fondo con que se pagó → aparecía un SOBRANTE fantasma en el cajón.
+    //
+    //  - Cobro de entrega (INCOME category 'DELIVERY') → NO se refleja aquí: ya
+    //    está contado vía totalCash de la venta de la orden; reflejarlo sería
+    //    DOBLE INGRESO. (Además esos llegan por POST /collect, no por aquí.)
+    const mirrorsExpense = type === 'EXPENSE';
+    const mirrorsCashIn = type === 'INCOME' && category !== 'DELIVERY';
     let openShift = null;
-    if (type === 'EXPENSE' && driver.locationId) {
+    if ((mirrorsExpense || mirrorsCashIn) && driver.locationId) {
       openShift = await prisma.cashShift.findFirst({
         where: { locationId: driver.locationId, isOpen: true },
         orderBy: { openedAt: 'desc' },
@@ -254,7 +296,7 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
           orderId: orderId || null,
         },
       });
-      if (openShift) {
+      if (openShift && mirrorsExpense) {
         await tx.shiftExpense.create({
           data: {
             shiftId: openShift.id,
@@ -266,6 +308,20 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
         await tx.cashShift.update({
           where: { id: openShift.id },
           data: { totalExpenses: { increment: numericAmount } },
+        });
+      }
+      if (openShift && mirrorsCashIn) {
+        await tx.shiftCashIn.create({
+          data: {
+            shiftId: openShift.id,
+            description: `Fondo repartidor ${driver.name}${description ? `: ${description}` : ''}`,
+            amount: numericAmount,
+            category: 'FONDO_REPARTIDOR',
+          },
+        });
+        await tx.cashShift.update({
+          where: { id: openShift.id },
+          data: { totalCashIn: { increment: numericAmount } },
         });
       }
       return mov;
