@@ -43,6 +43,16 @@ export function PocketTheme({ data }: { data: any }) {
     categoryRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  // Enlace de banner: CATEGORY → baja a la sección; ITEM → abre el producto.
+  const onBannerLink = (b: any) => {
+    if (b.linkType === 'CATEGORY' && b.linkValue) {
+      scrollToCategory(b.linkValue);
+    } else if (b.linkType === 'ITEM' && b.linkValue) {
+      const p = categories.flatMap((c: any) => c.items || []).find((x: any) => x.id === b.linkValue);
+      if (p) pick(p);
+    }
+  };
+
   const banners = locations[0]?.banners || [];
   const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
 
@@ -196,7 +206,7 @@ export function PocketTheme({ data }: { data: any }) {
         {/* Banners de promociones */}
         {!search.trim() && banners.length > 0 && (
           <div className="mb-6">
-            <BannerCarousel banners={banners} variant="light" accent={primary} />
+            <BannerCarousel banners={banners} variant="light" accent={primary} onLink={onBannerLink} />
           </div>
         )}
 

@@ -19,6 +19,12 @@ type BannerCarouselProps = {
   className?: string;
   /** Milisegundos entre slides en autoplay. 0 = sin autoplay. */
   interval?: number;
+  /**
+   * Acción para banners con enlace interno (linkType CATEGORY/ITEM). El tema lo
+   * provee para navegar a la categoría o abrir el producto (linkValue = id).
+   * Sin esto, esos banners no son clicables (los URL siempre lo son).
+   */
+  onLink?: (banner: Banner) => void;
 };
 
 // Tiempo de pausa tras una interacción del usuario antes de reanudar el autoplay.
@@ -33,7 +39,7 @@ const RESUME_DELAY = 6000;
 // prefers-reduced-motion (sin autoplay ni scroll animado). Incluye control
 // accesible de pausa/play (WCAG 2.2.2), dots con área táctil ≥44px,
 // barra de progreso y semántica de carrusel.
-export default function BannerCarousel({ banners, variant = 'light', accent = '#ff5c35', className = '', interval = 5000 }: BannerCarouselProps) {
+export default function BannerCarousel({ banners, variant = 'light', accent = '#ff5c35', className = '', interval = 5000, onLink }: BannerCarouselProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -149,11 +155,22 @@ export default function BannerCarousel({ banners, variant = 'light', accent = '#
         className={`bc-scroll relative flex gap-3 overflow-x-auto snap-x snap-mandatory -mx-1 px-1 ${className}`}
       >
         {banners.map((b, idx) => {
-          const clickable = b.linkType === 'URL' && !!b.linkValue;
-          const Wrapper: any = clickable ? 'a' : 'div';
-          const wrapperProps = clickable
+          const isUrl = b.linkType === 'URL' && !!b.linkValue;
+          const isInternal = (b.linkType === 'CATEGORY' || b.linkType === 'ITEM') && !!b.linkValue && !!onLink;
+          const clickable = isUrl || isInternal;
+          const Wrapper: any = isUrl ? 'a' : 'div';
+          const wrapperProps = isUrl
             ? { href: b.linkValue, target: '_blank', rel: 'noopener noreferrer' }
-            : {};
+            : isInternal
+              ? {
+                  role: 'button',
+                  tabIndex: 0,
+                  onClick: () => onLink!(b),
+                  onKeyDown: (e: React.KeyboardEvent) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onLink!(b); }
+                  },
+                }
+              : {};
           const alt = b.title || b.description || 'Promoción';
           return (
             <Wrapper

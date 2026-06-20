@@ -45,6 +45,17 @@ export function BentoTheme({ data }: BentoThemeProps) {
     add({ id: p.id, menuItemId: p.id, name: p.name, price });
   };
 
+  // Enlace de banner: CATEGORY → selecciona y baja a la sección; ITEM → abre el producto.
+  const onBannerLink = (b: any) => {
+    if (b.linkType === 'CATEGORY' && b.linkValue) {
+      setActiveCat(b.linkValue);
+      document.getElementById(`cat-${b.linkValue}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (b.linkType === 'ITEM' && b.linkValue) {
+      const p = menu.categories.flatMap((c: any) => c.items || []).find((x: any) => x.id === b.linkValue);
+      if (p) pick(p);
+    }
+  };
+
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
@@ -117,7 +128,7 @@ export function BentoTheme({ data }: BentoThemeProps) {
         {/* Banners de promociones (carrusel) */}
         {banners.length > 0 && (
           <div className="mb-5">
-            <BannerCarousel banners={banners} variant="dark" accent={accent} />
+            <BannerCarousel banners={banners} variant="dark" accent={accent} onLink={onBannerLink} />
           </div>
         )}
 
