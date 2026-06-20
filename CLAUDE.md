@@ -6,10 +6,15 @@
 - **IA:** Estrategia Híbrida (Groq Llama 3.1 para texto/chat, Gemini 1.5 Flash para visión).
 - **Monorepo:** Apps en `apps/*` (tpv, backend, admin, saas, kds, kiosk, delivery, meseros-lite, client, landing) y librerías en `packages/{config,database,types}`.
 
-## Identidad Visual (diseño operativo)
-- **Fuentes:** Syne (Títulos), Outfit (Cuerpo).
-- **Colores:** Fondo: #0C0C0E (Obsidiana), Acento: #FFB84D (Ámbar Miel), Éxito: #88D66C (Verde Salvia).
-- **Estilo:** Glassmorphism, bordes redondeados (3xl/full), transparencias sutiles.
+## Identidad Visual (panel admin)
+- **Fuentes:** Syne (display/títulos), DM Sans (cuerpo), DM Mono (datos/mono).
+- **Tema por defecto: CLARO premium retail** (tipo Shopify/Stripe/Linear). Tokens canónicos en `apps/admin/app/globals.css`:
+  - Fondo `#f6f8fa`, tarjetas blancas (`--surf-1` `#ffffff`), bordes `#e2e8f0`, texto `#0f172a`, sombras suaves, bordes redondeados grandes (20–24px).
+  - **Acento verde** por defecto (`--brand-primary` `#22c55e`), pero **dinámico por tenant** vía `AccentInjector` (no hardcodear el acento; usar `var(--brand-primary)`).
+  - **Sidebar oscuro elegante** siempre (`#0f172a`), vía la clase `.admin-sidebar` que redefine los tokens solo dentro del aside. Fondo general claro + sidebar oscuro es intencional.
+- **Tema oscuro** sigue disponible vía toggle (`mb-theme` en localStorage; `data-theme="dark"`). No re-forzar acento cálido/naranja en desktop (se eliminó el override de `.warmtech-shell`).
+- **Design system:** átomos en `apps/admin/components/warmtech/*` (`ui.tsx` + `retail.tsx`: `StatCard`, `StatusBadge`, `DataCard`, `ActionTile`, `TablePagination`, `SectionTabs`). Todas las pantallas consumen estos tokens/átomos, así que el look se cambia desde un solo lugar. Helpers: `lib/cn.ts`, `lib/format.ts`.
+- **Storefront (tienda online):** mantiene sus propios temas seleccionables (KAWAII/Boutique, HALO/Obsidiana, etc.) — independientes del tema del admin.
 
 ## Reglas de Desarrollo
 1. **No Placeholders:** Siempre entrega el código completo y listo para producción.
