@@ -160,6 +160,14 @@ export default function LockedPage() {
         className="relative z-10 flex h-full min-h-0 w-full flex-col items-center justify-center px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-[max(3.25rem,calc(env(safe-area-inset-top)+2.75rem))] sm:px-4 sm:pb-[max(1rem,env(safe-area-inset-bottom))] sm:pt-[max(4.25rem,calc(env(safe-area-inset-top)+3.5rem))]"
       >
       <main className="flex max-h-full min-h-0 w-full max-w-[360px] flex-col items-center gap-6 overflow-y-auto scrollbar-hide px-2 text-center landscape:gap-4">
+        {/* MARCA — logotipo MRTPVREST */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/brand/mr-logo.png"
+          alt="MRTPVREST"
+          className="h-16 w-auto select-none landscape:h-12"
+          draggable={false}
+        />
         {/* HEADER — avatar redondo + nombre de terminal + indicación (mockup BLOQUEO) */}
         <div className="flex flex-col items-center gap-3 landscape:gap-2">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--brand)] font-display text-2xl font-bold text-[var(--brand-fg)] landscape:h-14 landscape:w-14">
