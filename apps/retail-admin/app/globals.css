@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Tokens de diseño · MODA+ Retail Admin ────────────────────────────────
+   Identidad verde (distinta del admin restaurante, que es morado). Tema
+   oscuro único para mantener la app simple. Los nombres de variables calzan
+   con los que usan las pantallas retail (--surf-*, --tx-*, --iris-*, etc.). */
+:root {
+  /* Marca verde (MODA+) */
+  --iris-400: #5fe0a6;
+  --iris-500: #34c988;
+  --iris-600: #1f9d63;
+  --iris-soft: rgba(52, 201, 136, 0.14);
+  --iris-glow: rgba(52, 201, 136, 0.32);
+  --brand-primary: var(--iris-500);
+  --brand-secondary: var(--iris-400);
+
+  /* Superficies */
+  --bg: #07120d;
+  --surf-1: #0d1a14;
+  --surf-2: #12241b;
+  --surf-3: #193024;
+  --bd-1: rgba(220, 255, 238, 0.09);
+  --border: var(--bd-1);
+  --surf: var(--surf-1);
+  --surf2: var(--surf-2);
+
+  /* Texto */
+  --tx-hi: #f3fbf6;
+  --tx: var(--tx-hi);
+  --tx-mut: #8fae9d;
+  --tx-dim: #5f7e6e;
+  --text: var(--tx-hi);
+  --muted: var(--tx-mut);
+
+  /* Estados */
+  --ok: #34c988;
+  --ok-soft: rgba(52, 201, 136, 0.14);
+  --warn: #f5b54a;
+  --warn-soft: rgba(245, 181, 74, 0.14);
+  --err: #f0664d;
+  --err-soft: rgba(240, 102, 77, 0.14);
+
+  color-scheme: dark;
+}
+
+* {
+  border-color: var(--bd-1);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--tx-hi);
+}
+
+body {
+  font-family: var(--font-dm-sans), "DM Sans", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar discreta acorde al tema */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surf-3);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
