@@ -7,6 +7,7 @@ import BannerCarousel from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import type { DeliveryConfig } from '../../lib/delivery';
 import { productEmoji } from '../../lib/productEmoji';
+import { cldImage } from '@/lib/cloudinary';
 
 type BentoThemeProps = {
   data: {
@@ -68,7 +69,7 @@ export function BentoTheme({ data }: BentoThemeProps) {
         <div className="max-w-6xl mx-auto px-5 h-[72px] flex items-center justify-between">
           <div className="flex items-center gap-3">
             {info.logo ? (
-              <img src={info.logo} alt={info.name} className="w-11 h-11 rounded-2xl object-cover" style={{ border: `1px solid ${accent}50` }} />
+              <img src={cldImage(info.logo, { width: 200 })} alt={info.name} loading="lazy" decoding="async" className="w-11 h-11 rounded-2xl object-cover" style={{ border: `1px solid ${accent}50` }} />
             ) : (
               <div className="w-11 h-11 rounded-2xl flex items-center justify-center font-bold" style={{ background: `${accent}20`, color: accent }}>
                 {info.name.substring(0, 1)}
@@ -146,7 +147,7 @@ export function BentoTheme({ data }: BentoThemeProps) {
                         <span className="absolute top-2 left-2 z-10 text-[9px] font-bold px-2 py-1 rounded-full" style={{ background: '#0C0C0Ecc', color: accent, border: `1px solid ${accent}50` }}>⭐</span>
                       )}
                       {product.imageUrl ? (
-                        <img src={product.imageUrl} alt={product.name} className={`w-full h-full group-hover:scale-105 transition-transform duration-500 ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
+                        <img src={cldImage(product.imageUrl, { width: 480 })} alt={product.name} loading="lazy" decoding="async" className={`w-full h-full group-hover:scale-105 transition-transform duration-500 ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-3xl opacity-30">{productEmoji(product.name)}</div>
                       )}

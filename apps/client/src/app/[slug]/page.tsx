@@ -6,6 +6,7 @@ import { BentoTheme } from '@/components/themes/BentoTheme';
 import { PocketTheme } from '@/components/themes/PocketTheme';
 import { WagbaTheme } from '@/components/themes/WagbaTheme';
 import { getApiUrl } from '@/lib/config';
+import { cldImage } from '@/lib/cloudinary';
 import StorefrontClient from './StorefrontClient';
 import InstallPWABanner from '@/components/InstallPWABanner';
 
@@ -207,7 +208,7 @@ export default async function StorefrontPage({
         <div className="max-w-sm w-full text-center bg-gray-50 rounded-[40px] p-10 shadow-xl">
           {store.logo && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={store.logo} alt={store.name} className="w-20 h-20 object-contain mx-auto mb-6 rounded-3xl" />
+            <img src={cldImage(store.logo, { width: 200 })} alt={store.name} loading="lazy" decoding="async" className="w-20 h-20 object-contain mx-auto mb-6 rounded-3xl" />
           )}
           <h1 className="text-2xl font-black mb-2">{store.name}</h1>
           <div className="inline-block text-xs font-black uppercase tracking-widest px-4 py-1.5 rounded-full bg-gray-200 text-gray-600 mb-4">

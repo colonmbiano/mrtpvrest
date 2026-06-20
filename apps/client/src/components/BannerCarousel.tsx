@@ -156,8 +156,8 @@ export default function BannerCarousel({ banners, variant = 'light', accent = '#
               style={{ border: isDark ? '1px solid #FFFFFF14' : '1px solid rgba(0,0,0,0.06)', background: isDark ? '#15151A' : '#EDEDF0' }}
             >
               <img
-                src={cldImage(b.imageUrl, { width: single ? 800 : 640, ar: '16:9' })}
-                srcSet={cldSrcSet(b.imageUrl, single ? [640, 800] : [420, 640, 800], '16:9')}
+                src={cldImage(b.imageUrl, { width: single ? 800 : 640, ar: '16:9', crop: 'fill' })}
+                srcSet={cldSrcSet(b.imageUrl, single ? [640, 800] : [420, 640, 800], '16:9', 'fill')}
                 sizes={single ? '(min-width: 768px) 700px, 100vw' : '(min-width: 640px) 420px, 88vw'}
                 alt={alt}
                 loading={idx === 0 ? 'eager' : 'lazy'}

@@ -5,6 +5,7 @@ import { useCart } from '../../lib/cartStore';
 import StoreCheckout from '../StoreCheckout';
 import BannerCarousel from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
+import { cldImage } from '@/lib/cloudinary';
 
 export function PocketTheme({ data }: { data: any }) {
   const { info, menu, locations } = data;
@@ -75,7 +76,7 @@ export function PocketTheme({ data }: { data: any }) {
   const ProductImage = ({ product, className = '' }: { product: any; className?: string }) =>
     product.imageUrl ? (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={product.imageUrl} alt={product.name} className={`${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'} ${className}`} />
+      <img src={cldImage(product.imageUrl, { width: 480 })} alt={product.name} loading="lazy" decoding="async" className={`${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'} ${className}`} />
     ) : (
       <div
         className={`flex items-center justify-center ${className}`}
@@ -116,8 +117,10 @@ export function PocketTheme({ data }: { data: any }) {
           {info.logo && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={info.logo}
+              src={cldImage(info.logo, { width: 200 })}
               alt={info.name}
+              loading="lazy"
+              decoding="async"
               className="w-12 h-12 rounded-2xl object-cover shadow-md ring-2 ring-white shrink-0"
             />
           )}

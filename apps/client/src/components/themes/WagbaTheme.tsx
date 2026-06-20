@@ -13,6 +13,7 @@ import { useCart } from '../../lib/cartStore';
 import { productEmoji } from '../../lib/productEmoji';
 import BannerCarousel from '../BannerCarousel';
 import { needsModal } from '../ProductModal';
+import { cldImage } from '@/lib/cloudinary';
 import { getApiUrl } from '../../lib/config';
 import { computeDeliveryPreview, type DeliveryConfig } from '../../lib/delivery';
 import {
@@ -175,7 +176,7 @@ export function WagbaTheme({ data }: WagbaThemeProps) {
                 <div className="flex items-center gap-3 mb-3">
                   {info.logo ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={info.logo} alt={info.name} className="w-11 h-11 rounded-full object-cover shrink-0" style={{ border: `1.5px solid ${accent}` }} />
+                    <img src={cldImage(info.logo, { width: 200 })} alt={info.name} loading="lazy" decoding="async" className="w-11 h-11 rounded-full object-cover shrink-0" style={{ border: `1.5px solid ${accent}` }} />
                   ) : (
                     <div className="w-11 h-11 rounded-full flex items-center justify-center font-bold shrink-0" style={{ background: `${accent}22`, color: accent }}>{info.name.substring(0, 1)}</div>
                   )}
@@ -250,7 +251,7 @@ export function WagbaTheme({ data }: WagbaThemeProps) {
                     <div className="relative w-full aspect-[4/3] rounded-[16px] overflow-hidden mb-2.5" style={{ background: '#FFFFFF08' }}>
                       {cat.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={cat.imageUrl} alt={cat.name} className="w-full h-full object-cover" />
+                        <img src={cldImage(cat.imageUrl, { width: 256 })} alt={cat.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                       ) : <div className="w-full h-full flex items-center justify-center text-3xl opacity-30">🍽️</div>}
                     </div>
                     <h4 className="font-bold text-sm truncate">{cat.name}</h4>
@@ -374,7 +375,7 @@ function ProductCard({ p, accent, isFav, onFav, onOpen }: any) {
         {p.isPromo && <span className="absolute top-2 left-2 z-10 text-[9px] font-bold px-2 py-1 rounded-full text-white" style={{ background: accent }}>OFERTA</span>}
         {p.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={p.imageUrl} alt={p.name} className={`w-full h-full ${p.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
+          <img src={cldImage(p.imageUrl, { width: 480 })} alt={p.name} loading="lazy" decoding="async" className={`w-full h-full ${p.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
         ) : <div className="w-full h-full flex items-center justify-center text-3xl opacity-30">{productEmoji(p.name)}</div>}
       </button>
       <button onClick={onFav} className="absolute top-4 right-4 z-10 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur" style={{ background: '#0A0A0Caa' }} aria-label="Favorito">
@@ -440,7 +441,7 @@ function HomeBody({ info, categories, banners, popular, accent, favs, onFav, onO
           </div>
           {popular[0].imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={popular[0].imageUrl} alt={popular[0].name} className={`w-28 h-28 rounded-[18px] shrink-0 ${popular[0].imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
+            <img src={cldImage(popular[0].imageUrl, { width: 256 })} alt={popular[0].name} loading="lazy" decoding="async" className={`w-28 h-28 rounded-[18px] shrink-0 ${popular[0].imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
           )}
         </button>
       )}
@@ -458,7 +459,7 @@ function HomeBody({ info, categories, banners, popular, accent, favs, onFav, onO
                 <span className="w-16 h-16 rounded-[20px] flex items-center justify-center overflow-hidden" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
                   {cat.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={cat.imageUrl} alt={cat.name} className="w-full h-full object-cover" />
+                    <img src={cldImage(cat.imageUrl, { width: 256 })} alt={cat.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   ) : <span className="text-2xl">🍽️</span>}
                 </span>
                 <span className="text-[11px] font-semibold text-center leading-tight line-clamp-1 w-full">{cat.name}</span>
@@ -481,7 +482,7 @@ function HomeBody({ info, categories, banners, popular, accent, favs, onFav, onO
                   <div className="w-16 h-16 rounded-[14px] overflow-hidden shrink-0" style={{ background: '#FFFFFF08' }}>
                     {p.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.imageUrl} alt={p.name} className={`w-full h-full ${p.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
+                      <img src={cldImage(p.imageUrl, { width: 480 })} alt={p.name} loading="lazy" decoding="async" className={`w-full h-full ${p.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
                     ) : <div className="w-full h-full flex items-center justify-center text-xl opacity-30">{productEmoji(p.name)}</div>}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -536,7 +537,7 @@ function Splash({ info, accent }: { info: Info; accent: string }) {
       <div className="animate-pulse flex flex-col items-center">
         {info.logo ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={info.logo} alt={info.name} className="w-24 h-24 rounded-[28px] object-cover mb-4" style={{ border: `2px solid ${accent}` }} />
+          <img src={cldImage(info.logo, { width: 256 })} alt={info.name} loading="lazy" decoding="async" className="w-24 h-24 rounded-[28px] object-cover mb-4" style={{ border: `2px solid ${accent}` }} />
         ) : (
           <div className="w-24 h-24 rounded-[28px] flex items-center justify-center mb-4" style={{ background: `${accent}1f` }}>
             <UtensilsCrossed className="w-12 h-12" style={{ color: accent }} />
@@ -627,7 +628,7 @@ function SignIn({ accent, slug, info, profileKey, onDone }: { accent: string; sl
         <div className="flex flex-col items-center mb-7">
           {info.logo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={info.logo} alt={info.name} className="w-16 h-16 rounded-2xl object-cover mb-3" style={{ border: `1.5px solid ${accent}` }} />
+            <img src={cldImage(info.logo, { width: 200 })} alt={info.name} loading="lazy" decoding="async" className="w-16 h-16 rounded-2xl object-cover mb-3" style={{ border: `1.5px solid ${accent}` }} />
           ) : <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3" style={{ background: `${accent}1f` }}><User className="w-8 h-8" style={{ color: accent }} /></div>}
           <h1 className="text-2xl font-extrabold" style={{ fontFamily: 'Syne, sans-serif' }}>{mode === 'register' ? 'Crear cuenta' : 'Iniciar sesión'}</h1>
           <p className="text-sm mt-1 text-center" style={{ color: MUTED }}>Guarda tus pedidos y acumula puntos en {info.name}</p>
@@ -758,7 +759,7 @@ function MealDetails({ product, accent, isFav, onFav, onBack, onAdded }: any) {
       <div className="relative w-full h-72">
         {product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.imageUrl} alt={product.name} className={`w-full h-full ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
+          <img src={cldImage(product.imageUrl, { width: 800 })} alt={product.name} loading="lazy" decoding="async" className={`w-full h-full ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
         ) : <div className="w-full h-full flex items-center justify-center text-6xl opacity-20" style={{ background: CARD }}>{productEmoji(product.name)}</div>}
         <div className="absolute inset-x-0 bottom-0 h-24" style={{ background: `linear-gradient(to top, ${BG}, transparent)` }} />
         <button onClick={onBack} className="absolute top-5 left-4 w-10 h-10 rounded-full flex items-center justify-center backdrop-blur" style={{ background: '#0A0A0Caa' }}><ChevronLeft className="w-5 h-5" /></button>
@@ -884,7 +885,7 @@ function CartScreen({ accent, minOrderAmount = 0, onCheckout, onBrowse, onOpen, 
               <div className="w-16 h-16 rounded-[14px] overflow-hidden shrink-0" style={{ background: '#FFFFFF08' }}>
                 {src?.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={src.imageUrl} alt={l.name} className={`w-full h-full ${src.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
+                  <img src={cldImage(src.imageUrl, { width: 256 })} alt={l.name} loading="lazy" decoding="async" className={`w-full h-full ${src.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
                 ) : <div className="w-full h-full flex items-center justify-center text-xl opacity-30">{productEmoji(l.name)}</div>}
               </div>
               <div className="flex-1 min-w-0">

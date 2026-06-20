@@ -1,6 +1,7 @@
 'use client';
 
 import { ThemeProps } from './types';
+import { cldImage } from '@/lib/cloudinary';
 
 export default function StorefrontBrutalist({
   store, categories, lines, add, remove, total, quantity, primary,
@@ -71,7 +72,7 @@ export default function StorefrontBrutalist({
                   <div key={item.id} className="bg-white flex flex-col"
                     style={{ border: '3px solid #000', boxShadow: `5px 5px 0 ${accentSh}` }}>
                     <div className="relative w-full h-24 overflow-hidden">
-                      <img src={item.imageUrl || '/placeholder.png'} className={`w-full h-full ${item.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} alt="" />
+                      <img src={cldImage(item.imageUrl, { width: 480 }) || '/placeholder.png'} loading="lazy" decoding="async" className={`w-full h-full ${item.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} alt="" />
                       <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 text-xs font-black"
                         style={{ background: accentBg, color: i%2===0 ? '#EAFF00' : '#FFFFFF' }}>
                         #{String(i+1).padStart(2,'0')}

@@ -7,6 +7,7 @@ import StoreCheckout from '../StoreCheckout';
 import BannerCarousel from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import type { DeliveryConfig } from '../../lib/delivery';
+import { cldImage } from '@/lib/cloudinary';
 import { productEmoji } from '../../lib/productEmoji';
 
 type MochiThemeProps = {
@@ -66,7 +67,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
         <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {info.logo ? (
-              <img src={info.logo} alt="Logo" className="w-10 h-10 rounded-full object-cover shadow-sm" />
+              <img src={cldImage(info.logo, { width: 200 })} alt="Logo" loading="lazy" decoding="async" className="w-10 h-10 rounded-full object-cover shadow-sm" />
             ) : (
               <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-syne font-bold">
                 {info.name.substring(0, 1)}
@@ -103,7 +104,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
         {menu.categories.map((category: any) => (
           <div key={category.id} className="mb-12">
             <div className="flex items-center gap-3 mb-6">
-              {category.imageUrl && <img src={category.imageUrl} className="w-8 h-8 object-contain" alt="" />}
+              {category.imageUrl && <img src={cldImage(category.imageUrl, { width: 128 })} className="w-8 h-8 object-contain" alt="" loading="lazy" decoding="async" />}
               <h3 className="font-syne font-bold text-2xl text-gray-800 tracking-tight">{category.name}</h3>
             </div>
             
@@ -126,7 +127,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
                         </span>
                       )}
                       {product.imageUrl && (
-                        <img src={product.imageUrl} alt={product.name} className={`w-full h-full group-hover:scale-110 transition-transform duration-700 ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
+                        <img src={cldImage(product.imageUrl, { width: 480 })} alt={product.name} loading="lazy" decoding="async" className={`w-full h-full group-hover:scale-110 transition-transform duration-700 ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
                       )}
                     </div>
                     
