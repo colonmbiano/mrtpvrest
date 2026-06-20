@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useCart } from '../../lib/cartStore';
 import { productEmoji } from '../../lib/productEmoji';
-import BannerCarousel from '../BannerCarousel';
+import BannerCarousel, { collectBanners } from '../BannerCarousel';
 import { needsModal } from '../ProductModal';
 import { cldImage } from '@/lib/cloudinary';
 import { getApiUrl } from '../../lib/config';
@@ -139,7 +139,7 @@ export function WagbaTheme({ data }: WagbaThemeProps) {
   };
   const openCategory = (cat: any) => { setActiveCategory(cat); setView('category'); };
 
-  const banners = locations[0]?.banners || [];
+  const banners = collectBanners(locations);
   const waNumber = (info.whatsappNumber || '').replace(/\D/g, '');
 
   const showChrome = TAB_VIEWS.includes(view);

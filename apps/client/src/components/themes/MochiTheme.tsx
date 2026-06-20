@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import { useCart } from '../../lib/cartStore';
 import StoreCheckout from '../StoreCheckout';
-import BannerCarousel from '../BannerCarousel';
+import BannerCarousel, { collectBanners } from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import type { DeliveryConfig } from '../../lib/delivery';
 import { cldImage } from '@/lib/cloudinary';
@@ -64,8 +64,8 @@ export function MochiTheme({ data }: MochiThemeProps) {
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
 
-  // Banners de la primera sucursal activa
-  const banners = locations[0]?.banners || [];
+  // Banners de todas las sucursales activas (deduplicados)
+  const banners = collectBanners(locations);
 
   const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
 
