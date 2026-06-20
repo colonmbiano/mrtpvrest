@@ -8,6 +8,7 @@ import { IconPlus, IconArrow } from "@/components/Icon";
 import { useCart } from "@/lib/cart";
 import { fmt } from "@/lib/format";
 import api from "@/lib/api";
+import { cldImage } from "@/lib/cloudinary";
 
 type Variant = { id: string; name: string; price: number };
 type Complement = { id: string; name: string; price: number; isRequired: boolean };
@@ -122,7 +123,7 @@ function Inner() {
                   style={{ all: "unset", cursor: "pointer",
                     background: "var(--surf)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)",
                     padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ aspectRatio: "4 / 3", borderRadius: "var(--radius-sm)", background: mi.image ? `url(${mi.image}) center/cover` : "linear-gradient(135deg, var(--surf2), var(--surf3))" }} />
+                  <div style={{ aspectRatio: "4 / 3", borderRadius: "var(--radius-sm)", background: mi.image ? `url(${cldImage(mi.image, { width: 480 })}) center/cover` : "linear-gradient(135deg, var(--surf2), var(--surf3))" }} />
                   <div style={{ fontSize: 15, fontWeight: 800, lineHeight: 1.2 }}>{mi.name}</div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ fontSize: 18, fontWeight: 900, color: "var(--brand-primary)", fontFamily: "var(--font-mono)" }}>{fmt(price)}</div>
