@@ -3,6 +3,7 @@ const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const { pick } = require('../lib/validate');
+const { filterLiveBanners } = require('../lib/banner-schedule');
 const router = express.Router();
 
 // Allowlist contra mass assignment (no req.body directo a Prisma).
@@ -36,13 +37,6 @@ async function assertBannerAccess(req, res, id) {
 
 router.get('/', async (req, res) => {
   try {
-    // Día/hora en hora local de México (el servidor corre en UTC). Sin esto la
-    // programación por día/horario se evaluaba contra UTC y fallaba.
-    const now = new Date();
-    const tz = process.env.STORE_TIMEZONE || 'America/Mexico_City';
-    const local = new Date(now.toLocaleString('en-US', { timeZone: tz }));
-    const dayOfWeek = local.getDay();
-    const timeStr = local.getHours().toString().padStart(2, '0') + ':' + local.getMinutes().toString().padStart(2, '0');
     const locationIds = await locationIdsForRequest(req);
 
     const allBanners = await prisma.banner.findMany({
@@ -53,18 +47,9 @@ router.get('/', async (req, res) => {
       orderBy: { sortOrder: 'asc' },
     });
 
-    const banners = allBanners.filter((b) => {
-      try {
-        const days = JSON.parse(b.scheduleDays || '[]');
-        if (days.length > 0 && !days.includes(dayOfWeek)) return false;
-      } catch {}
-      if (b.dateFrom && now < new Date(b.dateFrom)) return false;
-      if (b.dateTo && now > new Date(b.dateTo)) return false;
-      if (b.scheduleStart && b.scheduleEnd && (timeStr < b.scheduleStart || timeStr > b.scheduleEnd)) return false;
-      return true;
-    });
-
-    res.json(banners);
+    // Filtrado por programación en hora local de la tienda (lib/banner-schedule;
+    // soporta ventanas que cruzan medianoche).
+    res.json(filterLiveBanners(allBanners));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
