@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Capacidades base de MODA+ Retail",
   "windows": ["main"],
-  "permissions": ["core:default", "shell:allow-open"]
+  "permissions": ["core:default", "shell:allow-open", "updater:default", "process:default"]
 }
