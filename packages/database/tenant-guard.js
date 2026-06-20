@@ -64,6 +64,18 @@ const SCOPED_MODELS = new Set([
   'WhatsappContact',
   'PromoGame',
   'PromoGamePlay',
+  // Módulo retail (SKU-based). Todo modelo con columna restaurantId debe estar
+  // aquí o el test tenant-guard.test.js falla. Las tablas hijas sin restaurantId
+  // (RetailSaleLine, RetailPayment, RetailTransferItem) se acceden vía su padre.
+  'RetailProduct',
+  'RetailSku',
+  'RetailStockByLocation',
+  'RetailStockMovement',
+  'RetailSale',
+  'RetailTransfer',
+  'RetailDevice',
+  'RetailSyncOutbox',
+  'RetailCashShift',
 ]);
 
 const SCOPE_FIELD = 'restaurantId';
