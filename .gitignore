@@ -44,6 +44,9 @@ public/assets/
 !**/android/**/*.jpeg
 # … y los iconos de la PWA del repartidor (manifest + apple-touch-icon):
 !apps/delivery/public/*.png
+# … y los iconos/PWA del TPV (favicon icon.png/apple-icon.png + manifest icons):
+!apps/tpv/src/app/*.png
+!apps/tpv/public/icon-*.png
 
 # Configuración de entorno (Seguridad)
 .env
