@@ -428,6 +428,11 @@ export default function BannersPage() {
                       style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
                     />
                   </div>
+                  {form.scheduleStart && form.scheduleEnd && form.scheduleStart > form.scheduleEnd && (
+                    <div className="mt-2 text-[11px] text-tx-mut">
+                      Horario nocturno: se mostrará desde las {form.scheduleStart} hasta las {form.scheduleEnd} del día siguiente.
+                    </div>
+                  )}
                 </div>
 
                 {/* Rango de fechas */}
