@@ -110,6 +110,15 @@ export default function BannerCarousel({ banners, variant = 'light', accent = '#
 
   const nudge = useCallback(() => { pausedUntil.current = Date.now() + RESUME_DELAY; setProgress(0); }, []);
 
+  // Navegación por teclado (flechas) cuando el foco está dentro del carrusel.
+  const onKeyNav = useCallback((e: React.KeyboardEvent) => {
+    if (single || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
+    e.preventDefault();
+    const delta = e.key === 'ArrowRight' ? 1 : -1;
+    const next = (active + delta + banners.length) % banners.length;
+    nudge(); setActive(next); scrollToIndex(next);
+  }, [single, active, banners.length, nudge, scrollToIndex]);
+
   if (single && (!banners || banners.length === 0)) return null;
 
   const overlay = isDark
@@ -123,6 +132,7 @@ export default function BannerCarousel({ banners, variant = 'light', accent = '#
       role={single ? undefined : 'region'}
       aria-roledescription={single ? undefined : 'carrusel'}
       aria-label={single ? undefined : 'Promociones'}
+      onKeyDown={onKeyNav}
     >
       <style dangerouslySetInnerHTML={{ __html: `
         .bc-scroll::-webkit-scrollbar{display:none}.bc-scroll{-ms-overflow-style:none;scrollbar-width:none}

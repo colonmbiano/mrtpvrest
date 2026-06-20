@@ -52,6 +52,12 @@ const NUMBER_WHEEL_GUARD_SCRIPT = `
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={`${syne.variable} ${dmSans.variable}`}>
+      <head>
+        {/* Las imágenes (menú, banners, logos) se sirven desde Cloudinary;
+            adelantamos la conexión para acelerar la primera carga. */}
+        <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="" />
+        <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+      </head>
       <body className="antialiased font-sans">
         <script dangerouslySetInnerHTML={{__html: NUMBER_WHEEL_GUARD_SCRIPT}} />
         {children}
