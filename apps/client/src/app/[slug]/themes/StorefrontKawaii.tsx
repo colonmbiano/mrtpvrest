@@ -1,6 +1,7 @@
 'use client';
 
 import { ThemeProps } from './types';
+import { cldImage } from '@/lib/cloudinary';
 
 export default function StorefrontKawaii({
   store, categories, lines, add, remove, total, quantity, primary,
@@ -76,7 +77,7 @@ export default function StorefrontKawaii({
                   <div key={item.id} className="rounded-3xl bg-white p-3.5 flex flex-col gap-2.5"
                     style={{ boxShadow: '0 8px 20px rgba(255,183,206,0.25)' }}>
                     <div className="relative w-full h-24 rounded-2xl overflow-hidden bg-pink-50">
-                      <img src={item.imageUrl || '/placeholder.png'} className={`w-full h-full ${item.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} alt="" />
+                      <img src={cldImage(item.imageUrl, { width: 480 }) || '/placeholder.png'} loading="lazy" decoding="async" className={`w-full h-full ${item.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} alt="" />
                       <button className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white flex items-center justify-center">
                         <span style={{ color: '#FF8EAA', fontSize: 11 }}>♡</span>
                       </button>

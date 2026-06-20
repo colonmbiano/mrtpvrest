@@ -1,6 +1,7 @@
 'use client';
 
 import { ThemeProps } from './types';
+import { cldImage } from '@/lib/cloudinary';
 
 export default function StorefrontHalo({
   store, categories, lines, add, remove, total, quantity, primary,
@@ -107,7 +108,7 @@ export default function StorefrontHalo({
                   <div key={item.id} className="rounded-xl p-2.5 flex items-center gap-3"
                     style={{ background: '#FFFFFF05', border: '1px solid #FFFFFF12' }}>
                     <div className="relative w-16 h-16 rounded-lg overflow-hidden" style={{ border: '1px solid #00F0FF40' }}>
-                      <img src={item.imageUrl || '/placeholder.png'} className={`w-full h-full ${item.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} alt="" />
+                      <img src={cldImage(item.imageUrl, { width: 320 }) || '/placeholder.png'} loading="lazy" decoding="async" className={`w-full h-full ${item.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} alt="" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[9px] font-bold text-white/40">[{String(i+1).padStart(3,'0')}]</p>

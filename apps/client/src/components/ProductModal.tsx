@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useCart } from '../lib/cartStore';
+import { cldImage } from '@/lib/cloudinary';
 
 type Variant = { id: string; name: string; price: number };
 type Modifier = { id: string; name: string; priceAdd: number };
@@ -123,7 +124,7 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
 
         {product.imageUrl && (
           <div className="relative w-full h-44 shrink-0">
-            <img src={product.imageUrl} alt={product.name} className={`w-full h-full ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
+            <img src={cldImage(product.imageUrl, { width: 800 })} alt={product.name} loading="lazy" decoding="async" className={`w-full h-full ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
             <button onClick={onClose} className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center">✕</button>
           </div>
         )}
