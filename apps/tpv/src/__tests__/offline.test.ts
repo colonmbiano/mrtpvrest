@@ -4,7 +4,7 @@
  * transacción. Foco en la apertura de turno offline (type 'shift').
  * Ejecutar: pnpm --filter @mrtpvrest/tpv test
  */
-import { apiOrQueue } from "@/lib/offline";
+import { apiOrQueue, shiftActionQueued, syncOfflineQueue } from "@/lib/offline";
 import useOfflineStore from "@/store/useOfflineStore";
 
 // Mock del axios singleton.
@@ -90,5 +90,85 @@ describe("apiOrQueue — apertura de turno offline", () => {
 
     const cfg = mockApi.post.mock.calls[0]![2] as { headers?: Record<string, string> };
     expect(cfg?.headers?.["Idempotency-Key"]).toBeTruthy();
+  });
+});
+
+describe("apiOrQueue — cierre / gastos / ingresos offline (Fase 2)", () => {
+  it("encola cierre offline contra /current/close", async () => {
+    setOnline(false);
+    const res = await apiOrQueue("shift-close", "POST", "/api/shifts/current/close", { closingFloat: 1000 });
+    expect(res).toMatchObject({ ok: true, queued: true });
+    const q = useOfflineStore.getState().getUnsyncedTransactions();
+    expect(q).toHaveLength(1);
+    expect(q[0]!).toMatchObject({ type: "shift-close", data: { path: "/api/shifts/current/close" } });
+  });
+
+  it("encola gasto e ingreso de caja offline", async () => {
+    setOnline(false);
+    await apiOrQueue("shift-expense", "POST", "/api/shifts/current/expenses", { amount: 50 });
+    await apiOrQueue("shift-cashin", "POST", "/api/shifts/current/cash-ins", { amount: 30 });
+    const types = useOfflineStore.getState().getUnsyncedTransactions().map((t) => t.type);
+    expect(types).toEqual(["shift-expense", "shift-cashin"]);
+  });
+});
+
+describe("shiftActionQueued — fallback de despliegue (/current → /:id)", () => {
+  it("si /current/close da 404 y hay shiftId, reintenta /:id/close", async () => {
+    mockApi.post
+      .mockRejectedValueOnce({ response: { status: 404, data: { error: "Not found" } } })
+      .mockResolvedValueOnce({ data: { id: "SID", isOpen: false } });
+
+    const res = await shiftActionQueued("shift-close", "close", { closingFloat: 0 }, "SID");
+
+    expect(res).toMatchObject({ ok: true, data: { id: "SID" } });
+    expect(mockApi.post).toHaveBeenCalledTimes(2);
+    expect(mockApi.post.mock.calls[0]![0]).toBe("/api/shifts/current/close");
+    expect(mockApi.post.mock.calls[1]![0]).toBe("/api/shifts/SID/close");
+  });
+});
+
+describe("syncOfflineQueue — gate de orden del cierre", () => {
+  beforeEach(() => {
+    // /employees/sync se llama al inicio del replay; lo silenciamos.
+    mockApi.get.mockResolvedValue({ data: [] });
+  });
+
+  function enqueue(type: any, path: string, id: string, timestamp: number) {
+    useOfflineStore.getState().addToQueue({
+      id, type, timestamp, synced: false,
+      data: { method: "POST", path, body: {} },
+    });
+  }
+
+  it("NO cierra mientras una orden más vieja siga pendiente", async () => {
+    enqueue("order", "/api/orders/tpv", "order-1", 1000);
+    enqueue("shift-close", "/api/shifts/current/close", "close-1", 2000);
+
+    // La orden falla (red) → queda pendiente; el cierre NO debe postearse.
+    mockApi.post.mockImplementation((path: string) => {
+      if (path === "/api/orders/tpv") return Promise.reject({ code: "ERR_NETWORK" });
+      return Promise.resolve({ data: {} });
+    });
+
+    await syncOfflineQueue();
+
+    const postedPaths = mockApi.post.mock.calls.map((c) => c[0]);
+    expect(postedPaths).toContain("/api/orders/tpv");
+    expect(postedPaths).not.toContain("/api/shifts/current/close");
+    // El cierre sigue en cola para el próximo tick.
+    expect(useOfflineStore.getState().getUnsyncedTransactions().map((t) => t.id)).toContain("close-1");
+  });
+
+  it("cierra cuando ya no hay tx más viejas pendientes", async () => {
+    enqueue("order", "/api/orders/tpv", "order-2", 1000);
+    enqueue("shift-close", "/api/shifts/current/close", "close-2", 2000);
+    mockApi.post.mockResolvedValue({ data: {} });
+
+    await syncOfflineQueue();
+
+    const postedPaths = mockApi.post.mock.calls.map((c) => c[0]);
+    expect(postedPaths).toContain("/api/orders/tpv");
+    expect(postedPaths).toContain("/api/shifts/current/close");
+    expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(0);
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { apiOrQueue } from "@/lib/offline";
+import { apiOrQueue, shiftActionQueued } from "@/lib/offline";
 
 const EXPENSE_CATEGORIES = [
   { value: "SUPPLIES", label: "🛒 Insumos" },
@@ -118,16 +118,27 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
     if (!expDesc || !expAmt) { alert("Completa descripción y monto"); return; }
     setSavingExp(true);
     try {
-      const { data } = await api.post(`/api/shifts/${shift.id}/expenses`, {
-        description: expDesc,
-        amount: Number(expAmt),
-        category: expCat,
-      });
-      setShift((s: any) => ({ ...s, expenses: [data, ...(s.expenses || [])] }));
-      setExpDesc(""); setExpAmt(""); setExpCat("OTHER");
-      setAddingExp(false);
-    } catch (e: any) { alert(e.response?.data?.error || "Error"); }
-    finally { setSavingExp(false); }
+      const amount = Number(expAmt);
+      const res = await shiftActionQueued(
+        "shift-expense",
+        "expenses",
+        { description: expDesc, amount, category: expCat },
+        shift?.id,
+      );
+      if (res.ok) {
+        // Online: el server devuelve el gasto. Offline (encolado): lo agregamos
+        // optimista para que el resumen del corte lo refleje al instante.
+        const optimistic = res.data ?? {
+          id: null, description: expDesc, amount, category: expCat,
+          createdAt: new Date().toISOString(), _optimistic: true,
+        };
+        setShift((s: any) => ({ ...s, expenses: [optimistic, ...(s.expenses || [])] }));
+        setExpDesc(""); setExpAmt(""); setExpCat("OTHER");
+        setAddingExp(false);
+      } else {
+        alert(res.error || "Error");
+      }
+    } finally { setSavingExp(false); }
   }
 
   async function deleteExpense(id: string) {
@@ -142,16 +153,25 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
     if (!cashDesc || !cashAmt) { alert("Completa descripción y monto"); return; }
     setSavingCash(true);
     try {
-      const { data } = await api.post(`/api/shifts/${shift.id}/cash-ins`, {
-        description: cashDesc,
-        amount: Number(cashAmt),
-        category: cashCat,
-      });
-      setShift((s: any) => ({ ...s, cashIns: [data, ...(s.cashIns || [])] }));
-      setCashDesc(""); setCashAmt(""); setCashCat("CHANGE");
-      setAddingCash(false);
-    } catch (e: any) { alert(e.response?.data?.error || "Error"); }
-    finally { setSavingCash(false); }
+      const amount = Number(cashAmt);
+      const res = await shiftActionQueued(
+        "shift-cashin",
+        "cash-ins",
+        { description: cashDesc, amount, category: cashCat },
+        shift?.id,
+      );
+      if (res.ok) {
+        const optimistic = res.data ?? {
+          id: null, description: cashDesc, amount, category: cashCat,
+          createdAt: new Date().toISOString(), _optimistic: true,
+        };
+        setShift((s: any) => ({ ...s, cashIns: [optimistic, ...(s.cashIns || [])] }));
+        setCashDesc(""); setCashAmt(""); setCashCat("CHANGE");
+        setAddingCash(false);
+      } else {
+        alert(res.error || "Error");
+      }
+    } finally { setSavingCash(false); }
   }
 
   async function deleteCashIn(id: string) {
@@ -184,22 +204,32 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
     if (!confirm("¿Cerrar el turno? Esta acción no se puede deshacer.")) return;
     setClosing(true);
     try {
-      const { data } = await api.post(`/api/shifts/${shift.id}/close`, {
-        closingFloat: Number(closingFloat) || 0,
-        notes: closeNotes,
-      });
-      setShift(data);
-      // Ya no hay turno abierto en la sucursal: dejamos el cache en false
-      // para que, tras re-loguear con PIN, el hub mande directo a
-      // /pos/shift/open (botón "Abrir Turno Ahora").
-      if (typeof window !== "undefined") {
-        localStorage.setItem("tpv-shift-open", "false");
+      const res = await shiftActionQueued(
+        "shift-close",
+        "close",
+        { closingFloat: Number(closingFloat) || 0, notes: closeNotes },
+        shift?.id,
+      );
+      if (res.ok) {
+        // Online: el server devuelve el turno cerrado (con corte). Offline
+        // (encolado): marcamos el shift local como cerrado de forma optimista;
+        // el corte definitivo y el reveal con PIN quedan para tras sincronizar.
+        setShift((s: any) =>
+          res.data ?? { ...s, isOpen: false, closedAt: new Date().toISOString(), closingFloat: Number(closingFloat) || 0, _optimistic: true },
+        );
+        // Ya no hay turno abierto en la sucursal: dejamos el cache en false
+        // para que, tras re-loguear con PIN, el hub mande directo a
+        // /pos/shift/open (botón "Abrir Turno Ahora").
+        if (typeof window !== "undefined") {
+          localStorage.setItem("tpv-shift-open", "false");
+        }
+        // El tab "Cerrar turno" desaparece al quedar cerrado; volvemos al
+        // resumen para que el cajero vea el corte (y no un cuerpo vacío).
+        setTab("summary");
+      } else {
+        alert(res.error || "Error");
       }
-      // El tab "Cerrar turno" desaparece al quedar cerrado; volvemos al
-      // resumen para que el cajero vea el corte (y no un cuerpo vacío).
-      setTab("summary");
-    } catch (e: any) { alert(e.response?.data?.error || "Error"); }
-    finally { setClosing(false); }
+    } finally { setClosing(false); }
   }
 
   function formatTime(date: string) {

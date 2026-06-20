@@ -140,17 +140,21 @@ router.post('/open', requireLocation, requireCanManageShifts, validateBody(openS
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── POST cerrar turno (solo el de la sucursal del request) ───────────────
-router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(closeShiftSchema), async (req, res) => {
-  try {
+// Helper compartido: ejecuta el cierre de un turno YA cargado (con
+// include {expenses, cashIns}). Lo usan POST /:id/close (turno por id) y
+// POST /current/close (turno abierto resuelto por sucursal, para la cola
+// offline que no conoce el id de servidor). Guard de doble cierre + corte +
+// clock-out de staff + cortes de repartidor en una sola $transaction.
+async function performShiftClose(req, res, shift) {
     const { closingFloat, notes, employeeId: bodyEmployeeId } = req.body;
-    const shiftId = req.params.id;
+    const shiftId = shift.id;
 
-    const shift = await prisma.cashShift.findFirst({
-      where: { id: shiftId, locationId: req.locationId },
-      include: { expenses: true, cashIns: true }
-    });
-    if (!shift) return res.status(404).json({ error: 'Turno no encontrado en esta sucursal' });
+    // Guard de doble cierre: si ya está cerrado, no re-corremos el clock-out
+    // ni los cortes de repartidor. El Idempotency-Key global cubre el replay
+    // exacto; esto cubre cualquier otra vía (defensa en profundidad).
+    if (!shift.isOpen) {
+      return res.status(409).json({ error: 'El turno ya está cerrado', code: 'SHIFT_ALREADY_CLOSED' });
+    }
 
     // Resolver Employee que cierra (closedById FK a Employee)
     let closedByEmployeeId = null;
@@ -320,6 +324,79 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
     } else {
       res.json({ ...closed, staffClockedOut, driversCut });
     }
+}
+
+// ── POST cerrar el turno ABIERTO de la sucursal (sin id) ─────────────────
+// Para la cola offline: el cliente no conoce el id de servidor si el turno se
+// abrió sin red. Resolvemos el turno abierto por locationId (igual que GET
+// /active). Si no hay ninguno abierto devolvemos 2xx idempotente — el goal
+// "turno cerrado" ya se cumple, así la cola marca synced y no reintenta en
+// bucle. DECLARADO ANTES de /:id/close (Express casa por orden: /:id casaría
+// 'current' como id).
+router.post('/current/close', requireLocation, requireCanManageShifts, validateBody(closeShiftSchema), async (req, res) => {
+  try {
+    const shift = await prisma.cashShift.findFirst({
+      where: { isOpen: true, locationId: req.locationId },
+      include: { expenses: true, cashIns: true },
+      orderBy: { openedAt: 'desc' },
+    });
+    if (!shift) return res.json({ closed: false, reason: 'no_open_shift' });
+    return await performShiftClose(req, res, shift);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST agregar gasto al turno ABIERTO de la sucursal (sin id, cola offline)
+router.post('/current/expenses', requireLocation, async (req, res) => {
+  try {
+    const { description, amount, category } = req.body;
+    const shift = await prisma.cashShift.findFirst({
+      where: { isOpen: true, locationId: req.locationId },
+      select: { id: true },
+      orderBy: { openedAt: 'desc' },
+    });
+    if (!shift) return res.json({ skipped: true, reason: 'no_open_shift' });
+    const expense = await prisma.shiftExpense.create({
+      data: { shiftId: shift.id, description, amount: Number(amount), category: category || 'OTHER' },
+    });
+    res.json(expense);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST ingresar efectivo al turno ABIERTO de la sucursal (sin id, cola offline)
+router.post('/current/cash-ins', requireLocation, async (req, res) => {
+  try {
+    const { description, amount, category } = req.body;
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return res.status(400).json({ error: 'Monto inválido', code: 'INVALID_AMOUNT' });
+    }
+    const shift = await prisma.cashShift.findFirst({
+      where: { isOpen: true, locationId: req.locationId },
+      select: { id: true },
+      orderBy: { openedAt: 'desc' },
+    });
+    if (!shift) return res.json({ skipped: true, reason: 'no_open_shift' });
+    const cashIn = await prisma.shiftCashIn.create({
+      data: {
+        shiftId: shift.id,
+        description: String(description || 'Ingreso de efectivo').slice(0, 200),
+        amount: amt,
+        category: category || 'CHANGE',
+      },
+    });
+    res.json(cashIn);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST cerrar turno por id (solo el de la sucursal del request) ─────────
+router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(closeShiftSchema), async (req, res) => {
+  try {
+    const shift = await prisma.cashShift.findFirst({
+      where: { id: req.params.id, locationId: req.locationId },
+      include: { expenses: true, cashIns: true },
+    });
+    if (!shift) return res.status(404).json({ error: 'Turno no encontrado en esta sucursal' });
+    return await performShiftClose(req, res, shift);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

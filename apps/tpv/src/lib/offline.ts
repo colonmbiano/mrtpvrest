@@ -147,6 +147,25 @@ export async function apiOrQueue<T = any>(
   }
 }
 
+// Acción de turno (cerrar / gasto / ingreso) vía cola con fallback de
+// despliegue. Apunta al endpoint nuevo /api/shifts/current/<suffix> que
+// resuelve el turno abierto por sucursal — clave porque un turno abierto
+// offline no tiene id de servidor. Si el backend aún no expone /current
+// (404: ventana en que Vercel ya sirve el front nuevo pero Railway no, o
+// APK viejo) y conocemos el id del turno, reintentamos contra /:id/<suffix>.
+export async function shiftActionQueued<T = any>(
+  type: 'shift-close' | 'shift-expense' | 'shift-cashin',
+  suffix: 'close' | 'expenses' | 'cash-ins',
+  body: Record<string, any>,
+  knownShiftId?: string | null
+): Promise<ApiOrQueueResult<T>> {
+  const res = await apiOrQueue<T>(type, 'POST', `/api/shifts/current/${suffix}`, body);
+  if (!res.ok && res.status === 404 && knownShiftId) {
+    return apiOrQueue<T>(type, 'POST', `/api/shifts/${knownShiftId}/${suffix}`, body);
+  }
+  return res;
+}
+
 export function initBackgroundSync() {
   if (syncInterval) return; // Already running
 
@@ -196,6 +215,20 @@ export async function syncOfflineQueue() {
     // (TODO: cliente debería mandar Idempotency-Key con tx.id).
     for (const transaction of unsyncedTransactions) {
       try {
+        // Gate de orden para el CIERRE de turno: el corte se calcula en el
+        // servidor leyendo las órdenes ya en la BD. Si todavía hay cualquier
+        // tx más vieja sin sincronizar (órdenes, gastos, ingresos, apertura),
+        // el corte saldría incompleto → posponemos el cierre al próximo tick.
+        // FIFO ya encola el cierre al final; esto cubre un predecesor que falló.
+        if (transaction.type === 'shift-close') {
+          // Lectura VIVA del store: la lista capturada arriba no refleja los
+          // markSynced de este mismo pase (guarda referencias viejas).
+          const hasOlderPending = store
+            .getUnsyncedTransactions()
+            .some((t) => t.id !== transaction.id && t.timestamp < transaction.timestamp);
+          if (hasOlderPending) continue; // reintenta el próximo tick
+        }
+
         const replay = transaction.data as
           | { method?: string; path?: string; body?: Record<string, any> }
           | undefined;

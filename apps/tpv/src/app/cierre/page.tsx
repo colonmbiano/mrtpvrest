@@ -8,6 +8,8 @@ import {
   Printer, Eye, Check, X,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { shiftActionQueued } from '@/lib/offline';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useAuthStore } from '@/store/authStore';
 import PurchasesExpensesModal from '@/components/pos/PurchasesExpensesModal';
 import { usePrinters, useReceiptIdentity, useFullTicketConfig } from '@/hooks/usePrinters';
@@ -53,6 +55,20 @@ interface Shift {
   staffClockedOut?: number;
   // Cuántos repartidores recibieron su corte automático al cerrar la caja.
   driversCut?: number;
+  // Turno reconstruido localmente porque no había red para leer /current
+  // (totales desconocidos). Permite cerrar offline; se reconcilia al sincronizar.
+  _offline?: boolean;
+}
+
+// Turno mínimo local para permitir el cierre sin red. Los totales reales los
+// computa el servidor al sincronizar el cierre (lee las órdenes de la BD).
+function buildOfflineShift(): Shift {
+  return {
+    id: '', openedAt: new Date().toISOString(), openingFloat: 0, blindClose: false,
+    totalCash: 0, totalCard: 0, totalTransfer: 0, totalCourtesy: 0, totalSales: 0,
+    totalExpenses: 0, totalCashIn: 0, ordersCount: 0, expectedCash: null,
+    expenses: [], cashIns: [], _offline: true,
+  };
 }
 
 const fmtMoney = (n: number) =>
@@ -75,6 +91,7 @@ const isDriverExpense = (e: ShiftExpense) =>
 
 export default function CierreTurno() {
   const router = useRouter();
+  const isOnline = useOnlineStatus();
   const employee = useAuthStore((s) => s.employee);
   const { printers } = usePrinters();
   const { businessName } = useReceiptIdentity();
@@ -146,6 +163,14 @@ export default function CierreTurno() {
     }
   };
 
+  // Si /current falla por red pero el cache dice que hay turno abierto,
+  // reconstruimos un turno local mínimo para poder cerrar offline.
+  const offlineShiftFallback = (): boolean => {
+    const open = typeof window !== 'undefined' && localStorage.getItem('tpv-shift-open') === 'true';
+    if (open) { setShift(buildOfflineShift()); return true; }
+    return false;
+  };
+
   const loadShift = async () => {
     try {
       const { data } = await api.get('/api/shifts/current');
@@ -154,8 +179,10 @@ export default function CierreTurno() {
         return;
       }
       setShift(data);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'No pudimos cargar el turno');
+    } catch {
+      // Offline: permitir el cierre con un turno local; si ni siquiera hay
+      // turno abierto en cache, sí mostramos el error.
+      if (!offlineShiftFallback()) setError('No pudimos cargar el turno');
     }
   };
 
@@ -170,8 +197,8 @@ export default function CierreTurno() {
           return;
         }
         setShift(data);
-      } catch (err: any) {
-        if (!cancelled) setError(err?.response?.data?.error || 'No pudimos cargar el turno');
+      } catch {
+        if (!cancelled && !offlineShiftFallback()) setError('No pudimos cargar el turno');
       }
     })();
     return () => { cancelled = true; };
@@ -207,11 +234,19 @@ export default function CierreTurno() {
     [cashIns],
   );
 
-  // Registra un ingreso de efectivo y refresca el turno para que entre al corte.
+  // Registra un ingreso de efectivo (vía cola: online entra directo, offline se
+  // encola contra el turno abierto y se reconcilia al sincronizar el cierre).
   const addCashIn = async (description: string, amount: number, category: string) => {
     if (!shift) return;
-    await api.post(`/api/shifts/${shift.id}/cash-ins`, { description, amount, category });
-    await loadShift();
+    const res = await shiftActionQueued(
+      'shift-cashin', 'cash-ins', { description, amount, category }, shift.id || undefined,
+    );
+    if (!res.ok) { alert(res.error || 'No se pudo registrar el ingreso'); return; }
+    // Optimista: lo agregamos al turno local (offline no podemos releer /current).
+    const entry: ShiftCashIn = res.data ?? {
+      id: '', description, amount, category, createdAt: new Date().toISOString(),
+    };
+    setShift((s) => (s ? { ...s, cashIns: [entry, ...(s.cashIns ?? [])] } : s));
   };
 
   const counted = Number(countedTotal);
@@ -222,21 +257,45 @@ export default function CierreTurno() {
     setSubmitting(true);
     setError('');
     try {
-      const { data: closed } = await api.post<Shift>(`/api/shifts/${shift.id}/close`, {
-        closingFloat: counted,
-        notes: notes.trim() || null,
-      });
-      localStorage.removeItem(`cierre-draft-${shift.id}`);
+      // Vía cola con fallback de despliegue: online cierra y devuelve el corte;
+      // offline lo encola contra el turno abierto (gate de orden garantiza que
+      // el corte server-side corra DESPUÉS de las órdenes encoladas).
+      const res = await shiftActionQueued<Shift>(
+        'shift-close', 'close',
+        { closingFloat: counted, notes: notes.trim() || null },
+        shift.id || undefined,
+      );
+
+      if (!res.ok) {
+        setError(res.error || 'No pudimos cerrar el turno');
+        setSubmitting(false);
+        return;
+      }
+
+      if (shift.id) localStorage.removeItem(`cierre-draft-${shift.id}`);
       // Ya no hay turno abierto en la caja: dejamos el cache en false para que,
-      // al volver al /hub (botón "Listo"), redirija a /pos/shift/open y no a
-      // /pos/order-type como si la sesión siguiera abierta.
+      // al volver al /hub (botón "Listo"), redirija a /pos/shift/open.
       localStorage.setItem('tpv-shift-open', 'false');
-      // Aseguramos el contado en el objeto (por si el backend no lo refleja al vuelo).
-      const closedWithCount: Shift = { ...closed, closingFloat: closed.closingFloat ?? counted };
-      setClosedShift(closedWithCount);
-      // Impresión automática del ticket de cierre. En corte ciego sale sin
-      // desfase (reveal=false); el supervisor lo revela con su PIN.
-      void printTicket(closedWithCount, !closedWithCount.blindClose);
+
+      if (res.data) {
+        // Online: usamos el corte real del backend.
+        const closedWithCount: Shift = { ...res.data, closingFloat: res.data.closingFloat ?? counted };
+        setClosedShift(closedWithCount);
+        // En corte ciego sale sin desfase (reveal=false); el supervisor lo revela con su PIN.
+        void printTicket(closedWithCount, !closedWithCount.blindClose);
+      } else {
+        // Offline (encolado): no hay corte del servidor. Imprimimos un ticket
+        // PENDIENTE con lo contado; el corte definitivo y el reveal quedan para
+        // después de reconectar (reimpresión).
+        const pending: Shift = {
+          ...shift,
+          closingFloat: counted,
+          closedAt: new Date().toISOString(),
+          notes: [notes.trim(), 'CORTE PENDIENTE DE SINCRONIZAR'].filter(Boolean).join(' · '),
+        };
+        setClosedShift(pending);
+        void printTicket(pending, false);
+      }
     } catch (err: any) {
       setError(err?.response?.data?.error || 'No pudimos cerrar el turno');
       setSubmitting(false);
@@ -246,6 +305,8 @@ export default function CierreTurno() {
   // Revelar el arqueo de un corte ciego con PIN de admin, y reimprimir completo.
   const onRevealPin = async (pin: string) => {
     if (!closedShift) return;
+    // El reveal valida el PIN y lee el snapshot en el servidor: requiere red.
+    if (!isOnline) throw new Error('Necesitas conexión para revelar el arqueo');
     try {
       const { data } = await api.post(`/api/shifts/${closedShift.id}/reveal`, { pin });
       const rev = { expectedCash: Number(data.expectedCash || 0), variance: Number(data.variance || 0) };

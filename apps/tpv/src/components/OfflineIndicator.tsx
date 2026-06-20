@@ -116,6 +116,9 @@ function PendingDrawer({
     adjustment: "Ajuste",
     override: "Override",
     shift: "Apertura de turno",
+    "shift-close": "Cierre de turno",
+    "shift-expense": "Gasto de caja",
+    "shift-cashin": "Ingreso de caja",
   };
 
   return (
