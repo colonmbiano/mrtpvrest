@@ -25,6 +25,10 @@ fn print_escpos(host: String, port: u16, bytes: Vec<u8>) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        // OTA de escritorio: el front llama a `check()` del plugin updater al
+        // arrancar; descarga e instala el nuevo instalador firmado y relanza.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![print_escpos])
         .run(tauri::generate_context!())
         .expect("error al ejecutar MODA+ Retail");
