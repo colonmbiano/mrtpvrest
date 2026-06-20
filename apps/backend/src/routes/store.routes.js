@@ -24,6 +24,7 @@ const {
 } = require('../lib/payment-providers');
 // Cálculo de envío: fuente única compartida con el chatbot de WhatsApp.
 const { computeDeliveryFee } = require('../lib/delivery-fee');
+const { filterLiveBanners } = require('../lib/banner-schedule');
 const { nextOrderNumber } = require('../lib/order-number');
 const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
@@ -399,29 +400,12 @@ router.get('/locations', async (req, res) => {
 
     if (!restaurant) return res.status(404).json({ error: 'Restaurante no encontrado.' });
 
-    // Filtrado por programación (día de la semana, rango horario y de fechas).
-    // IMPORTANTE: el servidor corre en UTC, pero la programación se define en
-    // hora local de México. Calculamos día/hora en America/Mexico_City para que
-    // un banner "miércoles 15:00-21:00" se muestre a esa hora local, no UTC.
-    const now = new Date();
-    const tz = process.env.STORE_TIMEZONE || 'America/Mexico_City';
-    const local = new Date(now.toLocaleString('en-US', { timeZone: tz }));
-    const dayOfWeek = local.getDay();
-    const timeStr = String(local.getHours()).padStart(2, '0') + ':' + String(local.getMinutes()).padStart(2, '0');
-    const bannerIsLive = (b) => {
-      try {
-        const days = JSON.parse(b.scheduleDays || '[]');
-        if (Array.isArray(days) && days.length > 0 && !days.includes(dayOfWeek)) return false;
-      } catch {}
-      if (b.dateFrom && now < new Date(b.dateFrom)) return false;
-      if (b.dateTo && now > new Date(b.dateTo)) return false;
-      if (b.scheduleStart && b.scheduleEnd && (timeStr < b.scheduleStart || timeStr > b.scheduleEnd)) return false;
-      return true;
-    };
-
+    // Filtrado por programación (día de la semana, rango horario y de fechas)
+    // en hora local de la tienda. Lógica compartida en lib/banner-schedule
+    // (soporta ventanas que cruzan medianoche, ej. 22:00-02:00).
     const locations = restaurant.locations.map((loc) => ({
       ...loc,
-      banners: (loc.banners || []).filter(bannerIsLive),
+      banners: filterLiveBanners(loc.banners),
     }));
 
     res.json(locations);
