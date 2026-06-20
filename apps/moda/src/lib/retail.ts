@@ -130,6 +130,7 @@ export async function loginPin(pin: string, locationId: string): Promise<Session
   });
   if (typeof window !== "undefined") {
     window.localStorage.setItem("moda-session", JSON.stringify(emp));
+    window.localStorage.removeItem("moda-default-pin-hint"); // ya entró, no hace falta el hint
   }
   return emp;
 }
@@ -186,9 +187,52 @@ export function linkLocation(w: Workspace): void {
   clearToken();
 }
 
+// Registro self-serve de una tienda nueva desde MODA+. Crea cuenta (tenant +
+// restaurante + sucursal "Principal" + admin con PIN 1234), la marca RETAIL y
+// liga el dispositivo. El cajero entra luego con PIN 1234 (cambiable en Ajustes).
+export async function registerTenant(input: {
+  restaurantName: string;
+  ownerName: string;
+  email: string;
+  password: string;
+}): Promise<void> {
+  const data = await apiFetch<{
+    accessToken?: string;
+    restaurant?: { id: string };
+    location?: { id: string; name?: string };
+  }>("/api/auth/register-tenant", { method: "POST", body: JSON.stringify(input) });
+  if (data.accessToken) setToken(data.accessToken);
+  const locId = data.location?.id;
+  const restId = data.restaurant?.id;
+  if (!locId || !restId) throw new Error("Registro sin sucursal");
+  // Marcar la sucursal como RETAIL (usa el token recién emitido).
+  try {
+    await apiFetch(`/api/locations/${locId}/business-type`, {
+      method: "PUT",
+      body: JSON.stringify({ businessType: "RETAIL" }),
+    });
+  } catch { /* el negocio se puede marcar luego desde admin */ }
+  // Ligar el dispositivo a la sucursal nueva (limpia el token admin).
+  linkLocation({
+    id: locId,
+    restaurantId: restId,
+    restaurantName: input.restaurantName,
+    name: data.location?.name || "Principal",
+    businessType: "RETAIL",
+  });
+  if (typeof window !== "undefined") window.localStorage.setItem("moda-default-pin-hint", "1234");
+}
+
 export function isLinked(): boolean {
   const t = getTenant();
   return Boolean(t.restaurantId && t.locationId);
+}
+
+// Lee el hint de PIN inicial SIN borrarlo (un efecto que borra al leer no es
+// seguro con StrictMode, que invoca el efecto 2 veces). Se limpia en loginPin.
+export function takeDefaultPinHint(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem("moda-default-pin-hint");
 }
 
 export function getLinkedName(): { location: string; restaurant: string } {
