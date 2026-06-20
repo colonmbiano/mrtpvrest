@@ -130,14 +130,18 @@ export async function generateMetadata({
   const description = `Haz tu pedido en línea en ${name}. Rápido y fácil, directo a tu domicilio.`;
   // store.logo ya es URL absoluta de Cloudinary. WhatsApp no resuelve relativas.
   const logo = store?.logo || undefined;
-  const ogImages = logo ? [{ url: logo, width: 1200, height: 630, alt: name }] : undefined;
+  // Favicon pequeño y imagen OG recortada a 1.91:1 (en vez del logo cuadrado
+  // declarado como 1200x630), ambas optimizadas vía Cloudinary.
+  const iconUrl = cldImage(logo, { width: 96 });
+  const ogImage = cldImage(logo, { width: 800, ar: '1200:630', crop: 'fill' });
+  const ogImages = ogImage ? [{ url: ogImage, width: 800, height: 420, alt: name }] : undefined;
 
   return {
     metadataBase: new URL(base),
     title: `${name} | Pedidos en línea`,
     description,
     applicationName: name,
-    icons: logo ? { icon: logo } : undefined,
+    icons: iconUrl ? { icon: iconUrl } : undefined,
     alternates: { canonical: '/' },
     openGraph: {
       type: 'website',
@@ -152,7 +156,7 @@ export async function generateMetadata({
       card: 'summary_large_image',
       title: name,
       description,
-      images: logo ? [logo] : undefined,
+      images: ogImage ? [ogImage] : undefined,
     },
   };
 }
