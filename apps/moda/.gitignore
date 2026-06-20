@@ -6,10 +6,9 @@ next-env.d.ts
 # Capacitor (Android se genera con `pnpm cap:add`)
 /android/
 
-# Tauri (Windows)
+# Tauri (Windows) — icons/ SÍ se commitean (CI los necesita para el .ico de Windows)
 /src-tauri/target/
 /src-tauri/gen/
-/src-tauri/icons/
 
 # deps / env
 /node_modules/
