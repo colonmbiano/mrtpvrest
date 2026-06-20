@@ -1,0 +1,72 @@
+name: MODA+ Windows Release
+
+# Build firmado del instalador de escritorio (Tauri) + GitHub Release con
+# latest.json para el auto-updater. Versión = la de apps/moda/src-tauri/tauri.conf.json
+# (bumpear ANTES de lanzar; debe ser > la instalada para que el updater dispare).
+
+permissions:
+  contents: read
+
+on:
+  push:
+    tags: ['moda-v*']
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: Notas del release (opcional)
+        required: false
+
+concurrency:
+  group: moda-windows-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build + sign + release (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 9.15.0
+          run_install: false
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install deps
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Read version
+        id: ver
+        shell: bash
+        run: echo "version=$(node -p "require('./apps/moda/src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"
+
+      # windows-latest ya trae Rust + MSVC + WebView2. tauri-action compila,
+      # firma (con TAURI_SIGNING_PRIVATE_KEY), crea el Release y sube latest.json.
+      - name: Build + release (tauri-action)
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/moda
+          tagName: moda-v${{ steps.ver.outputs.version }}
+          releaseName: 'MODA+ Retail v${{ steps.ver.outputs.version }} (Windows)'
+          releaseBody: ${{ github.event.inputs.notes || 'Actualización automática de MODA+ Retail para Windows.' }}
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true

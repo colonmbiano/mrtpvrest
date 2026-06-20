@@ -24,6 +24,8 @@
     "@capacitor/core": "^8.3.1",
     "@capgo/capacitor-updater": "^8.0.0",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-process": "^2",
+    "@tauri-apps/plugin-updater": "^2",
     "capacitor-tcp-socket": "^7.1.0",
     "next": "16.2.6",
     "react": "19.2.6",
