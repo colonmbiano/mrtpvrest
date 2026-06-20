@@ -30,7 +30,7 @@ export const DOWNLOADS: DownloadTarget[] = [
     platform: "android",
     label: "Android (tablet / celular)",
     version: "1.0.0",
-    size: "",
+    size: "6.7 MB",
     // TODO: reemplazar por la URL del APK release una vez publicado.
     url: "https://github.com/colonmbiano/mrtpvrest/releases/download/moda-apk-latest/mrtpv-moda.apk",
     hint: "Archivo .apk. Permite “instalar de orígenes desconocidos” al abrirlo.",
