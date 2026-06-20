@@ -2,6 +2,7 @@
 // handoff/screens/LoginScreen.tsx
 import React, { useState } from 'react';
 import { C, S } from '@/lib/tokens';
+import VersionTag from '@/components/VersionTag';
 
 interface LoginScreenProps {
   locationName?: string;
@@ -173,6 +174,11 @@ export function LoginScreen({ locationName = 'Sucursal', onLogin, loggingIn, log
           textTransform: 'uppercase', textDecoration: 'underline', opacity: 0.6,
         }}
       >Configuración de terminal</button>
+
+      <VersionTag style={{
+        marginTop: 10, fontSize: 9, color: C.textMuted, letterSpacing: '0.22em',
+        textTransform: 'uppercase', fontWeight: 800, opacity: 0.5,
+      }} />
     </div>
   );
 }
