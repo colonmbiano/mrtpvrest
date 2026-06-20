@@ -522,7 +522,9 @@ function SaleScreen({ cart, setCart, sel, setSel, go }) {
           </div>
         </Card>
       </div>
-      <ProductDetailPanel p={sel} onAdd={(p,color,size)=>setCart(c=>[...c,{key:p.id+color+size+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,color,size,tone:p.tone,cat:p.cat,qty:1,skuId:resolveSkuId(p,color,size)}])}/>
+      {sel
+        ? <ProductDetailPanel p={sel} onAdd={(p,color,size)=>setCart(c=>[...c,{key:p.id+color+size+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,color,size,tone:p.tone,cat:p.cat,qty:1,skuId:resolveSkuId(p,color,size)}])}/>
+        : <Card className="flex flex-col items-center justify-center text-center p-8"><div className="w-14 h-14 rounded-full bg-surf grid place-items-center text-ink-400 mb-3"><Icon n="tag" s={26}/></div><div className="text-[14px] font-semibold text-ink-900">Sin productos aún</div><p className="text-[12px] text-ink-400 mt-1 max-w-[220px]">Da de alta tu catálogo desde el panel de administrador para empezar a vender.</p></Card>}
     </div>
   );
 }
@@ -1155,8 +1157,14 @@ function SectionTitle({t}){return <div className="text-base font-semibold text-i
 /* ============================== DATA LAYER (backend real) ============================== */
 const DataCtx = createContext(null);
 function useData(){ return useContext(DataCtx) || { products:[], online:false, demo:true, session:null }; }
-// Catálogo en vivo si existe; si no (sin login / sin productos retail), cae al demo.
-function useProducts(){ const d=useContext(DataCtx); return (d && d.products && d.products.length) ? d.products : PRODUCTS; }
+// Con sesión real (no demo) usamos SIEMPRE el catálogo en vivo, aunque esté vacío:
+// una tienda recién creada debe verse vacía, no con las prendas de ejemplo. El
+// catálogo demo (PRODUCTS) solo aplica en "Explorar en modo demostración".
+function useProducts(){
+  const d=useContext(DataCtx);
+  if(d && !d.demo) return d.products || [];
+  return (d && d.products && d.products.length) ? d.products : PRODUCTS;
+}
 // Resuelve el skuId real de una variante color/talla; undefined en productos demo.
 function resolveSkuId(p, color, size){
   if(!p || !p.live || !p.skuByVariant) return undefined;
@@ -1386,7 +1394,7 @@ function App() {
   const products=useProducts();
   const [screen,setScreen]=useState("venta");
   const [query,setQuery]=useState("");
-  const [sel,setSel]=useState(()=>products[0]||PRODUCTS[0]);
+  const [sel,setSel]=useState(()=>products[0]||null);
   // POS real: el carrito arranca vacío (el cajero escanea/agrega productos).
   const [cart,setCart]=useState([]);
   const [sale,setSale]=useState(null);
