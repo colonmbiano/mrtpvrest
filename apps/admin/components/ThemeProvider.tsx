@@ -10,9 +10,9 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  theme: "dark",
+  theme: "light",
   setTheme: () => {},
-  accentColor: "#7c3aed",
+  accentColor: "#22c55e",
 });
 
 interface Props {
@@ -20,8 +20,8 @@ interface Props {
   accentColor?: string;
 }
 
-export function ThemeProvider({ children, accentColor = "#7c3aed" }: Props) {
-  const [theme, setThemeState] = useState<Theme>("dark");
+export function ThemeProvider({ children, accentColor = "#22c55e" }: Props) {
+  const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
     const saved = localStorage.getItem("mb-theme") as Theme | null;

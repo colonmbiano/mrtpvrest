@@ -86,7 +86,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <head>
         <script dangerouslySetInnerHTML={{__html:
-          "(function(){try{var t=localStorage.getItem('mb-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})()"
+          "(function(){try{var t=localStorage.getItem('mb-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})()"
         }} />
         <script dangerouslySetInnerHTML={{__html: SW_CLEANUP_SCRIPT}} />
         <script dangerouslySetInnerHTML={{__html: NUMBER_WHEEL_GUARD_SCRIPT}} />
