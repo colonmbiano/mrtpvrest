@@ -146,8 +146,67 @@ export function getSession(): SessionEmployee | null {
 
 export function logout(): void {
   clearToken();
-  clearTenant();
   if (typeof window !== "undefined") window.localStorage.removeItem("moda-session");
+}
+
+// ── Setup / vinculación de dispositivo (estilo TPV) ──────────────────────────
+// El admin inicia sesión una vez (email+password) y elige la sucursal; queda
+// ligada (restaurantId+locationId+nombre) y a partir de ahí solo es login por PIN.
+export interface Workspace {
+  id: string;            // locationId
+  restaurantId: string;
+  restaurantName: string;
+  businessType: string;
+  name: string;          // nombre de la sucursal
+}
+
+export async function adminLogin(email: string, password: string): Promise<void> {
+  const data = await apiFetch<{ accessToken?: string; token?: string }>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  const t = data.accessToken || data.token;
+  if (!t) throw new Error("Login sin token");
+  setToken(t); // temporal: para consultar las sucursales
+}
+
+export async function fetchWorkspaces(): Promise<Workspace[]> {
+  const data = await apiFetch<{ workspaces: Workspace[] }>("/api/workspaces/me");
+  return data.workspaces || [];
+}
+
+// Liga la sucursal elegida y termina el setup. Limpia el token de admin: el
+// dispositivo opera con login por PIN de empleado desde aquí.
+export function linkLocation(w: Workspace): void {
+  setTenant({ restaurantId: w.restaurantId, locationId: w.id });
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem("moda-location-name", w.name || "");
+    window.localStorage.setItem("moda-restaurant-name", w.restaurantName || "");
+  }
+  clearToken();
+}
+
+export function isLinked(): boolean {
+  const t = getTenant();
+  return Boolean(t.restaurantId && t.locationId);
+}
+
+export function getLinkedName(): { location: string; restaurant: string } {
+  if (typeof window === "undefined") return { location: "", restaurant: "" };
+  return {
+    location: window.localStorage.getItem("moda-location-name") || "",
+    restaurant: window.localStorage.getItem("moda-restaurant-name") || "",
+  };
+}
+
+export function unlink(): void {
+  clearTenant();
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem("moda-location-name");
+    window.localStorage.removeItem("moda-restaurant-name");
+    window.localStorage.removeItem("moda-session");
+  }
+  clearToken();
 }
 
 // ── Catálogo ─────────────────────────────────────────────────────────────────
