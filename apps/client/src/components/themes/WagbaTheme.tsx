@@ -426,11 +426,21 @@ function SearchResults({ results, query, accent, favs, onFav, onOpen }: any) {
 function HomeBody({ info, categories, banners, popular, accent, favs, onFav, onOpen, onOpenCategory }: any) {
   const add = useCart(s => s.add);
   const lines = useCart(s => s.lines);
+  // Enlace de banner: CATEGORY → abre la categoría; ITEM → abre el producto.
+  const onBannerLink = (b: any) => {
+    if (b.linkType === 'CATEGORY' && b.linkValue) {
+      const c = categories.find((x: any) => x.id === b.linkValue);
+      if (c) onOpenCategory(c);
+    } else if (b.linkType === 'ITEM' && b.linkValue) {
+      const p = categories.flatMap((c: any) => c.items || []).find((x: any) => x.id === b.linkValue);
+      if (p) onOpen(p);
+    }
+  };
   return (
     <>
       {/* BANNER / BEST SELLER */}
       {banners.length > 0 ? (
-        <div className="mb-6"><BannerCarousel banners={banners} variant="dark" accent={accent} /></div>
+        <div className="mb-6"><BannerCarousel banners={banners} variant="dark" accent={accent} onLink={onBannerLink} /></div>
       ) : popular[0] && (
         <button onClick={() => onOpen(popular[0])} className="w-full mb-6 flex items-center gap-3 p-3 rounded-[24px] text-left active:scale-[0.99] transition-transform" style={{ background: accent }}>
           <div className="flex-1 pl-2 text-white">

@@ -47,6 +47,16 @@ export function MochiTheme({ data }: MochiThemeProps) {
     add({ id: p.id, menuItemId: p.id, name: p.name, price });
   };
 
+  // Enlace de banner: CATEGORY → baja a la sección; ITEM → abre el producto.
+  const onBannerLink = (b: any) => {
+    if (b.linkType === 'CATEGORY' && b.linkValue) {
+      document.getElementById(`cat-${b.linkValue}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (b.linkType === 'ITEM' && b.linkValue) {
+      const p = menu.categories.flatMap((c: any) => c.items || []).find((x: any) => x.id === b.linkValue);
+      if (p) pick(p);
+    }
+  };
+
   // Zustand Cart Store
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
@@ -95,14 +105,14 @@ export function MochiTheme({ data }: MochiThemeProps) {
       {/* BANNERS DE PROMOCIONES (carrusel) */}
       {banners.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 mt-6">
-          <BannerCarousel banners={banners} variant="light" accent={primary} />
+          <BannerCarousel banners={banners} variant="light" accent={primary} onLink={onBannerLink} />
         </section>
       )}
 
       {/* PRODUCTOS MENU */}
       <section className="max-w-7xl mx-auto px-4 mt-10">
         {menu.categories.map((category: any) => (
-          <div key={category.id} className="mb-12">
+          <div key={category.id} id={`cat-${category.id}`} className="mb-12 scroll-mt-24">
             <div className="flex items-center gap-3 mb-6">
               {category.imageUrl && <img src={cldImage(category.imageUrl, { width: 128 })} className="w-8 h-8 object-contain" alt="" loading="lazy" decoding="async" />}
               <h3 className="font-syne font-bold text-2xl text-gray-800 tracking-tight">{category.name}</h3>
