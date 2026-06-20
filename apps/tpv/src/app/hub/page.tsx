@@ -9,7 +9,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import api from '@/lib/api';
-import { setTenant } from '@/lib/tenant';
+import { setTenant, getTenantIds } from '@/lib/tenant';
+import { getApiUrl } from '@/lib/config';
 import { useAuthStore } from '@/store/authStore';
 
 interface Workspace {
@@ -32,6 +33,17 @@ const TYPE_LABEL: Record<string, string> = {
   GROCERY: 'TIENDA',
   RECREATION: 'RECREACIÓN',
   };
+
+// Redirección por giro: las sucursales RETAIL (ropa) usan MODA+, una app de TPV
+// separada. Handoff por query (?api/restaurantId/locationId) para que MODA+ herede
+// backend + sucursal sin reconfigurar. Inerte para RESTAURANT y demás giros: solo
+// se dispara cuando businessType === 'RETAIL', así que los flujos actuales del
+// restaurante quedan exactamente igual. Configurable vía NEXT_PUBLIC_MODA_URL.
+const MODA_URL = process.env.NEXT_PUBLIC_MODA_URL || 'https://moda.mrtpvrest.com';
+function buildModaUrl(restaurantId: string, locationId: string): string {
+  const q = new URLSearchParams({ restaurantId, locationId, api: getApiUrl() });
+  return `${MODA_URL.replace(/\/+$/, '')}/?${q.toString()}`;
+}
 
 const fmtMoney = (n: number) =>
   n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 });
@@ -93,6 +105,14 @@ function HubPageInner() {
     // Identidad de tenant canónica (única vía de escritura — ver lib/tenant.ts).
     setTenant({ restaurantId: w.restaurantId, locationId: w.id, locationName: w.name });
 
+    // Giro RETAIL → MODA+ (app aparte). No entra al POS del restaurante.
+    if (w.businessType === 'RETAIL') {
+      localStorage.setItem('businessType', 'RETAIL');
+      window.location.href = buildModaUrl(w.restaurantId, w.id);
+      return;
+    }
+    localStorage.setItem('businessType', w.businessType || 'RESTAURANT');
+
     try {
       const { data } = await api.get('/api/shifts/active');
       const isShiftOpen = Boolean(data?.isOpen ?? data?.id);
@@ -127,6 +147,14 @@ function HubPageInner() {
         : null;
 
       if (persistedId && !force) {
+        // Terminal RETAIL ya ligada → MODA+ directo (sin re-consultar workspaces).
+        if (typeof window !== 'undefined' && localStorage.getItem('businessType') === 'RETAIL') {
+          const t = getTenantIds();
+          if (t.restaurantId && t.locationId) {
+            window.location.href = buildModaUrl(t.restaurantId, t.locationId);
+            return;
+          }
+        }
         (async () => {
           try {
             const { data } = await api.get('/api/shifts/active');
