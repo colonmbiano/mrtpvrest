@@ -1,7 +1,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-export type TransactionType = 'order' | 'payment' | 'adjustment' | 'override' | 'shift';
+export type TransactionType =
+  | 'order'
+  | 'payment'
+  | 'adjustment'
+  | 'override'
+  | 'shift'
+  | 'shift-close'
+  | 'shift-expense'
+  | 'shift-cashin';
 
 export interface OfflineTransaction {
   id: string;
