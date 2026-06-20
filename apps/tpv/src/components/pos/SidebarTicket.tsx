@@ -151,6 +151,25 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     toast.success(`"${label}" anulado`);
   };
 
+  // Quitar UN solo extra de un producto ya en la cuenta (aún no servido/cobrado).
+  // No anula el producto: el backend resta el cobro del extra y recalcula totales.
+  const removePreviousItemModifier = async (item: any, modRowId: string) => {
+    const mod = (item.modifiers || []).find((m: any) => m.id === modRowId);
+    const modLabel = mod?.modifier?.name || mod?.name || "extra";
+    const label = item.menuItem?.name || item.name || "producto";
+    if (!confirm(`¿Quitar "${modLabel}" de "${label}"?`)) return;
+    try {
+      await api.delete(`/api/orders/items/${item.id}/modifiers/${modRowId}`);
+    } catch (err: any) {
+      hapticError();
+      toast.error(err?.response?.data?.error || "No se pudo quitar el extra");
+      return;
+    }
+    await reloadPreviousItems();
+    hapticSuccess();
+    toast.success(`"${modLabel}" quitado`);
+  };
+
   const changePreviousItemQty = async (item: any, delta: number) => {
     const nextQty = (item.quantity || 1) + delta;
     if (nextQty < 1) { await removePreviousItem(item); return; }
@@ -1093,6 +1112,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                   price={item.price}
                   notes={item.notes}
                   modifiers={item.modifiers?.map((m: any) => ({
+                    id: m.id,
                     name: m.modifier?.name || m.name,
                     priceAdd: m.modifier?.priceAdd || m.priceAdd
                   }))}
@@ -1100,6 +1120,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                   onDecrease={() => changePreviousItemQty(item, -1)}
                   onUpdateNotes={(n) => updatePreviousItemNotes(item, n)}
                   onRemove={() => removePreviousItem(item)}
+                  onRemoveModifier={(modRowId) => removePreviousItemModifier(item, modRowId)}
                 />
               ))}
             </div>

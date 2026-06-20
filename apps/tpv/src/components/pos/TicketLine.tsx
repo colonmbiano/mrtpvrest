@@ -13,11 +13,15 @@ interface TicketLineProps {
   // Unidad de medida mostrada (pz/orden/bolsa/…). Cosmética en el "$X / unit".
   unit?: string;
   notes?: string;
-  modifiers?: { name: string; priceAdd: number }[];
+  // `id` (id de la fila OrderItemModifier) sólo viene en líneas ya guardadas;
+  // cuando está presente junto con `onRemoveModifier` se muestra la ✕ por extra.
+  modifiers?: { id?: string; name: string; priceAdd: number }[];
   onUpdateQty?: (qty: number) => void;
   onIncrease?: () => void;
   onDecrease?: () => void;
   onRemove?: () => void;
+  // Quitar un solo extra del producto (sólo líneas ya enviadas a la cuenta).
+  onRemoveModifier?: (modifierRowId: string) => void;
   onUpdateNotes?: (notes: string) => void;
   // Reabre el configurador (variantes/modificadores/complementos) para
   // editar este item. Solo se pasa cuando el producto tiene opciones.
@@ -37,6 +41,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
   onIncrease,
   onDecrease,
   onRemove,
+  onRemoveModifier,
   onUpdateNotes,
   onEdit,
   currency = "$",
@@ -160,12 +165,22 @@ const TicketLine: React.FC<TicketLineProps> = ({
           <div className="flex flex-wrap gap-1 mt-0.5">
             {modifiers.map((m, i) => (
               <span
-                key={i}
+                key={m.id ?? i}
                 className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[var(--surface-1)] border border-white/5 text-[9px] text-zinc-400 font-semibold uppercase tracking-wider"
               >
                 {m.name}
                 {m.priceAdd > 0 && (
                   <span className="text-[var(--brand)] mono">+{currency}{m.priceAdd.toFixed(2)}</span>
+                )}
+                {onRemoveModifier && m.id && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveModifier(m.id as string)}
+                    aria-label={`Quitar ${m.name}`}
+                    className="-mr-0.5 ml-0.5 text-zinc-600 active:text-red-500 transition-all active:scale-90"
+                  >
+                    <X size={11} strokeWidth={3} />
+                  </button>
                 )}
               </span>
             ))}
