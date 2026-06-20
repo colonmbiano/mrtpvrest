@@ -1176,6 +1176,7 @@ function BootSplash(){
 function SetupScreen({ onLinked, onDemo }){
   const [step,setStep]=useState("login");
   const [email,setEmail]=useState(""); const [password,setPassword]=useState("");
+  const [rName,setRName]=useState(""); const [oName,setOName]=useState("");
   const [url,setUrl]=useState(""); const [cfg,setCfg]=useState(false);
   const [ws,setWs]=useState([]);
   const [busy,setBusy]=useState(false); const [err,setErr]=useState("");
@@ -1193,7 +1194,21 @@ function SetupScreen({ onLinked, onDemo }){
     }catch(e){ setErr(e?.status===401||e?.status===400?"Correo o contraseña incorrectos.":(e?.message||"No se pudo conectar.")); }
     finally{ setBusy(false); }
   };
+  const doRegister=async()=>{
+    setErr("");
+    if(!rName.trim()||!oName.trim()||!email.trim()){ setErr("Completa todos los datos."); return; }
+    if(password.length<8){ setErr("La contraseña debe tener mínimo 8 caracteres."); return; }
+    setBusy(true);
+    try{
+      if(url.trim()) setApiUrl(url.trim());
+      await Retail.registerTenant({ restaurantName:rName.trim(), ownerName:oName.trim(), email:email.trim(), password });
+      onLinked();
+    }catch(e){ setErr(e?.status===409?"Ese correo o nombre de tienda ya existe.":(e?.message||"No se pudo crear la cuenta.")); }
+    finally{ setBusy(false); }
+  };
   const pick=(w)=>{ Retail.linkLocation(w); onLinked(); };
+  const fld=(label,el)=>(<div><div className="text-[11px] text-ink-500 mb-1">{label}</div>{el}</div>);
+  const inputCls="w-full h-11 rounded-xl border border-line bg-surf px-3 text-sm outline-none focus:border-brand-500";
   return (<div className="h-full grid place-items-center bg-body p-6 overflow-y-auto">
     <div className="w-full max-w-[400px] py-6">
       <div className="text-center mb-6">
@@ -1201,21 +1216,33 @@ function SetupScreen({ onLinked, onDemo }){
         <div className="text-[10px] tracking-[0.28em] text-ink-400 mt-1">SMART RETAIL FLOW</div>
       </div>
       <div className="bg-card border border-line rounded-2xl shadow-sm p-6">
-        {step==="login" ? (<>
+        {step==="login" && (<>
           <div className="text-[15px] font-semibold text-ink-900 text-center">Configurar dispositivo</div>
           <div className="text-[12px] text-ink-400 text-center mt-1 mb-5">Inicia sesión con tu cuenta de administrador</div>
           {err && <div className="text-[12px] text-red-500 text-center mb-3">{err}</div>}
           <div className="space-y-3">
-            <div><div className="text-[11px] text-ink-500 mb-1">Correo</div>
-              <input value={email} onChange={e=>setEmail(e.target.value)} type="email" autoCapitalize="none" placeholder="admin@tunegocio.com" className="w-full h-11 rounded-xl border border-line bg-surf px-3 text-sm outline-none focus:border-brand-500"/></div>
-            <div><div className="text-[11px] text-ink-500 mb-1">Contraseña</div>
-              <input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="••••••••" onKeyDown={e=>{if(e.key==="Enter")doLogin();}} className="w-full h-11 rounded-xl border border-line bg-surf px-3 text-sm outline-none focus:border-brand-500"/></div>
+            {fld("Correo",<input value={email} onChange={e=>setEmail(e.target.value)} type="email" autoCapitalize="none" placeholder="admin@tunegocio.com" className={inputCls}/>)}
+            {fld("Contraseña",<input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="••••••••" onKeyDown={e=>{if(e.key==="Enter")doLogin();}} className={inputCls}/>)}
           </div>
           <button onClick={doLogin} disabled={busy} className="w-full h-12 mt-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm inline-flex items-center justify-center gap-2 disabled:opacity-50">{busy?<span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin"/>:<><Icon n="check" s={16} c="#fff"/>Continuar</>}</button>
           <button onClick={()=>setCfg(c=>!c)} className="w-full mt-3 text-[11px] text-ink-400 hover:text-ink-700 flex items-center justify-center gap-1.5"><Icon n="gear" s={13}/>Configurar conexión</button>
-          {cfg && <div className="mt-3 pt-3 border-t border-line"><div className="text-[11px] text-ink-500 mb-1">URL del backend</div>
-            <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://api.mrtpvrest.com" className="w-full h-9 rounded-lg border border-line bg-surf px-3 text-[12px] outline-none focus:border-brand-500"/></div>}
-        </>) : (<>
+          {cfg && <div className="mt-3 pt-3 border-t border-line">{fld("URL del backend",<input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://api.mrtpvrest.com" className="w-full h-9 rounded-lg border border-line bg-surf px-3 text-[12px] outline-none focus:border-brand-500"/>)}</div>}
+          <div className="text-center mt-4 pt-4 border-t border-line text-[12px] text-ink-400">¿Tienda nueva? <button onClick={()=>{setErr(""); setStep("register");}} className="text-brand-600 font-medium">Crear cuenta</button></div>
+        </>)}
+        {step==="register" && (<>
+          <div className="text-[15px] font-semibold text-ink-900 text-center">Crear tu tienda</div>
+          <div className="text-[12px] text-ink-400 text-center mt-1 mb-5">15 días de prueba · sin tarjeta</div>
+          {err && <div className="text-[12px] text-red-500 text-center mb-3">{err}</div>}
+          <div className="space-y-3">
+            {fld("Nombre de la tienda",<input value={rName} onChange={e=>setRName(e.target.value)} placeholder="Boutique Aurora" className={inputCls}/>)}
+            {fld("Tu nombre",<input value={oName} onChange={e=>setOName(e.target.value)} placeholder="Tu nombre" className={inputCls}/>)}
+            {fld("Correo",<input value={email} onChange={e=>setEmail(e.target.value)} type="email" autoCapitalize="none" placeholder="tu@correo.com" className={inputCls}/>)}
+            {fld("Contraseña",<input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="mínimo 8 caracteres" onKeyDown={e=>{if(e.key==="Enter")doRegister();}} className={inputCls}/>)}
+          </div>
+          <button onClick={doRegister} disabled={busy} className="w-full h-12 mt-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm inline-flex items-center justify-center gap-2 disabled:opacity-50">{busy?<span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin"/>:<><Icon n="store" s={16} c="#fff"/>Crear cuenta</>}</button>
+          <button onClick={()=>{setErr(""); setStep("login");}} className="w-full mt-3 text-[11px] text-ink-400 hover:text-ink-700">← Ya tengo cuenta</button>
+        </>)}
+        {step==="location" && (<>
           <div className="text-[15px] font-semibold text-ink-900 text-center">Elige la sucursal</div>
           <div className="text-[12px] text-ink-400 text-center mt-1 mb-4">Este dispositivo quedará ligado a la tienda seleccionada</div>
           <div className="space-y-2 max-h-[50vh] overflow-y-auto">
@@ -1239,7 +1266,8 @@ function LoginScreen({ onLogin, onDemo, onRelink }){
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState("");
   const [loc,setLoc]=useState({location:"",restaurant:""});
-  useEffect(()=>{ setLoc(Retail.getLinkedName()); },[]);
+  const [hint,setHint]=useState(null);
+  useEffect(()=>{ setLoc(Retail.getLinkedName()); setHint(Retail.takeDefaultPinHint()); },[]);
   const submit=async()=>{
     setErr("");
     if(pin.length<4){ setErr("Ingresa tu PIN de 4 dígitos."); return; }
@@ -1262,6 +1290,7 @@ function LoginScreen({ onLogin, onDemo, onRelink }){
       <div className="bg-card border border-line rounded-2xl shadow-sm p-6">
         <div className="text-[14px] font-semibold text-ink-900 text-center">Ingresa tu PIN</div>
         <div className="text-[12px] text-ink-400 text-center mt-1">{loc.location ? loc.location : "Acceso de empleado"}</div>
+        {hint && <div className="text-[11px] text-brand-700 bg-brand-50 border border-brand-100 rounded-lg px-3 py-2 text-center mt-3">¡Tienda creada! Tu PIN inicial es <span className="font-bold tnum">{hint}</span> — cámbialo en Configuración.</div>}
         <div className="flex justify-center gap-3 my-5">
           {[0,1,2,3].map(i=>(<div key={i} className={"w-3.5 h-3.5 rounded-full border "+(pin.length>i?"bg-brand-500 border-brand-500":"border-line")}/>))}
         </div>
