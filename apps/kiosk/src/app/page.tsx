@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SetupGuard } from "@/components/SetupGuard";
+import { cldImage } from "@/lib/cloudinary";
 
 export default function IdlePage() {
   return (
@@ -50,7 +51,7 @@ function IdleInner() {
       >
         {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+          <img src={cldImage(logoUrl, { width: 400 })} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
         ) : (
           (restaurantName[0] || "K").toUpperCase()
         )}
