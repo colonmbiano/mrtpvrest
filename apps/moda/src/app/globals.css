@@ -11,3 +11,16 @@ body{background:var(--body);font-family:Inter,sans-serif}
 .tnum{font-variant-numeric:tabular-nums;font-family:'DM Mono',monospace}
 ::-webkit-scrollbar{width:10px;height:10px}
 ::-webkit-scrollbar-thumb{background:#cfd8d3;border-radius:8px;border:2px solid transparent;background-clip:content-box}
+
+/* ── Responsive móvil/tablet (<1024px) ──────────────────────────────────────
+   El diseño es desktop-first (grids fijos por pantalla). Bajo lg apilamos los
+   layouts de nivel-pantalla (hijos directos de <main>) a una sola columna y
+   soltamos las alturas fijas para que el contenido fluya y la página scrollee. */
+@media (max-width: 1023px) {
+  main > .grid { grid-template-columns: 1fr !important; height: auto !important; }
+  main > .grid > * { min-width: 0; }
+  /* Cards con altura fija + scroll interno de desktop → fluidas en móvil. */
+  main .h-full { height: auto !important; }
+  main .overflow-hidden { overflow: visible !important; }
+  main .overflow-y-auto { overflow-y: visible !important; }
+}

@@ -38,6 +38,7 @@ function Icon({ n, s = 18, c = "currentColor", sw = 1.9, cls = "" }) {
     min:["M5 12h14"],
     max:["M4 4h16v16H4z"],
     chev:["M6 9l6 6 6-6"],
+    menu:["M3 6h18","M3 12h18","M3 18h18"],
     heart:["M19 14c1.5-1.5 3-3.3 3-5.5A4.5 4.5 0 0012 5 4.5 4.5 0 002 8.5C2 10.7 3.5 12.5 5 14l7 7z"],
     store:["M3 9l1.5-5h15L21 9","M4 9v10a1 1 0 001 1h14a1 1 0 001-1V9","M3 9h18"],
     wifi:["M5 12.5a10 10 0 0114 0","M8.5 16a5 5 0 017 0","M12 20h.01"],
@@ -168,7 +169,7 @@ const SHORTCUTS = [["F1","Nueva venta","plus"],["F2","Buscar","search"],["F5","C
 function TitleBar({ screen }) {
   const data=useData();
   return (
-    <div className="flex items-center justify-between h-9 px-3 bg-titlebar border-b border-line select-none">
+    <div className="hidden lg:flex items-center justify-between h-9 px-3 bg-titlebar border-b border-line select-none">
       <div className="text-[12px] text-ink-500 font-medium">MODA+ <span className="text-ink-400">•</span> {screen}</div>
       <div className="flex items-center gap-2 text-ink-400">
         <span className={"flex items-center gap-1.5 text-[11px] px-2 h-6 rounded-full border "+(data.online?"border-brand-200 text-brand-700 bg-brand-50":"border-line text-ink-400")} title={data.online?"Conectado al backend":"Sin conexión · modo demo"}>
@@ -181,15 +182,16 @@ function TitleBar({ screen }) {
     </div>
   );
 }
-function TopBar({ query, setQuery, role, setRole, theme, setTheme }) {
+function TopBar({ query, setQuery, role, setRole, theme, setTheme, setNavOpen }) {
   const [t,setT]=useState("11:36 AM");
   return (
-    <header className="flex items-center gap-4 px-5 h-[68px] bg-card border-b border-line">
-      <div className="flex items-baseline gap-2 w-[200px] shrink-0">
-        <span className="text-2xl font-bold tracking-tight text-ink-900">MODA<span className="text-brand-600">+</span></span>
-        <span className="text-[9px] font-semibold tracking-[0.2em] text-ink-400 uppercase">Smart retail flow</span>
+    <header className="flex items-center gap-2 lg:gap-4 px-3 lg:px-5 h-[60px] lg:h-[68px] bg-card border-b border-line">
+      <button onClick={()=>setNavOpen&&setNavOpen(true)} aria-label="Menú" className="lg:hidden w-10 h-10 grid place-items-center rounded-lg hover:bg-surf text-ink-600 shrink-0"><Icon n="menu" s={20}/></button>
+      <div className="flex items-baseline gap-2 lg:w-[200px] shrink-0">
+        <span className="text-xl lg:text-2xl font-bold tracking-tight text-ink-900">MODA<span className="text-brand-600">+</span></span>
+        <span className="hidden xl:inline text-[9px] font-semibold tracking-[0.2em] text-ink-400 uppercase">Smart retail flow</span>
       </div>
-      <label className="flex-1 max-w-[640px] flex items-center gap-3 h-11 px-4 rounded-xl bg-surf border border-line focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+      <label className="hidden md:flex flex-1 max-w-[640px] items-center gap-3 h-11 px-4 rounded-xl bg-surf border border-line focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
         <Icon n="search" s={18} cls="text-ink-400"/>
         <input id="globalsearch" value={query} onChange={(e)=>setQuery(e.target.value)}
           placeholder="Buscar producto, SKU o código de barras"
@@ -197,16 +199,16 @@ function TopBar({ query, setQuery, role, setRole, theme, setTheme }) {
         <Icon n="scan" s={18} cls="text-ink-400"/>
       </label>
       <div className="flex-1"/>
-      <div className="flex items-center gap-4">
-        <RoleSwitcher role={role} setRole={setRole}/>
-        <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2 lg:gap-4">
+        <div className="hidden md:block"><RoleSwitcher role={role} setRole={setRole}/></div>
+        <div className="hidden lg:flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-full bg-brand-100 grid place-items-center text-brand-700 font-semibold text-sm">CM</div>
           <div className="leading-tight">
             <div className="text-[13px] font-semibold text-ink-900">Carla Méndez</div>
             <div className="text-[11px] text-ink-400">{role}</div>
           </div>
         </div>
-        <div className="text-[13px] font-medium text-ink-500 tnum">{t}</div>
+        <div className="hidden xl:block text-[13px] font-medium text-ink-500 tnum">{t}</div>
         <button onClick={()=>setTheme(theme==="dark"?"light":"dark")} title={theme==="dark"?"Modo claro":"Modo oscuro"} aria-label="Cambiar tema" className="w-9 h-9 grid place-items-center rounded-lg hover:bg-surf text-ink-500">
           <Icon n={theme==="dark"?"sun":"moon"} s={18}/></button>
         <button className="relative w-9 h-9 grid place-items-center rounded-lg hover:bg-surf text-ink-500">
@@ -217,14 +219,20 @@ function TopBar({ query, setQuery, role, setRole, theme, setTheme }) {
     </header>
   );
 }
-function Sidebar({ screen, go }) {
-  return (
-    <aside className="w-[224px] shrink-0 bg-card border-r border-line flex flex-col">
-      <nav className="p-3 space-y-1 flex-1">
+function Sidebar({ screen, go, navOpen, setNavOpen }) {
+  const close=()=>setNavOpen&&setNavOpen(false);
+  return (<>
+    {navOpen && <div className="fixed inset-0 bg-black/40 z-40 lg:hidden" onClick={close}/>}
+    <aside className={"bg-card border-r border-line flex-col w-[264px] shrink-0 fixed inset-y-0 left-0 z-50 lg:static lg:w-[224px] lg:z-auto "+(navOpen?"flex":"hidden lg:flex")}>
+      <div className="lg:hidden flex items-center justify-between px-4 h-14 border-b border-line">
+        <span className="text-lg font-bold tracking-tight text-ink-900">MODA<span className="text-brand-600">+</span></span>
+        <button onClick={close} aria-label="Cerrar" className="w-9 h-9 grid place-items-center rounded-lg hover:bg-surf text-ink-500"><Icon n="x" s={18}/></button>
+      </div>
+      <nav className="p-3 space-y-1 flex-1 overflow-y-auto">
         {NAV.map(([id,label,icon])=>{
           const a = screen===id;
           return (
-            <button key={id} onClick={()=>go(id)}
+            <button key={id} onClick={()=>{ go(id); close(); }}
               className={"w-full flex items-center gap-3 h-11 px-3 rounded-xl text-sm font-medium transition-colors "+
                 (a?"bg-brand-100 text-brand-700":"text-ink-500 hover:bg-surf hover:text-ink-900")}>
               <Icon n={icon} s={19} sw={a?2.1:1.8}/>{label}
@@ -241,21 +249,21 @@ function Sidebar({ screen, go }) {
         <Row k="Conexión" v={<span className="text-brand-600 font-medium">Online</span>} icon="wifi"/>
       </div>
     </aside>
-  );
+  </>);
 }
 function Row({k,v,icon}){return(<div className="flex items-center gap-2 text-ink-400"><Icon n={icon} s={14}/><span>{k}: <span className="text-ink-700 font-medium">{v}</span></span></div>);}
 
 function BottomBar({ go, onCobrar }) {
   return (
-    <footer className="flex items-center gap-2 px-4 h-[60px] bg-card border-t border-line">
+    <footer className="flex items-center gap-2 px-3 lg:px-4 h-[58px] lg:h-[60px] bg-card border-t border-line overflow-x-auto">
       {SHORTCUTS.map(([k,label,icon])=>(
         <button key={k} onClick={()=>{ if(k==="F5")onCobrar(); else if(k==="F7")go("devoluciones"); else if(k==="F8")go("caja"); else if(k==="F6")go("apartados"); else if(k==="F1")go("venta"); else document.getElementById("globalsearch")?.focus(); }}
-          className="flex-1 flex items-center justify-center gap-2.5 h-11 rounded-xl border border-line hover:bg-surf text-ink-700 text-[13px] font-medium">
+          className="shrink-0 min-w-[92px] lg:min-w-0 lg:flex-1 flex items-center justify-center gap-2 h-11 px-3 rounded-xl border border-line hover:bg-surf text-ink-700 text-[12px] lg:text-[13px] font-medium">
           <Icon n={icon} s={17} cls="text-ink-400"/>{label}
-          <span className="tnum text-[10px] text-ink-400 border border-line rounded px-1">{k}</span>
+          <span className="hidden lg:inline tnum text-[10px] text-ink-400 border border-line rounded px-1">{k}</span>
         </button>
       ))}
-      <button className="w-11 h-11 grid place-items-center rounded-xl border border-line hover:bg-surf text-ink-500">···</button>
+      <button className="shrink-0 w-11 h-11 grid place-items-center rounded-xl border border-line hover:bg-surf text-ink-500">···</button>
     </footer>
   );
 }
@@ -597,7 +605,7 @@ function CheckoutScreen({ cart, go, onApprove }) {
   const removePay=(i)=>{ setLines(l=>l.filter((_,j)=>j!==i)); setChangeDue(0); };
   const payLabel=lines.length>1?"Pago mixto":(lines[0]?lines[0].method:method);
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_360px_minmax(0,1fr)] gap-4 h-full">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px_minmax(0,1fr)] gap-4 h-auto lg:h-full">
       <Card className="flex flex-col overflow-hidden">
         <div className="px-5 h-14 flex items-center border-b border-line font-semibold text-ink-900">Carrito de compra ({cart.length})</div>
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
@@ -630,7 +638,7 @@ function CheckoutScreen({ cart, go, onApprove }) {
         </Card>
       </div>
 
-      <div className="grid grid-cols-[1fr_1fr] gap-4 min-h-0">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 min-h-0">
         <Card className="p-3 overflow-y-auto">
           <div className="px-2 py-2 font-semibold text-ink-900">Método de pago</div>
           <div className="space-y-2">{methods.map(([m,sub,icon])=>{const a=method===m;return(
@@ -656,7 +664,7 @@ function CheckoutScreen({ cart, go, onApprove }) {
         </Card>
       </div>
 
-      <div className="col-span-3 grid grid-cols-[minmax(0,1fr)_360px_minmax(0,1fr)] gap-4">
+      <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px_minmax(0,1fr)] gap-4">
         <Card className="p-4"><div className="text-[12px] text-ink-500 mb-1">Pagado</div><div className="h-12 rounded-xl bg-surf border border-line flex items-center justify-end px-4 tnum text-xl font-bold text-ink-900">{mx(paid)}</div></Card>
         <Card className="p-4"><div className="text-[12px] text-ink-500 mb-1">{remaining>0?"Restante":"Cambio"}</div>
           <div className={"h-12 rounded-xl border flex items-center justify-end px-4 tnum text-xl font-bold "+(remaining>0?"bg-amber-50 border-amber-100 text-amber-700":"bg-brand-50 border-brand-100 text-brand-700")}>{remaining>0?mx(remaining):mx(changeDue)}</div></Card>
@@ -1274,6 +1282,7 @@ function App() {
   const [ov,setOv]=useState(null);
   const [toast,setToast]=useState("");
   const [theme,setTheme]=useState("light");
+  const [navOpen,setNavOpen]=useState(false);
   useEffect(()=>{ setGrants({}); },[role]);
   useEffect(()=>{ document.documentElement.setAttribute("data-theme",theme); },[theme]);
   const can=(p)=>hasPerm(role,p)||!!grants[p];
@@ -1318,12 +1327,12 @@ function App() {
 
   return (
     <PermCtx.Provider value={{role,can,gate}}>
-    <div className="h-full flex flex-col min-w-[1320px] max-w-[1680px] mx-auto bg-surf shadow-2xl overflow-hidden" style={{borderRadius:0}}>
+    <div className="h-full flex flex-col w-full max-w-[1680px] mx-auto bg-surf shadow-2xl overflow-hidden" style={{borderRadius:0}}>
       <TitleBar screen={titles[screen]}/>
-      <TopBar query={query} setQuery={setQuery} role={role} setRole={setRole} theme={theme} setTheme={setTheme}/>
-      <div className="flex-1 flex min-h-0">
-        <Sidebar screen={["checkout","success"].includes(screen)?"venta":screen} go={setScreen}/>
-        <main className="flex-1 min-w-0 p-4 overflow-hidden">
+      <TopBar query={query} setQuery={setQuery} role={role} setRole={setRole} theme={theme} setTheme={setTheme} navOpen={navOpen} setNavOpen={setNavOpen}/>
+      <div className="flex-1 flex min-h-0 relative">
+        <Sidebar screen={["checkout","success"].includes(screen)?"venta":screen} go={setScreen} navOpen={navOpen} setNavOpen={setNavOpen}/>
+        <main className="flex-1 min-w-0 p-3 lg:p-4 overflow-y-auto lg:overflow-hidden">
           {screen==="venta"&&<SaleScreen cart={cart} setCart={setCart} sel={sel} setSel={setSel} go={setScreen}/>}
           {screen==="checkout"&&<CheckoutScreen cart={cart} go={setScreen} onApprove={approve}/>}
           {screen==="success"&&sale&&<SuccessScreen sale={sale} go={setScreen} newSale={newSale}/>}
