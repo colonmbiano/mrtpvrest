@@ -3,7 +3,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { useCart } from '../../lib/cartStore';
 import StoreCheckout from '../StoreCheckout';
-import BannerCarousel from '../BannerCarousel';
+import BannerCarousel, { collectBanners } from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import { cldImage } from '@/lib/cloudinary';
 
@@ -53,7 +53,7 @@ export function PocketTheme({ data }: { data: any }) {
     }
   };
 
-  const banners = locations[0]?.banners || [];
+  const banners = collectBanners(locations);
   const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
 
   // "Lo más pedido": productos marcados como populares en cualquier categoría.

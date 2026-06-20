@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useCart } from '../../lib/cartStore';
 import StoreCheckout from '../StoreCheckout';
-import BannerCarousel from '../BannerCarousel';
+import BannerCarousel, { collectBanners } from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import type { DeliveryConfig } from '../../lib/delivery';
 import { productEmoji } from '../../lib/productEmoji';
@@ -62,7 +62,7 @@ export function BentoTheme({ data }: BentoThemeProps) {
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
 
-  const banners = locations[0]?.banners || [];
+  const banners = collectBanners(locations);
   const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
 
   const glass = { background: '#FFFFFF08', border: '1px solid #FFFFFF14', backdropFilter: 'blur(12px)' } as React.CSSProperties;

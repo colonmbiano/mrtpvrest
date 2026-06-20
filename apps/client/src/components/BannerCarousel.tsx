@@ -12,6 +12,22 @@ export type Banner = {
   linkValue?: string;
 };
 
+// Une los banners de TODAS las sucursales activas (no solo la primera),
+// deduplicando por id. El backend ya los entrega filtrados por vigencia y
+// ordenados por sortOrder dentro de cada sucursal. Para tenants de una sola
+// sucursal el resultado es idéntico a `locations[0].banners`.
+export function collectBanners(locations: Array<{ banners?: Banner[] }> | undefined | null): Banner[] {
+  if (!locations || !locations.length) return [];
+  const seen = new Set<string>();
+  const out: Banner[] = [];
+  for (const loc of locations) {
+    for (const b of loc?.banners || []) {
+      if (b && !seen.has(b.id)) { seen.add(b.id); out.push(b); }
+    }
+  }
+  return out;
+}
+
 type BannerCarouselProps = {
   banners: Banner[];
   variant?: 'light' | 'dark';
