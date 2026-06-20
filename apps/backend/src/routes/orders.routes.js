@@ -1283,6 +1283,106 @@ router.delete('/items/:itemId', authenticate, requireTenantAccess, requireRole('
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── DELETE /items/:itemId/modifiers/:modRowId ───────────────────────────────
+// Quitar UN SOLO extra/modificador de un producto de una orden activa, sin
+// anular el producto entero (p.ej. "quítale el tocino a la hamburguesa" porque
+// aún no sale a mesa). Reglas de negocio:
+//  · Solo mientras la orden no esté pagada ni cerrada (DELIVERED/CANCELLED/PAID
+//    bloqueados): si ya se sirvió/cobró, no hay vuelta atrás.
+//  · Permiso: LIBRE (cajero/mesero/admin). A diferencia de anular el item
+//    completo NO exige `cancel_items` — es flujo operativo. Pero queda auditado
+//    (MODIFIER_VOID): quién, qué extra y cuánto descontó.
+//  · Dinero server-side: `OrderItem.price` es INCLUSIVO de modificadores, así
+//    que el nuevo precio unitario = price − (priceAdd cobrado del extra). Se
+//    recalcula el subtotal del item y los totales de la orden. Nunca se confía
+//    en el cliente.
+//  · Inventario: NO se repone automáticamente (igual que anular un item). El
+//    insumo del extra ya pudo usarse en cocina; la merma se concilia por su vía.
+//    Si algún día se quiere reponer, hacerlo dentro de la misma $transaction.
+//  · Cocina: se emite `order:updated` para que el KDS refresque ("ya no lleva X").
+router.delete('/items/:itemId/modifiers/:modRowId',
+  authenticate, requireTenantAccess,
+  requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'),
+  async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+
+    const orderItem = await prisma.orderItem.findUnique({
+      where: { id: req.params.itemId },
+      include: { order: true, modifiers: true },
+    });
+    if (!orderItem) return res.status(404).json({ error: 'Item no encontrado' });
+    if (orderItem.order.restaurantId !== restaurantId) {
+      return res.status(403).json({ error: 'Item de otro restaurante' });
+    }
+    if (orderItem.order.locationId && req.locationId && orderItem.order.locationId !== req.locationId) {
+      return res.status(403).json({ error: 'Item de otra sucursal' });
+    }
+    if (['DELIVERED', 'CANCELLED'].includes(orderItem.order.status)) {
+      return res.status(400).json({ error: 'La orden ya está cerrada' });
+    }
+    if (orderItem.order.paymentStatus === 'PAID') {
+      return res.status(400).json({ error: 'La orden ya fue pagada' });
+    }
+
+    const modRow = orderItem.modifiers.find((m) => m.id === req.params.modRowId);
+    if (!modRow) return res.status(404).json({ error: 'Extra no encontrado en el producto' });
+
+    // El precio unitario ya incluye el monto cobrado por cada extra; quitarlo
+    // resta exactamente lo que ese extra cobró (snapshot congelado en priceAdd).
+    const removedCharge = Number(modRow.priceAdd) || 0;
+    const isWeightLine = orderItem.weightKg != null;
+    const newUnitPrice = Math.max(0, Number(orderItem.price) - removedCharge);
+    const mult = isWeightLine ? Number(orderItem.weightKg) : orderItem.quantity;
+    const newItemSubtotal = newUnitPrice * mult;
+
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      await tx.orderItemModifier.delete({ where: { id: modRow.id } });
+      await tx.orderItem.update({
+        where: { id: orderItem.id },
+        data: { price: newUnitPrice, subtotal: newItemSubtotal },
+      });
+
+      const remaining = await tx.orderItem.findMany({
+        where: { orderId: orderItem.orderId },
+        select: { subtotal: true },
+      });
+      const newOrderSubtotal = remaining.reduce((s, i) => s + (i.subtotal || 0), 0);
+      const discount = orderItem.order.discount || 0;
+      const deliveryFee = orderItem.order.deliveryFee || 0;
+      const newTotal = Math.max(0, newOrderSubtotal - discount + deliveryFee);
+
+      return tx.order.update({
+        where: { id: orderItem.orderId },
+        data: { subtotal: newOrderSubtotal, total: newTotal },
+        include: {
+          items: { include: { menuItem: { select: { name: true, categoryId: true } }, modifiers: true } },
+          rounds: { orderBy: { roundNumber: 'asc' } },
+          table: true,
+        },
+      });
+    });
+
+    audit.record(req, audit.AUDIT_EVENTS.MODIFIER_VOID, {
+      resource: `order:${orderItem.orderId}`,
+      after: {
+        orderItemId: orderItem.id,
+        modifier: modRow.name,
+        removedCharge,
+        sentToKitchen: !!orderItem.roundId,
+      },
+    }).catch(() => {});
+
+    const io = req.app.get('io');
+    if (io && updatedOrder.locationId) {
+      io.to(`restaurant:${restaurantId}:location:${updatedOrder.locationId}:admins`)
+        .emit('order:updated', updatedOrder);
+    }
+
+    res.json(updatedOrder);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── GESTIÓN DE PAGOS Y CUENTAS ──
 
 // Al cobrar un dine-in, la mesa queda limpia y disponible inmediatamente.

@@ -14,6 +14,10 @@ const AUDIT_EVENTS = Object.freeze({
   // (el operador confirmó "agregar a la cuenta existente"). Hace rastreable
   // lo que antes era un merge silencioso por tableId.
   TAB_MERGE: 'TAB_MERGE',
+  // Se quitó un solo modificador/extra de un producto de una orden activa
+  // (p.ej. "quítale el tocino"). No requiere permiso especial (flujo
+  // operativo libre) pero queda registrado: quién, qué extra y cuánto descontó.
+  MODIFIER_VOID: 'MODIFIER_VOID',
 });
 
 const VALID_EVENTS = new Set(Object.values(AUDIT_EVENTS));
