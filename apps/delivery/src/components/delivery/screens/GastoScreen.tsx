@@ -20,6 +20,28 @@ const CATS = [
   { value: 'OTROS',         label: 'Otro gasto',        color: 'rgba(255,255,255,0.4)' },
 ];
 
+// Artículos que más compra el repartidor (derivados del histórico de gastos).
+// Se muestran como chips al elegir "Compras / Insumos" para que la descripción
+// quede consistente (antes se escribía a mano: "Piña ", "coca", "Verduras "…).
+const QUICK_ITEMS = [
+  'Verduras', 'Cilantro', 'Zanahoria', 'Jitomate', 'Jalapeños', 'Lechuga',
+  'Cebolla', 'Limón', 'Chile', 'Rábano', 'Papa', 'Elote', 'Harina', 'Aceite',
+  'Levadura', 'Huevo', 'Frijoles', 'Queso', 'Crema', 'Piña', 'Coca', 'Hielo',
+  'Jabón', 'Cloro', 'Servilletas', 'Papel taquero', 'Espátula',
+];
+
+// La descripción es una lista separada por comas; cada chip es un segmento.
+const splitItems = (desc: string) => desc.split(',').map(s => s.trim()).filter(Boolean);
+const descHasItem = (desc: string, item: string) =>
+  splitItems(desc).some(s => s.toLowerCase() === item.toLowerCase());
+const toggleItem = (desc: string, item: string) => {
+  const parts = splitItems(desc);
+  const idx = parts.findIndex(s => s.toLowerCase() === item.toLowerCase());
+  if (idx >= 0) parts.splice(idx, 1);
+  else parts.push(item);
+  return parts.join(', ');
+};
+
 export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
   const [cat, setCat]     = useState('');
   const [amount, setAmount] = useState('');
@@ -88,6 +110,27 @@ export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
               }} />
           </div>
         </div>
+
+        {/* Artículos frecuentes — solo para Compras / Insumos */}
+        {cat === 'COMPRAS' && (
+          <div style={S.card}>
+            <div style={S.sectionLabel}>Artículos frecuentes</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {QUICK_ITEMS.map(item => {
+                const active = descHasItem(desc, item);
+                return (
+                  <button key={item} onClick={() => setDesc(toggleItem(desc, item))} style={{
+                    padding: '8px 14px', borderRadius: 999, cursor: 'pointer',
+                    border: `1px solid ${active ? '#88D66C45' : C.border}`,
+                    background: active ? '#88D66C18' : C.surf2,
+                    color: active ? '#88D66C' : C.textDim,
+                    fontSize: 12.5, fontWeight: 600, fontFamily: C.fontBody, transition: 'all 0.15s',
+                  }}>{item}</button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Descripción */}
         <div style={S.card}>
