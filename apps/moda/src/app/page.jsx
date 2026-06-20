@@ -4,6 +4,7 @@ import * as Retail from "@/lib/retail";
 import { getApiUrl, setApiUrl } from "@/lib/config";
 import { getTenant, setTenant } from "@/lib/tenant";
 import { getToken } from "@/lib/token-vault";
+import { buildReceipt, buildLabel, printEscpos, getPrinterConfig, setPrinterIp } from "@/lib/printer";
 
 /* ---------------- icons (lucide paths) ---------------- */
 function Icon({ n, s = 18, c = "currentColor", sw = 1.9, cls = "" }) {
@@ -353,7 +354,18 @@ function Dash(){ return <div className="border-t border-dashed border-ink-400 my
 function RcLine({l,r}){ return <div className="flex justify-between gap-2"><span className="text-ink-600">{l}</span><span>{r}</span></div>; }
 
 function ReceiptModal({ sale, onClose }) {
+  const data = useData();
   const iva = Math.round((sale.subtotal - (sale.desc||0)) * 0.16 * 100)/100;
+  const [ip,setIp]=useState(""); const [status,setStatus]=useState("");
+  useEffect(()=>{ setIp(getPrinterConfig().ip||""); },[]);
+  const doPrint=async()=>{
+    if(ip.trim()) setPrinterIp(ip.trim());
+    setStatus("Imprimiendo…");
+    const escpos=buildReceipt({ folio:sale.folio, items:sale.items, subtotal:sale.subtotal, desc:sale.desc, total:sale.total, method:sale.method, cashier:(data.session&&data.session.name)||"" });
+    const res=await printEscpos(escpos);
+    if(res.ok) setStatus("Enviado a la impresora ✓");
+    else if(res.channel==="web"){ if(window.print) window.print(); setStatus("Sin impresora nativa — impresión del sistema"); }
+    else setStatus("Error: "+(res.error||"revisa la IP")); };
   return (<Modal title="Vista previa del recibo" onClose={onClose}>
     <div className="flex gap-6 items-start">
       <div className="mx-auto w-[290px] bg-card border border-line rounded-md px-5 py-5 font-mono text-[11px] text-ink-900 leading-relaxed shadow-sm">
@@ -383,9 +395,11 @@ function ReceiptModal({ sale, onClose }) {
         <div className="text-center mt-3 text-[10px] leading-snug">¡Gracias por tu compra!<br/>Cambios en 30 días con ticket</div>
       </div>
       <div className="w-44 shrink-0 self-center space-y-3">
-        <div className="text-[12px] text-ink-500">Impresora: <span className="text-ink-900 font-medium">EPSON TM-T20III</span></div>
-        <div className="text-[12px] text-ink-500">Ancho de papel: <span className="text-ink-900 font-medium">80 mm</span></div>
-        <PrimaryBtn className="w-full" onClick={()=>window.print&&window.print()}><Icon n="printer" s={16}/>Imprimir recibo</PrimaryBtn>
+        <div className="text-[12px] text-ink-500">Impresora térmica 80 mm · ESC/POS</div>
+        <div><div className="text-[11px] text-ink-500 mb-1">IP de la impresora</div>
+          <input value={ip} onChange={e=>setIp(e.target.value)} placeholder="192.168.1.50" className="w-full h-9 rounded-lg border border-line bg-surf px-3 text-[12px] tnum outline-none focus:border-brand-500"/></div>
+        <PrimaryBtn className="w-full" onClick={doPrint}><Icon n="printer" s={16}/>Imprimir recibo</PrimaryBtn>
+        {status && <div className="text-[11px] text-ink-500 text-center">{status}</div>}
         <GhostBtn className="w-full" onClick={onClose}>Cerrar</GhostBtn>
       </div>
     </div></Modal>);
@@ -394,6 +408,16 @@ function ReceiptModal({ sale, onClose }) {
 function LabelModal({ sku, onClose }) {
   const [qty,setQty]=useState(1);
   const code = sku.barcode || sku.sku;
+  const [ip,setIp]=useState(""); const [status,setStatus]=useState("");
+  useEffect(()=>{ setIp(getPrinterConfig().ip||""); },[]);
+  const doPrint=async()=>{
+    if(ip.trim()) setPrinterIp(ip.trim());
+    setStatus("Imprimiendo…");
+    const escpos=buildLabel({ name:sku.name, color:sku.color, size:sku.size, price:sku.price, code, sku:sku.sku }, qty);
+    const res=await printEscpos(escpos);
+    if(res.ok) setStatus("Enviado a la impresora ✓");
+    else if(res.channel==="web"){ if(window.print) window.print(); setStatus("Sin impresora nativa — impresión del sistema"); }
+    else setStatus("Error: "+(res.error||"revisa la IP")); };
   return (<Modal title="Etiqueta de código de barras" onClose={onClose}>
     <div className="flex gap-6 items-start">
       <div className="mx-auto">
@@ -410,9 +434,10 @@ function LabelModal({ sku, onClose }) {
         <Fld label="Cantidad de etiquetas">
           <div className="flex items-center justify-between h-10 px-2 rounded-lg border border-line"><button onClick={()=>setQty(Math.max(1,qty-1))} className="w-7 h-7 grid place-items-center text-ink-400"><Icon n="minus" s={14}/></button><span className="tnum">{qty}</span><button onClick={()=>setQty(qty+1)} className="w-7 h-7 grid place-items-center text-brand-600"><Icon n="plus" s={14}/></button></div>
         </Fld>
-        <div className="text-[12px] text-ink-500">Impresora: <span className="text-ink-900 font-medium">Zebra ZD220</span></div>
-        <div className="text-[12px] text-ink-500">Formato: <span className="text-ink-900 font-medium">50 x 30 mm</span></div>
-        <PrimaryBtn className="w-full" onClick={()=>window.print&&window.print()}><Icon n="printer" s={16}/>Imprimir {qty} etiqueta{qty>1?"s":""}</PrimaryBtn>
+        <div><div className="text-[11px] text-ink-500 mb-1">IP de la impresora</div>
+          <input value={ip} onChange={e=>setIp(e.target.value)} placeholder="192.168.1.50" className="w-full h-9 rounded-lg border border-line bg-surf px-3 text-[12px] tnum outline-none focus:border-brand-500"/></div>
+        <PrimaryBtn className="w-full" onClick={doPrint}><Icon n="printer" s={16}/>Imprimir {qty} etiqueta{qty>1?"s":""}</PrimaryBtn>
+        {status && <div className="text-[11px] text-ink-500 text-center">{status}</div>}
         <GhostBtn className="w-full" onClick={onClose}>Cerrar</GhostBtn>
       </div>
     </div></Modal>);
