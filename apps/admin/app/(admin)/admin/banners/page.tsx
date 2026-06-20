@@ -120,7 +120,8 @@ export default function BannersPage() {
     try {
       const fd = new FormData();
       fd.append("image", file);
-      const { data } = await api.post("/api/upload/image", fd, {
+      // mode=banner → Cloudinary guarda en 16:9 nativo (no cuadrado).
+      const { data } = await api.post("/api/upload/image?mode=banner", fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setForm((p) => ({ ...p, imageUrl: data.url }));

@@ -18,10 +18,19 @@ const upload  = multer({
   },
 });
 
-async function uploadImage(buffer, folder = 'menu') {
+// Transformaciones de subida por tipo de imagen. Productos/logos van cuadrados
+// (800x800); los banners en 16:9 nativo para no perder los lados ni el tope al
+// recortar después en el render. Cambiar 'default' afecta a TODO el catálogo.
+const UPLOAD_TRANSFORMS = {
+  default: [{ width: 800, height: 800, crop: 'fill', quality: 'auto' }],
+  banner:  [{ width: 1280, height: 720, crop: 'fill', quality: 'auto' }],
+};
+
+async function uploadImage(buffer, folder = 'menu', mode = 'default') {
+  const transformation = UPLOAD_TRANSFORMS[mode] || UPLOAD_TRANSFORMS.default;
   return new Promise((resolve, reject) => {
     cloudinary.uploader.upload_stream(
-      { folder: `master-burgers/${folder}`, transformation: [{ width: 800, height: 800, crop: 'fill', quality: 'auto' }] },
+      { folder: `master-burgers/${folder}`, transformation },
       (error, result) => {
         if (error) reject(error);
         else resolve(result.secure_url);
