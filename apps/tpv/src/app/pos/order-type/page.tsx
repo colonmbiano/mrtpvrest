@@ -696,6 +696,22 @@ export default function OrderTypePage() {
   }));
 
   const handlePickType = (type: ExtendedOrderType) => {
+    // RETOMAR VENTA SIN TERMINAR (auto-resume). Si el ticket activo ya trae
+    // productos, el cajero NO está empezando: está volviendo a una venta que
+    // dejó a medias (se salió por error, se bloqueó la pantalla, recargó la
+    // app…). El borrador vive en localStorage (tpv-tickets-draft) pero hasta
+    // ahora tocar un tipo de orden lo vaciaba (updateTicket({ items: [] })),
+    // y eso se vivía como "metí la orden y al salirme no se guardó". En ese
+    // caso lo dejamos justo donde iba, sin tocar items/cliente/type ni la
+    // orden activa (para no romper una ronda en curso sobre una cuenta ya
+    // abierta). Para una venta NUEVA real, primero se vacía el carrito (botón
+    // existente con confirmación) → items=[] → cae al flujo limpio de abajo.
+    const active = useTicketStore.getState().getActiveTicket();
+    if (active.items.length > 0) {
+      router.replace("/pos/menu");
+      return;
+    }
+
     if (type === "DINE_IN") {
       // Venta nueva: arrancar el ticket en limpio (sin items/datos de la
       // venta anterior) Y soltar cualquier orden activa heredada. Antes NO se
