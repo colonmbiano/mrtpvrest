@@ -230,6 +230,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     getActiveTicket,
     changeItemQty,
     clearActiveItems,
+    removeItem,
     updateTicket,
     setItemNotes,
     setEditingIndex,
@@ -1183,6 +1184,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               onIncrease={() => changeItemQty(idx, 1)}
               onDecrease={() => changeItemQty(idx, -1)}
               onUpdateNotes={(n) => setItemNotes(idx, n)}
+              onRemove={() => removeItem(idx)}
               onEdit={isConfigurableItem(item) ? () => setEditingIndex(idx) : undefined}
             />
           ))

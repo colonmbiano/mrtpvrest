@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef } from "react";
-import { X, Plus, Minus, MessageSquare, Check, Pencil } from "lucide-react";
+import { X, Plus, Minus, MessageSquare, Check, Pencil, Trash2 } from "lucide-react";
 
 interface TicketLineProps {
   id?: string;
@@ -83,9 +83,97 @@ const TicketLine: React.FC<TicketLineProps> = ({
     onUpdateNotes(draft);
     setEditing(false);
   };
-    
+
+  // ── Swipe-to-reveal ──────────────────────────────────────────────────────
+  // Deslizar la línea a la izquierda revela acciones rápidas (Editar/Borrar),
+  // estilo iOS. Es un atajo además de los botones inline (✕ / lápiz), que se
+  // quedan como affordance visible porque el gesto no es descubrible solo.
+  // Solo se arman las acciones que el consumidor realmente pasó.
+  const ACTION_W = 68;
+  const hasEdit = !!onEdit;
+  const hasDelete = !!onRemove;
+  const revealWidth = (hasEdit ? ACTION_W : 0) + (hasDelete ? ACTION_W : 0);
+
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  // Estado mutable del gesto en curso. `axis` bloquea la dirección en el primer
+  // movimiento: 'y' = scroll vertical de la lista (no interferimos); 'x' =
+  // swipe horizontal (traducimos la línea).
+  const swipe = useRef<{ x: number; y: number; base: number; axis: "" | "x" | "y" }>({
+    x: 0, y: 0, base: 0, axis: "",
+  });
+
+  const closeSwipe = () => setDragX(0);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (revealWidth === 0) return;
+    const t = e.touches[0]!;
+    swipe.current = { x: t.clientX, y: t.clientY, base: dragX, axis: "" };
+    setDragging(true);
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (revealWidth === 0) return;
+    const t = e.touches[0]!;
+    const dx = t.clientX - swipe.current.x;
+    const dy = t.clientY - swipe.current.y;
+    if (swipe.current.axis === "") {
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      swipe.current.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    }
+    if (swipe.current.axis !== "x") return; // scroll vertical: no estorbar
+    setDragX(Math.max(-revealWidth, Math.min(0, swipe.current.base + dx)));
+  };
+  const onTouchEnd = () => {
+    setDragging(false);
+    if (swipe.current.axis !== "x") return;
+    // Snap: si pasó de la mitad queda abierto; si no, se cierra.
+    setDragX((x) => (x <= -revealWidth / 2 ? -revealWidth : 0));
+  };
+
   return (
-    <div className="group flex items-center gap-3 py-2.5 border-b border-white/5 last:border-0">
+    <div className="relative overflow-hidden border-b border-white/5 last:border-0">
+      {/* Acciones reveladas al deslizar a la izquierda. */}
+      {revealWidth > 0 && (
+        <div className="absolute inset-y-0 right-0 flex" aria-hidden={dragX === 0}>
+          {hasEdit && (
+            <button
+              type="button"
+              onClick={() => { onEdit?.(); closeSwipe(); }}
+              style={{ width: ACTION_W }}
+              className="flex flex-col items-center justify-center gap-0.5 bg-[var(--brand)] text-[var(--brand-fg)] active:opacity-80"
+              aria-label="Editar producto"
+            >
+              <Pencil size={16} strokeWidth={2.5} />
+              <span className="text-[9px] font-bold uppercase tracking-wider">Editar</span>
+            </button>
+          )}
+          {hasDelete && (
+            <button
+              type="button"
+              onClick={() => { onRemove?.(); closeSwipe(); }}
+              style={{ width: ACTION_W }}
+              className="flex flex-col items-center justify-center gap-0.5 bg-red-600 text-white active:opacity-80"
+              aria-label="Eliminar producto"
+            >
+              <Trash2 size={16} strokeWidth={2.5} />
+              <span className="text-[9px] font-bold uppercase tracking-wider">Borrar</span>
+            </button>
+          )}
+        </div>
+      )}
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          transform: `translateX(${dragX}px)`,
+          transition: dragging ? "none" : "transform 0.18s ease-out",
+          // pan-y: el scroll vertical de la lista lo maneja el navegador; el
+          // movimiento horizontal nos lo cede a nosotros (sin jank ni scroll-x).
+          touchAction: "pan-y",
+        }}
+        className="group relative flex items-center gap-3 bg-[var(--bg)] py-2.5"
+      >
       {/* Línea por peso: badge de kg (sin stepper). Por unidad: stepper. */}
       {isWeight ? (
         <div className="flex w-12 flex-col items-center self-center rounded-lg border border-white/5 bg-[var(--surface-1)] px-1 py-1.5 shrink-0">
@@ -235,6 +323,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
             </span>
           </button>
         ) : null}
+      </div>
       </div>
     </div>
   );
