@@ -41,7 +41,21 @@ const FALLBACK_CATEGORIES: CategoryLite[] = PRIORITY_CATEGORIES.map((name) => ({
 // pintamos al instante lo último cacheado y revalidamos en segundo plano.
 const CATALOG_CACHE_KEY = "tpv-catalog-cache-v1";
 
-type CatalogCache = { categories: CategoryLite[]; products: Product[] };
+// El catálogo casi no cambia durante un turno, pero el cajero entra/sale del
+// menú decenas de veces (una por pedido). Revalidar en CADA entrada = 2
+// llamadas a Railway repetidas sin necesidad. Con este TTL solo revalidamos si
+// el cache dejó de estar "fresco"; los cambios locales (disponibilidad/
+// favorito) se escriben al cache al instante (write-through) para no quedar
+// stale dentro de la ventana.
+const CATALOG_TTL_MS = 5 * 60 * 1000;
+
+type CatalogCache = {
+  categories: CategoryLite[];
+  products: Product[];
+  // Epoch ms del último fetch exitoso. Ausente en caches viejos → se trata como
+  // stale (revalida una vez) y al escribir queda con timestamp.
+  fetchedAt?: number;
+};
 
 function readCatalogCache(): CatalogCache | null {
   if (typeof window === "undefined") return null;
@@ -63,6 +77,19 @@ function writeCatalogCache(data: CatalogCache): void {
   } catch {
     /* cuota llena / modo privado: la caché es best-effort */
   }
+}
+
+// Escribe un cambio puntual (disponibilidad/favorito) directo al cache, sin
+// tocar el resto ni `fetchedAt` (no queremos reiniciar el TTL por un toggle).
+// Así, dentro de la ventana del TTL, el siguiente montaje pinta el estado
+// correcto en vez de revertir el toggle a lo último que trajo la red.
+function patchCatalogCacheProduct(id: string, patch: Partial<Product>): void {
+  const cache = readCatalogCache();
+  if (!cache) return;
+  writeCatalogCache({
+    ...cache,
+    products: cache.products.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+  });
 }
 
 export default function CatalogPage() {
@@ -100,7 +127,17 @@ export default function CatalogPage() {
       });
     }
 
-    // 2. Revalida en segundo plano y actualiza la caché.
+    // 2. Revalida en segundo plano SOLO si el cache dejó de estar fresco. El
+    //    cajero entra/sale del menú decenas de veces por turno; sin este gate
+    //    cada entrada disparaba 2 llamadas a Railway aunque el menú no cambie.
+    const isFresh =
+      !!cached?.fetchedAt && Date.now() - cached.fetchedAt < CATALOG_TTL_MS;
+    if (isFresh) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const fetchData = async () => {
       try {
         const [catsRes, itemsRes] = await Promise.allSettled([
@@ -122,7 +159,7 @@ export default function CatalogPage() {
         }
         // Solo cacheamos si al menos una respuesta llegó bien (no pisar con vacío).
         if (catsRes.status === "fulfilled" || itemsRes.status === "fulfilled") {
-          writeCatalogCache({ categories: nextCats, products: nextItems });
+          writeCatalogCache({ categories: nextCats, products: nextItems, fetchedAt: Date.now() });
         }
       } catch (error) {
         console.error("Error loading POS catalog:", error);
@@ -156,9 +193,20 @@ export default function CatalogPage() {
     return counts;
   }, [products]);
 
+  // Acceso rápido a los productos más vendidos: el cajero marca sus tops como
+  // favorito (long-press → ⭐). isPopular cuenta también por si el backend lo
+  // setea. Una pestaña fija al frente evita el scroll/búsqueda en cada pedido.
+  const favoritesCount = useMemo(
+    () => products.filter((p) => p.isFavorite || p.isPopular).length,
+    [products],
+  );
+
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim();
     if (query) return fuzzyFilter(products, query);
+    if (activeCat === "favorites") {
+      return products.filter((p) => p.isFavorite || p.isPopular);
+    }
     if (activeCat === "all") return products;
 
     const selected = visibleCategories.find((cat) => cat.id === activeCat);
@@ -298,6 +346,9 @@ export default function CatalogPage() {
     );
     try {
       await api.put(`/api/menu/items/${id}`, { isAvailable: next });
+      // Write-through al cache: con el TTL del catálogo, sin esto el toggle se
+      // revertía visualmente al re-entrar al menú dentro de la ventana fresca.
+      patchCatalogCacheProduct(id, { isAvailable: next });
     } catch {
       setProducts((prev) =>
         prev.map((product) => (product.id === id ? ({ ...product, isAvailable: !next } as Product) : product)),
@@ -313,6 +364,7 @@ export default function CatalogPage() {
     );
     try {
       await api.patch(`/api/menu/items/${id}/favorite`, { isFavorite: next });
+      patchCatalogCacheProduct(id, { isFavorite: next });
     } catch {
       setProducts((prev) =>
         prev.map((product) => (product.id === id ? { ...product, isFavorite: !next } : product)),
@@ -343,6 +395,8 @@ export default function CatalogPage() {
             title={
               isSearching
                 ? "Resultados"
+                : activeCat === "favorites"
+                ? "Favoritos"
                 : selectedCategory?.name || "Todos los productos"
             }
             onBack={goToCategories}
@@ -352,6 +406,7 @@ export default function CatalogPage() {
         <CategoryBar
           categories={visibleCategories}
           counts={categoryCounts}
+          favoritesCount={favoritesCount}
           activeId={isSearching ? "search" : activeCat}
           onSelect={(id) => {
             setConfigProduct(null);
@@ -381,6 +436,7 @@ export default function CatalogPage() {
           <CategoryGrid
             categories={visibleCategories}
             counts={categoryCounts}
+            favoritesCount={favoritesCount}
             density={density}
             onSelect={(id) => {
               setConfigProduct(null);
@@ -520,11 +576,13 @@ function WeightEntryModal({
 function CategoryBar({
   categories,
   counts,
+  favoritesCount,
   activeId,
   onSelect,
 }: {
   categories: CategoryLite[];
   counts: Record<string, number>;
+  favoritesCount: number;
   activeId: string;
   onSelect: (id: string) => void;
 }) {
@@ -538,6 +596,15 @@ function CategoryBar({
           tone="neutral"
           onClick={() => onSelect("all")}
         />
+        {favoritesCount > 0 && (
+          <CategoryButton
+            label="★ Favoritos"
+            count={favoritesCount}
+            active={activeId === "favorites"}
+            tone="neutral"
+            onClick={() => onSelect("favorites")}
+          />
+        )}
         {categories.map((category) => (
           <CategoryButton
             key={category.id}
@@ -582,11 +649,13 @@ function DrilldownHeader({
 function CategoryGrid({
   categories,
   counts,
+  favoritesCount,
   density,
   onSelect,
 }: {
   categories: CategoryLite[];
   counts: Record<string, number>;
+  favoritesCount: number;
   density: CatalogDensity;
   onSelect: (id: string) => void;
 }) {
@@ -605,6 +674,22 @@ function CategoryGrid({
           gridAutoRows: `${rowHeight}px`,
         }}
       >
+        {favoritesCount > 0 && (
+          <button
+            type="button"
+            onClick={() => onSelect("favorites")}
+            className="relative flex h-full flex-col justify-between overflow-hidden rounded-lg border-2 border-bd bg-surf-1 p-3 text-left text-tx-pri shadow-sm active:bg-surf-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+          >
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-amber-400" />
+            <span className="line-clamp-2 pt-1 text-[17px] font-black leading-tight">
+              ★ Favoritos
+            </span>
+            <span className="text-[12px] font-semibold uppercase opacity-60">
+              {itemsLabel(favoritesCount)}
+            </span>
+          </button>
+        )}
         {categories.map((category) => {
           const tone = categoryTone(category.name);
           const palette = {
