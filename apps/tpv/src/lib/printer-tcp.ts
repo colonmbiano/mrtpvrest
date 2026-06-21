@@ -526,6 +526,15 @@ export interface ReceiptInput {
   promoDiscount?: number | null;
   tax?: number | null;
   tip?: number | null;
+  // Costo de envío (DELIVERY). Se imprime como renglón "Envío:" para que los
+  // productos + envío − descuento cuadren con el TOTAL a la vista. El backend
+  // ya lo sumó dentro de `total` (ver store.routes/orders.routes), aquí solo
+  // se DESGLOSA — no se vuelve a sumar.
+  deliveryFee?: number | null;
+  // ¿El envío causa IVA? Default true (envío con IVA incluido, igual que el
+  // resto del ticket). Si false, el envío se excluye de la base gravable del
+  // desglose de IVA. Configurable desde Tickets (admin).
+  deliveryFeeTaxed?: boolean;
   total: number;
   paymentMethod?: string | null;
   businessName?: string | null;
@@ -1167,13 +1176,26 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   d += sep;
 
   // ── 4. TOTALES (IVA incluido: subtotal/iva se desglosan del total) ───────
+  // Los renglones de arriba ya suman el importe real de cada producto. Aquí se
+  // muestran los ajustes (promo/descuento/envío) para que el cliente pueda seguir
+  // la aritmética: productos − promo − descuento + envío = TOTAL.
   if (input.promoDiscount && input.promoDiscount > 0) {
     d += row("Promo:", "-" + fmtMoney(input.promoDiscount), lw);
   }
   if (input.discount && input.discount > 0) {
     d += row("Descuento:", "-" + fmtMoney(input.discount), lw);
   }
-  const { subtotal: subSinIva, iva } = ivaBreakdown(input.total);
+  const deliveryFee = Number(input.deliveryFee || 0);
+  if (deliveryFee > 0) {
+    d += row("Envío:", "+" + fmtMoney(deliveryFee), lw);
+  }
+  // Base gravable del IVA. Default: envío con IVA incluido (se desglosa del
+  // total completo). Si el envío NO causa IVA, se excluye de la base y se
+  // reincorpora al subtotal mostrado.
+  const deliveryTaxed = input.deliveryFeeTaxed !== false;
+  const taxableTotal = deliveryTaxed ? input.total : round2(input.total - deliveryFee);
+  const { subtotal: taxBase, iva } = ivaBreakdown(taxableTotal);
+  const subSinIva = deliveryTaxed ? taxBase : round2(taxBase + deliveryFee);
   d += boldOn + row("Subtotal:", fmtMoney(subSinIva), lw) + boldOff;
   d += row("IVA (16% incl.):", fmtMoney(iva), lw);
   if (input.tip && input.tip > 0) d += row("Propina:", fmtMoney(input.tip), lw);
@@ -1744,6 +1766,10 @@ export async function printSplitReceipts(
       ...input,
       items: seat.items,
       subtotal: seat.subtotal,
+      // El envío es un cargo de la orden, no del comensal: no se prorratea por
+      // asiento. Se anula para no imprimir un renglón "Envío" que descuadre el
+      // total por asiento (los pedidos a domicilio no se dividen por comensal).
+      deliveryFee: 0,
       total:
         seat.subtotal -
         (input.discount || 0) -
@@ -1800,6 +1826,7 @@ export async function printEqualSplitReceipts(
   const promoDiscountCents = Math.round((input.promoDiscount || 0) * 100);
   const taxCents = Math.round((input.tax || 0) * 100);
   const tipCents = Math.round((input.tip || 0) * 100);
+  const deliveryFeeCents = Math.round((input.deliveryFee || 0) * 100);
 
   // División entera por partes y guardado del residuo para sumar al
   // último ticket — así la suma de los N tickets coincide exactamente
@@ -1825,6 +1852,7 @@ export async function printEqualSplitReceipts(
       promoDiscount: round2(splitInt(promoDiscountCents, i) / 100),
       tax: round2(splitInt(taxCents, i) / 100),
       tip: round2(splitInt(tipCents, i) / 100),
+      deliveryFee: round2(splitInt(deliveryFeeCents, i) / 100),
       total: round2(splitInt(totalCents, i) / 100),
       customerName: `Parte ${i + 1} de ${safeParts}`,
     };

@@ -31,6 +31,8 @@ interface TicketConfig {
   showInvoiceQr: boolean;
   invoiceUrl: string;
   invoiceFolioPrefix: string;
+  // Envío (DELIVERY): ¿el costo de envío causa IVA? Default true.
+  deliveryFeeTaxed: boolean;
   // Bloque de QR de lealtad al pie del recibo: el cliente lo escanea para
   // registrarse en la tienda en línea y acumular puntos.
   showLoyaltyQr: boolean;
@@ -75,6 +77,7 @@ const EMPTY: TicketConfig = {
   businessName: "", header: "", subheader: "", footer: "Gracias por su preferencia",
   showLogo: true, logoUrl: null, showAddress: true, address: "", phone: "",
   businessType: "", rfc: "", showInvoiceQr: false, invoiceUrl: "", invoiceFolioPrefix: "",
+  deliveryFeeTaxed: true,
   showLoyaltyQr: false, loyaltyUrl: "",
   paperWidth: "80mm", fontFamily: "monospace", fontSize: "medium",
   lineSpacing: "normal", lineWeight: "normal",
@@ -208,6 +211,7 @@ export default function TicketFormatTab() {
               <Toggle label="Mostrar dirección" checked={cfg.showAddress} onChange={(v) => setCfg({ ...cfg, showAddress: v })} />
               <Toggle label="Puntos de lealtad" checked={cfg.showPoints} onChange={(v) => setCfg({ ...cfg, showPoints: v })} />
               <Toggle label="Sugerir propinas" checked={cfg.showTip} onChange={(v) => setCfg({ ...cfg, showTip: v })} />
+              <Toggle label="Envío con IVA incluido" checked={cfg.deliveryFeeTaxed} onChange={(v) => setCfg({ ...cfg, deliveryFeeTaxed: v })} />
             </div>
 
             <SectionLabel>Factura (QR al pie del recibo)</SectionLabel>

@@ -68,6 +68,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const roundsRevision = useActiveOrderStore((s) => s.roundsRevision);
 
   const [previousItems, setPreviousItems] = useState<any[]>([]);
+  // Envío de la orden cargada (DELIVERY). El backend lo suma al total; la
+  // pantalla también debe sumarlo para no mentir sobre lo que se cobra. Se
+  // sincroniza junto a previousItems (misma fuente: la orden del backend).
+  const [orderDeliveryFee, setOrderDeliveryFee] = useState(0);
   // Nombre/etiqueta de la cuenta ("Renombrar" → Order.ticketName). Se hidrata
   // del pedido activo y se muestra en el header para que el rename sea visible
   // en la pantalla de trabajo (no solo en Tickets abiertos).
@@ -95,6 +99,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       if (cancelled) return;
       if (!activeOrderId) {
         setPreviousItems([]);
+        setOrderDeliveryFee(0);
         setActiveTicketName(null);
         return;
       }
@@ -105,6 +110,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           // Combinamos todos los items de todas las rondas como historial
           if (!cancelled) {
             setPreviousItems(data.items || []);
+            setOrderDeliveryFee(Number(data.deliveryFee || 0));
             setActiveTicketName(data.ticketName || null);
           }
         } catch (err) {
@@ -130,6 +136,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     try {
       const { data } = await api.get(`/api/orders/${activeOrderId}`);
       setPreviousItems(data.items || []);
+      setOrderDeliveryFee(Number(data.deliveryFee || 0));
     } catch (err) {
       console.error("Error al recargar la orden:", err);
     }
@@ -306,11 +313,16 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
   const currentSubtotal = ticket.items.reduce((acc, item) => acc + item.subtotal, 0);
   const subtotal = currentSubtotal + historySubtotal;
-  const total = subtotal - ticket.discount;
-  // Desglose fiscal MX: precios mostrados llevan IVA incluido. Subtotal
-  // sin IVA = subtotal / 1.16; IVA = diferencia.
-  const subtotalSinIva = subtotal / (1 + IVA_RATE);
-  const ivaAmount = subtotal - subtotalSinIva;
+  // El envío (DELIVERY) se suma al total igual que en el backend/recibo, para
+  // que la pantalla refleje EXACTAMENTE lo que se cobra. Solo aplica si hay
+  // orden cargada con items (si no, no hay envío que mostrar).
+  const deliveryFee = previousItems.length > 0 ? orderDeliveryFee : 0;
+  const total = subtotal - ticket.discount + deliveryFee;
+  // Desglose fiscal MX: precios mostrados llevan IVA incluido. La base se toma
+  // del monto realmente cobrado (total, ya con descuento y envío), igual que el
+  // recibo (ivaBreakdown(total)); subtotal sin IVA = total / 1.16.
+  const subtotalSinIva = total / (1 + IVA_RATE);
+  const ivaAmount = total - subtotalSinIva;
 
   // ── Doble pantalla (pantalla de cliente) ──────────────────────────────
   // Empuja el carrito en vivo al segundo monitor. No-op si está apagado.
@@ -488,7 +500,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         );
         clearActiveItems();
         clearActiveOrder();
-        setPreviousItems([]);
+        setPreviousItems([]); setOrderDeliveryFee(0);
         updateTicket({
           tableId: "",
           tableName: "",
@@ -521,7 +533,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         queued = res.queued;
         order = res.data;
         // Sincronizar historial local
-        if (!queued) setPreviousItems(order?.items || []);
+        if (!queued) { setPreviousItems(order?.items || []); setOrderDeliveryFee(Number(order?.deliveryFee || 0)); }
         // Persistir también cualquier edición de los datos del cliente sobre
         // la orden ya existente (el POST de items no los incluye). Best-effort:
         // los productos ya quedaron guardados, así que un fallo aquí solo se
@@ -578,7 +590,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           queued = res.queued;
           order = res.data;
           setActiveOrder(ex.id, ticket.tableId, ex.orderNumber ?? null);
-          if (!queued) setPreviousItems(order?.items || []);
+          if (!queued) { setPreviousItems(order?.items || []); setOrderDeliveryFee(Number(order?.deliveryFee || 0)); }
         } else {
           if (!res.ok) throw new Error(res.error || "fallo desconocido");
           queued = res.queued;
@@ -587,7 +599,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           if (order?.id && ticket.tableId) {
             setActiveOrder(order.id, ticket.tableId, order.orderNumber ?? null);
           }
-          if (!queued) setPreviousItems(order?.items || []);
+          if (!queued) { setPreviousItems(order?.items || []); setOrderDeliveryFee(Number(order?.deliveryFee || 0)); }
         }
       }
 
@@ -637,7 +649,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
       clearActiveItems();
       clearActiveOrder();
-      setPreviousItems([]);
+      setPreviousItems([]); setOrderDeliveryFee(0);
       updateTicket({
         tableId: "",
         tableName: "",
@@ -893,11 +905,18 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       const srvTotal = Number(order?.total);
       const srvDiscount = Number(order?.discount);
       const srvPromo = Number(order?.promoDiscount);
+      // El envío también lo trae el servidor en el total; se desglosa aparte en
+      // el recibo. Misma fuente que el total para que la aritmética cuadre.
+      const srvDelivery = Number(order?.deliveryFee);
       const useServerTotals = !queued && order != null && Number.isFinite(srvTotal);
       const totals = {
         subtotal: useServerTotals && Number.isFinite(srvSubtotal) ? srvSubtotal : subtotal,
         discount: useServerTotals && Number.isFinite(srvDiscount) ? srvDiscount : ticket.discount,
         promoDiscount: useServerTotals && Number.isFinite(srvPromo) ? srvPromo : 0,
+        // El envío ya está dentro del total (server o local). Se pasa aparte
+        // para que el recibo lo DESGLOSE como renglón "Envío:" y ajuste la base
+        // de IVA — no se re-suma. Misma fuente que el total elegido.
+        deliveryFee: useServerTotals && Number.isFinite(srvDelivery) ? srvDelivery : deliveryFee,
         total: (useServerTotals ? srvTotal : total) + tipAmount,
         paymentMethod: method,
         tipPercent: tip?.percent ?? 0,
@@ -950,7 +969,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       // arranque en limpio (items, orden activa, rondas, cliente y descuento).
       clearActiveItems();
       clearActiveOrder();
-      setPreviousItems([]);
+      setPreviousItems([]); setOrderDeliveryFee(0);
       updateTicket({ name: "", address: "", phone: "", discount: 0 });
       setShowPayment(false);
 
@@ -1002,7 +1021,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     }
     clearActiveItems();
     clearActiveOrder();
-    setPreviousItems([]);
+    setPreviousItems([]); setOrderDeliveryFee(0);
     updateTicket({ name: "", phone: "", address: "", discount: 0 });
     hapticMedium();
   };
@@ -1239,6 +1258,16 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               </span>
               <span className="font-bold text-emerald-400 mono tabular-nums">
                 −${ticket.discount.toFixed(2)}
+              </span>
+            </div>
+          )}
+          {deliveryFee > 0 && (
+            <div className="flex justify-between items-baseline text-[11px]">
+              <span className="font-bold uppercase tracking-[0.15em] text-zinc-500">
+                Envío
+              </span>
+              <span className="font-bold text-zinc-300 mono tabular-nums">
+                +${deliveryFee.toFixed(2)}
               </span>
             </div>
           )}

@@ -1234,6 +1234,11 @@ model TicketConfig {
   invoiceUrl         String  @default("") // destino del QR (portal de facturación)
   invoiceFolioPrefix String  @default("")
 
+  // Envío (DELIVERY): ¿el costo de envío causa IVA? Si false, el recibo excluye
+  // el envío de la base gravable del desglose de IVA incluido. Default true
+  // (envío con IVA incluido, igual que el resto del ticket).
+  deliveryFeeTaxed Boolean @default(true)
+
   // QR de lealtad al pie del recibo: el cliente lo escanea para registrarse en
   // la tienda en línea y acumular puntos. loyaltyUrl = destino (tienda/registro).
   showLoyaltyQr Boolean @default(false)
