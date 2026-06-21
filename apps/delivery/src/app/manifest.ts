@@ -1,5 +1,8 @@
 import type { MetadataRoute } from "next";
 
+// Necesario para `output: export` (build Capacitor/APK): el manifest es estático.
+export const dynamic = "force-static";
+
 // Web App Manifest del repartidor (PWA instalable en iOS/Android).
 // Nota: iOS Safari ignora la mayoría de estos campos para "Añadir a inicio";
 // la configuración crítica de iOS vive en los meta de Apple en layout.tsx.
