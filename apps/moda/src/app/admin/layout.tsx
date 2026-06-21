@@ -8,17 +8,24 @@ export default function AdminRootLayout({ children }: { children: React.ReactNod
     <div className="moda-admin min-h-screen">
       <style>{`
         .moda-admin {
-          --iris-400:#5fe0a6; --iris-500:#34c988; --iris-600:#1f9d63;
-          --iris-soft:rgba(52,201,136,.14); --iris-glow:rgba(52,201,136,.32);
-          --brand-primary:var(--iris-500); --brand-secondary:var(--iris-400);
-          --bg:#07120d; --surf-1:#0d1a14; --surf-2:#12241b; --surf-3:#193024;
-          --bd-1:rgba(220,255,238,.09); --border:var(--bd-1);
+          /* Tema CLARO premium "retail" (Shopify/Stripe/Linear) — acento verde MODA+. */
+          --bg:#f6f8fa; --surf-1:#ffffff; --surf-2:#f1f5f9; --surf-3:#e9eef3;
+          --bd-1:#e2e8f0; --bd-2:#cbd5e1; --border:var(--bd-1);
           --surf:var(--surf-1); --surf2:var(--surf-2);
-          --tx-hi:#f3fbf6; --tx:var(--tx-hi); --tx-mut:#8fae9d; --tx-dim:#5f7e6e;
+          --tx-hi:#0f172a; --tx:#0f172a; --tx-mid:#334155; --tx-mut:#64748b; --tx-dim:#94a3b8;
           --text:var(--tx-hi); --muted:var(--tx-mut);
-          --ok:#34c988; --ok-soft:rgba(52,201,136,.14);
-          --warn:#f5b54a; --warn-soft:rgba(245,181,74,.14);
-          --err:#f0664d; --err-soft:rgba(240,102,77,.14);
+          --iris-400:#4ade80; --iris-500:#22c55e; --iris-600:#16a34a;
+          --iris-soft:#dcfce7; --iris-glow:rgba(34,197,94,.22);
+          --brand-primary:#22c55e; --brand-secondary:#4ade80; --brand-dark:#16a34a;
+          --ok:#16a34a; --ok-soft:#dcfce7;
+          --warn:#b45309; --warn-soft:#fef3c7;
+          --err:#dc2626; --err-soft:#fee2e2;
+          --info:#2563eb; --info-soft:#dbeafe;
+          --purple:#7c3aed; --purple-soft:#ede9fe;
+          /* Sidebar oscuro elegante (constante, independiente del cuerpo claro). */
+          --sidebar:#0f172a; --sidebar-soft:#111827; --sidebar-bd:rgba(255,255,255,.08);
+          --shadow-card:0 12px 36px rgba(15,23,42,.06);
+          --shadow-soft:0 8px 24px rgba(15,23,42,.045);
           background:var(--bg); color:var(--tx-hi);
           font-family: var(--font-dm-sans), "DM Sans", system-ui, sans-serif;
         }
