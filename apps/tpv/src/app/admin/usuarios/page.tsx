@@ -14,6 +14,7 @@ import {
   BadgePercent,
   RotateCcw,
   Users,
+  Eye,
 } from "lucide-react";
 import api from "@/lib/api";
 import { AdminScreen, AdminHeader, AdminTabs } from "@/components/admin/AdminScreen";
@@ -66,13 +67,20 @@ const SPECIAL_PERMS: {
     description: "Crear, editar o desactivar empleados.",
     icon: Users,
   },
+  {
+    key: "canViewExpectedCash",
+    label: "Ver efectivo esperado en el corte",
+    description: "Rompe el corte ciego: ve cuánto debería haber en caja.",
+    icon: Eye,
+  },
 ];
 
 type SpecialPermKey =
   | "canCancelItems"
   | "canApplyDiscounts"
   | "canReopenTables"
-  | "canManageUsers";
+  | "canManageUsers"
+  | "canViewExpectedCash";
 
 interface Employee {
   id: string;
@@ -94,6 +102,7 @@ interface Employee {
   canApplyDiscounts: boolean;
   canReopenTables: boolean;
   canManageUsers: boolean;
+  canViewExpectedCash: boolean;
 }
 
 const ROLE_STYLE: Record<string, { bg: string; text: string }> = {
@@ -414,6 +423,7 @@ function EmployeeModal({
     canApplyDiscounts: employee?.canApplyDiscounts ?? false,
     canReopenTables:   employee?.canReopenTables   ?? false,
     canManageUsers:    employee?.canManageUsers    ?? false,
+    canViewExpectedCash: employee?.canViewExpectedCash ?? false,
   });
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState("");
