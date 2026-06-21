@@ -593,28 +593,40 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         customerName: ticket.name ?? null,
       };
 
-      try {
-        const printResult = await printKitchenTickets(printers, {
-          ...ticketContext,
-          items: printItems,
-          config: kitchenConfig ?? undefined,
-        });
-        if (printResult.failed.length > 0) {
-          toast.warning(
-            `Pedido guardado, pero la comanda no imprimio: ${
-              printResult.failed[0]?.error || "No hay una impresora disponible"
-            }`,
-          );
-        } else {
-          toast.success(
-            `Comanda impresa en ${printResult.ok} impresora${printResult.ok === 1 ? "" : "s"}`,
-          );
+      // VELOCIDAD: la comanda de cocina NO debe bloquear el "Guardar". El pedido
+      // ya quedó persistido en el backend (POST de arriba); imprimir es un efecto
+      // secundario por LAN que puede tardar segundos —y hasta ~18s si una
+      // impresora está apagada/inalcanzable (timeout 6s × reintentos en
+      // printer-tcp)—. Antes se hacía `await` aquí, así que la pantalla se quedaba
+      // "guardando" hasta que la impresora respondiera. Lo disparamos en segundo
+      // plano: navegamos de inmediato y los toasts de éxito/fallo llegan cuando
+      // termine. El snapshot (printItems/ticketContext) ya se capturó arriba, así
+      // que limpiar el ticket y navegar no afecta lo que se imprime, y la promesa
+      // sobrevive al desmontaje del componente (printKitchenTickets es de módulo).
+      void (async () => {
+        try {
+          const printResult = await printKitchenTickets(printers, {
+            ...ticketContext,
+            items: printItems,
+            config: kitchenConfig ?? undefined,
+          });
+          if (printResult.failed.length > 0) {
+            toast.warning(
+              `Pedido guardado, pero la comanda no imprimio: ${
+                printResult.failed[0]?.error || "No hay una impresora disponible"
+              }`,
+            );
+          } else {
+            toast.success(
+              `Comanda impresa en ${printResult.ok} impresora${printResult.ok === 1 ? "" : "s"}`,
+            );
+          }
+        } catch (printError) {
+          const message =
+            printError instanceof Error ? printError.message : "Error de impresion";
+          toast.warning(`Pedido guardado, pero la comanda no imprimio: ${message}`);
         }
-      } catch (printError) {
-        const message =
-          printError instanceof Error ? printError.message : "Error de impresion";
-        toast.warning(`Pedido guardado, pero la comanda no imprimio: ${message}`);
-      }
+      })();
 
       clearActiveItems();
       clearActiveOrder();
