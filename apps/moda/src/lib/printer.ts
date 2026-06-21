@@ -90,7 +90,8 @@ export function setPrinterIp(ip: string, port?: number): void {
 }
 
 export function buildReceipt(sale: ReceiptInput, cfg = getPrinterConfig()): string {
-  const iva = Math.round((sale.subtotal - (sale.desc || 0)) * 0.16 * 100) / 100;
+  // IVA desglosado COMO INCLUIDO en el total (el precio de catálogo ya lo trae); informativo.
+  const iva = Math.round((sale.total - sale.total / 1.16) * 100) / 100;
   const now = new Date().toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" });
   let r = CMD.INIT + CMD.ALIGN_C;
   r += CMD.BOLD_ON + CMD.BIG + ascii(cfg.storeName) + "\n" + CMD.NORMAL + CMD.BOLD_OFF;
@@ -107,8 +108,8 @@ export function buildReceipt(sale: ReceiptInput, cfg = getPrinterConfig()): stri
   r += sep();
   r += row("Subtotal", money(sale.subtotal));
   if (sale.desc) r += row("Descuento", "-" + money(sale.desc));
-  r += row("IVA (16%)", money(iva));
   r += CMD.BOLD_ON + CMD.BIG + row("TOTAL", money(sale.total), 24) + CMD.NORMAL + CMD.BOLD_OFF;
+  r += row("IVA 16% incluido", money(iva));
   r += row(sale.method || "Efectivo", money(sale.total));
   r += sep();
   r += CMD.ALIGN_C + code128(sale.folio) + "\n" + sale.folio + "\n\n";

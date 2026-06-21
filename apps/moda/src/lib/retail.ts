@@ -297,12 +297,37 @@ export function toPaymentMethod(label: string): SalePaymentInput["method"] {
 }
 
 // ── Caja / turno ─────────────────────────────────────────────────────────────
+export interface CashMovement {
+  id?: string;
+  type: "CASH_IN" | "CASH_OUT" | "EXPENSE";
+  amount: number | string;
+  reason?: string | null;
+  category?: string | null;
+  createdAt?: string;
+}
 export interface CashShift {
   id: string;
   status: string;
   openingFloat: number | string;
   openedByName?: string | null;
-  movements?: unknown[];
+  closedAt?: string | null;
+  blindClose?: boolean;
+  blindHidden?: boolean;
+  countedCash?: number | string | null;
+  expectedCash?: number | string | null;
+  difference?: number | string | null;
+  movements?: CashMovement[];
+  location?: { id: string; name: string } | null;
+}
+export interface ShiftTotals {
+  totalCashSales: number;
+  totalCardSales: number;
+  totalTransferSales: number;
+  totalCashIn: number;
+  totalCashOut: number;
+  salesCount: number;
+  expectedCash?: number | null;
+  blindHidden?: boolean;
 }
 
 export function getActiveShift(): Promise<{ shift: CashShift | null }> {
@@ -322,5 +347,32 @@ export function closeShift(shiftId: string, countedCash: number, notes?: string)
   return apiFetch(`/api/retail/v1/shifts/${shiftId}/close`, {
     method: "POST",
     body: JSON.stringify({ countedCash, notes }),
+  });
+}
+
+export function cashMovement(
+  shiftId: string,
+  m: { type: "CASH_IN" | "CASH_OUT" | "EXPENSE"; amount: number; reason?: string; category?: string },
+): Promise<CashMovement> {
+  return apiFetch(`/api/retail/v1/shifts/${shiftId}/cash-movement`, {
+    method: "POST",
+    body: JSON.stringify(m),
+  });
+}
+
+// Corte en vivo del turno (totales calculados). expectedCash/ventas vienen null
+// si es corte ciego y el empleado no es admin (blindHidden:true).
+export function getShiftSummary(shiftId: string): Promise<{ shift: CashShift; totals: ShiftTotals | null }> {
+  return apiFetch(`/api/retail/v1/shifts/${shiftId}/summary`);
+}
+
+// ── Autorización de supervisor (override por PIN) ─────────────────────────────
+// Valida contra el backend (no PINs hardcodeados): un supervisor de la sucursal
+// con el permiso canónico autoriza. `permission` debe ser uno de los 6 canónicos.
+export interface OverrideResult { token: string; supervisor: { id: string; name: string }; expiresIn: number }
+export function verifyPermission(pin: string, permission: string): Promise<OverrideResult> {
+  return apiFetch("/api/employees/verify-permission", {
+    method: "POST",
+    body: JSON.stringify({ pin, permission }),
   });
 }

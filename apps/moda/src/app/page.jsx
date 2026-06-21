@@ -140,20 +140,26 @@ const RETURNS = [
   ["DEV-000229","16/05/2024","Mostrador",PRODUCTS[6],"Nota de crédito","Procesada",-399],
 ];
 
-const ROLES = ["Cajera","Encargada","Gerente"];
-const ROLE_PERMS = {
-  Cajera: [],
-  Encargada: ["apply_discount","override_price","cancel_items","process_return","refund_cash","cancel_hold","manage_cash_shift","view_cash_count","adjust_inventory","manage_transfers","open_cash_drawer"],
-  Gerente: ["*"],
+// Roles con acceso total (dueño/encargado). El enforcement REAL de las mutaciones
+// sensibles vive en el backend; aquí el gate es de UI sobre el empleado logueado.
+const ADMIN_ROLES_UI = ["OWNER","ADMIN","MANAGER","SUPER_ADMIN"];
+const ROLE_ES = { OWNER:"Dueño", ADMIN:"Administrador", MANAGER:"Encargado", CASHIER:"Cajero", WAITER:"Mesero", SUPER_ADMIN:"Super Admin" };
+const roleEs = (r) => ROLE_ES[(r||"").toUpperCase()] || r || "";
+// Llave de permiso de la caja → permiso CANÓNICO del backend (los únicos 6 que
+// existen y que acepta el override por PIN). Las llaves sin equivalente directo
+// se tratan como admin (proxy manage_users).
+const CANON_PERM = {
+  apply_discount:"apply_discount", open_cash_drawer:"open_cash_drawer", cancel_items:"cancel_items",
+  process_return:"cancel_items", refund_cash:"cancel_items", override_price:"apply_discount",
+  cancel_hold:"cancel_items", view_cash_count:"view_expected_cash", manage_users:"manage_users",
+  manage_cash_shift:"manage_users", adjust_inventory:"manage_users", manage_transfers:"manage_users",
+  manage_catalog:"manage_users", view_reports:"manage_users", manage_settings:"manage_users",
 };
 const PERM_LABEL = { apply_discount:"Aplicar descuento", override_price:"Cambiar precio de venta", cancel_items:"Anular venta",
   process_return:"Procesar devolución", refund_cash:"Devolver efectivo", cancel_hold:"Cancelar apartado",
   manage_cash_shift:"Cerrar turno / corte", view_cash_count:"Ver corte de caja", open_cash_drawer:"Abrir cajón",
   adjust_inventory:"Ajustar inventario", manage_transfers:"Traspaso entre sucursales", manage_catalog:"Editar catálogo",
   view_reports:"Ver reportes", manage_settings:"Configuración", manage_users:"Gestionar usuarios" };
-const SUP_PINS = { "1234":"Gerente", "2468":"Encargada" };
-const SUP_NAME = { Gerente:"Diana Sosa", Encargada:"Laura Cano" };
-function hasPerm(role,perm){ const p=ROLE_PERMS[role]||[]; return p.indexOf("*")>=0||p.indexOf(perm)>=0; }
 const PermCtx = createContext(null);
 function usePerm(){ return useContext(PermCtx); }
 
@@ -182,8 +188,11 @@ function TitleBar({ screen }) {
     </div>
   );
 }
-function TopBar({ query, setQuery, role, setRole, theme, setTheme, setNavOpen }) {
-  const [t,setT]=useState("11:36 AM");
+function TopBar({ query, setQuery, theme, setTheme, setNavOpen }) {
+  const data=useData();
+  const name=data.session?.name || (data.demo?"Demostración":"Invitado");
+  const initials=((name.match(/\b\w/g)||[]).join("").slice(0,2)||"··").toUpperCase();
+  const [t]=useState("11:36 AM");
   return (
     <header className="flex items-center gap-2 lg:gap-4 px-3 lg:px-5 h-[60px] lg:h-[68px] bg-card border-b border-line">
       <button onClick={()=>setNavOpen&&setNavOpen(true)} aria-label="Menú" className="lg:hidden w-10 h-10 grid place-items-center rounded-lg hover:bg-surf text-ink-600 shrink-0"><Icon n="menu" s={20}/></button>
@@ -200,12 +209,11 @@ function TopBar({ query, setQuery, role, setRole, theme, setTheme, setNavOpen })
       </label>
       <div className="flex-1"/>
       <div className="flex items-center gap-2 lg:gap-4">
-        <div className="hidden md:block"><RoleSwitcher role={role} setRole={setRole}/></div>
         <div className="hidden lg:flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-full bg-brand-100 grid place-items-center text-brand-700 font-semibold text-sm">CM</div>
+          <div className="w-9 h-9 rounded-full bg-brand-100 grid place-items-center text-brand-700 font-semibold text-sm">{initials}</div>
           <div className="leading-tight">
-            <div className="text-[13px] font-semibold text-ink-900">Carla Méndez</div>
-            <div className="text-[11px] text-ink-400">{role}</div>
+            <div className="text-[13px] font-semibold text-ink-900">{name}</div>
+            <div className="text-[11px] text-ink-400">{data.session?.role?roleEs(data.session.role):(data.demo?"Demo":"")}</div>
           </div>
         </div>
         <div className="hidden xl:block text-[13px] font-medium text-ink-500 tnum">{t}</div>
@@ -305,33 +313,35 @@ function GateBtn({ perm, onClick, children, className="", ghost=false }) {
     {locked && <Icon n="lock" s={15}/>}{children}</Comp>;
 }
 
-function RoleSwitcher({ role, setRole }) {
-  return (<div className="flex items-center gap-1.5">
-    <Icon n="shield" s={14} cls="text-ink-400"/>
-    <div className="flex items-center gap-1 p-1 rounded-xl bg-surf border border-line">
-      {ROLES.map(r=><button key={r} onClick={()=>setRole(r)} title={"Cambiar rol a "+r}
-        className={"h-7 px-2.5 rounded-lg text-[11px] font-medium transition-colors "+(role===r?"bg-card shadow-sm text-ink-900":"text-ink-500 hover:text-ink-900")}>{r}</button>)}
-    </div></div>);
-}
+/* RoleSwitcher eliminado: el rol ya no es seleccionable desde el cliente.
+   El acceso se deriva del empleado logueado (RBAC real). */
 
 function OverrideModal({ perm, onClose, onOk }) {
-  const [pin,setPin]=useState(""); const [err,setErr]=useState("");
-  const submit=()=>{ const r=SUP_PINS[pin];
-    if(!r){ setErr("PIN incorrecto"); return; }
-    if(!hasPerm(r,perm)){ setErr(SUP_NAME[r]+" no tiene este permiso"); return; }
-    onOk(SUP_NAME[r]+" · "+r); };
+  const data=useData();
+  const [pin,setPin]=useState(""); const [err,setErr]=useState(""); const [busy,setBusy]=useState(false);
+  const submit=async()=>{
+    if(pin.length<4){ setErr("Ingresa el PIN de 4 dígitos."); return; }
+    if(data.demo){ onOk("Supervisor (demo)"); return; } // demo: sin backend
+    setBusy(true); setErr("");
+    try{
+      const r=await Retail.verifyPermission(pin, CANON_PERM[perm]||perm);
+      onOk(r?.supervisor?.name || "Supervisor");
+    }catch(e){
+      setErr(e?.status===401?"PIN de supervisor incorrecto.":e?.status===403?"Ese supervisor no tiene este permiso.":(e?.message||"No se pudo autorizar."));
+      setPin(""); setBusy(false);
+    }
+  };
   return (<Modal title="Autorización de supervisor" onClose={onClose}>
     <div className="text-center">
       <div className="w-14 h-14 mx-auto rounded-full bg-amber-50 grid place-items-center text-amber-500 mb-3"><Icon n="lock" s={26}/></div>
       <div className="text-[14px] text-ink-700">Se requiere permiso:</div>
       <div className="text-[15px] font-semibold text-ink-900">{PERM_LABEL[perm]||perm}</div>
-      <div className="text-[12px] text-ink-400 mt-1">Un supervisor con este permiso debe autorizar con su PIN.</div>
+      <div className="text-[12px] text-ink-400 mt-1">Un supervisor (encargado o dueño) con este permiso debe autorizar con su PIN.</div>
       <input value={pin} onChange={e=>{setPin(e.target.value.replace(/\D/g,"").slice(0,4));setErr("");}} type="password" inputMode="numeric" placeholder="••••" autoFocus
         className="mt-4 w-44 mx-auto block text-center tnum text-2xl tracking-[0.5em] h-14 rounded-xl border border-line outline-none focus:border-brand-500"
         onKeyDown={e=>{ if(e.key==="Enter") submit(); }}/>
       {err && <div className="text-[12px] text-red-500 mt-2">{err}</div>}
-      <div className="text-[11px] text-ink-400 mt-3">Demo: <span className="tnum">1234</span> (Gerente) · <span className="tnum">2468</span> (Encargada)</div>
-      <div className="flex gap-2 mt-5"><GhostBtn className="flex-1" onClick={onClose}>Cancelar</GhostBtn><PrimaryBtn className="flex-1" onClick={submit}><Icon n="check" s={16}/>Autorizar</PrimaryBtn></div>
+      <div className="flex gap-2 mt-5"><GhostBtn className="flex-1" onClick={onClose}>Cancelar</GhostBtn><PrimaryBtn className="flex-1" onClick={busy?undefined:submit}><Icon n="check" s={16}/>{busy?"Verificando…":"Autorizar"}</PrimaryBtn></div>
     </div></Modal>);
 }
 
@@ -362,7 +372,8 @@ function RcLine({l,r}){ return <div className="flex justify-between gap-2"><span
 
 function ReceiptModal({ sale, onClose }) {
   const data = useData();
-  const iva = Math.round((sale.subtotal - (sale.desc||0)) * 0.16 * 100)/100;
+  // IVA desglosado COMO INCLUIDO en el total (precio de catálogo con IVA); informativo.
+  const iva = Math.round((sale.total - sale.total/1.16) * 100)/100;
   const [ip,setIp]=useState(""); const [status,setStatus]=useState("");
   useEffect(()=>{ setIp(getPrinterConfig().ip||""); },[]);
   const doPrint=async()=>{
@@ -393,8 +404,8 @@ function ReceiptModal({ sale, onClose }) {
         <Dash/>
         <RcLine l="Subtotal" r={mx(sale.subtotal)}/>
         {sale.desc ? <RcLine l="Descuento" r={"-"+mx(sale.desc)}/> : null}
-        <RcLine l="IVA (16%)" r={mx(iva)}/>
         <div className="flex justify-between font-bold text-[14px] mt-1.5"><span>TOTAL</span><span>{mx(sale.total)}</span></div>
+        <RcLine l="IVA 16% incluido" r={mx(iva)}/>
         <RcLine l={sale.method||"Efectivo"} r={mx(sale.total)}/>
         <Dash/>
         <div className="flex justify-center my-1"><Barcode value={sale.folio} height={36} width={1.4}/></div>
@@ -461,9 +472,9 @@ function SaleScreen({ cart, setCart, sel, setSel, go }) {
     const m=products.find(p=>p.sku.toLowerCase()===q)||products.find(p=>(p.sku+" "+p.name).toLowerCase().indexOf(q)>=0);
     if(m){ addProduct(m); setSel(m); } setScan(""); };
   const subtotal=cart.reduce((s,l)=>s+l.price*l.qty,0);
-  const desc=Math.round(subtotal*0.10*100)/100;
-  const iva=Math.round((subtotal-desc)*0.16*100)/100;
-  const total=subtotal-desc+iva;
+  const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
+  const total=Math.round((subtotal-desc)*100)/100;
+  const iva=Math.round((total-total/1.16)*100)/100; // IVA incluido (informativo)
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_380px] gap-4 h-full">
       <div className="flex flex-col min-w-0">
@@ -513,8 +524,8 @@ function SaleScreen({ cart, setCart, sel, setSel, go }) {
           </div>
           <div className="p-5 border-l border-line space-y-2">
             <TotRow k="Subtotal" v={mx(subtotal)}/>
-            <TotRow k={<span className="flex items-center gap-1">Descuento <Icon n="info" s={13} cls="text-ink-400"/></span>} v={<span className="text-brand-600">-{mx(desc)}</span>}/>
-            <TotRow k="IVA (16%)" v={mx(iva)}/>
+            {desc>0 && <TotRow k="Descuento" v={<span className="text-brand-600">-{mx(desc)}</span>}/>}
+            <TotRow k="IVA 16% incluido" v={mx(iva)}/>
             <div className="flex items-center justify-between pt-2 mt-1 border-t border-line">
               <span className="font-semibold text-ink-900">Total</span>
               <span className="tnum text-2xl font-bold text-ink-900">{mx(total)}</span></div>
@@ -590,9 +601,9 @@ function CheckoutScreen({ cart, go, onApprove }) {
   const [changeDue,setChangeDue]=useState(0);
   const [rcpt,setRcpt]=useState(false);
   const subtotal=cart.reduce((s,l)=>s+l.price*l.qty,0);
-  const desc=Math.round(subtotal*0.15*100)/100;
-  const iva=Math.round((subtotal-desc)*0.16*100)/100;
-  const total=subtotal-desc+iva;
+  const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
+  const total=Math.round((subtotal-desc)*100)/100;
+  const iva=Math.round((total-total/1.16)*100)/100; // IVA incluido (informativo)
   const methods=[["Tarjeta","Débito o crédito","card"],["Efectivo","Paga con efectivo","cash"],["QR / Pago","Escanea y paga","qr"],["Transferencia","SPEI / Transferencia bancaria","swap"],["Meses sin intereses","Paga a meses sin intereses","card"]];
   const paid=Math.round(lines.reduce((s,l)=>s+l.amount,0)*100)/100;
   const remaining=Math.max(0,Math.round((total-paid)*100)/100);
@@ -629,10 +640,8 @@ function CheckoutScreen({ cart, go, onApprove }) {
         </Card>
         <Card className="p-5 flex-1">
           <TotRow k="Subtotal" v={mx(subtotal)}/>
-          <div className="my-2"/>
-          <TotRow k="Descuento" v={<span className="text-brand-600">-{mx(desc)}</span>}/>
-          <div className="flex items-center justify-between mt-2 text-[12px]"><span className="text-ink-400">Descuento por membresía</span><span className="tnum text-ink-500 border border-line rounded px-2 py-0.5">15% ⌄</span></div>
-          <div className="my-2"/><TotRow k="IVA (16%)" v={mx(iva)}/>
+          {desc>0 && <><div className="my-2"/><TotRow k="Descuento" v={<span className="text-brand-600">-{mx(desc)}</span>}/></>}
+          <div className="my-2"/><TotRow k="IVA 16% incluido" v={mx(iva)}/>
           <div className="flex items-center justify-between pt-4 mt-4 border-t border-line"><span className="text-xl font-bold text-ink-900">Total</span><span className="tnum text-3xl font-bold text-ink-900">{mx(total)}</span></div>
         </Card>
       </div>
@@ -704,7 +713,7 @@ function SuccessScreen({ sale, go, newSale }) {
           <Thumb p={l} size={44}/><div className="flex-1 min-w-0"><div className="text-[13px] font-semibold text-ink-900 truncate">{l.name}</div><div className="text-[11px] text-ink-400">{l.color} / {l.size}</div></div>
           <div className="tnum text-[13px] font-semibold text-ink-900">{mx(l.price*l.qty)}</div></div>))}</div>
         <div className="mt-5 pt-4 border-t border-line space-y-2">
-          <TotRow k="Subtotal" v={mx(sale.subtotal)}/><TotRow k="Descuento" v={<span className="text-brand-600">- {mx(sale.desc)}</span>}/>
+          <TotRow k="Subtotal" v={mx(sale.subtotal)}/>{sale.desc?<TotRow k="Descuento" v={<span className="text-brand-600">- {mx(sale.desc)}</span>}/>:null}
           <div className="flex items-center justify-between pt-2 border-t border-line"><span className="font-semibold text-ink-900">Total</span><span className="tnum text-lg font-bold text-ink-900">{mx(sale.total)}</span></div>
           <div className="text-[11px] text-ink-400">IVA incluido</div>
         </div>
@@ -912,29 +921,120 @@ function MiniSel({label,v,set,opts}){return(<label className="flex items-center 
 
 /* ===================================================== CASH REGISTER ===================================================== */
 function CashScreen() {
-  const inicial=2000, efectivo=8450, tarjeta=14320, qr=1890, entradas=500, salidas=300, gastos=450;
-  const esperado=inicial+efectivo+entradas-salidas-gastos;
+  const data=useData();
   const denoms=[1000,500,200,100,50,20,10,5,2,1];
+  const [shift,setShift]=useState(null);     // turno OPEN o null
+  const [totals,setTotals]=useState(null);   // corte en vivo del backend
   const [count,setCount]=useState({});
+  const [loading,setLoading]=useState(true);
+  const [openFloat,setOpenFloat]=useState("");
+  const [blind,setBlind]=useState(false);
+  const [mv,setMv]=useState(null);           // tipo de movimiento en curso
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState("");
+  const num=(v)=>Number(v||0);
   const contado=denoms.reduce((a,d)=>a+d*(count[d]||0),0);
-  const diff=contado-esperado;
-  const moves=[["Apertura de caja","Monto inicial",inicial,"wallet"],["Entradas de efectivo","Cambio / feria",entradas,"plus"],["Salida de efectivo","Pago a proveedor",-salidas,"minus"],["Gasto","Limpieza de tienda",-gastos,"file"]];
+  const blindHidden=Boolean(totals?.blindHidden || shift?.blindHidden);
+  const expected=blindHidden?null:(totals?num(totals.expectedCash):null);
+  const diff=expected==null?null:Math.round((contado-expected)*100)/100;
+
+  const load=async()=>{
+    if(!data.online){ setLoading(false); return; }
+    setLoading(true);
+    try{
+      const r=await Retail.getActiveShift();
+      if(r.shift){ const s=await Retail.getShiftSummary(r.shift.id); setShift(s.shift||r.shift); setTotals(s.totals||null); }
+      else { setShift(null); setTotals(null); }
+    }catch(e){ setMsg("No se pudo cargar la caja: "+(e?.message||e)); }
+    finally{ setLoading(false); }
+  };
+  useEffect(()=>{ load(); /* eslint-disable-next-line */ },[data.online]);
+
+  const doOpen=async()=>{ setBusy(true); setMsg("");
+    try{ await Retail.openShift(num(openFloat), blind); setOpenFloat(""); setBlind(false); await load(); }
+    catch(e){ setMsg("No se pudo abrir la caja: "+(e?.message||e)); if(e?.status===409) await load(); }
+    finally{ setBusy(false); } };
+  const doMovement=async(type,amount,reason)=>{ if(!shift||!(amount>0))return; setBusy(true); setMsg("");
+    try{ await Retail.cashMovement(shift.id,{type,amount,reason:reason||undefined}); setMv(null); await load(); }
+    catch(e){ setMsg("No se pudo registrar el movimiento: "+(e?.message||e)); }
+    finally{ setBusy(false); } };
+  const doClose=async()=>{ if(!shift)return; setBusy(true); setMsg("");
+    try{ const r=await Retail.closeShift(shift.id, contado); const sh=r.shift||{};
+      setMsg(sh.blindHidden ? "Turno cerrado. El esperado y la diferencia los revisa un supervisor."
+        : `Turno cerrado. Esperado ${mx(num(sh.expectedCash))} · Contado ${mx(contado)} · Diferencia ${mx(num(sh.difference))}.`);
+      setCount({}); await load();
+    }catch(e){ setMsg(e?.status===403 ? "Necesitas permiso de encargado/gerente para cerrar el turno."
+        : "No se pudo cerrar el turno: "+(e?.message||e)); }
+    finally{ setBusy(false); } };
+
+  const Banner=()=> msg ? <div className="text-[12px] text-ink-700 bg-surf border border-line rounded-lg px-3 py-2 mb-3 text-center">{msg}</div> : null;
+
+  // Modo demostración / sin backend: la caja necesita conexión real.
+  if(!data.online){
+    return (<div className="h-full overflow-y-auto"><ScreenHead icon="wallet" title="Caja / corte de caja"/>
+      <Card className="flex flex-col items-center justify-center text-center py-20">
+        <div className="w-16 h-16 rounded-full bg-amber-50 grid place-items-center text-amber-500 mb-4"><Icon n="wallet" s={30}/></div>
+        <div className="text-lg font-semibold text-ink-900">Caja sin conexión</div>
+        <p className="text-ink-500 mt-1 max-w-sm">El corte de caja necesita conexión al backend. Inicia sesión con tu PIN en una tienda real para abrir, registrar movimientos y cerrar el turno.</p>
+      </Card></div>);
+  }
+  if(loading){
+    return (<div className="h-full overflow-y-auto"><ScreenHead icon="wallet" title="Caja / corte de caja"/>
+      <Card className="py-20 grid place-items-center"><div className="w-7 h-7 rounded-full border-2 border-line border-t-brand-500 animate-spin"/></Card></div>);
+  }
+
+  // Sin turno abierto → abrir caja.
+  if(!shift){
+    return (<div className="h-full overflow-y-auto"><ScreenHead icon="wallet" title="Caja / corte de caja"/>
+      <Card className="max-w-md mx-auto p-6 mt-4">
+        <div className="text-center mb-5"><div className="w-14 h-14 mx-auto rounded-full bg-brand-50 grid place-items-center text-brand-600 mb-2"><Icon n="wallet" s={26}/></div>
+          <div className="text-lg font-semibold text-ink-900">No hay caja abierta</div>
+          <p className="text-[13px] text-ink-500 mt-1">Abre un turno para que las ventas entren al corte.</p></div>
+        <Banner/>
+        <Fld label="Fondo inicial en efectivo">
+          <input value={openFloat} onChange={e=>setOpenFloat(e.target.value.replace(/[^\d.]/g,""))} inputMode="decimal" placeholder="0.00"
+            className="w-full h-11 rounded-xl border border-line bg-surf px-3 text-right tnum text-lg outline-none focus:border-brand-500"/>
+        </Fld>
+        <div className="flex items-center justify-between py-3 border-t border-line mt-1">
+          <div><div className="text-[13px] font-medium text-ink-900">Corte ciego</div><div className="text-[11px] text-ink-400">El cajero no ve el esperado al cerrar</div></div>
+          <Toggle on={blind} set={setBlind}/></div>
+        <PrimaryBtn className="w-full mt-3" onClick={busy?undefined:doOpen}><Icon n="check" s={18}/>{busy?"Abriendo…":"Abrir caja"}</PrimaryBtn>
+      </Card></div>);
+  }
+
+  // Turno abierto → corte en vivo.
+  const ventasTotal=totals?num(totals.totalCashSales)+num(totals.totalCardSales)+num(totals.totalTransferSales):0;
   return (<div className="h-full overflow-y-auto">
-    <ScreenHead icon="wallet" title="Caja / corte de caja" folio="CRT-000045" right={<div className="flex gap-2"><GateBtn ghost perm="open_cash_drawer"><Icon n="wallet" s={16}/>Abrir cajón</GateBtn><span className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl bg-brand-50 text-brand-700 text-[13px] font-medium border border-brand-100"><Icon n="clock" s={15}/>Turno abierto · 08:00</span></div>}/>
+    <ScreenHead icon="wallet" title="Caja / corte de caja" right={<span className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl bg-brand-50 text-brand-700 text-[13px] font-medium border border-brand-100"><Icon n="clock" s={15}/>Turno abierto{shift.openedByName?" · "+shift.openedByName:""}</span>}/>
+    <Banner/>
     <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-4">
       <div className="space-y-4">
-        <div className="grid grid-cols-4 gap-3">
-          {[["Efectivo",efectivo,"cash"],["Tarjeta",tarjeta,"card"],["QR / Pago",qr,"qr"],["Total ventas",efectivo+tarjeta+qr,"chart"]].map(([k,v,ic])=>(
-            <Card key={k} className="p-4 min-w-0"><div className="flex items-center gap-1.5 text-[11px] text-ink-400 min-w-0"><Icon n={ic} s={14} cls="text-brand-600 shrink-0"/><span className="truncate">{k}</span></div>
-              <div className="tnum text-base font-bold text-ink-900 mt-1">{mx(v)}</div></Card>))}
-        </div>
-        <Card className="p-5"><div className="font-semibold text-ink-900 mb-3">Movimientos del turno</div>
-          {moves.map(([k,sub,v,ic])=>(<div key={k} className="flex items-center gap-3 py-2.5 border-t border-line first:border-0">
-            <div className={"w-8 h-8 rounded-lg grid place-items-center "+(v<0?"bg-red-50 text-red-500":"bg-brand-50 text-brand-600")}><Icon n={ic} s={15}/></div>
-            <div className="flex-1"><div className="text-[13px] text-ink-900">{k}</div><div className="text-[11px] text-ink-400">{sub}</div></div>
-            <span className={"tnum font-medium "+(v<0?"text-red-500":"text-ink-900")}>{v<0?"- ":""}{mx(Math.abs(v))}</span></div>))}
-          <div className="flex gap-2 mt-3"><GhostBtn className="flex-1"><Icon n="plus" s={15}/>Entrada</GhostBtn><GhostBtn className="flex-1"><Icon n="minus" s={15}/>Salida</GhostBtn><GhostBtn className="flex-1"><Icon n="file" s={15}/>Gasto</GhostBtn></div>
-          <div className="flex items-center justify-between py-3 mt-3 border-t-2 border-line"><span className="font-semibold text-ink-900">Total esperado en efectivo</span><span className="tnum text-xl font-bold text-brand-600">{mx(esperado)}</span></div>
+        {blindHidden ? (
+          <Card className="p-4 text-[13px] text-ink-500 flex items-center gap-2"><Icon n="lock" s={16} cls="text-amber-500"/>Corte ciego: las ventas y el esperado los revisa un supervisor.</Card>
+        ) : (
+          <div className="grid grid-cols-4 gap-3">
+            {[["Efectivo",num(totals?.totalCashSales),"cash"],["Tarjeta",num(totals?.totalCardSales),"card"],["Transferencia",num(totals?.totalTransferSales),"swap"],["Total ventas",ventasTotal,"chart"]].map(([k,v,ic])=>(
+              <Card key={k} className="p-4 min-w-0"><div className="flex items-center gap-1.5 text-[11px] text-ink-400 min-w-0"><Icon n={ic} s={14} cls="text-brand-600 shrink-0"/><span className="truncate">{k}</span></div>
+                <div className="tnum text-base font-bold text-ink-900 mt-1">{mx(v)}</div></Card>))}
+          </div>
+        )}
+        <Card className="p-5"><div className="flex items-center justify-between mb-3"><div className="font-semibold text-ink-900">Movimientos del turno</div><span className="text-[11px] text-ink-400">{totals?.salesCount??0} ventas</span></div>
+          <div className="flex items-center gap-3 py-2.5 border-b border-line">
+            <div className="w-8 h-8 rounded-lg grid place-items-center bg-brand-50 text-brand-600"><Icon n="wallet" s={15}/></div>
+            <div className="flex-1"><div className="text-[13px] text-ink-900">Fondo inicial</div></div>
+            <span className="tnum font-medium text-ink-900">{mx(num(shift.openingFloat))}</span></div>
+          {(shift.movements||[]).map((m,i)=>{const neg=m.type==="CASH_OUT"||m.type==="EXPENSE";const label=m.type==="CASH_IN"?"Entrada":m.type==="EXPENSE"?"Gasto":"Salida";return(
+            <div key={m.id||i} className="flex items-center gap-3 py-2.5 border-b border-line last:border-0">
+              <div className={"w-8 h-8 rounded-lg grid place-items-center "+(neg?"bg-red-50 text-red-500":"bg-brand-50 text-brand-600")}><Icon n={m.type==="CASH_IN"?"plus":m.type==="EXPENSE"?"file":"minus"} s={15}/></div>
+              <div className="flex-1"><div className="text-[13px] text-ink-900">{label}</div>{m.reason&&<div className="text-[11px] text-ink-400">{m.reason}</div>}</div>
+              <span className={"tnum font-medium "+(neg?"text-red-500":"text-ink-900")}>{neg?"- ":"+ "}{mx(num(m.amount))}</span></div>);})}
+          {!(shift.movements||[]).length && <div className="text-[12px] text-ink-400 py-2">Sin entradas, salidas ni gastos.</div>}
+          <div className="flex gap-2 mt-3">
+            <GhostBtn className="flex-1" onClick={()=>{setMsg("");setMv("CASH_IN");}}><Icon n="plus" s={15}/>Entrada</GhostBtn>
+            <GhostBtn className="flex-1" onClick={()=>{setMsg("");setMv("CASH_OUT");}}><Icon n="minus" s={15}/>Salida</GhostBtn>
+            <GhostBtn className="flex-1" onClick={()=>{setMsg("");setMv("EXPENSE");}}><Icon n="file" s={15}/>Gasto</GhostBtn>
+          </div>
+          {!blindHidden && <div className="flex items-center justify-between py-3 mt-3 border-t-2 border-line"><span className="font-semibold text-ink-900">Esperado en efectivo</span><span className="tnum text-xl font-bold text-brand-600">{expected==null?"—":mx(expected)}</span></div>}
         </Card>
         <Card className="p-5"><div className="font-semibold text-ink-900 mb-3">Conteo de efectivo</div>
           <div className="grid grid-cols-5 gap-3">{denoms.map(d=>(<div key={d}><div className="text-[11px] text-ink-400 mb-1 tnum">${d}</div>
@@ -944,31 +1044,36 @@ function CashScreen() {
       </div>
       <div className="space-y-4">
         <Card className="p-5"><div className="font-semibold text-ink-900 mb-3">Cierre de turno</div>
-          <div className="flex items-center justify-between text-[13px] py-1"><span className="text-ink-500">Esperado</span><span className="tnum font-medium">{mx(esperado)}</span></div>
+          {!blindHidden && <div className="flex items-center justify-between text-[13px] py-1"><span className="text-ink-500">Esperado</span><span className="tnum font-medium">{expected==null?"—":mx(expected)}</span></div>}
           <div className="flex items-center justify-between text-[13px] py-1"><span className="text-ink-500">Contado</span><span className="tnum font-medium">{mx(contado)}</span></div>
-          <div className={"flex items-center justify-between p-3 rounded-xl mt-2 text-[13px] "+(diff===0?"bg-brand-50 border border-brand-100":"bg-amber-50 border border-amber-100")}>
+          {!blindHidden && diff!=null && <div className={"flex items-center justify-between p-3 rounded-xl mt-2 text-[13px] "+(diff===0?"bg-brand-50 border border-brand-100":"bg-amber-50 border border-amber-100")}>
             <span className={"font-medium "+(diff===0?"text-brand-700":"text-amber-700")}>Diferencia</span>
-            <span className={"tnum font-bold "+(diff===0?"text-brand-700":"text-amber-700")}>{diff<0?"- ":diff>0?"+ ":""}{mx(Math.abs(diff))}</span></div>
-          <GateBtn className="w-full mt-4" perm="manage_cash_shift">Cerrar turno</GateBtn>
-          <GhostBtn className="w-full mt-2"><Icon n="printer" s={16}/>Imprimir ticket de corte</GhostBtn>
-          <GateBtn ghost className="w-full mt-2" perm="manage_cash_shift"><Icon n="dollar" s={16}/>Corte parcial</GateBtn>
-        </Card>
-        <Card className="p-5"><div className="font-semibold text-ink-900 mb-3">Ticket de corte</div>
-          <div className="rounded-xl bg-surf border border-line p-4 text-[12px] tnum text-ink-600 leading-relaxed">
-            <div className="text-center font-semibold text-ink-900 mb-2">MODA+ · Polanco</div>
-            <div className="flex justify-between"><span>Corte</span><span>CRT-000045</span></div>
-            <div className="flex justify-between"><span>Cajero</span><span>Carla Méndez</span></div>
-            <div className="border-t border-dashed border-line my-2"/>
-            <div className="flex justify-between"><span>Efectivo</span><span>{mx(efectivo)}</span></div>
-            <div className="flex justify-between"><span>Tarjeta</span><span>{mx(tarjeta)}</span></div>
-            <div className="flex justify-between"><span>QR</span><span>{mx(qr)}</span></div>
-            <div className="border-t border-dashed border-line my-2"/>
-            <div className="flex justify-between font-semibold text-ink-900"><span>Esperado</span><span>{mx(esperado)}</span></div>
-          </div>
+            <span className={"tnum font-bold "+(diff===0?"text-brand-700":"text-amber-700")}>{diff<0?"- ":diff>0?"+ ":""}{mx(Math.abs(diff))}</span></div>}
+          {blindHidden && <div className="text-[11px] text-ink-400 mt-2">Corte ciego: cuenta el efectivo y cierra; el supervisor verá el esperado y la diferencia.</div>}
+          <PrimaryBtn className="w-full mt-4" onClick={busy?undefined:doClose}><Icon n="check" s={16}/>{busy?"Cerrando…":"Cerrar turno"}</PrimaryBtn>
         </Card>
       </div>
     </div>
+    {mv && <MovementModal type={mv} busy={busy} onClose={()=>setMv(null)} onOk={doMovement}/>}
   </div>);
+}
+
+function MovementModal({ type, busy, onClose, onOk }){
+  const [amt,setAmt]=useState(""); const [reason,setReason]=useState("");
+  const title=type==="CASH_IN"?"Entrada de efectivo":type==="EXPENSE"?"Registrar gasto":"Salida de efectivo";
+  const amount=Math.round(Number(amt||0)*100)/100;
+  return (<Modal title={title} onClose={onClose}>
+    <Fld label="Monto">
+      <input value={amt} onChange={e=>setAmt(e.target.value.replace(/[^\d.]/g,""))} inputMode="decimal" placeholder="0.00" autoFocus
+        className="w-full h-11 rounded-xl border border-line bg-surf px-3 text-right tnum text-lg outline-none focus:border-brand-500"/>
+    </Fld>
+    <Fld label="Motivo (opcional)">
+      <input value={reason} onChange={e=>setReason(e.target.value)} placeholder={type==="EXPENSE"?"Ej. limpieza, papelería":"Ej. cambio / feria"}
+        className="w-full h-10 px-3 rounded-lg border border-line text-sm outline-none focus:border-brand-500"/>
+    </Fld>
+    <div className="flex gap-2 mt-4"><GhostBtn className="flex-1" onClick={onClose}>Cancelar</GhostBtn>
+      <PrimaryBtn className="flex-1" onClick={()=>{ if(amount>0) onOk(type,amount,reason); }}><Icon n="check" s={16}/>{busy?"Guardando…":"Registrar"}</PrimaryBtn></div>
+  </Modal>);
 }
 
 /* ===================================================== REPORTS ===================================================== */
@@ -1390,38 +1495,47 @@ function App() {
   // POS real: el carrito arranca vacío (el cajero escanea/agrega productos).
   const [cart,setCart]=useState([]);
   const [sale,setSale]=useState(null);
-  const [role,setRole]=useState("Cajera");
   const [grants,setGrants]=useState({});
   const [ov,setOv]=useState(null);
   const [toast,setToast]=useState("");
   const [theme,setTheme]=useState("light");
   const [navOpen,setNavOpen]=useState(false);
-  useEffect(()=>{ setGrants({}); },[role]);
+  // RBAC real: permisos del empleado logueado (backend) + rol. El override de
+  // supervisor concede temporalmente; en demo todo está desbloqueado (showcase).
+  const sessionPerms=useMemo(()=> new Set(data.session?.permissions||[]), [data.session]);
+  const isAdminRole=ADMIN_ROLES_UI.includes((data.session?.role||"").toUpperCase());
+  useEffect(()=>{ setGrants({}); },[data.session]);
   useEffect(()=>{ document.documentElement.setAttribute("data-theme",theme); },[theme]);
-  const can=(p)=>hasPerm(role,p)||!!grants[p];
-  const gate=(perm,fn)=>{ if(hasPerm(role,perm)||grants[perm]){ fn&&fn(); } else { setOv({perm,fn}); } };
+  const can=(p)=>{ if(data.demo) return true; if(isAdminRole) return true; if(grants[p]) return true; return sessionPerms.has(CANON_PERM[p]||p); };
+  const gate=(perm,fn)=>{ if(can(perm)){ fn&&fn(); } else { setOv({perm,fn}); } };
   const titles={venta:"Venta activa",catalogo:"Catálogo de productos",clientes:"Clientes frecuentes",inventario:"Inventario por talla y color",apartados:"Apartados y cliente frecuente",devoluciones:"Devoluciones y cambios",caja:"Caja / corte de caja",reportes:"Reportes",config:"Configuración",checkout:"Checkout y métodos de pago",success:"Venta completada"};
 
   const cobrar=()=>{ if(cart.length) setScreen("checkout"); };
   const approve=async(total,method,payLines)=>{
     const subtotal=cart.reduce((s,l)=>s+l.price*l.qty,0);
-    const desc=Math.round(subtotal*0.15*100)/100;
-    const iva=Math.round((subtotal-desc)*0.16*100)/100;
+    const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
+    const totalCobro=Math.round((subtotal-desc)*100)/100;
     // Venta real al backend solo si hay sesión online y TODAS las líneas tienen skuId
-    // (catálogo en vivo). Demo / offline → se completa localmente con folio temporal.
+    // (catálogo en vivo). Demo / sin catálogo → venta local con folio temporal.
     const canOnline=data.online && cart.length>0 && cart.every(l=>l.skuId);
     if(canOnline){
       try{
-        const payments=(payLines&&payLines.length?payLines:[{method,amount:total}])
+        const payments=(payLines&&payLines.length?payLines:[{method,amount:totalCobro}])
           .map(pl=>({method:Retail.toPaymentMethod(pl.method||method),amount:Math.round(pl.amount*100)/100}));
-        const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:l.qty})), payments, discount:desc, tax:iva });
+        // tax:0 → el precio de catálogo ya incluye IVA; el backend cobra Σ precio − descuento.
+        const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:l.qty})), payments, discount:desc, tax:0 });
         setSale({ total:Number(r.sale.total), method, items:cart, subtotal, desc, folio:r.sale.folio });
         setScreen("success");
         if(data.refreshCatalog) data.refreshCatalog();
-        return;
-      }catch(e){ setToast("No se pudo cobrar en línea ("+(e.message||e)+"). Registrada localmente."); }
+      }catch(e){
+        // NO fabricar un éxito: una venta online fallida (stock, pagos, sesión) se avisa
+        // y deja al cajero en el cobro para reintentar — nunca "Pago aprobado" falso.
+        setToast("No se pudo cobrar: "+(e?.message||e));
+      }
+      return;
     }
-    setSale({ total, method, items:cart, subtotal, desc, folio:"VTA-"+String(Date.now()).slice(-9) });
+    // Demo / sin catálogo en vivo: venta local (NO persiste en backend).
+    setSale({ total:totalCobro, method, items:cart, subtotal, desc, folio:"DEMO-"+String(Date.now()).slice(-6) });
     setScreen("success");
   };
   const newSale=()=>{ setCart([]); setSale(null); setScreen("venta"); };
@@ -1439,10 +1553,10 @@ function App() {
     window.addEventListener("keydown",h); return ()=>window.removeEventListener("keydown",h); },[cart,screen]);
 
   return (
-    <PermCtx.Provider value={{role,can,gate}}>
+    <PermCtx.Provider value={{can,gate}}>
     <div className="h-full flex flex-col w-full max-w-[1680px] mx-auto bg-surf shadow-2xl overflow-hidden" style={{borderRadius:0}}>
       <TitleBar screen={titles[screen]}/>
-      <TopBar query={query} setQuery={setQuery} role={role} setRole={setRole} theme={theme} setTheme={setTheme} navOpen={navOpen} setNavOpen={setNavOpen}/>
+      <TopBar query={query} setQuery={setQuery} theme={theme} setTheme={setTheme} navOpen={navOpen} setNavOpen={setNavOpen}/>
       <div className="flex-1 flex min-h-0 relative">
         <Sidebar screen={["checkout","success"].includes(screen)?"venta":screen} go={setScreen} navOpen={navOpen} setNavOpen={setNavOpen}/>
         <main className="flex-1 min-w-0 p-3 lg:p-4 overflow-y-auto lg:overflow-hidden">
