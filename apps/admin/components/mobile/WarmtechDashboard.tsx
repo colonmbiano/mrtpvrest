@@ -88,19 +88,27 @@ export default function WarmtechDashboard() {
     return () => window.removeEventListener("locationChanged", refresh);
   }, [load]);
 
-  const chartData = useMemo(() => ({
-    labels: series.map((point) => new Date(point.date + "T12:00:00").toLocaleDateString("es-MX", { weekday: "short" })),
-    datasets: [{
-      data: series.map((point) => point.revenue),
-      borderColor: "#e3794c",
-      backgroundColor: "rgba(201,90,47,.16)",
-      fill: true,
-      borderWidth: 2,
-      tension: 0.38,
-      pointRadius: series.length <= 1 ? 3 : 0,
-      pointBackgroundColor: "#c95a2f",
-    }],
-  }), [series]);
+  const chartData = useMemo(() => {
+    // El canvas de chart.js no entiende CSS-vars: leemos el acento real
+    // (verde por defecto o el del tenant) en runtime, con fallback verde.
+    const accent =
+      typeof window !== "undefined"
+        ? getComputedStyle(document.documentElement).getPropertyValue("--brand-primary").trim() || "#22c55e"
+        : "#22c55e";
+    return {
+      labels: series.map((point) => new Date(point.date + "T12:00:00").toLocaleDateString("es-MX", { weekday: "short" })),
+      datasets: [{
+        data: series.map((point) => point.revenue),
+        borderColor: accent,
+        backgroundColor: "rgba(34,197,94,.14)",
+        fill: true,
+        borderWidth: 2.5,
+        tension: 0.38,
+        pointRadius: series.length <= 1 ? 3 : 0,
+        pointBackgroundColor: accent,
+      }],
+    };
+  }, [series]);
   const maxQuantity = Math.max(1, ...topItems.map((item) => item.quantity));
 
   if (loading && !stats) {
@@ -158,7 +166,7 @@ export default function WarmtechDashboard() {
         <StatCard icon={UsersRound} value={staffCount.toString()} label="Personal en turno" />
       </div>
 
-      <section className="mt-3 overflow-hidden rounded-[18px] p-3.5 text-white md:mt-5 md:flex md:items-center md:justify-between md:gap-8 md:p-6" style={{ background: "linear-gradient(135deg,#7d351f,#c95a2f)", boxShadow: "0 8px 22px var(--iris-glow)" }}>
+      <section className="mt-3 overflow-hidden rounded-[20px] p-3.5 text-white md:mt-5 md:flex md:items-center md:justify-between md:gap-8 md:p-6" style={{ background: "linear-gradient(135deg,var(--brand-secondary),var(--brand-primary))", boxShadow: "0 8px 22px var(--iris-glow)" }}>
         <div className="md:max-w-3xl">
         <div className="flex items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/15"><Bot size={17} /></span>
@@ -168,7 +176,7 @@ export default function WarmtechDashboard() {
           {stats?.orders.value ? `Llevas ${stats.orders.value} pedidos. Tu ticket promedio es ${money(stats.averageTicket.value)} y hay ${stats.prepMinutes.activeCount} órdenes activas.` : "Todavía no hay pedidos en este periodo. Es un buen momento para activar una promoción o revisar tu menú."}
         </p>
         </div>
-        <Link href="/admin/reportes/ia" className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-xl bg-white px-4 text-xs font-extrabold text-[#7d351f]">Ver plan del día <ArrowRight size={15} /></Link>
+        <Link href="/admin/reportes/ia" className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-xl bg-white px-4 text-xs font-extrabold" style={{ color: "var(--brand-secondary)" }}>Ver plan del día <ArrowRight size={15} /></Link>
       </section>
 
       <div className="md:grid md:grid-cols-[minmax(0,1.45fr)_minmax(300px,.55fr)] md:gap-5">

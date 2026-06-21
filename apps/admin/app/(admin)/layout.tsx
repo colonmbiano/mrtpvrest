@@ -8,6 +8,7 @@ import { AccentInjector } from "@/components/AccentInjector";
 import FloatingVoiceAgent from "@/components/FloatingVoiceAgent";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import MobileAdminChrome from "@/components/mobile/MobileAdminChrome";
+import AdminTopbar from "@/components/admin/AdminTopbar";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -39,32 +40,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       )}
       <div className="md:ml-64 min-h-screen flex flex-col">
         <MobileAdminChrome />
-        <div
-          className="hidden sticky top-0 z-20 items-center justify-between px-4 py-3"
-          style={{ background: "var(--surf)", borderBottom: "1px solid var(--border)" }}
-        >
-          <button
-            type="button"
-            onClick={() => setMobileNavOpen(true)}
-            aria-label="Abrir menú"
-            className="w-10 h-10 rounded-lg flex items-center justify-center"
-            style={{ background: "var(--surf2)", border: "1px solid var(--border)", color: "var(--text)" }}
-          >
-            <div className="inline-flex transition-transform duration-200 hover:scale-110 active:scale-95">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <line x1="3" y1="12" x2="21" y2="12" />
-                <line x1="3" y1="18" x2="21" y2="18" />
-              </svg>
-            </div>
-          </button>
-          <span
-            className="font-black text-sm tracking-tighter"
-            style={{ color: "var(--text)", fontFamily: "Syne, sans-serif" }}
-          >
-            MRTPV<span style={{ color: "var(--brand-primary)" }}>REST</span>
-          </span>
-          <div style={{ width: 40 }} aria-hidden="true" />
+        <div className="hidden md:block">
+          <AdminTopbar />
         </div>
         <div className="hidden md:block"><TrialBanner /></div>
         <main className="flex-1 pb-24 md:p-8 md:pb-8">
