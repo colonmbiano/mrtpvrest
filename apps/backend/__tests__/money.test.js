@@ -156,16 +156,16 @@ describe('money :: computeOrderTotals', () => {
 
   test('el descuento se acota a [0, subtotal]', () => {
     expect(computeOrderTotals([{ subtotal: 100 }], { discount: 150 })).toEqual({
-      subtotal: 100, discount: 100, total: 0,
+      subtotal: 100, discount: 100, promoDiscount: 0, total: 0,
     });
     expect(computeOrderTotals([{ subtotal: 100 }], { discount: -20 })).toEqual({
-      subtotal: 100, discount: 0, total: 100,
+      subtotal: 100, discount: 0, promoDiscount: 0, total: 100,
     });
   });
 
   test('el deliveryFee se suma al total', () => {
     expect(computeOrderTotals([{ subtotal: 200 }], { discount: 20, deliveryFee: 35 })).toEqual({
-      subtotal: 200, discount: 20, total: 215,
+      subtotal: 200, discount: 20, promoDiscount: 0, total: 215,
     });
   });
 
@@ -175,7 +175,7 @@ describe('money :: computeOrderTotals', () => {
   });
 
   test('lista vacía → todo en cero', () => {
-    expect(computeOrderTotals([])).toEqual({ subtotal: 0, discount: 0, total: 0 });
+    expect(computeOrderTotals([])).toEqual({ subtotal: 0, discount: 0, promoDiscount: 0, total: 0 });
   });
 });
 

@@ -103,21 +103,27 @@ function round2(n) {
  * helper se usa tanto al crear la orden como al agregar rondas para que ambas
  * rutas no puedan desincronizarse jamás.
  *
- *   subtotal = Σ(item.subtotal)
- *   discount = clamp(discount, 0, subtotal)
- *   total    = max(0, subtotal − discount + deliveryFee)
+ *   subtotal      = Σ(item.subtotal)
+ *   promoDiscount = clamp(promoDiscount, 0, subtotal)            (promo NxM, automática)
+ *   discount      = clamp(discount, 0, subtotal − promoDiscount) (descuento manual del cajero)
+ *   total         = max(0, subtotal − discount − promoDiscount + deliveryFee)
+ *
+ * La promo se acota PRIMERO y el descuento manual sobre el remanente, así nunca
+ * se descuenta más que el subtotal aunque ambos coincidan en una orden chica.
  *
  * @param {{subtotal:number}[]} items  Líneas resueltas (cada una con su subtotal).
  * @param {object} [opts]
- * @param {number} [opts.discount=0]     Descuento solicitado (se acota a [0, subtotal]).
- * @param {number} [opts.deliveryFee=0]  Cargo de envío.
- * @returns {{subtotal:number, discount:number, total:number}}
+ * @param {number} [opts.discount=0]       Descuento manual (se acota a [0, subtotal − promo]).
+ * @param {number} [opts.deliveryFee=0]    Cargo de envío.
+ * @param {number} [opts.promoDiscount=0]  Descuento automático por promos NxM (ver lib/bulk-promo.js).
+ * @returns {{subtotal:number, discount:number, promoDiscount:number, total:number}}
  */
-function computeOrderTotals(items, { discount = 0, deliveryFee = 0 } = {}) {
+function computeOrderTotals(items, { discount = 0, deliveryFee = 0, promoDiscount = 0 } = {}) {
   const subtotal = round2((items || []).reduce((sum, item) => sum + Number(item?.subtotal || 0), 0));
-  const safeDiscount = round2(Math.min(Math.max(0, Number(discount) || 0), subtotal));
-  const total = round2(Math.max(0, subtotal - safeDiscount + (Number(deliveryFee) || 0)));
-  return { subtotal, discount: safeDiscount, total };
+  const safePromo = round2(Math.min(Math.max(0, Number(promoDiscount) || 0), subtotal));
+  const safeDiscount = round2(Math.min(Math.max(0, Number(discount) || 0), subtotal - safePromo));
+  const total = round2(Math.max(0, subtotal - safeDiscount - safePromo + (Number(deliveryFee) || 0)));
+  return { subtotal, discount: safeDiscount, promoDiscount: safePromo, total };
 }
 
 // Mapa por defecto de método de pago → bucket del corte de caja.

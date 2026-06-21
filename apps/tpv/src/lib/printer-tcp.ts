@@ -522,6 +522,8 @@ export interface ReceiptInput {
   items: TicketItem[];
   subtotal: number;
   discount?: number | null;
+  /** Descuento automático por promo NxM (3x2). Server-side; informativo en el recibo. */
+  promoDiscount?: number | null;
   tax?: number | null;
   tip?: number | null;
   total: number;
@@ -1165,6 +1167,9 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   d += sep;
 
   // ── 4. TOTALES (IVA incluido: subtotal/iva se desglosan del total) ───────
+  if (input.promoDiscount && input.promoDiscount > 0) {
+    d += row("Promo:", "-" + fmtMoney(input.promoDiscount), lw);
+  }
   if (input.discount && input.discount > 0) {
     d += row("Descuento:", "-" + fmtMoney(input.discount), lw);
   }
@@ -1739,7 +1744,12 @@ export async function printSplitReceipts(
       ...input,
       items: seat.items,
       subtotal: seat.subtotal,
-      total: seat.subtotal - (input.discount || 0) + (input.tax || 0) + (input.tip || 0),
+      total:
+        seat.subtotal -
+        (input.discount || 0) -
+        (input.promoDiscount || 0) +
+        (input.tax || 0) +
+        (input.tip || 0),
       // El campo customerName se sobreescribe para distinguir al
       // imprimir; conserva el original como referencia.
       customerName: `Comensal ${seat.seatNumber} de ${numberOfGuests}`,
@@ -1787,6 +1797,7 @@ export async function printEqualSplitReceipts(
   const totalCents = Math.round((input.total || 0) * 100);
   const subtotalCents = Math.round((input.subtotal || 0) * 100);
   const discountCents = Math.round((input.discount || 0) * 100);
+  const promoDiscountCents = Math.round((input.promoDiscount || 0) * 100);
   const taxCents = Math.round((input.tax || 0) * 100);
   const tipCents = Math.round((input.tip || 0) * 100);
 
@@ -1811,6 +1822,7 @@ export async function printEqualSplitReceipts(
       items: input.items,
       subtotal: round2(splitInt(subtotalCents, i) / 100),
       discount: round2(splitInt(discountCents, i) / 100),
+      promoDiscount: round2(splitInt(promoDiscountCents, i) / 100),
       tax: round2(splitInt(taxCents, i) / 100),
       tip: round2(splitInt(tipCents, i) / 100),
       total: round2(splitInt(totalCents, i) / 100),

@@ -861,9 +861,14 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
       hapticSuccess();
 
-      // Doble pantalla: mostrar agradecimiento en la pantalla de cliente.
+      // Doble pantalla: mostrar agradecimiento en la pantalla de cliente. Usa el
+      // total del servidor cuando exista (ya incluye promos 3x2 que el TPV no
+      // calcula local), + propina; offline cae al total local.
       justCompletedRef.current = true;
-      dualScreen.completeSale({ total: total + tipAmount });
+      const srvTotalForScreen = Number(order?.total);
+      const displayTotal =
+        (!queued && Number.isFinite(srvTotalForScreen) ? srvTotalForScreen : total) + tipAmount;
+      dualScreen.completeSale({ total: displayTotal });
 
       // Capturar contexto y armar el recibo ANTES de limpiar el ticket activo
       // (el botón "Imprimir ticket" del toast los usa después del reset).
@@ -876,10 +881,24 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         customerName: order?.ticketName || ticket.name || null,
         customerPhone: ticket.phone ?? null,
       };
+      // Totales del RECIBO: cuando hay respuesta del servidor (no encolado), el
+      // total/subtotal/descuentos son la VERDAD del servidor — que ya aplicó las
+      // promos por cantidad (3x2 etc.) que el TPV no calcula localmente. Sin
+      // esto, el recibo imprimiría el total sin promo aunque la orden se haya
+      // registrado con ella (ticket dice $300, sistema cobró $200). Offline /
+      // encolado cae al cálculo local (la promo se reflejará al reimprimir desde
+      // el ticket guardado una vez sincronizado). El tip lo suma el TPV: el
+      // total del servidor no lo incluye.
+      const srvSubtotal = Number(order?.subtotal);
+      const srvTotal = Number(order?.total);
+      const srvDiscount = Number(order?.discount);
+      const srvPromo = Number(order?.promoDiscount);
+      const useServerTotals = !queued && order != null && Number.isFinite(srvTotal);
       const totals = {
-        subtotal,
-        discount: ticket.discount,
-        total: total + tipAmount,
+        subtotal: useServerTotals && Number.isFinite(srvSubtotal) ? srvSubtotal : subtotal,
+        discount: useServerTotals && Number.isFinite(srvDiscount) ? srvDiscount : ticket.discount,
+        promoDiscount: useServerTotals && Number.isFinite(srvPromo) ? srvPromo : 0,
+        total: (useServerTotals ? srvTotal : total) + tipAmount,
         paymentMethod: method,
         tipPercent: tip?.percent ?? 0,
         tipAmount,

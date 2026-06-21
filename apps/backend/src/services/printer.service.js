@@ -150,7 +150,8 @@ function buildCashierTicket(order, config) {
   const items = order.items || [];
   const subtotal = Number(order.subtotal) || items.reduce((s, i) => s + Number(i.subtotal), 0);
   const discount = Number(order.discount) || 0;
-  const total    = Number(order.total) || subtotal - discount;
+  const promoDiscount = Number(order.promoDiscount) || 0;
+  const total    = Number(order.total) || subtotal - discount - promoDiscount;
 
   let d = CMD.INIT;
 
@@ -194,6 +195,7 @@ function buildCashierTicket(order, config) {
 
   // Totales
   d += row('Subtotal:', '$' + subtotal.toFixed(2));
+  if (promoDiscount > 0) d += row('Promo:', '-$' + promoDiscount.toFixed(2));
   if (discount > 0) d += row('Descuento:', '-$' + discount.toFixed(2));
   d += CMD.BOLD_ON;
   d += CMD.DOUBLE_ON;

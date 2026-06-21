@@ -479,6 +479,7 @@ export default function OrderTypePage() {
         items,
         subtotal: Number(full.subtotal ?? subtotalCalc),
         discount: Number(full.discount ?? 0),
+        promoDiscount: Number(full.promoDiscount ?? 0),
         tax: Number(full.tax ?? 0),
         tip: Number(full.tip ?? 0),
         total: Number(full.total ?? subtotalCalc),
