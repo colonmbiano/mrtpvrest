@@ -413,8 +413,7 @@ export default function OrderTypePage() {
 
   // Editar → abre la cuenta para agregar productos.
   const handleOpenAccount = (id: string) => enterAccount(id, null);
-  // Imprimir / Cobrar → entran a la cuenta y el menú dispara la acción al montar.
-  const handleReprintAccount = (id: string) => enterAccount(id, "print");
+  // Cobrar → entra a la cuenta y el menú dispara el cobro al montar.
   const handleChargeAccount = (id: string) => enterAccount(id, "pay");
 
   // Reimprime el ticket de una orden por id, DIRECTAMENTE desde la pantalla
@@ -508,6 +507,12 @@ export default function OrderTypePage() {
       });
     }
   };
+
+  // Imprimir cuenta → impresión DIRECTA a la CASHIER (reprintReceiptById), sin
+  // navegar al catálogo. Antes entraba a /pos/menu con pendingAction "print",
+  // así que "Imprimir" abría el ticket en el editor en lugar de imprimir al
+  // instante. Mismo flujo directo que la pestaña "Cobradas" y el cajón.
+  const handleReprintAccount = (id: string) => reprintReceiptById(id);
 
   // Meseros (WAITER) operan en modo préstamo: sin cobro directo (igual que el
   // hideMoney del drawer de tickets en el menú).
