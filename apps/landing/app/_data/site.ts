@@ -5,3 +5,6 @@ export const registerUrl = `${adminUrl}/register`
 export const loginUrl = `${adminUrl}/login`
 
 export const contactEmail = 'contacto@mrtpvrest.com'
+
+// MODA+ — POS para tiendas de ropa (app y registro self-serve viven aquí).
+export const modaUrl = 'https://moda.mrtpvrest.com'
