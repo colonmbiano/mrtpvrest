@@ -60,10 +60,34 @@ export function SalesAreaChart({ data, height = 210 }: { data: Array<{ h: string
         </g>
       ))}
       {data.map((d, i) => (i % 2 === 0 ? <text key={i} x={x(i)} y={H - 8} textAnchor="middle" fontSize="10" fill="#94a3b8" fontFamily="var(--font-dm-mono), monospace">{d.h}</text> : null))}
-      <path d={`${path("ayer")}`} fill="none" stroke="#cbd5e1" strokeWidth="1.6" strokeDasharray="3 3" />
+      {data.some((d) => d.ayer > 0) && <path d={`${path("ayer")}`} fill="none" stroke="#cbd5e1" strokeWidth="1.6" strokeDasharray="3 3" />}
       <path d={area} fill="url(#salesfill)" />
       <path d={path("hoy")} fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+// ── Donut (anillo de proporciones) ──────────────────────────────────────────
+export function Donut({ segments, size = 156, thickness = 22, center }: { segments: Array<{ label: string; value: number; color: string }>; size?: number; thickness?: number; center?: ReactNode }) {
+  const sum = segments.reduce((a, s) => a + s.value, 0) || 1;
+  const r = (size - thickness) / 2;
+  const c = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surf-2)" strokeWidth={thickness} />
+        <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+          {segments.map((s, i) => {
+            const len = (s.value / sum) * c;
+            const el = <circle key={i} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={s.color} strokeWidth={thickness} strokeDasharray={`${len.toFixed(2)} ${(c - len).toFixed(2)}`} strokeDashoffset={(-offset).toFixed(2)} strokeLinecap="butt" />;
+            offset += len;
+            return el;
+          })}
+        </g>
+      </svg>
+      {center && <div className="absolute inset-0 grid place-items-center text-center">{center}</div>}
+    </div>
   );
 }
 
@@ -106,6 +130,8 @@ const statusStyles: Record<string, { bg: string; fg: string; dot?: boolean }> = 
   en_proceso: { bg: "var(--warn-soft)", fg: "var(--warn)" },
   activo: { bg: "transparent", fg: "var(--ok)", dot: true },
   inactivo: { bg: "transparent", fg: "var(--tx-dim)", dot: true },
+  en_linea: { bg: "var(--ok-soft)", fg: "var(--ok)", dot: true },
+  sin_conexion: { bg: "var(--warn-soft)", fg: "var(--warn)", dot: true },
   vip: { bg: "var(--warn-soft)", fg: "var(--warn)" },
   frecuente: { bg: "var(--info-soft)", fg: "var(--info)" },
   nuevo: { bg: "var(--purple-soft)", fg: "var(--purple)" },
