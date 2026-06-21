@@ -134,6 +134,7 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
         id: true, orderNumber: true, status: true,
         paymentMethod: true, paymentStatus: true,
         total: true, deliveryFee: true, tip: true, cashCollected: true,
+        transferVerified: true, transferVerifiedAt: true,
         customerName: true, ticketName: true, customerPhone: true,
         deliveryAddress: true, createdAt: true,
       },
@@ -147,6 +148,12 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
       return acc;
     }, {});
 
+    // Transferencias del turno aún SIN verificar contra el banco. Es lo que el
+    // admin tiene que palomear en la lista de pedidos del repartidor.
+    const unverifiedTransfers = orders.filter(
+      (o) => o.paymentMethod === 'TRANSFER' && !o.transferVerified,
+    );
+
     res.json({
       orders: orders.map(o => ({ ...o, customer: o.customerName || o.ticketName || null })),
       summary: {
@@ -155,10 +162,58 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
         deliveryFees: orders.reduce((s, o) => s + (o.deliveryFee || 0), 0),
         tips: orders.reduce((s, o) => s + (o.tip || 0), 0),
         byMethod,
+        unverifiedTransferCount: unverifiedTransfers.length,
+        unverifiedTransferTotal: unverifiedTransfers.reduce((s, o) => s + (o.total || 0), 0),
       },
     });
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
+
+// ── Verificar / desverificar el cobro por TRANSFERENCIA de un pedido ──────────
+// El repartidor cobró por SPEI y el admin confirma contra el banco que el dinero
+// llegó. Solo aplica a paymentMethod=TRANSFER. Es admin-only (mismo rol que el
+// corte): el repartidor NO puede auto-verificar su propia transferencia, igual
+// que no aprueba su propio efectivo. No mueve caja ni totales — solo marca el
+// pedido y deja auditoría (quién/cuándo). No bloquea el corte.
+router.patch(
+  '/:driverId/orders/:orderId/verify-transfer',
+  authenticate,
+  requireTenantAccess,
+  requireRole('ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER'),
+  async (req, res) => {
+    try {
+      const driver = await assertDriverAccess(req, res);
+      if (!driver) return;
+      const { orderId } = req.params;
+      const verified = req.body?.verified !== false; // default true
+      const restaurantId = req.restaurantId || req.user?.restaurantId;
+
+      const order = await prisma.order.findFirst({
+        where: {
+          id: orderId,
+          deliveryDriverId: driver.id,
+          ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { restaurantId } : {}),
+        },
+        select: { id: true, paymentMethod: true, transferVerified: true },
+      });
+      if (!order) return res.status(404).json({ error: 'Pedido no encontrado para este repartidor' });
+      if (order.paymentMethod !== 'TRANSFER') {
+        return res.status(400).json({ error: 'El pedido no se cobró por transferencia' });
+      }
+
+      const updated = await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          transferVerified: verified,
+          transferVerifiedAt: verified ? new Date() : null,
+          transferVerifiedBy: verified ? (req.user?.name || req.user?.id || null) : null,
+        },
+        select: { id: true, transferVerified: true, transferVerifiedAt: true, transferVerifiedBy: true },
+      });
+      res.json(updated);
+    } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+  },
+);
 
 // ── Asignar fondo de cambio (caja chica) — sólo admin ────────────────────
 // El repartidor no puede asignarse fondo a sí mismo: se registra como un
