@@ -30,6 +30,8 @@ type DriverOrder = {
   createdAt: string;
 };
 
+type ShippingVariant = { variant: string; count: number; amount: number };
+
 type OrdersSummary = {
   count: number;
   total: number;
@@ -38,6 +40,9 @@ type OrdersSummary = {
   byMethod: Record<string, number>;
   unverifiedTransferCount?: number;
   unverifiedTransferTotal?: number;
+  // Desglose de envíos por variante/zona del turno (Lluvia, Noche, local…).
+  shippingTotal?: number;
+  shippingByVariant?: ShippingVariant[];
 };
 
 type CashSummary = {
@@ -589,6 +594,28 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                     <div className="text-[10px] font-medium opacity-70 mt-0.5">
                       Confírmalas contra tu banco y palomea cada una abajo.
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Envíos por variante/zona del turno (Lluvia, Noche, local…).
+                  La variante se lee de las notas del renglón de envío server-side. */}
+              {ordersSummary?.shippingByVariant && ordersSummary.shippingByVariant.length > 0 && (
+                <div className="rounded-2xl bg-[var(--surf2)] border border-[var(--border)] p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-widest text-white/40">🛵 Envíos por variante</h3>
+                    <span className="text-sm font-black text-white tabular-nums">${(ordersSummary.shippingTotal ?? 0).toFixed(0)}</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {ordersSummary.shippingByVariant.map((v) => (
+                      <div key={v.variant} className="flex items-center justify-between gap-3 text-xs">
+                        <span className="text-white/80 truncate capitalize">{v.variant}</span>
+                        <span className="flex items-center gap-3 shrink-0">
+                          <span className="text-[var(--text-secondary)] tabular-nums">×{v.count}</span>
+                          <span className="font-semibold text-white tabular-nums w-14 text-right">${v.amount.toFixed(0)}</span>
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
