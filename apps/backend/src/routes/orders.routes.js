@@ -1578,7 +1578,13 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/:id/payment', authenticate, requireTenantAccess, validateBody(updatePaymentSchema), async (req, res) => {
+// Cobrar (marcar PAID) es exclusivo de Cajero o superior — los MESEROS no
+// cobran (el TPV ya los mete en "modo préstamo" por rol, ver isLoanMode). Antes
+// esta ruta solo pedía autenticación + tenant: cualquier token del restaurante
+// (incl. WAITER/KITCHEN/DELIVERY) podía marcar una orden pagada vía API aunque
+// la UI nunca se lo ofreciera. WAITER queda fuera a propósito; no hay flujo
+// legítimo de cobro de mesero (los repartidores cobran por /driver-cash/collect).
+router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), validateBody(updatePaymentSchema), async (req, res) => {
   try {
     const { paymentMethod } = req.body;
     const order = await prisma.order.update({
