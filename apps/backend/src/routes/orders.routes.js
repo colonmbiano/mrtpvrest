@@ -300,6 +300,7 @@ const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePer
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
 const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals } = require('../lib/money');
+const { computeBulkPromoDiscount, loadActiveBulkPromos } = require('../lib/bulk-promo');
 const { nextOrderNumber } = require('../lib/order-number');
 const { releaseTableAfterPayment } = require('../services/table-lifecycle.service');
 const audit = require('../lib/audit-logger');
@@ -722,6 +723,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         seatNumber,
         course,
         _modifiers: flatMods,
+        // Categoría del producto: la usa el cálculo de promos NxM (qué líneas
+        // son elegibles). Prefijo `_` → no se persiste como columna de OrderItem.
+        _categoryId: menuItem?.categoryId || null,
       };
     }));
 
@@ -736,11 +740,26 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     // permiso no puede auto-descontarse la cuenta: discount forzado a 0.
     const mayDiscount =
       userHasPermission(req, 'apply_discount') || hasValidOverride(req, 'apply_discount');
+
+    // Promociones por cantidad (NxM, p.ej. "3x2 alitas"). Automáticas: NO pasan
+    // por el permiso apply_discount — son una promo del negocio, no un descuento
+    // que aplica el cajero. Se computan server-side desde las líneas resueltas
+    // (precio real de DB) y se acotan dentro de computeOrderTotals.
+    const activeBulkPromos = await loadActiveBulkPromos(prisma, restaurantId);
+    const { promoDiscount: bulkPromoDiscount } = computeBulkPromoDiscount(
+      resolvedItems.map((it) => ({ price: it.price, quantity: it.quantity, categoryId: it._categoryId })),
+      activeBulkPromos,
+    );
+
     const {
       subtotal: serverSubtotal,
       discount: serverDiscount,
+      promoDiscount: serverPromoDiscount,
       total: serverTotal,
-    } = computeOrderTotals(resolvedItems, { discount: mayDiscount ? discount : 0 });
+    } = computeOrderTotals(resolvedItems, {
+      discount: mayDiscount ? discount : 0,
+      promoDiscount: bulkPromoDiscount,
+    });
 
     // ── Defensa en profundidad anti multi-tap ───────────────────────────────
     // Aunque el TPV ya deshabilita el botón Cobrar desde el primer tap, un
@@ -873,6 +892,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           cashCollectedAt: paidOnCreate && paymentMethod === 'CASH' ? new Date() : null,
           subtotal: serverSubtotal,
           discount: serverDiscount,
+          promoDiscount: serverPromoDiscount,
           total: serverTotal,
           source: 'TPV',
           customerName, customerPhone,
@@ -893,7 +913,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       // Creamos cada OrderItem individualmente porque los modificadores son
       // una relación nested write (no se puede con createMany).
       for (const it of resolvedItems) {
-        const { _modifiers, ...itemData } = it;
+        const { _modifiers, _categoryId, ...itemData } = it;
         await tx.orderItem.create({
           data: {
             ...itemData,
@@ -1049,6 +1069,10 @@ async function addRoundHandler(req, res) {
       };
     }));
 
+    // Promos NxM activas: la cuenta crece al agregar ronda, así que el 3x2 se
+    // re-evalúa sobre TODOS los items (viejos + nuevos), no solo los de la ronda.
+    const activeBulkPromos = await loadActiveBulkPromos(prisma, restaurantId);
+
     // Transaccional: crear OrderRound, insertar items con roundId, recalcular totales.
     const { updated, round } = await prisma.$transaction(async (tx) => {
       const lastRound = await tx.orderRound.findFirst({
@@ -1076,16 +1100,26 @@ async function addRoundHandler(req, res) {
         });
       }
 
-      const all = await tx.orderItem.findMany({ where: { orderId: id } });
+      const all = await tx.orderItem.findMany({
+        where: { orderId: id },
+        include: { menuItem: { select: { categoryId: true } } },
+      });
+      // Re-evaluar la promo NxM sobre la cuenta completa (la categoría de cada
+      // línea sale del menuItem, no se guarda en OrderItem).
+      const { promoDiscount: bulkPromoDiscount } = computeBulkPromoDiscount(
+        all.map((it) => ({ price: Number(it.price), quantity: it.quantity, categoryId: it.menuItem?.categoryId })),
+        activeBulkPromos,
+      );
       // Mismo helper que el create: subtotal/total siempre desde las líneas en DB.
-      const { subtotal, total } = computeOrderTotals(all, {
+      const { subtotal, total, promoDiscount } = computeOrderTotals(all, {
         discount: existing.discount || 0,
         deliveryFee: existing.deliveryFee || 0,
+        promoDiscount: bulkPromoDiscount,
       });
 
       const finalOrder = await tx.order.update({
         where: { id },
-        data: { subtotal, total },
+        data: { subtotal, total, promoDiscount },
         include: {
           user: { select: { name: true, phone: true } },
           items: { include: { menuItem: { select: { name: true, categoryId: true } }, modifiers: true } },

@@ -319,6 +319,7 @@ model Restaurant {
   whatsappSessions WhatsappSession[]
   whatsappContacts WhatsappContact[]
   promoGames       PromoGame[]
+  bulkPromos       BulkPromo[]
 
   // FASE INVENTARIO/COSTEO · taxonomía + recetario (multi-tenant scope)
   ingredientTypes      IngredientType[]
@@ -557,6 +558,9 @@ model Category {
 
   printerGroups CategoryPrinterGroup[]
 
+  // Promociones por cantidad (NxM) que incluyen esta categoría en su pool.
+  bulkPromos BulkPromoCategory[]
+
   // FASE INVENTARIO/COSTEO · política de margen por categoría
   pricingPolicies PricingPolicy[]
 
@@ -752,6 +756,13 @@ model Order {
   subtotal    Float
   deliveryFee Float @default(0)
   discount    Float @default(0)
+  // promoDiscount · descuento AUTOMÁTICO de promociones por cantidad (NxM,
+  // p.ej. "3x2 en alitas"). Se calcula server-side desde las líneas (ver
+  // lib/bulk-promo.js) y se persiste APARTE del `discount` manual del cajero:
+  // así los reportes distinguen "promo del negocio" de "descuento aplicado a
+  // mano", y el recibo puede imprimir cada concepto en su renglón.
+  // total = subtotal − discount − promoDiscount + deliveryFee.
+  promoDiscount Float @default(0)
   tip         Float @default(0)   // propina (kiosko / dine-in)
   total       Float
 
@@ -1069,6 +1080,60 @@ model Coupon {
 enum DiscountType {
   PERCENTAGE
   FIXED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BULK PROMO — Promociones por cantidad (NxM): "compra N, paga M".
+//
+// El caso canónico es el 3x2 (buyQuantity=3, payQuantity=2): por cada bloque de
+// 3 unidades de los productos elegibles, 1 sale gratis. Generaliza a cualquier
+// NxM (2x1 cervezas, 4x3, etc.) sin tocar código.
+//
+// POOL COMBINADO: una promo agrupa N categorías (Alitas + Boneless cuentan
+// JUNTAS para sumar el bloque). La regla de "qué sale gratis" es siempre la
+// unidad MÁS BARATA de cada bloque (estándar de industria, protege el margen) —
+// esa lógica vive en lib/bulk-promo.js, no en el schema.
+//
+// El descuento NO requiere el permiso apply_discount del cajero: es una promo
+// del negocio, automática. Se calcula en la misma $transacción que crea la
+// orden y se persiste en Order.promoDiscount.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model BulkPromo {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name        String // "3x2 Alitas y Boneless"
+  buyQuantity Int     @default(3) // compra N
+  payQuantity Int     @default(2) // paga M (descuento = N−M unidades más baratas por bloque)
+  isActive    Boolean @default(true)
+  // Vigencia opcional. null = sin límite por ese lado. La promo aplica cuando
+  // isActive=true Y (startsAt null o <= now) Y (endsAt null o >= now).
+  startsAt    DateTime?
+  endsAt      DateTime?
+
+  // Pool de categorías elegibles (M:N vía tabla join explícita, igual que el
+  // resto del schema). Sus productos suman JUNTOS para formar los bloques NxM.
+  categories BulkPromoCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, isActive])
+  @@map("bulk_promos")
+}
+
+// Join explícito BulkPromo ↔ Category (pool combinado del NxM).
+model BulkPromoCategory {
+  bulkPromoId String
+  bulkPromo   BulkPromo @relation(fields: [bulkPromoId], references: [id], onDelete: Cascade)
+  categoryId  String
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([bulkPromoId, categoryId])
+  @@index([categoryId])
+  @@map("bulk_promo_categories")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

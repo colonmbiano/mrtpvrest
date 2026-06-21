@@ -35,6 +35,7 @@ const tenantStore = new AsyncLocalStorage();
 // aquí — el test `tenant-guard.test.js` valida que la lista siga en sync.
 const SCOPED_MODELS = new Set([
   'AccessLog',
+  'BulkPromo',
   'Category',
   'Counter',
   'Coupon',
