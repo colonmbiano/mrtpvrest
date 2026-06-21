@@ -415,75 +415,68 @@ export default function MenuPage() {
         : null;
     const tableLabel = activeTableName || (tableNumber ? `Mesa ${tableNumber}` : activeTableId);
 
+    // Resumen de presentación: viaja con la transacción en cola para que /mesas
+    // y /cuenta muestren esta comanda ANTES de que sincronice (local-first).
+    const meta = {
+      tableId: activeTableId,
+      tableName: tableLabel ?? activeTableName ?? null,
+      orderId: activeOrderId ?? null,
+      itemCount,
+      total,
+      items: ticketItems.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        total: item.total,
+      })),
+    };
+
     try {
+      // Local-first optimista: apiOrQueue guarda en la cola y vuelve al instante;
+      // el envío real corre en segundo plano. Nunca esperamos al backend aquí.
       const result = activeOrderId
-        ? await apiOrQueue<{ orderNumber?: string }>(
+        ? await apiOrQueue("order", "POST", `/api/orders/${activeOrderId}/rounds`, { items }, meta)
+        : await apiOrQueue(
             "order",
             "POST",
-            `/api/orders/${activeOrderId}/rounds`,
-            { items },
-          )
-        : await apiOrQueue<{ orderNumber?: string }>("order", "POST", "/api/orders/tpv", {
-            orderType: activeTableId ? "DINE_IN" : "TAKEOUT",
-            tableId: realTableId,
-            tableNumber,
-            numberOfGuests: activeTableId ? 1 : null,
-            customerName: activeTableId
-              ? tableLabel || "Meseros Lite"
-              : takeoutName.trim() || "Para llevar",
-            paymentMethod: "PENDING",
-            // Mesa con cuenta ya abierta (la abrió el TPV principal u otro
-            // mesero, o el cache de mesas estaba viejo) → agregar la ronda a esa
-            // cuenta en vez de un 409 que perdía la comanda. El mesero eligió una
-            // mesa física concreta: sus items pertenecen a esa cuenta. Sin esto,
-            // además, el replay offline a una mesa ocupada fallaba permanente.
-            ...(realTableId ? { appendToOpenTab: true } : {}),
-            items,
-            subtotal: total,
-            discount: 0,
-            total,
-          });
+            "/api/orders/tpv",
+            {
+              orderType: activeTableId ? "DINE_IN" : "TAKEOUT",
+              tableId: realTableId,
+              tableNumber,
+              numberOfGuests: activeTableId ? 1 : null,
+              customerName: activeTableId
+                ? tableLabel || "Meseros Lite"
+                : takeoutName.trim() || "Para llevar",
+              paymentMethod: "PENDING",
+              // Mesa con cuenta ya abierta (la abrió el TPV principal u otro
+              // mesero, o el cache de mesas estaba viejo) → agregar la ronda a esa
+              // cuenta en vez de un 409 que perdía la comanda. El mesero eligió una
+              // mesa física concreta: sus items pertenecen a esa cuenta. Sin esto,
+              // además, el replay a una mesa ocupada fallaba permanente.
+              ...(realTableId ? { appendToOpenTab: true } : {}),
+              items,
+              subtotal: total,
+              discount: 0,
+              total,
+            },
+            meta,
+          );
 
-      if (!result.ok) {
-        throw new Error(result.error || "No se pudo guardar la comanda.");
-      }
-
-      // Auto-impresión local (LAN). Se hace ANTES de limpiar el ticket y
-      // funciona incluso si la orden quedó en cola (WiFi local arriba, sin
-      // internet) — la impresión real corre en la tablet, no en el backend.
-      const printNote = await maybePrintKitchen(result.data?.orderNumber ?? null);
+      // Auto-impresión local (LAN) ANTES de limpiar el ticket. Corre en la
+      // tablet por TCP, no en el backend, así que funciona aunque la comanda
+      // siga en cola. El folio real lo asigna el backend al sincronizar; aquí
+      // imprimimos sin folio (la cocina necesita qué cocinar, no el número).
+      const printNote = await maybePrintKitchen(null);
 
       clearTicket();
       setLastAddedName(null);
       setTakeoutName("");
-      const baseMessage = result.queued
-        ? `${activeOrderId ? "Nueva ronda" : "Comanda"} en cola. Se enviara al volver internet.`
-        : activeOrderId
-          ? "Nueva ronda agregada a la cuenta."
-          : "Comanda guardada.";
+      const label = activeOrderId ? "Nueva ronda" : "Comanda";
+      const baseMessage = result.online
+        ? `${label} guardada. Enviando…`
+        : `${label} guardada sin conexión. Se enviará al volver internet.`;
       setSaveMessage(baseMessage + printNote);
       window.setTimeout(() => router.replace("/mesas"), 600);
-    } catch (err: unknown) {
-      const directMessage =
-        err instanceof Error && err.message ? err.message : "";
-      const message =
-        typeof err === "object" &&
-        err !== null &&
-        "response" in err &&
-        typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === "string"
-          ? (err as { response: { data: { error: string } } }).response.data.error
-          : directMessage || "No se pudo guardar la comanda. Revisa sesion, sucursal y turno.";
-      const isTokenError = message.toLowerCase().includes("token");
-      const friendlyMessage = isTokenError
-        ? "Sesion vencida. Vuelve a ingresar tu PIN para continuar (no hace falta reconfigurar la tablet)."
-        : message;
-      setSaveError(friendlyMessage);
-      // Sesion expirada: el interceptor ya limpio el token; llevamos al mesero
-      // directo al PIN en vez de dejarlo atascado en /menu con el error. La
-      // comanda actual sigue en el ticket local hasta que reingrese.
-      if (isTokenError) {
-        window.setTimeout(() => router.replace("/pin"), 1200);
-      }
     } finally {
       setSaving(false);
     }
