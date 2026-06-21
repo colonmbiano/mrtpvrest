@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, RotateCw } from "lucide-react";
+import { ArrowLeft, Clock, Plus, RotateCw } from "lucide-react";
 import api from "@/lib/api";
+import { pendingOrdersFor, useOfflineQueueStore } from "@/store/useOfflineQueueStore";
 import { useWaiterOrderStore } from "@/store/useWaiterOrderStore";
 
 interface AccountModifier {
@@ -67,6 +68,8 @@ export default function CuentaPage() {
   const activeTableId = useWaiterOrderStore((state) => state.activeTableId);
   const activeTableName = useWaiterOrderStore((state) => state.activeTableName);
   const setActiveOrder = useWaiterOrderStore((state) => state.setActiveOrder);
+  const queue = useOfflineQueueStore((state) => state.queue);
+  const lastSync = useOfflineQueueStore((state) => state.lastSync);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [order, setOrder] = useState<AccountOrder | null>(null);
   const [error, setError] = useState("");
@@ -133,6 +136,32 @@ export default function CuentaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTableId]);
 
+  // Cuando la cola sincroniza, el servidor ya tiene las rondas que estaban
+  // pendientes: re-leemos la cuenta para que el "Pendiente" se convierta en
+  // items reales sin parpadeo.
+  const lastSyncRef = useRef(lastSync);
+  useEffect(() => {
+    if (lastSync === lastSyncRef.current) return;
+    lastSyncRef.current = lastSync;
+    void applyAccount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSync]);
+
+  // Comandas locales de esta mesa/cuenta que aún no llegan al servidor. Local-
+  // first: se muestran como "Pendiente de sincronizar" para no perderlas de
+  // vista entre que el mesero guarda y la cola las envía.
+  const pendingTransactions = useMemo(
+    () => pendingOrdersFor(queue, { tableId: activeTableId, orderId: order?.id ?? null }),
+    [queue, activeTableId, order?.id],
+  );
+  const pendingItems = pendingTransactions.flatMap((transaction) => transaction.meta?.items ?? []);
+  const pendingTotal = pendingTransactions.reduce(
+    (sum, transaction) => sum + (transaction.meta?.total ?? 0),
+    0,
+  );
+  const pendingItemCount = pendingItems.reduce((sum, item) => sum + item.quantity, 0);
+  const pendingFailed = pendingTransactions.some((transaction) => transaction.failedPermanently);
+
   // Agrupar items por ronda para mostrar el orden cronologico de la comanda.
   const rounds = order?.rounds ?? [];
   const roundNumberById = new Map(rounds.map((r) => [r.id, r.roundNumber]));
@@ -151,6 +180,48 @@ export default function CuentaPage() {
   // (sumando cantidades) y cuantas rondas lleva la cuenta.
   const itemCount = (order?.items ?? []).reduce((sum, item) => sum + item.quantity, 0);
   const roundCount = groupedList.length;
+
+  // Bloque "Pendiente de enviar": las comandas locales de esta mesa que la cola
+  // aún no sincronizó. Se reusa en el estado vacío (mesa cuya cuenta todavía no
+  // existe en el servidor) y debajo de la cuenta real.
+  const pendingSection =
+    pendingItems.length > 0 ? (
+      <section
+        className={[
+          "grid gap-2 rounded-lg border bg-[var(--surface-1)] p-4",
+          pendingFailed ? "border-[var(--danger)]" : "border-[var(--warning)]",
+        ].join(" ")}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <p
+            className={[
+              "flex items-center gap-2 text-sm font-black uppercase",
+              pendingFailed ? "text-[var(--danger)]" : "text-[var(--warning)]",
+            ].join(" ")}
+          >
+            <Clock size={16} strokeWidth={2.8} />
+            {pendingFailed ? "No se pudo enviar" : "Pendiente de enviar"}
+          </p>
+          <p className="text-sm font-black text-[var(--text-secondary)]">{money(pendingTotal)}</p>
+        </div>
+        {pendingItems.map((item, index) => (
+          <div
+            key={`${item.name}-${index}`}
+            className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-3)] p-3"
+          >
+            <p className="min-w-0 text-base font-black text-[var(--text-primary)]">
+              <span className="text-[var(--brand)]">{item.quantity}x</span> {item.name}
+            </p>
+            <p className="shrink-0 text-base font-black text-[var(--text-primary)]">{money(item.total)}</p>
+          </div>
+        ))}
+        <p className="text-xs font-bold text-[var(--text-muted)]">
+          {pendingFailed
+            ? "Revisa sesion, sucursal y turno en Perfil y reintenta."
+            : "Se enviara al servidor en cuanto haya conexion."}
+        </p>
+      </section>
+    ) : null;
 
   return (
     <section className="min-h-screen bg-[var(--bg)] px-5 py-5 pb-40 text-[var(--text-primary)]">
@@ -198,7 +269,7 @@ export default function CuentaPage() {
         </div>
       )}
 
-      {loadState === "empty" && (
+      {loadState === "empty" && pendingItems.length === 0 && (
         <div className="grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-6 text-center">
           <p className="text-xl font-black text-[var(--text-primary)]">Esta mesa no tiene cuenta abierta</p>
           <p className="text-base font-bold text-[var(--text-secondary)]">
@@ -214,6 +285,15 @@ export default function CuentaPage() {
         </div>
       )}
 
+      {loadState === "empty" && pendingItems.length > 0 && (
+        <div className="grid gap-4">
+          <p className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3 text-sm font-black text-[var(--text-secondary)]">
+            Comanda guardada en esta tablet. Aun no aparece en el servidor.
+          </p>
+          {pendingSection}
+        </div>
+      )}
+
       {loadState === "ready" && order && (
         <div className="grid gap-4">
           <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3">
@@ -225,11 +305,13 @@ export default function CuentaPage() {
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3">
               <p className="text-xs font-black uppercase text-[var(--text-muted)]">Productos</p>
-              <p className="text-2xl font-black text-[var(--text-primary)]">{itemCount}</p>
+              <p className="text-2xl font-black text-[var(--text-primary)]">{itemCount + pendingItemCount}</p>
             </div>
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3">
               <p className="text-xs font-black uppercase text-[var(--text-muted)]">Rondas</p>
-              <p className="text-2xl font-black text-[var(--text-primary)]">{roundCount}</p>
+              <p className="text-2xl font-black text-[var(--text-primary)]">
+                {roundCount + pendingTransactions.length}
+              </p>
             </div>
           </div>
 
@@ -270,6 +352,8 @@ export default function CuentaPage() {
             </section>
           ))}
 
+          {pendingSection}
+
           <div className="grid gap-2 rounded-lg border border-[var(--brand)] bg-[var(--surface-1)] px-4 py-4">
             <div className="flex items-center justify-between">
               <p className="text-sm font-black uppercase text-[var(--text-secondary)]">Subtotal</p>
@@ -285,6 +369,20 @@ export default function CuentaPage() {
               <p className="text-lg font-black uppercase text-[var(--brand)]">Total</p>
               <p className="text-2xl font-black text-[var(--text-primary)]">{money(order.total)}</p>
             </div>
+            {pendingTotal > 0 && (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-black uppercase text-[var(--warning)]">En cola</p>
+                  <p className="text-base font-black text-[var(--warning)]">+{money(pendingTotal)}</p>
+                </div>
+                <div className="flex items-center justify-between border-t border-[var(--border)] pt-2">
+                  <p className="text-base font-black uppercase text-[var(--brand)]">Total con pendientes</p>
+                  <p className="text-2xl font-black text-[var(--text-primary)]">
+                    {money(order.total + pendingTotal)}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

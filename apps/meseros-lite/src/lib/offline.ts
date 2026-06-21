@@ -1,13 +1,21 @@
 "use client";
 
 import api from "@/lib/api";
-import { useOfflineQueueStore, type OfflineTransactionType } from "@/store/useOfflineQueueStore";
+import { useEmployeeSessionStore } from "@/store/useEmployeeSessionStore";
+import {
+  useOfflineQueueStore,
+  type OfflineOrderMeta,
+  type OfflineTransactionType,
+} from "@/store/useOfflineQueueStore";
 
 let syncInterval: number | null = null;
 
 export interface ApiOrQueueResult<T = unknown> {
   ok: boolean;
   queued: boolean;
+  // Había red al guardar (la comanda se enviará casi de inmediato) o no (queda
+  // en cola hasta que vuelva la conexión). Solo afecta el mensaje al mesero.
+  online?: boolean;
   data: T | null;
   error?: string;
 }
@@ -24,61 +32,59 @@ function isNetworkError(err: unknown) {
   return typeof error.response.status === "number" && error.response.status >= 500;
 }
 
+// Sesión vencida (401/403) o token inválido. Distinto de un 4xx de datos: la
+// comanda es válida, lo que caducó es la sesión del mesero. No quema su
+// presupuesto de reintentos; dispara el cierre de sesión → SessionGate al PIN.
+function isAuthError(err: unknown) {
+  const error = err as { response?: { status?: number }; message?: string } | null;
+  const status = error?.response?.status;
+  if (status === 401 || status === 403) return true;
+  return (error?.message || "").toLowerCase().includes("token");
+}
+
 function errorMessage(err: unknown) {
   const error = err as { message?: string; response?: { data?: { error?: string } } } | null;
   return error?.response?.data?.error || error?.message || "fallo desconocido";
 }
 
+// Local-first OPTIMISTA: la comanda se guarda SIEMPRE primero en la cola local
+// (respuesta instantánea, cero espera al backend) y el envío real corre en
+// segundo plano. Esto da fluidez constante en WiFi saturado y unifica el camino
+// online/offline. Las vistas de lectura mergean `meta` para no perder de vista
+// lo recién guardado, y los rechazos del servidor afloran de forma diferida
+// (OfflineStatus / Perfil / badges en mesa).
 export async function apiOrQueue<T = unknown>(
   type: OfflineTransactionType,
   method: "POST" | "PUT",
   path: string,
   body: Record<string, unknown>,
+  meta?: OfflineOrderMeta,
 ): Promise<ApiOrQueueResult<T>> {
   const store = useOfflineQueueStore.getState();
-  const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
 
   // ID estable por transacción: se usa como `clientOrderId` (dedup a nivel DB,
   // sobrevive reinicios del backend y multi-instancia) Y como header
-  // `Idempotency-Key`. Crítico: la MISMA clave viaja en el primer intento y en
-  // todos los reintentos de la cola, para que un ack perdido no duplique la
-  // comanda (server creó la orden, la red se cayó antes de la respuesta).
+  // `Idempotency-Key`. Crítico: la MISMA clave viaja en todos los reintentos de
+  // la cola, para que un ack perdido no duplique la comanda (server creó la
+  // orden, la red se cayó antes de la respuesta).
   const transactionId = makeTransactionId(type);
   const idempotentBody = { clientOrderId: transactionId, ...body };
-  const config = { headers: { "Idempotency-Key": transactionId } };
 
-  if (isOffline) {
-    store.addToQueue({
-      id: transactionId,
-      type,
-      data: { method, path, body: idempotentBody },
-      timestamp: Date.now(),
-      synced: false,
-    });
-    return { ok: true, queued: true, data: null };
-  }
+  store.addToQueue({
+    id: transactionId,
+    type,
+    data: { method, path, body: idempotentBody },
+    meta,
+    timestamp: Date.now(),
+    synced: false,
+  });
 
-  try {
-    const response =
-      method === "POST"
-        ? await api.post<T>(path, idempotentBody, config)
-        : await api.put<T>(path, idempotentBody, config);
-    return { ok: true, queued: false, data: response.data };
-  } catch (err: unknown) {
-    if (isNetworkError(err)) {
-      store.addToQueue({
-        id: transactionId,
-        type,
-        data: { method, path, body: idempotentBody },
-        timestamp: Date.now(),
-        synced: false,
-        lastError: errorMessage(err),
-      });
-      return { ok: true, queued: true, data: null };
-    }
+  // Si hay red, empujamos YA en segundo plano (sale en ~ms, no esperamos los 5s
+  // del intervalo). Sin red, se queda en cola y el listener `online` la dispara.
+  const online = typeof navigator === "undefined" || navigator.onLine !== false;
+  if (online) void syncOfflineQueue();
 
-    return { ok: false, queued: false, data: null, error: errorMessage(err) };
-  }
+  return { ok: true, queued: true, online, data: null };
 }
 
 export async function syncOfflineQueue() {
@@ -107,6 +113,15 @@ export async function syncOfflineQueue() {
           // el escenario para el que existe esta app). Cortamos la pasada y la
           // cola se reintenta intacta al volver la conexión (online / 5s).
           store.noteNetworkRetry(transaction.id, errorMessage(err));
+          break;
+        }
+        if (isAuthError(err)) {
+          // Sesión vencida: NO es culpa de la comanda (no quemamos su retry
+          // budget). Cerramos sesión → SessionGate redirige al PIN; tras re-PIN
+          // la cola reintenta con token fresco y la comanda sale sola. Cortamos
+          // la pasada: sin token, el resto fallaría igual.
+          store.noteNetworkRetry(transaction.id, errorMessage(err));
+          useEmployeeSessionStore.getState().logout();
           break;
         }
         // Error real (4xx: datos inválidos, turno cerrado, mesa inválida):
