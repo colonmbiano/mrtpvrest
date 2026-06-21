@@ -1,7 +1,7 @@
 const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
+const { authenticate, requireTenantAccess, requireRole, userHasPermission, hasValidOverride } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
@@ -111,6 +111,40 @@ async function findOpenShiftId(client, restaurantId, locationId) {
     select: { id: true },
   });
   return shift?.id || null;
+}
+
+// Totales EN VIVO de una caja (mismo cálculo que el cierre, sin mutar): ventas
+// COMPLETED ligadas al turno por método + movimientos de efectivo + esperado.
+// Fuente única compartida por el cierre y por GET /shifts/:id/summary.
+async function computeShiftTotals(client, shiftId, openingFloat) {
+  const payments = await client.retailPayment.findMany({
+    where: { sale: { shiftId, status: 'COMPLETED' } },
+    select: { method: true, amount: true },
+  });
+  const byMethod = payments.reduce((acc, p) => {
+    const amt = Number(p.amount);
+    if (p.method === 'CASH') acc.cash += amt;
+    else if (p.method === 'CARD_PRESENT') acc.card += amt;
+    else if (p.method === 'TRANSFER') acc.transfer += amt;
+    return acc;
+  }, { cash: 0, card: 0, transfer: 0 });
+  const salesCount = await client.retailSale.count({ where: { shiftId, status: 'COMPLETED' } });
+  const movements = await client.retailCashMovement.findMany({
+    where: { shiftId },
+    select: { type: true, amount: true },
+  });
+  const cashIn = movements.filter((m) => m.type === 'CASH_IN').reduce((s, m) => s + Number(m.amount), 0);
+  const cashOut = movements.filter((m) => m.type === 'CASH_OUT' || m.type === 'EXPENSE').reduce((s, m) => s + Number(m.amount), 0);
+  const expectedCash = Number((Number(openingFloat) + byMethod.cash + cashIn - cashOut).toFixed(2));
+  return {
+    totalCashSales: Number(byMethod.cash.toFixed(2)),
+    totalCardSales: Number(byMethod.card.toFixed(2)),
+    totalTransferSales: Number(byMethod.transfer.toFixed(2)),
+    totalCashIn: Number(cashIn.toFixed(2)),
+    totalCashOut: Number(cashOut.toFixed(2)),
+    salesCount,
+    expectedCash,
+  };
 }
 
 const productSchema = z.object({
@@ -226,6 +260,21 @@ async function createRetailSale(input, req) {
   const saleDiscount = Math.min(Math.max(toNumber(body.discount), 0), totals.subtotal);
   const tax = Math.max(toNumber(body.tax), 0);
   const total = Number((totals.subtotal - saleDiscount + tax).toFixed(2));
+
+  // Descuento requiere permiso REAL (apply_discount): el actor lo tiene, es admin,
+  // o trae un override token de supervisor. El clamp [0,subtotal] solo evitaba un
+  // total negativo, no un descuento NO autorizado de un cliente modificado.
+  const anyDiscount = saleDiscount > 0 || body.lines.some((l) => toNumber(l.discount) > 0);
+  if (anyDiscount && !(userHasPermission(req, 'apply_discount') || hasValidOverride(req, 'apply_discount'))) {
+    const err = new Error('No tienes permiso para aplicar descuentos');
+    err.status = 403;
+    throw err;
+  }
+
+  // Sobreventa (stock negativo) solo para administradores; un cajero NO puede
+  // saltarse el control de stock pasando allowNegativeStock.
+  const allowNeg = Boolean(body.allowNegativeStock) && ADMIN_ROLES.includes(req.user?.role);
+
   const paid = body.payments.reduce((sum, p) => sum + toNumber(p.amount), 0);
   if (Math.abs(paid - total) > 0.01) {
     const err = new Error(`Pagos no cuadran con total retail (${paid} vs ${total})`);
@@ -278,7 +327,7 @@ async function createRetailSale(input, req) {
       // Decremento atómico y guardado contra la carrera (dos cobros del mismo SKU
       // a la vez): la condición qty>=cantidad va en el WHERE, no en un read previo,
       // así Postgres serializa y nunca sobre-vende. allowNegativeStock lo omite.
-      if (body.allowNegativeStock) {
+      if (allowNeg) {
         await tx.retailStockByLocation.update({ where: { id: current.id }, data: { qty: { decrement: quantity } } });
       } else {
         const dec = await tx.retailStockByLocation.updateMany({
@@ -386,6 +435,22 @@ async function reverseRetailSale(saleId, req, action) {
   }
 
   return prisma.$transaction(async (tx) => {
+    // Transición atómica COMPLETED → nextStatus ANTES de reponer/reembolsar: solo
+    // el primer reverso gana. Un segundo (doble clic / reintento concurrente) ve
+    // count 0 → 409, evitando doble reposición de stock y doble asiento negativo.
+    const flip = await tx.retailSale.updateMany({
+      where: { id: sale.id, status: 'COMPLETED' },
+      data: {
+        status: nextStatus,
+        notes: [sale.notes, notes ? `${actionLabel}: ${notes}` : actionLabel].filter(Boolean).join('\n'),
+      },
+    });
+    if (flip.count === 0) {
+      const err = new Error(`La venta ${sale.folio} ya fue revertida`);
+      err.status = 409;
+      throw err;
+    }
+
     for (const line of sale.lines) {
       const balance = await tx.retailStockByLocation.upsert({
         where: { locationId_skuId: { locationId: sale.locationId, skuId: line.skuId } },
@@ -432,12 +497,8 @@ async function reverseRetailSale(saleId, req, action) {
       });
     }
 
-    const updatedSale = await tx.retailSale.update({
+    const updatedSale = await tx.retailSale.findUnique({
       where: { id: sale.id },
-      data: {
-        status: nextStatus,
-        notes: [sale.notes, notes ? `${actionLabel}: ${notes}` : actionLabel].filter(Boolean).join('\n'),
-      },
       include: { lines: true, payments: true, location: { select: { id: true, name: true } } },
     });
 
@@ -1039,53 +1100,33 @@ router.post('/shifts/:id/close', requireRole(...ADMIN_ROLES), async (req, res) =
       if (!shift) { const e = new Error('Caja no encontrada'); e.status = 404; throw e; }
       if (shift.status !== 'OPEN') { const e = new Error('La caja ya esta cerrada'); e.status = 409; throw e; }
 
-      // Ventas en efectivo del turno = pagos CASH de ventas COMPLETED ligadas al
-      // shift. Las canceladas/devueltas quedan fuera (su par positivo+negativo
-      // neteaba a 0 en la gaveta de todos modos).
-      const payments = await tx.retailPayment.findMany({
-        where: { sale: { shiftId: shift.id, status: 'COMPLETED' } },
-        select: { method: true, amount: true },
-      });
-      const byMethod = payments.reduce((acc, p) => {
-        const amt = Number(p.amount);
-        if (p.method === 'CASH') acc.cash += amt;
-        else if (p.method === 'CARD_PRESENT') acc.card += amt;
-        else if (p.method === 'TRANSFER') acc.transfer += amt;
-        return acc;
-      }, { cash: 0, card: 0, transfer: 0 });
+      // Mismo cálculo que el corte en vivo (fuente única). Las ventas canceladas/
+      // devueltas quedan fuera (su par +/- neteaba a 0 en la gaveta de todos modos).
+      const t = await computeShiftTotals(tx, shift.id, shift.openingFloat);
+      const difference = Number((countedCash - t.expectedCash).toFixed(2));
 
-      const salesCount = await tx.retailSale.count({ where: { shiftId: shift.id, status: 'COMPLETED' } });
-
-      const movements = await tx.retailCashMovement.findMany({
-        where: { shiftId: shift.id },
-        select: { type: true, amount: true },
-      });
-      const cashIn = movements.filter((m) => m.type === 'CASH_IN').reduce((s, m) => s + Number(m.amount), 0);
-      const cashOut = movements.filter((m) => m.type === 'CASH_OUT' || m.type === 'EXPENSE').reduce((s, m) => s + Number(m.amount), 0);
-
-      const openingFloat = Number(shift.openingFloat);
-      const expectedCash = Number((openingFloat + byMethod.cash + cashIn - cashOut).toFixed(2));
-      const difference = Number((countedCash - expectedCash).toFixed(2));
-
-      return tx.retailCashShift.update({
-        where: { id: shift.id },
+      // UPDATE guardado contra doble cierre concurrente: solo cierra si SIGUE OPEN.
+      // El check de arriba es read-then-act; este updateMany condicional serializa.
+      const guard = await tx.retailCashShift.updateMany({
+        where: { id: shift.id, status: 'OPEN' },
         data: {
           status: 'CLOSED',
           closedAt: new Date(),
           closedById: req.user?.id || null,
           countedCash,
-          expectedCash,
+          expectedCash: t.expectedCash,
           difference,
-          totalCashSales: Number(byMethod.cash.toFixed(2)),
-          totalCardSales: Number(byMethod.card.toFixed(2)),
-          totalTransferSales: Number(byMethod.transfer.toFixed(2)),
-          totalCashIn: Number(cashIn.toFixed(2)),
-          totalCashOut: Number(cashOut.toFixed(2)),
-          salesCount,
+          totalCashSales: t.totalCashSales,
+          totalCardSales: t.totalCardSales,
+          totalTransferSales: t.totalTransferSales,
+          totalCashIn: t.totalCashIn,
+          totalCashOut: t.totalCashOut,
+          salesCount: t.salesCount,
           notes: [shift.notes, closeNotes].filter(Boolean).join('\n') || null,
         },
-        include: { movements: true },
       });
+      if (guard.count === 0) { const e = new Error('La caja ya esta cerrada'); e.status = 409; throw e; }
+      return tx.retailCashShift.findUnique({ where: { id: shift.id }, include: { movements: true } });
     });
 
     // Corte ciego: el cajero no ve esperado/diferencia al cerrar; el supervisor
@@ -1133,7 +1174,37 @@ router.get('/shifts/:id', async (req, res) => {
       },
     });
     if (!shift) return res.status(404).json({ error: 'Caja no encontrada' });
+    // Corte ciego: el cajero NO ve esperado/diferencia/ventas; solo un admin. Cierra
+    // la fuga por la que un CASHIER leía aquí lo que el cierre ciego le ocultaba.
+    const isAdmin = ADMIN_ROLES.includes(req.user?.role);
+    if (shift.blindClose && !isAdmin) {
+      const { expectedCash, difference, totalCashSales, totalCardSales, totalTransferSales, ...rest } = shift;
+      return res.json({ ...rest, blindHidden: true });
+    }
     res.json(shift);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Corte EN VIVO de la caja (totales calculados, no snapshot): para mostrar el
+// turno en curso y el esperado antes de cerrar. Respeta el corte ciego.
+router.get('/shifts/:id/summary', async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const shift = await prisma.retailCashShift.findFirst({
+      where: { id: req.params.id, restaurantId },
+      include: { movements: { orderBy: { createdAt: 'asc' } }, location: { select: { id: true, name: true } } },
+    });
+    if (!shift) return res.status(404).json({ error: 'Caja no encontrada' });
+    const totals = await computeShiftTotals(prisma, shift.id, shift.openingFloat);
+    const isAdmin = ADMIN_ROLES.includes(req.user?.role);
+    if (shift.blindClose && !isAdmin) {
+      const { expectedCash, totalCashSales, totalCardSales, totalTransferSales, ...safe } = totals;
+      return res.json({ shift, totals: { ...safe, blindHidden: true } });
+    }
+    res.json({ shift, totals });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
