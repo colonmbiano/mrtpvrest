@@ -22,6 +22,8 @@ type DriverOrder = {
   deliveryFee: number | null;
   tip: number | null;
   cashCollected: boolean;
+  transferVerified: boolean;
+  transferVerifiedAt: string | null;
   customer: string | null;
   customerPhone: string | null;
   deliveryAddress: string | null;
@@ -34,6 +36,8 @@ type OrdersSummary = {
   deliveryFees: number;
   tips: number;
   byMethod: Record<string, number>;
+  unverifiedTransferCount?: number;
+  unverifiedTransferTotal?: number;
 };
 
 type CashSummary = {
@@ -128,6 +132,43 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
       console.error(e);
     } finally {
       setLoadingOrders(false);
+    }
+  }
+
+  // Set de pedidos cuya verificación de transferencia está en vuelo (evita
+  // doble tap mientras responde el backend).
+  const [verifyingIds, setVerifyingIds] = useState<Set<string>>(new Set());
+
+  // Verificar / desverificar el cobro por transferencia de un pedido. El admin
+  // confirma contra su banco que el SPEI llegó. Optimista: actualiza la fila al
+  // instante y revierte si el backend falla.
+  async function toggleTransferVerified(o: DriverOrder) {
+    if (!driver || verifyingIds.has(o.id)) return;
+    const next = !o.transferVerified;
+    setVerifyingIds((p) => new Set(p).add(o.id));
+    setOrders((prev) =>
+      prev.map((x) => (x.id === o.id ? { ...x, transferVerified: next } : x)),
+    );
+    setOrdersSummary((s) =>
+      s
+        ? {
+            ...s,
+            unverifiedTransferCount: Math.max(0, (s.unverifiedTransferCount || 0) + (next ? -1 : 1)),
+            unverifiedTransferTotal: Math.max(0, (s.unverifiedTransferTotal || 0) + (next ? -o.total : o.total)),
+          }
+        : s,
+    );
+    try {
+      await api.patch(`/api/driver-cash/${driver.id}/orders/${o.id}/verify-transfer`, { verified: next });
+    } catch (e) {
+      console.error(e);
+      // Revertir
+      setOrders((prev) =>
+        prev.map((x) => (x.id === o.id ? { ...x, transferVerified: !next } : x)),
+      );
+      alert("No se pudo actualizar la verificación. Intenta de nuevo.");
+    } finally {
+      setVerifyingIds((p) => { const n = new Set(p); n.delete(o.id); return n; });
     }
   }
 
@@ -534,6 +575,24 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                 </div>
               )}
 
+              {/* Aviso: transferencias del turno aún sin verificar contra el banco */}
+              {!!ordersSummary?.unverifiedTransferCount && (
+                <div
+                  className="flex items-center gap-2 p-3 rounded-2xl border"
+                  style={{ background: "color-mix(in srgb, var(--warning) 10%, transparent)", borderColor: "color-mix(in srgb, var(--warning) 25%, transparent)" }}
+                >
+                  <span className="text-base">⚠️</span>
+                  <div className="text-[11px] font-bold leading-tight" style={{ color: "var(--warning)" }}>
+                    {ordersSummary.unverifiedTransferCount} transferencia
+                    {ordersSummary.unverifiedTransferCount === 1 ? "" : "s"} sin verificar
+                    {" · "}${(ordersSummary.unverifiedTransferTotal || 0).toFixed(0)}
+                    <div className="text-[10px] font-medium opacity-70 mt-0.5">
+                      Confírmalas contra tu banco y palomea cada una abajo.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Lista de pedidos */}
               <div className="space-y-3">
                 <h3 className="text-xs font-semibold uppercase tracking-widest text-white/40 ml-1">Pedidos del turno (pendientes de corte)</h3>
@@ -576,6 +635,45 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                             style={{ color: "var(--warning)", background: "color-mix(in srgb, var(--warning) 12%, transparent)", borderColor: "color-mix(in srgb, var(--warning) 25%, transparent)" }}
                           >
                             Efectivo sin liquidar
+                          </div>
+                        )}
+                        {/* Verificación de transferencia: el admin palomea que el
+                            SPEI llegó a su banco. Solo para pedidos por transferencia. */}
+                        {o.paymentMethod === "TRANSFER" && (
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            {o.transferVerified ? (
+                              <span
+                                className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border"
+                                style={{ color: "var(--success)", background: "color-mix(in srgb, var(--success) 12%, transparent)", borderColor: "color-mix(in srgb, var(--success) 25%, transparent)" }}
+                              >
+                                ✓ Transferencia verificada
+                              </span>
+                            ) : (
+                              <span
+                                className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border"
+                                style={{ color: "var(--warning)", background: "color-mix(in srgb, var(--warning) 12%, transparent)", borderColor: "color-mix(in srgb, var(--warning) 25%, transparent)" }}
+                              >
+                                Transferencia sin verificar
+                              </span>
+                            )}
+                            {canCut && (
+                              <button
+                                onClick={() => toggleTransferVerified(o)}
+                                disabled={verifyingIds.has(o.id)}
+                                className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-lg border active:scale-95 transition-transform disabled:opacity-50"
+                                style={
+                                  o.transferVerified
+                                    ? { borderColor: "var(--border)", color: "var(--text-secondary)" }
+                                    : { borderColor: "var(--success)", color: "var(--success)", background: "color-mix(in srgb, var(--success) 8%, transparent)" }
+                                }
+                              >
+                                {verifyingIds.has(o.id)
+                                  ? "..."
+                                  : o.transferVerified
+                                    ? "Desmarcar"
+                                    : "Verificar ✓"}
+                              </button>
+                            )}
                           </div>
                         )}
 

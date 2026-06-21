@@ -813,6 +813,14 @@ model Order {
   cashCollectedAt DateTime?
   cashCollectedBy String?
 
+  // Verificación de cobro por TRANSFERENCIA: el admin confirma contra el banco
+  // que el SPEI de una entrega cobrada por transferencia realmente llegó. Espeja
+  // el patrón de cashCollected; solo aplica a paymentMethod=TRANSFER. No bloquea
+  // el corte del repartidor, solo da visibilidad/auditoría en su lista de pedidos.
+  transferVerified   Boolean   @default(false)
+  transferVerifiedAt DateTime?
+  transferVerifiedBy String?
+
   conektaOrderId        String?
   conektaChargeId       String?
   paymentProvider       String? // MERCADOPAGO | STRIPE | CONEKTA | ...
