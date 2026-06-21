@@ -351,6 +351,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         promoDiscount: Number(payOrder.promoDiscount ?? 0),
         tax: Number(payOrder.tax ?? 0),
         tip: Number(payOrder.tip ?? 0),
+        // Envío (DELIVERY): el backend ya lo sumó al total; aquí se DESGLOSA
+        // como renglón "Envío:" para que productos + envío − descuento = TOTAL.
+        deliveryFee: Number(payOrder.deliveryFee ?? 0),
         total: Number(payOrder.total ?? subtotalCalc),
         paymentMethod: method,
         paid: true, // se está cobrando ahora → recibo pagado
@@ -636,6 +639,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         promoDiscount: Number(full.promoDiscount ?? 0),
         tax: Number(full.tax ?? 0),
         tip: Number(full.tip ?? 0),
+        // Envío (DELIVERY): desglosado como renglón "Envío:" (ya viene en total).
+        deliveryFee: Number(full.deliveryFee ?? 0),
         total: Number(full.total ?? subtotalCalc),
         paymentMethod: full.paymentMethod || null,
         // Reimpresión de la cuenta: "Pendiente de cobro" si aún no está pagada.

@@ -131,6 +131,59 @@ describe("recibo :: desglose IVA incluido", () => {
   });
 });
 
+// Extrae el importe ("$xxx.xx") que sigue a la primera aparición de `label`
+// dentro del texto ESC/POS del recibo. Sirve para afirmar sobre el renglón
+// TOTAL / Subtotal / Envío sin depender del padding exacto.
+function amountAfter(receipt: string, label: string): number | null {
+  const line = receipt.split("\n").find((l) => l.includes(label));
+  if (!line) return null;
+  const g1 = line.match(/\$\s?([\d,]+\.\d{2})/)?.[1];
+  return g1 ? Number(g1.replace(/,/g, "")) : null;
+}
+
+describe("recibo :: envío (DELIVERY) desglosado y cuadrado", () => {
+  it("imprime el renglón 'Envío:' y productos + envío = TOTAL", () => {
+    // Pedido a domicilio: productos $245 + envío $20 = $265.
+    const out = buildCustomerReceipt({
+      orderNumber: "454457",
+      orderType: "DELIVERY",
+      items: [
+        { name: "Refrescos 600ml", quantity: 1, price: 35 },
+        { name: "Alitas", quantity: 1, price: 105 },
+        { name: "Taco", quantity: 3, price: 35 },
+      ],
+      subtotal: 245,
+      deliveryFee: 20,
+      total: 265, // 245 productos + 20 envío
+      paymentMethod: "CASH",
+    });
+    expect(out).toContain("Envío:");
+    expect(amountAfter(out, "Envío:")).toBe(20);
+    expect(amountAfter(out, "TOTAL:")).toBe(265);
+  });
+
+  it("sin envío no imprime el renglón 'Envío:'", () => {
+    const out = buildCustomerReceipt({ ...baseReceipt, orderType: "DELIVERY" });
+    expect(out).not.toContain("Envío:");
+  });
+
+  it("IVA del envío configurable: deliveryFeeTaxed=false saca el envío de la base", () => {
+    const base = {
+      orderNumber: "1", orderType: "DELIVERY" as const,
+      items: [{ name: "X", quantity: 1, price: 100 }],
+      subtotal: 100, deliveryFee: 16, total: 116, paymentMethod: "CASH",
+    };
+    // Con IVA (default): base gravable = 116/1.16 = 100, IVA = 16.
+    const conIva = buildCustomerReceipt({ ...base, deliveryFeeTaxed: true });
+    expect(amountAfter(conIva, "IVA (16% incl.):")).toBe(16);
+    // Sin IVA en envío: base gravable = (116-16)/1.16 = 86.21, IVA = 13.79.
+    const sinIva = buildCustomerReceipt({ ...base, deliveryFeeTaxed: false });
+    expect(amountAfter(sinIva, "IVA (16% incl.):")).toBe(13.79);
+    // El TOTAL no cambia por el tratamiento de IVA.
+    expect(amountAfter(sinIva, "TOTAL:")).toBe(116);
+  });
+});
+
 describe("recibo :: bloque de factura (QR)", () => {
   it("emite el QR y el folio sólo cuando showInvoiceQr + invoiceUrl", () => {
     const sin = buildCustomerReceipt(baseReceipt);
