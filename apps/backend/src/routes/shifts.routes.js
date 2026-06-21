@@ -54,6 +54,47 @@ router.get('/staff-active', requireLocation, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Gating del efectivo esperado de un turno ABIERTO ─────────────────────
+// Reusa liveShiftTotals (mismo cálculo que el cierre, ya contempla cashIns) y
+// decide si REVELAR los campos sensibles del corte (totalCash/totalSales/
+// expectedCash). El corte ciego los oculta para que el cajero no "cuadre"
+// tecleando el número exacto; se revelan si el turno NO es ciego, o si el
+// empleado está privilegiado: permiso explícito canViewExpectedCash, o rol
+// admin/owner/super_admin SIEMPRE QUE el restaurante no haya apagado ese
+// override (RestaurantConfig.adminCanViewExpectedCash, default true). Los
+// campos no sensibles (tarjeta/transferencia/gastos/ingresos) van siempre.
+async function gateExpectedCash(shift, req) {
+  const live = await liveShiftTotals(shift);
+
+  const restaurantId = req.restaurantId || req.user?.restaurantId;
+  let adminMayView = true;
+  if (restaurantId) {
+    const cfg = await prisma.restaurantConfig.findUnique({
+      where: { restaurantId },
+      select: { adminCanViewExpectedCash: true },
+    });
+    if (cfg) adminMayView = cfg.adminCanViewExpectedCash !== false;
+  }
+
+  const role = req.user?.role;
+  const isAdminRole = role === 'ADMIN' || role === 'OWNER' || role === 'SUPER_ADMIN';
+  // El permiso explícito por empleado SIEMPRE concede; el override por rol
+  // admin queda sujeto al flag del restaurante.
+  const privileged =
+    req.user?.canViewExpectedCash === true || (isAdminRole && adminMayView);
+  const reveal = !shift.blindClose || privileged;
+
+  return {
+    ...shift,
+    ...live,
+    // Sensibles al corte ciego → null si este empleado no puede verlos.
+    totalCash: reveal ? live.totalCash : null,
+    totalSales: reveal ? live.totalSales : null,
+    expectedCash: reveal ? live.expectedCash : null,
+    canRevealExpected: reveal,
+  };
+}
+
 // Alias histórico — el frontend del admin llama a /api/shifts/current
 router.get('/current', requireLocation, async (req, res) => {
   try {
@@ -65,7 +106,7 @@ router.get('/current', requireLocation, async (req, res) => {
       },
       orderBy: { openedAt: 'desc' }
     });
-    res.json(shift || null);
+    res.json(shift ? await gateExpectedCash(shift, req) : null);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -80,7 +121,7 @@ router.get('/active', requireLocation, async (req, res) => {
       },
       orderBy: { openedAt: 'desc' }
     });
-    res.json(shift || null);
+    res.json(shift ? await gateExpectedCash(shift, req) : null);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -9,6 +9,23 @@ export type OfflineTransactionType = "order";
 // mesa inválida). Sin esto, una comanda mala se reenvía cada 5s para siempre.
 export const MAX_SYNC_RETRIES = 5;
 
+// Resumen de presentación de una comanda encolada. NO se envía al backend (eso
+// va en `data.body`); existe para que las vistas de lectura (/mesas, /cuenta)
+// puedan mostrar lo que el mesero acaba de guardar ANTES de que sincronice, sin
+// "perderlo" visualmente. Es el corazón del modo optimista local-first.
+export interface OfflineOrderMeta {
+  // Mesa a la que pertenece la comanda. Mesa real = cuid (activeTableId);
+  // mesa demo = "mesa-N"; pedido para llevar = null.
+  tableId: string | null;
+  tableName: string | null;
+  // orderId si fue una ronda a una cuenta YA existente (/orders/:id/rounds);
+  // null si es una comanda nueva (/orders/tpv).
+  orderId: string | null;
+  itemCount: number;
+  total: number;
+  items: Array<{ name: string; quantity: number; total: number }>;
+}
+
 export interface OfflineTransaction {
   id: string;
   type: OfflineTransactionType;
@@ -17,11 +34,27 @@ export interface OfflineTransaction {
     path: string;
     body: Record<string, unknown>;
   };
+  meta?: OfflineOrderMeta;
   timestamp: number;
   synced: boolean;
   retryCount: number;
   failedPermanently?: boolean;
   lastError?: string;
+}
+
+// Comandas locales que aún NO llegaron al servidor (en cola o reintentando, e
+// incluso las fallidas permanentes), para que /mesas y /cuenta no pierdan de
+// vista lo recién guardado. `match` filtra por mesa o por cuenta existente.
+export function pendingOrdersFor(
+  queue: OfflineTransaction[],
+  match: { tableId?: string | null; orderId?: string | null },
+): OfflineTransaction[] {
+  return queue.filter((transaction) => {
+    if (transaction.synced || !transaction.meta) return false;
+    if (match.orderId && transaction.meta.orderId === match.orderId) return true;
+    if (match.tableId && transaction.meta.tableId === match.tableId) return true;
+    return false;
+  });
 }
 
 interface OfflineQueueState {

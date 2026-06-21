@@ -21,6 +21,7 @@ const FLAG_TO_PERM = {
   canCancelItems:    'cancel_items',
   canReopenTables:   'reopen_table',
   canManageUsers:    'manage_users',
+  canViewExpectedCash: 'view_expected_cash',
 };
 
 // Inverso: string de permiso → flag canónico.
@@ -37,6 +38,7 @@ const PERMISSION_FLAG_SELECT = {
   canCancelItems:    true,
   canReopenTables:   true,
   canManageUsers:    true,
+  canViewExpectedCash: true,
 };
 
 /**
@@ -51,6 +53,7 @@ function mapPermissions(emp) {
   if (emp.canCancelItems) perms.push('cancel_items');
   if (emp.canReopenTables) perms.push('reopen_table');
   if (emp.canManageUsers) perms.push('manage_users');
+  if (emp.canViewExpectedCash) perms.push('view_expected_cash');
   return perms;
 }
 

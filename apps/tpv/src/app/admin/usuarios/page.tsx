@@ -14,6 +14,7 @@ import {
   BadgePercent,
   RotateCcw,
   Users,
+  Eye,
 } from "lucide-react";
 import api from "@/lib/api";
 import { AdminScreen, AdminHeader, AdminTabs } from "@/components/admin/AdminScreen";
@@ -66,13 +67,20 @@ const SPECIAL_PERMS: {
     description: "Crear, editar o desactivar empleados.",
     icon: Users,
   },
+  {
+    key: "canViewExpectedCash",
+    label: "Ver efectivo esperado en el corte",
+    description: "Rompe el corte ciego: ve cuánto debería haber en caja.",
+    icon: Eye,
+  },
 ];
 
 type SpecialPermKey =
   | "canCancelItems"
   | "canApplyDiscounts"
   | "canReopenTables"
-  | "canManageUsers";
+  | "canManageUsers"
+  | "canViewExpectedCash";
 
 interface Employee {
   id: string;
@@ -94,6 +102,7 @@ interface Employee {
   canApplyDiscounts: boolean;
   canReopenTables: boolean;
   canManageUsers: boolean;
+  canViewExpectedCash: boolean;
 }
 
 const ROLE_STYLE: Record<string, { bg: string; text: string }> = {
@@ -414,6 +423,7 @@ function EmployeeModal({
     canApplyDiscounts: employee?.canApplyDiscounts ?? false,
     canReopenTables:   employee?.canReopenTables   ?? false,
     canManageUsers:    employee?.canManageUsers    ?? false,
+    canViewExpectedCash: employee?.canViewExpectedCash ?? false,
   });
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState("");
@@ -634,27 +644,36 @@ function EmployeeModal({
               </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {PERM_KEYS.map((p) => {
-                const checked = (form as Record<string, unknown>)[p.key] as boolean;
-                return (
-                  <label
-                    key={p.key}
-                    className="group flex items-center gap-4 px-5 py-4 rounded-2xl bg-white/[0.03] border border-white/10 active:bg-white/5 cursor-pointer active:scale-[0.99] transition-all"
-                  >
-                    <input
-                      type="checkbox"
-                      className="w-5 h-5 rounded-md accent-iris-500"
-                      checked={checked}
-                      onChange={(e) =>
-                        setForm({ ...form, [p.key]: e.target.checked })
-                      }
-                    />
-                    <span className="text-[11px] font-semibold uppercase tracking-widest text-white/60 group-active:text-white">
-                      {p.label}
-                    </span>
-                  </label>
-                );
-              })}
+              {form.role === "WAITER" ? (
+                // Los meseros no cobran: el TPV los mete en "modo préstamo" por
+                // rol y el backend rechaza el cobro de un WAITER. Mostrar el
+                // checkbox "Cobrar" aquí era engañoso (no hacía nada).
+                <p className="sm:col-span-2 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4 text-[11px] font-semibold uppercase tracking-widest leading-relaxed text-white/40">
+                  Los meseros no cobran. El cobro es exclusivo de Cajero o superior — cambia el rol a Cajero si esta persona debe cobrar.
+                </p>
+              ) : (
+                PERM_KEYS.map((p) => {
+                  const checked = (form as Record<string, unknown>)[p.key] as boolean;
+                  return (
+                    <label
+                      key={p.key}
+                      className="group flex items-center gap-4 px-5 py-4 rounded-2xl bg-white/[0.03] border border-white/10 active:bg-white/5 cursor-pointer active:scale-[0.99] transition-all"
+                    >
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 rounded-md accent-iris-500"
+                        checked={checked}
+                        onChange={(e) =>
+                          setForm({ ...form, [p.key]: e.target.checked })
+                        }
+                      />
+                      <span className="text-[11px] font-semibold uppercase tracking-widest text-white/60 group-active:text-white">
+                        {p.label}
+                      </span>
+                    </label>
+                  );
+                })
+              )}
             </div>
           </section>
 

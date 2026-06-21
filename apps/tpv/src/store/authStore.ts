@@ -38,6 +38,7 @@ export type Permission =
   | "reopen_table" // reabrir una cuenta ya cobrada
   | "manage_users" // crear/editar empleados
   | "open_cash_drawer" // abrir cajón / cobrar
+  | "view_expected_cash" // ver el efectivo esperado en el corte (rompe el corte ciego)
   // ── Legacy (aún referenciados por UI/ tests; sin enforcement de backend) ──
   | "void_item"
   | "void_order"

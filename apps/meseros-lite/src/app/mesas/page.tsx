@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { RotateCw, Settings, ShoppingBag } from "lucide-react";
+import { Clock, RotateCw, Settings, ShoppingBag } from "lucide-react";
 import api from "@/lib/api";
 import { type AssignedTable, useWaiterOrderStore } from "@/store/useWaiterOrderStore";
+import { useOfflineQueueStore } from "@/store/useOfflineQueueStore";
 
 interface ApiTable {
   id: string;
@@ -18,6 +19,9 @@ interface ApiTable {
 }
 
 type LoadState = "idle" | "loading" | "ready" | "offline" | "error";
+
+// Mesa del salón con el resumen de comandas locales aún no sincronizadas encima.
+type FloorTable = AssignedTable & { pendingCount: number; pendingFailed: boolean };
 
 const tablesCacheKey = "meseros-lite-real-tables";
 
@@ -66,6 +70,10 @@ export default function MesasPage() {
   const activeTableId = useWaiterOrderStore((state) => state.activeTableId);
   const setActiveTable = useWaiterOrderStore((state) => state.setActiveTable);
   const setAssignedTables = useWaiterOrderStore((state) => state.setAssignedTables);
+  // Cola local: para mostrar las comandas que aún no llegaron al servidor sobre
+  // el mapa de salón (local-first), y para re-leer el piso al sincronizar.
+  const queue = useOfflineQueueStore((state) => state.queue);
+  const lastSync = useOfflineQueueStore((state) => state.lastSync);
 
   // Fetch puro: sin setState síncrono antes del primer await, para que el
   // effect de montaje no dispare react-hooks/set-state-in-effect.
@@ -117,18 +125,61 @@ export default function MesasPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Tras cada pasada de sincronización el servidor ya tiene las comandas que
+  // estaban en cola: re-leemos el piso para que el preview local se reemplace
+  // por el estado real (mesa abierta de verdad) SIN que la comanda parpadee y
+  // desaparezca al limpiarse de la cola.
+  const lastSyncRef = useRef(lastSync);
+  useEffect(() => {
+    if (lastSync === lastSyncRef.current) return;
+    lastSyncRef.current = lastSync;
+    void applyTables();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSync]);
+
+  // Mesas reales + las comandas locales aún no sincronizadas encima. Una mesa
+  // libre con comanda en cola pasa a "abierta" para que el mesero no la trate
+  // como vacía; las fallidas permanentes se marcan en rojo.
+  const displayTables = useMemo<FloorTable[]>(() => {
+    const pendingByTable = new Map<string, { count: number; failed: boolean }>();
+    for (const transaction of queue) {
+      if (transaction.synced || !transaction.meta?.tableId) continue;
+      const current = pendingByTable.get(transaction.meta.tableId) ?? { count: 0, failed: false };
+      current.count += 1;
+      if (transaction.failedPermanently) current.failed = true;
+      pendingByTable.set(transaction.meta.tableId, current);
+    }
+    return assignedTables.map((table) => {
+      const pending = pendingByTable.get(table.id);
+      if (!pending) return { ...table, pendingCount: 0, pendingFailed: false };
+      return {
+        ...table,
+        status: table.status === "free" ? "open" : table.status,
+        pendingCount: pending.count,
+        pendingFailed: pending.failed,
+      };
+    });
+  }, [assignedTables, queue]);
+
+  // Pedidos para llevar (sin mesa) que siguen en cola: no caben en el mapa, así
+  // que se resumen en un aviso aparte.
+  const takeoutPendingCount = useMemo(
+    () => queue.filter((transaction) => !transaction.synced && transaction.meta && !transaction.meta.tableId).length,
+    [queue],
+  );
+
   const groupedTables = useMemo(() => {
-    return assignedTables.reduce<Record<string, AssignedTable[]>>((acc, table) => {
+    return displayTables.reduce<Record<string, FloorTable[]>>((acc, table) => {
       const zone = table.zone || "Sin zona";
       acc[zone] = [...(acc[zone] || []), table];
       return acc;
     }, {});
-  }, [assignedTables]);
+  }, [displayTables]);
 
   const stats = {
-    total: assignedTables.length,
-    free: assignedTables.filter((table) => table.status === "free").length,
-    open: assignedTables.filter((table) => table.status === "open").length,
+    total: displayTables.length,
+    free: displayTables.filter((table) => table.status === "free").length,
+    open: displayTables.filter((table) => table.status === "open").length,
   };
 
   return (
@@ -180,6 +231,13 @@ export default function MesasPage() {
       {loadState === "offline" && (
         <p className="mb-4 rounded-lg border border-[var(--brand)] bg-[var(--surface-1)] p-4 text-base font-black text-[var(--brand)]">
           Mostrando mesas guardadas localmente.
+        </p>
+      )}
+
+      {takeoutPendingCount > 0 && (
+        <p className="mb-4 flex items-center gap-2 rounded-lg border border-[var(--warning)] bg-[var(--surface-1)] p-4 text-base font-black text-[var(--warning)]">
+          <Clock size={18} strokeWidth={2.6} />
+          {takeoutPendingCount} pedido{takeoutPendingCount === 1 ? "" : "s"} para llevar por enviar
         </p>
       )}
 
@@ -259,6 +317,19 @@ export default function MesasPage() {
                           ? "Por limpiar"
                           : "Cuenta abierta"}
                     </p>
+                    {table.pendingCount > 0 && (
+                      <p
+                        className={[
+                          "mt-1 flex items-center gap-1 text-xs font-black uppercase",
+                          table.pendingFailed ? "text-[var(--danger)]" : "text-[var(--warning)]",
+                        ].join(" ")}
+                      >
+                        <Clock size={13} strokeWidth={2.8} />
+                        {table.pendingFailed
+                          ? "No enviada"
+                          : `Por enviar${table.pendingCount > 1 ? ` (${table.pendingCount})` : ""}`}
+                      </p>
+                    )}
                   </button>
                 );
               })}

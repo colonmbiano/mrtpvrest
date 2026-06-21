@@ -1,10 +1,11 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, ShoppingCart, User, UtensilsCrossed, MapPin, Phone, Home, Receipt, Save, Zap } from "lucide-react";
+import { Trash2, ShoppingCart, User, UtensilsCrossed, MapPin, Phone, Home, Receipt, Save, Zap, Users } from "lucide-react";
 import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
+import GuestCountModal from "@/components/pos/GuestCountModal";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
 import { buildOrderItemsPayload } from "@/lib/modifiers";
 import { useAuthStore } from "@/store/authStore";
@@ -72,6 +73,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // en la pantalla de trabajo (no solo en Tickets abiertos).
   const [activeTicketName, setActiveTicketName] = useState<string | null>(null);
   const [_loadingHistory, setLoadingHistory] = useState(false);
+  // DINE_IN: editar nº de comensales DESDE el ticket. Antes el conteo se pedía
+  // sí o sí en un modal al elegir mesa (1 tap extra por mesa); ahora la mesa
+  // entra directo con 1 comensal y aquí se sube solo si se va a dividir por
+  // asiento. Reusa el mismo GuestCountModal del flujo Comer Aquí.
+  const [editingGuests, setEditingGuests] = useState(false);
 
   // Registro de clientes — al teclear el teléfono en DELIVERY buscamos el
   // directorio y autocompletamos nombre/dirección. customerHint muestra el
@@ -224,6 +230,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     getActiveTicket,
     changeItemQty,
     clearActiveItems,
+    removeItem,
     updateTicket,
     setItemNotes,
     setEditingIndex,
@@ -593,28 +600,40 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         customerName: ticket.name ?? null,
       };
 
-      try {
-        const printResult = await printKitchenTickets(printers, {
-          ...ticketContext,
-          items: printItems,
-          config: kitchenConfig ?? undefined,
-        });
-        if (printResult.failed.length > 0) {
-          toast.warning(
-            `Pedido guardado, pero la comanda no imprimio: ${
-              printResult.failed[0]?.error || "No hay una impresora disponible"
-            }`,
-          );
-        } else {
-          toast.success(
-            `Comanda impresa en ${printResult.ok} impresora${printResult.ok === 1 ? "" : "s"}`,
-          );
+      // VELOCIDAD: la comanda de cocina NO debe bloquear el "Guardar". El pedido
+      // ya quedó persistido en el backend (POST de arriba); imprimir es un efecto
+      // secundario por LAN que puede tardar segundos —y hasta ~18s si una
+      // impresora está apagada/inalcanzable (timeout 6s × reintentos en
+      // printer-tcp)—. Antes se hacía `await` aquí, así que la pantalla se quedaba
+      // "guardando" hasta que la impresora respondiera. Lo disparamos en segundo
+      // plano: navegamos de inmediato y los toasts de éxito/fallo llegan cuando
+      // termine. El snapshot (printItems/ticketContext) ya se capturó arriba, así
+      // que limpiar el ticket y navegar no afecta lo que se imprime, y la promesa
+      // sobrevive al desmontaje del componente (printKitchenTickets es de módulo).
+      void (async () => {
+        try {
+          const printResult = await printKitchenTickets(printers, {
+            ...ticketContext,
+            items: printItems,
+            config: kitchenConfig ?? undefined,
+          });
+          if (printResult.failed.length > 0) {
+            toast.warning(
+              `Pedido guardado, pero la comanda no imprimio: ${
+                printResult.failed[0]?.error || "No hay una impresora disponible"
+              }`,
+            );
+          } else {
+            toast.success(
+              `Comanda impresa en ${printResult.ok} impresora${printResult.ok === 1 ? "" : "s"}`,
+            );
+          }
+        } catch (printError) {
+          const message =
+            printError instanceof Error ? printError.message : "Error de impresion";
+          toast.warning(`Pedido guardado, pero la comanda no imprimio: ${message}`);
         }
-      } catch (printError) {
-        const message =
-          printError instanceof Error ? printError.message : "Error de impresion";
-        toast.warning(`Pedido guardado, pero la comanda no imprimio: ${message}`);
-      }
+      })();
 
       clearActiveItems();
       clearActiveOrder();
@@ -1008,17 +1027,23 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               />
             </div>
           ) : (
-            <div className="flex h-10 min-w-0 flex-1 items-center gap-2 px-1 text-zinc-400">
+            <button
+              type="button"
+              onClick={() => setEditingGuests(true)}
+              className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[var(--surface-1)] px-3 text-zinc-400 transition-all active:scale-[0.98] active:border-[var(--brand)]"
+              aria-label="Editar comensales"
+            >
               <MapPin size={15} className="text-emerald-400/70 shrink-0" />
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] truncate">
                 {ticket.tableName || ticket.table || "Sin mesa"}
               </span>
-              {(ticket.numberOfGuests ?? 0) > 0 && (
-                <span className="text-[9px] font-bold text-zinc-500 shrink-0">
-                  · {ticket.numberOfGuests} pax
-                </span>
-              )}
-            </div>
+              <span className="ml-auto flex items-center gap-1 text-[9px] font-bold text-zinc-500 shrink-0">
+                <Users size={12} />
+                {(ticket.numberOfGuests ?? 0) > 1
+                  ? `${ticket.numberOfGuests} pax`
+                  : "Comensales"}
+              </span>
+            </button>
           )}
           <button
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[var(--surface-1)] text-zinc-500 transition-all active:scale-95 active:border-red-500/20 active:bg-red-500/10 active:text-red-500"
@@ -1159,6 +1184,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               onIncrease={() => changeItemQty(idx, 1)}
               onDecrease={() => changeItemQty(idx, -1)}
               onUpdateNotes={(n) => setItemNotes(idx, n)}
+              onRemove={() => removeItem(idx)}
               onEdit={isConfigurableItem(item) ? () => setEditingIndex(idx) : undefined}
             />
           ))
@@ -1341,6 +1367,21 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               clearActiveOrder();
               toast.success(`Mesa ${t.name} asignada`);
             }
+          }}
+        />
+
+        {/* Editar comensales desde el ticket (DINE_IN). El flujo Comer Aquí ya
+            no pide el conteo en un modal al elegir mesa: la mesa entra con 1
+            comensal y aquí se sube cuando se va a dividir la cuenta por asiento.
+            Reusa el mismo modal del flujo original. */}
+        <GuestCountModal
+          isOpen={editingGuests}
+          tableCapacity={ticket.numberOfGuests || null}
+          tableName={ticket.tableName || ticket.table || null}
+          onClose={() => setEditingGuests(false)}
+          onConfirm={(guests) => {
+            updateTicket({ numberOfGuests: guests, activeSeat: 1 });
+            setEditingGuests(false);
           }}
         />
 

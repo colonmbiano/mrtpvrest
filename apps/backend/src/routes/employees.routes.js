@@ -41,15 +41,15 @@ const overrideLimiter = rateLimit({
 
 const ROLE_DEFAULTS = {
   ADMIN:    { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:true,  canConfigSystem:true,  canTakeDelivery:true,  canTakeTakeout:true,  canManageShifts:true,
-              canCancelItems:true,  canApplyDiscounts:true,  canReopenTables:true,  canManageUsers:true  },
+              canCancelItems:true,  canApplyDiscounts:true,  canReopenTables:true,  canManageUsers:true,  canViewExpectedCash:true  },
   CASHIER:  { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true,  canManageShifts:true,
-              canCancelItems:false, canApplyDiscounts:true,  canReopenTables:false, canManageUsers:false },
+              canCancelItems:false, canApplyDiscounts:true,  canReopenTables:false, canManageUsers:false, canViewExpectedCash:false },
   WAITER:   { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true,  canManageShifts:false,
-              canCancelItems:false, canApplyDiscounts:false, canReopenTables:false, canManageUsers:false },
+              canCancelItems:false, canApplyDiscounts:false, canReopenTables:false, canManageUsers:false, canViewExpectedCash:false },
   DELIVERY: { canCharge:true,  canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:true,  canTakeTakeout:false, canManageShifts:false,
-              canCancelItems:false, canApplyDiscounts:false, canReopenTables:false, canManageUsers:false },
+              canCancelItems:false, canApplyDiscounts:false, canReopenTables:false, canManageUsers:false, canViewExpectedCash:false },
   COOK:     { canCharge:false, canDiscount:false, canModifyTickets:false, canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:false, canManageShifts:false,
-              canCancelItems:false, canApplyDiscounts:false, canReopenTables:false, canManageUsers:false },
+              canCancelItems:false, canApplyDiscounts:false, canReopenTables:false, canManageUsers:false, canViewExpectedCash:false },
 };
 
 // FASE 10 · Validación de booleanos. Acepta true/false explícito o
@@ -566,7 +566,7 @@ router.post('/', authenticate, requireTenantAccess, requirePermission('manage_us
     const { name, phone, pin, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays,
       canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout, canManageShifts,
       // Fase 10 · permisos granulares
-      canCancelItems, canApplyDiscounts, canReopenTables, canManageUsers,
+      canCancelItems, canApplyDiscounts, canReopenTables, canManageUsers, canViewExpectedCash,
       locationId: bodyLocationId } = req.body;
 
     const locationId = req.locationId || bodyLocationId;
@@ -609,6 +609,7 @@ router.post('/', authenticate, requireTenantAccess, requirePermission('manage_us
         canApplyDiscounts: asBoolOrUndef(canApplyDiscounts) ?? defaults.canApplyDiscounts ?? false,
         canReopenTables:   asBoolOrUndef(canReopenTables)   ?? defaults.canReopenTables   ?? false,
         canManageUsers:    asBoolOrUndef(canManageUsers)    ?? defaults.canManageUsers    ?? false,
+        canViewExpectedCash: asBoolOrUndef(canViewExpectedCash) ?? defaults.canViewExpectedCash ?? false,
       }
     });
     const { pin: _p, offlinePin: _op, ...rest } = emp;
@@ -621,7 +622,7 @@ router.put('/:id', authenticate, requireTenantAccess, requirePermission('manage_
     const { name, phone, pin, role, photo, tables, scheduleStart, scheduleEnd, scheduleDays, isActive,
       canCharge, canDiscount, canModifyTickets, canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout, canManageShifts,
       // Fase 10 · permisos granulares
-      canCancelItems, canApplyDiscounts, canReopenTables, canManageUsers } = req.body;
+      canCancelItems, canApplyDiscounts, canReopenTables, canManageUsers, canViewExpectedCash } = req.body;
 
     // 1. Verificar que el empleado exista en esta sucursal
     const existing = await prisma.employee.findFirst({
@@ -647,6 +648,7 @@ router.put('/:id', authenticate, requireTenantAccess, requirePermission('manage_
       canApplyDiscounts: asBoolOrUndef(canApplyDiscounts),
       canReopenTables:   asBoolOrUndef(canReopenTables),
       canManageUsers:    asBoolOrUndef(canManageUsers),
+      canViewExpectedCash: asBoolOrUndef(canViewExpectedCash),
     };
 
     // Actualizar estado activo/inactivo si se envía
