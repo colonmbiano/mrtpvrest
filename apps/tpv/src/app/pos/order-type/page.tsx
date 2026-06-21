@@ -7,7 +7,6 @@ import OrderTypeSelector from "@/components/pos/OrderTypeSelector";
 import type { ExtendedOrderType, OpenAccount } from "@/components/pos/OrderTypeSelector";
 import OrdersDrawer, { type DrawerOrder } from "@/components/pos/OrdersDrawer";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
-import GuestCountModal from "@/components/pos/GuestCountModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import NotificationsPanel from "@/components/pos/NotificationsPanel";
 import WebOrdersPanel from "@/components/pos/WebOrdersPanel";
@@ -41,11 +40,12 @@ import { toast } from "sonner";
 /**
  * Flujo Comer Aquí (DINE_IN):
  *   1. Tap "Comer Aquí" → abre TablePickerModal.
- *   2a. Pick mesa LIBRE  → guarda tableId/name en ticket activo, abre
- *                           GuestCountModal pre-llenado con capacity.
+ *   2a. Pick mesa LIBRE  → entra DIRECTO a /pos/menu con numberOfGuests=1 y
+ *                           activeSeat=1 (sin modal de comensales). El conteo
+ *                           se ajusta dentro del ticket ("Comensales" en
+ *                           SidebarTicket) solo si se va a dividir por asiento.
  *   2b. Pick mesa OCUPADA → busca orden abierta, setea activeOrderStore,
- *                           va directo a /pos/menu sin GuestCountModal.
- *   3. Confirma comensales → numberOfGuests + activeSeat=1 → /pos/menu.
+ *                           va directo a /pos/menu.
  *
  * TAKEOUT y DELIVERY van directo a /pos/menu sin modales.
  */
@@ -107,8 +107,6 @@ export default function OrderTypePage() {
   const tpvConfig = useTpvConfig();
 
   const [pickingTable, setPickingTable] = useState(false);
-  const [picked, setPicked]             = useState<TableLite | null>(null);
-  const [askingGuests, setAskingGuests] = useState(false);
   const [askingAdminPin, setAskingAdminPin] = useState(false);
   const [showExpenses, setShowExpenses] = useState(false);
   // Paneles en vivo traídos desde /pos/menu a la pantalla principal.
@@ -793,26 +791,20 @@ export default function OrderTypePage() {
         return;
       }
     } catch {
-      // Si falla el lookup (p.ej. sin red), caemos al flujo normal con
-      // GuestCountModal. El backend es la red de seguridad: al crear la orden
-      // responde 409 TABLE_HAS_OPEN_TAB si la mesa ya tenía cuenta, así que no
-      // se enciman ventas aunque el lookup haya fallado aquí.
+      // Si falla el lookup (p.ej. sin red), caemos al flujo de mesa libre
+      // (entra al menú con 1 comensal). El backend es la red de seguridad: al
+      // crear la orden responde 409 TABLE_HAS_OPEN_TAB si la mesa ya tenía
+      // cuenta, así que no se enciman ventas aunque el lookup haya fallado aquí.
     }
 
-    // Mesa libre (sin cuenta abierta) → flujo normal con GuestCountModal.
+    // Mesa libre (sin cuenta abierta) → entra DIRECTO al menú con 1 comensal.
+    // Antes se pedía el conteo en un modal aquí (1 tap/modal extra por cada
+    // mesa); ahora la mesa entra de inmediato y el nº de comensales se ajusta
+    // dentro del ticket SOLO si se va a dividir por asiento (control
+    // "Comensales" en SidebarTicket, que reusa este mismo GuestCountModal).
     useActiveOrderStore.getState().clear();
-    setPicked(t);
+    useTicketStore.getState().updateTicket({ numberOfGuests: 1, activeSeat: 1 });
     setPickingTable(false);
-    setAskingGuests(true);
-  };
-
-  const handleConfirmGuests = (guests: number) => {
-    useTicketStore.getState().updateTicket({
-      numberOfGuests: guests,
-      activeSeat: 1,
-    });
-    setAskingGuests(false);
-    setPicked(null);
     router.replace("/pos/menu");
   };
 
@@ -887,21 +879,6 @@ export default function OrderTypePage() {
         onPick={handlePickTable}
       />
 
-      <GuestCountModal
-        isOpen={askingGuests}
-        tableCapacity={picked?.capacity ?? null}
-        tableName={picked?.name ?? null}
-        onClose={() => {
-          setAskingGuests(false);
-          setPicked(null);
-          useTicketStore.getState().updateTicket({
-            tableId: "",
-            tableName: "",
-            table: "",
-          });
-        }}
-        onConfirm={handleConfirmGuests}
-      />
 
       <PurchasesExpensesModal
         isOpen={showExpenses}
