@@ -1132,6 +1132,11 @@ model RestaurantConfig {
   // luego se reparten a las demás vía StockTransfer.
   centralWarehouseEnabled Boolean @default(false)
 
+  // CORTE DE CAJA · si true (default), los roles admin ven el efectivo
+  // esperado aunque el turno sea ciego. false → corte ciego también para
+  // admins (solo el permiso explícito canViewExpectedCash lo revela).
+  adminCanViewExpectedCash Boolean @default(true)
+
   updatedAt DateTime @updatedAt
 
   @@map("restaurant_config")
@@ -1619,6 +1624,7 @@ model Employee {
   canApplyDiscounts Boolean @default(false) // Aplicar cortesías o descuentos al ticket
   canReopenTables   Boolean @default(false) // Reabrir una cuenta cerrada
   canManageUsers    Boolean @default(false) // Crear/editar otros empleados
+  canViewExpectedCash Boolean @default(false) // Ver el efectivo esperado en el corte (rompe el corte ciego para este empleado)
 
   shifts       EmployeeShift[]
   shiftsOpened CashShift[]     @relation("ShiftOpenedBy")
