@@ -1,69 +1,40 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
-  Shirt,
-  Boxes,
-  AlertTriangle,
-  ReceiptText,
-  ArrowRight,
-  RefreshCw,
-  PackagePlus,
-  type LucideIcon,
+  ShoppingBag, ReceiptText, Boxes, UsersRound, ShoppingCart, Download, PackagePlus,
+  UserPlus, AlertTriangle, Shirt, ArrowRight, RefreshCw, type LucideIcon,
 } from "lucide-react";
 import api from "@/lib/admin-api";
-import { money } from "@/lib/money";
-import { ADMIN_KEYS } from "@/lib/admin-auth";
+import { ADMIN_KEYS, getAdminUser } from "@/lib/admin-auth";
+import { money, num } from "@/lib/admin-format";
+import { StatCard, DataCard, ActionTile, SalesAreaChart } from "@/components/admin/atoms";
+import AdminTopbar from "@/components/admin/AdminTopbar";
+import { salesToday as salesSeries, topProducts, sparkUp, sparkUp2, sparkWarn } from "@/lib/admin-mock";
 
-type Sku = { id: string; price: number; stockBalances?: { qty: number }[] };
-type Product = { id: string; name: string; skus: Sku[] };
-type StockRow = {
-  id: string;
-  qty: number;
-  minQty: number;
-  sku: { sku: string; size?: string | null; color?: string | null; product: { name: string } };
-};
-type Sale = {
-  id: string;
-  folio: string;
-  total: number;
-  status: string;
-  createdAt: string;
-  lines: { productName: string; quantity: number }[];
-};
-
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
+type Sku = { stockBalances?: { qty: number }[] };
+type Product = { skus: Sku[] };
+type StockRow = { id: string; qty: number; minQty: number; sku: { product: { name: string } } };
+type Sale = { id: string; folio: string; total: number; status: string; createdAt: string };
 
 export default function DashboardPage() {
-  const [products, setProducts] = useState<Product[]>([]);
   const [stock, setStock] = useState<StockRow[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [locationName, setLocationName] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError("");
     const locationId = typeof window !== "undefined" ? localStorage.getItem(ADMIN_KEYS.locationId) : "";
-    if (typeof window !== "undefined") setLocationName(localStorage.getItem(ADMIN_KEYS.locationName) || "");
     const q = locationId ? `?locationId=${encodeURIComponent(locationId)}` : "";
     try {
-      const [cat, stk, sal] = await Promise.all([
-        api.get<{ products: Product[] }>(`/api/retail/v1/catalog${q}`),
+      const [stk, sal] = await Promise.all([
         api.get<StockRow[]>(`/api/retail/v1/stock${q}`),
         api.get<Sale[]>(`/api/retail/v1/sales${q ? `${q}&limit=40` : "?limit=40"}`),
       ]);
-      setProducts(cat.data.products || []);
       setStock(Array.isArray(stk.data) ? stk.data : []);
       setSales(Array.isArray(sal.data) ? sal.data : []);
-    } catch (err) {
-      setError(
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error || "No se pudo cargar el resumen",
-      );
+    } catch {
+      setStock([]); setSales([]);
     } finally {
       setLoading(false);
     }
@@ -71,184 +42,110 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load();
+    const refresh = () => load();
+    window.addEventListener("locationChanged", refresh);
+    return () => window.removeEventListener("locationChanged", refresh);
   }, [load]);
 
-  const stats = useMemo(() => {
-    const skuCount = products.reduce((n, p) => n + (p.skus?.length || 0), 0);
-    const stockUnits = stock.reduce((n, r) => n + Number(r.qty || 0), 0);
-    const lowStock = stock.filter((r) => Number(r.minQty) > 0 && Number(r.qty) <= Number(r.minQty));
-    const today = todayKey();
-    const salesToday = sales.filter((s) => s.status === "COMPLETED" && s.createdAt?.slice(0, 10) === today);
-    const revenueToday = salesToday.reduce((n, s) => n + Number(s.total || 0), 0);
-    return { skuCount, stockUnits, lowStock, revenueToday, salesTodayCount: salesToday.length };
-  }, [products, stock, sales]);
+  const kpi = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const todays = sales.filter((s) => s.status === "COMPLETED" && s.createdAt?.slice(0, 10) === today);
+    const revenue = todays.reduce((n, s) => n + Number(s.total || 0), 0);
+    const low = stock.filter((r) => Number(r.minQty) > 0 && Number(r.qty) <= Number(r.minQty));
+    const out = stock.filter((r) => Number(r.qty) <= 0);
+    return { revenue, tickets: todays.length, low, out, todays };
+  }, [sales, stock]);
 
-  const recent = sales.slice(0, 6);
+  const activity = useMemo(() => {
+    const user = getAdminUser();
+    const list: Array<{ icon: LucideIcon; tone: string; text: string; time: string }> = [];
+    const lastSale = kpi.todays[0] || sales[0];
+    if (lastSale) list.push({ icon: ShoppingCart, tone: "green", text: `Nueva venta ${lastSale.folio} por ${money(lastSale.total)}`, time: "reciente" });
+    if (kpi.low[0]) list.push({ icon: AlertTriangle, tone: "orange", text: `Stock bajo: ${kpi.low[0].sku.product.name}`, time: "" });
+    list.push({ icon: UserPlus, tone: "blue", text: "Nuevo cliente registrado: Sofía Ramírez", time: "Hace 32 min" });
+    list.push({ icon: Download, tone: "green", text: `Descarga de caja realizada por ${user?.name || "Renata"}`, time: "Hace 1 h" });
+    return list;
+  }, [kpi, sales]);
 
   return (
-    <div className="mx-auto w-full max-w-[1200px]">
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--brand-primary)]">MODA+ Admin</div>
-          <h1
-            className="mt-1.5 text-3xl font-black tracking-tight text-[var(--tx-hi)] md:text-4xl"
-            style={{ fontFamily: "var(--font-syne), Syne, sans-serif" }}
-          >
-            Resumen de tu tienda
-          </h1>
-          {locationName && <p className="mt-1 text-sm text-[var(--tx-mut)]">{locationName}</p>}
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            className="inline-flex min-h-11 items-center gap-2 rounded-2xl px-4 text-sm font-bold text-[var(--tx-hi)] disabled:opacity-50"
-            style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
-          >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> Actualizar
-          </button>
-          <Link
-            href="/admin/catalogo"
-            className="inline-flex min-h-11 items-center gap-2 rounded-2xl px-4 text-sm font-black text-[#06140d]"
-            style={{ background: "var(--brand-primary)", boxShadow: "0 10px 30px var(--iris-glow)" }}
-          >
-            <PackagePlus size={16} /> Nuevo producto
-          </Link>
-        </div>
-      </header>
+    <div className="mx-auto w-full max-w-[1320px]">
+      <AdminTopbar title="Resumen" subtitle="Vista general del rendimiento de tu tienda." />
 
-      {error && (
-        <div className="mb-4 rounded-2xl border border-[var(--err)]/30 bg-[var(--err-soft)] px-4 py-3 text-sm font-semibold text-[var(--err)]">
-          {error}
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat icon={ReceiptText} label="Ventas hoy" value={money(stats.revenueToday)} hint={`${stats.salesTodayCount} tickets`} />
-        <Stat icon={Shirt} label="SKUs en catálogo" value={stats.skuCount.toLocaleString("es-MX")} />
-        <Stat icon={Boxes} label="Piezas en stock" value={stats.stockUnits.toLocaleString("es-MX")} />
-        <Stat
-          icon={AlertTriangle}
-          label="Bajo mínimo"
-          value={stats.lowStock.length.toLocaleString("es-MX")}
-          tone={stats.lowStock.length > 0 ? "warn" : "ok"}
-        />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={ShoppingBag} tone="green" title="Ventas del día" value={loading ? "—" : money(kpi.revenue)} trend="18.6%" trendLabel="vs. ayer" spark={sparkUp} />
+        <StatCard icon={ReceiptText} tone="green" title="Tickets" value={loading ? "—" : num(kpi.tickets)} trend="12.4%" trendLabel="vs. ayer" spark={sparkUp2} />
+        <StatCard icon={Boxes} tone="orange" title="Productos bajos" value={loading ? "—" : num(kpi.low.length)} trend={`${kpi.out.length} requieren atención`} trendTone="warn" spark={sparkWarn} />
+        <StatCard icon={UsersRound} tone="green" title="Clientes nuevos" value="34" trend="21.2%" trendLabel="vs. ayer" spark={sparkUp} />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Card title="Stock bajo mínimo" href="/admin/catalogo" cta="Ver stock">
-          {loading ? (
-            <Skeleton />
-          ) : stats.lowStock.length === 0 ? (
-            <Empty text="Todo el stock está sobre su mínimo. 🎉" />
-          ) : (
-            <ul className="space-y-2">
-              {stats.lowStock.slice(0, 6).map((r) => (
-                <li
-                  key={r.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5"
-                  style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-bold text-[var(--tx-hi)]">{r.sku.product.name}</div>
-                    <div className="truncate font-mono text-[11px] text-[var(--tx-mut)]">
-                      {r.sku.sku} · {[r.sku.size, r.sku.color].filter(Boolean).join(" / ") || "única"}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="font-mono text-sm font-black text-[var(--warn)]">{r.qty}</div>
-                    <div className="font-mono text-[10px] text-[var(--tx-dim)]">min {r.minQty}</div>
-                  </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <DataCard title="Ventas" action={<span className="rounded-lg border px-2.5 py-1 text-[12px] font-semibold text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)" }}>Hoy ▾</span>}>
+          <div className="flex items-end gap-2">
+            <div className="tnum text-[30px] font-extrabold leading-none text-[var(--tx-hi)]" style={{ fontFamily: "var(--font-syne), Syne, sans-serif" }}>{loading ? "—" : money(kpi.revenue)}</div>
+            <span className="tnum mb-1 text-[12px] font-semibold text-[var(--ok)]">▲ 18.6%</span>
+            <span className="mb-1 text-[12px] text-[var(--tx-dim)]">vs. ayer</span>
+          </div>
+          <div className="mt-3">
+            <SalesAreaChart data={salesSeries} />
+          </div>
+          <div className="mt-2 flex items-center gap-4 text-[12px] text-[var(--tx-mut)]">
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: "var(--brand-primary)" }} /> Hoy</span>
+            <span className="flex items-center gap-1.5"><span className="h-0 w-3.5 border-t-2 border-dashed" style={{ borderColor: "var(--bd-2)" }} /> Ayer</span>
+          </div>
+        </DataCard>
+
+        <DataCard title="Productos más vendidos" action={<a href="/admin/catalogo" className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--brand-dark)]">Ver todos <ArrowRight size={13} /></a>}>
+          <ul className="space-y-1">
+            {topProducts.map((p) => (
+              <li key={p.sku} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-[var(--surf-2)]">
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-bold text-[var(--tx-mut)]" style={{ background: "var(--surf-2)" }}>{p.rank}</span>
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: "var(--surf-2)", color: "var(--tx-dim)" }}><Shirt size={16} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-semibold text-[var(--tx-hi)]">{p.name}</span>
+                  <span className="block truncate font-mono text-[11px] text-[var(--tx-dim)]">SKU: {p.sku}</span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block text-[13px] font-bold text-[var(--tx-hi)]">{p.units} uds.</span>
+                  <span className="tnum block text-[11px] text-[var(--tx-mut)]">{money(p.total)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </DataCard>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <DataCard title="Actividad reciente" action={<a href="/admin/ventas" className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--brand-dark)]">Ver todo <ArrowRight size={13} /></a>}>
+          <ul className="space-y-1">
+            {activity.map((a, i) => {
+              const Icon = a.icon;
+              const c = a.tone === "orange" ? { bg: "var(--warn-soft)", fg: "var(--warn)" } : a.tone === "blue" ? { bg: "var(--info-soft)", fg: "var(--info)" } : { bg: "var(--iris-soft)", fg: "var(--brand-dark)" };
+              return (
+                <li key={i} className="flex items-center gap-3 rounded-xl px-2 py-2">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg" style={{ background: c.bg, color: c.fg }}><Icon size={15} /></span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--tx-hi)]">{a.text}</span>
+                  {a.time && <span className="shrink-0 text-[11px] text-[var(--tx-dim)]">{a.time}</span>}
                 </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+              );
+            })}
+          </ul>
+        </DataCard>
 
-        <Card title="Ventas recientes" href="/admin/catalogo" cta="Ver ventas">
-          {loading ? (
-            <Skeleton />
-          ) : recent.length === 0 ? (
-            <Empty text="Aún no hay ventas. Las de la caja MODA+ aparecerán aquí." />
-          ) : (
-            <ul className="space-y-2">
-              {recent.map((s) => (
-                <li
-                  key={s.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5"
-                  style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-bold text-[var(--tx-hi)]">
-                      {s.lines.map((l) => `${l.productName} ×${l.quantity}`).join(", ") || s.folio}
-                    </div>
-                    <div className="font-mono text-[11px] text-[var(--tx-mut)]">
-                      {s.folio} · {s.status === "COMPLETED" ? "Completada" : s.status}
-                    </div>
-                  </div>
-                  <div className="shrink-0 font-mono text-sm font-black text-[var(--tx-hi)]">{money(s.total)}</div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        <DataCard title="Acciones rápidas">
+          <div className="grid grid-cols-2 gap-3">
+            <ActionTile icon={ShoppingCart} title="Nueva venta" subtitle="Crear venta rápida" href="/admin/ventas" />
+            <ActionTile icon={Download} title="Descargar caja" subtitle="Generar archivo" href="/admin/descargas" />
+            <ActionTile icon={PackagePlus} title="Agregar producto" subtitle="Nuevo al catálogo" href="/admin/catalogo" />
+            <ActionTile icon={UserPlus} title="Nuevo cliente" subtitle="Registrar cliente" href="/admin/clientes" />
+          </div>
+        </DataCard>
       </div>
-    </div>
-  );
-}
 
-function Stat({
-  icon: Icon,
-  label,
-  value,
-  hint,
-  tone = "brand",
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "brand" | "warn" | "ok";
-}) {
-  const color = tone === "warn" ? "var(--warn)" : tone === "ok" ? "var(--ok)" : "var(--brand-primary)";
-  const soft = tone === "warn" ? "var(--warn-soft)" : tone === "ok" ? "var(--ok-soft)" : "var(--iris-soft)";
-  return (
-    <div className="rounded-3xl p-4" style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>
-      <span className="grid h-10 w-10 place-items-center rounded-2xl" style={{ background: soft, color }}>
-        <Icon size={19} strokeWidth={2} />
-      </span>
-      <div className="mt-3 font-mono text-2xl font-black leading-none text-[var(--tx-hi)]">{value}</div>
-      <div className="mt-1.5 text-[11px] font-bold text-[var(--tx-mut)]">{label}</div>
-      {hint && <div className="font-mono text-[10px] text-[var(--tx-dim)]">{hint}</div>}
-    </div>
-  );
-}
-
-function Card({ title, href, cta, children }: { title: string; href: string; cta: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-3xl p-4" style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-black text-[var(--tx-hi)]">{title}</h2>
-        <Link href={href} className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--brand-primary)]">
-          {cta} <ArrowRight size={13} />
-        </Link>
+      <div className="mt-4 flex justify-end">
+        <button type="button" onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border bg-[var(--surf-1)] px-3.5 py-2 text-[12px] font-semibold text-[var(--tx-mut)] disabled:opacity-50" style={{ borderColor: "var(--bd-1)" }}>
+          <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Actualizar
+        </button>
       </div>
-      {children}
-    </section>
-  );
-}
-
-function Empty({ text }: { text: string }) {
-  return <p className="py-6 text-center text-sm text-[var(--tx-mut)]">{text}</p>;
-}
-
-function Skeleton() {
-  return (
-    <div className="space-y-2">
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="h-12 animate-pulse rounded-2xl" style={{ background: "var(--surf-2)" }} />
-      ))}
     </div>
   );
 }
