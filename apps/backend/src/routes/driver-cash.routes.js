@@ -137,6 +137,12 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
         transferVerified: true, transferVerifiedAt: true,
         customerName: true, ticketName: true, customerPhone: true,
         deliveryAddress: true, createdAt: true,
+        items: {
+          select: {
+            name: true, quantity: true, price: true, subtotal: true, notes: true,
+            menuItem: { select: { categoryId: true } },
+          },
+        },
       },
     });
 
@@ -154,8 +160,34 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
       (o) => o.paymentMethod === 'TRANSFER' && !o.transferVerified,
     );
 
+    // Desglose de ENVÍOS por variante/zona del turno (Lluvia, Noche, local, zona
+    // extendida…). La variante elegida NO está en el nombre del renglón: vive en
+    // la línea "Variantes: …" de las notas (que pueden ser multilínea). Se
+    // detectan los renglones de envío por categoría (misma lógica que el reporte)
+    // y se agrupa por esa línea, así los montos cuadran con el total de envíos sin
+    // doble conteo. Los renglones de envío sin variante caen en "(sin variante)".
+    const shippingCatIds = await getShippingCategoryIds(restaurantId);
+    const shipMap = new Map(); // label -> { variant, count, amount }
+    let shippingTotal = 0;
+    for (const o of orders) {
+      for (const it of (o.items || [])) {
+        if (!it.menuItem || !shippingCatIds.has(it.menuItem.categoryId)) continue;
+        const amt = (typeof it.subtotal === 'number' && it.subtotal > 0)
+          ? it.subtotal
+          : (it.price || 0) * (it.quantity || 0);
+        shippingTotal += amt;
+        const label = parseShippingVariant(it.notes) || '(sin variante)';
+        const cur = shipMap.get(label) || { variant: label, count: 0, amount: 0 };
+        cur.count += it.quantity || 1;
+        cur.amount += amt;
+        shipMap.set(label, cur);
+      }
+    }
+    const shippingByVariant = [...shipMap.values()].sort((a, b) => b.amount - a.amount);
+
     res.json({
-      orders: orders.map(o => ({ ...o, customer: o.customerName || o.ticketName || null })),
+      // items solo se usa server-side para el desglose; no se devuelve al cliente.
+      orders: orders.map(({ items: _items, ...o }) => ({ ...o, customer: o.customerName || o.ticketName || null })),
       summary: {
         count: orders.length,
         total: orders.reduce((s, o) => s + (o.total || 0), 0),
@@ -164,6 +196,8 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
         byMethod,
         unverifiedTransferCount: unverifiedTransfers.length,
         unverifiedTransferTotal: unverifiedTransfers.reduce((s, o) => s + (o.total || 0), 0),
+        shippingTotal,
+        shippingByVariant,
       },
     });
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
@@ -703,6 +737,18 @@ async function getShippingCategoryIds(restaurantId) {
     select: { id: true },
   });
   return new Set(cats.map(c => c.id));
+}
+
+// Extrae la variante/zona elegida de la línea "Variantes: …" de las notas de un
+// renglón. Las notas pueden ser multilínea ("Complementos: Aderezo\nVariantes:
+// Lluvia") e incluso traer texto libre que NO es la variante ("Lluvia\nVariantes:
+// zona extendida" → la variante real es "zona extendida"), por eso parseamos la
+// línea, no el texto completo. Devuelve el valor tal cual ("Lluvia", "local,
+// Lluvia", "zona extendida") o null si no hay línea de variante.
+function parseShippingVariant(notes) {
+  if (!notes) return null;
+  const m = /variantes?\s*:\s*([^\n\r]+)/i.exec(notes);
+  return m ? (m[1].trim() || null) : null;
 }
 
 // ── Reporte consolidado por repartidor y día (admin) ─────────────────────
