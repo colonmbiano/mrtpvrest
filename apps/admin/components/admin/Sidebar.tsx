@@ -224,7 +224,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-full w-64 flex flex-col z-40 transition-transform duration-200 md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
+      className={`admin-sidebar fixed left-0 top-0 h-full w-64 flex flex-col z-40 transition-transform duration-200 md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
       style={{ background: "var(--surf)", borderRight: "1px solid var(--border)" }}
     >
       {/* ── Logo + sucursal ── */}
