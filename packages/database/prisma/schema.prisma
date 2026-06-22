@@ -340,6 +340,12 @@ model Restaurant {
   // FASE COMPRAS · repartos de Bodega Central a sucursales
   stockTransfers StockTransfer[]
 
+  // FASE NÓMINA · pago a empleados (control interno de la raya)
+  payrollConfig       PayrollConfig?
+  employeePayProfiles EmployeePayProfile[]
+  payrollPeriods      PayrollPeriod[]
+  payrollItems        PayrollItem[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -440,6 +446,9 @@ model Location {
 
   // FASE COMPRAS/GASTOS · gastos operativos registrados desde el TPV
   operatingExpenses OperatingExpense[]
+
+  // FASE NÓMINA · corridas de raya por sucursal
+  payrollPeriods PayrollPeriod[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1713,6 +1722,10 @@ model Employee {
   shiftsClosed CashShift[]     @relation("ShiftClosedBy")
   taskLogs     TaskLog[]
 
+  // FASE NÓMINA · perfil de pago (1:1) e histórico de renglones de raya
+  payProfile   EmployeePayProfile?
+  payrollItems PayrollItem[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -1725,6 +1738,155 @@ model EmployeeShift {
   endAt      DateTime?
   notes      String?
   createdAt  DateTime  @default(now())
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FASE NÓMINA · Pago a empleados ("la raya"). Control interno por defecto; la
+// capa fiscal (CFDI/IMSS) es OPCIONAL y se prende por restaurante con
+// PayrollConfig.fiscalEnabled (sus columnas/flujo viven dormidas hasta entonces).
+//
+// Esquema de pago por defecto: POR DÍA TRABAJADO. Un día cuenta cuando el
+// empleado tiene al menos un EmployeeShift (clock-in) ese día — las faltas se
+// descuentan solas. El periodo de la raya es configurable en días.
+//
+// Dinero SIEMPRE en Decimal (regla del repo). Modelos tenant-scoped por
+// restaurantId (van en SCOPED_MODELS) + locationId donde aplica.
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum PayType {
+  DAILY        // tarifa por día trabajado (default)
+  HOURLY       // tarifa por hora (horas de EmployeeShift)
+  WEEKLY_FIXED // sueldo fijo por periodo, sin importar días
+  PER_DELIVERY // comisión por entrega (repartidores)
+}
+
+enum PayrollStatus {
+  DRAFT    // borrador: calculada, editable
+  APPROVED // aprobada, lista para pagar
+  PAID     // pagada
+}
+
+enum TipPolicy {
+  INDIVIDUAL   // cada quien se queda su propina
+  POOL_BY_ROLE // pool repartido dentro de un rol
+  POOL_ALL     // pool repartido entre todos
+}
+
+// Config de nómina por restaurante (1:1).
+model PayrollConfig {
+  id           String     @id @default(cuid())
+  restaurantId String     @unique
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  // Largo del periodo de la raya, en días (configurable: 7, 14, 15...).
+  periodLengthDays Int       @default(7)
+  defaultPayType   PayType   @default(DAILY)
+  tipPolicy        TipPolicy @default(INDIVIDUAL)
+  currency         String    @default("MXN")
+
+  // Capa fiscal OPCIONAL. Mientras esté en false la nómina es solo control
+  // interno (sin CFDI/IMSS). Prenderla habilita el track fiscal (fase posterior).
+  fiscalEnabled Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("payroll_config")
+}
+
+// Perfil de pago por empleado (1:1 con Employee). Solo se usa la tarifa del
+// payType activo; las demás quedan disponibles para cambiar de esquema sin migrar.
+model EmployeePayProfile {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  employeeId   String     @unique
+  employee     Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  payType         PayType @default(DAILY)
+  dailyRate       Decimal @default(0) @db.Decimal(12, 2)
+  hourlyRate      Decimal @default(0) @db.Decimal(12, 2)
+  fixedAmount     Decimal @default(0) @db.Decimal(12, 2) // por periodo (WEEKLY_FIXED)
+  perDeliveryRate Decimal @default(0) @db.Decimal(12, 2) // comisión por entrega
+
+  isActive  Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId])
+  @@map("employee_pay_profiles")
+}
+
+// Corrida de nómina (la raya de un periodo) por sucursal.
+model PayrollPeriod {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  locationId   String
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  periodFrom DateTime
+  periodTo   DateTime
+  status     PayrollStatus @default(DRAFT)
+  notes      String?
+
+  // Snapshot del total neto del último cálculo (listados sin recomputar).
+  totalNet Decimal @default(0) @db.Decimal(12, 2)
+
+  // Auditoría
+  createdById  String?
+  approvedById String?
+  approvedAt   DateTime?
+  paidById     String?
+  paidAt       DateTime?
+
+  items     PayrollItem[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([restaurantId])
+  @@index([locationId, periodFrom])
+  @@map("payroll_periods")
+}
+
+// Renglón por empleado dentro de una corrida. Snapshot de identidad y tarifa
+// para conservar el histórico aunque el empleado cambie o se elimine.
+model PayrollItem {
+  id           String        @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  periodId     String
+  period       PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  // Empleado: SetNull al borrar para no perder el histórico. Nombre/rol en snapshot.
+  employeeId   String?
+  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  employeeName String
+  role         String?
+
+  payType    PayType @default(DAILY)
+  daysWorked Int     @default(0)
+  rate       Decimal @default(0) @db.Decimal(12, 2) // tarifa aplicada (snapshot)
+
+  gross            Decimal @default(0) @db.Decimal(12, 2) // base del periodo (días×tarifa o según payType)
+  tips             Decimal @default(0) @db.Decimal(12, 2) // Fase 3
+  commission       Decimal @default(0) @db.Decimal(12, 2) // Fase 3
+  additions        Decimal @default(0) @db.Decimal(12, 2) // bonos / ajustes +
+  advancesDeducted Decimal @default(0) @db.Decimal(12, 2) // Fase 2 (anticipos)
+  deductions       Decimal @default(0) @db.Decimal(12, 2) // faltas / otros -
+  net              Decimal @default(0) @db.Decimal(12, 2)
+
+  payMethod String? // CASH / TRANSFER (al pagar)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([periodId, employeeId])
+  @@index([restaurantId])
+  @@index([periodId])
+  @@index([employeeId])
+  @@map("payroll_items")
 }
 
 model VariantTemplate {

@@ -46,6 +46,7 @@ const ITag       = ({ size }: IconProps) => ic(<><path d="M1 1h5l7 7a2 2 0 010 2
 const IBook      = ({ size }: IconProps) => ic(<><path d="M3 2.5h4a2 2 0 012 2v9a2 2 0 00-2-2H3z"/><path d="M13 2.5H9a2 2 0 00-2 2v9a2 2 0 012-2h4z"/></>, size);
 const IStore     = ({ size }: IconProps) => ic(<><path d="M2 6l1-3.5h10L14 6M2 6v7a1 1 0 001 1h10a1 1 0 001-1V6M2 6h12M6 14V9.5h4V14"/></>, size);
 const IChat      = ({ size }: IconProps) => ic(<><path d="M2 3.5h12a1 1 0 011 1V11a1 1 0 01-1 1H6l-3.5 2.5V12H2a1 1 0 01-1-1V4.5a1 1 0 011-1z"/></>, size);
+const ICash      = ({ size }: IconProps) => ic(<><rect x="1" y="4" width="14" height="8" rx="1"/><circle cx="8" cy="8" r="2"/><path d="M4 4v8M12 4v8"/></>, size);
 
 // ── Nav sections ──────────────────────────────────────────────
 const SECTIONS = [
@@ -93,6 +94,7 @@ const SECTIONS = [
     accent: "#8b5cf6",
     items: [
       { href: "/admin/empleados",         icon: <IUsers />,  label: "Empleados" },
+      { href: "/admin/nomina",            icon: <ICash />,   label: "Nómina" },
       { href: "/admin/reportes/cortes",   icon: <IBarChart />, label: "Cortes" },
       { href: "/admin/turnos",            icon: <IClock />,  label: "Turnos de caja" },
       { href: "/admin/caja-repartidores", icon: <IWallet />, label: "Caja Rep." },
