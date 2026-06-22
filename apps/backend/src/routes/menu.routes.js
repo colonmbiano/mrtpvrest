@@ -50,7 +50,9 @@ function getTodayDay() {
 
 function isMenuItemActiveToday(item, todayDay) {
   const activeDays = Array.isArray(item.activeDays) ? item.activeDays : []
-  if (activeDays.length === 0) return !item.isPromo
+  // Sin agenda configurada → siempre visible (promo o no). La agenda por días
+  // solo restringe cuando el admin la configura explícitamente.
+  if (activeDays.length === 0) return true
   return activeDays.includes(todayDay)
 }
 
