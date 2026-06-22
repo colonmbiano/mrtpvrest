@@ -123,6 +123,23 @@ const payMethodLabel = (m?: string | null): string =>
 const FILTERS = ["Todos", "Mesa", "Llevar", "Domicilio"] as const;
 type FilterKey = (typeof FILTERS)[number];
 
+// Filtro por método de pago — solo en modo "Cobradas". Cada chip agrupa los
+// métodos equivalentes (efectivo contra-entrega cuenta como efectivo, SPEI/OXXO
+// como transferencia, etc.). `methods: null` = sin filtrar (Todos).
+const PAY_FILTERS: { key: string; label: string; methods: string[] | null }[] = [
+  { key: "Todos", label: "Todos", methods: null },
+  { key: "CASH", label: "Efectivo", methods: ["CASH", "CASH_ON_DELIVERY"] },
+  { key: "TRANSFER", label: "Transfer.", methods: ["TRANSFER", "SPEI", "OXXO"] },
+  { key: "CARD", label: "Tarjeta", methods: ["CARD", "CARD_PRESENT"] },
+  { key: "OTHER", label: "Otros", methods: ["ONLINE", "MIXED", "COURTESY", "OTHER"] },
+];
+
+const matchesPayFilter = (order: DrawerOrder, payKey: string): boolean => {
+  const group = PAY_FILTERS.find((p) => p.key === payKey);
+  if (!group || group.methods === null) return true;
+  return group.methods.includes((order.paymentMethod || "").toUpperCase());
+};
+
 // Orden del listado. `time` es string de display (no timestamp), así que
 // no ordenamos por tiempo; orden por monto y nombre son confiables.
 const SORTS = [
@@ -191,6 +208,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
 }) => {
   const paidMode = mode === "paid";
   const [activeFilter, setActiveFilter] = useState<FilterKey>("Todos");
+  const [payFilter, setPayFilter] = useState<string>("Todos");
   const [sortKey, setSortKey] = useState<SortKey>("default");
   const [search, setSearch] = useState("");
   const [selectionMode, setSelectionMode] = useState(false);
@@ -218,6 +236,8 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
     const q = search.trim().toLowerCase();
     const filtered = orders
       .filter((o) => matchesFilter(o, activeFilter))
+      // El filtro por método de pago solo aplica en "Cobradas".
+      .filter((o) => (paidMode ? matchesPayFilter(o, payFilter) : true))
       .filter((o) => {
         if (!q) return true;
         return (
@@ -235,7 +255,14 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
       );
     }
     return filtered;
-  }, [orders, activeFilter, search, sortKey]);
+  }, [orders, activeFilter, payFilter, paidMode, search, sortKey]);
+
+  // Total monetario de lo que está visible (útil al filtrar cobrados por método
+  // o tipo: "cuánto entró por transferencia en mesas", etc.).
+  const visibleTotal = useMemo(
+    () => visibleOrders.reduce((sum, o) => sum + o.total, 0),
+    [visibleOrders],
+  );
 
   const driverlessCount = useMemo(
     () => orders.filter((o) => o.needsDriver).length,
@@ -478,6 +505,34 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
               );
             })}
           </div>
+
+          {/* FILTRO POR MÉTODO DE PAGO — solo en "Cobradas". */}
+          {paidMode && (
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-white/30 shrink-0">
+                Pago
+              </span>
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                {PAY_FILTERS.map((p) => {
+                  const isActive = payFilter === p.key;
+                  return (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => setPayFilter(p.key)}
+                      className={`shrink-0 h-9 px-4 rounded-xl text-[10px] font-semibold uppercase tracking-[0.12em] whitespace-nowrap active:scale-95 transition-all border ${
+                        isActive
+                          ? "bg-[#88D66C]/20 text-[#88D66C] border-[#88D66C]/40"
+                          : "bg-white/5 text-white/45 border-white/10"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="relative">
             <Search
@@ -861,9 +916,20 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
               </div>
             </div>
           ) : paidMode ? (
-            <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-white/30">
-              Cobrados del último mes · guardado local
-            </p>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-baseline justify-between">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/40">
+                  {visibleOrders.length} ticket{visibleOrders.length === 1 ? "" : "s"}
+                  {(payFilter !== "Todos" || activeFilter !== "Todos") ? " · filtrado" : ""}
+                </span>
+                <span className="text-xl font-black tabular-nums text-[#88D66C]">
+                  ${visibleTotal.toFixed(2)}
+                </span>
+              </div>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-white/25">
+                Cobrados del último mes · guardado local
+              </p>
+            </div>
           ) : (
             <button
               type="button"
