@@ -19,6 +19,7 @@ import {
   printCustomerReceipt,
   buildCustomerReceipt,
   buildKitchenTicket,
+  comboKitchenDetail,
   paymentLabel,
   withLabel,
   formatProductLine,
@@ -224,6 +225,44 @@ describe("comanda :: título = nombre/mesa, sin 'COMANDA'", () => {
       config: { header: "COCINA CENTRAL" },
     });
     expect(out).toContain("COCINA CENTRAL");
+  });
+});
+
+describe("comanda :: desglose de combo/promo (kitchenDetail)", () => {
+  it("imprime el desglose entre paréntesis bajo el nombre cuando viene kitchenDetail", () => {
+    const out = buildKitchenTicket({
+      orderType: "TAKEOUT",
+      items: [
+        {
+          name: "Botana de Papás",
+          quantity: 1,
+          price: 329,
+          kitchenDetail: "1 kg de alitas + papas gajo + 2 cervezas",
+        },
+      ],
+    });
+    expect(out).toContain("Botana de Papás");
+    expect(out).toContain("(1 kg de alitas + papas gajo + 2 cervezas)");
+  });
+
+  it("sin kitchenDetail no agrega sub-línea (productos normales quedan limpios)", () => {
+    const out = buildKitchenTicket({
+      items: [{ name: "Burger de Res Clásica", quantity: 1, price: 92 }],
+    });
+    expect(out).toContain("Burger de Res Clásica");
+    expect(out).not.toContain("(");
+  });
+
+  it("comboKitchenDetail solo devuelve descripción cuando el item es promo", () => {
+    expect(
+      comboKitchenDetail({ isPromo: true, description: "alitas + 2 cervezas" }),
+    ).toBe("alitas + 2 cervezas");
+    // Producto normal con descripción de menú → no se imprime en cocina.
+    expect(
+      comboKitchenDetail({ isPromo: false, description: "viene con papas fritas" }),
+    ).toBeNull();
+    expect(comboKitchenDetail({ isPromo: true, description: "  " })).toBeNull();
+    expect(comboKitchenDetail(null)).toBeNull();
   });
 });
 
