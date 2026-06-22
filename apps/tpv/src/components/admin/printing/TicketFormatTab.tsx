@@ -63,6 +63,7 @@ interface TicketConfig {
   kitchenShowOrderNumber: boolean;
   kitchenShowModifiers: boolean;
   kitchenShowNotes: boolean;
+  kitchenShowItemDescription: boolean;
   kitchenGroupBySeat: boolean;
   kitchenSeparateByGroup: boolean;
   kitchenFontSize: KitchenFontSize;
@@ -87,6 +88,7 @@ const EMPTY: TicketConfig = {
   kitchenHeader: "", adminPin: "0000",
   kitchenShowCustomer: true, kitchenShowTable: true, kitchenShowType: true, kitchenShowTime: true,
   kitchenShowOrderNumber: true, kitchenShowModifiers: true, kitchenShowNotes: true,
+  kitchenShowItemDescription: false,
   kitchenGroupBySeat: true, kitchenSeparateByGroup: false,
   kitchenFontSize: "large", kitchenFontFamily: "monospace",
   kitchenLineSpacing: "normal", kitchenLineWeight: "bold",
@@ -294,6 +296,7 @@ export default function TicketFormatTab() {
             <div className="grid grid-cols-2 gap-3">
               <Toggle label="Modificadores (+ extra, sin…)" checked={cfg.kitchenShowModifiers} onChange={(v) => setCfg({ ...cfg, kitchenShowModifiers: v })} />
               <Toggle label="Notas del producto" checked={cfg.kitchenShowNotes} onChange={(v) => setCfg({ ...cfg, kitchenShowNotes: v })} />
+              <Toggle label="Contenido de combos (desglose)" checked={cfg.kitchenShowItemDescription} onChange={(v) => setCfg({ ...cfg, kitchenShowItemDescription: v })} />
               <Toggle label="Agrupar por comensal" checked={cfg.kitchenGroupBySeat} onChange={(v) => setCfg({ ...cfg, kitchenGroupBySeat: v })} />
               <Toggle label="Ticket separado por estación" checked={cfg.kitchenSeparateByGroup} onChange={(v) => setCfg({ ...cfg, kitchenSeparateByGroup: v })} />
             </div>
@@ -637,9 +640,10 @@ function KitchenPreview({ cfg }: { cfg: TicketConfig }) {
     tableNumber: "5",
     customerName: "Juan P.",
     items: [
-      { quantity: 2, name: "Hamburguesa BBQ", seat: 1, modifiers: ["Sin cebolla", "Extra queso"], notes: "Término medio" },
-      { quantity: 1, name: "Papas grandes", seat: 1, modifiers: [], notes: "" },
-      { quantity: 1, name: "Refresco cola", seat: 2, modifiers: [], notes: "Sin hielo" },
+      { quantity: 1, name: "Combo El Jefe", seat: 1, modifiers: [], notes: "", kitchenDetail: "burger res + papas + refresco" },
+      { quantity: 2, name: "Hamburguesa BBQ", seat: 1, modifiers: ["Sin cebolla", "Extra queso"], notes: "Término medio", kitchenDetail: "" },
+      { quantity: 1, name: "Papas grandes", seat: 1, modifiers: [], notes: "", kitchenDetail: "" },
+      { quantity: 1, name: "Refresco cola", seat: 2, modifiers: [], notes: "Sin hielo", kitchenDetail: "" },
     ],
   };
 
@@ -658,6 +662,9 @@ function KitchenPreview({ cfg }: { cfg: TicketConfig }) {
   const renderItem = (it: typeof SAMPLE.items[number], key: React.Key) => (
     <div key={key}>
       <div className={`text-black ${itemSizeCls}`} style={{ fontWeight: itemWeight }}>{it.quantity}x {it.name}</div>
+      {cfg.kitchenShowItemDescription && it.kitchenDetail && (
+        <div className="text-[12px] text-zinc-700 pl-3">({it.kitchenDetail})</div>
+      )}
       {cfg.kitchenShowModifiers && it.modifiers.map((m, i) => (
         <div key={`m${i}`} className="text-[12px] text-zinc-700 pl-3">+ {m}</div>
       ))}
