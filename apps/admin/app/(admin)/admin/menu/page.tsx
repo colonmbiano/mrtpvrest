@@ -194,9 +194,13 @@ export default function MenuPage() {
 
   async function fetchData() {
     try {
+      // admin=true: es la pantalla de GESTIÓN del menú, debe ver TODO
+      // (promos sin días, no disponibles, categorías inactivas). Sin esto el
+      // endpoint público oculta los combos isPromo sin activeDays y la
+      // categoría se ve vacía ("0 artículos en Día del Padre").
       const [i, c, vt] = await Promise.all([
-        api.get("/api/menu/items"),
-        api.get("/api/menu/categories"),
+        api.get("/api/menu/items?admin=true"),
+        api.get("/api/menu/categories?admin=true"),
         api.get("/api/menu/variant-templates"),
       ]);
       setItems(Array.isArray(i.data) ? i.data : []);
