@@ -25,6 +25,7 @@ import {
 import {
   printCustomerReceipt,
   printKitchenTickets,
+  comboKitchenDetail,
   type TicketItem,
 } from "@/lib/printer-tcp";
 import {
@@ -237,6 +238,7 @@ export default function OrderTypePage() {
         price: Number(it.unitPrice ?? it.price ?? 0),
         notes: it.notes || null,
         seatNumber: typeof it.seatNumber === "number" ? it.seatNumber : null,
+        kitchenDetail: comboKitchenDetail(it.menuItem),
         modifiers: (it.modifiers || []).map((m: any) => ({
           name: m.name || m.modifier?.name || "",
           priceAdd: Number(m.priceAdd ?? m.price ?? 0),

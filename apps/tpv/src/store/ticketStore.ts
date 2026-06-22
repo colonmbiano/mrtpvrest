@@ -57,6 +57,10 @@ export type Product = {
   category: string;
   categoryId?: string;
   imageUrl?: string | null;
+  // Descripción del catálogo. En combos/promos la usamos como desglose de
+  // cocina (ver comboKitchenDetail en printer-tcp). Llega en el payload de
+  // /api/menu/items aunque no se mapee campo por campo.
+  description?: string | null;
   isPromo?: boolean;
   isPopular?: boolean;
   isFavorite?: boolean;

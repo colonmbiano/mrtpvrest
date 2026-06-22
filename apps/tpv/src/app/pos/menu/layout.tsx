@@ -34,6 +34,7 @@ import {
   printEqualSplitReceipts,
   printKitchenTickets,
   openCashDrawer,
+  comboKitchenDetail,
   type TicketItem,
   type ReceiptInput,
 } from "@/lib/printer-tcp";
@@ -531,6 +532,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         price: Number(it.unitPrice ?? it.price ?? 0),
         notes: it.notes || null,
         seatNumber: typeof it.seatNumber === "number" ? it.seatNumber : null,
+        kitchenDetail: comboKitchenDetail(it.menuItem),
         modifiers: (it.modifiers || []).map((m: any) => ({
           name: m.name || m.modifier?.name || "",
           priceAdd: Number(m.priceAdd ?? m.price ?? 0),
@@ -1291,6 +1293,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
               name: it.name || it.menuItem?.name || "Producto",
               quantity: Number(it.quantity ?? 1),
               notes: it.notes || null,
+              kitchenDetail: comboKitchenDetail(it.menuItem),
               printerGroupIds:
                 itemOverride.length > 0 ? itemOverride : categoryDefault,
               modifiers: (it.modifiers || []).map((m: any) => ({

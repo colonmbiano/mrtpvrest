@@ -23,6 +23,7 @@ import {
   printKitchenTickets,
   printCustomerReceipt,
   printSplitReceipts,
+  comboKitchenDetail,
   type TicketItem,
 } from "@/lib/printer-tcp";
 
@@ -410,6 +411,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         notes: it.notes,
         seatNumber: it.seatNumber ?? null,
         printerGroupIds,
+        kitchenDetail: comboKitchenDetail(it),
         modifiers: (it.modifiers || []).map((m) => ({ name: m.name, priceAdd: m.priceAdd })),
       };
     });
@@ -995,6 +997,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       price: it.price,
       notes: it.notes,
       seatNumber: it.seatNumber ?? null,
+      kitchenDetail: comboKitchenDetail(it.menuItem),
       modifiers: (it.modifiers || []).map((m: any) => ({ name: m.name || m.modifier?.name, priceAdd: m.priceAdd || m.modifier?.priceAdd })),
     }));
   };

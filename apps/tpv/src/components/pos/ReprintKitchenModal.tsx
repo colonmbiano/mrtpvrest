@@ -14,6 +14,8 @@ export interface ReprintCandidateItem {
   name: string;
   quantity: number;
   notes?: string | null;
+  /** Desglose de combo/promo para la comanda (sub-línea entre paréntesis). */
+  kitchenDetail?: string | null;
   printerGroupIds?: string[];
   modifiers?: { name: string; priceAdd?: number }[];
   seatNumber?: number | null;
@@ -94,6 +96,7 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
         quantity: it.quantity,
         price: 0, // cocina no muestra precios
         notes: it.notes || null,
+        kitchenDetail: it.kitchenDetail || null,
         modifiers: it.modifiers || [],
         printerGroupIds: it.printerGroupIds || [],
         seatNumber: it.seatNumber ?? null,

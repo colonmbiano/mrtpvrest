@@ -449,12 +449,33 @@ export interface TicketItem {
   price: number;
   notes?: string | null;
   modifiers?: TicketModifier[] | null;
+  /** Desglose del producto a imprimir SOLO en la comanda de cocina (no en el
+   *  recibo). Pensado para combos/promos: el nombre queda limpio ("Botana de
+   *  Papás") y cocina ve el contenido en una sub-línea entre paréntesis. Se
+   *  puebla con comboKitchenDetail(); null = no imprimir nada. */
+  kitchenDetail?: string | null;
   // En DINE_IN: a qué comensal pertenece. null = compartido.
   seatNumber?: number | null;
   // Printer Groups resueltos para este item — override item-level si
   // existe, default heredado de la categoría si no. El dispatcher usa
   // este array para enrutar la comanda a las impresoras correctas.
   printerGroupIds?: string[];
+}
+
+/**
+ * Desglose de cocina para combos/promos. Devuelve la `description` SOLO cuando
+ * el producto es promo/combo (`isPromo`), para que la comanda muestre qué trae
+ * sin ensuciar el resto del menú (las descripciones de productos normales —p.ej.
+ * "todas las hamburguesas vienen con papas…"— NO se imprimen). Fuente: el item
+ * del catálogo (carrito) o el `menuItem` de la orden; ambos traen isPromo +
+ * description. null = no imprimir sub-línea.
+ */
+export function comboKitchenDetail(
+  src: { isPromo?: boolean | null; description?: string | null } | null | undefined,
+): string | null {
+  if (!src || !src.isPromo) return null;
+  const d = (src.description ?? "").trim();
+  return d ? d : null;
 }
 
 /**
@@ -882,6 +903,15 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
       ? `${Number(item.weightKg).toFixed(3).replace(/\.?0+$/, "")} kg`
       : `${item.quantity}x`;
     s += `${qtyLabel} ${item.name}\n`;
+    // Desglose de combo/promo: sub-línea entre paréntesis bajo el nombre, para
+    // que cocina sepa qué incluye sin depender de notas escritas a mano. Solo
+    // se puebla para items promo (ver comboKitchenDetail), así que aquí no hay
+    // riesgo de imprimir descripciones de productos normales.
+    if (item.kitchenDetail && item.kitchenDetail.trim()) {
+      s += itemSizeOff;
+      s += `  (${item.kitchenDetail.trim()})\n`;
+      s += itemSizeOn;
+    }
     if (cfg.showModifiers && item.modifiers && item.modifiers.length > 0) {
       s += itemSizeOff;
       for (const m of item.modifiers) s += `  + ${m.name}\n`;
