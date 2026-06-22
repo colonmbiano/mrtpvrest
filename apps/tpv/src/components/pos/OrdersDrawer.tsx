@@ -17,6 +17,9 @@ import {
   Pencil,
   Wallet,
   History,
+  Banknote,
+  CreditCard,
+  ArrowLeftRight,
 } from "lucide-react";
 import { hapticMedium } from "@/lib/haptics";
 
@@ -85,7 +88,26 @@ interface OrdersDrawerProps {
   onModeChange?: (mode: "open" | "paid") => void;
   /** Spinner en la lista mientras se refresca "Cobradas" y no hay cache aún. */
   paidLoading?: boolean;
+  /** Solo modo "Cobradas": habilita corregir el método de pago de un ticket ya
+   *  cobrado (caso típico: se cobró por transferencia pero entró en efectivo, o
+   *  al revés). Requiere permiso reopen_table / rol privilegiado. */
+  canCorrectPaymentMethod?: boolean;
+  /** Aplica el nuevo método al pedido ya cobrado. El caller llama al backend
+   *  (PUT /orders/:id/correct-payment-method) y refresca el cache de cobrados. */
+  onCorrectPaymentMethod?: (order: DrawerOrder, method: string) => Promise<void>;
 }
+
+// Métodos a los que se puede corregir un cobro desde la pestaña "Cobradas".
+// Coincide con CORRECTABLE_PAYMENT_METHODS del backend (sin OTHER en la UI).
+const CORRECTION_METHODS: {
+  key: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+}[] = [
+  { key: "CASH", label: "Efectivo", icon: Banknote },
+  { key: "TRANSFER", label: "Transfer.", icon: ArrowLeftRight },
+  { key: "CARD", label: "Tarjeta", icon: CreditCard },
+];
 
 // Etiqueta legible del método de pago para el chip del tile en modo "Cobradas".
 const PAY_METHOD_LABEL: Record<string, string> = {
@@ -164,6 +186,8 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   mode = "open",
   onModeChange,
   paidLoading = false,
+  canCorrectPaymentMethod = false,
+  onCorrectPaymentMethod,
 }) => {
   const paidMode = mode === "paid";
   const [activeFilter, setActiveFilter] = useState<FilterKey>("Todos");
@@ -176,6 +200,10 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   const [showDriverPicker, setShowDriverPicker] = useState(false);
   const [assigningDriverId, setAssigningDriverId] = useState<string | null>(null);
   const [sendingKitchen, setSendingKitchen] = useState(false);
+  // Modo "Cobradas": id del ticket cuyo selector de corrección de método está
+  // abierto, y el id que está guardando contra el backend (spinner).
+  const [correctingId, setCorrectingId] = useState<string | null>(null);
+  const [correctingSaveId, setCorrectingSaveId] = useState<string | null>(null);
 
   // Refs para el "dejar presionado" (long-press) que entra a seleccion.
   const longPressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -629,23 +657,97 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     </span>
                     </div>
 
-                    {/* Modo "Cobradas": solo lectura → un único botón para
-                        reimprimir el recibo (paid:true en el caller). */}
+                    {/* Modo "Cobradas": reimprimir el recibo (paid:true en el
+                        caller) y, con permiso, corregir el método de pago de un
+                        ticket ya cobrado (efectivo ↔ transferencia ↔ tarjeta). */}
                     {paidMode ? (
-                      <div className="flex items-stretch gap-2 w-full">
-                        <button
-                          type="button"
-                          aria-label={`Reimprimir recibo de ${order.customerName}`}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            hapticMedium();
-                            onReprintOrder(order);
-                          }}
-                          className="flex-1 h-9 rounded-lg bg-[#88D66C]/12 border border-[#88D66C]/30 text-[#88D66C] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
-                        >
-                          <Receipt size={15} strokeWidth={2.5} /> Reimprimir recibo
-                        </button>
+                      <div className="flex flex-col gap-2 w-full">
+                        <div className="flex items-stretch gap-2 w-full">
+                          <button
+                            type="button"
+                            aria-label={`Reimprimir recibo de ${order.customerName}`}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              hapticMedium();
+                              onReprintOrder(order);
+                            }}
+                            className="flex-1 h-9 rounded-lg bg-[#88D66C]/12 border border-[#88D66C]/30 text-[#88D66C] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                          >
+                            <Receipt size={15} strokeWidth={2.5} /> Reimprimir
+                          </button>
+                          {canCorrectPaymentMethod && onCorrectPaymentMethod && (
+                            <button
+                              type="button"
+                              aria-label={`Corregir método de pago de ${order.customerName}`}
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                hapticMedium();
+                                setCorrectingId((cur) =>
+                                  cur === order.id ? null : order.id,
+                                );
+                              }}
+                              className={`flex-1 h-9 rounded-lg border text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform ${
+                                correctingId === order.id
+                                  ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)]"
+                                  : "bg-white/5 border-white/10 text-white/75"
+                              }`}
+                            >
+                              <Wallet size={15} strokeWidth={2.5} /> Corregir cobro
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Selector inline del nuevo método (excluye el actual). */}
+                        {canCorrectPaymentMethod &&
+                          onCorrectPaymentMethod &&
+                          correctingId === order.id && (
+                            <div className="rounded-lg border border-white/10 bg-white/5 p-2">
+                              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-white/40 mb-1.5 px-0.5">
+                                Cambiar método a…
+                              </p>
+                              <div className="flex items-stretch gap-2">
+                                {CORRECTION_METHODS.filter(
+                                  (m) =>
+                                    m.key !==
+                                    (order.paymentMethod || "").toUpperCase(),
+                                ).map((m) => {
+                                  const Icon = m.icon;
+                                  const busy = correctingSaveId === order.id;
+                                  return (
+                                    <button
+                                      key={m.key}
+                                      type="button"
+                                      disabled={busy}
+                                      onPointerDown={(e) => e.stopPropagation()}
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        hapticMedium();
+                                        setCorrectingSaveId(order.id);
+                                        try {
+                                          await onCorrectPaymentMethod(order, m.key);
+                                          setCorrectingId(null);
+                                        } catch {
+                                          // El caller muestra el error (toast).
+                                        } finally {
+                                          setCorrectingSaveId(null);
+                                        }
+                                      }}
+                                      className="flex-1 h-9 rounded-lg bg-white/5 border border-white/10 text-white text-[11px] font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40"
+                                    >
+                                      {busy ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                      ) : (
+                                        <Icon size={14} strokeWidth={2.5} />
+                                      )}
+                                      {m.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                       </div>
                     ) : (
                     /* Acciones por ticket — Editar / Imprimir / Cobrar — sin
