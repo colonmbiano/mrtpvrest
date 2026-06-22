@@ -1007,6 +1007,56 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       )
     : false;
 
+  // Corregir el método de pago de un ticket YA cobrado (pestaña "Cobradas").
+  // Mismo gate que el backend (requirePermission('reopen_table')): roles
+  // privilegiados pasan sin permiso explícito, el resto necesita reopen_table.
+  const canCorrectPayment =
+    (currentEmployee?.role
+      ? ["ADMIN", "SUPER_ADMIN", "OWNER", "MANAGER"].includes(
+          currentEmployee.role,
+        )
+      : false) || !!currentEmployee?.permissions?.includes("reopen_table");
+
+  const handleCorrectPaymentMethod = useCallback(
+    async (o: { id: string }, method: string) => {
+      try {
+        const { data } = await api.put(
+          `/api/orders/${o.id}/correct-payment-method`,
+          { paymentMethod: method },
+        );
+        // Refleja el cambio en el cache local de cobrados (la fila y el chip de
+        // método se actualizan al instante; el picker excluye el nuevo método).
+        setPaidOrders((prev) => {
+          const next = prev.map((p) =>
+            p.id === o.id ? { ...p, paymentMethod: method } : p,
+          );
+          writePaidTicketsCache(next);
+          return next;
+        });
+        const label =
+          method === "CASH"
+            ? "Efectivo"
+            : method === "TRANSFER"
+              ? "Transferencia"
+              : method === "CARD"
+                ? "Tarjeta"
+                : method;
+        toast.success(`Método corregido a ${label}`);
+        if (data?.cashAdjusted === "locked") {
+          toast.warning(
+            "El corte del repartidor ya estaba cerrado; la caja no se ajustó automáticamente.",
+          );
+        }
+      } catch (err: any) {
+        toast.error(
+          err?.response?.data?.error || "No se pudo corregir el método de pago",
+        );
+        throw err;
+      }
+    },
+    [],
+  );
+
   const handleMergeOpenOrders = useCallback(
     async (
       targetOrder: { id: string; orderNumber: string },
@@ -1258,6 +1308,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         onAssignDriver={handleAssignDriverToOrders}
         canSendToKitchen={ordersMode === "open"}
         onSendToKitchen={handleSendOrdersToKitchen}
+        canCorrectPaymentMethod={canCorrectPayment && ordersMode === "paid"}
+        onCorrectPaymentMethod={handleCorrectPaymentMethod}
       />
 
       {reprintKitchenOrder && (
