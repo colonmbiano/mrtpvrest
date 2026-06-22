@@ -111,7 +111,10 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
       try {
         const [catsRes, itemsRes, printersRes, tableRes] = await Promise.all([
           api.get("/api/menu/categories"),
-          api.get("/api/menu/items"),
+          // ?admin=true: terminal de venta interna (igual que pos/menu). Sin esto
+          // el backend oculta los combos (isPromo sin activeDays). Los agotados
+          // se filtran abajo client-side (isAvailable !== false).
+          api.get("/api/menu/items?admin=true"),
           api.get<PrinterRecord[]>("/api/printers").catch(() => ({ data: [] as PrinterRecord[] })),
           api.get<{ name?: string }>(`/api/tables/${tableId}`).catch(() => ({ data: {} as { name?: string } })),
         ]);
@@ -181,7 +184,9 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   }, [isAppendMode, activeOrderId]);
 
   const filtered = useMemo(() => {
-    let list = activeCat === "all" ? products : products.filter((p) => p.categoryId === activeCat);
+    // admin=true trae también los no disponibles; ocultarlos aquí.
+    let list = products.filter((p) => p.isAvailable !== false);
+    if (activeCat !== "all") list = list.filter((p) => p.categoryId === activeCat);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q));

@@ -217,7 +217,13 @@ export default function MenuPage() {
     try {
       const [categoriesResponse, productsResponse] = await Promise.all([
         api.get<MenuCategory[]>("/api/menu/categories"),
-        api.get<MenuItem[]>("/api/menu/items"),
+        // ?admin=true: terminal de venta interna, igual que el POS principal
+        // (apps/tpv/src/app/pos/menu). Sin esto el backend oculta los combos
+        // (marcados isPromo sin activeDays → isMenuItemActiveToday los filtra),
+        // que sí deben venderse aquí. La disponibilidad se filtra abajo
+        // client-side (product.isAvailable !== false), así que los agotados
+        // siguen ocultos.
+        api.get<MenuItem[]>("/api/menu/items?admin=true"),
       ]);
       const nextCategories = Array.isArray(categoriesResponse.data) ? categoriesResponse.data : [];
       const nextProducts = Array.isArray(productsResponse.data) ? productsResponse.data : [];
