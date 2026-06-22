@@ -494,6 +494,9 @@ export interface KitchenTicketConfig {
   showCustomerName?: boolean;
   showModifiers?: boolean;
   showNotes?: boolean;
+  // Imprime el desglose de combos/promos (kitchenDetail) como sub-línea en
+  // cocina. Opt-in (default false); se activa desde /admin/tickets.
+  showItemDescription?: boolean;
   groupBySeat?: boolean;
   separateByGroup?: boolean;
   fontSize?: "normal" | "large" | "xlarge";
@@ -755,6 +758,7 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     showCustomerName: input.config?.showCustomerName ?? true,
     showModifiers:    input.config?.showModifiers    ?? true,
     showNotes:        input.config?.showNotes        ?? true,
+    showItemDescription: input.config?.showItemDescription ?? false,
     groupBySeat:      input.config?.groupBySeat      ?? true,
     separateByGroup:  input.config?.separateByGroup  ?? false,
     fontSize:         input.config?.fontSize         ?? "large",
@@ -906,8 +910,9 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     // Desglose de combo/promo: sub-línea entre paréntesis bajo el nombre, para
     // que cocina sepa qué incluye sin depender de notas escritas a mano. Solo
     // se puebla para items promo (ver comboKitchenDetail), así que aquí no hay
-    // riesgo de imprimir descripciones de productos normales.
-    if (item.kitchenDetail && item.kitchenDetail.trim()) {
+    // riesgo de imprimir descripciones de productos normales. Gateado por el
+    // toggle showItemDescription (Ajustes → Tickets) para poder apagarlo.
+    if (cfg.showItemDescription && item.kitchenDetail && item.kitchenDetail.trim()) {
       s += itemSizeOff;
       s += `  (${item.kitchenDetail.trim()})\n`;
       s += itemSizeOn;

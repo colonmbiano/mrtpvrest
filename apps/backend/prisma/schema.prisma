@@ -1030,6 +1030,10 @@ model TicketConfig {
   kitchenShowOrderNumber Boolean @default(true)
   kitchenShowModifiers   Boolean @default(true)
   kitchenShowNotes       Boolean @default(true)
+  // Imprime el desglose de combos/promos (description gateada por isPromo) como
+  // sub-línea en la comanda. Opt-in (default false), se controla desde
+  // /admin/tickets. El nombre del combo queda limpio en botón/recibo.
+  kitchenShowItemDescription Boolean @default(false)
   // Agrupa items por COMENSAL N en DINE_IN con varios asientos. OFF = plano.
   kitchenGroupBySeat     Boolean @default(true)
   // "normal" | "large" | "xlarge" — controla doble/triple ancho de items.

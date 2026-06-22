@@ -482,14 +482,17 @@ router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
         items: {
           include: {
             modifiers: true,
-            // Solo se consume menuItem.name (fallback de display) y los
+            // Se consume menuItem.name (fallback de display), isPromo +
+            // description (desglose de cocina para combos/promos vía
+            // comboKitchenDetail, ver kitchenShowItemDescription) y los
             // printerGroups (item + categoría → printerGroup.id) para enrutar
-            // comandas a cocina. Antes el include jalaba TODAS las columnas de
-            // MenuItem (imágenes, descripción, precios, costos) y de cada
-            // printerGroup: payload y serialización innecesarios por cada item.
+            // comandas a cocina. NO jalar el resto de columnas de MenuItem
+            // (imágenes, precios, costos): payload innecesario por cada item.
             menuItem: {
               select: {
                 name: true,
+                isPromo: true,
+                description: true,
                 printerGroups: { select: { printerGroup: { select: { id: true } } } },
                 category: {
                   select: {

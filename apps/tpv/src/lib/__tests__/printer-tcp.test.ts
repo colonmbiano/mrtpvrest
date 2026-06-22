@@ -229,7 +229,24 @@ describe("comanda :: título = nombre/mesa, sin 'COMANDA'", () => {
 });
 
 describe("comanda :: desglose de combo/promo (kitchenDetail)", () => {
-  it("imprime el desglose entre paréntesis bajo el nombre cuando viene kitchenDetail", () => {
+  it("imprime el desglose entre paréntesis bajo el nombre cuando viene kitchenDetail y el toggle está activo", () => {
+    const out = buildKitchenTicket({
+      orderType: "TAKEOUT",
+      config: { showItemDescription: true },
+      items: [
+        {
+          name: "Botana de Papás",
+          quantity: 1,
+          price: 329,
+          kitchenDetail: "1 kg de alitas + papas gajo + 2 cervezas",
+        },
+      ],
+    });
+    expect(out).toContain("Botana de Papás");
+    expect(out).toContain("(1 kg de alitas + papas gajo + 2 cervezas)");
+  });
+
+  it("con el toggle apagado (default) NO imprime el desglose aunque venga kitchenDetail", () => {
     const out = buildKitchenTicket({
       orderType: "TAKEOUT",
       items: [
@@ -242,7 +259,7 @@ describe("comanda :: desglose de combo/promo (kitchenDetail)", () => {
       ],
     });
     expect(out).toContain("Botana de Papás");
-    expect(out).toContain("(1 kg de alitas + papas gajo + 2 cervezas)");
+    expect(out).not.toContain("(1 kg de alitas + papas gajo + 2 cervezas)");
   });
 
   it("sin kitchenDetail no agrega sub-línea (productos normales quedan limpios)", () => {
