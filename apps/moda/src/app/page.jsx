@@ -260,11 +260,11 @@ function Sidebar({ screen, go, navOpen, setNavOpen }) {
 }
 function Row({k,v,icon}){return(<div className="flex items-center gap-2 text-ink-400"><Icon n={icon} s={14}/><span>{k}: <span className="text-ink-700 font-medium">{v}</span></span></div>);}
 
-function BottomBar({ go, onCobrar }) {
+function BottomBar({ go, onCobrar, onNewTicket }) {
   return (
     <footer className="flex items-center gap-2 px-3 lg:px-4 h-[58px] lg:h-[60px] bg-card border-t border-line overflow-x-auto">
       {SHORTCUTS.map(([k,label,icon])=>(
-        <button key={k} onClick={()=>{ if(k==="F5")onCobrar(); else if(k==="F7")go("devoluciones"); else if(k==="F8")go("caja"); else if(k==="F6")go("apartados"); else if(k==="F1")go("venta"); else document.getElementById("globalsearch")?.focus(); }}
+        <button key={k} onClick={()=>{ if(k==="F5")onCobrar(); else if(k==="F7")go("devoluciones"); else if(k==="F8")go("caja"); else if(k==="F6")go("apartados"); else if(k==="F1")onNewTicket(); else document.getElementById("globalsearch")?.focus(); }}
           className="shrink-0 min-w-[92px] lg:min-w-0 lg:flex-1 flex items-center justify-center gap-2 h-11 px-3 rounded-xl border border-line hover:bg-surf text-ink-700 text-[12px] lg:text-[13px] font-medium">
           <Icon n={icon} s={17} cls="text-ink-400"/>{label}
           <span className="hidden lg:inline tnum text-[10px] text-ink-400 border border-line rounded px-1">{k}</span>
@@ -462,7 +462,7 @@ function LabelModal({ sku, onClose }) {
 }
 
 /* ===================================================== SALE ===================================================== */
-function SaleScreen({ cart, setCart, sel, setSel, go }) {
+function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketIndex, onSwitch, onAddTicket, onCloseTicket }) {
   const products=useProducts();
   const setQty=(id,d)=>setCart(c=>c.map(l=>l.key===id?{...l,qty:Math.max(1,l.qty+d)}:l));
   const del=(id)=>setCart(c=>c.filter(l=>l.key!==id));
@@ -476,13 +476,15 @@ function SaleScreen({ cart, setCart, sel, setSel, go }) {
   const total=Math.round((subtotal-desc)*100)/100;
   const iva=Math.round((total-total/1.16)*100)/100; // IVA incluido (informativo)
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_380px] gap-4 h-full">
+    <div className="flex flex-col h-full gap-3">
+      <TicketTabs tickets={tickets} activeId={activeId} onSwitch={onSwitch} onAdd={onAddTicket} onClose={onCloseTicket}/>
+      <div className="grid grid-cols-[minmax(0,1fr)_380px] gap-4 flex-1 min-h-0">
       <div className="flex flex-col min-w-0">
         <Card className="flex-1 flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-5 h-14 border-b border-line">
             <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-xl bg-brand-100 grid place-items-center text-brand-600"><Icon n="cart" s={18}/></div>
               <span className="font-semibold text-ink-900">Venta activa</span></div>
-            <span className="tnum text-[12px] text-ink-400">Folio: VTA-00012345</span>
+            <span className="tnum text-[12px] text-ink-400">Ticket {(ticketIndex??0)+1}</span>
           </div>
           <div className="grid grid-cols-[1fr_120px_56px_56px_90px_84px_40px] px-5 py-2.5 text-[11px] font-semibold text-ink-400 uppercase tracking-wide border-b border-line">
             <span>Producto</span><span>SKU</span><span className="text-center">Talla</span><span className="text-center">Color</span><span className="text-right">Precio</span><span className="text-center">Cant.</span><span></span>
@@ -534,6 +536,7 @@ function SaleScreen({ cart, setCart, sel, setSel, go }) {
         </Card>
       </div>
       <ProductDetailPanel p={sel} onAdd={(p,color,size)=>setCart(c=>[...c,{key:p.id+color+size+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,color,size,tone:p.tone,cat:p.cat,qty:1,skuId:resolveSkuId(p,color,size)}])}/>
+      </div>
     </div>
   );
 }
@@ -1485,6 +1488,63 @@ function Root(){
   return (<DataCtx.Provider value={value}><App/></DataCtx.Provider>);
 }
 
+/* ===================================================== MULTITICKET ===================================================== */
+// Varias ventas en curso a la vez (tickets en espera) + persistencia local para
+// que un ticket apartado sobreviva a un refresh/cierre accidental de la caja.
+const TICKETS_KEY = "moda-pos-tickets";
+const mkTicketId = () => (globalThis.crypto?.randomUUID?.() || ("tk-" + Date.now() + "-" + Math.floor(Math.random() * 1e6)));
+const freshTicket = () => ({ id: mkTicketId(), cart: [], createdAt: Date.now() });
+function readTicketStore() {
+  if (typeof window === "undefined") return null;
+  try { const raw = window.localStorage.getItem(TICKETS_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+function loadTickets() {
+  const o = readTicketStore();
+  if (o && Array.isArray(o.tickets) && o.tickets.length) {
+    return o.tickets.map(t => ({ id: t.id || mkTicketId(), cart: Array.isArray(t.cart) ? t.cart : [], createdAt: t.createdAt || Date.now() }));
+  }
+  return [freshTicket()];
+}
+function loadActiveId(tickets) {
+  const o = readTicketStore();
+  if (o && o.activeId && tickets.some(t => t.id === o.activeId)) return o.activeId;
+  return tickets[0]?.id;
+}
+function saveTickets(tickets, activeId) {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.setItem(TICKETS_KEY, JSON.stringify({ tickets, activeId })); } catch { /* cuota llena: ignorar */ }
+}
+
+// Barra de pestañas de tickets (ventas en espera). Click = cambiar; ✕ = cerrar;
+// "Nuevo ticket" = abrir uno vacío. Se muestra arriba de la venta activa.
+function TicketTabs({ tickets, activeId, onSwitch, onAdd, onClose }) {
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto pb-0.5 shrink-0">
+      {tickets.map((t, i) => {
+        const a = t.id === activeId;
+        const count = t.cart.reduce((s, l) => s + l.qty, 0);
+        const total = t.cart.reduce((s, l) => s + l.price * l.qty, 0);
+        return (
+          <div key={t.id} onClick={() => onSwitch(t.id)} role="button" tabIndex={0}
+            className={"group flex items-center gap-2 h-11 pl-2.5 pr-1.5 rounded-xl border shrink-0 cursor-pointer transition-colors " + (a ? "bg-brand-100 border-brand-500" : "bg-card border-line hover:bg-surf")}>
+            <span className={"w-6 h-6 grid place-items-center rounded-lg text-[11px] font-bold shrink-0 " + (a ? "bg-brand-600 text-white" : "bg-surf text-ink-500")}>{i + 1}</span>
+            <div className="leading-tight pr-1">
+              <div className={"text-[12px] font-semibold " + (a ? "text-brand-700" : "text-ink-800")}>Ticket {i + 1}</div>
+              <div className="tnum text-[10px] text-ink-400">{count} art · {mx(total)}</div>
+            </div>
+            <button onClick={(e) => { e.stopPropagation(); onClose(t.id); }} aria-label={"Cerrar ticket " + (i + 1)}
+              className="w-6 h-6 grid place-items-center rounded-md text-ink-300 hover:text-red-500 hover:bg-red-50 shrink-0"><Icon n="x" s={13} /></button>
+          </div>
+        );
+      })}
+      <button onClick={onAdd} aria-label="Nuevo ticket"
+        className="flex items-center gap-1.5 h-11 px-3 rounded-xl border border-dashed border-line text-ink-500 hover:text-brand-600 hover:border-brand-500 shrink-0 text-[12px] font-semibold">
+        <Icon n="plus" s={15} />Nuevo ticket <span className="tnum opacity-70 text-[10px]">F1</span>
+      </button>
+    </div>
+  );
+}
+
 /* ===================================================== APP ===================================================== */
 function App() {
   const data=useData();
@@ -1492,8 +1552,19 @@ function App() {
   const [screen,setScreen]=useState("venta");
   const [query,setQuery]=useState("");
   const [sel,setSel]=useState(()=>products[0]||PRODUCTS[0]);
-  // POS real: el carrito arranca vacío (el cajero escanea/agrega productos).
-  const [cart,setCart]=useState([]);
+  // Multiticket: varias ventas en curso a la vez. El carrito activo es el del
+  // ticket seleccionado; setCart mapea el updater sobre ese ticket.
+  const [tickets,setTickets]=useState(loadTickets);
+  const [activeId,setActiveId]=useState(()=>loadActiveId(tickets));
+  const [confirmClose,setConfirmClose]=useState(null);
+  const activeTicket=tickets.find(t=>t.id===activeId)||tickets[0];
+  const cart=activeTicket?activeTicket.cart:[];
+  const setCart=(updater)=>setTickets(ts=>ts.map(t=>t.id===activeId?{...t,cart:typeof updater==="function"?updater(t.cart):updater}:t));
+  // Si el activo dejó de existir (cierre), reapunta al primero.
+  useEffect(()=>{ if(tickets.length && !tickets.some(t=>t.id===activeId)) setActiveId(tickets[0].id); },[tickets,activeId]);
+  // Persistir tickets + activo (sobreviven a refresh/crash de la caja).
+  useEffect(()=>{ saveTickets(tickets,activeId); },[tickets,activeId]);
+  const ticketIndex=Math.max(0,tickets.findIndex(t=>t.id===activeId));
   const [sale,setSale]=useState(null);
   const [grants,setGrants]=useState({});
   const [ov,setOv]=useState(null);
@@ -1525,6 +1596,7 @@ function App() {
         // tax:0 → el precio de catálogo ya incluye IVA; el backend cobra Σ precio − descuento.
         const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:l.qty})), payments, discount:desc, tax:0 });
         setSale({ total:Number(r.sale.total), method, items:cart, subtotal, desc, folio:r.sale.folio });
+        closeTicket(activeId); // la venta ya se cobró → descartar el ticket de inmediato
         setScreen("success");
         if(data.refreshCatalog) data.refreshCatalog();
       }catch(e){
@@ -1536,12 +1608,32 @@ function App() {
     }
     // Demo / sin catálogo en vivo: venta local (NO persiste en backend).
     setSale({ total:totalCobro, method, items:cart, subtotal, desc, folio:"DEMO-"+String(Date.now()).slice(-6) });
+    closeTicket(activeId); // venta demo completada → descartar el ticket
     setScreen("success");
   };
-  const newSale=()=>{ setCart([]); setSale(null); setScreen("venta"); };
+  // Nuevo ticket: reusa uno vacío si ya existe (no acumula vacíos) y lo activa.
+  const addTicket=()=>{
+    const empty=tickets.find(t=>t.cart.length===0);
+    if(empty){ setActiveId(empty.id); setScreen("venta"); return; }
+    const t=freshTicket();
+    setTickets(ts=>[...ts,t]); setActiveId(t.id); setScreen("venta");
+  };
+  const switchTicket=(id)=>{ setActiveId(id); setScreen("venta"); };
+  // Cerrar un ticket; si era el último, deja uno vacío. Siempre ≥1 ticket.
+  const closeTicket=(id)=>{
+    const rest=tickets.filter(t=>t.id!==id);
+    if(rest.length===0){ const t=freshTicket(); setTickets([t]); setActiveId(t.id); }
+    else { setTickets(rest); if(id===activeId) setActiveId(rest[0].id); }
+    setConfirmClose(null);
+  };
+  // ✕ en una pestaña: si tiene artículos pide confirmación, si está vacío cierra directo.
+  const requestCloseTicket=(id)=>{ const t=tickets.find(x=>x.id===id); if(!t||t.cart.length===0) closeTicket(id); else setConfirmClose(id); };
+  // Cierra la pantalla de éxito (el ticket vendido ya se descartó al cobrar) y
+  // vuelve a la venta activa (el siguiente ticket en espera o uno nuevo vacío).
+  const finishSale=()=>{ setSale(null); setScreen("venta"); };
 
   useEffect(()=>{ const h=(e)=>{
-    if(e.key==="F1"){e.preventDefault();newSale();}
+    if(e.key==="F1"){e.preventDefault();addTicket();}
     else if(e.key==="F2"){e.preventDefault();document.getElementById("globalsearch")?.focus();}
     else if(e.key==="F3"){e.preventDefault();setScreen("clientes");}
     else if(e.key==="F5"){e.preventDefault();cobrar();}
@@ -1550,7 +1642,7 @@ function App() {
     else if(e.key==="F8"){e.preventDefault();setScreen("caja");}
     else if(e.key==="Escape"&&["checkout","success"].includes(screen)){setScreen("venta");}
   };
-    window.addEventListener("keydown",h); return ()=>window.removeEventListener("keydown",h); },[cart,screen]);
+    window.addEventListener("keydown",h); return ()=>window.removeEventListener("keydown",h); },[tickets,activeId,screen]);
 
   return (
     <PermCtx.Provider value={{can,gate}}>
@@ -1560,9 +1652,10 @@ function App() {
       <div className="flex-1 flex min-h-0 relative">
         <Sidebar screen={["checkout","success"].includes(screen)?"venta":screen} go={setScreen} navOpen={navOpen} setNavOpen={setNavOpen}/>
         <main className="flex-1 min-w-0 p-3 lg:p-4 overflow-y-auto lg:overflow-hidden">
-          {screen==="venta"&&<SaleScreen cart={cart} setCart={setCart} sel={sel} setSel={setSel} go={setScreen}/>}
+          {screen==="venta"&&<SaleScreen cart={cart} setCart={setCart} sel={sel} setSel={setSel} go={setScreen}
+            tickets={tickets} activeId={activeId} ticketIndex={ticketIndex} onSwitch={switchTicket} onAddTicket={addTicket} onCloseTicket={requestCloseTicket}/>}
           {screen==="checkout"&&<CheckoutScreen cart={cart} go={setScreen} onApprove={approve}/>}
-          {screen==="success"&&sale&&<SuccessScreen sale={sale} go={setScreen} newSale={newSale}/>}
+          {screen==="success"&&sale&&<SuccessScreen sale={sale} go={setScreen} newSale={finishSale}/>}
           {screen==="catalogo"&&<CatalogScreen setSel={setSel} go={setScreen}/>}
           {screen==="inventario"&&<InventoryScreen/>}
           {screen==="apartados"&&<HoldsScreen/>}
@@ -1573,8 +1666,25 @@ function App() {
           {screen==="config"&&(can("manage_settings")?<SettingsScreen theme={theme} setTheme={setTheme}/>:<LockedScreen perm="manage_settings" icon="gear" title="Configuración"/>)}
         </main>
       </div>
-      <BottomBar go={setScreen} onCobrar={cobrar}/>
+      <BottomBar go={setScreen} onCobrar={cobrar} onNewTicket={addTicket}/>
       {ov && <OverrideModal perm={ov.perm} onClose={()=>setOv(null)} onOk={(who)=>{ const f=ov.fn; const p=ov.perm; setOv(null); setGrants(g=>({...g,[p]:true})); f&&f(); setToast("Autorizado por "+who); }}/>}
+      {confirmClose && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={()=>setConfirmClose(null)}>
+          <Card className="w-full max-w-sm">
+            <div className="p-5" onClick={(e)=>e.stopPropagation()}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-50 grid place-items-center text-red-500 shrink-0"><Icon n="alert" s={20}/></div>
+                <div className="font-semibold text-ink-900">¿Cerrar este ticket?</div>
+              </div>
+              <p className="text-[13px] text-ink-500 mt-3">Se descartarán {(tickets.find(t=>t.id===confirmClose)?.cart||[]).reduce((s,l)=>s+l.qty,0)} artículo(s) en espera. Esta acción no se puede deshacer.</p>
+              <div className="flex gap-2 mt-5">
+                <GhostBtn className="flex-1" onClick={()=>setConfirmClose(null)}>Cancelar</GhostBtn>
+                <button onClick={()=>closeTicket(confirmClose)} className="flex-1 h-11 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold text-sm inline-flex items-center justify-center gap-2"><Icon n="trash" s={16}/>Cerrar ticket</button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
       {toast && <Toast msg={toast} onClose={()=>setToast("")}/>}
     </div>
     </PermCtx.Provider>
