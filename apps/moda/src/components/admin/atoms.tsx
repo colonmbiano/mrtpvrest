@@ -128,6 +128,8 @@ const statusStyles: Record<string, { bg: string; fg: string; dot?: boolean }> = 
   sin_stock: { bg: "var(--err-soft)", fg: "var(--err)", dot: true },
   completado: { bg: "var(--ok-soft)", fg: "var(--ok)" },
   en_proceso: { bg: "var(--warn-soft)", fg: "var(--warn)" },
+  cancelado: { bg: "var(--err-soft)", fg: "var(--err)" },
+  devuelto: { bg: "var(--purple-soft)", fg: "var(--purple)" },
   activo: { bg: "transparent", fg: "var(--ok)", dot: true },
   inactivo: { bg: "transparent", fg: "var(--tx-dim)", dot: true },
   en_linea: { bg: "var(--ok-soft)", fg: "var(--ok)", dot: true },
