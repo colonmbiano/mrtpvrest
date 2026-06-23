@@ -145,6 +145,14 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     { id: string; name: string; isAvailable?: boolean }[]
   >([]);
   const [payOrder, setPayOrder] = useState<any | null>(null);
+  // Overlay "Preparando cobro…" que cubre el catálogo/ticket entre el tap en
+  // "Cobrar" y la apertura del PaymentModal. Arranca ENCENDIDO si entramos desde
+  // la pantalla de inicio con la intención "pay", para que el cajero nunca vea
+  // el ticket editable antes del cobro — pasa directo de "Cobrar" al modal de
+  // pago. Se apaga en cuanto el modal abre (o por seguridad a los segundos).
+  const [chargingIntent, setChargingIntent] = useState(
+    () => useActiveOrderStore.getState().pendingAction === "pay",
+  );
   const [reprintKitchenOrder, setReprintKitchenOrder] = useState<any | null>(null);
   const [changeTypeOrder, setChangeTypeOrder] = useState<any | null>(null);
   const [moveOrder, setMoveOrder] = useState<any | null>(null);
@@ -487,10 +495,17 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     // sin apertura optimista, porque es una acción de dinero. Cerramos el
     // drawer al mismo tiempo que abrimos el modal: el drawer es z-[120] y el
     // PaymentModal z-[100], si quedara abierto taparía el cobro.
-    const full = await fetchFullOrder(o);
-    setShowOrders(false);
-    useUIStore.getState().setIsOrdersOpen(false);
-    setPayOrder(full);
+    // Mientras se baja el detalle mostramos el overlay "Preparando cobro…"
+    // para que entre el tap y el modal no se vea el catálogo/ticket editable.
+    setChargingIntent(true);
+    try {
+      const full = await fetchFullOrder(o);
+      setShowOrders(false);
+      useUIStore.getState().setIsOrdersOpen(false);
+      setPayOrder(full);
+    } finally {
+      setChargingIntent(false);
+    }
   };
 
   // FASE 6 · MODO PRÉSTAMO DE CAJA
@@ -507,6 +522,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // la intención de la pantalla de inicio) para no quedar como forward-ref.
   const handleOpenPaymentGuarded = async (o: any) => {
     if (isLoanMode) {
+      setChargingIntent(false);
       toast.error("Cobro no permitido en modo préstamo de caja");
       return;
     }
@@ -860,9 +876,17 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   };
 
   const handleChargeActiveOrder = async () => {
-    const order = await getActiveOrderForAction();
-    if (!order) return;
-    await handleOpenPaymentGuarded(order);
+    // Una sola lectura de red: handleOpenPayment ya baja el detalle completo.
+    // Antes pre-cargábamos con getActiveOrderForAction y handleOpenPayment lo
+    // volvía a bajar (doble fetch en serie), por lo que el cobro desde la
+    // pantalla de inicio se sentía en dos pasos ("abre el ticket y luego
+    // cobra"). Pasamos solo el id y dejamos que handleOpenPayment lo resuelva.
+    if (!activeOrderId) {
+      setChargingIntent(false);
+      toast.warning("Abre un ticket para usar esta acción");
+      return;
+    }
+    await handleOpenPaymentGuarded({ id: activeOrderId });
   };
 
   // Acción agendada desde la pantalla de inicio (OrderTypeSelector): al entrar a
@@ -884,6 +908,18 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAction, activeOrderId, printers.length]);
+
+  // Seguridad del overlay "Preparando cobro…": normalmente lo apaga el finally
+  // de handleOpenPayment al abrir el modal, y el render ya lo oculta cuando hay
+  // payOrder. Este timeout es solo el respaldo: si el cobro nunca llega a abrir
+  // (id ausente, hidratación rara del store) lo bajamos a los pocos segundos
+  // para no dejar al cajero atrapado en un spinner. El setState va diferido
+  // dentro del setTimeout (no síncrono en el effect).
+  useEffect(() => {
+    if (!chargingIntent || payOrder) return;
+    const t = setTimeout(() => setChargingIntent(false), 7000);
+    return () => clearTimeout(t);
+  }, [chargingIntent, payOrder]);
 
   const handleConfirmActiveSplit = async (itemIds: string[]) => {
     if (!splitOrder) return;
@@ -1441,6 +1477,23 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
       {showCatalogSettings && (
         <CatalogSettingsSheet onClose={() => setShowCatalogSettings(false)} />
+      )}
+
+      {/* Overlay "Preparando cobro" — cubre el catálogo/ticket entre el tap en
+          "Cobrar" (pantalla de inicio o sidebar) y la apertura del PaymentModal,
+          para que el cobro se sienta directo y no se vea el ticket editable.
+          z-[98]: sobre catálogo/sidebar, debajo del PaymentModal (z-[100]). */}
+      {chargingIntent && !payOrder && (
+        <div
+          className="fixed inset-0 z-[98] flex flex-col items-center justify-center gap-4 bg-surf-0 font-sans"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-[var(--brand)] border-t-transparent" />
+          <p className="text-[12px] font-bold uppercase tracking-[0.22em] text-tx-mut">
+            Preparando cobro…
+          </p>
+        </div>
       )}
 
       {payOrder && !isLoanMode && (
