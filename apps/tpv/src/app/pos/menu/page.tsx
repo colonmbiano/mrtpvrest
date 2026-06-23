@@ -27,6 +27,9 @@ import {
 type CategoryLite = {
   id: string;
   name: string;
+  // false = categoría oculta: no se muestra en el POS ni sus productos. Se
+  // controla con el toggle de /admin/menu (category.isActive).
+  isActive?: boolean;
 };
 
 const PRIORITY_CATEGORIES = ["Hamburguesas", "Alitas", "Antojitos", "Bebidas"];
@@ -174,8 +177,23 @@ export default function CatalogPage() {
     };
   }, []);
 
+  // Categorías ocultas (isActive=false desde /admin/menu). Sus productos NO se
+  // venden ni se muestran en el POS (ni en favoritos, "todos" o búsqueda).
+  const hiddenCategoryIds = useMemo(
+    () => new Set(categories.filter((c) => c.isActive === false).map((c) => c.id)),
+    [categories],
+  );
+
+  // Productos vendibles = los que NO pertenecen a una categoría oculta.
+  const sellableProducts = useMemo(
+    () => products.filter((p) => !p.categoryId || !hiddenCategoryIds.has(p.categoryId)),
+    [products, hiddenCategoryIds],
+  );
+
   const visibleCategories = useMemo(() => {
-    const base = categories.length > 0 ? categories : FALLBACK_CATEGORIES;
+    const base = categories.length > 0
+      ? categories.filter((c) => c.isActive !== false)
+      : FALLBACK_CATEGORIES;
     return [...base].sort((a, b) => {
       const ai = PRIORITY_CATEGORIES.findIndex((name) => sameCategory(a.name, name));
       const bi = PRIORITY_CATEGORIES.findIndex((name) => sameCategory(b.name, name));
@@ -185,37 +203,37 @@ export default function CatalogPage() {
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const product of products) {
+    for (const product of sellableProducts) {
       const cid = product.categoryId || getCategoryIdOrName(product.category) || "";
       if (!cid) continue;
       counts[cid] = (counts[cid] || 0) + 1;
     }
     return counts;
-  }, [products]);
+  }, [sellableProducts]);
 
   // Acceso rápido a los productos más vendidos: el cajero marca sus tops como
   // favorito (long-press → ⭐). isPopular cuenta también por si el backend lo
   // setea. Una pestaña fija al frente evita el scroll/búsqueda en cada pedido.
   const favoritesCount = useMemo(
-    () => products.filter((p) => p.isFavorite || p.isPopular).length,
-    [products],
+    () => sellableProducts.filter((p) => p.isFavorite || p.isPopular).length,
+    [sellableProducts],
   );
 
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim();
-    if (query) return fuzzyFilter(products, query);
+    if (query) return fuzzyFilter(sellableProducts, query);
     if (activeCat === "favorites") {
-      return products.filter((p) => p.isFavorite || p.isPopular);
+      return sellableProducts.filter((p) => p.isFavorite || p.isPopular);
     }
-    if (activeCat === "all") return products;
+    if (activeCat === "all") return sellableProducts;
 
     const selected = visibleCategories.find((cat) => cat.id === activeCat);
-    return products.filter((product) => {
+    return sellableProducts.filter((product) => {
       if (product.categoryId && product.categoryId === activeCat) return true;
       if (!selected) return false;
       return sameCategory(product.category || "", selected.name);
     });
-  }, [activeCat, products, searchQuery, visibleCategories]);
+  }, [activeCat, sellableProducts, searchQuery, visibleCategories]);
 
   const addPlainProduct = (product: Product) => {
     const unit = Number(product.promoPrice || product.price || 0);

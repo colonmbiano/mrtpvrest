@@ -357,6 +357,18 @@ export default function MenuEditorPage() {
     await fetchData();
   }
 
+  // Ocultar/mostrar una categoría COMPLETA (con sus productos) sin borrar nada:
+  // isActive=false la saca del POS, la tienda en línea y el kiosko junto con
+  // todos sus productos. Reversible con el mismo botón.
+  async function toggleCategoryActive(category: Category) {
+    const willShow = category.isActive === false; // oculta → mostrar; visible → ocultar
+    const count = items.filter((item) => item.categoryId === category.id).length;
+    if (!willShow && !confirm(`¿Ocultar "${category.name}" y sus ${count} producto(s) del POS y la tienda?`)) return;
+    await api.put(`/api/menu/categories/${category.id}`, { isActive: willShow });
+    toast.success(willShow ? `"${category.name}" visible de nuevo` : `"${category.name}" oculta`);
+    await fetchData();
+  }
+
   async function createTemplate() {
     const name = newTemplateName.trim();
     if (!name) return;
@@ -610,6 +622,7 @@ export default function MenuEditorPage() {
               createCategory={createCategory}
               renameCategory={renameCategory}
               deleteCategory={deleteCategory}
+              toggleCategoryActive={toggleCategoryActive}
             />
           )}
           {section === "variants" && (
@@ -928,6 +941,7 @@ function CategoriesView(props: {
   createCategory: () => void;
   renameCategory: (category: Category) => void;
   deleteCategory: (category: Category) => void;
+  toggleCategoryActive: (category: Category) => void;
 }) {
   return (
     <div className="grid gap-3">
@@ -937,12 +951,22 @@ function CategoriesView(props: {
       </div>
       {props.categories.map((cat) => {
         const count = props.items.filter((item) => item.categoryId === cat.id).length;
+        const hidden = cat.isActive === false;
         return (
-          <div key={cat.id} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[var(--bg)] p-4 sm:flex-row sm:items-center">
+          <div key={cat.id} className={`flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center ${hidden ? "border-amber-500/20 bg-amber-500/5 opacity-70" : "border-white/10 bg-[var(--bg)]"}`}>
             <div className="flex-1">
-              <h3 className="font-semibold">{cat.name}</h3>
+              <h3 className="flex items-center gap-2 font-semibold">
+                {cat.name}
+                {hidden && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-black uppercase text-amber-400">Oculta</span>}
+              </h3>
               <p className="text-xs font-bold text-zinc-500">{count} producto(s)</p>
             </div>
+            <button
+              onClick={() => props.toggleCategoryActive(cat)}
+              className={`rounded-xl border px-4 py-2 text-xs font-semibold uppercase ${hidden ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" : "border-white/10 text-zinc-400"}`}
+            >
+              {hidden ? "Mostrar" : "Ocultar"}
+            </button>
             <button onClick={() => props.renameCategory(cat)} className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase text-zinc-400">Editar</button>
             <button onClick={() => props.deleteCategory(cat)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-xs font-semibold uppercase text-red-400">Eliminar</button>
           </div>
