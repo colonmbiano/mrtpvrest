@@ -2,9 +2,6 @@ import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import { MapPin, Phone, MessageCircle } from 'lucide-react';
 import { MochiTheme } from '@/components/themes/MochiTheme';
-import { BentoTheme } from '@/components/themes/BentoTheme';
-import { PocketTheme } from '@/components/themes/PocketTheme';
-import { WagbaTheme } from '@/components/themes/WagbaTheme';
 import { MundialistaTheme } from '@/components/themes/MundialistaTheme';
 import { getApiUrl } from '@/lib/config';
 import { cldImage } from '@/lib/cloudinary';
@@ -64,15 +61,12 @@ type StoreInfo = {
   } | null;
 };
 
-// El backend mapea el enum de la DB a alias (MOCHI→KAWAII, BENTO→HALO,
-// POCKET→BRUTALIST). Aquí normalizamos cualquier variante al nombre canónico
-// que usa el render de abajo. Sin esto el tema nunca coincide y cae a DEFAULT.
-function normalizeTheme(raw?: string | null): 'MOCHI' | 'BENTO' | 'POCKET' | 'WAGBA' | 'MUNDIALISTA' | 'DEFAULT' {
-  const map: Record<string, 'MOCHI' | 'BENTO' | 'POCKET' | 'WAGBA' | 'MUNDIALISTA' | 'DEFAULT'> = {
+// Temas activos: KAWAII (pastel bubble-tea, alias MOCHI) y MUNDIALISTA. Cualquier
+// otro valor (incluidos los temas retirados HALO/BRUTALIST/ANTOJO) cae a DEFAULT,
+// que renderiza el cliente legacy como red de seguridad.
+function normalizeTheme(raw?: string | null): 'MOCHI' | 'MUNDIALISTA' | 'DEFAULT' {
+  const map: Record<string, 'MOCHI' | 'MUNDIALISTA' | 'DEFAULT'> = {
     MOCHI: 'MOCHI', KAWAII: 'MOCHI',
-    BENTO: 'BENTO', HALO: 'BENTO',
-    POCKET: 'POCKET', BRUTALIST: 'POCKET',
-    WAGBA: 'WAGBA', ANTOJO: 'WAGBA',
     MUNDIALISTA: 'MUNDIALISTA', MUNDIAL: 'MUNDIALISTA',
     DEFAULT: 'DEFAULT',
   };
@@ -299,9 +293,6 @@ export default async function StorefrontPage({
       className="min-h-screen bg-white"
     >
       {theme === 'MOCHI' && <MochiTheme data={data} />}
-      {theme === 'BENTO' && <BentoTheme data={data} />}
-      {theme === 'POCKET' && <PocketTheme data={data} />}
-      {theme === 'WAGBA' && <WagbaTheme data={data} />}
       {theme === 'MUNDIALISTA' && <MundialistaTheme data={data} />}
 
       {/* Fallback to legacy client if no modern theme is selected or during transition */}

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Store, Globe, Power, Clock, Phone, MessageCircle, MapPin, Palette,
   Truck, Star, Link2, Copy, Check, ExternalLink, Crosshair, AlertTriangle,
-  Zap, Flower2, Moon, Bike, Wallet, Trophy, Upload, ImagePlus, X,
+  Flower2, Wallet, Trophy, Upload, ImagePlus, X,
 } from "lucide-react";
 import api from "@/lib/api";
 import { getStoreUrl } from "@/lib/config";
@@ -237,10 +237,7 @@ export default function TiendaConfigPage() {
   }
 
   const THEMES = [
-    { id: "BRUTALIST", name: "Express", icon: Zap, desc: "Lista estilo app · Claro" },
     { id: "KAWAII", name: "Kawaii", icon: Flower2, desc: "Pastel lavanda · bubble-tea · cute 🧋" },
-    { id: "HALO", name: "Obsidiana", icon: Moon, desc: "Oscuro premium · Bento" },
-    { id: "ANTOJO", name: "Antojo", icon: Bike, desc: "Delivery oscuro · Naranja" },
     { id: "MUNDIALISTA", name: "Mundialista", icon: Trophy, desc: "Estadio oscuro · Dorado · Mundial ⚽" },
   ];
 
