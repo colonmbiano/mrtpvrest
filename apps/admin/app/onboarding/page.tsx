@@ -71,17 +71,17 @@ function AIAvatar({ size = 32 }: { size?: number }) {
       style={{
         width: size,
         height: size,
-        background: "linear-gradient(135deg, #FF8400 0%, #FFB84D 100%)",
-        boxShadow: "0 4px 12px rgba(255,132,0,0.35)",
+        background: "linear-gradient(140deg, var(--brand-secondary), var(--brand-primary))",
+        boxShadow: "0 4px 12px var(--iris-glow)",
       }}
     >
       <span
-        className="absolute inset-0 rounded-full opacity-60"
+        className="absolute inset-0 rounded-full opacity-50"
         style={{
-          background: "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.5), transparent 60%)",
+          background: "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.55), transparent 60%)",
         }}
       />
-      <span className="relative font-black text-black" style={{ fontSize: size * 0.32 }}>
+      <span className="relative font-black text-white" style={{ fontSize: size * 0.32 }}>
         AI
       </span>
     </div>
@@ -95,9 +95,9 @@ function TypingIndicator() {
       <div
         className="px-4 py-3 rounded-2xl rounded-bl-sm"
         style={{
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          backdropFilter: "blur(20px)",
+          background: "var(--surf-1)",
+          border: "1px solid var(--bd-1)",
+          boxShadow: "var(--shadow-sm)",
         }}
       >
         <div className="flex gap-1.5 items-center h-4">
@@ -106,7 +106,7 @@ function TypingIndicator() {
               key={i}
               className="w-1.5 h-1.5 rounded-full animate-bounce"
               style={{
-                background: "linear-gradient(135deg, #FF8400, #FFB84D)",
+                background: "linear-gradient(140deg, var(--brand-secondary), var(--brand-primary))",
                 animationDelay: `${i * 150}ms`,
               }}
             />
@@ -132,17 +132,17 @@ function ChatBubble({ msg }: { msg: Message }) {
         style={
           isUser
             ? {
-                background: "linear-gradient(135deg, #FF8400 0%, #FFB84D 100%)",
-                color: "#0C0C0E",
+                background: "linear-gradient(140deg, var(--brand-secondary), var(--brand-primary))",
+                color: "#ffffff",
                 fontWeight: 500,
                 borderRadius: "20px 20px 4px 20px",
-                boxShadow: "0 6px 16px rgba(255,132,0,0.25)",
+                boxShadow: "0 6px 16px var(--iris-glow)",
               }
             : {
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                color: "#F5F5F5",
-                backdropFilter: "blur(20px)",
+                background: "var(--surf-1)",
+                border: "1px solid var(--bd-1)",
+                color: "var(--tx)",
+                boxShadow: "var(--shadow-sm)",
                 borderRadius: "20px 20px 20px 4px",
               }
         }
@@ -294,17 +294,17 @@ export default function OnboardingPage() {
   // ── Loading inicial ────────────────────────────────────────────────────────
   if (booting) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0C0C0E" }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
         <div className="flex flex-col items-center gap-4">
           <AIAvatar size={48} />
           <div
             className="w-6 h-6 rounded-full animate-spin"
             style={{
-              border: "2px solid rgba(255,132,0,0.2)",
-              borderTopColor: "#FF8400",
+              border: "2px solid var(--iris-soft)",
+              borderTopColor: "var(--brand-primary)",
             }}
           />
-          <p className="text-xs text-zinc-500">Preparando tu asistente…</p>
+          <p className="text-xs text-tx-mut">Preparando tu asistente…</p>
         </div>
       </div>
     );
@@ -318,29 +318,13 @@ export default function OnboardingPage() {
   // ── UI principal ───────────────────────────────────────────────────────────
   return (
     <div
-      className="min-h-screen text-white flex relative overflow-hidden"
-      style={{ background: "#0C0C0E", fontFamily: "'Inter', sans-serif" }}
+      className="min-h-screen flex relative"
+      style={{ background: "var(--bg)", color: "var(--tx)", fontFamily: "var(--f-b)" }}
     >
-      {/* Glows decorativos */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-48 -left-32 w-[800px] h-[800px] rounded-full opacity-50"
-        style={{ background: "radial-gradient(circle, rgba(255,132,0,0.18) 0%, transparent 70%)" }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute top-[400px] -right-32 w-[700px] h-[700px] rounded-full opacity-40"
-        style={{ background: "radial-gradient(circle, rgba(136,214,108,0.12) 0%, transparent 70%)" }}
-      />
-
-      {/* ── Sidebar branding ─────────────────────────────────────────────── */}
+      {/* ── Sidebar branding (oscuro elegante, espejo del admin) ──────────── */}
       <aside
-        className="hidden lg:flex flex-col w-[360px] shrink-0 relative z-10"
-        style={{
-          borderRight: "1px solid rgba(255,255,255,0.06)",
-          background: "rgba(12,12,14,0.4)",
-          backdropFilter: "blur(20px)",
-        }}
+        className="admin-sidebar hidden lg:flex flex-col w-[360px] shrink-0 relative z-10 text-white"
+        style={{ background: "#0f172a", borderRight: "1px solid rgba(255,255,255,0.06)" }}
       >
         {/* Header */}
         <div className="p-8" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
@@ -348,19 +332,19 @@ export default function OnboardingPage() {
             <span
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider"
               style={{
-                background: "rgba(255,132,0,0.18)",
-                border: "1px solid rgba(255,132,0,0.4)",
-                color: "#FF8400",
+                background: "var(--iris-soft)",
+                border: "1px solid var(--brand-primary)",
+                color: "var(--brand-primary)",
               }}
             >
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#FF8400" }} />
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--brand-primary)" }} />
               ASISTENTE IA
             </span>
           </div>
-          <h1 className="text-2xl font-black tracking-tighter mb-1">
-            MRTPV<span style={{ color: "#FF8400" }}>REST</span>
+          <h1 className="font-display text-2xl font-extrabold tracking-tighter mb-1 text-white">
+            MRTPV<span style={{ color: "var(--brand-primary)" }}>REST</span>
           </h1>
-          <p className="text-zinc-500 text-xs">
+          <p className="text-slate-500 text-xs">
             Sistema POS para LATAM · v2.4
           </p>
         </div>
@@ -368,19 +352,19 @@ export default function OnboardingPage() {
         {/* Tenant card + progress */}
         <div className="p-6 space-y-5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
           <div>
-            <p className="text-[10px] font-bold tracking-wider mb-2" style={{ color: "#666" }}>
+            <p className="font-mono text-[10px] font-bold tracking-wider mb-2 text-slate-500">
               CONFIGURANDO
             </p>
-            <p className="text-sm font-bold truncate">{tenantName || "Tu negocio"}</p>
+            <p className="text-sm font-bold truncate text-white">{tenantName || "Tu negocio"}</p>
           </div>
 
           {/* Progress steps */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-bold tracking-wider" style={{ color: "#666" }}>
+              <p className="font-mono text-[10px] font-bold tracking-wider text-slate-500">
                 PROGRESO
               </p>
-              <span className="text-[10px] font-bold" style={{ color: "#FF8400" }}>
+              <span className="text-[10px] font-bold" style={{ color: "var(--brand-primary)" }}>
                 {Math.round(((stepIdx + 1) / STEP_ORDER.length) * 100)}%
               </span>
             </div>
@@ -391,15 +375,15 @@ export default function OnboardingPage() {
                   className="h-1 flex-1 rounded-full transition-all"
                   style={{
                     background: i <= stepIdx
-                      ? "linear-gradient(90deg, #FF8400, #FFB84D)"
-                      : "rgba(255,255,255,0.06)",
+                      ? "linear-gradient(90deg, var(--brand-secondary), var(--brand-primary))"
+                      : "rgba(255,255,255,0.08)",
                   }}
                 />
               ))}
             </div>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-slate-400">
               {STEP_LABELS[obState.currentStep]}
-              <span className="text-zinc-600">
+              <span className="text-slate-600">
                 {" "}· {businessFilled}/{businessTotal} datos
               </span>
             </p>
@@ -410,36 +394,36 @@ export default function OnboardingPage() {
         <div className="flex-1 p-6 overflow-y-auto space-y-6">
           <div>
             <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-bold tracking-wider" style={{ color: "#666" }}>
+              <p className="font-mono text-[10px] font-bold tracking-wider text-slate-500">
                 MÓDULOS ACTIVOS
               </p>
               <span
                 className="text-[10px] font-bold px-1.5 rounded-full tabular-nums"
-                style={{ background: "rgba(136,214,108,0.18)", color: "#88D66C" }}
+                style={{ background: "var(--ok-soft)", color: "var(--ok)" }}
               >
                 {obState.activatedModules.length}
               </span>
             </div>
             <div className="space-y-1.5">
               {obState.activatedModules.map((mod) => {
-                const meta = MODULE_META[mod] || { label: mod, emoji: "✦", color: "#FF8400" };
+                const meta = MODULE_META[mod] || { label: mod, emoji: "✦", color: "var(--brand-primary)" };
                 return (
                   <div
                     key={mod}
                     className="flex items-center gap-3 px-3 py-2 rounded-xl animate-in fade-in slide-in-from-left-3"
                     style={{
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.06)",
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.07)",
                     }}
                   >
                     <div
                       className="w-7 h-7 rounded-lg flex items-center justify-center text-base"
-                      style={{ background: `${meta.color}20` }}
+                      style={{ background: `${meta.color}22` }}
                     >
                       {meta.emoji}
                     </div>
-                    <span className="flex-1 text-xs font-semibold">{meta.label}</span>
-                    <svg className="w-3.5 h-3.5" style={{ color: "#88D66C" }} viewBox="0 0 20 20" fill="currentColor">
+                    <span className="flex-1 text-xs font-semibold text-white">{meta.label}</span>
+                    <svg className="w-3.5 h-3.5" style={{ color: "var(--ok)" }} viewBox="0 0 20 20" fill="currentColor">
                       <path
                         fillRule="evenodd"
                         d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
@@ -454,7 +438,7 @@ export default function OnboardingPage() {
 
           {obState.suggestedCategories.length > 0 && (
             <div>
-              <p className="text-[10px] font-bold tracking-wider mb-3" style={{ color: "#666" }}>
+              <p className="font-mono text-[10px] font-bold tracking-wider mb-3 text-slate-500">
                 CATEGORÍAS SUGERIDAS
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -463,9 +447,9 @@ export default function OnboardingPage() {
                     key={cat}
                     className="text-xs px-2.5 py-1 rounded-full animate-in fade-in"
                     style={{
-                      background: "rgba(255,255,255,0.04)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      color: "#B8B9B6",
+                      background: "rgba(255,255,255,0.05)",
+                      border: "1px solid rgba(255,255,255,0.09)",
+                      color: "#cbd5e1",
                     }}
                   >
                     {cat}
@@ -477,26 +461,26 @@ export default function OnboardingPage() {
         </div>
 
         <div className="p-6" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-          <p className="text-zinc-600 text-[10px] flex items-center gap-1.5">
-            <span className="w-1 h-1 rounded-full bg-zinc-700" />
+          <p className="text-slate-600 text-[10px] flex items-center gap-1.5">
+            <span className="w-1 h-1 rounded-full bg-slate-700" />
             Onboarding privado
           </p>
         </div>
       </aside>
 
       {/* ── Main: chat ───────────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col min-h-screen relative z-10">
+      <main className="flex-1 flex flex-col min-h-screen relative z-10" style={{ background: "var(--bg)" }}>
         {/* Header */}
         <header
           className="shrink-0 flex items-center justify-between px-5 lg:px-10 py-4"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+          style={{ borderBottom: "1px solid var(--bd-1)", background: "var(--surf-1)" }}
         >
           <div className="flex items-center gap-3">
             <AIAvatar size={36} />
             <div>
-              <p className="text-sm font-bold">Asistente MRTPVREST</p>
-              <p className="text-[10px] flex items-center gap-1.5" style={{ color: "#88D66C" }}>
-                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#88D66C" }} />
+              <p className="text-sm font-bold text-tx-hi">Asistente MRTPVREST</p>
+              <p className="text-[10px] flex items-center gap-1.5" style={{ color: "var(--ok)" }}>
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--ok)" }} />
                 En línea · responde en segundos
               </p>
             </div>
@@ -509,17 +493,17 @@ export default function OnboardingPage() {
                 <div
                   key={s}
                   className="w-3 h-1 rounded-full"
-                  style={{ background: i <= stepIdx ? "#FF8400" : "rgba(255,255,255,0.1)" }}
+                  style={{ background: i <= stepIdx ? "var(--brand-primary)" : "var(--bd-2)" }}
                 />
               ))}
             </div>
           </div>
 
           <div className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <span className="text-[10px] font-bold tracking-wider" style={{ color: "#666" }}>PASO</span>
-            <span className="text-[11px] font-bold">{stepIdx + 1}/{STEP_ORDER.length}</span>
-            <span className="text-[10px]" style={{ color: "#FF8400" }}>· {STEP_LABELS[obState.currentStep]}</span>
+            style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+            <span className="font-mono text-[10px] font-bold tracking-wider text-tx-mut">PASO</span>
+            <span className="text-[11px] font-bold text-tx-hi">{stepIdx + 1}/{STEP_ORDER.length}</span>
+            <span className="text-[10px]" style={{ color: "var(--brand-primary)" }}>· {STEP_LABELS[obState.currentStep]}</span>
           </div>
         </header>
 
@@ -535,12 +519,12 @@ export default function OnboardingPage() {
                 <div
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-full"
                   style={{
-                    background: "rgba(136,214,108,0.18)",
-                    border: "1px solid rgba(136,214,108,0.4)",
+                    background: "var(--ok-soft)",
+                    border: "1px solid var(--ok)",
                   }}
                 >
-                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#88D66C" }} />
-                  <span className="text-xs font-bold" style={{ color: "#88D66C" }}>
+                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--ok)" }} />
+                  <span className="text-xs font-bold" style={{ color: "var(--ok)" }}>
                     Configuración completa — abriendo tu panel…
                   </span>
                 </div>
@@ -554,15 +538,15 @@ export default function OnboardingPage() {
         <form
           onSubmit={handleSubmit}
           className="shrink-0 px-4 md:px-10 py-5"
-          style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+          style={{ borderTop: "1px solid var(--bd-1)", background: "var(--surf-1)" }}
         >
           <div className="max-w-2xl mx-auto">
             <div
-              className="flex items-end gap-2 p-2 rounded-3xl transition-all focus-within:border-orange-500/40"
+              className="flex items-end gap-2 p-2 rounded-3xl transition-all"
               style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                backdropFilter: "blur(20px)",
+                background: "var(--surf-1)",
+                border: "1px solid var(--bd-2)",
+                boxShadow: "var(--shadow-sm)",
               }}
             >
               <textarea
@@ -573,7 +557,7 @@ export default function OnboardingPage() {
                 onKeyDown={handleKeyDown}
                 disabled={loading || isDone}
                 placeholder={isDone ? "Configuración completada" : "Escribe tu respuesta…"}
-                className="flex-1 bg-transparent px-3 py-2.5 text-sm text-white placeholder-zinc-600 outline-none resize-none disabled:opacity-40 disabled:cursor-not-allowed max-h-32"
+                className="flex-1 bg-transparent px-3 py-2.5 text-sm text-tx placeholder-tx-dim outline-none resize-none disabled:opacity-40 disabled:cursor-not-allowed max-h-32"
                 style={{ minHeight: 40 }}
               />
               <button
@@ -582,23 +566,23 @@ export default function OnboardingPage() {
                 aria-label="Enviar"
                 className="shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed disabled:scale-100"
                 style={{
-                  background: "linear-gradient(135deg, #FF8400 0%, #FFB84D 100%)",
-                  boxShadow: input.trim() && !loading ? "0 4px 14px rgba(255,132,0,0.4)" : "none",
+                  background: "linear-gradient(140deg, var(--brand-secondary), var(--brand-primary))",
+                  boxShadow: input.trim() && !loading ? "0 4px 14px var(--iris-glow)" : "none",
                 }}
               >
                 {loading ? (
                   <div
                     className="w-4 h-4 rounded-full animate-spin"
-                    style={{ border: "2px solid rgba(0,0,0,0.3)", borderTopColor: "#0C0C0E" }}
+                    style={{ border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#ffffff" }}
                   />
                 ) : (
-                  <svg className="w-4 h-4 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.269 20.876L5.999 12zm0 0h7.5" />
                   </svg>
                 )}
               </button>
             </div>
-            <p className="mt-2 text-center text-[10px]" style={{ color: "#444" }}>
+            <p className="mt-2 text-center text-[10px] text-tx-dim">
               Enter para enviar · Shift+Enter para salto de línea
             </p>
           </div>
