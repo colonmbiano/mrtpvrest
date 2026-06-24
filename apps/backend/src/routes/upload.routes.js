@@ -18,8 +18,9 @@ router.post('/image', authenticate, requireTenantAccess, requireStaffOrSuper, up
 
     // Si viene de un restaurante, lo ponemos en su carpeta, si no, en 'global'
     const folder = req.restaurantSlug || 'global';
-    // ?mode=banner sube en 16:9 (banners); por defecto cuadrado (productos/logos).
-    const mode = req.query.mode === 'banner' ? 'banner' : 'default';
+    // ?mode=banner sube en 16:9 (banners); ?mode=hero conserva la proporción
+    // original sin recortar (portada panorámica); por defecto cuadrado.
+    const mode = ['banner', 'hero'].includes(req.query.mode) ? req.query.mode : 'default';
     const url = await uploadImage(req.file.buffer, folder, mode);
 
     res.json({ url });

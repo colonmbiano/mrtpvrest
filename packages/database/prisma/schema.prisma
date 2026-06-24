@@ -1205,7 +1205,10 @@ model RestaurantConfig {
   pointsPerTen     Int   @default(1)
   pointsValuePesos Float @default(0.10)
 
-  storefrontTheme String @default("KAWAII") // KAWAII | HALO | BRUTALIST
+  storefrontTheme String @default("KAWAII") // KAWAII | HALO | BRUTALIST | ANTOJO | MUNDIALISTA
+  // Imagen de portada (hero) opcional del storefront. La usa el tema Mundialista
+  // a todo lo ancho. Se sube sin recorte (mode=hero). null → hero por defecto.
+  storefrontHeroUrl String?
 
   // FASE COMPRAS · interruptor maestro del modelo "Bodega Central".
   // false (default) → cada compra entra directo a la bodega de la sucursal
