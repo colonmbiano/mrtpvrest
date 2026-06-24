@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   Bot, Plus, Search, X, FolderOpen, UtensilsCrossed, Pencil, Trash2,
   Check, Power, ImagePlus, ChevronLeft, AlertTriangle, Shuffle,
@@ -598,6 +599,9 @@ export default function MenuPage() {
               <Bot size={16} strokeWidth={2} /> Escaneo IA
               {!scanState.active && <input type="file" accept="image/*" multiple onChange={handleAIScan} className="hidden" />}
             </label>
+            <PrimaryBtn full={false} ghost icon={ImagePlus} href="/admin/menu/fotos">
+              Subir fotos en lote
+            </PrimaryBtn>
             <PrimaryBtn full={false} ghost icon={Plus} onClick={() => openForm()}>
               Nuevo platillo
             </PrimaryBtn>
@@ -618,6 +622,13 @@ export default function MenuPage() {
           <Plus size={15} strokeWidth={2.2} /> Nuevo platillo
         </button>
       </div>
+
+      {/* Acceso directo a carga de fotos en lote (móvil) */}
+      <Link href="/admin/menu/fotos"
+        className="mb-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-[13px] px-3 text-xs font-bold text-tx md:hidden"
+        style={{ background: "var(--surf-2)", border: "1px solid var(--bd-2)" }}>
+        <ImagePlus size={15} strokeWidth={2.2} /> Subir fotos en lote
+      </Link>
 
       {/* Barra de búsqueda + breadcrumb */}
       <WtCard className="mb-4 flex flex-wrap items-center gap-2 p-3">
