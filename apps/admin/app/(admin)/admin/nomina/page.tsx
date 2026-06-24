@@ -19,7 +19,7 @@ const mxn = (n: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0);
 
 function addDays(yyyyMmDd: string, delta: number) {
-  const [y, m, d] = yyyyMmDd.split("-").map(Number);
+  const [y = 0, m = 1, d = 1] = yyyyMmDd.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() + delta);
   return dt.toISOString().slice(0, 10);
@@ -419,10 +419,10 @@ function PreviewTable({ items }: { items: any[] }) {
 function ProfileRow({ p, saving, onSave }: { p: any; saving: boolean; onSave: (p: any, patch: any) => void }) {
   const [payType, setPayType] = useState<string>(p.profile?.payType || "DAILY");
   const [rate, setRate] = useState<string>(() => {
-    const f = RATE_FIELD[p.profile?.payType || "DAILY"];
+    const f = RATE_FIELD[p.profile?.payType || "DAILY"] ?? "dailyRate";
     return p.profile ? String(p.profile[f] ?? 0) : "";
   });
-  const field = RATE_FIELD[payType];
+  const field = RATE_FIELD[payType] ?? "dailyRate";
   const dirty =
     payType !== (p.profile?.payType || "DAILY") ||
     String(p.profile?.[field] ?? "") !== String(rate || "");
