@@ -5,6 +5,7 @@ import { MochiTheme } from '@/components/themes/MochiTheme';
 import { BentoTheme } from '@/components/themes/BentoTheme';
 import { PocketTheme } from '@/components/themes/PocketTheme';
 import { WagbaTheme } from '@/components/themes/WagbaTheme';
+import { MundialistaTheme } from '@/components/themes/MundialistaTheme';
 import { getApiUrl } from '@/lib/config';
 import { cldImage } from '@/lib/cloudinary';
 import StorefrontClient from './StorefrontClient';
@@ -65,12 +66,13 @@ type StoreInfo = {
 // El backend mapea el enum de la DB a alias (MOCHI→KAWAII, BENTO→HALO,
 // POCKET→BRUTALIST). Aquí normalizamos cualquier variante al nombre canónico
 // que usa el render de abajo. Sin esto el tema nunca coincide y cae a DEFAULT.
-function normalizeTheme(raw?: string | null): 'MOCHI' | 'BENTO' | 'POCKET' | 'WAGBA' | 'DEFAULT' {
-  const map: Record<string, 'MOCHI' | 'BENTO' | 'POCKET' | 'WAGBA' | 'DEFAULT'> = {
+function normalizeTheme(raw?: string | null): 'MOCHI' | 'BENTO' | 'POCKET' | 'WAGBA' | 'MUNDIALISTA' | 'DEFAULT' {
+  const map: Record<string, 'MOCHI' | 'BENTO' | 'POCKET' | 'WAGBA' | 'MUNDIALISTA' | 'DEFAULT'> = {
     MOCHI: 'MOCHI', KAWAII: 'MOCHI',
     BENTO: 'BENTO', HALO: 'BENTO',
     POCKET: 'POCKET', BRUTALIST: 'POCKET',
     WAGBA: 'WAGBA', ANTOJO: 'WAGBA',
+    MUNDIALISTA: 'MUNDIALISTA', MUNDIAL: 'MUNDIALISTA',
     DEFAULT: 'DEFAULT',
   };
   return map[(raw || '').toUpperCase()] || 'DEFAULT';
@@ -178,13 +180,19 @@ export async function generateViewport({
 
 export default async function StorefrontPage({
   params,
+  searchParams,
 }: {
   // Next.js 15+/16: params es asíncrono y DEBE await-earse. Acceder a
   // params.slug de forma síncrona devuelve undefined -> fetchStore(undefined)
   // -> 404 para CUALQUIER slug. Este era el bug que tiraba 404 en toda tienda.
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ theme?: string }>;
 }) {
   const { slug } = await params;
+  // Vista previa de tema: ?theme=MUNDIALISTA permite al dueño ver cualquier
+  // skin ANTES de activarlo en /admin/tienda. Solo afecta el render (lectura),
+  // no cambia nada en la BD ni el pedido.
+  const { theme: themeOverride } = await searchParams;
 
   const [store, menu, locations] = await Promise.all([
     fetchStore(slug),
@@ -195,7 +203,7 @@ export default async function StorefrontPage({
   if (!store || !store.hasWebStore) notFound();
 
   const primary = store.primaryColor || store.themeConfig?.primaryColor || '#ff5c35';
-  const theme = normalizeTheme(store.storefrontTheme || store.themeConfig?.theme);
+  const theme = normalizeTheme(themeOverride || store.storefrontTheme || store.themeConfig?.theme);
 
   // Tienda cerrada: bloqueamos el catálogo para TODOS los temas y mostramos el
   // mensaje configurado. Así "activar/desactivar tienda" desde el admin tiene
@@ -293,6 +301,7 @@ export default async function StorefrontPage({
       {theme === 'BENTO' && <BentoTheme data={data} />}
       {theme === 'POCKET' && <PocketTheme data={data} />}
       {theme === 'WAGBA' && <WagbaTheme data={data} />}
+      {theme === 'MUNDIALISTA' && <MundialistaTheme data={data} />}
 
       {/* Fallback to legacy client if no modern theme is selected or during transition */}
       {theme === 'DEFAULT' && (

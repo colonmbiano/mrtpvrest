@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Store, Globe, Power, Clock, Phone, MessageCircle, MapPin, Palette,
   Truck, Star, Link2, Copy, Check, ExternalLink, Crosshair, AlertTriangle,
-  Zap, Flower2, Moon, Bike, Wallet,
+  Zap, Flower2, Moon, Bike, Wallet, Trophy,
 } from "lucide-react";
 import api from "@/lib/api";
 import { getStoreUrl } from "@/lib/config";
@@ -217,6 +217,7 @@ export default function TiendaConfigPage() {
     { id: "KAWAII", name: "Boutique", icon: Flower2, desc: "Grid suave · Claro" },
     { id: "HALO", name: "Obsidiana", icon: Moon, desc: "Oscuro premium · Bento" },
     { id: "ANTOJO", name: "Antojo", icon: Bike, desc: "Delivery oscuro · Naranja" },
+    { id: "MUNDIALISTA", name: "Mundialista", icon: Trophy, desc: "Estadio oscuro · Dorado · Mundial ⚽" },
   ];
 
   return (

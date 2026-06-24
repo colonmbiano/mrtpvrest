@@ -19,6 +19,9 @@ type StoreCheckoutProps = {
   delivery?: DeliveryConfig | null;
   minOrderAmount?: number;
   onlinePayment?: boolean;
+  // Tipo de pedido preseleccionado (ej. el toggle Entrega/Recoger del tema).
+  // Si la sucursal no lo permite, el efecto de `allowed` lo corrige a uno válido.
+  initialOrderType?: OrderType;
 };
 
 const STATUS_LABEL: Record<string, { t: string; c: string }> = {
@@ -33,6 +36,7 @@ const STATUS_LABEL: Record<string, { t: string; c: string }> = {
 
 export default function StoreCheckout({
   open, onClose, slug, primary, locations = [], delivery, minOrderAmount = 0, onlinePayment = false,
+  initialOrderType = 'DELIVERY',
 }: StoreCheckoutProps) {
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
@@ -48,7 +52,7 @@ export default function StoreCheckout({
   const [geoStatus, setGeoStatus] = useState<'' | 'loading' | 'ok' | 'error'>('');
 
   // Tipo de pedido + sucursal
-  const [orderType, setOrderType] = useState<OrderType>('DELIVERY');
+  const [orderType, setOrderType] = useState<OrderType>(initialOrderType);
   const [tableNumber, setTableNumber] = useState('');
   const [locationId, setLocationId] = useState<string>(locations[0]?.id || '');
   const selectedLocation = locations.find(l => l.id === locationId) || locations[0] || null;
