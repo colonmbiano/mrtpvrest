@@ -9,7 +9,7 @@ import {
 import api from "@/lib/api";
 import { getApiUrl } from "@/lib/config";
 import ModifierGroupsEditor from "@/components/admin/ModifierGroupsEditor";
-import { uploadMenuImage } from "@/lib/supabaseUpload";
+import { importMenuImageFromUrl, uploadMenuImage } from "@/lib/supabaseUpload";
 import { extractErrorMessage } from "@/lib/errors";
 import {
   WtScreen, PageHeader, WtCard, SectionLabel, Pill, IconBadge, Toggle,
@@ -147,6 +147,7 @@ export default function MenuPage() {
   const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true });
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState("");
+  const [imageUrlDirty, setImageUrlDirty] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [filterCat, setFilterCat] = useState("all");
   const [search, setSearch] = useState("");
@@ -318,6 +319,7 @@ export default function MenuPage() {
       setEditItem(item);
       setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0, availableOnline:item.availableOnline ?? true });
       setImagePreview(item.imageUrl||"");
+      setImageUrlDirty(false);
       api.get(`/api/menu/items/${item.id}`).then(r => {
         setComplements(r.data.complements || []);
         setVariants(r.data.variants || []);
@@ -329,6 +331,7 @@ export default function MenuPage() {
       setEditItem(null);
       setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true });
       setImagePreview("");
+      setImageUrlDirty(false);
       setComplements([]);
       setVariants([]);
       setInitialTemplateIds([]);
@@ -350,12 +353,17 @@ export default function MenuPage() {
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
     setForm(p => ({...p, imageUrl:""}));
+    setImageUrlDirty(false);
   }
 
   async function uploadImageToCloud(): Promise<string> {
-    if (!imageFile) return form.imageUrl;
+    if (!imageFile && !imageUrlDirty) return form.imageUrl;
     setUploading(true);
     try {
+      if (!imageFile) {
+        const url = form.imageUrl.trim();
+        return url ? await importMenuImageFromUrl(url) : "";
+      }
       // Sube a Supabase Storage (bucket "menu-images") con fallback al backend.
       return await uploadMenuImage(imageFile);
     } finally { setUploading(false); }
@@ -939,10 +947,15 @@ export default function MenuPage() {
                   <ImagePlus size={15} /> Subir foto
                   <input type="file" accept="image/*" onChange={handleImageFile} className="hidden" />
                 </label>
-                <input value={form.imageUrl} onChange={e => { setForm(p=>({...p,imageUrl:e.target.value})); setImagePreview(e.target.value); setImageFile(null); }}
-                  placeholder="o pega URL"
+                <input value={form.imageUrl} onChange={e => { setForm(p=>({...p,imageUrl:e.target.value})); setImagePreview(e.target.value); setImageFile(null); setImageUrlDirty(true); }}
+                  placeholder="o pega una URL para descargarla"
                   className="mt-2 min-h-11 w-full rounded-xl px-3 text-sm text-tx outline-none"
                   style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }} />
+                {imageUrlDirty && form.imageUrl.trim() && (
+                  <p className="mt-1 px-1 text-[11px] text-tx-mut">
+                    Al guardar, esta URL se copiara al storage y se guardara en la base de datos.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">

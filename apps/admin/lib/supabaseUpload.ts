@@ -121,6 +121,12 @@ async function uploadToBackend(file: File): Promise<string> {
   return data.url;
 }
 
+export async function importMenuImageFromUrl(url: string): Promise<string> {
+  const { data } = await api.post("/api/upload/image-from-url", { url });
+  if (!data?.url) throw new Error("Respuesta de importacion sin url");
+  return data.url;
+}
+
 /**
  * Sube una imagen y devuelve la URL pública.
  * Prioriza Supabase Storage si está configurado, con fallback al backend.
