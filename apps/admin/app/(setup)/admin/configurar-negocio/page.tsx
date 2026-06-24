@@ -163,31 +163,32 @@ export default function ConfigurarNegocioPage() {
   };
 
   return (
-    <main className="min-h-screen bg-black text-white font-[DM_Sans,system-ui,sans-serif]">
+    <main className="min-h-screen font-sans text-tx" style={{ background: "var(--bg)" }}>
       <div className="mx-auto max-w-6xl px-6 py-16 md:py-24">
-        <header className="mb-12 md:mb-16 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs tracking-wide text-white/70 mb-6">
-            <span
-              className="inline-block h-1.5 w-1.5 rounded-full"
-              style={{ background: "var(--brand-primary)" }}
-            />
+        <header className="mb-12 text-center md:mb-16">
+          <div className="mb-6 inline-flex items-center gap-2.5">
+            <span className="grid h-10 w-10 place-items-center rounded-[12px] font-display text-xs font-extrabold text-white" style={{ background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))" }}>MR</span>
+            <span className="font-display text-lg font-extrabold tracking-[-.03em] text-tx-hi">MRTPV<span className="text-primary">REST</span></span>
+          </div>
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-bd-1 bg-surf-1 px-3 py-1 font-mono text-[11px] uppercase tracking-[.14em] text-tx-mut shadow-[var(--shadow-sm)]">
+            <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "var(--brand-primary)" }} />
             Configuración inicial
           </div>
-          <h1 className="text-3xl md:text-5xl font-semibold tracking-tight">
+          <h1 className="font-display text-3xl font-extrabold tracking-[-.04em] text-tx-hi md:text-5xl">
             ¿Qué tipo de negocio operas?
           </h1>
-          <p className="mt-4 text-white/60 max-w-2xl mx-auto text-base md:text-lg">
+          <p className="mx-auto mt-4 max-w-2xl text-base text-tx-mut md:text-lg">
             Esto adapta tu terminal al flujo perfecto. Podrás cambiarlo después en cualquier momento.
           </p>
         </header>
 
         {error && (
-          <div className="mb-8 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300 text-center">
+          <div className="mx-auto mb-8 max-w-2xl rounded-xl px-4 py-3 text-center text-sm font-semibold" style={{ border: "1px solid var(--err-soft)", background: "var(--err-soft)", color: "var(--err)" }}>
             {error}
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
           {CARDS.map((card) => {
             const isSelected = selected === card.key;
             const isDisabled = saving && !isSelected;
@@ -199,37 +200,39 @@ export default function ConfigurarNegocioPage() {
                 disabled={isDisabled}
                 aria-pressed={isSelected}
                 className={[
-                  "group relative text-left rounded-2xl border p-6 md:p-7 transition-all",
-                  "bg-white/[0.03] hover:bg-white/[0.06]",
-                  "border-white/10 hover:border-white/25",
+                  "group relative rounded-[20px] border bg-surf-1 p-6 text-left shadow-[var(--shadow-sm)] transition-all md:p-7",
+                  "hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]",
                   "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]",
-                  isSelected
-                    ? "border-[var(--brand-primary)]/70 bg-white/[0.08] shadow-[0_0_0_1px_var(--brand-primary)]"
-                    : "",
-                  isDisabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer",
+                  isDisabled ? "cursor-not-allowed opacity-40" : "cursor-pointer",
                 ].join(" ")}
+                style={{
+                  borderColor: isSelected ? "var(--brand-primary)" : "var(--bd-1)",
+                  boxShadow: isSelected ? "0 0 0 1px var(--brand-primary), var(--shadow-md)" : undefined,
+                  background: isSelected ? "var(--iris-soft)" : "var(--surf-1)",
+                }}
               >
                 <div
-                  className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-black/40 transition-colors"
-                  style={{ color: isSelected ? "var(--brand-primary)" : undefined }}
+                  className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-[14px] border border-bd-1 transition-colors"
+                  style={{
+                    color: isSelected ? "var(--brand-primary)" : "var(--tx-mid)",
+                    background: isSelected ? "var(--surf-1)" : "var(--surf-2)",
+                  }}
                 >
                   {card.icon}
                 </div>
-                <h2 className="text-xl font-semibold tracking-tight mb-1">{card.title}</h2>
-                <p className="text-xs uppercase tracking-wider text-white/40 mb-3">{card.subtitle}</p>
-                <p className="text-sm text-white/60 leading-relaxed">{card.description}</p>
+                <h2 className="mb-1 font-display text-xl font-extrabold tracking-[-.02em] text-tx-hi">{card.title}</h2>
+                <p className="mb-3 font-mono text-[11px] uppercase tracking-[.12em] text-tx-dim">{card.subtitle}</p>
+                <p className="text-sm leading-relaxed text-tx-mut">{card.description}</p>
 
                 <div
-                  className="absolute top-5 right-5 h-5 w-5 rounded-full border transition-all"
+                  className="absolute right-5 top-5 grid h-5 w-5 place-items-center rounded-full border transition-all"
                   style={{
-                    borderColor: isSelected ? "var(--brand-primary)" : "rgba(255,255,255,0.15)",
+                    borderColor: isSelected ? "var(--brand-primary)" : "var(--bd-2)",
                     background: isSelected ? "var(--brand-primary)" : "transparent",
                   }}
                 >
                   {isSelected && saving && (
-                    <span className="absolute inset-0 flex items-center justify-center">
-                      <span className="h-2 w-2 animate-ping rounded-full bg-white" />
-                    </span>
+                    <span className="h-2 w-2 animate-ping rounded-full bg-white" />
                   )}
                 </div>
               </button>
@@ -237,7 +240,7 @@ export default function ConfigurarNegocioPage() {
           })}
         </div>
 
-        <footer className="mt-12 text-center text-xs text-white/40">
+        <footer className="mt-12 text-center text-xs text-tx-dim">
           Al continuar aceptas la adaptación de la interfaz al modo seleccionado.
         </footer>
       </div>

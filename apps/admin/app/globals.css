@@ -148,6 +148,13 @@
   --tx-dim: #64748b;
 }
 
+/* Inputs del flujo de registro (/register) — focus ring premium retail. */
+.rg-input::placeholder { color: var(--tx-dim); }
+.rg-input:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 4px var(--iris-soft);
+}
+
 /* WARMTECH mobile theme. Desktop keeps the canonical admin palette. */
 @media (max-width: 767px) {
   :root,

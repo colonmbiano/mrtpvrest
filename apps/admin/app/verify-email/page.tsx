@@ -37,46 +37,47 @@ function VerifyEmailContent() {
   }, [token, router]);
 
   return (
-    <div className="w-full max-w-md bg-[#111] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl text-center">
+    <div className="w-full max-w-md rounded-[24px] border border-bd-1 bg-surf-1 p-10 text-center shadow-[var(--shadow-md)]">
 
       {status === "loading" && (
         <div className="space-y-4">
-          <div className="w-16 h-16 mx-auto rounded-full border-4 border-[var(--brand-primary)]/30 border-t-[var(--brand-primary)] animate-spin" />
-          <p className="text-gray-400 font-bold">Verificando tu cuenta...</p>
+          <div className="mx-auto h-16 w-16 animate-spin rounded-full border-4 border-iris-soft border-t-[var(--brand-primary)]" />
+          <p className="font-bold text-tx-mut">Verificando tu cuenta...</p>
         </div>
       )}
 
       {status === "success" && (
         <div className="space-y-5">
-          <div className="w-20 h-20 mx-auto rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center text-4xl">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full text-4xl" style={{ background: "var(--ok-soft)", color: "var(--ok)" }}>
             ✓
           </div>
           <div>
-            <p className="text-2xl font-black mb-2">Email verificado</p>
-            <p className="text-gray-400 text-sm">Tu cuenta está activa. Redirigiendo...</p>
+            <p className="mb-2 font-display text-2xl font-extrabold text-tx-hi">Email verificado</p>
+            <p className="text-sm text-tx-mut">Tu cuenta está activa. Redirigiendo...</p>
           </div>
-          <div className="w-full bg-white/5 rounded-full h-1 overflow-hidden">
-            <div className="bg-green-500 h-1 animate-[grow_3s_linear_forwards]" style={{ width: "100%" }} />
+          <div className="h-1 w-full overflow-hidden rounded-full bg-surf-2">
+            <div className="h-1 animate-[grow_3s_linear_forwards]" style={{ width: "100%", background: "var(--ok)" }} />
           </div>
         </div>
       )}
 
       {status === "expired" && (
         <div className="space-y-5">
-          <div className="w-20 h-20 mx-auto rounded-full bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-4xl">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full text-4xl" style={{ background: "var(--warn-soft)", color: "var(--warn)" }}>
             ⏰
           </div>
           <div>
-            <p className="text-2xl font-black mb-2">Enlace expirado</p>
-            <p className="text-gray-400 text-sm">{msg}</p>
+            <p className="mb-2 font-display text-2xl font-extrabold text-tx-hi">Enlace expirado</p>
+            <p className="text-sm text-tx-mut">{msg}</p>
           </div>
           <button
             onClick={() => router.push("/onboarding")}
-            className="w-full py-4 rounded-2xl font-black bg-[var(--brand-primary)] hover:bg-[var(--brand-primary)] text-white transition-all active:scale-95"
+            className="w-full rounded-[13px] py-4 font-extrabold text-white transition-all active:scale-95"
+            style={{ background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", boxShadow: "0 8px 22px var(--iris-glow)" }}
           >
             IR AL DASHBOARD →
           </button>
-          <p className="text-xs text-gray-600">
+          <p className="text-xs text-tx-dim">
             Puedes reenviar el email desde la configuración de tu cuenta.
           </p>
         </div>
@@ -84,16 +85,16 @@ function VerifyEmailContent() {
 
       {status === "error" && (
         <div className="space-y-5">
-          <div className="w-20 h-20 mx-auto rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-4xl">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full text-4xl" style={{ background: "var(--err-soft)", color: "var(--err)" }}>
             ✗
           </div>
           <div>
-            <p className="text-2xl font-black mb-2">Enlace inválido</p>
-            <p className="text-gray-400 text-sm">{msg}</p>
+            <p className="mb-2 font-display text-2xl font-extrabold text-tx-hi">Enlace inválido</p>
+            <p className="text-sm text-tx-mut">{msg}</p>
           </div>
           <button
             onClick={() => router.push("/login")}
-            className="w-full py-4 rounded-2xl font-black bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all"
+            className="w-full rounded-[13px] border border-bd-2 bg-surf-2 py-4 font-extrabold text-tx transition-all hover:bg-surf-3"
           >
             INICIAR SESIÓN
           </button>
@@ -105,18 +106,18 @@ function VerifyEmailContent() {
 
 export default function VerifyEmailPage() {
   return (
-    <div className="min-h-screen bg-[var(--bg)] text-white flex flex-col items-center justify-center p-6"
-      style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="flex min-h-screen flex-col items-center justify-center p-6 text-tx" style={{ background: "var(--bg)" }}>
 
-      <div className="mb-10 text-center">
-        <h1 className="text-3xl font-black tracking-tighter">
-          MRTPV<span style={{color:"var(--brand-primary)"}}>REST</span>
+      <div className="mb-10 flex items-center gap-3 text-center">
+        <span className="grid h-11 w-11 place-items-center rounded-[14px] font-display text-sm font-extrabold text-white" style={{ background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))" }}>MR</span>
+        <h1 className="font-display text-3xl font-extrabold tracking-[-.03em] text-tx-hi">
+          MRTPV<span className="text-primary">REST</span>
         </h1>
       </div>
 
       <Suspense fallback={
-        <div className="w-full max-w-md bg-[#111] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl text-center">
-          <div className="w-16 h-16 mx-auto rounded-full border-4 border-[var(--brand-primary)]/30 border-t-[var(--brand-primary)] animate-spin" />
+        <div className="w-full max-w-md rounded-[24px] border border-bd-1 bg-surf-1 p-10 text-center shadow-[var(--shadow-md)]">
+          <div className="mx-auto h-16 w-16 animate-spin rounded-full border-4 border-iris-soft border-t-[var(--brand-primary)]" />
         </div>
       }>
         <VerifyEmailContent />

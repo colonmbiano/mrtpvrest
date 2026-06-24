@@ -153,17 +153,17 @@ export default function RegisterPage() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "var(--f-b)", color: "var(--tx)" }}>
 
       {/* Brand */}
       <div style={{ marginBottom: 32, textAlign: "center" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 8 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 9, background: "linear-gradient(135deg,#7c3aed,#9f67ff)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 10, color: "#fff" }}>MR</div>
-          <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 20, color: "var(--text)", letterSpacing: -0.5 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 11, background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--f-d)", fontWeight: 800, fontSize: 11, color: "#fff" }}>MR</div>
+          <span style={{ fontFamily: "var(--f-d)", fontWeight: 800, fontSize: 20, color: "var(--tx-hi)", letterSpacing: -0.5 }}>
             MRTPV<span style={{ color: "var(--brand-primary)" }}>REST</span>
           </span>
         </div>
-        <p style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.8px" }}>
+        <p style={{ fontFamily: "var(--f-m)", fontSize: 10, fontWeight: 700, color: "var(--tx-mut)", textTransform: "uppercase", letterSpacing: "0.8px" }}>
           {selectedPlan && selectedPlan.trialDays > 0
             ? `EMPIEZA TU PRUEBA DE ${selectedPlan.trialDays} DÍAS`
             : "EMPIEZA A VENDER HOY"}
@@ -171,7 +171,7 @@ export default function RegisterPage() {
       </div>
 
       {/* Card */}
-      <div style={{ width: "100%", maxWidth: 480, background: "var(--surf)", border: "1px solid var(--border2)", borderRadius: 20, padding: "36px 40px", boxShadow: "0 0 40px rgba(124,58,237,0.06)" }}>
+      <div style={{ width: "100%", maxWidth: 480, background: "var(--surf-1)", border: "1px solid var(--bd-1)", borderRadius: 24, padding: "36px 40px", boxShadow: "var(--shadow-md)" }}>
 
         {/* Stepper */}
         {step < 3 && (
@@ -180,21 +180,21 @@ export default function RegisterPage() {
               <div key={n} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{
                   display: "flex", alignItems: "center", gap: 8,
-                  padding: "5px 12px", borderRadius: 99, fontSize: 10, fontWeight: 700,
-                  background: step === n ? "rgba(124,58,237,0.12)" : step > n ? "rgba(16,185,129,0.1)" : "var(--surf2)",
-                  color: step === n ? "var(--brand-primary)" : step > n ? "#10b981" : "var(--muted)",
-                  border: `1px solid ${step === n ? "rgba(124,58,237,0.25)" : step > n ? "rgba(16,185,129,0.25)" : "var(--border2)"}`,
+                  padding: "5px 12px", borderRadius: 99, fontFamily: "var(--f-m)", fontSize: 10, fontWeight: 700,
+                  background: step === n ? "var(--iris-soft)" : step > n ? "var(--ok-soft)" : "var(--surf-2)",
+                  color: step === n ? "var(--brand-primary)" : step > n ? "var(--ok)" : "var(--tx-mut)",
+                  border: `1px solid ${step === n ? "var(--brand-primary)" : step > n ? "var(--ok)" : "var(--bd-1)"}`,
                 }}>
                   <div style={{
                     width: 20, height: 20, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800,
-                    background: step === n ? "var(--brand-primary)" : step > n ? "#10b981" : "var(--border2)",
-                    color: step >= n ? "#fff" : "var(--muted)",
+                    background: step === n ? "var(--brand-primary)" : step > n ? "var(--ok)" : "var(--bd-2)",
+                    color: step >= n ? "#fff" : "var(--tx-mut)",
                   }}>
                     {step > n ? "✓" : n}
                   </div>
                   {label}
                 </div>
-                {i < 1 && <div style={{ width: 24, height: 2, borderRadius: 2, background: step > n ? "#10b981" : "var(--border2)" }} />}
+                {i < 1 && <div style={{ width: 24, height: 2, borderRadius: 2, background: step > n ? "var(--ok)" : "var(--bd-2)" }} />}
               </div>
             ))}
           </div>
@@ -203,27 +203,28 @@ export default function RegisterPage() {
         {/* Paso 1 */}
         {step === 1 && (
           <div>
-            <h2 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 22, color: "var(--text)", marginBottom: 4 }}>Tu restaurante</h2>
-            <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 24 }}>Cuéntanos sobre tu negocio para empezar.</p>
+            <h2 style={{ fontFamily: "var(--f-d)", fontWeight: 800, fontSize: 24, letterSpacing: "-0.02em", color: "var(--tx-hi)", marginBottom: 4 }}>Tu restaurante</h2>
+            <p style={{ fontSize: 14, color: "var(--tx-mut)", marginBottom: 24 }}>Cuéntanos sobre tu negocio para empezar.</p>
             {[{ label: "Nombre del negocio", value: restaurantName, set: setRestaurantName, ph: "Ej: Tacos El Gordo" },
               { label: "Tu nombre completo", value: ownerName, set: setOwnerName, ph: "Ej: Juan García" }].map(f => (
               <div key={f.label} style={{ marginBottom: 16 }}>
-                <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>{f.label} <span style={{ color: "#ef4444" }}>*</span></label>
+                <label style={{ display: "block", fontFamily: "var(--f-m)", fontSize: 11, fontWeight: 700, color: "var(--tx-mut)", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>{f.label} <span style={{ color: "var(--err)" }}>*</span></label>
                 <input value={f.value} onChange={e => f.set(e.target.value)} placeholder={f.ph}
                   onKeyDown={e => { if (e.key === "Enter" && canNext1) { setStep(2); setError(""); } }}
-                  style={{ width: "100%", padding: "11px 14px", background: "var(--surf2)", border: "1px solid var(--border2)", borderRadius: 10, color: "var(--text)", fontSize: 13, outline: "none", fontFamily: "'DM Sans',sans-serif" }} />
+                  className="rg-input"
+                  style={{ width: "100%", padding: "12px 14px", background: "var(--surf-1)", border: "1px solid var(--bd-2)", borderRadius: 12, color: "var(--tx)", fontSize: 13, outline: "none", fontFamily: "var(--f-b)" }} />
               </div>
             ))}
             {/* Selector de plan */}
             <div style={{ marginTop: 20 }}>
-              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 8 }}>Elige tu plan</label>
+              <label style={{ display: "block", fontFamily: "var(--f-m)", fontSize: 11, fontWeight: 700, color: "var(--tx-mut)", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 8 }}>Elige tu plan</label>
 
               {plansLoading ? (
-                <div style={{ padding: "14px 16px", background: "var(--surf2)", border: "1px solid var(--border2)", borderRadius: 12, fontSize: 12, color: "var(--muted)" }}>
+                <div style={{ padding: "14px 16px", background: "var(--surf-2)", border: "1px solid var(--bd-1)", borderRadius: 12, fontSize: 12, color: "var(--tx-mut)" }}>
                   Cargando planes…
                 </div>
               ) : plans.length === 0 ? (
-                <div style={{ padding: "14px 16px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 12, fontSize: 12, color: "#ef4444" }}>
+                <div style={{ padding: "14px 16px", background: "var(--err-soft)", border: "1px solid var(--err-soft)", borderRadius: 12, fontSize: 12, color: "var(--err)" }}>
                   No hay planes disponibles. Contacta al administrador.
                 </div>
               ) : (
@@ -242,23 +243,23 @@ export default function RegisterPage() {
                       <button key={p.id} type="button" onClick={() => setSelectedPlanId(p.id)}
                         style={{
                           textAlign: "left", cursor: "pointer",
-                          padding: "14px 16px", borderRadius: 12,
-                          background: isSelected ? "rgba(124,58,237,0.10)" : "var(--surf2)",
-                          border: `1px solid ${isSelected ? "var(--brand-primary)" : "var(--border2)"}`,
-                          boxShadow: isSelected ? "0 0 0 3px rgba(124,58,237,0.12)" : "none",
+                          padding: "14px 16px", borderRadius: 14,
+                          background: isSelected ? "var(--iris-soft)" : "var(--surf-1)",
+                          border: `1px solid ${isSelected ? "var(--brand-primary)" : "var(--bd-1)"}`,
+                          boxShadow: isSelected ? "0 0 0 3px var(--iris-soft)" : "var(--shadow-sm)",
                           transition: "all .15s",
                         }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                          <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>{p.displayName}</span>
+                          <span style={{ fontFamily: "var(--f-d)", fontSize: 15, fontWeight: 800, color: "var(--tx-hi)" }}>{p.displayName}</span>
                           <span style={{ fontSize: 13, fontWeight: 700, color: "var(--brand-primary)" }}>
-                            ${p.price}<span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 500 }}>/mes</span>
+                            ${p.price}<span style={{ fontSize: 11, color: "var(--tx-mut)", fontWeight: 500 }}>/mes</span>
                           </span>
                         </div>
-                        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>
+                        <div style={{ fontSize: 11, color: "var(--tx-mut)", marginBottom: 6 }}>
                           {p.trialDays > 0 ? `${p.trialDays} días gratis` : "Sin trial"} · sin tarjeta
                         </div>
                         {perks.length > 0 && (
-                          <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono',monospace" }}>
+                          <div style={{ fontSize: 11, color: "var(--tx-mut)", fontFamily: "var(--f-m)" }}>
                             {perks.join(" · ")}
                           </div>
                         )}
@@ -269,7 +270,7 @@ export default function RegisterPage() {
               )}
 
               {selectedPlan && (
-                <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 10 }}>
+                <p style={{ fontSize: 11, color: "var(--tx-mut)", marginTop: 10 }}>
                   Puedes cambiar de plan en cualquier momento desde tu panel de administración.
                 </p>
               )}
@@ -280,29 +281,31 @@ export default function RegisterPage() {
         {/* Paso 2 */}
         {step === 2 && (
           <div>
-            <h2 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 22, color: "var(--text)", marginBottom: 4 }}>Crea tu cuenta</h2>
-            <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 24 }}>Serás el administrador de <strong style={{ color: "var(--text)" }}>{restaurantName}</strong>.</p>
+            <h2 style={{ fontFamily: "var(--f-d)", fontWeight: 800, fontSize: 24, letterSpacing: "-0.02em", color: "var(--tx-hi)", marginBottom: 4 }}>Crea tu cuenta</h2>
+            <p style={{ fontSize: 14, color: "var(--tx-mut)", marginBottom: 24 }}>Serás el administrador de <strong style={{ color: "var(--tx-hi)" }}>{restaurantName}</strong>.</p>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>Correo electrónico <span style={{ color: "#ef4444" }}>*</span></label>
+              <label style={{ display: "block", fontFamily: "var(--f-m)", fontSize: 11, fontWeight: 700, color: "var(--tx-mut)", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>Correo electrónico <span style={{ color: "var(--err)" }}>*</span></label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="juan@mirestaurante.com"
                 onKeyDown={e => { if (e.key === "Enter" && canNext2 && !loading) handleSubmit(); }}
-                style={{ width: "100%", padding: "11px 14px", background: "var(--surf2)", border: "1px solid var(--border2)", borderRadius: 10, color: "var(--text)", fontSize: 13, outline: "none" }} />
-              {email.length > 0 && !emailValid && <p style={{ color: "#ef4444", fontSize: 11, marginTop: 4 }}>Correo electrónico no válido</p>}
+                className="rg-input"
+                style={{ width: "100%", padding: "12px 14px", background: "var(--surf-1)", border: "1px solid var(--bd-2)", borderRadius: 12, color: "var(--tx)", fontSize: 13, outline: "none", fontFamily: "var(--f-b)" }} />
+              {email.length > 0 && !emailValid && <p style={{ color: "var(--err)", fontSize: 11, marginTop: 4 }}>Correo electrónico no válido</p>}
             </div>
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.7px" }}>Contraseña <span style={{ color: "#ef4444" }}>*</span></label>
-                <span style={{ fontSize: 11, color: "var(--muted)" }}>Mínimo 8 caracteres</span>
+                <label style={{ fontFamily: "var(--f-m)", fontSize: 11, fontWeight: 700, color: "var(--tx-mut)", textTransform: "uppercase", letterSpacing: "0.7px" }}>Contraseña <span style={{ color: "var(--err)" }}>*</span></label>
+                <span style={{ fontSize: 11, color: "var(--tx-mut)" }}>Mínimo 8 caracteres</span>
               </div>
               <div style={{ position: "relative" }}>
                 <input type={showPass ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
                   onKeyDown={e => { if (e.key === "Enter" && canNext2 && !loading) handleSubmit(); }}
-                  style={{ width: "100%", padding: "11px 44px 11px 14px", background: "var(--surf2)", border: "1px solid var(--border2)", borderRadius: 10, color: "var(--text)", fontSize: 13, outline: "none" }} />
+                  className="rg-input"
+                  style={{ width: "100%", padding: "12px 44px 12px 14px", background: "var(--surf-1)", border: "1px solid var(--bd-2)", borderRadius: 12, color: "var(--tx)", fontSize: 13, outline: "none", fontFamily: "var(--f-b)" }} />
                 <button type="button" onClick={() => setShowPass(s => !s)} aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 15 }}>
                   {showPass ? "🙈" : "👁️"}
                 </button>
               </div>
-              {password.length > 0 && password.length < 8 && <p style={{ color: "#ef4444", fontSize: 11, marginTop: 4 }}>Mínimo 8 caracteres</p>}
+              {password.length > 0 && password.length < 8 && <p style={{ color: "var(--err)", fontSize: 11, marginTop: 4 }}>Mínimo 8 caracteres</p>}
             </div>
             <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", marginTop: 8 }}>
               <div
@@ -313,13 +316,13 @@ export default function RegisterPage() {
                 onClick={() => setTerms(t => !t)}
                 onKeyDown={e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); setTerms(t => !t); } }}
                 style={{
-                marginTop: 2, width: 18, height: 18, borderRadius: 5, flexShrink: 0, border: `1px solid ${terms ? "var(--brand-primary)" : "var(--border2)"}`,
+                marginTop: 2, width: 18, height: 18, borderRadius: 5, flexShrink: 0, border: `1px solid ${terms ? "var(--brand-primary)" : "var(--bd-2)"}`,
                 background: terms ? "var(--brand-primary)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center",
               }}>
                 {terms && <span style={{ color: "#fff", fontSize: 10, fontWeight: 800 }}>✓</span>}
               </div>
-              <span style={{ fontSize: 13, color: "var(--muted)" }}>
-                Acepto los <a href="#" style={{ color: "var(--brand-primary)" }}>términos</a> y la <a href="#" style={{ color: "var(--brand-primary)" }}>política de privacidad</a>
+              <span style={{ fontSize: 13, color: "var(--tx-mut)" }}>
+                Acepto los <a href="#" style={{ color: "var(--brand-primary)", fontWeight: 600 }}>términos</a> y la <a href="#" style={{ color: "var(--brand-primary)", fontWeight: 600 }}>política de privacidad</a>
               </span>
             </label>
             {TURNSTILE_SITE_KEY && (
@@ -333,31 +336,31 @@ export default function RegisterPage() {
         {/* Paso 3 — email enviado */}
         {step === 3 && (
           <div style={{ textAlign: "center" }}>
-            <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, margin: "0 auto 20px" }}>✉️</div>
-            <h2 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 22, color: "var(--text)", marginBottom: 8 }}>Revisa tu email</h2>
-            <p style={{ fontSize: 14, color: "var(--muted)", lineHeight: 1.7, marginBottom: 24 }}>
-              Enviamos un enlace a <br /><strong style={{ color: "var(--text)" }}>{email}</strong>
+            <div style={{ width: 80, height: 80, borderRadius: "50%", background: "var(--iris-soft)", border: "1px solid var(--brand-primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, margin: "0 auto 20px" }}>✉️</div>
+            <h2 style={{ fontFamily: "var(--f-d)", fontWeight: 800, fontSize: 24, letterSpacing: "-0.02em", color: "var(--tx-hi)", marginBottom: 8 }}>Revisa tu email</h2>
+            <p style={{ fontSize: 14, color: "var(--tx-mut)", lineHeight: 1.7, marginBottom: 24 }}>
+              Enviamos un enlace a <br /><strong style={{ color: "var(--tx-hi)" }}>{email}</strong>
             </p>
             {emailDomain && (
               <a href={`https://${emailDomain}`} target="_blank" rel="noopener noreferrer"
-                style={{ display: "inline-block", padding: "10px 24px", background: "var(--surf2)", border: "1px solid var(--border2)", borderRadius: 10, fontSize: 13, fontWeight: 700, color: "var(--text)", textDecoration: "none", marginBottom: 24 }}>
+                style={{ display: "inline-block", padding: "10px 24px", background: "var(--surf-2)", border: "1px solid var(--bd-2)", borderRadius: 12, fontSize: 13, fontWeight: 700, color: "var(--tx)", textDecoration: "none", marginBottom: 24 }}>
                 Abrir {emailDomain} →
               </a>
             )}
-            <div style={{ background: "var(--surf2)", border: "1px solid var(--border2)", borderRadius: 12, padding: 16, textAlign: "left", marginBottom: 20 }}>
-              <p style={{ fontSize: 9, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 12 }}>Qué sigue</p>
+            <div style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", borderRadius: 14, padding: 16, textAlign: "left", marginBottom: 20 }}>
+              <p style={{ fontFamily: "var(--f-m)", fontSize: 9, fontWeight: 700, color: "var(--tx-mut)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 12 }}>Qué sigue</p>
               {["Haz clic en el botón del email", "Tu cuenta queda activada", "Configura tu negocio"].map((s, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(124,58,237,0.12)", color: "var(--brand-primary)", fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i+1}</div>
-                  <span style={{ fontSize: 13, color: "var(--muted)" }}>{s}</span>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--iris-soft)", color: "var(--brand-primary)", fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i+1}</div>
+                  <span style={{ fontSize: 13, color: "var(--tx-mut)" }}>{s}</span>
                 </div>
               ))}
             </div>
             <button onClick={handleResend} disabled={resending || resendDone}
-              style={{ width: "100%", padding: "12px", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer", border: "1px solid var(--border2)", background: "var(--surf2)", color: "var(--muted)", opacity: (resending || resendDone) ? 0.6 : 1 }}>
+              style={{ width: "100%", padding: "12px", borderRadius: 12, fontWeight: 700, fontSize: 13, cursor: "pointer", border: "1px solid var(--bd-2)", background: "var(--surf-2)", color: "var(--tx-mid)", opacity: (resending || resendDone) ? 0.6 : 1 }}>
               {resendDone ? "✓ Correo reenviado" : resending ? "Enviando..." : "No llegó el correo — Reenviar"}
             </button>
-            <p style={{ marginTop: 20, fontSize: 13, color: "var(--muted)" }}>
+            <p style={{ marginTop: 20, fontSize: 13, color: "var(--tx-mut)" }}>
               ¿Ya activaste tu cuenta?{" "}
               <Link href="/login" style={{ color: "var(--brand-primary)", fontWeight: 700, textDecoration: "none" }}>
                 Ir a iniciar sesión →
@@ -368,7 +371,7 @@ export default function RegisterPage() {
 
         {/* Error global */}
         {error && (
-          <div style={{ marginTop: 16, padding: "10px 14px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", fontSize: 13, fontWeight: 700 }}>⚠️ {error}</div>
+          <div style={{ marginTop: 16, padding: "10px 14px", borderRadius: 12, background: "var(--err-soft)", border: "1px solid var(--err-soft)", color: "var(--err)", fontSize: 13, fontWeight: 700 }}>⚠️ {error}</div>
         )}
 
         {/* Botones de navegación */}
@@ -376,18 +379,18 @@ export default function RegisterPage() {
           <div style={{ display: "flex", gap: 12, marginTop: 28 }}>
             {step > 1 && (
               <button onClick={() => { setStep(s => s - 1); setError(""); }}
-                style={{ padding: "12px 20px", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer", background: "var(--surf2)", border: "1px solid var(--border2)", color: "var(--muted)" }}>
+                style={{ padding: "13px 20px", borderRadius: 13, fontWeight: 700, fontSize: 13, cursor: "pointer", background: "var(--surf-2)", border: "1px solid var(--bd-2)", color: "var(--tx-mid)" }}>
                 ← Atrás
               </button>
             )}
             {step < 2 ? (
               <button disabled={!canNext1} onClick={() => { setStep(2); setError(""); }}
-                style={{ flex: 1, padding: "13px", borderRadius: 10, fontWeight: 800, fontSize: 13, border: "none", background: "var(--brand-primary)", color: "#fff", cursor: canNext1 ? "pointer" : "not-allowed", opacity: canNext1 ? 1 : 0.5, boxShadow: "0 4px 20px rgba(124,58,237,0.25)" }}>
+                style={{ flex: 1, padding: "14px", borderRadius: 13, fontWeight: 800, fontSize: 13, border: "none", background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", color: "#fff", cursor: canNext1 ? "pointer" : "not-allowed", opacity: canNext1 ? 1 : 0.5, boxShadow: "0 8px 22px var(--iris-glow)" }}>
                 CONTINUAR →
               </button>
             ) : (
               <button disabled={!canNext2 || loading} onClick={handleSubmit}
-                style={{ flex: 1, padding: "13px", borderRadius: 10, fontWeight: 800, fontSize: 13, border: "none", background: "var(--brand-primary)", color: "#fff", cursor: (canNext2 && !loading) ? "pointer" : "not-allowed", opacity: (canNext2 && !loading) ? 1 : 0.5, boxShadow: "0 4px 20px rgba(124,58,237,0.25)" }}>
+                style={{ flex: 1, padding: "14px", borderRadius: 13, fontWeight: 800, fontSize: 13, border: "none", background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", color: "#fff", cursor: (canNext2 && !loading) ? "pointer" : "not-allowed", opacity: (canNext2 && !loading) ? 1 : 0.5, boxShadow: "0 8px 22px var(--iris-glow)" }}>
                 {loading ? "Creando cuenta..." : "EMPEZAR GRATIS →"}
               </button>
             )}
@@ -396,8 +399,8 @@ export default function RegisterPage() {
 
         {/* Footer link */}
         {step < 3 && (
-          <div style={{ marginTop: 20, textAlign: "center", borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-            <p style={{ fontSize: 13, color: "var(--muted)" }}>¿Ya tienes cuenta?{" "}
+          <div style={{ marginTop: 20, textAlign: "center", borderTop: "1px solid var(--bd-1)", paddingTop: 16 }}>
+            <p style={{ fontSize: 13, color: "var(--tx-mut)" }}>¿Ya tienes cuenta?{" "}
               <Link href="/login" style={{ color: "var(--brand-primary)", fontWeight: 700, textDecoration: "none" }}>Iniciar sesión</Link>
             </p>
           </div>
