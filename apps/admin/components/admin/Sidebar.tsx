@@ -76,6 +76,7 @@ const SECTIONS = [
     accent: "#3b82f6",
     items: [
       { href: "/admin/menu",            icon: <IUtensils />, label: "Platillos" },
+      { href: "/admin/menu/fotos",      icon: <IImage />,    label: "Fotos de productos" },
       { href: "/admin/menu/categorias", icon: <IFolder />,   label: "Categorías" },
       { href: "/admin/menu/variantes",  icon: <ISliders />,  label: "Variantes" },
       { href: "/admin/promociones",     icon: <ITag />,      label: "Promociones IA" },
