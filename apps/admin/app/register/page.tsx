@@ -1,9 +1,13 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "@/lib/api";
 import { getApiUrl } from "@/lib/config";
+
+// CAPTCHA anti-bot. Si no hay site key configurada (dev), el widget no se
+// renderiza y el registro no exige token — el backend hace lo simétrico.
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
 interface Plan {
   id: string;
@@ -34,6 +38,9 @@ export default function RegisterPage() {
   const [resending, setResending]             = useState(false);
   const [resendDone, setResendDone]           = useState(false);
   const [emailDomain, setEmailDomain]         = useState("");
+  const [captchaToken, setCaptchaToken]       = useState("");
+  const captchaRef                            = useRef<HTMLDivElement>(null);
+  const captchaWidgetId                       = useRef<string | null>(null);
 
   const [plans, setPlans]               = useState<Plan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
@@ -52,9 +59,51 @@ export default function RegisterPage() {
       .finally(() => setPlansLoading(false));
   }, []);
 
+  // Carga el script de Turnstile una sola vez (si hay site key).
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY) return;
+    if (document.getElementById("cf-turnstile-script")) return;
+    const s = document.createElement("script");
+    s.id = "cf-turnstile-script";
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    s.async = true;
+    s.defer = true;
+    document.head.appendChild(s);
+  }, []);
+
+  // Renderiza el widget al entrar al paso 2; lo desmonta al salir.
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || step !== 2) return;
+    let cancelled = false;
+    const tw = () => (window as any).turnstile;
+    const render = () => {
+      if (cancelled) return;
+      if (tw() && captchaRef.current && captchaWidgetId.current === null) {
+        try {
+          captchaWidgetId.current = tw().render(captchaRef.current, {
+            sitekey: TURNSTILE_SITE_KEY,
+            callback: (token: string) => setCaptchaToken(token),
+            "expired-callback": () => setCaptchaToken(""),
+            "error-callback": () => setCaptchaToken(""),
+          });
+        } catch { /* widget ya montado */ }
+      } else if (!tw()) {
+        setTimeout(render, 300);
+      }
+    };
+    render();
+    return () => {
+      cancelled = true;
+      try { if (tw() && captchaWidgetId.current !== null) tw().remove(captchaWidgetId.current); } catch { /* noop */ }
+      captchaWidgetId.current = null;
+      setCaptchaToken("");
+    };
+  }, [step]);
+
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const canNext1 = restaurantName.trim().length > 0 && ownerName.trim().length > 0 && selectedPlanId.length > 0;
-  const canNext2 = emailValid && password.length >= 8 && terms;
+  const captchaOk = !TURNSTILE_SITE_KEY || captchaToken.length > 0;
+  const canNext2 = emailValid && password.length >= 8 && terms && captchaOk;
 
   const selectedPlan = plans.find(p => p.id === selectedPlanId) || null;
 
@@ -85,6 +134,7 @@ export default function RegisterPage() {
         email,
         password,
         planId: selectedPlanId || undefined,
+        turnstileToken: captchaToken || undefined,
       });
       // El backend ya devuelve sesión al registrar. La guardamos para que el
       // reenvío de verificación vaya autenticado (resend-verification exige
@@ -272,6 +322,11 @@ export default function RegisterPage() {
                 Acepto los <a href="#" style={{ color: "var(--brand-primary)" }}>términos</a> y la <a href="#" style={{ color: "var(--brand-primary)" }}>política de privacidad</a>
               </span>
             </label>
+            {TURNSTILE_SITE_KEY && (
+              <div style={{ marginTop: 16, display: "flex", justifyContent: "center" }}>
+                <div ref={captchaRef} />
+              </div>
+            )}
           </div>
         )}
 

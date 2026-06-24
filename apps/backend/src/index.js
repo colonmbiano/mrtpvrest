@@ -319,6 +319,9 @@ startTrialExpiryJob()
 const { startAutoPromosJob } = require('./jobs/autoPromos.job')
 startAutoPromosJob()
 
+const { startUnverifiedPurgeJob } = require('./jobs/unverifiedPurge.job')
+startUnverifiedPurgeJob()
+
 const PORT = process.env.PORT || 3001
 server.listen(PORT,'0.0.0.0', () => {
   console.log('┌─────────────────────────────────┐')

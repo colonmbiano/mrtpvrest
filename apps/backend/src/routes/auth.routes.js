@@ -8,6 +8,8 @@ const { authenticate } = require('../middleware/auth.middleware')
 const rateLimit  = require('express-rate-limit')
 const { refreshLimiter, resendVerifyLimiter } = require('../lib/rate-limiters')
 const { sendEmail, verificationEmailHtml } = require('../utils/mailer')
+const { verifyTurnstile } = require('../lib/turnstile')
+const { isDisposableEmail } = require('../lib/email-domains')
 const log = require('../lib/logger')('auth')
 
 const router = express.Router()
@@ -150,6 +152,29 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
   }
   if (password.length < 8) {
     return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' })
+  }
+
+  // Anti-bot capa 1: CAPTCHA (Cloudflare Turnstile). Solo se exige si
+  // TURNSTILE_SECRET_KEY está configurada; si no, se omite (dev/test). Cierra
+  // el vector que metió ~72 tenants basura en un día vía script automatizado.
+  const captcha = await verifyTurnstile(req.body?.turnstileToken, req.ip)
+  if (!captcha.ok) {
+    log.warn('register.captcha.fail', { reason: captcha.reason, ip: req.ip })
+    return res.status(400).json({
+      error: 'Verificación anti-bot fallida. Recarga la página e intenta de nuevo.',
+      code:  'CAPTCHA_FAILED',
+    })
+  }
+
+  // Anti-bot capa 2: rechazar emails desechables / dominios de prueba
+  // (example.com, temp-mail, .local/.test, …). El bot del abuso usó justamente
+  // userNNNN@example.com y temp-mail, que además nunca pueden verificar.
+  if (isDisposableEmail(email)) {
+    log.warn('register.disposable_email', { email: String(email).toLowerCase(), ip: req.ip })
+    return res.status(400).json({
+      error: 'Usa un correo electrónico real. No se permiten correos temporales o de prueba.',
+      code:  'DISPOSABLE_EMAIL',
+    })
   }
 
   // Slug a partir del nombre del restaurante
