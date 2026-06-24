@@ -238,7 +238,7 @@ export default function TiendaConfigPage() {
 
   const THEMES = [
     { id: "BRUTALIST", name: "Express", icon: Zap, desc: "Lista estilo app · Claro" },
-    { id: "KAWAII", name: "Boutique", icon: Flower2, desc: "Grid suave · Claro" },
+    { id: "KAWAII", name: "Kawaii", icon: Flower2, desc: "Pastel lavanda · bubble-tea · cute 🧋" },
     { id: "HALO", name: "Obsidiana", icon: Moon, desc: "Oscuro premium · Bento" },
     { id: "ANTOJO", name: "Antojo", icon: Bike, desc: "Delivery oscuro · Naranja" },
     { id: "MUNDIALISTA", name: "Mundialista", icon: Trophy, desc: "Estadio oscuro · Dorado · Mundial ⚽" },

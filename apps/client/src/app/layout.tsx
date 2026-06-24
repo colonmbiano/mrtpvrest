@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Syne, DM_Sans, Bebas_Neue, Montserrat } from "next/font/google";
+import { Syne, DM_Sans, Bebas_Neue, Montserrat, Baloo_2, Quicksand } from "next/font/google";
 import "./globals.css";
 
 const syne = Syne({
@@ -27,6 +27,20 @@ const montserrat = Montserrat({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
   variable: "--font-montserrat",
+});
+
+// Tipografías del tema "Kawaii / Boutique" (storefront pastel): Baloo 2
+// (titulares redondeados, bubbly) + Quicksand (cuerpo redondeado, amable).
+const baloo2 = Baloo_2({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  variable: "--font-baloo",
+});
+
+const quicksand = Quicksand({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-quicksand",
 });
 
 export const metadata: Metadata = {
@@ -66,7 +80,7 @@ const NUMBER_WHEEL_GUARD_SCRIPT = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${syne.variable} ${dmSans.variable} ${bebasNeue.variable} ${montserrat.variable}`}>
+    <html lang="es" className={`${syne.variable} ${dmSans.variable} ${bebasNeue.variable} ${montserrat.variable} ${baloo2.variable} ${quicksand.variable}`}>
       <head>
         {/* Las imágenes (menú, banners, logos) se sirven desde Cloudinary;
             adelantamos la conexión para acelerar la primera carga. */}
