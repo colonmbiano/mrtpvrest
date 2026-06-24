@@ -96,7 +96,7 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
     const VALID_FIELDS = [
       'phone','whatsappNumber','address','countryCode','deliveryFee','freeDeliveryFrom',
       'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
-      'pointsPerTen','pointsValuePesos','storefrontTheme',
+      'pointsPerTen','pointsValuePesos','storefrontTheme','storefrontHeroUrl',
       'centralWarehouseEnabled','adminCanViewExpectedCash',
       // Horario de atención (businessHours llega como JSON serializado)
       'scheduleEnabled','timezone','businessHours',

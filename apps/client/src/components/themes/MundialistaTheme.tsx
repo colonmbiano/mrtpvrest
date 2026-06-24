@@ -48,6 +48,16 @@ const BODY = 'var(--font-montserrat), system-ui, sans-serif';
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
 const priceOf = (p: any) => (p.isPromo && p.promoPrice ? p.promoPrice : p.price);
 
+// La portada (hero) se sube a 1600px (mode=hero), así que NO usamos cldImage
+// (que capa a 800). Servimos f_auto/q_auto hasta 1600 sin recortar. URLs que no
+// son de Cloudinary (pegadas a mano) se devuelven intactas.
+function heroSrc(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  const M = '/image/upload/';
+  if (url.includes(M) && !url.includes('/f_auto')) return url.replace(M, `${M}f_auto,q_auto,c_limit,w_1600/`);
+  return url;
+}
+
 // Icono futbolero por categoría (data-driven sobre el nombre real del catálogo).
 const CAT_ICONS: [RegExp, string][] = [
   [/combo|paquete|partido|mundial/i, '⚽'],
@@ -77,7 +87,7 @@ const isShippingCat = (name?: string | null) => !!name && /env[ií]o/i.test(name
 type Info = {
   id: string; name: string; slug: string; logo: string | null; hasWebStore: boolean;
   whatsappNumber: string | null; minOrderAmount?: number; estimatedDelivery?: number;
-  onlinePayment?: boolean; delivery?: DeliveryConfig;
+  onlinePayment?: boolean; delivery?: DeliveryConfig; heroImageUrl?: string | null;
   themeConfig: { theme?: string; primaryColor?: string } | null;
 };
 
@@ -407,6 +417,28 @@ function DeliveryToggle({ orderMode, setOrderMode, className = '' }: { orderMode
 //  HERO
 // ══════════════════════════════════════════════════════════════════════════════
 function Hero({ info, onOrder, onCombos }: { info: Info; onOrder: () => void; onCombos: () => void }) {
+  const heroImg = info.heroImageUrl?.trim();
+  // Imagen de portada configurable (admin /tienda). Si existe, la mostramos a
+  // todo lo ancho sin recortar (ya trae el texto/arte). Las CTAs van debajo.
+  if (heroImg) {
+    return (
+      <section className="max-w-7xl mx-auto px-4 pt-5">
+        <button onClick={onOrder} className="block w-full overflow-hidden rounded-[24px] active:scale-[0.997] transition" style={{ border: `1px solid ${BORDER}`, boxShadow: '0 30px 70px rgba(0,0,0,0.5)' }} aria-label="Ordenar ahora">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={heroSrc(heroImg)} alt={`${info.name.trim()} — Menú Mundialista`} loading="eager" decoding="async" className="w-full h-auto block" />
+        </button>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button onClick={onOrder} className="px-7 py-3.5 rounded-xl font-extrabold text-[15px] active:scale-95 transition" style={{ background: GOLD, color: '#1A1206', boxShadow: `0 12px 30px ${GOLD}50` }}>Ordenar ahora</button>
+          <button onClick={onCombos} className="px-7 py-3.5 rounded-xl font-extrabold text-[15px] active:scale-95 transition" style={{ background: '#FFFFFF0f', color: TEXT, border: `1.5px solid ${BORDER}` }}>Ver combos del partido</button>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-2.5">
+          <HeroChip icon={<Truck className="w-3.5 h-3.5" />} title="Entrega rápida" sub={info.estimatedDelivery ? `~${info.estimatedDelivery} min` : 'A tu puerta'} />
+          <HeroChip icon={<CreditCard className="w-3.5 h-3.5" />} title="Pago fácil y seguro" sub="Efectivo · tarjeta · transfer" />
+          <HeroChip icon={<Trophy className="w-3.5 h-3.5" />} title="Promos del partido" sub="Ofertas cada día" />
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="max-w-7xl mx-auto px-4 pt-5">
       <div className="relative overflow-hidden rounded-[24px] px-6 py-10 sm:px-12 sm:py-14"

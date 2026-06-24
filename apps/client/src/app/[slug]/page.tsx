@@ -56,6 +56,7 @@ type StoreInfo = {
   // El backend (GET /api/store/info) devuelve estos campos planos:
   storefrontTheme?: string | null;
   primaryColor?: string | null;
+  heroImageUrl?: string | null;
   // Retrocompat: algunas respuestas antiguas anidaban el tema aquí.
   themeConfig?: {
     theme?: string;

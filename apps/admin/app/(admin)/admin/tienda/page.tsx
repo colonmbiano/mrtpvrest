@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Store, Globe, Power, Clock, Phone, MessageCircle, MapPin, Palette,
   Truck, Star, Link2, Copy, Check, ExternalLink, Crosshair, AlertTriangle,
-  Zap, Flower2, Moon, Bike, Wallet, Trophy,
+  Zap, Flower2, Moon, Bike, Wallet, Trophy, Upload, ImagePlus, X,
 } from "lucide-react";
 import api from "@/lib/api";
 import { getStoreUrl } from "@/lib/config";
@@ -91,6 +91,7 @@ export default function TiendaConfigPage() {
     freeDeliveryFrom: 0,
     estimatedDelivery: 40,
     storefrontTheme: "KAWAII",
+    storefrontHeroUrl: "",
     // Estado de la tienda
     isOpen: true,
     closedMessage: "",
@@ -112,6 +113,29 @@ export default function TiendaConfigPage() {
     pointsPerTen: 1,
     pointsValuePesos: 0.1,
   });
+
+  const [heroUploading, setHeroUploading] = useState(false);
+
+  // Sube la imagen de portada (hero) sin recorte (mode=hero conserva la
+  // proporción panorámica). Guarda la URL en config.storefrontHeroUrl.
+  async function uploadHero(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setHeroUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      const { data } = await api.post("/api/upload/image?mode=hero", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      if (data?.url) setConfig(p => ({ ...p, storefrontHeroUrl: data.url }));
+    } catch (err: any) {
+      alert("No se pudo subir la imagen: " + (err?.response?.data?.error || err?.message || ""));
+    } finally {
+      setHeroUploading(false);
+      e.target.value = "";
+    }
+  }
 
   const useMyLocation = () => {
     if (!navigator.geolocation) { setGeoStatus("error"); return; }
@@ -449,6 +473,43 @@ export default function TiendaConfigPage() {
                 );
               })}
             </div>
+          </div>
+
+          {/* Imagen de portada (hero) — la usa el tema Mundialista a todo lo ancho */}
+          <div className="mt-5">
+            <FieldLabel><ImagePlus size={11} className="mr-1 inline" /> Imagen de portada (hero)</FieldLabel>
+            <p className="mb-2 text-[11px] text-tx-mut">Se muestra a todo lo ancho arriba (tema Mundialista). Recomendado panorámico ~1600×520. Se sube sin recorte.</p>
+            {config.storefrontHeroUrl ? (
+              <div className="relative overflow-hidden rounded-xl" style={{ border: "1px solid var(--bd-1)" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={config.storefrontHeroUrl} alt="Portada" className="w-full object-cover" style={{ maxHeight: 180 }} />
+                <button
+                  type="button"
+                  onClick={() => setConfig(p => ({ ...p, storefrontHeroUrl: "" }))}
+                  className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full"
+                  style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}
+                  aria-label="Quitar imagen"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <label
+                className="flex cursor-pointer items-center justify-center gap-2 rounded-xl py-6 text-sm font-semibold"
+                style={{ border: "1.5px dashed var(--bd-1)", background: "var(--surf-2)", color: "var(--tx-mid)" }}
+              >
+                <Upload size={16} /> {heroUploading ? "Subiendo…" : "Subir imagen de portada"}
+                <input type="file" accept="image/*" className="hidden" onChange={uploadHero} disabled={heroUploading} />
+              </label>
+            )}
+            <input
+              type="text"
+              value={config.storefrontHeroUrl || ""}
+              placeholder="…o pega una URL de imagen"
+              onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, storefrontHeroUrl: v })); }}
+              className={INPUT_CLS}
+              style={{ ...INPUT_STYLE, marginTop: 8 }}
+            />
           </div>
         </WtCard>
 

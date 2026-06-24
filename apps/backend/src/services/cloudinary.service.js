@@ -24,6 +24,10 @@ const upload  = multer({
 const UPLOAD_TRANSFORMS = {
   default: [{ width: 800, height: 800, crop: 'fill', quality: 'auto' }],
   banner:  [{ width: 1280, height: 720, crop: 'fill', quality: 'auto' }],
+  // hero = imagen de portada ancha del storefront. NO recortamos (crop: limit):
+  // solo limitamos el ancho conservando la proporción original, para no perder
+  // los lados de un banner panorámico (p.ej. balón a la izq. y copa a la der.).
+  hero:    [{ width: 1600, crop: 'limit', quality: 'auto' }],
 };
 
 async function uploadImage(buffer, folder = 'menu', mode = 'default') {
