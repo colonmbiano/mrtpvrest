@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Search, X, Plus, Minus, Check, Delete } from "lucide-react";
 import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
 import api from "@/lib/api";
@@ -43,6 +43,11 @@ const FALLBACK_CATEGORIES: CategoryLite[] = PRIORITY_CATEGORIES.map((name) => ({
 // cajero entraba a tomar un pedido (2 round-trips a Railway con spinner). Ahora
 // pintamos al instante lo último cacheado y revalidamos en segundo plano.
 const CATALOG_CACHE_KEY = "tpv-catalog-cache-v1";
+
+// Evento global para forzar una re-descarga del catálogo ignorando el TTL.
+// Lo dispara el botón "Sincronizar" del header (layout) para que un producto
+// recién dado de alta en /admin/menu se vea al instante sin esperar el TTL.
+export const CATALOG_REFRESH_EVENT = "tpv-catalog-refresh";
 
 // El catálogo casi no cambia durante un turno, pero el cajero entra/sale del
 // menú decenas de veces (una por pedido). Revalidar en CADA entrada = 2
@@ -114,6 +119,38 @@ export default function CatalogPage() {
   const [weightProduct, setWeightProduct] = useState<Product | null>(null);
   const [optionsProduct, setOptionsProduct] = useState<Product | null>(null);
 
+  // Re-baja categorías + productos de la nube y refresca estado + cache. La usa
+  // tanto la revalidación en segundo plano (al entrar con cache stale) como el
+  // refresh forzado del botón "Sincronizar" (ignora el TTL).
+  const loadCatalog = useCallback(async () => {
+    try {
+      const [catsRes, itemsRes] = await Promise.allSettled([
+        api.get("/api/menu/categories?admin=true"),
+        api.get("/api/menu/items?admin=true"),
+      ]);
+
+      const cached = readCatalogCache();
+      let nextCats = cached?.categories ?? [];
+      let nextItems = cached?.products ?? [];
+      if (catsRes.status === "fulfilled" && Array.isArray(catsRes.value.data)) {
+        nextCats = catsRes.value.data;
+      }
+      if (itemsRes.status === "fulfilled" && Array.isArray(itemsRes.value.data)) {
+        nextItems = itemsRes.value.data;
+      }
+      setCategories(nextCats);
+      setProducts(nextItems);
+      // Solo cacheamos si al menos una respuesta llegó bien (no pisar con vacío).
+      if (catsRes.status === "fulfilled" || itemsRes.status === "fulfilled") {
+        writeCatalogCache({ categories: nextCats, products: nextItems, fetchedAt: Date.now() });
+      }
+    } catch (error) {
+      console.error("Error loading POS catalog:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -135,47 +172,30 @@ export default function CatalogPage() {
     //    cada entrada disparaba 2 llamadas a Railway aunque el menú no cambie.
     const isFresh =
       !!cached?.fetchedAt && Date.now() - cached.fetchedAt < CATALOG_TTL_MS;
-    if (isFresh) {
-      return () => {
-        cancelled = true;
-      };
+    if (!isFresh) {
+      // Diferido a microtask (igual que el pintado de cache): evita disparar el
+      // set-state de loadCatalog de forma síncrona dentro del effect.
+      queueMicrotask(() => {
+        if (cancelled) return;
+        void loadCatalog();
+      });
     }
 
-    const fetchData = async () => {
-      try {
-        const [catsRes, itemsRes] = await Promise.allSettled([
-          api.get("/api/menu/categories?admin=true"),
-          api.get("/api/menu/items?admin=true"),
-        ]);
-
-        let nextCats = cached?.categories ?? [];
-        let nextItems = cached?.products ?? [];
-        if (catsRes.status === "fulfilled" && Array.isArray(catsRes.value.data)) {
-          nextCats = catsRes.value.data;
-        }
-        if (itemsRes.status === "fulfilled" && Array.isArray(itemsRes.value.data)) {
-          nextItems = itemsRes.value.data;
-        }
-        if (!cancelled) {
-          setCategories(nextCats);
-          setProducts(nextItems);
-        }
-        // Solo cacheamos si al menos una respuesta llegó bien (no pisar con vacío).
-        if (catsRes.status === "fulfilled" || itemsRes.status === "fulfilled") {
-          writeCatalogCache({ categories: nextCats, products: nextItems, fetchedAt: Date.now() });
-        }
-      } catch (error) {
-        console.error("Error loading POS catalog:", error);
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-
-    fetchData();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadCatalog]);
+
+  // Refresh forzado: el botón "Sincronizar" del header dispara este evento para
+  // re-bajar el menú ignorando el TTL (productos/cambios recién hechos en
+  // /admin/menu aparecen de inmediato en vez de esperar la ventana fresca).
+  useEffect(() => {
+    const onRefresh = () => {
+      void loadCatalog();
+    };
+    window.addEventListener(CATALOG_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(CATALOG_REFRESH_EVENT, onRefresh);
+  }, [loadCatalog]);
 
   // Categorías ocultas (isActive=false desde /admin/menu). Sus productos NO se
   // venden ni se muestran en el POS (ni en favoritos, "todos" o búsqueda).
