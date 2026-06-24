@@ -41,6 +41,7 @@ import {
 
 import SidebarTicket from "@/components/pos/SidebarTicket";
 import TopActionsDropdown from "@/components/pos/TopActionsDropdown";
+import { CATALOG_REFRESH_EVENT } from "./page";
 import CatalogSettingsSheet from "@/components/modals/CatalogSettingsSheet";
 import VoiceOrderDictation from "@/components/pos/VoiceOrderDictation";
 import { useUIStore } from "@/store/useUIStore";
@@ -1247,12 +1248,22 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     }
   }, [printers]);
 
-  // Sincronizar ahora: fuerza el envío de la cola offline (también corre sola
-  // en intervalo) y reporta cuántas transacciones quedaban pendientes.
+  // Sincronizar ahora: hace DOS cosas.
+  //   1. Refresca el catálogo (re-baja menú/categorías ignorando el TTL) para
+  //      que un producto recién dado de alta en /admin/menu se vea al instante
+  //      sin esperar la ventana fresca de 5 min.
+  //   2. Vacía la cola offline (también corre sola en intervalo) y reporta
+  //      cuántas transacciones quedaban pendientes.
   const handleSyncNow = useCallback(async () => {
+    // 1. Forzar refresh del catálogo en la página del menú (escucha el evento).
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(CATALOG_REFRESH_EVENT));
+    }
+
+    // 2. Vaciar la cola offline.
     const pending = useOfflineStore.getState().getUnsyncedTransactions().length;
     if (pending === 0) {
-      toast.success("Todo sincronizado ✓");
+      toast.success("Catálogo actualizado ✓");
       return;
     }
     const t = toast.loading(
