@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Syne, DM_Sans } from "next/font/google";
+import { Syne, DM_Sans, Bebas_Neue, Montserrat } from "next/font/google";
 import "./globals.css";
 
 const syne = Syne({
@@ -12,6 +12,21 @@ const dmSans = DM_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "700"],
   variable: "--font-dm-sans",
+});
+
+// Tipografías del tema "Mundialista": Bebas Neue (titulares condensados tipo
+// estadio) + Montserrat (cuerpo/precios/CTAs). Solo las usa ese tema, pero se
+// cargan aquí para aprovechar el self-hosting de next/font (sin FOUT).
+const bebasNeue = Bebas_Neue({
+  subsets: ["latin"],
+  weight: ["400"],
+  variable: "--font-bebas",
+});
+
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-montserrat",
 });
 
 export const metadata: Metadata = {
@@ -51,7 +66,7 @@ const NUMBER_WHEEL_GUARD_SCRIPT = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${syne.variable} ${dmSans.variable}`}>
+    <html lang="es" className={`${syne.variable} ${dmSans.variable} ${bebasNeue.variable} ${montserrat.variable}`}>
       <head>
         {/* Las imágenes (menú, banners, logos) se sirven desde Cloudinary;
             adelantamos la conexión para acelerar la primera carga. */}
