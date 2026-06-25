@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import DriverMovementsModal from "./DriverMovementsModal";
-import type { UserRole } from "@/store/authStore";
+import { useAuthStore, type UserRole } from "@/store/authStore";
 import type { AxiosError } from "axios";
 
 // Panel ligero de rastreo para el TPV: lista de repartidores activos con
@@ -121,7 +121,13 @@ export default function DriversPanel({
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [confirmingAll, setConfirmingAll] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const canViewFinancial = currentRole ? FINANCIAL_ROLES.has(currentRole) : false;
+  // Acceso a la caja del repartidor: por rol financiero (admin/owner/manager) o
+  // por el permiso granular `manage_driver_cash` (ej. un cajero al que el admin
+  // le delega recibir el efectivo del repartidor). De `canViewFinancial` cuelga
+  // ver los resúmenes, abrir el modal de movimientos y cerrar el corte.
+  const canManageDriverCash = useAuthStore((s) => s.hasPermission("manage_driver_cash"));
+  const canViewFinancial =
+    (currentRole ? FINANCIAL_ROLES.has(currentRole) : false) || canManageDriverCash;
 
   async function fetchLive(silent = false) {
     if (!silent) {

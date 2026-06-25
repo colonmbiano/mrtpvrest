@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import api from "@/lib/api";
 import DriversPanel from "@/components/admin/DriversPanel";
+import { useAuthStore } from "@/store/authStore";
 
 jest.mock("@/lib/api", () => ({
   __esModule: true,
@@ -34,6 +35,10 @@ const gpsResponse = {
 describe("DriversPanel", () => {
   beforeEach(() => {
     mockedGet.mockReset();
+    // El permiso granular se guarda en el authStore; lo reseteamos antes de cada
+    // test (sin componente montado, así no dispara warnings de act) para que un
+    // cajero con `manage_driver_cash` no filtre acceso a los demás casos.
+    useAuthStore.setState({ employee: null });
   });
 
   it("muestra el estado operativo al cajero sin solicitar datos de caja", async () => {
@@ -93,6 +98,52 @@ describe("DriversPanel", () => {
       );
     },
   );
+
+  it("habilita la vista financiera al cajero con permiso manage_driver_cash", async () => {
+    // Cajero al que el admin le delegó recibir la caja del repartidor.
+    useAuthStore.setState({
+      employee: {
+        id: "e1",
+        name: "Caja",
+        role: "CASHIER",
+        isActive: true,
+        permissions: ["manage_driver_cash"],
+      },
+    });
+    mockedGet.mockImplementation((url: string) => {
+      if (url === "/api/gps/live") return Promise.resolve(gpsResponse);
+      if (url === "/api/driver-cash/summary/today") {
+        return Promise.resolve({
+          data: [
+            {
+              driver: { id: "driver-1", name: "Mario López" },
+              income: 500,
+              expense: 100,
+              returned: 50,
+              deliveries: 3,
+            },
+          ],
+        });
+      }
+      if (url === "/api/driver-cash/pending-collection") {
+        return Promise.resolve({ data: [] });
+      }
+      return Promise.reject(new Error(`URL inesperada: ${url}`));
+    });
+
+    render(
+      <DriversPanel
+        isOpen
+        onClose={jest.fn()}
+        accent="#ffb84d"
+        currentRole="CASHIER"
+      />,
+    );
+
+    expect(await screen.findByText("Mario López")).toBeInTheDocument();
+    expect(screen.getByText("Ingresos")).toBeInTheDocument();
+    expect(mockedGet).toHaveBeenCalledWith("/api/driver-cash/summary/today");
+  });
 
   it("muestra el error de GPS y permite reintentar", async () => {
     const user = userEvent.setup();

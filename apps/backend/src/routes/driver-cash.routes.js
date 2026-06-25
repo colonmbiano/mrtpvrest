@@ -22,7 +22,25 @@ const upload = multer({
 });
 
 function isStaff(user) {
-  return ['ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'].includes(user?.role);
+  // Roles supervisores + cualquier empleado con el permiso granular
+  // `manage_driver_cash` (típicamente un cajero al que el admin le delega
+  // recibir el efectivo del repartidor — todo se consolida en una sola caja).
+  return ['ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'].includes(user?.role)
+    || user?.canManageDriverCash === true;
+}
+
+// Gate de la caja del repartidor: recibir/cerrar el corte y ver los resúmenes
+// de efectivo. Concede a los roles supervisores y, además, al empleado con el
+// permiso `manage_driver_cash` (vía isStaff). Reemplaza a requireRole en las
+// rutas operativas para que el flag granular surta efecto sin abrir el módulo
+// a todo cajero por rol.
+function requireDriverCashManager(req, res, next) {
+  if (isStaff(req.user)) return next();
+  return res.status(403).json({
+    error: 'No tienes autorización para la caja del repartidor',
+    code: 'PERMISSION_REQUIRED',
+    requiredPermission: 'manage_driver_cash',
+  });
 }
 
 async function assertDriverAccess(req, res) {
@@ -213,7 +231,7 @@ router.patch(
   '/:driverId/orders/:orderId/verify-transfer',
   authenticate,
   requireTenantAccess,
-  requireRole('ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER'),
+  requireDriverCashManager,
   async (req, res) => {
     try {
       const driver = await assertDriverAccess(req, res);
@@ -521,7 +539,7 @@ router.post('/:driverId/shift-request', authenticate, requireTenantAccess, async
 });
 
 // ── Solicitudes de cierre pendientes (admin) ─────────────────────────────
-router.get('/shift-requests', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+router.get('/shift-requests', authenticate, requireTenantAccess, requireDriverCashManager, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const requests = await prisma.driverShiftRequest.findMany({
@@ -532,7 +550,7 @@ router.get('/shift-requests', authenticate, requireTenantAccess, requireRole('AD
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
-router.post('/:driverId/cut', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER'), async (req, res) => {
+router.post('/:driverId/cut', authenticate, requireTenantAccess, requireDriverCashManager, async (req, res) => {
   try {
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
@@ -600,7 +618,7 @@ router.get('/cuts', authenticate, requireTenantAccess, requireAdmin, async (req,
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
-router.get('/summary/today', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+router.get('/summary/today', authenticate, requireTenantAccess, requireDriverCashManager, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const drivers = await prisma.employee.findMany({
@@ -635,7 +653,7 @@ router.get('/summary/today', authenticate, requireTenantAccess, requireRole('ADM
 // Pedidos ENTREGADOS pero sin cobrar (paidAt = null): efectivo que el
 // repartidor aún trae o entregas "por cobrar". Quedan abiertos hasta que la
 // caja confirme el cobro (PUT /api/orders/:id/confirm-cash).
-router.get('/pending-collection', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+router.get('/pending-collection', authenticate, requireTenantAccess, requireDriverCashManager, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const orders = await prisma.order.findMany({
@@ -680,7 +698,7 @@ router.get('/pending-collection', authenticate, requireTenantAccess, requireRole
 // históricos), pero ORDENADOS por actividad de hoy: los que tienen pedidos
 // primero, así el selector arranca en uno con datos y no en un repartidor
 // inactivo (que mostraba "Sin pedidos" engañoso). Incluye `ordersToday`.
-router.get('/drivers', authenticate, requireTenantAccess, requireRole('ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+router.get('/drivers', authenticate, requireTenantAccess, requireDriverCashManager, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     const scoped = req.user?.role !== 'SUPER_ADMIN' && restaurantId;

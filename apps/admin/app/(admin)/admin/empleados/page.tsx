@@ -32,9 +32,9 @@ const ROLES: { value: string; label: string; short: string; icon: LucideIcon; to
 // ROLE_DEFAULTS del backend (employees.routes.js). Solo incluye permisos con
 // enforcement real; las columnas legacy sin operación quedan deprecadas.
 const ROLE_DEFAULTS: Record<string, Record<string, boolean>> = {
-  ADMIN:    { canCharge: true,  canApplyDiscounts: true,  canCancelItems: true,  canReopenTables: true,  canManageUsers: true  },
-  CASHIER:  { canCharge: true,  canApplyDiscounts: true,  canCancelItems: false, canReopenTables: false, canManageUsers: false },
-  WAITER:   { canCharge: false, canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false },
+  ADMIN:    { canCharge: true,  canApplyDiscounts: true,  canCancelItems: true,  canReopenTables: true,  canManageUsers: true,  canManageDriverCash: true  },
+  CASHIER:  { canCharge: true,  canApplyDiscounts: true,  canCancelItems: false, canReopenTables: false, canManageUsers: false, canManageDriverCash: false },
+  WAITER:   { canCharge: false, canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false, canManageDriverCash: false },
   DELIVERY: { canCharge: true,  canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false },
   COOK:     { canCharge: false, canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false },
 };
@@ -46,6 +46,7 @@ const PERMS: { key: string; label: string; icon: LucideIcon }[] = [
   { key: "canCancelItems",    label: "Anular productos enviados",        icon: Trash2     },
   { key: "canReopenTables",   label: "Reabrir cuentas cerradas",         icon: Unlock     },
   { key: "canManageUsers",    label: "Gestionar empleados",              icon: Users      },
+  { key: "canManageDriverCash", label: "Recibir caja de repartidores",   icon: Bike       },
 ];
 
 const emptyForm = {
@@ -53,7 +54,7 @@ const emptyForm = {
   tables: [] as string[], scheduleStart: "", scheduleEnd: "", scheduleDays: [] as string[],
   isActive: true,
   canCharge: false, canApplyDiscounts: false, canCancelItems: false,
-  canReopenTables: false, canManageUsers: false,
+  canReopenTables: false, canManageUsers: false, canManageDriverCash: false,
 };
 
 function roleMeta(value: string) {
@@ -145,6 +146,7 @@ export default function EmpleadosPage() {
         canCancelItems: emp.canCancelItems,
         canReopenTables: emp.canReopenTables,
         canManageUsers: emp.canManageUsers,
+        canManageDriverCash: emp.canManageDriverCash,
       });
     } else {
       setForm({ ...emptyForm, ...ROLE_DEFAULTS.WAITER });

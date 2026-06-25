@@ -43,6 +43,10 @@ describe('mapPermissions', () => {
     expect(perms).toEqual([]);
   });
 
+  it('mapea canManageDriverCash a manage_driver_cash', () => {
+    expect(mapPermissions({ canManageDriverCash: true })).toEqual(['manage_driver_cash']);
+  });
+
   it('tolera entrada nula/vacía', () => {
     expect(mapPermissions(null)).toEqual([]);
     expect(mapPermissions({})).toEqual([]);
@@ -63,6 +67,7 @@ describe('PERM_TO_FLAG / FLAG_TO_PERM', () => {
       reopen_table: 'canReopenTables',
       manage_users: 'canManageUsers',
       open_cash_drawer: 'canCharge',
+      manage_driver_cash: 'canManageDriverCash',
     });
   });
 });
