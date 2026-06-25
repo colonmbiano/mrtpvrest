@@ -1,33 +1,24 @@
 import Image from 'next/image'
 import Link from 'next/link'
-
-const adminUrl = 'https://admin.mrtpvrest.com'
-const registerUrl = `${adminUrl}/register`
-const loginUrl = `${adminUrl}/login`
-const apkUrls = {
-  tpv: `${adminUrl}/apks/tpv-debug.apk`,
-  kiosk: `${adminUrl}/apks/kiosk-debug.apk`,
-  kds: `${adminUrl}/apks/kds-debug.apk`,
-  delivery: `${adminUrl}/apks/delivery-debug.apk`,
-  meseros: `${adminUrl}/apks/meseros-lite-debug.apk`,
-} as const
-const apkUrl = apkUrls.tpv
+import { APKS, FUNCIONES } from '../lib/links'
+import { siteUrl, registerUrl, loginUrl } from './_data/site'
+import { DownloadButton } from './_components/DownloadButton'
 
 const apps = [
-  { src: '/showcase-warm/app-cliente.png', title: 'App Cliente', text: 'Pedidos QR y online sin perder control.', tone: 'sage', href: '#apps' },
-  { src: '/showcase-warm/kiosko.png', title: 'Kiosko', text: 'Autoservicio rápido para horas pico.', tone: 'amber', href: apkUrls.kiosk },
-  { src: '/showcase-warm/tpv.png', title: 'TPV', text: 'Cobro, mesas, tickets y caja en una pantalla.', tone: 'orange', href: apkUrls.tpv },
-  { src: '/showcase-warm/kds.png', title: 'KDS', text: 'Cocina recibe ordenes al instante.', tone: 'ember', href: apkUrls.kds },
-  { src: '/showcase-warm/delivery.png', title: 'Delivery', text: 'Reparto conectado con operación y caja.', tone: 'steel', href: apkUrls.delivery },
-  { src: '/showcase-warm/admin.png', title: 'Admin', text: 'Reportes, inventario y permisos por rol.', tone: 'gold', href: loginUrl },
+  { src: '/showcase-warm/app-cliente.png', title: 'App Cliente', text: 'Pedidos QR y online sin perder control.', tone: 'sage', href: FUNCIONES.appCliente },
+  { src: '/showcase-warm/kiosko.png', title: 'Kiosko', text: 'Autoservicio rápido para horas pico.', tone: 'amber', href: FUNCIONES.kiosko },
+  { src: '/showcase-warm/tpv.png', title: 'TPV', text: 'Cobro, mesas, tickets y caja en una pantalla.', tone: 'orange', href: FUNCIONES.tpv },
+  { src: '/showcase-warm/kds.png', title: 'KDS', text: 'Cocina recibe ordenes al instante.', tone: 'ember', href: FUNCIONES.kds },
+  { src: '/showcase-warm/delivery.png', title: 'Delivery', text: 'Reparto conectado con operación y caja.', tone: 'steel', href: FUNCIONES.delivery },
+  { src: '/showcase-warm/admin.png', title: 'Admin', text: 'Reportes, inventario y permisos por rol.', tone: 'gold', href: FUNCIONES.admin },
 ] as const
 
 const apkDownloads = [
-  ['TPV', apkUrls.tpv],
-  ['Kiosko', apkUrls.kiosk],
-  ['KDS', apkUrls.kds],
-  ['Delivery', apkUrls.delivery],
-  ['Meseros Lite', apkUrls.meseros],
+  ['TPV', APKS.tpv],
+  ['Kiosko', APKS.kiosko],
+  ['KDS', APKS.kds],
+  ['Delivery', APKS.delivery],
+  ['Meseros Lite', APKS.meserosLite],
 ] as const
 
 const pains = [
@@ -97,8 +88,6 @@ const faqs = [
   ['¿El precio es en dólares?', 'Los planes se muestran en USD con equivalentes aproximados en MXN para que puedas comparar rápido.'],
   ['¿Qué pasa cuando termina el trial?', 'Decides si sigues con un plan. No necesitas tarjeta para probar y no hay bloqueo de datos al evaluar.'],
 ] as const
-
-const siteUrl = 'https://mrtpvrest.com'
 
 const structuredData = {
   '@context': 'https://schema.org',
@@ -198,7 +187,7 @@ export default function HomePage() {
             <div className="hero-actions">
               <a className="btn btn-primary" href={registerUrl}>Registrar mi restaurante</a>
               <Link className="btn btn-soft" href="/demo">Ver demo</Link>
-              <a className="btn btn-line" href={apkUrl} download>Descargar TPV</a>
+              <DownloadButton apkUrl={APKS.tpv} label="Descargar TPV" requestLabel="Solicitar acceso" className="btn btn-line" />
             </div>
             <div className="trust-row" aria-label="Beneficios de confianza">
               <span>14 días gratis</span>
@@ -249,21 +238,19 @@ export default function HomePage() {
             <p>Cada pantalla trabaja para un rol distinto, todas comparten la misma verdad del restaurante.</p>
           </div>
           <div className="apps-grid">
-            {apps.map((app, index) => (
-              <a className={`app-card ${app.tone}`} href={app.href} key={app.title}>
+            {apps.map((app) => (
+              <Link className={`app-card ${app.tone}`} href={app.href} key={app.title}>
                 <Image src={app.src} alt={`${app.title}: ${app.text}`} width={1536} height={672} loading="lazy" sizes="(max-width: 900px) 100vw, 50vw" />
                 <span>
                   <strong>{app.title}</strong>
                   <small>{app.text}</small>
                 </span>
-              </a>
+              </Link>
             ))}
           </div>
           <div className="apk-downloads" aria-label="Descargas Android">
             {apkDownloads.map(([label, href]) => (
-              <a href={href} download key={label}>
-                Descargar {label}
-              </a>
+              <DownloadButton apkUrl={href} label={`Descargar ${label}`} requestLabel={`Solicitar ${label}`} key={label} />
             ))}
           </div>
           <div className="apk-downloads" aria-label="Explora las funciones">
@@ -398,7 +385,7 @@ export default function HomePage() {
           <Link href="/comparativa/parrot">Comparativas</Link>
           <a href="#precios">Precios</a>
           <a href="mailto:contacto@mrtpvrest.com">Contacto</a>
-          <a href={apkUrl} download>APK</a>
+          <DownloadButton apkUrl={APKS.tpv} label="APK" requestLabel="Solicitar acceso" />
         </div>
       </footer>
     </>
