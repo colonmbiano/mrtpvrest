@@ -1429,6 +1429,7 @@ model Employee {
   canReopenTables   Boolean @default(false) // Reabrir una cuenta cerrada
   canManageUsers    Boolean @default(false) // Crear/editar otros empleados
   canViewExpectedCash Boolean @default(false) // Ver el efectivo esperado en el corte (rompe el corte ciego para este empleado)
+  canManageDriverCash Boolean @default(false) // Recibir/cerrar el corte de los repartidores (caja del repartidor) sin ser admin
 
   shifts       EmployeeShift[]
   shiftsOpened CashShift[]     @relation("ShiftOpenedBy")

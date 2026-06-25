@@ -39,6 +39,7 @@ export type Permission =
   | "manage_users" // crear/editar empleados
   | "open_cash_drawer" // abrir cajón / cobrar
   | "view_expected_cash" // ver el efectivo esperado en el corte (rompe el corte ciego)
+  | "manage_driver_cash" // recibir/cerrar el corte de los repartidores (caja del repartidor)
   // ── Legacy (aún referenciados por UI/ tests; sin enforcement de backend) ──
   | "void_item"
   | "void_order"
