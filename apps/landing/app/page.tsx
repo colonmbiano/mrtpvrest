@@ -10,7 +10,7 @@ const apps = [
   { src: '/showcase-warm/app-cliente.png', title: 'App Cliente', text: 'Pedidos QR y online sin perder control.', tone: 'sage', href: FUNCIONES.appCliente },
   { src: '/showcase-warm/kiosko.png', title: 'Kiosko', text: 'Autoservicio rápido para horas pico.', tone: 'amber', href: FUNCIONES.kiosko },
   { src: '/showcase-warm/tpv.png', title: 'TPV', text: 'Cobro, mesas, tickets y caja en una pantalla.', tone: 'orange', href: FUNCIONES.tpv },
-  { src: '/showcase-warm/kds.png', title: 'KDS', text: 'Cocina recibe ordenes al instante.', tone: 'ember', href: FUNCIONES.kds },
+  { src: '/showcase-warm/kds.png', title: 'KDS', text: 'Cocina recibe órdenes al instante.', tone: 'ember', href: FUNCIONES.kds },
   { src: '/showcase-warm/delivery.png', title: 'Delivery', text: 'Reparto conectado con operación y caja.', tone: 'steel', href: FUNCIONES.delivery },
   { src: '/showcase-warm/admin.png', title: 'Admin', text: 'Reportes, inventario y permisos por rol.', tone: 'gold', href: FUNCIONES.admin },
 ] as const
@@ -26,7 +26,7 @@ const apkDownloads = [
 const pains = [
   ['Cuentas dispersas', 'Ventas en cuaderno, Excel y memoria.', 'Dashboard vivo con ventas, caja y turnos al minuto.'],
   ['Pedidos perdidos', 'Meseros, cocina y delivery hablan por separado.', 'TPV, KDS y apps sincronizadas en tiempo real.'],
-  ['Poco control', 'Empleados sin roles claros ni historial confiable.', 'Permisos, auditoria y operación multi-sucursal.'],
+  ['Poco control', 'Empleados sin roles claros ni historial confiable.', 'Permisos, auditoría y operación multi-sucursal.'],
 ] as const
 
 const steps = [
@@ -151,9 +151,9 @@ export default function HomePage() {
         <div className="nav-links" aria-label="Navegación principal">
           <Link href="/funciones">Funciones</Link>
           <Link href="/punto-de-venta">Giros</Link>
+          <Link href="/blog">Blog</Link>
           <a href="#precios">Precios</a>
           <Link href="/comparativa/parrot">Comparativas</Link>
-          <a href="#faq">FAQ</a>
         </div>
         <div className="nav-actions">
           <a className="nav-login" href={loginUrl}>Entrar</a>
@@ -197,7 +197,7 @@ export default function HomePage() {
 
         <section className="proof-strip" aria-label="Indicadores principales">
           <div><strong>6</strong><span>apps conectadas</span></div>
-          <div><strong>0 lag</strong><span>flujo operativo</span></div>
+          <div><strong>Sin esperas</strong><span>flujo operativo</span></div>
           <div><strong>24/7</strong><span>lectura de negocio</span></div>
           <div><strong>LATAM</strong><span>diseño para restaurantes reales</span></div>
         </section>
