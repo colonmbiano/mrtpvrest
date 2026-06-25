@@ -9,7 +9,7 @@ const rateLimit  = require('express-rate-limit')
 const { refreshLimiter, resendVerifyLimiter } = require('../lib/rate-limiters')
 const { sendEmail, verificationEmailHtml } = require('../utils/mailer')
 const { verifyTurnstile } = require('../lib/turnstile')
-const { isDisposableEmail } = require('../lib/email-domains')
+const { isDisposableEmail, normalizeEmail } = require('../lib/email-domains')
 const log = require('../lib/logger')('auth')
 
 const router = express.Router()
@@ -32,10 +32,16 @@ router.post('/login', loginLimiter, async (req, res) => {
     const { email, password } = req.body
     if (!email || !password) return res.status(400).json({ error: 'Email y contrasena requeridos' })
 
-    const user = await runWithBypass(() => prisma.user.findUnique({
-      where: { email },
-      include: { restaurant: true, tenant: true } // Traemos info de restaurante y tenant
-    }))
+    // Lookup por email canónico (mismo criterio que el registro). Fallback a la
+    // forma cruda en minúsculas para cuentas legacy guardadas con puntos/+tag
+    // antes de la normalización — así no se regresiona su login.
+    const normEmail = normalizeEmail(email)
+    const rawEmail  = String(email).trim().toLowerCase()
+    const include   = { restaurant: true, tenant: true } // Info de restaurante y tenant
+    let user = await runWithBypass(() => prisma.user.findUnique({ where: { email: normEmail }, include }))
+    if (!user && rawEmail && rawEmail !== normEmail) {
+      user = await runWithBypass(() => prisma.user.findUnique({ where: { email: rawEmail }, include }))
+    }
 
     if (!user || !user.isActive) return res.status(401).json({ error: 'Credenciales incorrectas o cuenta inactiva' })
 
@@ -177,6 +183,15 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
     })
   }
 
+  // Email canónico: colapsa variantes de la misma bandeja (Gmail +/. y
+  // subdirecciones) para que el chequeo de duplicado y la auto-purga no se
+  // puedan evadir con colon+1@gmail.com, c.o.l.o.n@gmail.com, etc. Se almacena
+  // y se notifica a esta forma (entregable al mismo inbox).
+  const normalizedEmail = normalizeEmail(email)
+  if (!normalizedEmail || !normalizedEmail.includes('@')) {
+    return res.status(400).json({ error: 'Correo electrónico no válido' })
+  }
+
   // Slug a partir del nombre del restaurante
   const slug = restaurantName
     .toLowerCase()
@@ -187,7 +202,7 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
   try {
     // Validaciones previas
     const [emailTaken, slugTaken] = await Promise.all([
-      runWithBypass(() => prisma.user.findUnique({ where: { email: email.toLowerCase() } })),
+      runWithBypass(() => prisma.user.findUnique({ where: { email: normalizedEmail } })),
       prisma.tenant.findUnique({ where: { slug } }),
     ])
 
@@ -215,7 +230,7 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
         data: {
           name:          restaurantName,
           slug,
-          ownerEmail:    email.toLowerCase(),
+          ownerEmail:    normalizedEmail,
           onboardingStep: 0,
           onboardingDone: false,
         }
@@ -290,7 +305,7 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
           tenantId:     t.id,
           restaurantId: r.id,
           name:         ownerName,
-          email:        email.toLowerCase(),
+          email:        normalizedEmail,
           passwordHash,
           role:         'ADMIN',
           isActive:     true,
@@ -343,13 +358,13 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
       locationId: location?.id || null,
       planId: plan.id,
       planName: plan.name,
-      email: email.toLowerCase(),
+      email: normalizedEmail,
     })
 
     // Enviar email (sin bloquear la respuesta)
     const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/verify-email?token=${verificationToken}`
     sendEmail(
-      email.toLowerCase(),
+      normalizedEmail,
       `Verifica tu cuenta de ${restaurantName} — MRTPVREST`,
       verificationEmailHtml(ownerName, restaurantName, verifyUrl)
     ).catch(err => log.error('register.email.failed', { tenantId: tenant.id, err }))

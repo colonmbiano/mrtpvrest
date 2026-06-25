@@ -40,4 +40,51 @@ function isDisposableEmail(email) {
   return false
 }
 
-module.exports = { isDisposableEmail, DISPOSABLE_DOMAINS, BLOCKED_TLDS }
+// Dominios que tratan el sufijo "+etiqueta" del local-part como subdirección y
+// lo entregan a la MISMA bandeja (RFC 5233). Para ellos, user+x@dom y user@dom
+// son la misma persona. Gmail además ignora los puntos del local-part.
+const PLUS_SUBADDRESS_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com',
+  'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+  'icloud.com', 'me.com',
+  'proton.me', 'protonmail.com',
+  'yahoo.com', 'fastmail.com',
+])
+const GMAIL_DOMAINS = new Set(['gmail.com', 'googlemail.com'])
+
+/**
+ * Canonicaliza un email para deduplicación y lookup de login. Sin esto, un bot
+ * evade el chequeo de "email ya registrado" (y la auto-purga) creando variantes
+ * infinitas de una misma bandeja: colon+1@gmail.com, colon+2@gmail.com,
+ * c.o.l.o.n@gmail.com… todas Gmail reales (no caen en la denylist de
+ * desechables) pero el mismo inbox. Es el mismo abuso de registro masivo, por
+ * otra puerta. Solo se normaliza para proveedores que de hecho colapsan esas
+ * variantes a una sola bandeja, para no romper la entrega a dominios propios
+ * que sí tratan "+tag" como dirección literal.
+ * @param {string} email
+ * @returns {string} email canónico en minúsculas (o '' si es inválido).
+ */
+function normalizeEmail(email) {
+  if (!email || typeof email !== 'string') return ''
+  const trimmed = email.trim().toLowerCase()
+  const at = trimmed.lastIndexOf('@')
+  if (at <= 0) return trimmed
+  let local = trimmed.slice(0, at)
+  const domain = trimmed.slice(at + 1)
+  if (PLUS_SUBADDRESS_DOMAINS.has(domain)) {
+    const plus = local.indexOf('+')
+    if (plus >= 0) local = local.slice(0, plus)
+  }
+  if (GMAIL_DOMAINS.has(domain)) {
+    local = local.replace(/\./g, '')
+  }
+  return local ? `${local}@${domain}` : trimmed
+}
+
+module.exports = {
+  isDisposableEmail,
+  normalizeEmail,
+  DISPOSABLE_DOMAINS,
+  BLOCKED_TLDS,
+  PLUS_SUBADDRESS_DOMAINS,
+}

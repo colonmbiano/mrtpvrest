@@ -30,6 +30,8 @@ const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
 const { addLoyaltyPoints, genLoyaltyQr } = require('../services/loyalty.service');
 const { runOrderDictationSmart } = require('../services/order-dictation.service');
+const { storeOrderLimiter, customerRegisterLimiter, customerLoginLimiter } = require('../lib/rate-limiters');
+const { normalizeEmail } = require('../lib/email-domains');
 const router = express.Router();
 
 // Throttle ligero del parseo de pedidos por IA (público). Protege la cuota de
@@ -417,7 +419,7 @@ router.get('/locations', async (req, res) => {
 });
 
 // ── POST /api/store/orders ───────────────────────────────────────────────────
-router.post('/orders', async (req, res) => {
+router.post('/orders', storeOrderLimiter, async (req, res) => {
   const store = await resolveStore(req, res);
   if (!store) return;
   const { restaurant, location } = store;
@@ -1224,13 +1226,15 @@ function requireCustomer(req, res, next) {
 }
 
 // POST /api/store/customer/register  { name, email, password, phone }
-router.post('/customer/register', async (req, res) => {
+router.post('/customer/register', customerRegisterLimiter, async (req, res) => {
   const store = await resolveStore(req, res);
   if (!store) return;
   const { restaurant } = store;
   try {
     const name = String(req.body?.name || '').trim();
-    const email = String(req.body?.email || '').trim().toLowerCase();
+    // Canónico: evita cuentas CUSTOMER duplicadas vía Gmail +/. (mismo bypass
+    // que en el registro de tenants).
+    const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || '');
     const phone = String(req.body?.phone || '').trim() || null;
 
@@ -1258,19 +1262,22 @@ router.post('/customer/register', async (req, res) => {
 });
 
 // POST /api/store/customer/login  { email, password }
-router.post('/customer/login', async (req, res) => {
+router.post('/customer/login', customerLoginLimiter, async (req, res) => {
   const store = await resolveStore(req, res);
   if (!store) return;
   const { restaurant } = store;
   try {
-    const email = String(req.body?.email || '').trim().toLowerCase();
+    const rawEmail = String(req.body?.email || '').trim().toLowerCase();
+    const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || '');
     if (!email || !password) return res.status(400).json({ error: 'Correo y contraseña requeridos.' });
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true, name: true, email: true, phone: true, role: true, restaurantId: true, tenantId: true, isActive: true, passwordHash: true },
-    });
+    const sel = { id: true, name: true, email: true, phone: true, role: true, restaurantId: true, tenantId: true, isActive: true, passwordHash: true };
+    let user = await prisma.user.findUnique({ where: { email }, select: sel });
+    // Fallback para cuentas legacy guardadas con puntos/+tag antes de normalizar.
+    if (!user && rawEmail && rawEmail !== email) {
+      user = await prisma.user.findUnique({ where: { email: rawEmail }, select: sel });
+    }
     if (!user || !user.isActive || user.role !== 'CUSTOMER' || user.restaurantId !== restaurant.id) {
       return res.status(401).json({ error: 'Credenciales incorrectas.' });
     }

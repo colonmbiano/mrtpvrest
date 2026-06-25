@@ -25,8 +25,18 @@ let warnedMissing = false
 async function verifyTurnstile(token, remoteip) {
   const secret = process.env.TURNSTILE_SECRET_KEY
   if (!secret) {
+    // En producción la ausencia de la key es una MISCONFIGURACIÓN, no un modo
+    // dev: fallar abierto reabriría el vector de spam de bots que esto cerró.
+    // Fallamos cerrado salvo opt-out explícito (TURNSTILE_OPTIONAL=true).
+    if (process.env.NODE_ENV === 'production' && process.env.TURNSTILE_OPTIONAL !== 'true') {
+      log.error('turnstile.misconfigured', {
+        msg: 'TURNSTILE_SECRET_KEY ausente en producción — registro bloqueado. ' +
+             'Configura la key en el entorno o setea TURNSTILE_OPTIONAL=true para omitir a propósito.',
+      })
+      return { ok: false, reason: 'captcha-misconfigured' }
+    }
     if (!warnedMissing) {
-      log.warn('turnstile.disabled', { msg: 'TURNSTILE_SECRET_KEY ausente — CAPTCHA desactivado' })
+      log.warn('turnstile.disabled', { msg: 'TURNSTILE_SECRET_KEY ausente — CAPTCHA desactivado (dev/opt-out)' })
       warnedMissing = true
     }
     return { ok: true, skipped: true }

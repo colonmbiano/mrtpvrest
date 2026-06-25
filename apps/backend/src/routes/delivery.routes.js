@@ -4,7 +4,21 @@ const jwt = require('jsonwebtoken');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const { localDayRange } = require('../utils/dayRange');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
+
+// Login de repartidor = teléfono + PIN numérico (4 dígitos → 10k combinaciones).
+// Esta ruta está EXCLUIDA del rate-limit global (index.js salta /api/delivery/),
+// así que sin este limiter dedicado la fuerza bruta del PIN es trivial. Keyed
+// por IP; 10 intentos / 15 min corta el barrido sin molestar a repartidores
+// legítimos que erran el PIN un par de veces.
+const driverLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos de inicio de sesión. Espera 15 minutos.' },
+});
 
 const STAFF_ROLES = ['CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'];
 
@@ -85,7 +99,7 @@ async function ensureCashOnDeliveryMovement(order) {
 }
 
 // Legacy login by phone + PIN. New clients should prefer /api/employees/login.
-router.post('/login', async (req, res) => {
+router.post('/login', driverLoginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     const restaurantId = req.restaurantId || req.headers['x-restaurant-id'] || null;
