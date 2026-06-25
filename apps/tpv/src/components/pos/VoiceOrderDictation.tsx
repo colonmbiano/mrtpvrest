@@ -7,39 +7,30 @@ import { Capacitor } from "@capacitor/core";
 import { SpeechRecognition as NativeSpeech } from "@capacitor-community/speech-recognition";
 import api from "@/lib/api";
 import { hapticError, hapticLight, hapticSuccess } from "@/lib/haptics";
-import {
-  COMPLEMENT_MODIFIER_PREFIX,
-  VARIANT_MODIFIER_PREFIX,
-} from "@/lib/modifiers";
-import {
-  useTicketStore,
-  type CartItem,
-  type ModifierSelection,
-  type Product,
-} from "@/store/ticketStore";
+import { useTicketStore, type CartItem, type Product } from "@/store/ticketStore";
+import VoiceDictationReviewSheet, {
+  type VoiceDictationItem,
+  type VoiceReviewHandle,
+} from "./VoiceDictationReviewSheet";
 
 type SpeechRecognition = any;
 type Status = "idle" | "listening" | "processing" | "error";
 
-type DictationItem = {
-  menuItemId: string;
-  quantity: number;
-  notes?: string;
-  needsReview?: boolean;
-  selections?: {
-    selectedVariant?: { id: string; name: string; price: number } | null;
-    selectedVariants?: { id: string; name: string; price: number }[];
-    selectedModifiers?: {
-      id: string;
-      groupId: string;
-      name: string;
-      priceAdd: number;
-    }[];
-    selectedComplements?: { id: string; name: string; price: number }[];
-    unitPrice?: number;
-  };
-  product: Product;
-};
+// Mismo cache que el catálogo del POS (app/pos/menu/page.tsx). Lo leemos para
+// que la hoja de revisión pueda buscar productos y agregarlos a mano.
+const CATALOG_CACHE_KEY = "tpv-catalog-cache-v1";
+
+function readCatalogProducts(): Product[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(CATALOG_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.products) ? (parsed.products as Product[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 export default function VoiceOrderDictation() {
   const [status, setStatus] = useState<Status>("idle");
@@ -48,6 +39,15 @@ export default function VoiceOrderDictation() {
   const isNative = Capacitor.isNativePlatform();
 
   const addItemToActive = useTicketStore((s) => s.addItemToActive);
+
+  // Estado de la hoja de revisión. El dictado YA NO entra directo al ticket:
+  // primero el cajero revisa/corrige en VoiceDictationReviewSheet y confirma.
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewItems, setReviewItems] = useState<VoiceDictationItem[]>([]);
+  const [reviewUnresolved, setReviewUnresolved] = useState<string[]>([]);
+  const [reviewTranscript, setReviewTranscript] = useState("");
+  const [catalog, setCatalog] = useState<Product[]>([]);
+  const sheetRef = useRef<VoiceReviewHandle>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -81,82 +81,60 @@ export default function VoiceOrderDictation() {
     };
   }, [isNative]);
 
-  async function sendDictation(prompt: string) {
+  function closeReview() {
+    setReviewOpen(false);
+    setReviewItems([]);
+    setReviewUnresolved([]);
+    setReviewTranscript("");
+  }
+
+  function handleConfirm(cartItems: CartItem[]) {
+    cartItems.forEach((item) => addItemToActive(item));
+    hapticSuccess();
+    const n = cartItems.length;
+    toast.success(`${n} producto${n === 1 ? "" : "s"} agregado${n === 1 ? "" : "s"} al ticket`);
+    closeReview();
+  }
+
+  // append=true cuando viene de "Dictar más" dentro de la hoja: concatena los
+  // nuevos items en vez de reemplazar la revisión en curso.
+  async function sendDictation(prompt: string, append: boolean) {
+    // En modo "Dictar más": primero probamos si es un COMANDO sobre la revisión
+    // en curso (quita X, otra, que sea grande, sin cebolla…). Si la hoja lo
+    // maneja, no hace falta llamar al backend a agregar.
+    if (append && sheetRef.current?.applyVoiceCommand(prompt)) {
+      hapticSuccess();
+      setStatus("idle");
+      return;
+    }
+
     setStatus("processing");
     const toastId = toast.loading(`Escuchado: "${prompt}"`);
     try {
       const { data } = await api.post("/api/ai/order-dictation", { prompt });
-      const items: DictationItem[] = Array.isArray(data?.items) ? data.items : [];
+      const items: VoiceDictationItem[] = Array.isArray(data?.items) ? data.items : [];
+      const unresolved: string[] = Array.isArray(data?.unresolved) ? data.unresolved : [];
+
       if (items.length === 0) {
         hapticError();
-        toast.error(data?.message || "No encontre productos del menu", { id: toastId });
+        if (append) {
+          toast.info("No agregué nada nuevo", { id: toastId });
+        } else {
+          toast.error(data?.message || "No encontré productos del menú", { id: toastId });
+        }
         return;
       }
 
-      let added = 0;
-      let review = 0;
-      for (const item of items) {
-        const product = item.product;
-        const selections = item.selections;
-        const selectedVariant = selections?.selectedVariant || null;
-        const modifiers: ModifierSelection[] = [
-          ...(selections?.selectedModifiers || []).map((modifier) => ({
-            id: modifier.id,
-            groupId: modifier.groupId,
-            name: modifier.name,
-            priceAdd: Number(modifier.priceAdd || 0),
-          })),
-          ...(selections?.selectedVariants || []).map((variant) => ({
-            id: `${VARIANT_MODIFIER_PREFIX}${variant.id}`,
-            groupId: "__variants",
-            name: variant.name,
-            priceAdd: Number(variant.price || 0),
-          })),
-          ...(selections?.selectedComplements || []).map((complement) => ({
-            id: `${COMPLEMENT_MODIFIER_PREFIX}${complement.id}`,
-            groupId: "__complements",
-            name: complement.name,
-            priceAdd: Number(complement.price || 0),
-          })),
-        ];
-        const unit = Number(
-          selections?.unitPrice ??
-            selectedVariant?.price ??
-            product.promoPrice ??
-            product.price ??
-            0,
-        );
-        const quantity = Math.max(1, Math.min(99, Number(item.quantity || 1)));
-        const notes = item.notes?.trim() || undefined;
-        const baseName = product.name;
-
-        for (let i = 0; i < quantity; i += 1) {
-          const cartItem: CartItem = {
-            ...product,
-            menuItemId: item.menuItemId,
-            quantity: 1,
-            subtotal: unit,
-            price: unit,
-            originalPrice: product.price,
-            baseName,
-            variantId: selectedVariant?.id ?? null,
-            variantName: selectedVariant?.name ?? null,
-            name: selectedVariant ? `${baseName} (${selectedVariant.name})` : baseName,
-            modifiers,
-            notes,
-          };
-          addItemToActive(cartItem);
-          added += 1;
-        }
-        if (item.needsReview) review += 1;
-      }
-
-      const unresolved = Array.isArray(data?.unresolved) ? data.unresolved : [];
-      const suffix = unresolved.length > 0 ? ` · sin reconocer: ${unresolved.join(", ")}` : "";
-      if (review > 0) {
-        toast.warning(`${added} agregado(s). Revisa variantes/modificadores${suffix}`, { id: toastId });
+      toast.dismiss(toastId);
+      if (append) {
+        setReviewItems((prev) => [...prev, ...items]);
+        setReviewUnresolved((prev) => [...prev, ...unresolved]);
       } else {
-        toast.success(`${added} producto(s) agregado(s) al ticket${suffix}`, { id: toastId });
+        setCatalog(readCatalogProducts());
+        setReviewItems(items);
+        setReviewUnresolved(unresolved);
+        setReviewTranscript(prompt);
+        setReviewOpen(true);
       }
       hapticSuccess();
     } catch (err: any) {
@@ -172,12 +150,12 @@ export default function VoiceOrderDictation() {
     }
   }
 
-  async function startNativeDictation() {
+  async function startNativeDictation(append: boolean) {
     try {
       const perm = await NativeSpeech.requestPermissions();
       if (perm.speechRecognition !== "granted") {
         hapticError();
-        toast.error("Permiso de microfono denegado");
+        toast.error("Permiso de micrófono denegado");
         return;
       }
 
@@ -192,7 +170,7 @@ export default function VoiceOrderDictation() {
         popup: false,
       });
       const text = String(matches?.[0] || "").trim();
-      if (text) await sendDictation(text);
+      if (text) await sendDictation(text, append);
       else setStatus("idle");
     } catch (err: any) {
       setStatus("error");
@@ -202,24 +180,7 @@ export default function VoiceOrderDictation() {
     }
   }
 
-  function handleClick() {
-    if (!supported) {
-      toast.error("Dictado por voz no disponible en este dispositivo");
-      hapticError();
-      return;
-    }
-    if (status === "processing") return;
-    if (status === "listening") {
-      if (isNative) NativeSpeech.stop().catch(() => {});
-      else recognitionRef.current?.stop();
-      return;
-    }
-
-    if (isNative) {
-      startNativeDictation();
-      return;
-    }
-
+  function startWebRecognition(append: boolean) {
     const SR =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
@@ -238,14 +199,14 @@ export default function VoiceOrderDictation() {
       hapticError();
       toast.error(
         ev?.error === "not-allowed"
-          ? "Permiso de microfono denegado"
+          ? "Permiso de micrófono denegado"
           : `Error de dictado: ${ev?.error || "desconocido"}`,
       );
       setTimeout(() => setStatus("idle"), 900);
     };
     rec.onresult = (ev: any) => {
       const text = ev?.results?.[0]?.[0]?.transcript || "";
-      if (text.trim()) sendDictation(text.trim());
+      if (text.trim()) sendDictation(text.trim(), append);
       else setStatus("idle");
     };
     rec.onend = () => {
@@ -260,30 +221,62 @@ export default function VoiceOrderDictation() {
     }
   }
 
+  function startListening(append: boolean) {
+    if (!supported) {
+      toast.error("Dictado por voz no disponible en este dispositivo");
+      hapticError();
+      return;
+    }
+    if (status === "processing") return;
+    if (status === "listening") {
+      if (isNative) NativeSpeech.stop().catch(() => {});
+      else recognitionRef.current?.stop();
+      return;
+    }
+    if (isNative) startNativeDictation(append);
+    else startWebRecognition(append);
+  }
+
   const active = status === "listening";
   const busy = status === "processing";
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      title={supported === false ? "Dictado no disponible" : "Dictar pedido"}
-      aria-label="Dictar pedido"
-      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-slate-950 ${
-        active
-          ? "border-red-700 bg-red-600 text-white"
-          : busy
-            ? "border-blue-700 bg-blue-600 text-white"
-            : "border-slate-300 bg-slate-100 text-slate-950 active:bg-slate-200"
-      }`}
-    >
-      {busy ? (
-        <Loader2 size={22} strokeWidth={3} className="animate-spin" />
-      ) : active ? (
-        <MicOff size={22} strokeWidth={3} />
-      ) : (
-        <Mic size={22} strokeWidth={3} />
+    <>
+      <button
+        type="button"
+        onClick={() => startListening(false)}
+        title={supported === false ? "Dictado no disponible" : "Dictar pedido"}
+        aria-label="Dictar pedido"
+        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-iris-500 ${
+          active
+            ? "border-danger bg-danger text-white"
+            : busy
+              ? "border-iris-600 bg-iris-500 text-iris-fg"
+              : "border-bd bg-surf-2 text-tx-pri active:bg-surf-3"
+        }`}
+      >
+        {busy ? (
+          <Loader2 size={22} strokeWidth={3} className="animate-spin" />
+        ) : active ? (
+          <MicOff size={22} strokeWidth={3} />
+        ) : (
+          <Mic size={22} strokeWidth={3} />
+        )}
+      </button>
+
+      {reviewOpen && (
+        <VoiceDictationReviewSheet
+          ref={sheetRef}
+          transcript={reviewTranscript}
+          items={reviewItems}
+          unresolved={reviewUnresolved}
+          catalog={catalog}
+          listening={active}
+          onConfirm={handleConfirm}
+          onClose={closeReview}
+          onDictateMore={() => startListening(true)}
+        />
       )}
-    </button>
+    </>
   );
 }
