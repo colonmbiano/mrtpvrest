@@ -268,6 +268,7 @@ export default function HomePage() {
           </div>
           <div className="apk-downloads" aria-label="Explora las funciones">
             <Link href="/funciones/punto-de-venta">Punto de venta</Link>
+            <Link href="/funciones/asistente-de-voz">Asistente de voz</Link>
             <Link href="/funciones/kds-cocina">KDS de cocina</Link>
             <Link href="/funciones/delivery">Delivery</Link>
             <Link href="/funciones/kiosko">Kiosko</Link>

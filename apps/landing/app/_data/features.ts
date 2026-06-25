@@ -203,6 +203,35 @@ export const features: Feature[] = [
       ['¿Qué necesito para activar la autofactura por QR?', 'Configura en los ajustes del ticket el RFC del emisor, el prefijo de folio y la URL de tu portal de facturación; el recibo empieza a imprimir el bloque de factura con su QR.'],
     ],
   },
+  {
+    slug: 'asistente-de-voz',
+    nav: 'Asistente de voz',
+    metaTitle: 'Punto de Venta con Asistente de Voz para Restaurantes | MRTPVREST',
+    metaDescription:
+      'Toma pedidos hablando: el cajero dicta, el punto de venta arma el ticket y él lo revisa y confirma. Entiende español de México, vende por peso y corrige por voz. Prueba gratis.',
+    eyebrow: 'TPV · Asistente de voz',
+    h1: 'Toma pedidos hablando: tu punto de venta ahora entiende la voz',
+    intro:
+      'El asistente de voz de MRTPVREST deja que el cajero dicte el pedido y el sistema lo arme solo. Antes de cobrar, una hoja de revisión muestra qué entendió para confirmarlo o corregirlo de un toque. Menos tecleo, menos errores de captura y más velocidad en hora pico.',
+    image: '/showcase-warm/asistente-de-voz.png',
+    bullets: [
+      { title: 'Dicta el pedido natural', text: '«dos hamburguesas y una coca» entra al ticket al instante, con cantidades, variantes y modificadores.' },
+      { title: 'Revisa antes de cobrar', text: 'Una hoja muestra lo que entendió; ajusta cantidad, tamaño o extras de un toque. Nada entra a ciegas al ticket.' },
+      { title: 'Vende por peso hablando', text: 'Para productos de báscula entiende «medio kilo de alitas» y cobra el precio por kilo exacto.' },
+      { title: 'Corrige con la voz', text: '«quita la coca», «que sea grande», «otra de pastor»: ajusta el pedido sin tocar la pantalla.' },
+    ],
+    pains: [
+      ['Captura lenta en hora pico', 'El cajero teclea producto por producto mientras crece la fila.', 'Dicta el pedido y el sistema arma el ticket en segundos.'],
+      ['Errores de pedido', 'Productos mal capturados que terminan en mermas y quejas.', 'Revisas lo que entendió antes de cobrar y corriges al instante.'],
+      ['Dictados que no entienden el menú', 'Las dictadoras genéricas no captan cómo se pide aquí.', 'Reconoce español de México: «una chela», «media docena», marcas y tamaños.'],
+    ],
+    faqs: [
+      ['¿Necesito internet o un micrófono especial?', 'Funciona con el micrófono de la misma tablet del punto de venta y el reconocimiento de voz del dispositivo. No necesitas hardware adicional.'],
+      ['¿Qué pasa si entiende mal un producto?', 'Antes de agregar al ticket ves una hoja de revisión con lo que entendió. Ahí ajustas cantidad, variante, modificadores o lo quitas, y lo que no reconoció lo agregas a mano. Nada se cobra sin tu confirmación.'],
+      ['¿Entiende cómo pedimos en México?', 'Sí. Reconoce coloquialismos y marcas («una coca», «una chela»), cantidades habladas como «media docena», tamaños como «grande» o «chico» y venta por peso como «medio kilo».'],
+      ['¿Funciona con cualquier menú?', 'Sí. Reconoce los productos de tu propio menú en español de México. Entre más completo tu catálogo —variantes y modificadores—, mejor arma el pedido.'],
+    ],
+  },
 ]
 
 export function getFeature(slug: string) {
