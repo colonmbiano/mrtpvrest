@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { posts, getPost } from '../../_data/posts'
 import { siteUrl, registerUrl } from '../../_data/site'
+import { buildMetadata } from '../../../lib/seo'
 import { SiteNav, SiteFooter } from '../../_components/SiteChrome'
 
 export function generateStaticParams() {
@@ -13,18 +14,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params
   const post = getPost(slug)
   if (!post) return {}
-  return {
+  return buildMetadata({
     title: post.metaTitle,
     description: post.metaDescription,
-    alternates: { canonical: `/blog/${post.slug}` },
-    openGraph: {
-      title: post.metaTitle,
-      description: post.metaDescription,
-      url: `${siteUrl}/blog/${post.slug}`,
-      type: 'article',
-      publishedTime: post.datePublished,
-    },
-  }
+    path: `/blog/${post.slug}`,
+    ogType: 'article',
+    publishedTime: post.datePublished,
+  })
 }
 
 export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -48,7 +44,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         publisher: {
           '@type': 'Organization',
           name: 'MRTPVREST',
-          logo: { '@type': 'ImageObject', url: `${siteUrl}/brand/mrtpvrest-logo.png` },
+          logo: { '@type': 'ImageObject', url: `${siteUrl}/brand/mrtpvrest-logo-current.png` },
         },
       },
       {

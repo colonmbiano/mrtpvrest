@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { features, getFeature } from '../../_data/features'
 import { siteUrl, registerUrl } from '../../_data/site'
+import { buildMetadata } from '../../../lib/seo'
 import { SiteNav, SiteFooter } from '../../_components/SiteChrome'
 
 export function generateStaticParams() {
@@ -14,18 +15,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params
   const feature = getFeature(slug)
   if (!feature) return {}
-  return {
+  return buildMetadata({
     title: feature.metaTitle,
     description: feature.metaDescription,
-    alternates: { canonical: `/funciones/${feature.slug}` },
-    openGraph: {
-      title: feature.metaTitle,
-      description: feature.metaDescription,
-      url: `${siteUrl}/funciones/${feature.slug}`,
-      type: 'website',
-      images: [{ url: feature.image }],
-    },
-  }
+    path: `/funciones/${feature.slug}`,
+    image: feature.image,
+  })
 }
 
 export default async function FeaturePage({ params }: { params: Promise<{ slug: string }> }) {
