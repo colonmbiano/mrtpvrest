@@ -57,8 +57,76 @@ const resendVerifyLimiter = rateLimit({
   },
 });
 
+// Creación de pedidos del storefront PÚBLICO (sin auth). El cap estricto de
+// kiosko (8 PENDING/10min) solo aplica a source=KIOSK; los pedidos ONLINE
+// quedaban solo bajo el global (2000/15min), suficiente para spamear miles de
+// órdenes basura por IP. Limitamos el origen anónimo (web) y dejamos pasar al
+// staff autenticado (TPV), al kiosko (cap propio) y al bridge de WhatsApp.
+const storeOrderLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  standardHeaders,
+  legacyHeaders,
+  message: {
+    error: 'Demasiados pedidos desde esta conexión. Espera unos minutos.',
+    code: 'ORDER_RATE_LIMIT',
+  },
+  skip: (req) => {
+    if (req.headers.authorization) return true;
+    const src = String(req.body?.source || '').toUpperCase();
+    return src === 'KIOSK' || src === 'WHATSAPP';
+  },
+});
+
+// Registro de cliente final del storefront: 5/hora por IP. Evita poblar la BD
+// con cuentas CUSTOMER basura (mismo patrón que el spam de tenants).
+const customerRegisterLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders,
+  legacyHeaders,
+  message: {
+    error: 'Demasiados registros desde esta conexión. Intenta más tarde.',
+    code: 'CUSTOMER_REGISTER_RATE_LIMIT',
+  },
+});
+
+// Login de cliente final: 15/15min por IP. Corta fuerza bruta de credenciales
+// de clientes sin molestar reintentos legítimos.
+const customerLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders,
+  legacyHeaders,
+  message: {
+    error: 'Demasiados intentos. Espera unos minutos e intenta de nuevo.',
+    code: 'CUSTOMER_LOGIN_RATE_LIMIT',
+  },
+});
+
+// Backstop de costo de IA POR TENANT. El aiLimiter existente es por IP; un
+// atacante autenticado tras un NAT/proxy rotativo podía drenar la cuota de
+// Groq/Gemini. Este límite, generoso para uso real (120/min por restaurante),
+// solo frena un script desbocado. Degrada a IP si aún no se resolvió el tenant.
+const aiTenantLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders,
+  legacyHeaders,
+  keyGenerator: (req) =>
+    req.restaurantId || req.user?.restaurantId || req.headers['x-restaurant-id'] || req.ip,
+  message: {
+    error: 'Demasiadas solicitudes a IA para este negocio. Espera un minuto.',
+    code: 'AI_TENANT_RATE_LIMIT',
+  },
+});
+
 module.exports = {
   aiLimiter,
   refreshLimiter,
   resendVerifyLimiter,
+  storeOrderLimiter,
+  customerRegisterLimiter,
+  customerLoginLimiter,
+  aiTenantLimiter,
 };
