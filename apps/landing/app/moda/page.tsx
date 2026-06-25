@@ -2,23 +2,18 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Fragment, type CSSProperties } from 'react'
 import { siteUrl, modaUrl } from '../_data/site'
+import { buildMetadata } from '../../lib/seo'
 import { SiteNav, SiteFooter } from '../_components/SiteChrome'
 
 const metaTitle = 'Punto de Venta para Tienda de Ropa | MODA+'
 const metaDescription =
   'MODA+ es el punto de venta para tiendas de ropa y boutiques: inventario por talla y color, etiquetas con código de barras, corte de caja y ventas, en Windows, Android o web. Pruébalo 15 días gratis, sin tarjeta.'
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: metaTitle,
   description: metaDescription,
-  alternates: { canonical: '/moda' },
-  openGraph: {
-    title: metaTitle,
-    description: metaDescription,
-    url: `${siteUrl}/moda`,
-    type: 'website',
-  },
-}
+  path: '/moda',
+})
 
 const highlights: { title: string; text: string }[] = [
   {

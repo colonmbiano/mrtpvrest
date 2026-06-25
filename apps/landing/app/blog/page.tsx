@@ -2,20 +2,15 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { posts } from '../_data/posts'
 import { siteUrl } from '../_data/site'
+import { buildMetadata } from '../../lib/seo'
 import { SiteNav, SiteFooter } from '../_components/SiteChrome'
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: 'Blog para Restaurantes: Punto de Venta y Operación | MRTPVREST',
   description:
     'Guías prácticas para operar tu restaurante: cómo elegir un punto de venta, cuánto cuesta, qué es un KDS, reducir mermas y delivery propio vs plataformas.',
-  alternates: { canonical: '/blog' },
-  openGraph: {
-    title: 'Blog para Restaurantes | MRTPVREST',
-    description: 'Guías prácticas sobre punto de venta y operación de restaurantes.',
-    url: `${siteUrl}/blog`,
-    type: 'website',
-  },
-}
+  path: '/blog',
+})
 
 const structuredData = {
   '@context': 'https://schema.org',

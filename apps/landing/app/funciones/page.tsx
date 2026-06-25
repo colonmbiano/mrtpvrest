@@ -3,20 +3,15 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { features } from '../_data/features'
 import { siteUrl, registerUrl } from '../_data/site'
+import { buildMetadata } from '../../lib/seo'
 import { SiteNav, SiteFooter } from '../_components/SiteChrome'
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: 'Funciones del Punto de Venta para Restaurantes | MRTPVREST',
   description:
     'TPV, KDS de cocina, delivery, kiosko de autoservicio, pedidos QR y administración: todas las funciones del punto de venta para restaurantes MRTPVREST.',
-  alternates: { canonical: '/funciones' },
-  openGraph: {
-    title: 'Funciones del Punto de Venta para Restaurantes | MRTPVREST',
-    description: 'Todas las funciones del ecosistema MRTPVREST para operar tu restaurante en tiempo real.',
-    url: `${siteUrl}/funciones`,
-    type: 'website',
-  },
-}
+  path: '/funciones',
+})
 
 const structuredData = {
   '@context': 'https://schema.org',

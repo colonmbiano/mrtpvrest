@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { verticals, getVertical } from '../../_data/verticals'
 import { siteUrl, registerUrl } from '../../_data/site'
+import { buildMetadata } from '../../../lib/seo'
 import { SiteNav, SiteFooter } from '../../_components/SiteChrome'
 
 export function generateStaticParams() {
@@ -14,18 +15,12 @@ export async function generateMetadata({ params }: { params: Promise<{ giro: str
   const { giro } = await params
   const vertical = getVertical(giro)
   if (!vertical) return {}
-  return {
+  return buildMetadata({
     title: vertical.metaTitle,
     description: vertical.metaDescription,
-    alternates: { canonical: `/punto-de-venta/${vertical.slug}` },
-    openGraph: {
-      title: vertical.metaTitle,
-      description: vertical.metaDescription,
-      url: `${siteUrl}/punto-de-venta/${vertical.slug}`,
-      type: 'website',
-      images: [{ url: vertical.image }],
-    },
-  }
+    path: `/punto-de-venta/${vertical.slug}`,
+    image: vertical.image,
+  })
 }
 
 export default async function VerticalPage({ params }: { params: Promise<{ giro: string }> }) {

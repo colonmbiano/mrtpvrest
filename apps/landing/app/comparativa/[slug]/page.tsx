@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { comparisons, getComparison } from '../../_data/comparisons'
 import { siteUrl, registerUrl } from '../../_data/site'
+import { buildMetadata } from '../../../lib/seo'
 import { SiteNav, SiteFooter } from '../../_components/SiteChrome'
 
 export function generateStaticParams() {
@@ -13,17 +14,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params
   const comparison = getComparison(slug)
   if (!comparison) return {}
-  return {
+  return buildMetadata({
     title: comparison.metaTitle,
     description: comparison.metaDescription,
-    alternates: { canonical: `/comparativa/${comparison.slug}` },
-    openGraph: {
-      title: comparison.metaTitle,
-      description: comparison.metaDescription,
-      url: `${siteUrl}/comparativa/${comparison.slug}`,
-      type: 'website',
-    },
-  }
+    path: `/comparativa/${comparison.slug}`,
+  })
 }
 
 export default async function ComparisonPage({ params }: { params: Promise<{ slug: string }> }) {

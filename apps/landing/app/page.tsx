@@ -97,7 +97,7 @@ const structuredData = {
       '@id': `${siteUrl}/#organization`,
       name: 'MRTPVREST',
       url: siteUrl,
-      logo: `${siteUrl}/brand/mrtpvrest-logo.png`,
+      logo: `${siteUrl}/brand/mrtpvrest-logo-current.png`,
       email: 'contacto@mrtpvrest.com',
       description:
         'Software de punto de venta para restaurantes que conecta caja, cocina, delivery, kiosko y administración en tiempo real.',

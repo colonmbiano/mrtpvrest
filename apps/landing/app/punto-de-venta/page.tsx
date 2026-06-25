@@ -3,20 +3,15 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { verticals } from '../_data/verticals'
 import { siteUrl, registerUrl } from '../_data/site'
+import { buildMetadata } from '../../lib/seo'
 import { SiteNav, SiteFooter } from '../_components/SiteChrome'
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: 'Punto de Venta por Tipo de Restaurante | MRTPVREST',
   description:
     'Punto de venta para cada giro: taquería, pizzería, cafetería, bar, comida rápida y marisquería. Encuentra el sistema hecho para tu tipo de restaurante.',
-  alternates: { canonical: '/punto-de-venta' },
-  openGraph: {
-    title: 'Punto de Venta por Tipo de Restaurante | MRTPVREST',
-    description: 'El punto de venta MRTPVREST adaptado a cada giro de restaurante.',
-    url: `${siteUrl}/punto-de-venta`,
-    type: 'website',
-  },
-}
+  path: '/punto-de-venta',
+})
 
 const structuredData = {
   '@context': 'https://schema.org',
