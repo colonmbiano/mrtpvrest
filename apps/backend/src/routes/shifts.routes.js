@@ -163,7 +163,11 @@ router.post('/open', requireLocation, requireCanManageShifts, validateBody(openS
         openedById: openedByEmployeeId,
         openingFloat: openingFloat || 0,
         isOpen: true,
-        blindClose: !!blindClose,
+        // Corte CIEGO por default: el cajero no debe ver el efectivo esperado
+        // (solo lo ve un rol admin/owner por la vía privilegiada de
+        // gateExpectedCash, o quien tenga el permiso canViewExpectedCash). Solo
+        // se abre en modo no-ciego si el caller manda blindClose:false explícito.
+        blindClose: blindClose !== false,
       },
       include: { expenses: true, cashIns: true }
     });
