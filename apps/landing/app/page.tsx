@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { APKS, FUNCIONES } from '../lib/links'
 import { siteUrl, registerUrl, loginUrl } from './_data/site'
 import { DownloadButton } from './_components/DownloadButton'
+import { testimonials } from '../lib/testimonials'
+import { Badge } from './_components/Badge'
 
 const apps = [
   { src: '/showcase-warm/app-cliente.png', title: 'App Cliente', text: 'Pedidos QR y online sin perder control.', tone: 'sage', href: FUNCIONES.appCliente },
@@ -33,26 +35,8 @@ const steps = [
   ['03', 'Cobra la primera orden', 'Pedidos, pagos, delivery y reportes fluyen desde el primer día.'],
 ] as const
 
-const testimonials = [
-  {
-    name: 'María García',
-    business: 'Tacos El Güero · CDMX',
-    avatar: '/people/testimonial-maria.png',
-    quote: 'Pasamos de cerrar caja a ciegas a ver ventas, pedidos y cocina desde el mismo lugar.',
-  },
-  {
-    name: 'Carlos Mendoza',
-    business: 'Pollos Don Carlos · Monterrey',
-    avatar: '/people/testimonial-carlos.png',
-    quote: 'El KDS nos bajó los errores en cocina y los turnos dejaron de depender de notas sueltas.',
-  },
-  {
-    name: 'Valentina Ríos',
-    business: 'Café Andino · Bogotá',
-    avatar: '/people/testimonial-valentina.png',
-    quote: 'Se siente hecho para restaurantes reales: rápido, claro y sin pantallas llenas de ruido.',
-  },
-] as const
+// Solo cuentan para el rating los testimonios reales (con permiso).
+const realTestimonials = testimonials.filter((item) => item.real)
 
 const plans = [
   {
@@ -128,11 +112,15 @@ const structuredData = {
         priceCurrency: 'USD',
         url: `${siteUrl}/#precios`,
       })),
-      aggregateRating: {
-        '@type': 'AggregateRating',
-        ratingValue: '5',
-        reviewCount: testimonials.length,
-      },
+      ...(realTestimonials.length > 0
+        ? {
+            aggregateRating: {
+              '@type': 'AggregateRating',
+              ratingValue: '5',
+              reviewCount: realTestimonials.length,
+            },
+          }
+        : {}),
     },
     {
       '@type': 'FAQPage',
@@ -305,27 +293,34 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="section testimonials-section">
-          <div className="section-head">
-            <span className="section-kicker">Prueba social</span>
-            <h2>Operadores que quieren claridad, no más ruido</h2>
-          </div>
-          <div className="testimonial-grid">
-            {testimonials.map((item) => (
-              <article className="testimonial" key={item.name}>
-                <div className="stars">★★★★★</div>
-                <p>“{item.quote}”</p>
-                <div className="author">
-                  <Image src={item.avatar} alt={item.name} width={56} height={56} loading="lazy" />
-                  <span>
-                    <strong>{item.name}</strong>
-                    <small>{item.business}</small>
-                  </span>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
+        {testimonials.length > 0 ? (
+          <section className="section testimonials-section">
+            <div className="section-head">
+              <span className="section-kicker">Prueba social</span>
+              <h2>Operadores que quieren claridad, no más ruido</h2>
+            </div>
+            <div className={`testimonial-grid${testimonials.length === 1 ? ' single' : ''}`}>
+              {testimonials.map((item) => (
+                <article className="testimonial" key={item.name}>
+                  <div className="stars">★★★★★</div>
+                  {!item.real ? <Badge>Ejemplo ilustrativo</Badge> : null}
+                  <p>“{item.quote}”</p>
+                  <div className="author">
+                    {item.avatar ? (
+                      <Image src={item.avatar} alt={item.name} width={56} height={56} loading="lazy" />
+                    ) : (
+                      <span className="avatar-fallback" aria-hidden="true">{item.name.charAt(0)}</span>
+                    )}
+                    <span>
+                      <strong>{item.name}</strong>
+                      <small>{item.business} · {item.city}</small>
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="section pricing-section" id="precios">
           <div className="section-head">

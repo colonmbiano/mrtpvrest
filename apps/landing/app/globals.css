@@ -709,6 +709,43 @@ details p {
   text-transform: uppercase;
 }
 
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.testimonial .badge {
+  margin-bottom: 12px;
+}
+
+.avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--surface-strong);
+  color: var(--amber);
+  font-weight: 700;
+  font-size: 22px;
+  text-transform: uppercase;
+}
+
+/* Con un solo testimonio real, no estirar a la rejilla de 3 columnas. */
+.testimonial-grid.single {
+  max-width: 560px;
+  margin-inline: auto;
+}
+
 .plan {
   position: relative;
   padding: 26px;
