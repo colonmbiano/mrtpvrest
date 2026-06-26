@@ -6,6 +6,7 @@ import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import GuestCountModal from "@/components/pos/GuestCountModal";
+import ManagerOverrideModal from "@/components/ManagerOverrideModal";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
 import { buildOrderItemsPayload } from "@/lib/modifiers";
 import { useAuthStore } from "@/store/authStore";
@@ -143,19 +144,31 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     }
   }, [activeOrderId]);
 
-  const removePreviousItem = async (item: any) => {
+  // Autorización de supervisor para anular productos ya enviados a cocina
+  // (cancel_items). `overrideItemRef` guarda la línea pendiente mientras el
+  // ManagerOverrideModal pide el PIN; NO se limpia en onClose para que onSuccess
+  // (que corre justo después del onClose del modal) todavía la lea.
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const overrideItemRef = React.useRef<any | null>(null);
+
+  // Ejecuta el DELETE de una línea ya enviada + post-acciones (ticket de
+  // anulación, recarga, toast). Si el backend lo rechaza por falta de permiso
+  // (cancel_items), abre el modal de PIN de supervisor para autorizar en el
+  // momento y reintenta con el override token (mismo patrón que el descuento).
+  const performRemovePreviousItem = async (item: any) => {
     const label = item.menuItem?.name || item.name || "este producto";
-    if (!confirm(`¿Anular "${label}"? Se quitará de la cuenta y se imprimirá un ticket de anulación en cocina.`)) return;
     try {
       await api.delete(`/api/orders/items/${item.id}`);
     } catch (err: any) {
-      hapticError();
       const code = err?.response?.data?.code;
-      const msg =
-        code === "PERMISSION_REQUIRED"
-          ? "No tienes permiso para anular productos ya enviados a cocina. Pide autorización a un gerente."
-          : err?.response?.data?.error || "No se pudo quitar el producto";
-      toast.error(msg);
+      if (code === "PERMISSION_REQUIRED") {
+        // Sin permiso para anular enviado → pedir autorización de un gerente.
+        overrideItemRef.current = item;
+        setOverrideOpen(true);
+        return;
+      }
+      hapticError();
+      toast.error(err?.response?.data?.error || "No se pudo quitar el producto");
       return;
     }
     // Ticket de anulación a cocina (best-effort): el producto ya no va.
@@ -163,6 +176,12 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     await reloadPreviousItems();
     hapticSuccess();
     toast.success(`"${label}" anulado`);
+  };
+
+  const removePreviousItem = async (item: any) => {
+    const label = item.menuItem?.name || item.name || "este producto";
+    if (!confirm(`¿Anular "${label}"? Se quitará de la cuenta y se imprimirá un ticket de anulación en cocina.`)) return;
+    await performRemovePreviousItem(item);
   };
 
   // Quitar UN solo extra de un producto ya en la cuenta (aún no servido/cobrado).
@@ -1433,6 +1452,21 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           onConfirm={(guests) => {
             updateTicket({ numberOfGuests: guests, activeSeat: 1 });
             setEditingGuests(false);
+          }}
+        />
+
+        {/* Autorización de supervisor para anular un producto ya enviado a
+            cocina cuando el cajero/mesero no tiene `cancel_items`. Al validar el
+            PIN se emite un override token y se reintenta el DELETE. */}
+        <ManagerOverrideModal
+          isOpen={overrideOpen}
+          onClose={() => setOverrideOpen(false)}
+          permission="cancel_items"
+          onSuccess={async () => {
+            const item = overrideItemRef.current;
+            overrideItemRef.current = null;
+            setOverrideOpen(false);
+            if (item) await performRemovePreviousItem(item);
           }}
         />
 
