@@ -7,6 +7,7 @@ const { requireModule, MODULES } = require('../lib/modules');
 const { validateBody } = require('../lib/validate');
 const { openShiftSchema, closeShiftSchema } = require('../schemas/shifts.schema');
 const { summarizePayments, cashCutSummary } = require('../lib/money');
+const { sendCashCutEmail } = require('../lib/cash-cut-mailer');
 const audit = require('../lib/audit-logger');
 const router = express.Router();
 
@@ -185,6 +186,38 @@ router.post('/open', requireLocation, requireCanManageShifts, validateBody(openS
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Mapea el corte del TPV de restaurante a la forma `cut` del correo y lo
+// dispara (best-effort) vía el helper compartido. El arqueo va completo aunque
+// el turno sea ciego: el correo llega a la bandeja del dueño (privilegiada).
+function emailRestaurantCashCut(req, closed) {
+  const closingFloat = closed.closingFloat;
+  const variance = (closingFloat === null || closingFloat === undefined)
+    ? null
+    : Number(closingFloat) - Number(closed.expectedCash || 0);
+  return sendCashCutEmail({
+    restaurantId: req.restaurantId || req.user?.restaurantId,
+    locationId: closed.locationId,
+    closedByName: req.user?.name || closed.employeeName || 'Cajero',
+    closedAt: closed.closedAt,
+    adminUrl: `${process.env.NEXT_PUBLIC_ADMIN_URL || 'https://admin.mrtpvrest.com'}/admin/reportes/cortes`,
+    cut: {
+      ordersCount: closed.ordersCount,
+      totalCash: closed.totalCash,
+      totalCard: closed.totalCard,
+      totalTransfer: closed.totalTransfer,
+      totalCourtesy: closed.totalCourtesy,
+      totalSales: closed.totalSales,
+      openingFloat: closed.openingFloat,
+      totalCashIn: closed.totalCashIn,
+      totalExpenses: closed.totalExpenses,
+      expectedCash: closed.expectedCash,
+      closingFloat,
+      variance,
+      notes: closed.notes,
+    },
+  });
+}
+
 // Helper compartido: ejecuta el cierre de un turno YA cargado (con
 // include {expenses, cashIns}). Lo usan POST /:id/close (turno por id) y
 // POST /current/close (turno abierto resuelto por sucursal, para la cola
@@ -359,6 +392,11 @@ async function performShiftClose(req, res, shift) {
         driversCut,
       },
     }).catch(() => {});
+
+    // Correo del corte al dueño (best-effort, no se await-ea). El cierre ya está
+    // confirmado en la BD; el correo es secundario y nunca debe bloquear la
+    // respuesta al cajero ni revertir nada. Sale solo si el restaurante lo activó.
+    emailRestaurantCashCut(req, closed).catch((e) => console.error('[cash-cut-email]', e?.message || e));
 
     // Corte ciego: el cajero NO debe ver el efectivo esperado ni el desfase.
     // Persistimos expectedCash en la BD (para admin/historial y para el

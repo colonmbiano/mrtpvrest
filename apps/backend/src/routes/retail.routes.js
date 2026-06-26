@@ -2,6 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requireRole, userHasPermission, hasValidOverride } = require('../middleware/auth.middleware');
+const { sendCashCutEmail } = require('../lib/cash-cut-mailer');
 
 const router = express.Router();
 
@@ -1128,6 +1129,35 @@ router.post('/shifts/:id/close', requireRole(...ADMIN_ROLES), async (req, res) =
       if (guard.count === 0) { const e = new Error('La caja ya esta cerrada'); e.status = 409; throw e; }
       return tx.retailCashShift.findUnique({ where: { id: shift.id }, include: { movements: true } });
     });
+
+    // Correo del corte de TIENDA al dueño (best-effort, no se await-ea). Mismo
+    // mecanismo/config que el restaurante (cashCutEmailEnabled + cashCutEmails),
+    // mapeando los campos del corte retail. El cierre ya está confirmado: un
+    // fallo de correo nunca debe bloquear la respuesta ni revertir el cierre.
+    sendCashCutEmail({
+      restaurantId: result.restaurantId,
+      locationId: result.locationId,
+      closedByName: req.user?.name || result.openedByName || 'Cajero',
+      closedAt: result.closedAt,
+      moduleLabel: 'Tienda',
+      adminUrl: null, // los cortes de retail se ven en la app de tienda, no en /admin
+      cut: {
+        ordersCount: result.salesCount,
+        totalCash: result.totalCashSales,
+        totalCard: result.totalCardSales,
+        totalTransfer: result.totalTransferSales,
+        totalCourtesy: 0,
+        totalSales:
+          Number(result.totalCashSales) + Number(result.totalCardSales) + Number(result.totalTransferSales),
+        openingFloat: result.openingFloat,
+        totalCashIn: result.totalCashIn,
+        totalExpenses: result.totalCashOut,
+        expectedCash: result.expectedCash,
+        closingFloat: result.countedCash,
+        variance: result.difference == null ? null : Number(result.difference),
+        notes: result.notes,
+      },
+    }).catch((e) => console.error('[cash-cut-email][retail]', e?.message || e));
 
     // Corte ciego: el cajero no ve esperado/diferencia al cerrar; el supervisor
     // los consulta con GET /shifts/:id.
