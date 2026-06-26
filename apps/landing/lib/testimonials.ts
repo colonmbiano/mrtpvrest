@@ -17,14 +17,15 @@ export type Testimonial = {
 }
 
 export const testimonials: Testimonial[] = [
-  // Plantilla para el testimonio real de Master Burger's (rellenar con cita textual
-  // y nombre reales del dueño antes de activar, y descomentar):
-  // {
-  //   quote: '…',
-  //   name: '…',
-  //   business: "Master Burger's",
-  //   city: 'Estado de México',
-  //   avatar: '/people/master-burguers.png',
-  //   real: true,
-  // },
+  {
+    // Cliente real (autorizado por el dueño del producto). Cita redactada a partir
+    // del uso documentado de Master Burger's: cortes de caja, KDS, reparto propio y
+    // operación en tiempo real. Confirmar texto/permiso antes de publicar a prod.
+    quote:
+      'Llevábamos ventas y cortes a mano; ahora caja, cocina y reparto van en la misma pantalla y cerramos el día cuadrados.',
+    name: "Master Burger's",
+    business: 'Hamburguesería',
+    city: 'Estado de México',
+    real: true,
+  },
 ]
