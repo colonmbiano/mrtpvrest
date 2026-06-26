@@ -571,6 +571,11 @@ export interface ReceiptInput {
   showPhone?: boolean;
   phone?: string | null;
   showOrderNumber?: boolean | null;  // imprimir "Pedido: #folio" en el recibo (default true)
+  showCustomerData?: boolean | null; // imprimir "Cliente: <nombre>" en el recibo (default true)
+  // WiFi para clientes al pie del recibo (red + contraseña).
+  showWifi?: boolean | null;
+  wifiSsid?: string | null;
+  wifiPassword?: string | null;
   // ── Identidad de negocio extendida (encabezado fiscal) ──────────────────
   // Si el tenant aún no define estos campos, el builder los omite (no imprime
   // líneas vacías). Ver reporte "campos del tenant a agregar".
@@ -1152,7 +1157,7 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
       !!custName &&
       custName.toLowerCase() !== tbl.toLowerCase() &&
       custName.toLowerCase() !== String(input.tableNumber ?? "").trim().toLowerCase();
-    if (custIsReal) d += row("Cliente:", custName, lw);
+    if (input.showCustomerData !== false && custIsReal) d += row("Cliente:", custName, lw);
   }
 
   d += sep;
@@ -1276,6 +1281,15 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
     d += boldOn + "Acumula puntos\n" + boldOff;
     d += "Escanea y registrate\n";
     d += qrCode(input.loyaltyUrl) + "\n";
+    d += CMD.ALIGN_LEFT;
+  }
+
+  // ── 6c. WIFI PARA CLIENTES (red + contraseña al pie del recibo) ──────────
+  if (input.showWifi && input.wifiSsid) {
+    d += sep + CMD.ALIGN_CENTER;
+    d += boldOn + "WiFi" + "\n" + boldOff;
+    d += "Red: " + input.wifiSsid + "\n";
+    if (input.wifiPassword) d += "Clave: " + input.wifiPassword + "\n";
     d += CMD.ALIGN_LEFT;
   }
 

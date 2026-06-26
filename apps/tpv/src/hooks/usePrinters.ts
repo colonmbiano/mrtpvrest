@@ -154,6 +154,10 @@ type TicketConfigDTO = {
   showPhone?: boolean;
   showOrderNumber?: boolean;   // "Pedido: #folio" en el recibo
   compactMode?: boolean;       // recibo compacto (ahorra papel)
+  showCustomerData?: boolean;  // "Cliente: <nombre>" en el recibo
+  showWifi?: boolean;          // imprimir WiFi al pie del recibo
+  wifiSsid?: string;
+  wifiPassword?: string;
   kitchenHeader?: string;
   kitchenFooter?: string;
   kitchenShowOrderNumber?: boolean;
@@ -225,6 +229,10 @@ export function buildReceiptIdentityFields(
     showPhone: dto?.showPhone,
     phone: dto?.phone,
     showOrderNumber: dto?.showOrderNumber,
+    showCustomerData: dto?.showCustomerData,
+    showWifi: dto?.showWifi,
+    wifiSsid: dto?.wifiSsid || null,
+    wifiPassword: dto?.wifiPassword || null,
     showInvoiceQr: dto?.showInvoiceQr,
     invoiceUrl: dto?.invoiceUrl || null,
     invoiceFolio,
