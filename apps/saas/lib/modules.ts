@@ -12,6 +12,7 @@
 
 import {
   Boxes, Truck, Globe, MonitorSmartphone, Heart, ChefHat, BarChart3, Wallet,
+  Utensils, Coins, Users, Receipt,
   type LucideIcon,
 } from "lucide-react";
 
@@ -41,6 +42,10 @@ export const MODULE_CATALOG: ModuleDef[] = [
   { key: "kds",       label: "KDS",                shortLabel: "KDS",        description: "Pantalla de cocina (Kitchen Display).",       Icon: ChefHat,           accent: "orange", kind: "key", planFlag: "hasKDS" },
   { key: "reports",   label: "Reportes",           shortLabel: "Reportes",   description: "Analítica avanzada y exportaciones.",         Icon: BarChart3,         accent: "blue",   kind: "key", planFlag: "hasReports" },
   { key: "finance",   label: "Finanzas",           shortLabel: "Finanzas",   description: "Gastos, compras y cortes de caja.",           Icon: Wallet,            accent: "green",  kind: "key" },
+  { key: "waiters",             label: "Meseros / Salón", shortLabel: "Meseros",   description: "Toma de órdenes en mesa por meseros.", Icon: Utensils, accent: "amber",  kind: "key" },
+  { key: "cash_shift",          label: "Turnos de Caja",  shortLabel: "Turnos",    description: "Apertura y corte de turno de caja.",   Icon: Coins,    accent: "green",  kind: "key" },
+  { key: "employee_management", label: "Empleados",       shortLabel: "Empleados", description: "Gestión de empleados, roles y PINs.",  Icon: Users,    accent: "blue",   kind: "key" },
+  { key: "payroll",             label: "Nómina",          shortLabel: "Nómina",    description: "Pago por día trabajado (la raya).",    Icon: Receipt,  accent: "orange", kind: "key" },
 ];
 
 const ALIAS_TO_CANONICAL: Record<string, string> = {};
