@@ -10,9 +10,11 @@ const securityHeaders = [
     value: 'camera=(), microphone=(), geolocation=(), browsing-topics=()',
   },
   {
-    // EMPIEZA en Report-Only. Vigila la consola unos días y luego renómbralo
-    // a "Content-Security-Policy" (sin -Report-Only) para hacerlo cumplir.
-    key: 'Content-Security-Policy-Report-Only',
+    // CSP en ENFORCE. Validada en Report-Only contra el sitio en vivo con navegador
+    // headless: cero violaciones en home, funciones, blog, giros, comparativa y /demo.
+    // Si agregas un origen nuevo (Cloudinary, analytics, fuentes externas), permítelo
+    // en img-src/connect-src/script-src/font-src ANTES de desplegar o romperá la carga.
+    key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
       "base-uri 'self'",
