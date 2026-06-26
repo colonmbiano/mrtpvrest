@@ -1,0 +1,167 @@
+name: Build Android APKs Release (KDS/Delivery/Meseros/Kiosk)
+
+# Genera APK de release FIRMADOS de las apps Capacitor que faltaban: KDS,
+# Delivery, Meseros Lite y Kiosk. El TPV tiene su propio workflow
+# (build-android-apk-release.yml). Cada APK se sube como artifact descargable
+# (no se commitea: lo publica la landing copiándolo a apps/landing/public/apks).
+#
+# Disparo: manual (workflow_dispatch) o push de un tag `apks-rel-v*` (sirve para
+# bootstrapear el workflow desde una rama de feature antes de mergear a master).
+#
+# Requiere los GitHub Secrets para producir APK firmados:
+#   KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+# Si faltan, el job falla en "Decode" para no publicar APKs sin firmar.
+
+# GITHUB_TOKEN de solo lectura (least-privilege); este workflow no escribe al repo.
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: 'Apps a construir (coma) o "all" (kds,delivery,meseros-lite,kiosk)'
+        type: string
+        default: 'all'
+  push:
+    tags:
+      - 'apks-rel-v*'
+
+concurrency:
+  group: build-apks-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    name: Resolver matriz de apps
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - name: Calcular matriz
+        id: set
+        run: |
+          INPUT="${{ github.event.inputs.apps }}"
+          [ -z "$INPUT" ] && INPUT="all"
+          ALL='["kds","delivery","meseros-lite","kiosk"]'
+          if [ "$INPUT" = "all" ]; then
+            MATRIX="$ALL"
+          else
+            MATRIX=$(node -e '
+              const valid = ["kds","delivery","meseros-lite","kiosk"];
+              const wanted = process.argv[1].split(",").map(s => s.trim()).filter(Boolean);
+              const picked = wanted.filter(a => valid.includes(a));
+              if (picked.length === 0) { console.error("No hay apps válidas en: " + process.argv[1]); process.exit(1); }
+              process.stdout.write(JSON.stringify(picked));
+            ' "$INPUT")
+          fi
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "::notice::Apps a construir: $MATRIX"
+
+  build:
+    name: Build signed release ${{ matrix.app }}
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          run_install: false
+
+      - name: pnpm cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Install deps (workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Java 21
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install Android SDK packages (platform 36 + build-tools)
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "platform-tools" >/dev/null
+          sdkmanager "build-tools;36.0.0" >/dev/null || echo "::warning::build-tools;36.0.0 no instalado explícitamente; AGP lo resolverá."
+
+      - name: Build Next.js static export + Capacitor sync (${{ matrix.app }})
+        env:
+          CAPACITOR_BUILD: 'true'
+          NEXT_PUBLIC_API_URL: https://api.mrtpvrest.com
+        run: pnpm --filter @mrtpvrest/${{ matrix.app }} run build:apk
+
+      - name: Gradle cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ matrix.app }}-${{ hashFiles(format('apps/{0}/android/**/*.gradle*', matrix.app)) }}
+
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Falta el secret KEYSTORE_BASE64. No es seguro publicar APKs sin firmar."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "apps/${{ matrix.app }}/android/app/release.jks"
+          ls -lh "apps/${{ matrix.app }}/android/app/release.jks"
+
+      - name: Build release APK (${{ matrix.app }})
+        working-directory: apps/${{ matrix.app }}/android
+        env:
+          # Ruta ABSOLUTA: build.gradle la resuelve con file() relativo al módulo
+          # app — una relativa apuntaría a android/app/app/… y la firma quedaría vacía.
+          KEYSTORE_PATH: ${{ github.workspace }}/apps/${{ matrix.app }}/android/app/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Verificar que el APK quedó firmado (v2/v3)
+        run: |
+          APK="apps/${{ matrix.app }}/android/app/build/outputs/apk/release/app-release.apk"
+          ls -lh "$APK"
+          if ! grep -aq "APK Sig Block 42" "$APK"; then
+            echo "::error::El APK de ${{ matrix.app }} no tiene bloque de firma APK v2/v3 — keystore mal configurado."
+            exit 1
+          fi
+          echo "::notice::${{ matrix.app }} firmado correctamente (APK Signing Block presente)."
+
+      - name: Upload signed release APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.app }}-release-apk-${{ github.sha }}
+          path: apps/${{ matrix.app }}/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Cleanup keystore
+        if: always()
+        run: rm -f "apps/${{ matrix.app }}/android/app/release.jks"
