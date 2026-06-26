@@ -23,7 +23,104 @@ async function sendEmail(to, subject, html) {
   return data
 }
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+// Parsea una lista de correos escrita por el dueño (separada por coma, punto y
+// coma, espacios o saltos de línea) y devuelve solo los que tienen forma válida,
+// deduplicados y en minúsculas. Pura/testeable — sin I/O.
+function parseEmailList(str) {
+  if (!str || typeof str !== 'string') return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of str.split(/[\s,;]+/)) {
+    const e = raw.trim().toLowerCase();
+    if (!e) continue;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) continue;
+    if (seen.has(e)) continue;
+    seen.add(e);
+    out.push(e);
+  }
+  return out;
+}
+
+// Formato de dinero para los correos (MXN por defecto). Robusto ante null/NaN.
+function pesos(n) {
+  const v = Number(n) || 0;
+  return '$' + v.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 // ── Templates ─────────────────────────────────────────────────────────────────
+
+// Corte de caja al cierre del turno. Va al correo del dueño (vista privilegiada),
+// así que incluye el arqueo completo aunque el turno sea ciego para el cajero.
+// payload: { restaurantName, locationName, closedAtLabel, closedByName,
+//   ordersCount, totalCash, totalCard, totalTransfer, totalCourtesy, totalSales,
+//   openingFloat, totalCashIn, totalExpenses, expectedCash, closingFloat,
+//   variance, notes, adminUrl }
+function cashCutEmailHtml(p) {
+  const row = (label, value, opts = {}) => `
+    <tr>
+      <td style="padding:9px 0;color:${opts.muted ? '#64748b' : '#334155'};font-size:14px;${opts.strong ? 'font-weight:800;' : ''}">${label}</td>
+      <td style="padding:9px 0;text-align:right;color:${opts.color || '#0f172a'};font-size:14px;font-weight:${opts.strong ? '800' : '600'};font-variant-numeric:tabular-nums;">${value}</td>
+    </tr>`;
+  const divider = `<tr><td colspan="2" style="padding:0;"><div style="height:1px;background:#e2e8f0;margin:6px 0;"></div></td></tr>`;
+
+  const variance = Number(p.variance);
+  const hasVariance = Number.isFinite(variance) && (p.closingFloat !== null && p.closingFloat !== undefined);
+  const varColor = !hasVariance ? '#0f172a' : variance < -0.005 ? '#dc2626' : variance > 0.005 ? '#d97706' : '#16a34a';
+  const varLabel = !hasVariance ? '—' : variance < -0.005 ? `Faltante ${pesos(Math.abs(variance))}` : variance > 0.005 ? `Sobrante ${pesos(variance)}` : 'Cuadra exacto';
+
+  return `
+    <div style="font-family:'DM Sans',Inter,Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;color:#0f172a;border-radius:20px;overflow:hidden;border:1px solid #e2e8f0;">
+      <div style="background:linear-gradient(135deg,#7c3aed,#9f67ff);padding:24px 32px;">
+        <h1 style="margin:0;font-size:18px;font-weight:900;letter-spacing:-0.5px;color:#fff;">CORTE DE CAJA${p.moduleLabel ? ' · ' + String(p.moduleLabel).toUpperCase() : ''}</h1>
+        <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">${p.restaurantName || 'Restaurante'}${p.locationName ? ' · ' + p.locationName : ''}</p>
+      </div>
+      <div style="padding:28px 32px;">
+        <p style="margin:0 0 2px;font-size:13px;color:#64748b;">Turno cerrado</p>
+        <p style="margin:0 0 4px;font-size:20px;font-weight:900;letter-spacing:-0.4px;">${p.closedAtLabel || ''}</p>
+        <p style="margin:0 0 24px;font-size:13px;color:#64748b;">
+          Cerró: <strong style="color:#334155;">${p.closedByName || 'Cajero'}</strong> · ${p.ordersCount || 0} ${p.ordersCount === 1 ? 'orden' : 'órdenes'}
+        </p>
+
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:8px 18px;margin-bottom:18px;">
+          <table style="width:100%;border-collapse:collapse;">
+            <tr><td colspan="2" style="padding:10px 0 2px;color:#94a3b8;font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">Ventas por método</td></tr>
+            ${row('Efectivo', pesos(p.totalCash))}
+            ${row('Tarjeta', pesos(p.totalCard))}
+            ${row('Transferencia', pesos(p.totalTransfer))}
+            ${Number(p.totalCourtesy) ? row('Cortesías', pesos(p.totalCourtesy), { muted: true }) : ''}
+            ${divider}
+            ${row('Venta total', pesos(p.totalSales), { strong: true, color: '#7c3aed' })}
+          </table>
+        </div>
+
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:8px 18px;margin-bottom:18px;">
+          <table style="width:100%;border-collapse:collapse;">
+            <tr><td colspan="2" style="padding:10px 0 2px;color:#94a3b8;font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">Arqueo de efectivo</td></tr>
+            ${row('Fondo de apertura', pesos(p.openingFloat))}
+            ${row('+ Ventas en efectivo', pesos(p.totalCash))}
+            ${row('+ Ingresos a caja', pesos(p.totalCashIn))}
+            ${row('− Gastos de caja', pesos(p.totalExpenses))}
+            ${divider}
+            ${row('Efectivo esperado', pesos(p.expectedCash), { strong: true })}
+            ${row('Efectivo contado', (p.closingFloat === null || p.closingFloat === undefined) ? '—' : pesos(p.closingFloat))}
+            ${row('Diferencia', varLabel, { strong: true, color: varColor })}
+          </table>
+        </div>
+
+        ${p.notes ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:18px;">
+          <p style="margin:0;font-size:12px;color:#92400e;"><strong>Notas:</strong> ${String(p.notes).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+        </div>` : ''}
+
+        ${p.adminUrl ? `<a href="${p.adminUrl}" style="display:inline-block;background:#0f172a;color:#fff;padding:13px 26px;border-radius:12px;font-weight:800;text-decoration:none;font-size:14px;">Ver cortes en el panel →</a>` : ''}
+      </div>
+      <div style="padding:16px 32px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:12px;">
+        MRTPVREST · Resumen automático al cierre de caja
+      </div>
+    </div>
+  `;
+}
 
 function verificationEmailHtml(ownerName, tenantName, verifyUrl) {
   return `
@@ -126,4 +223,4 @@ function welcomeEmailHtml(ownerName, tenantName, downloadsUrl) {
   `
 }
 
-module.exports = { sendEmail, verificationEmailHtml, trialReminderHtml, trialExpiredHtml, welcomeEmailHtml }
+module.exports = { sendEmail, parseEmailList, verificationEmailHtml, trialReminderHtml, trialExpiredHtml, welcomeEmailHtml, cashCutEmailHtml }

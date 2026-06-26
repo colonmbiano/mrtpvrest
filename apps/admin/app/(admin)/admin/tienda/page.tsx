@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Store, Globe, Power, Clock, Phone, MessageCircle, MapPin, Palette,
   Truck, Star, Link2, Copy, Check, ExternalLink, Crosshair, AlertTriangle,
-  Flower2, Wallet, Trophy, Upload, ImagePlus, X,
+  Flower2, Wallet, Trophy, Upload, ImagePlus, X, Mail,
 } from "lucide-react";
 import api from "@/lib/api";
 import { getStoreUrl } from "@/lib/config";
@@ -97,6 +97,9 @@ export default function TiendaConfigPage() {
     closedMessage: "",
     // Corte de caja: ¿los admins ven el efectivo esperado en corte ciego?
     adminCanViewExpectedCash: true,
+    // Corte de caja por correo: enviar el resumen del corte al cerrar el turno.
+    cashCutEmailEnabled: false,
+    cashCutEmails: "",
     // Horario de atención automático
     scheduleEnabled: false,
     timezone: "America/Mexico_City",
@@ -189,6 +192,8 @@ export default function TiendaConfigPage() {
           deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : "FLAT",
           isOpen: d.isOpen ?? true,
           adminCanViewExpectedCash: d.adminCanViewExpectedCash ?? true,
+          cashCutEmailEnabled: d.cashCutEmailEnabled ?? false,
+          cashCutEmails: d.cashCutEmails ?? "",
           scheduleEnabled: d.scheduleEnabled ?? false,
           countryCode: d.countryCode || "MX",
           timezone: d.timezone || "America/Mexico_City",
@@ -325,6 +330,40 @@ export default function TiendaConfigPage() {
             </div>
             <Toggle checked={config.adminCanViewExpectedCash} onChange={(v) => setConfig(p => ({ ...p, adminCanViewExpectedCash: v }))} label="Admins ven el efectivo esperado" />
           </div>
+        </WtCard>
+
+        {/* Corte de caja — envío automático por correo al cierre */}
+        <WtCard className="p-5 md:p-6">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <Mail size={16} className="shrink-0 text-tx-mid" />
+                <p className="font-display text-base font-extrabold text-tx-hi">Corte por correo</p>
+              </div>
+              <p className="mt-1 text-[12px] text-tx-mut">
+                {config.cashCutEmailEnabled
+                  ? "Al cerrar la caja (restaurante y tienda) se envía el resumen del corte por correo."
+                  : "Recibe el corte de caja en tu correo cada vez que se cierra la caja, tanto del restaurante como de la tienda."}
+              </p>
+            </div>
+            <Toggle checked={config.cashCutEmailEnabled} onChange={(v) => setConfig(p => ({ ...p, cashCutEmailEnabled: v }))} label="Enviar el corte por correo" />
+          </div>
+          {config.cashCutEmailEnabled && (
+            <div className="mt-4">
+              <FieldLabel>Correo(s) destino</FieldLabel>
+              <input
+                type="text"
+                value={config.cashCutEmails}
+                placeholder="dueño@correo.com, contador@correo.com"
+                onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, cashCutEmails: v })); }}
+                className={INPUT_CLS}
+                style={INPUT_STYLE}
+              />
+              <p className="mt-1.5 text-[11px] text-tx-mut">
+                Separa varios correos con coma. Si lo dejas vacío, se envía a los administradores del restaurante.
+              </p>
+            </div>
+          )}
         </WtCard>
 
         {/* País / WhatsApp */}

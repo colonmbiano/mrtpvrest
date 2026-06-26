@@ -957,6 +957,15 @@ model RestaurantConfig {
   // admins (solo el permiso explícito canViewExpectedCash lo revela).
   adminCanViewExpectedCash Boolean @default(true)
 
+  // CORTE DE CAJA · envío del corte por correo al cierre del turno. Si
+  // cashCutEmailEnabled es true, al cerrar la caja se manda el resumen del
+  // corte (ventas por método, efectivo esperado, varianza) a los correos de
+  // cashCutEmails (lista separada por coma/;). Vacío → cae a los correos de
+  // los admins del restaurante. El envío es best-effort: nunca bloquea ni
+  // revierte el cierre.
+  cashCutEmailEnabled Boolean @default(false)
+  cashCutEmails       String?
+
   updatedAt DateTime @updatedAt
 
   @@map("restaurant_config")

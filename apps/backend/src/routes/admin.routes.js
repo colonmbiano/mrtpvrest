@@ -98,6 +98,8 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
       'pointsPerTen','pointsValuePesos','storefrontTheme','storefrontHeroUrl',
       'centralWarehouseEnabled','adminCanViewExpectedCash',
+      // Corte de caja por correo (toggle + lista de destinatarios)
+      'cashCutEmailEnabled','cashCutEmails',
       // Horario de atención (businessHours llega como JSON serializado)
       'scheduleEnabled','timezone','businessHours',
       // Envío por distancia
@@ -123,6 +125,9 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       } else if (NUMERIC_NOT_NULL.has(k)) {
         const n = Number(v);
         data[k] = Number.isNaN(n) ? 0 : n;
+      } else if (k === 'cashCutEmails') {
+        // String opcional: un vacío se guarda como null (cae al fallback de admins).
+        data[k] = (typeof v === 'string' && v.trim()) ? v.trim() : null;
       } else {
         data[k] = v;
       }
