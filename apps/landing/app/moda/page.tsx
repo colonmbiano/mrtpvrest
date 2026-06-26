@@ -2,18 +2,28 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Fragment, type CSSProperties } from 'react'
 import { siteUrl, modaUrl } from '../_data/site'
-import { buildMetadata } from '../../lib/seo'
 import { SiteNav, SiteFooter } from '../_components/SiteChrome'
 
 const metaTitle = 'Punto de Venta para Tienda de Ropa | MODA+'
 const metaDescription =
-  'MODA+ es el punto de venta para tiendas de ropa y boutiques: inventario por talla y color, etiquetas con código de barras, corte de caja y ventas, en Windows, Android o web. Pruébalo 15 días gratis, sin tarjeta.'
+  'Punto de venta para tienda de ropa y boutique: inventario por talla y color, etiquetas de código de barras y corte de caja. 15 días gratis, sin tarjeta.'
 
-export const metadata: Metadata = buildMetadata({
+export const metadata: Metadata = {
   title: metaTitle,
   description: metaDescription,
-  path: '/moda',
-})
+  alternates: { canonical: '/moda' },
+  openGraph: {
+    title: metaTitle,
+    description: metaDescription,
+    url: `${siteUrl}/moda`,
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: metaTitle,
+    description: metaDescription,
+  },
+}
 
 const highlights: { title: string; text: string }[] = [
   {
@@ -225,6 +235,30 @@ export default function ModaLandingPage() {
                 <p>{answer}</p>
               </details>
             ))}
+          </div>
+        </section>
+
+        <section className="section">
+          <div className="section-head">
+            <span className="section-kicker">Explora MODA+</span>
+            <h2>Más sobre el punto de venta para ropa</h2>
+          </div>
+          <div className="pain-grid">
+            <Link className="post-card" href="/moda/giros">
+              <span>Giros</span>
+              <h2>Punto de venta por giro de ropa</h2>
+              <p>Boutique, zapatería, lencería, uniformes, mercería y más, cada giro con su matriz de variantes.</p>
+            </Link>
+            <Link className="post-card" href="/moda/comparativa">
+              <span>Comparativas</span>
+              <h2>MODA+ vs. otros puntos de venta</h2>
+              <p>Cómo se compara con SICAR, Loyverse, INTAC, Kyte y Vendty para una tienda de ropa.</p>
+            </Link>
+            <Link className="post-card" href="/moda/guias">
+              <span>Guías</span>
+              <h2>Guías para tu tienda de ropa</h2>
+              <p>Costos, inventario por talla y color, corte de caja y etiquetas con código de barras.</p>
+            </Link>
           </div>
         </section>
 
