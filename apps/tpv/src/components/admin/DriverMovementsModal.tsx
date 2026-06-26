@@ -92,6 +92,14 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
 
+  // Asignar fondo de cambio al repartidor (solo roles financieros). El origen
+  // decide si sale del cajón del local ("CAJA" → se refleja en el turno) o si es
+  // efectivo externo que el repartidor trae ("EXTERNO" → no toca la caja).
+  const [floatAmount, setFloatAmount] = useState("");
+  const [floatDesc, setFloatDesc] = useState("");
+  const [floatSource, setFloatSource] = useState<"CAJA" | "EXTERNO">("CAJA");
+  const [assigningFloat, setAssigningFloat] = useState(false);
+
   // Inventariar compras del repartidor (entrada de stock, SIN dinero). El gasto
   // ya está en su corte; esto solo suma al inventario. Offline-first vía
   // apiOrQueue (Idempotency-Key) — el backend es idempotente por movementId.
@@ -218,6 +226,30 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
       alert("Error al registrar movimiento");
     } finally {
       setAdding(false);
+    }
+  }
+
+  // Asigna fondo de cambio al repartidor (movimiento FLOAT). El backend valida
+  // rol admin; el origen ("CAJA"/"EXTERNO") decide si afecta el turno de caja.
+  async function handleAssignFloat(e: React.FormEvent) {
+    e.preventDefault();
+    if (!driver || !floatAmount || isNaN(Number(floatAmount)) || Number(floatAmount) <= 0) return;
+    try {
+      setAssigningFloat(true);
+      await api.post(`/api/driver-cash/${driver.id}/float`, {
+        amount: Number(floatAmount),
+        description: floatDesc,
+        source: floatSource,
+      });
+      setFloatAmount("");
+      setFloatDesc("");
+      fetchMovements();
+      onRefresh();
+    } catch (err: unknown) {
+      const e2 = err as { response?: { data?: { error?: string } } };
+      alert(e2?.response?.data?.error || "No se pudo asignar el fondo");
+    } finally {
+      setAssigningFloat(false);
     }
   }
 
@@ -420,6 +452,79 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
               {adding ? "Registrando..." : "Guardar Movimiento"}
             </button>
           </form>
+
+          {/* Asignar fondo de cambio (solo roles financieros — backend exige admin) */}
+          {canCut && (
+            <form onSubmit={handleAssignFloat} className="space-y-4 bg-[var(--surf2)] p-4 rounded-2xl border border-[var(--border)]">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-white/40">Asignar fondo de cambio</h3>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Origen del efectivo</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: "CAJA", label: "🏪 Desde caja", hint: "Sale del cajón del local" },
+                    { value: "EXTERNO", label: "💵 Desde fuera", hint: "No toca la caja" },
+                  ] as const).map((opt) => {
+                    const active = floatSource === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setFloatSource(opt.value)}
+                        className="rounded-xl px-3 py-2 text-left border transition-colors"
+                        style={{
+                          background: active ? "color-mix(in srgb, var(--warning) 14%, transparent)" : "var(--bg)",
+                          borderColor: active ? "var(--warning)" : "var(--border)",
+                        }}
+                      >
+                        <div className="text-sm font-bold text-white">{opt.label}</div>
+                        <div className="text-[10px] text-[var(--text-secondary)]">{opt.hint}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-1 space-y-1">
+                  <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Monto ($)</label>
+                  <input
+                    type="number"
+                    value={floatAmount}
+                    onChange={(e) => setFloatAmount(e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm text-white outline-none"
+                    required
+                  />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Descripción (opcional)</label>
+                  <input
+                    type="text"
+                    value={floatDesc}
+                    onChange={(e) => setFloatDesc(e.target.value)}
+                    placeholder="Ej: cambio para el turno"
+                    className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm text-white outline-none"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[10px] text-[var(--text-secondary)] ml-1">
+                {floatSource === "CAJA"
+                  ? "Se descuenta de la caja del local (entra como movimiento de caja en el turno abierto)."
+                  : "Efectivo externo: solo cuadra el corte del repartidor, no afecta la caja del local."}
+              </p>
+
+              <button
+                type="submit"
+                disabled={assigningFloat}
+                className="w-full py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-transform active:scale-95 disabled:opacity-50"
+                style={{ background: "var(--warning)", color: "var(--brand-fg)" }}
+              >
+                {assigningFloat ? "Asignando…" : "Asignar fondo"}
+              </button>
+            </form>
+          )}
 
           {/* Balance + corte: cerrar la caja del repartidor (solo roles financieros) */}
           {canCut && (
