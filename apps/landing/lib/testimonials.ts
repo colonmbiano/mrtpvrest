@@ -18,9 +18,9 @@ export type Testimonial = {
 
 export const testimonials: Testimonial[] = [
   {
-    // Cliente real (autorizado por el dueño del producto). Cita redactada a partir
-    // del uso documentado de Master Burger's: cortes de caja, KDS, reparto propio y
-    // operación en tiempo real. Confirmar texto/permiso antes de publicar a prod.
+    // Cliente real. Cita redactada a partir del uso documentado de Master Burger's
+    // (cortes de caja, KDS, reparto propio, operación en tiempo real). Texto y
+    // permiso APROBADOS por el dueño del producto (jun-2026) — listo para prod.
     quote:
       'Llevábamos ventas y cortes a mano; ahora caja, cocina y reparto van en la misma pantalla y cerramos el día cuadrados.',
     name: "Master Burger's",
