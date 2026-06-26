@@ -570,6 +570,7 @@ export interface ReceiptInput {
   address?: string | null;
   showPhone?: boolean;
   phone?: string | null;
+  showOrderNumber?: boolean | null;  // imprimir "Pedido: #folio" en el recibo (default true)
   // ── Identidad de negocio extendida (encabezado fiscal) ──────────────────
   // Si el tenant aún no define estos campos, el builder los omite (no imprime
   // líneas vacías). Ver reporte "campos del tenant a agregar".
@@ -593,6 +594,8 @@ export interface ReceiptInput {
   lineSpacing?: string | null;
   lineWeight?: string | null;
   paperWidth?: string | null;
+  // Recibo compacto: interlineado apretado + sin renglones en blanco (ahorra papel).
+  compactMode?: boolean;
   // ── Opciones POR LÍNEA (de-clutter del recibo, /admin/tickets) ───────────
   showItemsPrice?: boolean | null;    // false = oculta importes por línea (deja solo el total)
   showModifiers?: boolean | null;     // imprimir modificadores en el recibo (default true)
@@ -1093,11 +1096,14 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   // Estado de cobro: una cuenta sin pagar (paid===false) imprime título
   // "CUENTA" y total "Pendiente de cobro"; pagada o sin dato → "RECIBO"/"TOTAL".
   const isPending = input.paid === false;
+  // Modo compacto: interlineado apretado + sin renglones en blanco entre
+  // secciones/productos + menos avance al cortar. Ahorra papel térmico.
+  const compact = input.compactMode === true;
 
   let d =
     CMD.INIT +
     fontCmd(input.fontFamily) +
-    spacingCmd(input.lineSpacing) +
+    spacingCmd(compact ? "tight" : input.lineSpacing) +
     sizeCmd(input.fontSize) +
     (heavy ? CMD.BOLD_ON + CMD.DBLSTRIKE_ON : "") +
     CMD.ALIGN_CENTER;
@@ -1120,13 +1126,13 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
 
   // Saludo arriba (estilo Loyverse) + título del documento (CUENTA/RECIBO).
   const greeting = (input.businessFooter && input.businessFooter.trim()) || "Gracias por su preferencia";
-  d += CMD.LF + greeting + "\n";
-  d += CMD.LF + boldOn + (isPending ? "CUENTA" : "RECIBO") + "\n" + boldOff;
+  d += (compact ? "" : CMD.LF) + greeting + "\n";
+  d += (compact ? "" : CMD.LF) + boldOn + (isPending ? "CUENTA" : "RECIBO") + "\n" + boldOff;
 
   d += sep + CMD.ALIGN_LEFT;
 
   // ── 2. META (pedido, fecha, empleado, TPV, lugar, cliente) ───────────────
-  if (input.orderNumber) d += row("Pedido:", "#" + input.orderNumber, lw);
+  if (input.showOrderNumber !== false && input.orderNumber) d += row("Pedido:", "#" + input.orderNumber, lw);
   d += row("Fecha:", now, lw);
   if (input.cashierName) d += row("Empleado:", input.cashierName, lw);
   if (input.terminalName) d += row("TPV:", input.terminalName, lw);
@@ -1171,7 +1177,7 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   const itemSep    = input.showItemSeparator ? sep : "";
   // Por defecto deja una línea en blanco entre productos (look Loyverse); el
   // admin puede apretarlo a "tight" para juntarlos.
-  const itemGap    = input.itemSpacing === "tight" ? "" : "\n";
+  const itemGap    = (compact || input.itemSpacing === "tight") ? "" : "\n";
   const lines = input.items || [];
   lines.forEach((item, idx) => {
     // El `price` del item YA incluye los modificadores de pago: el backend los
@@ -1248,7 +1254,7 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   const tipPcts = input.suggestedTipPercents
     ?? (input.orderType === "DINE_IN" ? [10] : []);
   if (tipPcts.length > 0) {
-    d += "\n" + CMD.ALIGN_CENTER + "Propina sugerida\n" + CMD.ALIGN_LEFT;
+    d += (compact ? "" : "\n") + CMD.ALIGN_CENTER + "Propina sugerida\n" + CMD.ALIGN_LEFT;
     const { subtotal: baseForTip } = ivaBreakdown(input.total);
     for (const pct of tipPcts) {
       d += row(`  ${pct}%`, fmtMoney(round2(baseForTip * (pct / 100))), lw);
@@ -1275,7 +1281,7 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
 
   // ── 7. PIE ───────────────────────────────────────────────────────────────
   d += sep;
-  d += (heavy ? CMD.DBLSTRIKE_OFF + CMD.BOLD_OFF : "") + CMD.LF + CMD.LF + CMD.CUT;
+  d += (heavy ? CMD.DBLSTRIKE_OFF + CMD.BOLD_OFF : "") + (compact ? CMD.LF : CMD.LF + CMD.LF) + CMD.CUT;
   return d;
 }
 

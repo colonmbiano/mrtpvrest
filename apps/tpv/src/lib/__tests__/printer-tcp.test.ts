@@ -339,6 +339,33 @@ describe("recibo :: la línea NO duplica el modificador (incidente TPV-048483)",
   });
 });
 
+describe("recibo :: modo compacto y número de orden", () => {
+  const multi: ReceiptInput = {
+    ...baseReceipt,
+    orderNumber: "123",
+    items: [
+      { name: "Hamburguesa", quantity: 1, price: 100 },
+      { name: "Refresco", quantity: 2, price: 25 },
+    ],
+    subtotal: 150,
+    total: 150,
+  };
+
+  it("compactMode ahorra papel (menos saltos de línea que el normal)", () => {
+    const normal = buildCustomerReceipt({ ...multi, compactMode: false });
+    const compact = buildCustomerReceipt({ ...multi, compactMode: true });
+    const nl = (s: string) => (s.match(/\n/g) || []).length;
+    expect(nl(compact)).toBeLessThan(nl(normal));
+  });
+
+  it("showOrderNumber=false omite la línea 'Pedido:'", () => {
+    const con = buildCustomerReceipt({ ...multi, showOrderNumber: true });
+    const sin = buildCustomerReceipt({ ...multi, showOrderNumber: false });
+    expect(con).toContain("Pedido:");
+    expect(sin).not.toContain("Pedido:");
+  });
+});
+
 describe("recibo :: opciones POR LÍNEA (de-clutter del ticket)", () => {
   const money = (n: number) =>
     n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2 });

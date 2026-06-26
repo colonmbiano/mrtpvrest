@@ -26,6 +26,7 @@ interface TicketConfig {
   phone: string;
   showPhone: boolean;
   showOrderNumber: boolean;
+  compactMode: boolean;
   // Datos fiscales del emisor (encabezado del recibo).
   businessType: string;
   rfc: string;
@@ -79,7 +80,7 @@ interface TicketConfig {
 const EMPTY: TicketConfig = {
   businessName: "", header: "", subheader: "", footer: "Gracias por su preferencia",
   showLogo: true, logoUrl: null, showAddress: true, address: "", phone: "",
-  showPhone: true, showOrderNumber: true,
+  showPhone: true, showOrderNumber: true, compactMode: false,
   businessType: "", rfc: "", showInvoiceQr: false, invoiceUrl: "", invoiceFolioPrefix: "",
   deliveryFeeTaxed: true,
   showLoyaltyQr: false, loyaltyUrl: "",
@@ -216,6 +217,7 @@ export default function TicketFormatTab() {
               <Toggle label="Mostrar dirección" checked={cfg.showAddress} onChange={(v) => setCfg({ ...cfg, showAddress: v })} />
               <Toggle label="Mostrar teléfono" checked={cfg.showPhone} onChange={(v) => setCfg({ ...cfg, showPhone: v })} />
               <Toggle label="Número de orden en recibo" checked={cfg.showOrderNumber} onChange={(v) => setCfg({ ...cfg, showOrderNumber: v })} />
+              <Toggle label="Modo compacto (ahorra papel)" checked={cfg.compactMode} onChange={(v) => setCfg({ ...cfg, compactMode: v })} />
               <Toggle label="Puntos de lealtad" checked={cfg.showPoints} onChange={(v) => setCfg({ ...cfg, showPoints: v })} />
               <Toggle label="Sugerir propinas" checked={cfg.showTip} onChange={(v) => setCfg({ ...cfg, showTip: v })} />
               <Toggle label="Envío con IVA incluido" checked={cfg.deliveryFeeTaxed} onChange={(v) => setCfg({ ...cfg, deliveryFeeTaxed: v })} />
