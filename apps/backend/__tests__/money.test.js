@@ -5,6 +5,7 @@ const {
   applyFreeModifiers,
   lineSubtotal,
   computeOrderTotals,
+  computeEmployeeDiscount,
   summarizePayments,
   cashCutSummary,
   PAYMENT_METHOD_MAP,
@@ -176,6 +177,58 @@ describe('money :: computeOrderTotals', () => {
 
   test('lista vacía → todo en cero', () => {
     expect(computeOrderTotals([])).toEqual({ subtotal: 0, discount: 0, promoDiscount: 0, total: 0 });
+  });
+});
+
+// ── computeEmployeeDiscount (cobro a cuenta de empleado) ────────────────────
+describe('money :: computeEmployeeDiscount', () => {
+  test('descuento de empleado sobre el subtotal', () => {
+    // $200 con 50% de descuento → cargo $100 a su cuenta.
+    expect(computeEmployeeDiscount({ subtotal: 200, discountPct: 50 })).toEqual({
+      discount: 100, total: 100,
+    });
+  });
+
+  test('sin descuento (0%) cobra el subtotal completo', () => {
+    expect(computeEmployeeDiscount({ subtotal: 150, discountPct: 0 })).toEqual({
+      discount: 0, total: 150,
+    });
+  });
+
+  test('100% = cortesía total (cargo 0)', () => {
+    expect(computeEmployeeDiscount({ subtotal: 180, discountPct: 100 })).toEqual({
+      discount: 180, total: 0,
+    });
+  });
+
+  test('el descuento se aplica DESPUÉS de la promo automática (sobre el remanente)', () => {
+    // subtotal 300, promo 60 → base 240; 25% de 240 = 60 → total 300−60−60 = 180.
+    expect(computeEmployeeDiscount({ subtotal: 300, promoDiscount: 60, discountPct: 25 })).toEqual({
+      discount: 60, total: 180,
+    });
+  });
+
+  test('el envío se suma al total a cuenta (no se descuenta)', () => {
+    // subtotal 100, 10% → desc 10; + envío 35 → 125.
+    expect(computeEmployeeDiscount({ subtotal: 100, deliveryFee: 35, discountPct: 10 })).toEqual({
+      discount: 10, total: 125,
+    });
+  });
+
+  test('% fuera de rango se acota a [0,100]', () => {
+    expect(computeEmployeeDiscount({ subtotal: 100, discountPct: 150 }).total).toBe(0);
+    expect(computeEmployeeDiscount({ subtotal: 100, discountPct: -20 }).total).toBe(100);
+  });
+
+  test('redondea a 2 decimales', () => {
+    // 33.33% de 100 = 33.33
+    expect(computeEmployeeDiscount({ subtotal: 100, discountPct: 33.33 })).toEqual({
+      discount: 33.33, total: 66.67,
+    });
+  });
+
+  test('defaults a cero sin argumentos', () => {
+    expect(computeEmployeeDiscount()).toEqual({ discount: 0, total: 0 });
   });
 });
 

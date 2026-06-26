@@ -299,7 +299,8 @@ const { normalizePhone } = require('@mrtpvrest/config/phone');
 const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePermission, userHasPermission, hasValidOverride } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
-const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals } = require('../lib/money');
+const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals, computeEmployeeDiscount } = require('../lib/money');
+const { requireModule, MODULES } = require('../lib/modules');
 const { computeBulkPromoDiscount, loadActiveBulkPromos } = require('../lib/bulk-promo');
 const { nextOrderNumber } = require('../lib/order-number');
 const { releaseTableAfterPayment } = require('../services/table-lifecycle.service');
@@ -1647,6 +1648,112 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── POST /:id/charge-to-employee — Cobrar una orden "a cuenta de empleado".
+// La orden se cierra (PAID/DELIVERED) SIN entrar a caja (cashCollected=false) y
+// genera un EmployeeCharge CONSUMPTION pendiente que se descontará de la raya
+// del empleado. Aplica el descuento de empleado server-side (override del body
+// → perfil del empleado → default del PayrollConfig). Gateado por el módulo
+// 'payroll' (la caja de empleado vive con la nómina) + rol de cajero.
+// Todo en una sola $transaction; la orden y el cargo entran o no entran juntos.
+const gatePayrollOrders = requireModule(MODULES.MODULE_PAYROLL);
+router.post('/:id/charge-to-employee',
+  authenticate, requireTenantAccess,
+  requireRole('CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'),
+  gatePayrollOrders,
+  async (req, res) => {
+    try {
+      const restaurantId = req.user?.restaurantId || req.restaurantId;
+      const employeeId = String(req.body?.employeeId || '');
+      if (!employeeId) return res.status(400).json({ error: 'employeeId requerido' });
+
+      const order = await prisma.order.findFirst({
+        where: { id: req.params.id, restaurantId },
+        select: {
+          id: true, restaurantId: true, locationId: true, paymentStatus: true,
+          subtotal: true, promoDiscount: true, deliveryFee: true,
+        },
+      });
+      if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+      if (order.paymentStatus === 'PAID') {
+        return res.status(409).json({ error: 'La orden ya está pagada' });
+      }
+
+      // El empleado debe pertenecer al restaurante (anti-IDOR cross-tenant).
+      const emp = await prisma.employee.findFirst({
+        where: { id: employeeId, location: { restaurantId } },
+        select: { id: true, name: true, payProfile: { select: { discountPct: true } } },
+      });
+      if (!emp) return res.status(404).json({ error: 'Empleado no encontrado en este restaurante' });
+
+      // Descuento de empleado: override del cajero → perfil → config → 0.
+      const cfg = await prisma.payrollConfig.findUnique({
+        where: { restaurantId }, select: { employeeDiscountPct: true },
+      });
+      const bodyPct = req.body?.discountPct;
+      let pct;
+      if (bodyPct != null && Number.isFinite(Number(bodyPct))) pct = Number(bodyPct);
+      else if (emp.payProfile?.discountPct != null) pct = Number(emp.payProfile.discountPct);
+      else pct = Number(cfg?.employeeDiscountPct || 0);
+      pct = Math.min(Math.max(pct, 0), 100);
+
+      // Total y descuento se computan SIEMPRE en el servidor (lib/money.js).
+      const { discount: empDiscount, total } = computeEmployeeDiscount({
+        subtotal: order.subtotal,
+        promoDiscount: order.promoDiscount,
+        deliveryFee: order.deliveryFee,
+        discountPct: pct,
+      });
+      const note = typeof req.body?.note === 'string' ? req.body.note.slice(0, 300) : null;
+
+      const result = await prisma.$transaction(async (tx) => {
+        const updatedOrder = await tx.order.update({
+          where: { id: order.id },
+          data: {
+            paymentMethod: 'EMPLOYEE_ACCOUNT',
+            paymentStatus: 'PAID',
+            status: 'DELIVERED',
+            paidAt: new Date(),
+            discount: empDiscount,
+            total,
+            cashCollected: false,
+            cashCollectedAt: null,
+          },
+        });
+        const charge = await tx.employeeCharge.create({
+          data: {
+            restaurantId,
+            locationId: order.locationId || null,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            type: 'CONSUMPTION',
+            status: 'PENDING',
+            amount: total,
+            discountAmount: empDiscount,
+            orderId: order.id,
+            note,
+            createdById: req.user?.id || null,
+          },
+        });
+        return { updatedOrder, charge };
+      });
+
+      await releaseTableIfDineIn(order.id);
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`)
+          .emit('order:updated', result.updatedOrder);
+      }
+      res.json({ order: result.updatedOrder, charge: result.charge });
+    } catch (e) {
+      // orderId es @unique en employee_charges: un segundo cobro a cuenta de la
+      // misma orden (race / doble-tap) choca aquí en vez de duplicar el cargo.
+      if (e?.code === 'P2002') return res.status(409).json({ error: 'La orden ya fue cobrada a cuenta de empleado' });
+      console.error('POST /orders/:id/charge-to-employee:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
 // ── PATCH /:id/type — Cambiar el tipo de una orden abierta
 // (DINE_IN ↔ TAKEOUT ↔ DELIVERY). Útil cuando el cliente pidió en mesa y
 // luego decide llevar/domicilio (o viceversa). Reglas de saneo:
@@ -2070,21 +2177,30 @@ router.put('/:id/void-payment', authenticate, requireTenantAccess, requirePermis
     const auditNote = `[Cobro anulado por ${voidedBy} el ${stamp}]`;
     const notes = existing.notes ? `${existing.notes}\n${auditNote}` : auditNote;
 
-    const updated = await prisma.order.update({
-      where: { id },
-      data: {
-        paymentStatus: 'PENDING',
-        cashCollected: false,
-        cashCollectedAt: null,
-        cashCollectedBy: null,
-        paidAt: null,
-        paymentMethod: 'PENDING',
-        notes,
-      },
-      include: {
-        user: { select: { name: true, phone: true } },
-        items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
-      }
+    const updated = await prisma.$transaction(async (tx) => {
+      // Si se cobró "a cuenta de empleado", anular el cargo PENDIENTE para que el
+      // empleado deje de deberlo. No se toca uno ya liquidado en una raya cerrada
+      // (status SETTLED): revertirlo corrompería una corrida pagada.
+      await tx.employeeCharge.updateMany({
+        where: { orderId: id, restaurantId, status: 'PENDING' },
+        data: { status: 'CANCELLED' },
+      });
+      return tx.order.update({
+        where: { id },
+        data: {
+          paymentStatus: 'PENDING',
+          cashCollected: false,
+          cashCollectedAt: null,
+          cashCollectedBy: null,
+          paidAt: null,
+          paymentMethod: 'PENDING',
+          notes,
+        },
+        include: {
+          user: { select: { name: true, phone: true } },
+          items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
+        },
+      });
     });
 
     const io = req.app.get('io');
