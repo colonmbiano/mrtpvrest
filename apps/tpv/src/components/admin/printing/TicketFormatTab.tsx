@@ -27,6 +27,10 @@ interface TicketConfig {
   showPhone: boolean;
   showOrderNumber: boolean;
   compactMode: boolean;
+  showCustomerData: boolean;
+  showWifi: boolean;
+  wifiSsid: string;
+  wifiPassword: string;
   // Datos fiscales del emisor (encabezado del recibo).
   businessType: string;
   rfc: string;
@@ -81,6 +85,7 @@ const EMPTY: TicketConfig = {
   businessName: "", header: "", subheader: "", footer: "Gracias por su preferencia",
   showLogo: true, logoUrl: null, showAddress: true, address: "", phone: "",
   showPhone: true, showOrderNumber: true, compactMode: false,
+  showCustomerData: true, showWifi: false, wifiSsid: "", wifiPassword: "",
   businessType: "", rfc: "", showInvoiceQr: false, invoiceUrl: "", invoiceFolioPrefix: "",
   deliveryFeeTaxed: true,
   showLoyaltyQr: false, loyaltyUrl: "",
@@ -218,6 +223,7 @@ export default function TicketFormatTab() {
               <Toggle label="Mostrar teléfono" checked={cfg.showPhone} onChange={(v) => setCfg({ ...cfg, showPhone: v })} />
               <Toggle label="Número de orden en recibo" checked={cfg.showOrderNumber} onChange={(v) => setCfg({ ...cfg, showOrderNumber: v })} />
               <Toggle label="Modo compacto (ahorra papel)" checked={cfg.compactMode} onChange={(v) => setCfg({ ...cfg, compactMode: v })} />
+              <Toggle label="Mostrar datos del cliente" checked={cfg.showCustomerData} onChange={(v) => setCfg({ ...cfg, showCustomerData: v })} />
               <Toggle label="Puntos de lealtad" checked={cfg.showPoints} onChange={(v) => setCfg({ ...cfg, showPoints: v })} />
               <Toggle label="Sugerir propinas" checked={cfg.showTip} onChange={(v) => setCfg({ ...cfg, showTip: v })} />
               <Toggle label="Envío con IVA incluido" checked={cfg.deliveryFeeTaxed} onChange={(v) => setCfg({ ...cfg, deliveryFeeTaxed: v })} />
@@ -240,6 +246,15 @@ export default function TicketFormatTab() {
               </Field>
             )}
             <p className="text-[10px] text-zinc-500 -mt-2 ml-1">El cliente escanea el QR al pie del recibo para registrarse en tu tienda en línea y acumular puntos.</p>
+
+            <SectionLabel>WiFi para clientes (al pie del recibo)</SectionLabel>
+            <Toggle label="Imprimir datos de WiFi" checked={cfg.showWifi} onChange={(v) => setCfg({ ...cfg, showWifi: v })} />
+            {cfg.showWifi && (
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Red (SSID)"><input value={cfg.wifiSsid ?? ""} onChange={(e) => setCfg({ ...cfg, wifiSsid: e.target.value })} className={inputCls} placeholder="MiNegocio_WiFi" /></Field>
+                <Field label="Contraseña"><input value={cfg.wifiPassword ?? ""} onChange={(e) => setCfg({ ...cfg, wifiPassword: e.target.value })} className={inputCls} placeholder="••••••••" /></Field>
+              </div>
+            )}
 
             <SectionLabel>Tipografía del recibo</SectionLabel>
             <Field label="Ancho de papel">

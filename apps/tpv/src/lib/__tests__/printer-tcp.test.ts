@@ -366,6 +366,31 @@ describe("recibo :: modo compacto y número de orden", () => {
   });
 });
 
+describe("recibo :: WiFi y datos del cliente", () => {
+  const withCust: ReceiptInput = {
+    ...baseReceipt,
+    customerName: "Juan Pérez",
+    items: [{ name: "Café", quantity: 1, price: 50 }],
+    subtotal: 50,
+    total: 50,
+  };
+
+  it("showCustomerData=false omite la línea 'Cliente:'", () => {
+    const con = buildCustomerReceipt({ ...withCust, showCustomerData: true });
+    const sin = buildCustomerReceipt({ ...withCust, showCustomerData: false });
+    expect(con).toContain("Cliente:");
+    expect(sin).not.toContain("Cliente:");
+  });
+
+  it("showWifi imprime la red y la clave; apagado las omite", () => {
+    const on = buildCustomerReceipt({ ...withCust, showWifi: true, wifiSsid: "MB_WiFi", wifiPassword: "clave123" });
+    const off = buildCustomerReceipt({ ...withCust, showWifi: false, wifiSsid: "MB_WiFi", wifiPassword: "clave123" });
+    expect(on).toContain("MB_WiFi");
+    expect(on).toContain("clave123");
+    expect(off).not.toContain("MB_WiFi");
+  });
+});
+
 describe("recibo :: opciones POR LÍNEA (de-clutter del ticket)", () => {
   const money = (n: number) =>
     n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2 });
