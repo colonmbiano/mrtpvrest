@@ -274,18 +274,23 @@ router.post('/:driverId/float', authenticate, requireTenantAccess, requireAdmin,
   try {
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
-    const { amount, description } = req.body;
+    const { amount, description, source } = req.body;
     const numericAmount = Number(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 50000) {
       return res.status(400).json({ error: 'amount invalido' });
     }
-    // El fondo de cambio es efectivo REAL de la caja que pasa a manos del
-    // repartidor. Se refleja como ShiftCashIn en el turno abierto para que "sume
-    // al total de la caja": el cierre lo espera de vuelta (como efectivo + el
-    // gasto que se haya cubierto con él). Mismo criterio que el fondo para
-    // compras en POST /movements; evita el sobrante fantasma.
+    // Origen del fondo:
+    //  - 'CAJA' (default): efectivo REAL del cajón del local. Se refleja como
+    //    ShiftCashIn en el turno abierto para que "sume al total de la caja":
+    //    el cierre lo espera de vuelta (como efectivo + el gasto cubierto con
+    //    él). Mismo criterio que el fondo para compras en POST /movements;
+    //    evita el sobrante fantasma.
+    //  - 'EXTERNO': efectivo que NO sale de la caja del local (el repartidor lo
+    //    trae de fuera). No toca el turno: solo se registra como FLOAT en su
+    //    caja para que cuadre su corte, sin inflar el total de la caja.
+    const fromShift = source !== 'EXTERNO';
     let openShift = null;
-    if (driver.locationId) {
+    if (fromShift && driver.locationId) {
       openShift = await prisma.cashShift.findFirst({
         where: { locationId: driver.locationId, isOpen: true },
         orderBy: { openedAt: 'desc' },
@@ -299,7 +304,7 @@ router.post('/:driverId/float', authenticate, requireTenantAccess, requireAdmin,
           type: 'FLOAT',
           category: 'CAMBIO',
           amount: numericAmount,
-          description: description || 'Fondo de cambio asignado',
+          description: description || (fromShift ? 'Fondo de cambio (desde caja)' : 'Fondo de cambio (externo)'),
         },
       });
       if (openShift) {
