@@ -271,8 +271,44 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     return () => { cancelled = true; clearInterval(id); };
   }, [mounted, isLocked, fetchShift]);
 
-  const handleConfirmDrawerPayment = async (method: string) => {
+  const handleConfirmDrawerPayment = async (
+    method: string,
+    _tip?: unknown,
+    _driverId?: string | null,
+    _printReceipt?: boolean,
+    account?: { employeeId: string; discountPct: number | null } | null,
+  ) => {
     if (!payOrder) return;
+
+    // Cobro "a cuenta de empleado": no entra a caja; el backend aplica el
+    // descuento de empleado y genera el cargo que se descuenta de la raya.
+    // Requiere conexión (resolución server-side del descuento + módulo nómina).
+    if (method === "EMPLOYEE_ACCOUNT") {
+      if (!account?.employeeId) {
+        toast.error("Selecciona un empleado");
+        return;
+      }
+      try {
+        await api.post(`/api/orders/${payOrder.id}/charge-to-employee`, {
+          employeeId: account.employeeId,
+          discountPct: account.discountPct,
+        });
+        toast.success("Cargado a la cuenta del empleado");
+      } catch (e: any) {
+        toast.error(
+          "No se pudo cargar a cuenta: " +
+            (e?.response?.data?.error || e?.message || "fallo"),
+        );
+        return;
+      }
+      setPayOrder(null);
+      useActiveOrderStore.getState().clear();
+      useTicketStore.getState().clearActiveItems();
+      fetchOpenOrders();
+      router.replace("/pos/order-type");
+      return;
+    }
+
     const res = await apiOrQueue(
       "payment",
       "PUT",
@@ -1526,6 +1562,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           }))}
           onConfirm={handleConfirmDrawerPayment}
           onConfirmSplit={handleConfirmSplit}
+          employeeAccountEnabled={tpvConfig.employeeAccountEnabled}
         />
       )}
 

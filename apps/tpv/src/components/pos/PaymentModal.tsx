@@ -15,6 +15,9 @@ import {
   Delete,
   Tag,
   Printer,
+  UserRound,
+  Percent,
+  Search,
 } from "lucide-react";
 import api from "@/lib/api";
 import DiscountModal from "@/components/pos/DiscountModal";
@@ -58,6 +61,19 @@ export interface PaymentTip {
   amount: number;
 }
 
+/** Datos del cobro "a cuenta de empleado" (método EMPLOYEE_ACCOUNT). */
+export interface EmployeeAccountPayload {
+  employeeId: string;
+  /** Descuento de empleado (%). null = usar el configurado server-side. */
+  discountPct: number | null;
+}
+
+interface EmployeeLite {
+  id: string;
+  name: string;
+  role?: string;
+}
+
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -81,7 +97,11 @@ interface PaymentModalProps {
     tip?: PaymentTip,
     driverId?: string | null,
     printReceipt?: boolean,
+    account?: EmployeeAccountPayload | null,
   ) => void | Promise<void>;
+  /** Habilita el método "Empleado" (consumo a cuenta). Off por defecto: se
+   *  enciende cuando el tenant tiene el módulo de nómina activo. */
+  employeeAccountEnabled?: boolean;
   /** Opcional · invocado en lugar de onConfirm cuando el usuario
    *  presiona Confirmar en modo split. Si no se provee, usa onConfirm. */
   onConfirmSplit?: (
@@ -117,6 +137,11 @@ const METHODS = [
   { id: "COURTESY", icon: Gift,       label: "Cortesía" },
 ] as const;
 
+// Método extra "a cuenta de empleado" — se agrega solo cuando el tenant tiene
+// la nómina activa (employeeAccountEnabled). No es un tender de caja: cierra la
+// orden sin efectivo y genera un cargo que se descuenta de la raya.
+const EMPLOYEE_METHOD = { id: "EMPLOYEE_ACCOUNT", icon: UserRound, label: "Empleado" } as const;
+
 const PaymentModal: React.FC<PaymentModalProps> = ({
   isOpen,
   onClose,
@@ -132,6 +157,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   onConfirm,
   onConfirmSplit,
   showReceiptToggle = false,
+  employeeAccountEnabled = false,
 }) => {
   const [tab, setTab] = useState<Tab>("TOTAL");
   const [splitMode, setSplitMode] = useState<SplitMode>("EQUAL");
@@ -185,6 +211,48 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   if (prevOpenDriver !== isOpen) {
     setPrevOpenDriver(isOpen);
     if (!isOpen) setDriverId(null);
+  }
+
+  // ── Cobro "a cuenta de empleado" (método EMPLOYEE_ACCOUNT) ──────────────────
+  const [employees, setEmployees] = useState<EmployeeLite[]>([]);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [accountEmployeeId, setAccountEmployeeId] = useState<string | null>(null);
+  const [accountSearch, setAccountSearch] = useState("");
+  // Descuento de empleado (%) tecleado por el cajero. "" = usar el configurado
+  // server-side (perfil del empleado o default del negocio).
+  const [accountDiscount, setAccountDiscount] = useState("");
+  const isEmployeeAccount = method === "EMPLOYEE_ACCOUNT";
+
+  // Carga diferida de empleados activos al elegir el método "Empleado".
+  useEffect(() => {
+    if (!isOpen || !isEmployeeAccount || employees.length > 0 || employeesLoading) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setEmployeesLoading(true);
+      api.get<any[]>("/api/employees/sync")
+        .then(({ data }) => {
+          if (cancelled) return;
+          const list = (Array.isArray(data) ? data : [])
+            .filter((e) => e && e.isActive !== false)
+            .map((e) => ({ id: String(e.id), name: e.name, role: e.role }));
+          setEmployees(list);
+        })
+        .catch(() => { if (!cancelled) setEmployees([]); })
+        .finally(() => { if (!cancelled) setEmployeesLoading(false); });
+    });
+    return () => { cancelled = true; };
+  }, [isOpen, isEmployeeAccount, employees.length, employeesLoading]);
+
+  // Reset del estado de cuenta de empleado al cerrar (render-phase, ver patrón).
+  const [prevOpenAcct, setPrevOpenAcct] = useState(isOpen);
+  if (prevOpenAcct !== isOpen) {
+    setPrevOpenAcct(isOpen);
+    if (!isOpen) {
+      setAccountEmployeeId(null);
+      setAccountSearch("");
+      setAccountDiscount("");
+    }
   }
 
   const subtotal = useMemo(
@@ -343,8 +411,20 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     ? { percent: tipPercent, amount: tipAmount }
     : undefined;
 
-  // Gate de confirmación: DELIVERY exige repartidor seleccionado.
-  const canConfirm = (!isDelivery || Boolean(driverId)) && !discountSaving;
+  // Payload del cobro a cuenta de empleado (solo cuando aplica y hay empleado).
+  const accountPayload: EmployeeAccountPayload | null =
+    isEmployeeAccount && accountEmployeeId
+      ? {
+          employeeId: accountEmployeeId,
+          discountPct: accountDiscount.trim() === "" ? null : Number(accountDiscount),
+        }
+      : null;
+
+  // Gate de confirmación: DELIVERY exige repartidor; "Empleado" exige empleado.
+  const canConfirm =
+    (!isDelivery || Boolean(driverId)) &&
+    (!isEmployeeAccount || Boolean(accountEmployeeId)) &&
+    !discountSaving;
 
   const handleConfirm = async () => {
     // Guarda anti doble-tap: el ref se evalúa síncrono (a prueba de closures
@@ -355,7 +435,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     setSubmitting(true);
     try {
       if (tab === "TOTAL") {
-        await onConfirm(method, tipPayload, driverId, printReceipt);
+        await onConfirm(method, tipPayload, driverId, printReceipt, accountPayload);
         return;
       }
       // SPLIT
@@ -602,6 +682,16 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 tipAmount={tipAmount}
                 onTipChange={setTipPercent}
                 baseTotal={total}
+                employeeAccountEnabled={employeeAccountEnabled}
+                employees={employees}
+                employeesLoading={employeesLoading}
+                accountEmployeeId={accountEmployeeId}
+                onSelectEmployee={setAccountEmployeeId}
+                accountSearch={accountSearch}
+                onAccountSearchChange={setAccountSearch}
+                accountDiscount={accountDiscount}
+                onAccountDiscountChange={setAccountDiscount}
+                subtotal={subtotal}
               />
             ) : (
               <SplitView
@@ -825,13 +915,18 @@ function CashKey({
 function MethodGrid({
   method,
   onChange,
+  allowEmployee = false,
 }: {
   method: string;
   onChange: (m: string) => void;
+  allowEmployee?: boolean;
 }) {
+  const list = allowEmployee
+    ? [...METHODS, EMPLOYEE_METHOD]
+    : METHODS;
   return (
-    <div className="grid grid-cols-4 gap-3">
-      {METHODS.map((m) => {
+    <div className={`grid gap-3 ${allowEmployee ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-4"}`}>
+      {list.map((m) => {
         const Icon = m.icon;
         const isSelected = method === m.id;
         return (
@@ -856,6 +951,148 @@ function MethodGrid({
   );
 }
 
+function EmployeeAccountPanel({
+  employees,
+  loading,
+  selectedId,
+  onSelect,
+  search,
+  onSearchChange,
+  discount,
+  onDiscountChange,
+  subtotal,
+}: {
+  employees: EmployeeLite[];
+  loading: boolean;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  search: string;
+  onSearchChange: (s: string) => void;
+  discount: string;
+  onDiscountChange: (s: string) => void;
+  subtotal: number;
+}) {
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? employees.filter(
+        (e) =>
+          e.name.toLowerCase().includes(q) ||
+          (e.role || "").toLowerCase().includes(q),
+      )
+    : employees;
+  const pct =
+    discount.trim() === ""
+      ? null
+      : Math.min(Math.max(Number(discount) || 0, 0), 100);
+  const discountAmount = pct != null ? subtotal * (pct / 100) : 0;
+  const previewTotal = Math.max(0, subtotal - discountAmount);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="w-11 h-11 rounded-2xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center shrink-0">
+          <UserRound size={20} />
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-[13px] font-black text-white tracking-tight">
+            A cuenta de empleado
+          </h3>
+          <p className="text-[11px] text-white/45 font-medium">
+            Se descuenta de su raya. No entra a caja.
+          </p>
+        </div>
+      </div>
+
+      <div className="relative">
+        <Search
+          size={16}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30"
+        />
+        <input
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Buscar empleado…"
+          className="w-full min-h-[48px] pl-10 pr-3 rounded-2xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-white/30 outline-none focus:border-[var(--brand)]"
+        />
+      </div>
+
+      {loading ? (
+        <p className="text-xs font-medium text-white/40 py-3 animate-pulse text-center">
+          Cargando empleados…
+        </p>
+      ) : filtered.length === 0 ? (
+        <p className="text-xs font-medium text-white/40 py-3 text-center">
+          Sin empleados
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[220px] overflow-y-auto scrollbar-hide">
+          {filtered.map((e) => {
+            const active = selectedId === e.id;
+            return (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => onSelect(e.id)}
+                className={`min-h-[56px] px-3 py-2 rounded-xl border text-left transition-all active:scale-95 ${
+                  active
+                    ? "bg-[var(--brand-soft)] border-[var(--brand)] text-white"
+                    : "bg-white/[0.03] border-white/10 text-white/75"
+                }`}
+              >
+                <span className="block text-sm font-semibold truncate">
+                  {e.name}
+                </span>
+                {e.role && (
+                  <span className="block text-[9px] font-bold uppercase tracking-widest text-white/40">
+                    {e.role}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Percent size={15} className="text-[var(--brand)] shrink-0" />
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/70">
+              Descuento empleado
+            </span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <input
+              value={discount}
+              onChange={(e) =>
+                onDiscountChange(e.target.value.replace(/[^0-9.]/g, ""))
+              }
+              inputMode="decimal"
+              placeholder="auto"
+              className="w-20 text-right min-h-[44px] px-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm tabular-nums outline-none focus:border-[var(--brand)] placeholder:text-white/30"
+            />
+            <span className="text-white/40 text-sm font-bold">%</span>
+          </div>
+        </div>
+        <p className="text-[10px] text-white/35 font-medium leading-relaxed">
+          Vacío = usa el descuento configurado del empleado. El total final lo
+          calcula el servidor.
+        </p>
+        {pct != null && (
+          <div className="flex items-center justify-between pt-2 border-t border-white/5">
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-white/45">
+              Total aprox.
+            </span>
+            <span className="tabular-nums text-xl font-black text-[var(--brand)]">
+              ${previewTotal.toFixed(2)}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TotalView({
   method,
   onMethodChange,
@@ -871,6 +1108,16 @@ function TotalView({
   tipAmount,
   onTipChange,
   baseTotal,
+  employeeAccountEnabled,
+  employees,
+  employeesLoading,
+  accountEmployeeId,
+  onSelectEmployee,
+  accountSearch,
+  onAccountSearchChange,
+  accountDiscount,
+  onAccountDiscountChange,
+  subtotal,
 }: {
   method: string;
   onMethodChange: (m: string) => void;
@@ -886,6 +1133,16 @@ function TotalView({
   tipAmount: number;
   onTipChange: (pct: number) => void;
   baseTotal: number;
+  employeeAccountEnabled: boolean;
+  employees: EmployeeLite[];
+  employeesLoading: boolean;
+  accountEmployeeId: string | null;
+  onSelectEmployee: (id: string) => void;
+  accountSearch: string;
+  onAccountSearchChange: (s: string) => void;
+  accountDiscount: string;
+  onAccountDiscountChange: (s: string) => void;
+  subtotal: number;
 }) {
   // Tecleo manual del efectivo recibido. El buffer cashEntry vive en el
   // padre (se resetea con cashReceived). Tipear reemplaza el monto auto.
@@ -916,9 +1173,23 @@ function TotalView({
         onChange={onTipChange}
       />
 
-      <MethodGrid method={method} onChange={onMethodChange} />
+      <MethodGrid method={method} onChange={onMethodChange} allowEmployee={employeeAccountEnabled} />
 
       <div className="rounded-3xl bg-white/5 border border-white/10 p-6">
+        {method === "EMPLOYEE_ACCOUNT" && (
+          <EmployeeAccountPanel
+            employees={employees}
+            loading={employeesLoading}
+            selectedId={accountEmployeeId}
+            onSelect={onSelectEmployee}
+            search={accountSearch}
+            onSearchChange={onAccountSearchChange}
+            discount={accountDiscount}
+            onDiscountChange={onAccountDiscountChange}
+            subtotal={subtotal}
+          />
+        )}
+
         {method === "CASH" && (
           <div className="space-y-6">
             <div className="flex justify-between items-end gap-4">

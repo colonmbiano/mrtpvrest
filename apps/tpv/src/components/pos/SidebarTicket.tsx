@@ -699,11 +699,23 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     tip?: PaymentTip,
     driverId?: string | null,
     printReceipt?: boolean,
+    account?: { employeeId: string; discountPct: number | null } | null,
   ) => {
     if (ticket.items.length === 0 && previousItems.length === 0) return;
     if (processing) return; // evita doble cobro / ronda duplicada por doble-tap
     setProcessing(true);
     try {
+      // Cobro "a cuenta de empleado": la orden se crea SIN pagar y se cierra con
+      // POST /:id/charge-to-employee (aplica el descuento de empleado y genera el
+      // cargo de su raya). Requiere conexión y un empleado seleccionado.
+      const isEmployeeAccount = method === "EMPLOYEE_ACCOUNT";
+      if (isEmployeeAccount) {
+        if (!account?.employeeId) { toast.error("Selecciona un empleado"); return; }
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          toast.error("El cobro a cuenta de empleado requiere conexión");
+          return;
+        }
+      }
       const tipAmount = tip?.amount ?? 0;
       const itemsPayload = buildItemsPayload();
       const printItems = buildTicketItems();
@@ -779,8 +791,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           subtotal,
           discount: ticket.discount,
           total: total + tipAmount,
-          paymentMethod: method,
-          status: "DELIVERED",
+          // A cuenta de empleado: crear SIN pagar (el charge-to-employee la cierra
+          // aplicando el descuento). Marcarla PAID aquí la dejaría con el método
+          // pero sin el cargo ni el descuento.
+          paymentMethod: isEmployeeAccount ? "PENDING" : method,
+          status: isEmployeeAccount ? "CONFIRMED" : "DELIVERED",
           notes: tip && tip.percent > 0
             ? `Propina ${tip.percent}% ($${tipAmount.toFixed(2)})`
             : undefined,
@@ -848,35 +863,55 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       }
 
       const payableOrderId = activeOrderId || order?.id;
-      // El create de orden nueva ya marca PAID cuando manda status=DELIVERED +
-      // paymentMethod (paidOnCreate). En ese caso el PUT /payment es redundante
-      // → lo saltamos para ahorrar un round-trip. Excepción: DINE_IN, donde el
-      // PUT /payment también libera la mesa (releaseTableIfDineIn).
-      const alreadyPaidOnCreate =
-        !activeOrderId && order?.paymentStatus === "PAID" && ticket.type !== "DINE_IN";
-      if (payableOrderId && !queued && !alreadyPaidOnCreate) {
-        const payRes = await apiOrQueue<any>(
-          "payment",
-          "PUT",
-          `/api/orders/${payableOrderId}/payment`,
-          { paymentMethod: method },
-        );
-        if (!payRes.ok) {
-          toast.error("Error al cobrar: " + (payRes.error || ""));
+
+      if (isEmployeeAccount) {
+        // El cargo a cuenta no se encola: necesita la orden ya creada en el
+        // servidor para aplicar el descuento y generar el EmployeeCharge.
+        if (!payableOrderId || queued) {
+          toast.error("No se pudo cargar a cuenta (sin conexión o sin orden)");
           return;
         }
-        queued = queued || payRes.queued;
-        if (payRes.data) order = { ...order, ...payRes.data };
-      } else if (activeOrderId && queued) {
-        const payRes = await apiOrQueue<any>(
-          "payment",
-          "PUT",
-          `/api/orders/${activeOrderId}/payment`,
-          { paymentMethod: method },
-        );
-        if (!payRes.ok) {
-          toast.error("Error al encolar cobro: " + (payRes.error || ""));
+        try {
+          const { data } = await api.post(`/api/orders/${payableOrderId}/charge-to-employee`, {
+            employeeId: account!.employeeId,
+            discountPct: account!.discountPct,
+          });
+          if (data?.order) order = { ...order, ...data.order };
+        } catch (e: any) {
+          toast.error("No se pudo cargar a cuenta: " + (e?.response?.data?.error || e?.message || "fallo"));
           return;
+        }
+      } else {
+        // El create de orden nueva ya marca PAID cuando manda status=DELIVERED +
+        // paymentMethod (paidOnCreate). En ese caso el PUT /payment es redundante
+        // → lo saltamos para ahorrar un round-trip. Excepción: DINE_IN, donde el
+        // PUT /payment también libera la mesa (releaseTableIfDineIn).
+        const alreadyPaidOnCreate =
+          !activeOrderId && order?.paymentStatus === "PAID" && ticket.type !== "DINE_IN";
+        if (payableOrderId && !queued && !alreadyPaidOnCreate) {
+          const payRes = await apiOrQueue<any>(
+            "payment",
+            "PUT",
+            `/api/orders/${payableOrderId}/payment`,
+            { paymentMethod: method },
+          );
+          if (!payRes.ok) {
+            toast.error("Error al cobrar: " + (payRes.error || ""));
+            return;
+          }
+          queued = queued || payRes.queued;
+          if (payRes.data) order = { ...order, ...payRes.data };
+        } else if (activeOrderId && queued) {
+          const payRes = await apiOrQueue<any>(
+            "payment",
+            "PUT",
+            `/api/orders/${activeOrderId}/payment`,
+            { paymentMethod: method },
+          );
+          if (!payRes.ok) {
+            toast.error("Error al encolar cobro: " + (payRes.error || ""));
+            return;
+          }
         }
       }
 
@@ -1407,6 +1442,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             })),
           ]}
           onConfirm={handleProcessPayment}
+          employeeAccountEnabled={tpvConfig.employeeAccountEnabled}
           showReceiptToggle
         />
 

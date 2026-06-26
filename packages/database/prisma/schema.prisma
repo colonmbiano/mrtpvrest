@@ -345,6 +345,7 @@ model Restaurant {
   employeePayProfiles EmployeePayProfile[]
   payrollPeriods      PayrollPeriod[]
   payrollItems        PayrollItem[]
+  employeeCharges     EmployeeCharge[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -449,6 +450,7 @@ model Location {
 
   // FASE NÓMINA · corridas de raya por sucursal
   payrollPeriods PayrollPeriod[]
+  employeeCharges EmployeeCharge[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -719,6 +721,9 @@ enum PaymentMethod {
   SPEI
   CASH_ON_DELIVERY
   QR_CODE
+  // Consumo a cuenta de un empleado: la orden se cierra SIN entrar a caja y
+  // genera un EmployeeCharge que se descuenta de su raya. Ver employee_charges.
+  EMPLOYEE_ACCOUNT
 }
 
 enum PaymentStatus {
@@ -845,6 +850,10 @@ model Order {
   statusHistory OrderStatusHistory[]
   rounds        OrderRound[]
   payments      PaymentTransaction[]
+
+  // FASE NÓMINA · si la orden se cobró "a cuenta de empleado", aquí cuelga el
+  // cargo generado (1:1). Nullable: la inmensa mayoría de órdenes no lo tienen.
+  employeeCharge EmployeeCharge?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1738,6 +1747,7 @@ model Employee {
   // FASE NÓMINA · perfil de pago (1:1) e histórico de renglones de raya
   payProfile   EmployeePayProfile?
   payrollItems PayrollItem[]
+  charges      EmployeeCharge[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1801,6 +1811,11 @@ model PayrollConfig {
   // interno (sin CFDI/IMSS). Prenderla habilita el track fiscal (fase posterior).
   fiscalEnabled Boolean @default(false)
 
+  // Descuento de empleado por DEFECTO (%) aplicado cuando un empleado consume
+  // "a cuenta" desde el TPV. 0 = sin descuento. Se puede sobreescribir por
+  // empleado (EmployeePayProfile.discountPct) o por venta (override del cajero).
+  employeeDiscountPct Decimal @default(0) @db.Decimal(5, 2)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1821,6 +1836,11 @@ model EmployeePayProfile {
   hourlyRate      Decimal @default(0) @db.Decimal(12, 2)
   fixedAmount     Decimal @default(0) @db.Decimal(12, 2) // por periodo (WEEKLY_FIXED)
   perDeliveryRate Decimal @default(0) @db.Decimal(12, 2) // comisión por entrega
+
+  // Descuento de empleado (%) propio de este empleado. null = usa el default
+  // del PayrollConfig. Permite tarifas de consumo distintas (p.ej. gerente 100%,
+  // cocinero 50%) sin tocar la config global.
+  discountPct Decimal? @db.Decimal(5, 2)
 
   isActive  Boolean  @default(true)
   notes     String?
@@ -1854,7 +1874,8 @@ model PayrollPeriod {
   paidById     String?
   paidAt       DateTime?
 
-  items     PayrollItem[]
+  items          PayrollItem[]
+  settledCharges EmployeeCharge[] // cargos a cuenta liquidados en esta corrida
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
@@ -1900,6 +1921,65 @@ model PayrollItem {
   @@index([periodId])
   @@index([employeeId])
   @@map("payroll_items")
+}
+
+enum EmployeeChargeType {
+  CONSUMPTION // consumo a cuenta (pidió comida/producto desde el TPV)
+  ADVANCE     // anticipo en efectivo (le adelantaron dinero de su sueldo)
+  ADJUSTMENT  // ajuste manual (+ debe / − a favor) capturado por el admin
+}
+
+enum EmployeeChargeStatus {
+  PENDING   // pendiente de descontar en una raya
+  SETTLED   // ya descontado en una corrida pagada (settledPeriodId)
+  CANCELLED // anulado antes de liquidarse
+}
+
+// Cargo contra la "caja"/cuenta de un empleado: lo que debe por consumo a
+// cuenta o por anticipos. El saldo PENDING se descuenta automáticamente en su
+// renglón de la raya (PayrollItem.advancesDeducted) y se marca SETTLED cuando
+// esa corrida se paga. Modelo tenant-scoped (restaurantId → tenant-guard).
+model EmployeeCharge {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  locationId   String?
+  location     Location?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  // Empleado: SetNull al borrar para no perder el histórico contable. El nombre
+  // queda en snapshot (employeeName) igual que en PayrollItem.
+  employeeId   String?
+  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  employeeName String
+
+  type   EmployeeChargeType   @default(CONSUMPTION)
+  status EmployeeChargeStatus @default(PENDING)
+
+  // Monto que el empleado DEBE (positivo). Para un ADJUSTMENT a favor del
+  // empleado se permite negativo. El neto de la raya resta este monto.
+  amount Decimal @db.Decimal(12, 2)
+
+  // Solo CONSUMPTION: descuento de empleado aplicado a la orden (snapshot) y la
+  // orden ligada (1:1). orderId es @unique: una orden genera a lo más un cargo.
+  discountAmount Decimal @default(0) @db.Decimal(12, 2)
+  orderId        String? @unique
+  order          Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  note String?
+
+  // Liquidación: la corrida de raya que lo descontó (al pagarla).
+  settledPeriodId String?
+  settledPeriod   PayrollPeriod? @relation(fields: [settledPeriodId], references: [id], onDelete: SetNull)
+  settledAt       DateTime?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([restaurantId])
+  @@index([employeeId, status])
+  @@index([settledPeriodId])
+  @@map("employee_charges")
 }
 
 model VariantTemplate {

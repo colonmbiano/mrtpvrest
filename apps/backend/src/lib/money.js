@@ -126,6 +126,33 @@ function computeOrderTotals(items, { discount = 0, deliveryFee = 0, promoDiscoun
   return { subtotal, discount: safeDiscount, promoDiscount: safePromo, total };
 }
 
+/**
+ * Cobro "a cuenta de empleado": aplica el descuento de empleado sobre el subtotal
+ * (después de la promo automática) y devuelve el descuento y el total a cargar a
+ * su cuenta. Server-side y puro — el TPV nunca decide el monto. El % se acota a
+ * [0, 100] y el total nunca queda por debajo de 0.
+ *
+ *   base     = max(0, subtotal − promoDiscount)
+ *   discount = round2(base × pct/100)
+ *   total    = max(0, subtotal − promoDiscount − discount + deliveryFee)
+ *
+ * @param {object} p
+ * @param {number} [p.subtotal=0]
+ * @param {number} [p.promoDiscount=0]
+ * @param {number} [p.deliveryFee=0]
+ * @param {number} [p.discountPct=0]   Descuento de empleado en % (0-100).
+ * @returns {{discount:number, total:number}}
+ */
+function computeEmployeeDiscount({ subtotal = 0, promoDiscount = 0, deliveryFee = 0, discountPct = 0 } = {}) {
+  const sub = round2(Number(subtotal) || 0);
+  const promo = round2(Math.min(Math.max(0, Number(promoDiscount) || 0), sub));
+  const pct = Math.min(Math.max(0, Number(discountPct) || 0), 100);
+  const base = Math.max(0, sub - promo);
+  const discount = round2(base * (pct / 100));
+  const total = round2(Math.max(0, sub - promo - discount + (Number(deliveryFee) || 0)));
+  return { discount, total };
+}
+
 // Mapa por defecto de método de pago → bucket del corte de caja.
 const PAYMENT_METHOD_MAP = {
   CASH: 'totalCash',
@@ -181,6 +208,7 @@ module.exports = {
   lineSubtotal,
   round2,
   computeOrderTotals,
+  computeEmployeeDiscount,
   summarizePayments,
   cashCutSummary,
   PAYMENT_METHOD_MAP,

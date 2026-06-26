@@ -42,6 +42,7 @@ const SCOPED_MODELS = new Set([
   'Customer',
   'DriverNotice',
   'DriverShiftRequest',
+  'EmployeeCharge',
   'EmployeePayProfile',
   'Ingredient',
   'IngredientCategory',

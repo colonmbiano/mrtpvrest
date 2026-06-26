@@ -22,6 +22,7 @@ const { requireModule, MODULES } = require('../lib/modules');
 const { pick } = require('../lib/validate');
 const { localDayRange } = require('../utils/dayRange');
 const { buildItemComputation } = require('../lib/payroll');
+const { round2 } = require('../lib/money');
 
 const router = express.Router();
 
@@ -35,6 +36,8 @@ function profileToNumbers(profile) {
   if (!profile) return null;
   const out = { ...profile, payType: profile.payType || 'DAILY' };
   for (const f of RATE_FIELDS) out[f] = Number(profile[f] || 0);
+  // discountPct es un override opcional (null = usa el default del negocio).
+  out.discountPct = profile.discountPct == null ? null : Number(profile.discountPct);
   return out;
 }
 
@@ -90,13 +93,20 @@ router.put('/config', ...guard, async (req, res) => {
     const restaurantId = resolveRestaurantId(req);
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
 
-    const data = pick(req.body, ['periodLengthDays', 'defaultPayType', 'tipPolicy', 'currency', 'fiscalEnabled']);
+    const data = pick(req.body, ['periodLengthDays', 'defaultPayType', 'tipPolicy', 'currency', 'fiscalEnabled', 'employeeDiscountPct']);
     if (data.periodLengthDays != null) {
       const n = Number(data.periodLengthDays);
       if (!Number.isInteger(n) || n < 1 || n > 90) {
         return res.status(400).json({ error: 'periodLengthDays debe ser un entero entre 1 y 90' });
       }
       data.periodLengthDays = n;
+    }
+    if (data.employeeDiscountPct != null) {
+      const n = Number(data.employeeDiscountPct);
+      if (!Number.isFinite(n) || n < 0 || n > 100) {
+        return res.status(400).json({ error: 'employeeDiscountPct debe estar entre 0 y 100' });
+      }
+      data.employeeDiscountPct = n;
     }
     if (data.defaultPayType && !['DAILY', 'HOURLY', 'WEEKLY_FIXED', 'PER_DELIVERY'].includes(data.defaultPayType)) {
       return res.status(400).json({ error: 'defaultPayType inválido' });
@@ -156,7 +166,7 @@ router.put('/profiles/:employeeId', ...guard, async (req, res) => {
     });
     if (!emp) return res.status(404).json({ error: 'Empleado no encontrado en este restaurante' });
 
-    const data = pick(req.body, ['payType', 'dailyRate', 'hourlyRate', 'fixedAmount', 'perDeliveryRate', 'isActive', 'notes']);
+    const data = pick(req.body, ['payType', 'dailyRate', 'hourlyRate', 'fixedAmount', 'perDeliveryRate', 'isActive', 'notes', 'discountPct']);
     if (data.payType && !['DAILY', 'HOURLY', 'WEEKLY_FIXED', 'PER_DELIVERY'].includes(data.payType)) {
       return res.status(400).json({ error: 'payType inválido' });
     }
@@ -168,6 +178,18 @@ router.put('/profiles/:employeeId', ...guard, async (req, res) => {
       }
     }
     if (data.isActive != null) data.isActive = Boolean(data.isActive);
+    // discountPct: null limpia el override (usa default); número 0-100 lo fija.
+    if ('discountPct' in data) {
+      if (data.discountPct === null || data.discountPct === '') {
+        data.discountPct = null;
+      } else {
+        const n = Number(data.discountPct);
+        if (!Number.isFinite(n) || n < 0 || n > 100) {
+          return res.status(400).json({ error: 'discountPct debe estar entre 0 y 100' });
+        }
+        data.discountPct = n;
+      }
+    }
 
     const profile = await prisma.employeePayProfile.upsert({
       where: { employeeId },
@@ -193,19 +215,40 @@ async function computePeriodItems({ restaurantId, locationId, from, to }) {
   ]);
 
   const empIds = employees.map((e) => e.id);
-  const shifts = empIds.length
-    ? await prisma.employeeShift.findMany({
-        where: { employeeId: { in: empIds }, startAt: { gte: from, lte: to } },
-        select: { employeeId: true, startAt: true, endAt: true },
-      })
-    : [];
+  const [shifts, pendingCharges] = await Promise.all([
+    empIds.length
+      ? prisma.employeeShift.findMany({
+          where: { employeeId: { in: empIds }, startAt: { gte: from, lte: to } },
+          select: { employeeId: true, startAt: true, endAt: true },
+        })
+      : [],
+    // Cargos a cuenta PENDIENTES (consumo + anticipos + ajustes) que aún no se
+    // liquidan en ninguna raya. Se descuentan del neto del periodo, sin filtro
+    // de fecha: el empleado los debe hasta que una corrida pagada los liquide.
+    empIds.length
+      ? prisma.employeeCharge.groupBy({
+          by: ['employeeId'],
+          where: { restaurantId, employeeId: { in: empIds }, status: 'PENDING' },
+          _sum: { amount: true },
+        })
+      : [],
+  ]);
 
   const shiftsByEmp = new Map(empIds.map((id) => [id, []]));
   for (const s of shifts) shiftsByEmp.get(s.employeeId)?.push(s);
 
+  const pendingByEmp = new Map(
+    pendingCharges.map((c) => [c.employeeId, Number(c._sum.amount || 0)]),
+  );
+
   return employees.map((e) => {
     const profile = effectiveProfile(e.payProfile, config);
-    const calc = buildItemComputation({ profile, shifts: shiftsByEmp.get(e.id) || [] });
+    const advancesDeducted = pendingByEmp.get(e.id) || 0;
+    const calc = buildItemComputation({
+      profile,
+      shifts: shiftsByEmp.get(e.id) || [],
+      extras: { advancesDeducted },
+    });
     return {
       employeeId: e.id,
       employeeName: e.name,
@@ -424,8 +467,11 @@ router.post('/periods/:id/approve', ...guard, async (req, res) => {
 });
 
 // POST /api/payroll/periods/:id/pay — marca la corrida como PAGADA. Body opcional
-// { payMethod } se aplica a los renglones sin método. (La salida de caja real va
-// en la Fase 2: aquí solo se registra el pago para control.)
+// { payMethod } se aplica a los renglones sin método. Al pagar se LIQUIDAN los
+// cargos a cuenta de cada empleado (PENDING → SETTLED, ligados a esta corrida):
+// re-sincronizamos advancesDeducted con lo realmente liquidado dentro de la
+// misma $transaction, así lo descontado del neto = lo que se marcó como saldado
+// (sin drift si llegaron/cancelaron cargos entre el borrador y el pago).
 router.post('/periods/:id/pay', ...guard, async (req, res) => {
   try {
     const restaurantId = resolveRestaurantId(req);
@@ -442,6 +488,47 @@ router.post('/periods/:id/pay', ...guard, async (req, res) => {
           data: { payMethod },
         });
       }
+
+      // Liquidar cargos a cuenta de los empleados con renglón en esta corrida.
+      const items = await tx.payrollItem.findMany({
+        where: { periodId: period.id },
+        select: {
+          id: true, employeeId: true, advancesDeducted: true,
+          gross: true, tips: true, commission: true, additions: true, deductions: true,
+        },
+      });
+      const empIds = items.filter((i) => i.employeeId).map((i) => i.employeeId);
+      if (empIds.length) {
+        const sums = await tx.employeeCharge.groupBy({
+          by: ['employeeId'],
+          where: { restaurantId, employeeId: { in: empIds }, status: 'PENDING' },
+          _sum: { amount: true },
+        });
+        const sumByEmp = new Map(sums.map((s) => [s.employeeId, Number(s._sum.amount || 0)]));
+
+        await tx.employeeCharge.updateMany({
+          where: { restaurantId, employeeId: { in: empIds }, status: 'PENDING' },
+          data: { status: 'SETTLED', settledPeriodId: period.id, settledAt: new Date() },
+        });
+
+        // Re-sincronizar advancesDeducted/net de cada renglón con lo liquidado.
+        for (const it of items) {
+          if (!it.employeeId) continue;
+          const adv = round2(sumByEmp.get(it.employeeId) || 0);
+          if (round2(Number(it.advancesDeducted)) === adv) continue;
+          const net = round2(
+            Number(it.gross) + Number(it.tips) + Number(it.commission) +
+            Number(it.additions) - adv - Number(it.deductions),
+          );
+          await tx.payrollItem.update({
+            where: { id: it.id },
+            data: { advancesDeducted: adv, net },
+          });
+        }
+        const agg = await tx.payrollItem.aggregate({ where: { periodId: period.id }, _sum: { net: true } });
+        await tx.payrollPeriod.update({ where: { id: period.id }, data: { totalNet: agg._sum.net || 0 } });
+      }
+
       return tx.payrollPeriod.update({
         where: { id: period.id },
         data: { status: 'PAID', paidById: req.user?.id || null, paidAt: new Date() },
@@ -461,6 +548,122 @@ router.delete('/periods/:id', ...guard, async (req, res) => {
     await prisma.payrollPeriod.delete({ where: { id: period.id } }); // items en cascade
     res.json({ ok: true });
   } catch (e) { console.error('DELETE /payroll/periods/:id:', e); res.status(500).json({ error: e.message }); }
+});
+
+// ── CAJA DE EMPLEADO (cargos a cuenta + anticipos) ───────────────────────────
+// Los cargos CONSUMPTION normalmente los crea el TPV al cobrar una orden "a
+// cuenta de empleado" (orders.routes → POST /:id/charge-to-employee). Aquí el
+// admin consulta saldos y captura anticipos/ajustes manuales.
+
+// GET /api/payroll/charges/balance?locationId= — saldo PENDIENTE por empleado.
+router.get('/charges/balance', ...guard, async (req, res) => {
+  try {
+    const restaurantId = resolveRestaurantId(req);
+    const locationId = resolveLocationId(req, req.query);
+    const where = locationId
+      ? { locationId, location: { restaurantId } }
+      : { location: { restaurantId } };
+    const employees = await prisma.employee.findMany({
+      where: { ...where, isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, role: true },
+    });
+    const empIds = employees.map((e) => e.id);
+    const sums = empIds.length
+      ? await prisma.employeeCharge.groupBy({
+          by: ['employeeId'],
+          where: { restaurantId, employeeId: { in: empIds }, status: 'PENDING' },
+          _sum: { amount: true },
+        })
+      : [];
+    const byEmp = new Map(sums.map((s) => [s.employeeId, Number(s._sum.amount || 0)]));
+    const rows = employees.map((e) => ({
+      employeeId: e.id, name: e.name, role: e.role,
+      pending: round2(byEmp.get(e.id) || 0),
+    }));
+    const totalPending = round2(rows.reduce((s, r) => s + r.pending, 0));
+    res.json({ totalPending, employees: rows });
+  } catch (e) { console.error('GET /payroll/charges/balance:', e); res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/payroll/charges?status=&employeeId=&locationId=&limit= — lista cargos.
+router.get('/charges', ...guard, async (req, res) => {
+  try {
+    const restaurantId = resolveRestaurantId(req);
+    const { status, employeeId } = req.query;
+    const locationId = resolveLocationId(req, req.query);
+    const take = Math.min(Number(req.query.limit) || 100, 300);
+    const where = { restaurantId };
+    if (status && ['PENDING', 'SETTLED', 'CANCELLED'].includes(status)) where.status = status;
+    if (employeeId) where.employeeId = String(employeeId);
+    if (locationId) where.locationId = locationId;
+    const charges = await prisma.employeeCharge.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take,
+      include: { order: { select: { id: true, orderNumber: true, total: true } } },
+    });
+    res.json(charges);
+  } catch (e) { console.error('GET /payroll/charges:', e); res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/payroll/charges — alta manual de un anticipo o ajuste (o consumo
+// suelto) capturado por el admin. Body: { employeeId, type, amount, note }.
+// Solo ADJUSTMENT admite monto negativo (saldo a favor del empleado).
+router.post('/charges', ...guard, async (req, res) => {
+  try {
+    const restaurantId = resolveRestaurantId(req);
+    const data = pick(req.body, ['employeeId', 'type', 'amount', 'note', 'locationId']);
+    const employeeId = String(data.employeeId || '');
+    if (!employeeId) return res.status(400).json({ error: 'employeeId requerido' });
+
+    const emp = await prisma.employee.findFirst({
+      where: { id: employeeId, location: { restaurantId } },
+      select: { id: true, name: true, locationId: true },
+    });
+    if (!emp) return res.status(404).json({ error: 'Empleado no encontrado en este restaurante' });
+
+    const type = ['CONSUMPTION', 'ADVANCE', 'ADJUSTMENT'].includes(data.type) ? data.type : 'ADVANCE';
+    const amount = Number(data.amount);
+    if (!Number.isFinite(amount) || amount === 0) {
+      return res.status(400).json({ error: 'amount debe ser un número distinto de 0' });
+    }
+    if (amount < 0 && type !== 'ADJUSTMENT') {
+      return res.status(400).json({ error: 'Solo un ADJUSTMENT puede ser negativo' });
+    }
+
+    const charge = await prisma.employeeCharge.create({
+      data: {
+        restaurantId,
+        locationId: emp.locationId || data.locationId || null,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        type,
+        status: 'PENDING',
+        amount: round2(amount),
+        note: typeof data.note === 'string' ? data.note.slice(0, 300) : null,
+        createdById: req.user?.id || null,
+      },
+    });
+    res.status(201).json(charge);
+  } catch (e) { console.error('POST /payroll/charges:', e); res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/payroll/charges/:id/cancel — anula un cargo PENDIENTE (no liquidado).
+router.post('/charges/:id/cancel', ...guard, async (req, res) => {
+  try {
+    const restaurantId = resolveRestaurantId(req);
+    const charge = await prisma.employeeCharge.findFirst({ where: { id: req.params.id, restaurantId } });
+    if (!charge) return res.status(404).json({ error: 'Cargo no encontrado' });
+    if (charge.status !== 'PENDING') {
+      return res.status(409).json({ error: 'Solo se puede anular un cargo pendiente' });
+    }
+    const updated = await prisma.employeeCharge.update({
+      where: { id: charge.id },
+      data: { status: 'CANCELLED' },
+    });
+    res.json(updated);
+  } catch (e) { console.error('POST /payroll/charges/:id/cancel:', e); res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

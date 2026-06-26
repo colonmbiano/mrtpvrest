@@ -12,6 +12,9 @@ export interface TpvRemoteConfig {
   lockTimeoutSec:    number;
   accentColor:       string | null;
   extra:             Record<string, unknown>;
+  // Cobro "a cuenta de empleado" (módulo de nómina activo en el tenant). El
+  // backend lo deriva de tenant.enabledModules; el TPV solo lo refleja en UI.
+  employeeAccountEnabled: boolean;
   updatedAt:         string | null;
 }
 
@@ -22,6 +25,7 @@ export const DEFAULT_CONFIG: TpvRemoteConfig = {
   lockTimeoutSec:    0,
   accentColor:       null,
   extra:             {},
+  employeeAccountEnabled: false,
   updatedAt:         null,
 };
 
@@ -170,6 +174,7 @@ export async function fetchRemoteConfig(api: {
       lockTimeoutSec:    Number.isFinite(d.lockTimeoutSec) ? Number(d.lockTimeoutSec) : 0,
       accentColor:       typeof d.accentColor === "string" ? d.accentColor : null,
       extra:             (d.extra && typeof d.extra === "object") ? (d.extra as Record<string, unknown>) : {},
+      employeeAccountEnabled: d.employeeAccountEnabled === true,
       updatedAt:         typeof d.updatedAt === "string" ? d.updatedAt : null,
     };
     setCachedRemoteConfig(cfg);

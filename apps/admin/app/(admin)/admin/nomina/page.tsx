@@ -2,7 +2,8 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Wallet, Users, History, Settings, Calculator, Save, Check, Trash2,
-  Download, AlertCircle, ChevronLeft, CalendarDays, type LucideIcon,
+  Download, AlertCircle, ChevronLeft, CalendarDays, HandCoins, Plus, Ban,
+  Percent, type LucideIcon,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
@@ -45,13 +46,18 @@ const ROLE_LABEL: Record<string, string> = { ADMIN: "Admin", CASHIER: "Cajero", 
 const inputCls = "w-full rounded-xl px-3 py-2 text-sm outline-none";
 const inputStyle = { background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
 
-type Tab = "raya" | "tarifas" | "historial" | "ajustes";
+type Tab = "raya" | "tarifas" | "cuentas" | "historial" | "ajustes";
 const TABS: { value: Tab; label: string; icon: LucideIcon }[] = [
   { value: "raya", label: "Calcular raya", icon: Calculator },
   { value: "tarifas", label: "Tarifas", icon: Users },
+  { value: "cuentas", label: "Cuentas", icon: HandCoins },
   { value: "historial", label: "Historial", icon: History },
   { value: "ajustes", label: "Ajustes", icon: Settings },
 ];
+
+const CHARGE_TYPE_LABEL: Record<string, string> = {
+  CONSUMPTION: "Consumo", ADVANCE: "Anticipo", ADJUSTMENT: "Ajuste",
+};
 
 export default function NominaPage() {
   const [tab, setTab] = useState<Tab>("raya");
@@ -336,6 +342,9 @@ export default function NominaPage() {
         </div>
       )}
 
+      {/* ── CUENTAS DE EMPLEADO ────────────────────────────────────── */}
+      {tab === "cuentas" && <CuentasPanel locationId={locationId} flash={flash} />}
+
       {/* ── HISTORIAL / DETALLE ────────────────────────────────────── */}
       {tab === "historial" && (
         detail ? (
@@ -423,9 +432,12 @@ function ProfileRow({ p, saving, onSave }: { p: any; saving: boolean; onSave: (p
     return p.profile ? String(p.profile[f] ?? 0) : "";
   });
   const field = RATE_FIELD[payType] ?? "dailyRate";
+  const initialDisc = p.profile?.discountPct == null ? "" : String(p.profile.discountPct);
+  const [disc, setDisc] = useState<string>(initialDisc);
   const dirty =
     payType !== (p.profile?.payType || "DAILY") ||
-    String(p.profile?.[field] ?? "") !== String(rate || "");
+    String(p.profile?.[field] ?? "") !== String(rate || "") ||
+    disc !== initialDisc;
 
   return (
     <WtCard className="flex flex-wrap items-center gap-3 p-4">
@@ -451,8 +463,16 @@ function ProfileRow({ p, saving, onSave }: { p: any; saving: boolean; onSave: (p
           placeholder="0.00" className={`${inputCls} w-28 text-right`} style={inputStyle}
         />
       </label>
+      <label className="flex items-center gap-2" title="Descuento de empleado (vacío = usa el default del negocio)">
+        <Percent size={13} className="text-tx-mut" />
+        <input
+          type="number" min={0} max={100} step="0.01" inputMode="decimal"
+          value={disc} onChange={(e) => setDisc(e.target.value)}
+          placeholder="auto" className={`${inputCls} w-20 text-right`} style={inputStyle}
+        />
+      </label>
       <PrimaryBtn full={false} icon={Save} disabled={saving || !dirty}
-        onClick={() => onSave(p, { payType, [field]: Number(rate || 0) })}>
+        onClick={() => onSave(p, { payType, [field]: Number(rate || 0), discountPct: disc.trim() === "" ? null : Number(disc) })}>
         {saving ? "…" : "Guardar"}
       </PrimaryBtn>
     </WtCard>
@@ -524,10 +544,173 @@ function PeriodDetail({
   );
 }
 
+function CuentasPanel({ locationId, flash }: { locationId: string; flash: (k: "ok" | "err", t: string) => void }) {
+  const [balance, setBalance] = useState<any>(null);
+  const [charges, setCharges] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [empId, setEmpId] = useState("");
+  const [type, setType] = useState("ADVANCE");
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const params = locationId ? { locationId } : {};
+    try {
+      const [b, c] = await Promise.all([
+        api.get("/api/payroll/charges/balance", { params }),
+        api.get("/api/payroll/charges", { params: { ...params, status: "PENDING", limit: 100 } }),
+      ]);
+      setBalance(b.data);
+      setCharges(Array.isArray(c.data) ? c.data : []);
+    } catch {
+      flash("err", "No pudimos cargar las cuentas");
+    } finally {
+      setLoading(false);
+    }
+  }, [locationId, flash]);
+  useEffect(() => { load(); }, [load]);
+
+  const addCharge = async () => {
+    const amt = Number(amount);
+    if (!empId || !Number.isFinite(amt) || amt === 0) { flash("err", "Elige empleado y un monto válido"); return; }
+    setSaving(true);
+    try {
+      await api.post("/api/payroll/charges", { employeeId: empId, type, amount: amt, note: note || undefined });
+      setAmount(""); setNote("");
+      flash("ok", "Movimiento registrado");
+      load();
+    } catch (e: any) {
+      flash("err", e?.response?.data?.error || "No se pudo registrar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelCharge = async (id: string) => {
+    if (!confirm("¿Anular este cargo pendiente?")) return;
+    try {
+      await api.post(`/api/payroll/charges/${id}/cancel`, {});
+      flash("ok", "Cargo anulado");
+      load();
+    } catch (e: any) {
+      flash("err", e?.response?.data?.error || "No se pudo anular");
+    }
+  };
+
+  if (loading) return <LoadingCards count={4} />;
+
+  const employees: any[] = balance?.employees || [];
+  const withBalance = employees.filter((e) => Math.abs(Number(e.pending)) > 0.001);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatTile icon={Wallet} value={mxn(balance?.totalPending || 0)} label="Saldo pendiente total" />
+        <StatTile icon={Users} value={withBalance.length} label="Empleados con saldo" />
+        <StatTile icon={HandCoins} value={charges.length} label="Cargos pendientes" />
+      </div>
+
+      {/* Alta de anticipo / ajuste manual */}
+      <WtCard className="p-4 md:p-5">
+        <SectionLabel>Registrar anticipo o ajuste</SectionLabel>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="block min-w-[180px] flex-1">
+            <span className="mb-1 block text-[11px] text-tx-mut">Empleado</span>
+            <select value={empId} onChange={(e) => setEmpId(e.target.value)} className={inputCls} style={inputStyle}>
+              <option value="">Selecciona…</option>
+              {employees.map((e) => (
+                <option key={e.employeeId} value={e.employeeId}>{e.name}</option>
+              ))}
+            </select>
+          </label>
+          <div className="w-52">
+            <span className="mb-1 block text-[11px] text-tx-mut">Tipo</span>
+            <Segmented
+              options={[{ value: "ADVANCE", label: "Anticipo" }, { value: "ADJUSTMENT", label: "Ajuste" }]}
+              value={type}
+              onChange={(v) => setType(v)}
+            />
+          </div>
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-tx-mut">Monto</span>
+            <input
+              type="number" step="0.01" inputMode="decimal" value={amount}
+              onChange={(e) => setAmount(e.target.value)} placeholder="0.00"
+              className={`${inputCls} w-32 text-right`} style={inputStyle}
+            />
+          </label>
+          <label className="block min-w-[160px] flex-1">
+            <span className="mb-1 block text-[11px] text-tx-mut">Nota (opcional)</span>
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Motivo…" className={inputCls} style={inputStyle} />
+          </label>
+          <PrimaryBtn full={false} icon={Plus} disabled={saving} onClick={addCharge}>
+            {saving ? "…" : "Registrar"}
+          </PrimaryBtn>
+        </div>
+        <p className="mt-2 text-[11px] text-tx-mut">
+          El saldo pendiente se descuenta automáticamente del neto de la raya y se liquida al marcarla pagada.
+          “Ajuste” admite monto negativo (saldo a favor del empleado).
+        </p>
+      </WtCard>
+
+      {/* Saldo por empleado */}
+      <div>
+        <SectionLabel>Saldo por empleado</SectionLabel>
+        {withBalance.length === 0 ? (
+          <EmptyState icon={HandCoins} title="Sin saldos pendientes" hint="Los consumos a cuenta del TPV y los anticipos aparecen aquí hasta que se liquidan en la raya." />
+        ) : (
+          <div className="space-y-2">
+            {withBalance.map((e) => (
+              <WtCard key={e.employeeId} className="flex items-center gap-3 p-4">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-tx">{e.name}</div>
+                  <div className="mt-0.5 text-[11px] text-tx-mut">{ROLE_LABEL[e.role] || e.role}</div>
+                </div>
+                <div className="w-28 text-right font-display text-lg font-extrabold" style={{ color: Number(e.pending) < 0 ? "var(--ok)" : "var(--tx-hi)" }}>
+                  {mxn(e.pending)}
+                </div>
+              </WtCard>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Cargos pendientes */}
+      <div>
+        <SectionLabel>Cargos pendientes</SectionLabel>
+        {charges.length === 0 ? (
+          <EmptyState icon={Wallet} title="Sin cargos pendientes" hint="Aún no hay consumos ni anticipos por descontar." />
+        ) : (
+          <div className="space-y-2">
+            {charges.map((c) => (
+              <WtCard key={c.id} className="flex items-center gap-3 p-4">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-tx">{c.employeeName}</div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-tx-mut">
+                    <Pill tone="neutral">{CHARGE_TYPE_LABEL[c.type] || c.type}</Pill>
+                    <span>{fmtDate(c.createdAt)}</span>
+                    {c.order?.orderNumber && <span>· Orden #{c.order.orderNumber}</span>}
+                    {c.note && <span className="truncate">· {c.note}</span>}
+                  </div>
+                </div>
+                <div className="w-24 text-right font-display text-base font-extrabold tabular-nums text-tx-hi">{mxn(c.amount)}</div>
+                <PrimaryBtn ghost danger full={false} icon={Ban} onClick={() => cancelCharge(c.id)}>Anular</PrimaryBtn>
+              </WtCard>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AjustesPanel({ config, cfgErr, onSave, onRetry }: { config: any; cfgErr: boolean; onSave: (p: any) => void; onRetry: () => void }) {
   const [days, setDays] = useState<string>(String(config.periodLengthDays ?? 7));
   const [defaultPayType, setDefaultPayType] = useState<string>(config.defaultPayType || "DAILY");
   const [fiscal, setFiscal] = useState<boolean>(Boolean(config.fiscalEnabled));
+  const [empDiscount, setEmpDiscount] = useState<string>(String(config.employeeDiscountPct ?? 0));
 
   if (cfgErr) return <ErrorState onRetry={onRetry} />;
 
@@ -546,6 +729,19 @@ function AjustesPanel({ config, cfgErr, onSave, onRetry }: { config: any; cfgErr
           <Segmented options={PAY_TYPES.map((p) => ({ value: p.value, label: p.label }))} value={defaultPayType} onChange={(v) => setDefaultPayType(v)} />
         </div>
         <p className="mt-2 text-[11px] text-tx-mut">Se aplica a empleados nuevos sin tarifa configurada.</p>
+      </WtCard>
+
+      <WtCard className="p-4 md:p-5">
+        <SectionLabel>Descuento de empleado</SectionLabel>
+        <label className="flex items-center gap-2">
+          <Percent size={14} className="text-tx-mut" />
+          <input type="number" min={0} max={100} step="0.01" value={empDiscount}
+            onChange={(e) => setEmpDiscount(e.target.value)} className={`${inputCls} w-28 text-right`} style={inputStyle} />
+          <span className="text-[11px] text-tx-mut">%</span>
+        </label>
+        <p className="mt-2 text-[11px] text-tx-mut">
+          Descuento por defecto al cobrar “a cuenta de empleado” en el TPV. Se puede sobreescribir por empleado (en Tarifas) o por venta.
+        </p>
       </WtCard>
 
       <WtCard className="p-4 md:p-5">
@@ -569,7 +765,7 @@ function AjustesPanel({ config, cfgErr, onSave, onRetry }: { config: any; cfgErr
 
       <div className="flex justify-end">
         <PrimaryBtn full={false} icon={Save}
-          onClick={() => onSave({ periodLengthDays: Number(days || 7), defaultPayType, fiscalEnabled: fiscal })}>
+          onClick={() => onSave({ periodLengthDays: Number(days || 7), defaultPayType, fiscalEnabled: fiscal, employeeDiscountPct: Number(empDiscount || 0) })}>
           Guardar ajustes
         </PrimaryBtn>
       </div>
