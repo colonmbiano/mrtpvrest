@@ -9,7 +9,7 @@ import { Badge } from './_components/Badge'
 const apps = [
   { src: '/showcase-warm/app-cliente.png', title: 'App Cliente', text: 'Pedidos QR y online sin perder control.', tone: 'sage', href: FUNCIONES.appCliente },
   { src: '/showcase-warm/kiosko.png', title: 'Kiosko', text: 'Autoservicio rápido para horas pico.', tone: 'amber', href: FUNCIONES.kiosko },
-  { src: '/showcase-warm/tpv.png', title: 'TPV', text: 'Cobro, mesas, tickets y caja en una pantalla.', tone: 'orange', href: FUNCIONES.tpv },
+  { src: '/showcase-warm/tpv.png', title: 'TPV', text: 'Cobro, mesas, tickets y caja en una pantalla.', tone: 'orange', href: FUNCIONES.tpv, badge: 'Más usado' },
   { src: '/showcase-warm/kds.png', title: 'KDS', text: 'Cocina recibe órdenes al instante.', tone: 'ember', href: FUNCIONES.kds },
   { src: '/showcase-warm/delivery.png', title: 'Delivery', text: 'Reparto conectado con operación y caja.', tone: 'steel', href: FUNCIONES.delivery },
   { src: '/showcase-warm/admin.png', title: 'Admin', text: 'Reportes, inventario y permisos por rol.', tone: 'gold', href: FUNCIONES.admin },
@@ -169,8 +169,8 @@ export default function HomePage() {
               <span className="hero-brand-word">MRTPVREST</span> es el punto de venta que controla tu restaurante en tiempo real
             </h1>
             <p>
-              El punto de venta para restaurantes que conecta caja, cocina, delivery, kiosko, clientes y
-              administración en una sola operación rápida, cálida y lista para turnos intensos.
+              Caja, cocina, delivery, kiosko y administración en una sola plataforma. Cobra en segundos,
+              controla tu inventario en vivo y cierra el día cuadrado — sin apps sueltas ni cuentas a mano.
             </p>
             <div className="hero-actions">
               <a className="btn btn-primary" href={registerUrl}>Registrar mi restaurante</a>
@@ -180,9 +180,23 @@ export default function HomePage() {
             <div className="trust-row" aria-label="Beneficios de confianza">
               <span>14 días gratis</span>
               <span>Sin tarjeta</span>
+              <span>Autofactura por QR</span>
               <span>Soporte en español</span>
               <span>Operación multi-app</span>
             </div>
+            {realTestimonials.length > 0 ? (
+              <div className="hero-proof">
+                <span className="hero-proof-avatar" aria-hidden="true">
+                  {realTestimonials[0].name.charAt(0)}
+                </span>
+                <div className="hero-proof-text">
+                  <div className="hero-proof-stars" aria-label="Calificación 5 de 5 estrellas">★★★★★</div>
+                  <span>
+                    Operando en vivo con restaurantes reales como <strong>{realTestimonials[0].name}</strong>
+                  </span>
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="hero-visual">
             <div className="logo-plate">
@@ -228,6 +242,7 @@ export default function HomePage() {
           <div className="apps-grid">
             {apps.map((app) => (
               <Link className={`app-card ${app.tone}`} href={app.href} key={app.title}>
+                {'badge' in app ? <b className="app-flag">{app.badge}</b> : null}
                 <Image src={app.src} alt={`${app.title}: ${app.text}`} width={1536} height={672} loading="lazy" sizes="(max-width: 900px) 100vw, 50vw" />
                 <span>
                   <strong>{app.title}</strong>
