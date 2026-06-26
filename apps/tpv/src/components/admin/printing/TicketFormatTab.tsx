@@ -24,6 +24,8 @@ interface TicketConfig {
   showAddress: boolean;
   address: string;
   phone: string;
+  showPhone: boolean;
+  showOrderNumber: boolean;
   // Datos fiscales del emisor (encabezado del recibo).
   businessType: string;
   rfc: string;
@@ -77,6 +79,7 @@ interface TicketConfig {
 const EMPTY: TicketConfig = {
   businessName: "", header: "", subheader: "", footer: "Gracias por su preferencia",
   showLogo: true, logoUrl: null, showAddress: true, address: "", phone: "",
+  showPhone: true, showOrderNumber: true,
   businessType: "", rfc: "", showInvoiceQr: false, invoiceUrl: "", invoiceFolioPrefix: "",
   deliveryFeeTaxed: true,
   showLoyaltyQr: false, loyaltyUrl: "",
@@ -211,6 +214,8 @@ export default function TicketFormatTab() {
             <div className="grid grid-cols-2 gap-3 pt-2">
               <Toggle label="Mostrar logo" checked={cfg.showLogo} onChange={(v) => setCfg({ ...cfg, showLogo: v })} />
               <Toggle label="Mostrar dirección" checked={cfg.showAddress} onChange={(v) => setCfg({ ...cfg, showAddress: v })} />
+              <Toggle label="Mostrar teléfono" checked={cfg.showPhone} onChange={(v) => setCfg({ ...cfg, showPhone: v })} />
+              <Toggle label="Número de orden en recibo" checked={cfg.showOrderNumber} onChange={(v) => setCfg({ ...cfg, showOrderNumber: v })} />
               <Toggle label="Puntos de lealtad" checked={cfg.showPoints} onChange={(v) => setCfg({ ...cfg, showPoints: v })} />
               <Toggle label="Sugerir propinas" checked={cfg.showTip} onChange={(v) => setCfg({ ...cfg, showTip: v })} />
               <Toggle label="Envío con IVA incluido" checked={cfg.deliveryFeeTaxed} onChange={(v) => setCfg({ ...cfg, deliveryFeeTaxed: v })} />
@@ -235,6 +240,9 @@ export default function TicketFormatTab() {
             <p className="text-[10px] text-zinc-500 -mt-2 ml-1">El cliente escanea el QR al pie del recibo para registrarse en tu tienda en línea y acumular puntos.</p>
 
             <SectionLabel>Tipografía del recibo</SectionLabel>
+            <Field label="Ancho de papel">
+              <Segmented value={cfg.paperWidth} onChange={(v) => setCfg({ ...cfg, paperWidth: v })} options={PAPER_OPTS} />
+            </Field>
             <Field label="Fuente — así se ve impresa">
               <FontPicker value={cfg.fontFamily} onChange={(v) => setCfg({ ...cfg, fontFamily: v })} />
             </Field>
@@ -540,6 +548,11 @@ const NAME_SIZE_OPTS = [
 const ITEM_GAP_OPTS = [
   { id: "normal", label: "Juntos" },
   { id: "loose", label: "Con espacio" },
+];
+
+const PAPER_OPTS = [
+  { id: "80mm", label: "80 mm" },
+  { id: "58mm", label: "58 mm" },
 ];
 // Sangría de los modificadores/notas bajo cada producto.
 const INDENT_OPTS = [
