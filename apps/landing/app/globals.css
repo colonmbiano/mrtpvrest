@@ -8,7 +8,7 @@
   --border-soft: rgba(255, 255, 255, 0.075);
   --text: #f7f2ea;
   --text-muted: #b9aca0;
-  --text-dim: #86786d;
+  --text-dim: #9a8b7c;
   --amber: #ffb84d;
   --amber-hot: #ff8400;
   --sage: #88d66c;
@@ -309,6 +309,54 @@ h1 {
   font-size: 11px;
 }
 
+.hero-proof {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 11px 16px 11px 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  background: var(--surface-soft);
+  backdrop-filter: blur(10px);
+}
+
+.hero-proof-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--surface-strong);
+  color: var(--amber);
+  font-weight: 800;
+  font-size: 17px;
+  text-transform: uppercase;
+}
+
+.hero-proof-text {
+  display: grid;
+  gap: 3px;
+}
+
+.hero-proof-stars {
+  color: var(--amber);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.hero-proof-text > span {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.hero-proof-text strong {
+  color: var(--text);
+}
+
 .hero-visual {
   display: grid;
   gap: 18px;
@@ -539,6 +587,23 @@ details p {
   border-radius: 26px;
   text-decoration: none;
   transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.app-flag {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 2;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--amber), var(--amber-hot));
+  color: #180f08;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow: 0 8px 22px rgba(255, 132, 0, 0.32);
 }
 
 .app-card:hover {
