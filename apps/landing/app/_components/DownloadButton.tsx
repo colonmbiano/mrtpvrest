@@ -1,4 +1,4 @@
-import { DOWNLOADS_READY } from '../../lib/links'
+import { READY_APKS } from '../../lib/links'
 import { registerUrl } from '../_data/site'
 
 type DownloadButtonProps = {
@@ -19,7 +19,7 @@ export function DownloadButton({
   requestLabel = 'Solicitar acceso',
   className,
 }: DownloadButtonProps) {
-  if (!DOWNLOADS_READY) {
+  if (!READY_APKS.includes(apkUrl)) {
     return (
       <a className={className} href={registerUrl}>
         {requestLabel}
