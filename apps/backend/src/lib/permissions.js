@@ -9,9 +9,13 @@
  *   - El descuento se unifica: `canApplyDiscounts` (Fase 10) absorbe al legacy
  *     `canDiscount`. Cualquiera de los dos concede `apply_discount`.
  *   - Las columnas legacy que NO mapean a una operación (canModifyTickets,
- *     canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout,
- *     canManageShifts) quedan deprecadas: se conservan en DB pero ya no se
- *     traducen a permisos ni se evalúan en el enforcement.
+ *     canDeleteTickets, canConfigSystem, canTakeDelivery, canTakeTakeout)
+ *     quedan deprecadas: se conservan en DB pero ya no se traducen a permisos
+ *     ni se evalúan en el enforcement.
+ *   - `canManageShifts` NO mapea a un string de permiso del TPV, pero SÍ se
+ *     evalúa por lectura directa (requireCanManageShifts en shifts.routes.js):
+ *     gobierna abrir/cerrar el turno de caja. Tiene su propio toggle en los
+ *     editores de empleado (admin web y TPV), no pasa por mapPermissions.
  */
 
 // Flag canónico (columna Employee) → string de permiso del TPV.

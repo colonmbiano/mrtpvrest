@@ -40,7 +40,11 @@ const overrideLimiter = rateLimit({
 });
 
 const ROLE_DEFAULTS = {
+  OWNER:    { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:true,  canConfigSystem:true,  canTakeDelivery:true,  canTakeTakeout:true,  canManageShifts:true,
+              canCancelItems:true,  canApplyDiscounts:true,  canReopenTables:true,  canManageUsers:true,  canViewExpectedCash:true,  canManageDriverCash:true  },
   ADMIN:    { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:true,  canConfigSystem:true,  canTakeDelivery:true,  canTakeTakeout:true,  canManageShifts:true,
+              canCancelItems:true,  canApplyDiscounts:true,  canReopenTables:true,  canManageUsers:true,  canViewExpectedCash:true,  canManageDriverCash:true  },
+  MANAGER:  { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:true,  canConfigSystem:false, canTakeDelivery:true,  canTakeTakeout:true,  canManageShifts:true,
               canCancelItems:true,  canApplyDiscounts:true,  canReopenTables:true,  canManageUsers:true,  canViewExpectedCash:true,  canManageDriverCash:true  },
   CASHIER:  { canCharge:true,  canDiscount:true,  canModifyTickets:true,  canDeleteTickets:false, canConfigSystem:false, canTakeDelivery:false, canTakeTakeout:true,  canManageShifts:true,
               canCancelItems:false, canApplyDiscounts:true,  canReopenTables:false, canManageUsers:false, canViewExpectedCash:false, canManageDriverCash:false },

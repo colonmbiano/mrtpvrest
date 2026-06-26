@@ -15,6 +15,8 @@ import {
   RotateCcw,
   Users,
   Eye,
+  Bike,
+  Clock,
 } from "lucide-react";
 import api from "@/lib/api";
 import { AdminScreen, AdminHeader, AdminTabs } from "@/components/admin/AdminScreen";
@@ -73,6 +75,18 @@ const SPECIAL_PERMS: {
     description: "Rompe el corte ciego: ve cuánto debería haber en caja.",
     icon: Eye,
   },
+  {
+    key: "canManageShifts",
+    label: "Abrir / cerrar turno de caja",
+    description: "Permite iniciar y cerrar el turno (corte) de la caja.",
+    icon: Clock,
+  },
+  {
+    key: "canManageDriverCash",
+    label: "Recibir caja de repartidores",
+    description: "Recibir y cerrar el corte de los repartidores.",
+    icon: Bike,
+  },
 ];
 
 type SpecialPermKey =
@@ -80,7 +94,9 @@ type SpecialPermKey =
   | "canApplyDiscounts"
   | "canReopenTables"
   | "canManageUsers"
-  | "canViewExpectedCash";
+  | "canViewExpectedCash"
+  | "canManageShifts"
+  | "canManageDriverCash";
 
 interface Employee {
   id: string;
@@ -103,6 +119,7 @@ interface Employee {
   canReopenTables: boolean;
   canManageUsers: boolean;
   canViewExpectedCash: boolean;
+  canManageDriverCash: boolean;
 }
 
 const ROLE_STYLE: Record<string, { bg: string; text: string }> = {
@@ -424,6 +441,7 @@ function EmployeeModal({
     canReopenTables:   employee?.canReopenTables   ?? false,
     canManageUsers:    employee?.canManageUsers    ?? false,
     canViewExpectedCash: employee?.canViewExpectedCash ?? false,
+    canManageDriverCash: employee?.canManageDriverCash ?? false,
   });
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState("");
