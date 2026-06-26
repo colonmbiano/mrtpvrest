@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Crown, Banknote, ChefHat, Bike, Soup, BarChart3, Plus, X, Clock,
   History, Pencil, Trash2, Users, Tag, Ban, Unlock, ListChecks,
-  CheckCircle2, RotateCcw, Download, type LucideIcon,
+  CheckCircle2, RotateCcw, Download, Eye, ShieldCheck, Gem, type LucideIcon,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
@@ -21,7 +21,9 @@ const PAY_LABELS: Record<string, string> = {
 };
 
 const ROLES: { value: string; label: string; short: string; icon: LucideIcon; tone: Tone }[] = [
+  { value: "OWNER",    label: "Dueño",         short: "Dueño",      icon: Gem,        tone: "ac"   },
   { value: "ADMIN",    label: "Administrador", short: "Admin",       icon: Crown,   tone: "warn" },
+  { value: "MANAGER",  label: "Encargado",     short: "Encargado",  icon: ShieldCheck, tone: "warn" },
   { value: "CASHIER",  label: "Cajero",        short: "Cajero",      icon: Banknote, tone: "ok"  },
   { value: "WAITER",   label: "Mesero",        short: "Mesero",      icon: Soup,    tone: "info" },
   { value: "DELIVERY", label: "Repartidor",    short: "Repartidor",  icon: Bike,    tone: "ac"   },
@@ -32,11 +34,13 @@ const ROLES: { value: string; label: string; short: string; icon: LucideIcon; to
 // ROLE_DEFAULTS del backend (employees.routes.js). Solo incluye permisos con
 // enforcement real; las columnas legacy sin operación quedan deprecadas.
 const ROLE_DEFAULTS: Record<string, Record<string, boolean>> = {
-  ADMIN:    { canCharge: true,  canApplyDiscounts: true,  canCancelItems: true,  canReopenTables: true,  canManageUsers: true,  canManageDriverCash: true  },
-  CASHIER:  { canCharge: true,  canApplyDiscounts: true,  canCancelItems: false, canReopenTables: false, canManageUsers: false, canManageDriverCash: false },
-  WAITER:   { canCharge: false, canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false, canManageDriverCash: false },
-  DELIVERY: { canCharge: true,  canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false },
-  COOK:     { canCharge: false, canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false },
+  OWNER:    { canCharge: true,  canApplyDiscounts: true,  canCancelItems: true,  canReopenTables: true,  canManageUsers: true,  canManageDriverCash: true,  canViewExpectedCash: true,  canManageShifts: true  },
+  ADMIN:    { canCharge: true,  canApplyDiscounts: true,  canCancelItems: true,  canReopenTables: true,  canManageUsers: true,  canManageDriverCash: true,  canViewExpectedCash: true,  canManageShifts: true  },
+  MANAGER:  { canCharge: true,  canApplyDiscounts: true,  canCancelItems: true,  canReopenTables: true,  canManageUsers: true,  canManageDriverCash: true,  canViewExpectedCash: true,  canManageShifts: true  },
+  CASHIER:  { canCharge: true,  canApplyDiscounts: true,  canCancelItems: false, canReopenTables: false, canManageUsers: false, canManageDriverCash: false, canViewExpectedCash: false, canManageShifts: true  },
+  WAITER:   { canCharge: false, canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false, canManageDriverCash: false, canViewExpectedCash: false, canManageShifts: false },
+  DELIVERY: { canCharge: true,  canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false, canManageDriverCash: false, canViewExpectedCash: false, canManageShifts: false },
+  COOK:     { canCharge: false, canApplyDiscounts: false, canCancelItems: false, canReopenTables: false, canManageUsers: false, canManageDriverCash: false, canViewExpectedCash: false, canManageShifts: false },
 };
 
 const DAYS = ["LUN", "MAR", "MIE", "JUE", "VIE", "SAB", "DOM"];
@@ -45,8 +49,10 @@ const PERMS: { key: string; label: string; icon: LucideIcon }[] = [
   { key: "canApplyDiscounts", label: "Aplicar descuentos / cortesías",  icon: Tag        },
   { key: "canCancelItems",    label: "Anular productos enviados",        icon: Trash2     },
   { key: "canReopenTables",   label: "Reabrir cuentas cerradas",         icon: Unlock     },
+  { key: "canManageShifts",   label: "Abrir / cerrar turno de caja",     icon: Clock      },
   { key: "canManageUsers",    label: "Gestionar empleados",              icon: Users      },
   { key: "canManageDriverCash", label: "Recibir caja de repartidores",   icon: Bike       },
+  { key: "canViewExpectedCash", label: "Ver efectivo esperado (corte)",  icon: Eye        },
 ];
 
 const emptyForm = {
@@ -55,6 +61,7 @@ const emptyForm = {
   isActive: true,
   canCharge: false, canApplyDiscounts: false, canCancelItems: false,
   canReopenTables: false, canManageUsers: false, canManageDriverCash: false,
+  canViewExpectedCash: false, canManageShifts: false,
 };
 
 function roleMeta(value: string) {
@@ -147,6 +154,8 @@ export default function EmpleadosPage() {
         canReopenTables: emp.canReopenTables,
         canManageUsers: emp.canManageUsers,
         canManageDriverCash: emp.canManageDriverCash,
+        canViewExpectedCash: emp.canViewExpectedCash,
+        canManageShifts: emp.canManageShifts,
       });
     } else {
       setForm({ ...emptyForm, ...ROLE_DEFAULTS.WAITER });
