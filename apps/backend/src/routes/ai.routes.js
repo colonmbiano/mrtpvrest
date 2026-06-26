@@ -10,7 +10,7 @@ const { authenticate, requireAdmin, requireRole, requireTenantAccess } = require
 // desde el TPV). El escaneo de inventario alimenta el flujo de Compras, así
 // que no debe quedar restringido sólo a ADMIN.
 const PURCHASE_SCAN_ROLES = ['CASHIER', 'WAITER', 'KITCHEN', 'ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'];
-const { aiLimiter } = require('../lib/rate-limiters');
+const { aiLimiter, aiTenantLimiter } = require('../lib/rate-limiters');
 const router = express.Router();
 const multer = require('multer');
 
@@ -55,7 +55,7 @@ const upload = multer({
 });
 
 // Escanear MENÚ (Platos y Precios) — visión, usa Gemini con key de plataforma.
-router.post('/scan-menu', authenticate, requireTenantAccess, requireAdmin, upload.array('images', 10), async (req, res) => {
+router.post('/scan-menu', authenticate, requireTenantAccess, aiTenantLimiter, requireAdmin, upload.array('images', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No se recibieron imágenes.' });
     const { apiKey } = resolveGeminiKey();
@@ -83,7 +83,7 @@ router.post('/scan-menu', authenticate, requireTenantAccess, requireAdmin, uploa
 //     correcto por archivo. PDFs van con application/pdf (Gemini lo soporta
 //     nativamente desde 1.5). Imágenes van con su mimeType original (no
 //     hardcodear image/jpeg porque rompe PNGs en algunas regiones).
-router.post('/scan-inventory', authenticate, requireTenantAccess, requireRole(...PURCHASE_SCAN_ROLES), upload.array('images', 10), async (req, res) => {
+router.post('/scan-inventory', authenticate, requireTenantAccess, aiTenantLimiter, requireRole(...PURCHASE_SCAN_ROLES), upload.array('images', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No se recibieron archivos.' });
 
@@ -123,7 +123,7 @@ router.post('/scan-inventory', authenticate, requireTenantAccess, requireRole(..
 // POST /api/ai/assistant — chat con el asistente administrativo (Claude)
 // Body: { messages: [{ role: "user"|"assistant", content: string|Array }] }
 // Responde con { messages, usage } incluyendo la respuesta final del asistente.
-router.post('/assistant', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/assistant', authenticate, requireTenantAccess, aiTenantLimiter, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -146,7 +146,7 @@ router.post('/assistant', authenticate, requireTenantAccess, requireAdmin, async
 // Groq key (BYOK) usa IA (Llama) para entender lenguaje natural y varios
 // productos; si no, cae al parser de reglas gratis. Nunca expone precios del
 // cliente a terceros más allá de los nombres del menú.
-router.post('/order-dictation', authenticate, requireTenantAccess, requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+router.post('/order-dictation', authenticate, requireTenantAccess, aiTenantLimiter, requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
@@ -175,7 +175,7 @@ router.post('/order-dictation', authenticate, requireTenantAccess, requireRole('
 // incluye tenantId y no coincide, responde 403.
 // Responde con { ok, action, message, data? } para que el frontend muestre un
 // toast y refresque la vista afectada si aplica.
-router.post('/agent', authenticate, requireTenantAccess, async (req, res) => {
+router.post('/agent', authenticate, requireTenantAccess, aiTenantLimiter, async (req, res) => {
   try {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(403).json({ error: 'Tenant no resoluble' });
@@ -198,7 +198,7 @@ router.post('/agent', authenticate, requireTenantAccess, async (req, res) => {
 });
 
 // POST /api/ai/generate-recipe — Autogenera receta para un platillo
-router.post('/generate-recipe', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+router.post('/generate-recipe', authenticate, requireTenantAccess, aiTenantLimiter, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
