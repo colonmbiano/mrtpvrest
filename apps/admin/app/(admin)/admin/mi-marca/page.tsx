@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import {
   Store, Camera, ImageIcon, MapPin, Phone, Plus, Pencil, Trash2,
-  Bike, ShoppingBag, Utensils, Sparkles, X,
+  Bike, ShoppingBag, Utensils, Sparkles, X, Receipt,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
@@ -10,7 +10,7 @@ import {
   Pill, IconBadge, EmptyState, type Tone,
 } from "@/components/warmtech";
 
-type Location = { id: string; name: string; slug: string; address?: string; phone?: string; autoPromoEnabled?: boolean; autoPromoThreshold?: number; autoPromoDiscount?: number; hasDelivery?: boolean; hasTakeaway?: boolean; hasTableMap?: boolean; };
+type Location = { id: string; name: string; slug: string; address?: string; phone?: string; autoPromoEnabled?: boolean; autoPromoThreshold?: number; autoPromoDiscount?: number; hasDelivery?: boolean; hasTakeaway?: boolean; hasTableMap?: boolean; hasOpenTabs?: boolean; };
 
 function slugify(text: string) {
   return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
@@ -40,7 +40,7 @@ function LocationsSection() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Location | null>(null);
-  const [form, setForm] = useState({ name: "", address: "", phone: "", autoPromoEnabled: false, autoPromoThreshold: 10, autoPromoDiscount: 15, hasDelivery: true, hasTakeaway: true, hasTableMap: true });
+  const [form, setForm] = useState({ name: "", address: "", phone: "", autoPromoEnabled: false, autoPromoThreshold: 10, autoPromoDiscount: 15, hasDelivery: true, hasTakeaway: true, hasTableMap: true, hasOpenTabs: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -54,8 +54,8 @@ function LocationsSection() {
 
   useEffect(() => { fetchLocations(); }, []);
 
-  const openCreate = () => { setEditing(null); setForm({ name: "", address: "", phone: "", autoPromoEnabled: false, autoPromoThreshold: 10, autoPromoDiscount: 15, hasDelivery: true, hasTakeaway: true, hasTableMap: true }); setError(""); setShowModal(true); };
-  const openEdit = (loc: Location) => { setEditing(loc); setForm({ name: loc.name, address: loc.address || "", phone: loc.phone || "", autoPromoEnabled: loc.autoPromoEnabled || false, autoPromoThreshold: loc.autoPromoThreshold || 10, autoPromoDiscount: loc.autoPromoDiscount || 15, hasDelivery: loc.hasDelivery ?? true, hasTakeaway: loc.hasTakeaway ?? true, hasTableMap: loc.hasTableMap ?? true }); setError(""); setShowModal(true); };
+  const openCreate = () => { setEditing(null); setForm({ name: "", address: "", phone: "", autoPromoEnabled: false, autoPromoThreshold: 10, autoPromoDiscount: 15, hasDelivery: true, hasTakeaway: true, hasTableMap: true, hasOpenTabs: false }); setError(""); setShowModal(true); };
+  const openEdit = (loc: Location) => { setEditing(loc); setForm({ name: loc.name, address: loc.address || "", phone: loc.phone || "", autoPromoEnabled: loc.autoPromoEnabled || false, autoPromoThreshold: loc.autoPromoThreshold || 10, autoPromoDiscount: loc.autoPromoDiscount || 15, hasDelivery: loc.hasDelivery ?? true, hasTakeaway: loc.hasTakeaway ?? true, hasTableMap: loc.hasTableMap ?? true, hasOpenTabs: loc.hasOpenTabs ?? false }); setError(""); setShowModal(true); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -217,6 +217,7 @@ function LocationsSection() {
                     { key: "hasDelivery" as const, label: "Delivery (envío a domicilio)", icon: Bike },
                     { key: "hasTakeaway" as const, label: "Para llevar (takeaway)", icon: ShoppingBag },
                     { key: "hasTableMap" as const, label: "En mesa (dine-in / mapa de mesas)", icon: Utensils },
+                    { key: "hasOpenTabs" as const, label: "Cuentas abiertas (bar / tab)", icon: Receipt },
                   ].map(opt => (
                     <label key={opt.key} className="flex min-h-11 cursor-pointer items-center gap-3">
                       <input
