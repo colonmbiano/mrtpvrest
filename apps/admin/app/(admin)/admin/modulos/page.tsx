@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   Monitor, Bike, ShoppingCart, Star, Tv, BarChart3, Wrench,
-  CheckCircle2, XCircle, type LucideIcon,
+  CheckCircle2, XCircle, Receipt, type LucideIcon,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
@@ -31,6 +31,7 @@ const MODULE_META: Record<string, { label: string; description: string; icon: Lu
   LOYALTY:  { label: "Programa de puntos",  description: "Acumula y canjea puntos de fidelidad.",                 icon: Star },
   KDS:      { label: "Kitchen Display",     description: "Pantalla de cocina en tiempo real.",                    icon: Tv },
   REPORTS:  { label: "Reportes avanzados",  description: "Análisis de ventas, turnos e inventario.",              icon: BarChart3 },
+  PAYROLL:  { label: "Nómina y caja de empleado", description: "La raya (pago por día) + consumo a cuenta de empleado con su descuento.", icon: Receipt },
 };
 
 export default function ModulosPage() {
