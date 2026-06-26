@@ -2,7 +2,7 @@
 import { useEffect, useState, type ComponentType } from "react";
 import {
   Flame, Package, Coins, BarChart3, Plug, CreditCard, Bike, Users as UsersIcon,
-  Wallet, ShoppingBag, ShoppingCart, Utensils, Trophy, Globe2, X, Check,
+  Wallet, ShoppingBag, ShoppingCart, Utensils, Trophy, Globe2, X, Check, Receipt,
 } from "lucide-react";
 import api from "@/lib/api";
 
@@ -53,6 +53,8 @@ const AVAILABLE_MODULES: Array<{ id: string; label: string; Icon: IconCmp }> = [
   { id: "waiters",             label: "Meseros / Salón",     Icon: Utensils },
   { id: "loyalty_advanced",    label: "Loyalty Avanzado",    Icon: Trophy },
   { id: "multi_currency",      label: "Multi-moneda",        Icon: Globe2 },
+  { id: "finance",             label: "Finanzas / Cortes",   Icon: Coins },
+  { id: "payroll",             label: "Nómina",              Icon: Receipt },
 ];
 
 const EMPTY_PLAN: Omit<Plan, "id" | "createdAt"> = {

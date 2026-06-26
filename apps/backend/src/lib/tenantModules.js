@@ -36,6 +36,10 @@ const MODULE_CATALOG = [
   { key: 'kds',       kind: 'key',  requiresPlan: true,  legacyFlag: null,           aliases: [],                  planFlag: 'hasKDS' },
   { key: 'reports',   kind: 'key',  requiresPlan: true,  legacyFlag: null,           aliases: [],                  planFlag: 'hasReports' },
   { key: 'finance',   kind: 'key',  requiresPlan: true,  legacyFlag: null,           aliases: [],                  planFlag: null },
+  { key: 'waiters',             kind: 'key', requiresPlan: true, legacyFlag: null, aliases: [], planFlag: null },
+  { key: 'cash_shift',          kind: 'key', requiresPlan: true, legacyFlag: null, aliases: [], planFlag: null },
+  { key: 'employee_management', kind: 'key', requiresPlan: true, legacyFlag: null, aliases: [], planFlag: null },
+  { key: 'payroll',             kind: 'key', requiresPlan: true, legacyFlag: null, aliases: [], planFlag: null },
 ]
 
 const CANONICAL_KEYS = MODULE_CATALOG.map((m) => m.key)
