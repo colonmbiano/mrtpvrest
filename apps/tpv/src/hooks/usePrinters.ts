@@ -152,6 +152,8 @@ type TicketConfigDTO = {
   showLogo?: boolean;
   showAddress?: boolean;
   showPhone?: boolean;
+  showOrderNumber?: boolean;   // "Pedido: #folio" en el recibo
+  compactMode?: boolean;       // recibo compacto (ahorra papel)
   kitchenHeader?: string;
   kitchenFooter?: string;
   kitchenShowOrderNumber?: boolean;
@@ -222,6 +224,7 @@ export function buildReceiptIdentityFields(
     address: dto?.address,
     showPhone: dto?.showPhone,
     phone: dto?.phone,
+    showOrderNumber: dto?.showOrderNumber,
     showInvoiceQr: dto?.showInvoiceQr,
     invoiceUrl: dto?.invoiceUrl || null,
     invoiceFolio,
@@ -230,6 +233,7 @@ export function buildReceiptIdentityFields(
     lineSpacing: dto?.lineSpacing,
     lineWeight: dto?.lineWeight,
     paperWidth: dto?.paperWidth,
+    compactMode: dto?.compactMode,
     // Envío: ¿causa IVA? Solo se manda explícito cuando el negocio lo apagó,
     // para no alterar el desglose por defecto (envío con IVA incluido).
     deliveryFeeTaxed: dto?.deliveryFeeTaxed,
