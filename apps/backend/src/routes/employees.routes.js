@@ -6,6 +6,7 @@ const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requirePermission } = require('../middleware/auth.middleware');
 const { requireModule, MODULES } = require('../lib/modules');
 const { mapPermissions, PERM_TO_FLAG, PERMISSION_FLAG_SELECT } = require('../lib/permissions');
+const { isEnforceMode } = require('../lib/modules');
 const { localDayRange } = require('../utils/dayRange');
 const router = express.Router();
 
@@ -578,6 +579,32 @@ router.post('/', authenticate, requireTenantAccess, requirePermission('manage_us
 
     if (!name || !pin) return res.status(400).json({ error: 'Nombre y PIN requeridos' });
     if (!/^\d{4,6}$/.test(pin)) return res.status(400).json({ error: 'El PIN debe ser numérico de 4 a 6 dígitos' });
+
+    // Límite de empleados del plan. Graceful: solo bloquea con
+    // ENFORCE_PLAN_FLAGS=true (mismo switch que el plan-gating de lib/modules),
+    // para no romper a tenants que ya estén sobre su cupo. 99 = ilimitado.
+    const planRestaurantId = req.restaurantId || req.user?.restaurantId;
+    if (planRestaurantId) {
+      const r = await prisma.restaurant.findUnique({
+        where: { id: planRestaurantId },
+        select: { tenant: { select: { subscription: { select: { plan: { select: { maxEmployees: true } } } } } } },
+      });
+      const maxEmp = r?.tenant?.subscription?.plan?.maxEmployees ?? 0;
+      if (maxEmp > 0 && maxEmp < 99) {
+        const count = await prisma.employee.count({
+          where: { isActive: true, location: { restaurantId: planRestaurantId } },
+        });
+        if (count >= maxEmp) {
+          if (isEnforceMode()) {
+            return res.status(403).json({
+              error: `Límite de empleados de tu plan alcanzado (${maxEmp}). Actualiza tu plan para agregar más.`,
+              code: 'PLAN_EMPLOYEE_LIMIT',
+            });
+          }
+          console.warn(`[plan-gate] tenant ${planRestaurantId} sobre el cupo de empleados (${count}/${maxEmp}) — dejando pasar (ENFORCE off)`);
+        }
+      }
+    }
 
     // PIN único dentro de la marca — comparar contra hashes existentes
     const sameRestaurantEmps = await prisma.employee.findMany({
