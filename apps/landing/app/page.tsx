@@ -1,42 +1,69 @@
+import type { ReactNode } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { APKS, FUNCIONES } from '../lib/links'
-import { siteUrl, registerUrl, loginUrl } from './_data/site'
-import { DownloadButton } from './_components/DownloadButton'
+import { siteUrl, registerUrl, loginUrl, contactEmail } from './_data/site'
 import { testimonials } from '../lib/testimonials'
-import { Badge } from './_components/Badge'
+import styles from './page.module.css'
 
-const apps = [
-  { src: '/showcase-warm/app-cliente.png', title: 'App Cliente', text: 'Pedidos QR y online sin perder control.', tone: 'sage', href: FUNCIONES.appCliente },
-  { src: '/showcase-warm/kiosko.png', title: 'Kiosko', text: 'Autoservicio rápido para horas pico.', tone: 'amber', href: FUNCIONES.kiosko },
-  { src: '/showcase-warm/tpv.png', title: 'TPV', text: 'Cobro, mesas, tickets y caja en una pantalla.', tone: 'orange', href: FUNCIONES.tpv, badge: 'Más usado' },
-  { src: '/showcase-warm/kds.png', title: 'KDS', text: 'Cocina recibe órdenes al instante.', tone: 'ember', href: FUNCIONES.kds },
-  { src: '/showcase-warm/delivery.png', title: 'Delivery', text: 'Reparto conectado con operación y caja.', tone: 'steel', href: FUNCIONES.delivery },
-  { src: '/showcase-warm/admin.png', title: 'Admin', text: 'Reportes, inventario y permisos por rol.', tone: 'gold', href: FUNCIONES.admin },
-] as const
+// ---------------------------------------------------------------------------
+// Iconos inline (sin dependencias — la landing no trae lucide). Estilo Lucide.
+// ---------------------------------------------------------------------------
+type IconName =
+  | 'monitor' | 'chefHat' | 'tablet' | 'bike' | 'smartphone' | 'barChart'
+  | 'zap' | 'cloud' | 'headphones' | 'shield'
+  | 'calendar' | 'play' | 'arrowRight' | 'check'
 
-const apkDownloads = [
-  ['TPV', APKS.tpv],
-  ['Kiosko', APKS.kiosko],
-  ['KDS', APKS.kds],
-  ['Delivery', APKS.delivery],
-  ['Meseros Lite', APKS.meserosLite],
-] as const
+const ICON_PATHS: Record<IconName, ReactNode> = {
+  monitor: (<><rect width="20" height="14" x="2" y="3" rx="2" /><line x1="8" x2="16" y1="21" y2="21" /><line x1="12" x2="12" y1="17" y2="21" /></>),
+  chefHat: (<><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z" /><line x1="6" x2="18" y1="17" y2="17" /></>),
+  tablet: (<><rect width="16" height="20" x="4" y="2" rx="2" ry="2" /><line x1="12" x2="12.01" y1="18" y2="18" /></>),
+  bike: (<><circle cx="18.5" cy="17.5" r="3.5" /><circle cx="5.5" cy="17.5" r="3.5" /><circle cx="15" cy="5" r="1" /><path d="M12 17.5V14l-3-3 4-3 2 3h2" /></>),
+  smartphone: (<><rect width="14" height="20" x="5" y="2" rx="2" ry="2" /><path d="M12 18h.01" /></>),
+  barChart: (<><path d="M3 3v18h18" /><path d="M18 17V9" /><path d="M13 17V5" /><path d="M8 17v-3" /></>),
+  zap: (<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />),
+  cloud: (<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />),
+  headphones: (<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" />),
+  shield: (<><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z" /><path d="m9 12 2 2 4-4" /></>),
+  calendar: (<><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18M8 2v4M16 2v4" /></>),
+  play: (<><circle cx="12" cy="12" r="10" /><polygon points="10 8 16 12 10 16 10 8" /></>),
+  arrowRight: (<path d="M5 12h14M12 5l7 7-7 7" />),
+  check: (<path d="M20 6 9 17l-5-5" />),
+}
 
-const pains = [
-  ['Cuentas dispersas', 'Ventas en cuaderno, Excel y memoria.', 'Dashboard vivo con ventas, caja y turnos al minuto.'],
-  ['Pedidos perdidos', 'Meseros, cocina y delivery hablan por separado.', 'TPV, KDS y apps sincronizadas en tiempo real.'],
-  ['Poco control', 'Empleados sin roles claros ni historial confiable.', 'Permisos, auditoría y operación multi-sucursal.'],
-] as const
+function Icon({ name }: { name: IconName }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {ICON_PATHS[name]}
+    </svg>
+  )
+}
 
-const steps = [
-  ['01', 'Registra tu restaurante', 'Crea cuenta, define sucursal y activa módulos clave.'],
-  ['02', 'Instala pantallas', 'TPV en tablet, KDS en cocina, admin en web y apps por rol.'],
-  ['03', 'Cobra la primera orden', 'Pedidos, pagos, delivery y reportes fluyen desde el primer día.'],
-] as const
+// ---------------------------------------------------------------------------
+// Datos
+// ---------------------------------------------------------------------------
+const modules: { icon: IconName; name: string; text: string; href: string }[] = [
+  { icon: 'monitor', name: 'TPV', text: 'Vende más rápido y cobra de forma segura. Mesas, cuentas, comandas y caja en una sola pantalla.', href: FUNCIONES.tpv },
+  { icon: 'chefHat', name: 'KDS Cocina', text: 'Órdenes claras y en tiempo real para una cocina más eficiente y sin tickets perdidos.', href: FUNCIONES.kds },
+  { icon: 'tablet', name: 'Kiosko', text: 'Autoservicio que aumenta el ticket promedio y mejora la experiencia en horas pico.', href: FUNCIONES.kiosko },
+  { icon: 'bike', name: 'Delivery', text: 'Gestiona pedidos a domicilio y repartidores conectados con la operación y la caja.', href: FUNCIONES.delivery },
+  { icon: 'smartphone', name: 'App Cliente', text: 'Pedidos por QR y en línea, con tu marca al frente y sin comisiones de terceros.', href: FUNCIONES.appCliente },
+  { icon: 'barChart', name: 'Administración', text: 'Reportes inteligentes, inventario, usuarios y sucursales bajo control desde la nube.', href: FUNCIONES.admin },
+]
 
-// Solo cuentan para el rating los testimonios reales (con permiso).
-const realTestimonials = testimonials.filter((item) => item.real)
+const trust: { icon: IconName; label: string }[] = [
+  { icon: 'zap', label: 'Implementación rápida' },
+  { icon: 'cloud', label: 'Acceso en la nube' },
+  { icon: 'headphones', label: 'Soporte en español' },
+  { icon: 'shield', label: 'Sin contratos forzosos' },
+]
+
+const stats: { num: string; label: string }[] = [
+  { num: '6', label: 'apps conectadas en un solo ecosistema' },
+  { num: '24/7', label: 'lectura de tu negocio en tiempo real' },
+  { num: '14 días', label: 'gratis para probar, sin tarjeta' },
+  { num: 'LATAM', label: 'pensado para restaurantes reales' },
+]
 
 const plans = [
   {
@@ -73,6 +100,9 @@ const faqs = [
   ['¿Qué pasa cuando termina el trial?', 'Decides si sigues con un plan. No necesitas tarjeta para probar y no hay bloqueo de datos al evaluar.'],
 ] as const
 
+const realTestimonials = testimonials.filter((item) => item.real)
+const featuredTestimonial = testimonials[0]
+
 const structuredData = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -82,7 +112,7 @@ const structuredData = {
       name: 'MRTPVREST',
       url: siteUrl,
       logo: `${siteUrl}/brand/mrtpvrest-logo-current.png`,
-      email: 'contacto@mrtpvrest.com',
+      email: contactEmail,
       description:
         'Software de punto de venta para restaurantes que conecta caja, cocina, delivery, kiosko y administración en tiempo real.',
     },
@@ -128,10 +158,7 @@ const structuredData = {
       mainEntity: faqs.map(([question, answer]) => ({
         '@type': 'Question',
         name: question,
-        acceptedAnswer: {
-          '@type': 'Answer',
-          text: answer,
-        },
+        acceptedAnswer: { '@type': 'Answer', text: answer },
       })),
     },
   ],
@@ -139,265 +166,260 @@ const structuredData = {
 
 export default function HomePage() {
   return (
-    <>
+    <div className={styles.page} id="inicio">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
-      <nav className="site-nav" id="inicio">
-        <a className="brand" href="#inicio" aria-label="MRTPVREST inicio">
+
+      {/* NAV */}
+      <nav className={styles.nav}>
+        <a className={styles.navBrand} href="#inicio" aria-label="MRTPVREST inicio">
           <Image src="/brand/mrtpvrest-logo-current.png" alt="MRTPVREST" width={2400} height={810} priority />
         </a>
-        <div className="nav-links" aria-label="Navegación principal">
+        <div className={styles.navLinks} aria-label="Navegación principal">
+          <a href="#modulos">Módulos</a>
           <Link href="/funciones">Funciones</Link>
-          <Link href="/punto-de-venta">Giros</Link>
-          <Link href="/blog">Blog</Link>
           <a href="#precios">Precios</a>
           <Link href="/comparativa/parrot">Comparativas</Link>
+          <Link href="/blog">Recursos</Link>
         </div>
-        <div className="nav-actions">
-          <a className="nav-login" href={loginUrl}>Entrar</a>
-          <a className="nav-cta" href={registerUrl}>Registrar</a>
+        <div className={styles.navActions}>
+          <a className={styles.navLogin} href={loginUrl}>Iniciar sesión</a>
+          <a className={`${styles.btn} ${styles.btnPrimary} ${styles.btnSm}`} href={registerUrl}>Solicitar demo</a>
         </div>
       </nav>
 
-      <main>
-        <section className="hero">
-          <div className="hero-copy">
-            <div className="eyebrow"><span /> Punto de venta para restaurantes LATAM</div>
-            <h1>
-              <span className="hero-brand-word">MRTPVREST</span> es el punto de venta que controla tu restaurante en tiempo real
+      {/* HERO */}
+      <header className={styles.hero}>
+        <div className={styles.heroInner}>
+          <div className={styles.heroCopy}>
+            <span className={styles.badge}>
+              <span className={styles.badgeDot} /> Todo tu restaurante, conectado y bajo control
+            </span>
+            <h1 className={styles.heroTitle}>
+              Software punto de venta para <span className={styles.accent}>restaurantes</span>
             </h1>
-            <p>
-              Caja, cocina, delivery, kiosko y administración en una sola plataforma. Cobra en segundos,
-              controla tu inventario en vivo y cierra el día cuadrado — sin apps sueltas ni cuentas a mano.
+            <p className={styles.heroSub}>
+              Gestiona pedidos, cocina, kiosko, delivery y administración desde una sola plataforma.
+              Más control, más ventas, mejor experiencia.
             </p>
-            <div className="hero-actions">
-              <a className="btn btn-primary" href={registerUrl}>Registrar mi restaurante</a>
-              <Link className="btn btn-soft" href="/demo">Ver demo</Link>
-              <DownloadButton apkUrl={APKS.tpv} label="Descargar TPV" requestLabel="Solicitar acceso" className="btn btn-line" />
+            <div className={styles.heroCtas}>
+              <a className={`${styles.btn} ${styles.btnPrimary}`} href={registerUrl}><Icon name="calendar" /> Solicitar demo</a>
+              <a className={`${styles.btn} ${styles.btnGhostDark}`} href="#modulos"><Icon name="play" /> Ver módulos</a>
             </div>
-            <div className="trust-row" aria-label="Beneficios de confianza">
-              <span>14 días gratis</span>
-              <span>Sin tarjeta</span>
-              <span>Autofactura por QR</span>
-              <span>Soporte en español</span>
-              <span>Operación multi-app</span>
-            </div>
-            {realTestimonials.length > 0 ? (
-              <div className="hero-proof">
-                <span className="hero-proof-avatar" aria-hidden="true">
-                  {realTestimonials[0].name.charAt(0)}
+            <div className={styles.trust}>
+              {trust.map((item) => (
+                <span className={styles.trustItem} key={item.label}>
+                  <Icon name={item.icon} /> {item.label}
                 </span>
-                <div className="hero-proof-text">
-                  <div className="hero-proof-stars" aria-label="Calificación 5 de 5 estrellas">★★★★★</div>
-                  <span>
-                    Operando en vivo con restaurantes reales como <strong>{realTestimonials[0].name}</strong>
-                  </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Collage de producto — construido en código */}
+          <div className={styles.heroArt}>
+            <div className={styles.heroGlow} aria-hidden="true" />
+            <div className={styles.screen}>
+              <div className={styles.screenBar} aria-hidden="true">
+                <span className={styles.screenDot} /><span className={styles.screenDot} /><span className={styles.screenDot} />
+              </div>
+              <div className={styles.screenShot}>
+                <Image src="/showcase-warm/tpv.png" alt="Pantalla del TPV MRTPVREST cobrando una mesa" fill sizes="(max-width: 980px) 90vw, 520px" priority />
+              </div>
+            </div>
+
+            <div className={styles.receipt} aria-hidden="true">
+              <div className={styles.receiptBrand}>MRTPVREST</div>
+              <div className={styles.receiptMeta}>Pedido #1023 · Mesa 12</div>
+              <div className={styles.receiptRow}><span>2× Hamburguesa</span><span>$236</span></div>
+              <div className={styles.receiptRow}><span>1× Papas</span><span>$69</span></div>
+              <div className={styles.receiptRow}><span>1× Limonada</span><span>$45</span></div>
+              <div className={styles.receiptRule} />
+              <div className={styles.receiptTotal}><span>TOTAL</span><span>$408.32</span></div>
+              <div className={styles.receiptBars} />
+            </div>
+
+            <div className={styles.phone} aria-hidden="true">
+              <div className={styles.phoneNotch} />
+              <div className={styles.phoneScreen}>
+                <div className={styles.phoneLabel}>Pedido en camino</div>
+                <div className={styles.phoneOrder}>#1023</div>
+                <div className={styles.phoneMap}>
+                  <svg viewBox="0 0 168 74" preserveAspectRatio="none">
+                    <path d="M10 62 Q60 52 78 34 T154 12" fill="none" stroke="#f97316" strokeWidth="3" strokeDasharray="5 5" strokeLinecap="round" />
+                    <circle cx="10" cy="62" r="4" fill="#ffffff" />
+                    <circle cx="154" cy="12" r="5" fill="#f97316" />
+                  </svg>
+                </div>
+                <div className={styles.phoneEta}>Entrega estimada <b>25–30 min</b></div>
+                <div className={styles.phoneDriver}>
+                  <span className={styles.phoneAvatar}>C</span>
+                  <div>
+                    <div className={styles.phoneDriverName}>Carlos M.</div>
+                    <div className={styles.phoneRating}>★ 4.9 · Repartidor</div>
+                  </div>
                 </div>
               </div>
-            ) : null}
-          </div>
-          <div className="hero-visual">
-            <div className="logo-plate">
-              <Image src="/brand/mrtpvrest-logo-current.png" alt="Logotipo MRTPVREST" width={2400} height={810} priority />
-            </div>
-            <div className="hero-photo">
-              <Image src="/people/hero-owner.png" alt="Dueño de restaurante usando MRTPVREST en una tablet" fill priority sizes="(max-width: 900px) 100vw, 48vw" />
-              <div className="live-badge"><span /> Sistema en operación real</div>
             </div>
           </div>
-        </section>
+        </div>
+      </header>
 
-        <section className="proof-strip" aria-label="Indicadores principales">
-          <div><strong>6</strong><span>apps conectadas</span></div>
-          <div><strong>Sin esperas</strong><span>flujo operativo</span></div>
-          <div><strong>24/7</strong><span>lectura de negocio</span></div>
-          <div><strong>LATAM</strong><span>diseño para restaurantes reales</span></div>
-        </section>
-
-        <section className="section" id="plataforma">
-          <div className="section-head">
-            <span className="section-kicker">Problema a solución</span>
-            <h2>De operación improvisada a restaurante medible</h2>
-            <p>MRTPVREST está diseñado para bajar fricción en piso, cocina y caja sin perder calidez humana.</p>
+      {/* MÓDULOS */}
+      <section className={styles.modules} id="modulos">
+        <div className={styles.modulesInner}>
+          <div className={styles.sectionHead}>
+            <span className={styles.kicker}>Módulos</span>
+            <h2 className={styles.sectionTitle}>Una plataforma, todos los módulos de tu restaurante</h2>
+            <p className={styles.sectionLede}>
+              Cada pantalla trabaja para un rol distinto y todas comparten la misma información en tiempo real.
+            </p>
           </div>
-          <div className="pain-grid">
-            {pains.map(([title, bad, good]) => (
-              <article className="pain-card" key={title}>
-                <span className="pain-title">{title}</span>
-                <p className="pain-bad">{bad}</p>
-                <p className="pain-good">{good}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="section apps-section" id="apps">
-          <div className="section-head">
-            <span className="section-kicker">Ecosistema completo</span>
-            <h2>Una app para cada punto de la operación</h2>
-            <p>Cada pantalla trabaja para un rol distinto, todas comparten la misma verdad del restaurante.</p>
-          </div>
-          <div className="apps-grid">
-            {apps.map((app) => (
-              <Link className={`app-card ${app.tone}`} href={app.href} key={app.title}>
-                {'badge' in app ? <b className="app-flag">{app.badge}</b> : null}
-                <Image src={app.src} alt={`${app.title}: ${app.text}`} width={1536} height={672} loading="lazy" sizes="(max-width: 900px) 100vw, 50vw" />
-                <span>
-                  <strong>{app.title}</strong>
-                  <small>{app.text}</small>
-                </span>
+          <div className={styles.moduleGrid}>
+            {modules.map((mod) => (
+              <Link className={styles.moduleCard} href={mod.href} key={mod.name}>
+                <span className={styles.moduleIcon}><Icon name={mod.icon} /></span>
+                <span className={styles.moduleName}>{mod.name}</span>
+                <span className={styles.moduleText}>{mod.text}</span>
+                <span className={styles.moduleLink}>Ver módulo <Icon name="arrowRight" /></span>
               </Link>
             ))}
           </div>
-          <div className="apk-downloads" aria-label="Descargas Android">
-            {apkDownloads.map(([label, href]) => (
-              <DownloadButton apkUrl={href} label={`Descargar ${label}`} requestLabel={`Solicitar ${label}`} key={label} />
+        </div>
+      </section>
+
+      {/* PRUEBA SOCIAL */}
+      <section className={styles.proof} aria-label="Prueba social e indicadores">
+        <div className={styles.proofInner}>
+          <div className={styles.stats}>
+            {stats.map((item) => (
+              <div className={styles.stat} key={item.label}>
+                <div className={styles.statNum}>{item.num}</div>
+                <div className={styles.statLabel}>{item.label}</div>
+              </div>
             ))}
           </div>
-          <div className="apk-downloads" aria-label="Explora las funciones">
-            <Link href="/funciones/punto-de-venta">Punto de venta</Link>
-            <Link href="/funciones/asistente-de-voz">Asistente de voz</Link>
-            <Link href="/funciones/kds-cocina">KDS de cocina</Link>
-            <Link href="/funciones/delivery">Delivery</Link>
-            <Link href="/funciones/kiosko">Kiosko</Link>
-            <Link href="/funciones/app-cliente">App de cliente</Link>
-            <Link href="/funciones/administracion">Administración</Link>
-          </div>
-        </section>
+          {featuredTestimonial ? (
+            <figure className={styles.quoteCard}>
+              {!featuredTestimonial.real ? <span className={styles.exampleTag}>Ejemplo ilustrativo</span> : null}
+              <div className={styles.quoteStars} aria-label="Calificación 5 de 5 estrellas">★★★★★</div>
+              <blockquote className={styles.quoteText}>“{featuredTestimonial.quote}”</blockquote>
+              <figcaption className={styles.quoteAuthor}>
+                <span className={styles.quoteAvatar} aria-hidden="true">{featuredTestimonial.name.charAt(0)}</span>
+                <span>
+                  <span className={styles.quoteName}>{featuredTestimonial.name}</span>
+                  <span className={styles.quoteMeta}>{featuredTestimonial.business} · {featuredTestimonial.city}</span>
+                </span>
+              </figcaption>
+            </figure>
+          ) : null}
+        </div>
+      </section>
 
-        <section className="section steps-section">
-          <div className="section-head">
-            <span className="section-kicker">Cómo funciona</span>
-            <h2>Activa el sistema sin detener tu servicio</h2>
+      {/* PRECIOS */}
+      <section className={styles.pricing} id="precios">
+        <div className={styles.pricingInner}>
+          <div className={styles.sectionHead}>
+            <span className={styles.kicker}>Precios</span>
+            <h2 className={styles.sectionTitle}>Empieza sin tarjeta y escala cuando lo pidas</h2>
+            <p className={styles.sectionLede}>
+              Todos los planes incluyen 14 días gratis y soporte en español durante el arranque.
+            </p>
           </div>
-          <div className="steps">
-            {steps.map(([number, title, text]) => (
-              <article className="step" key={number}>
-                <span>{number}</span>
-                <h3>{title}</h3>
-                <p>{text}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="section operation-section">
-          <div className="operation-grid">
-            <div className="operation-copy">
-              <span className="section-kicker">En el restaurante</span>
-              <h2>Tecnología que se siente como parte del equipo</h2>
-              <p>
-                Pantallas claras, botones táctiles grandes y datos visibles para quien toma decisiones en caliente:
-                caja, cocina, meseros, repartidores y dueños.
-              </p>
-              <a className="btn btn-primary" href={registerUrl}>Crear mi cuenta gratis</a>
-            </div>
-            <div className="photo-wall">
-              <div className="photo-main">
-                <Image src="/people/restaurant-team.png" alt="Equipo de restaurante coordinando operación con MRTPVREST" fill loading="lazy" sizes="(max-width: 900px) 100vw, 52vw" />
-              </div>
-              <div className="photo-small">
-                <Image src="/people/kitchen-kds.png" alt="Cocina usando una pantalla KDS conectada" fill loading="lazy" sizes="(max-width: 900px) 50vw, 24vw" />
-              </div>
-              <div className="photo-small warm">
-                <Image src="/people/hero-owner.png" alt="Dueño revisando ventas en una tablet" fill loading="lazy" sizes="(max-width: 900px) 50vw, 24vw" />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {testimonials.length > 0 ? (
-          <section className="section testimonials-section">
-            <div className="section-head">
-              <span className="section-kicker">Prueba social</span>
-              <h2>Operadores que quieren claridad, no más ruido</h2>
-            </div>
-            <div className={`testimonial-grid${testimonials.length === 1 ? ' single' : ''}`}>
-              {testimonials.map((item) => (
-                <article className="testimonial" key={item.name}>
-                  <div className="stars">★★★★★</div>
-                  {!item.real ? <Badge>Ejemplo ilustrativo</Badge> : null}
-                  <p>“{item.quote}”</p>
-                  <div className="author">
-                    {item.avatar ? (
-                      <Image src={item.avatar} alt={item.name} width={56} height={56} loading="lazy" />
-                    ) : (
-                      <span className="avatar-fallback" aria-hidden="true">{item.name.charAt(0)}</span>
-                    )}
-                    <span>
-                      <strong>{item.name}</strong>
-                      <small>{item.business} · {item.city}</small>
-                    </span>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        <section className="section pricing-section" id="precios">
-          <div className="section-head">
-            <span className="section-kicker">Precios públicos</span>
-            <h2>Empieza sin tarjeta y escala cuando tu operación lo pida</h2>
-            <p>Todos los planes incluyen 14 días gratis y soporte en español durante el arranque.</p>
-          </div>
-          <div className="plans">
+          <div className={styles.plans}>
             {plans.map((plan) => (
-              <article className={`plan ${plan.featured ? 'featured' : ''}`} key={plan.name}>
-                {plan.featured ? <span className="plan-badge">Más elegido</span> : null}
-                <h3>{plan.name}</h3>
-                <div className="price"><strong>{plan.price}</strong><span>/mes</span></div>
-                <p className="local-price">{plan.local}</p>
-                <p>{plan.text}</p>
-                <a className={plan.featured ? 'btn btn-primary' : 'btn btn-soft'} href={registerUrl}>Probar {plan.name}</a>
-                <ul>
-                  {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
+              <article className={`${styles.plan} ${plan.featured ? styles.planFeatured : ''}`} key={plan.name}>
+                {plan.featured ? <span className={styles.planTag}>Más elegido</span> : null}
+                <div className={styles.planName}>{plan.name}</div>
+                <div className={styles.planPrice}><b>{plan.price}</b><span>/mes</span></div>
+                <div className={styles.planLocal}>{plan.local}</div>
+                <p className={styles.planText}>{plan.text}</p>
+                <a className={`${styles.btn} ${plan.featured ? styles.btnPrimary : styles.btnGhostLight}`} href={registerUrl}>
+                  Probar {plan.name}
+                </a>
+                <ul className={styles.planFeatures}>
+                  {plan.features.map((feature) => (
+                    <li key={feature}><Icon name="check" /> {feature}</li>
+                  ))}
                 </ul>
               </article>
             ))}
           </div>
-        </section>
-
-        <section className="section faq-section" id="faq">
-          <div className="section-head">
-            <span className="section-kicker">FAQ</span>
-            <h2>Preguntas antes de encender cocina</h2>
-          </div>
-          <div className="faq-list">
-            {faqs.map(([question, answer], index) => (
-              <details key={question} open={index === 0}>
-                <summary>{question}</summary>
-                <p>{answer}</p>
-              </details>
-            ))}
-          </div>
-        </section>
-
-        <section className="final-cta">
-          <span className="section-kicker">MRTPVREST</span>
-          <h2>Tu restaurante merece tecnología de verdad</h2>
-          <p>Registra tu negocio, conecta tus pantallas y toma decisiones con datos desde el primer turno.</p>
-          <div className="hero-actions">
-            <a className="btn btn-primary" href={registerUrl}>Registrar mi restaurante</a>
-            <a className="btn btn-line" href="mailto:contacto@mrtpvrest.com">Hablar con ventas</a>
-          </div>
-        </section>
-      </main>
-
-      <footer className="site-footer">
-        <span>© 2026 MRTPVREST</span>
-        <div>
-          <Link href="/funciones">Funciones</Link>
-          <Link href="/punto-de-venta">Giros</Link>
-          <Link href="/blog">Blog</Link>
-          <Link href="/comparativa/parrot">Comparativas</Link>
-          <a href="#precios">Precios</a>
-          <a href="mailto:contacto@mrtpvrest.com">Contacto</a>
-          <DownloadButton apkUrl={APKS.tpv} label="APK" requestLabel="Solicitar acceso" />
         </div>
+      </section>
+
+      {/* FAQ */}
+      <section className={styles.faq} id="faq">
+        <div className={styles.faqInner}>
+          <div className={styles.sectionHead}>
+            <span className={styles.kicker}>FAQ</span>
+            <h2 className={styles.sectionTitle}>Preguntas antes de encender cocina</h2>
+          </div>
+          {faqs.map(([question, answer], index) => (
+            <details className={styles.faqItem} key={question} open={index === 0}>
+              <summary>{question}</summary>
+              <p>{answer}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA FINAL */}
+      <section className={styles.finalCta}>
+        <h2 className={styles.finalTitle}>Tu restaurante merece tecnología de verdad</h2>
+        <p className={styles.finalSub}>
+          Registra tu negocio, conecta tus pantallas y toma decisiones con datos desde el primer turno.
+        </p>
+        <div className={styles.finalCtas}>
+          <a className={`${styles.btn} ${styles.btnPrimary}`} href={registerUrl}><Icon name="calendar" /> Solicitar demo</a>
+          <a className={`${styles.btn} ${styles.btnGhostDark}`} href={`mailto:${contactEmail}`}>Hablar con ventas</a>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className={styles.footer}>
+        <div className={styles.footerInner}>
+          <div className={styles.footerBrand}>
+            <Image src="/brand/mrtpvrest-logo-current.png" alt="MRTPVREST" width={2400} height={810} />
+            <p className={styles.footerTag}>
+              Tu restaurante, siempre conectado. Punto de venta para restaurantes en México y LATAM.
+            </p>
+          </div>
+          <div className={styles.footerCols}>
+            <div className={styles.footerCol}>
+              <h4>Producto</h4>
+              <Link href="/funciones/punto-de-venta">TPV</Link>
+              <Link href="/funciones/kds-cocina">KDS Cocina</Link>
+              <Link href="/funciones/kiosko">Kiosko</Link>
+              <Link href="/funciones/delivery">Delivery</Link>
+              <Link href="/funciones/administracion">Administración</Link>
+            </div>
+            <div className={styles.footerCol}>
+              <h4>Recursos</h4>
+              <Link href="/funciones">Funciones</Link>
+              <Link href="/punto-de-venta">Giros</Link>
+              <Link href="/moda">Tienda de ropa</Link>
+              <Link href="/blog">Blog</Link>
+              <Link href="/comparativa/parrot">Comparativas</Link>
+            </div>
+            <div className={styles.footerCol}>
+              <h4>Apps</h4>
+              <a href={APKS.tpv}>Descargar TPV</a>
+              <a href={APKS.kiosko}>Descargar Kiosko</a>
+              <a href={APKS.kds}>Descargar KDS</a>
+              <a href={APKS.delivery}>Descargar Delivery</a>
+            </div>
+            <div className={styles.footerCol}>
+              <h4>Empresa</h4>
+              <a href={loginUrl}>Iniciar sesión</a>
+              <a href={registerUrl}>Solicitar demo</a>
+              <a href={`mailto:${contactEmail}`}>Contacto</a>
+            </div>
+          </div>
+        </div>
+        <div className={styles.footerBottom}>© 2026 MRTPVREST · Punto de venta para restaurantes</div>
       </footer>
-    </>
+    </div>
   )
 }
