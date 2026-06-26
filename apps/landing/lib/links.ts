@@ -21,7 +21,8 @@ export const APKS = {
 // solo tienen build DEBUG en CI, y Kiosko ninguno — NO se publican como release.
 // Agrega la URL aquí SOLO cuando el .apk release firmado esté en public/apks;
 // si no está listo, DownloadButton degrada a "Solicitar acceso" (sin enlaces muertos).
-export const READY_APKS: string[] = []
+// TPV: APK release firmado publicado (build CI 28215708538, assembleRelease + keystore).
+export const READY_APKS: string[] = [APKS.tpv]
 
 // Páginas de función existentes (para que las tarjetas del ecosistema naveguen,
 // NO descarguen ni caigan en el login del admin).
