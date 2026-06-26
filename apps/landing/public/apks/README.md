@@ -14,18 +14,19 @@ Los nombres deben coincidir **exactamente** con `apps/landing/lib/links.ts` (`AP
 - `mrtpvrest-delivery.apk`
 - `mrtpvrest-meseros-lite.apk`
 
-## Estado del pipeline de release (importante)
+## Estado del pipeline de release
 
-Los `.apk` deben ser builds **release firmados**, no debug (los debug son más
-pesados, depurables/reversibles y van con la clave de debug). Hoy en CI:
+Los `.apk` deben ser builds **release firmados**, no debug. Las 5 apps ya tienen
+pipeline de release firmado en CI (`assembleRelease` + keystore de GitHub Secrets,
+con verificación de firma v2/v3):
 
-- **TPV** → SÍ tiene build release firmado: `.github/workflows/build-android-apk-release.yml`
-  (`assembleRelease` + keystore de GitHub Secrets). Disparable con `workflow_dispatch`.
-- **KDS / Delivery / Meseros Lite** → en CI solo hay build **DEBUG**
-  (`build-android-apk-*.yml` corren `assembleDebug`). NO se pueden publicar como release
-  hasta agregarles `signingConfig` de release en su `android/app/build.gradle` + un
-  workflow `assembleRelease` (como el del TPV).
-- **Kiosko** → no tiene ningún workflow de release (solo debug en `build-apks.yml`).
+- **TPV** → `.github/workflows/build-android-apk-release.yml` (`workflow_dispatch` o tag `tpv-v*`).
+- **KDS / Delivery / Meseros Lite / Kiosk** → `.github/workflows/build-android-apks-release.yml`
+  (matriz; `workflow_dispatch` o tag `apks-rel-v*`).
+
+Cada `android/app/build.gradle` tiene `signingConfigs.release` que lee el keystore
+de env (`KEYSTORE_PATH`/`KEYSTORE_PASSWORD`/`KEY_ALIAS`/`KEY_PASSWORD`); sin keystore
+`assembleRelease` queda sin firma a propósito.
 
 ## Cómo publicar un APK release
 

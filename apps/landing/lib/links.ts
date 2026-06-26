@@ -16,13 +16,18 @@ export const APKS = {
 } as const
 
 // APK release (FIRMADOS) ya publicados en public/apks. Es per-app a propósito:
-// solo el TPV tiene pipeline de release firmado en CI hoy
-// (.github/workflows/build-android-apk-release.yml). KDS/Delivery/Meseros Lite
-// solo tienen build DEBUG en CI, y Kiosko ninguno — NO se publican como release.
-// Agrega la URL aquí SOLO cuando el .apk release firmado esté en public/apks;
-// si no está listo, DownloadButton degrada a "Solicitar acceso" (sin enlaces muertos).
-// TPV: APK release firmado publicado (build CI 28215708538, assembleRelease + keystore).
-export const READY_APKS: string[] = [APKS.tpv]
+// agrega la URL aquí SOLO cuando el .apk release firmado esté en public/apks; si no,
+// DownloadButton degrada a "Solicitar acceso" (sin enlaces muertos).
+// Las 5 apps tienen pipeline de release firmado en CI (assembleRelease + keystore):
+//   TPV                              → build-android-apk-release.yml  (run 28215708538)
+//   KDS/Delivery/Meseros Lite/Kiosk  → build-android-apks-release.yml (run 28216454498)
+export const READY_APKS: string[] = [
+  APKS.tpv,
+  APKS.kds,
+  APKS.delivery,
+  APKS.meserosLite,
+  APKS.kiosko,
+]
 
 // Páginas de función existentes (para que las tarjetas del ecosistema naveguen,
 // NO descarguen ni caigan en el login del admin).
