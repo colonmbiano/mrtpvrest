@@ -2,7 +2,24 @@ const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireRole, requireTenantAccess } = require('../middleware/auth.middleware');
 const { printTest, kickDrawer } = require('../services/printer.service');
+const { pick } = require('../lib/validate');
 const router = express.Router();
+
+// Whitelist de columnas editables de TicketConfig (anti mass-assignment, regla
+// de CLAUDE.md). Cualquier campo fuera de esta lista se descarta antes de tocar
+// Prisma — el cliente no puede inyectar columnas arbitrarias vía el body.
+const TICKET_CONFIG_FIELDS = [
+  'businessName', 'header', 'subheader', 'footer', 'showLogo', 'showAddress',
+  'showPhone', 'address', 'phone', 'logoUrl', 'businessType', 'rfc',
+  'showInvoiceQr', 'invoiceUrl', 'invoiceFolioPrefix', 'paperWidth', 'fontFamily',
+  'fontSize', 'compactMode', 'showOrderNumber', 'showCustomerData', 'showItemsPrice',
+  'itemSpacing', 'showItemSeparator', 'modifierIndent', 'receiptShowModifiers',
+  'receiptShowNotes', 'showWifi', 'wifiSsid', 'wifiPassword', 'showPoints', 'showTip',
+  'tipSuggestions', 'kitchenHeader', 'kitchenLayout', 'adminPin', 'kitchenShowCustomer',
+  'kitchenShowTable', 'kitchenShowType', 'kitchenShowTime', 'kitchenShowOrderNumber',
+  'kitchenShowModifiers', 'kitchenShowNotes', 'kitchenShowItemDescription',
+  'kitchenGroupBySeat', 'kitchenFontSize', 'kitchenFooter',
+];
 
 // ── Gate común ───────────────────────────────────────────────────────────────
 router.use(authenticate, requireTenantAccess);
@@ -46,7 +63,7 @@ router.get('/ticket-config', requirePrinterRead, async (req, res) => {
 router.put('/ticket-config', requireAdmin, async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
-    const { id, locationId, createdAt, updatedAt, ...data } = req.body || {};
+    const data = pick(req.body || {}, TICKET_CONFIG_FIELDS);
     const cfg = await prisma.ticketConfig.upsert({
       where: { locationId: req.locationId },
       update: data,
