@@ -16,7 +16,7 @@ export default function StorefrontBrutalist({
           <span style={{ color: '#EAFF00' }}>·</span>
           <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700 }}>COCINA ABIERTA</span>
         </div>
-        <span style={{ color: '#EAFF00', fontWeight: 700 }}>{new Date().toLocaleTimeString('es-MX', { hour12: false, hour: '2-digit', minute: '2-digit' })}</span>
+        <span style={{ color: '#EAFF00', fontWeight: 700 }}>{new Date().toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour12: false, hour: '2-digit', minute: '2-digit' })}</span>
       </div>
 
       <header className="px-5 pt-5 flex items-start justify-between">

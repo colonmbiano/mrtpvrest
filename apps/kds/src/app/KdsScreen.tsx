@@ -1624,7 +1624,7 @@ function TcpTicketCard({ ticket, onDismiss }: { ticket: TcpTicket; onDismiss: ()
     : ticket.isKitchen
       ? { label: "COMANDA", color: "#88D66C" }
       : { label: "TICKET",  color: "#94a3b8" };
-  const time = new Date(ticket.receivedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const time = new Date(ticket.receivedAt).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   return (
     <div

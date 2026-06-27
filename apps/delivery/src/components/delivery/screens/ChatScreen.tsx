@@ -69,7 +69,7 @@ export function ChatScreen({ order, messages, onBack, onSend }: ChatScreenProps)
             }}>
               <div style={{ fontSize: 13, fontWeight: m.fromDriver ? 600 : 400, lineHeight: 1.5 }}>{m.message}</div>
               <div style={{ fontSize: 9, marginTop: 4, opacity: 0.55, textAlign: 'right', fontWeight: 600 }}>
-                {new Date(m.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                {new Date(m.createdAt).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })}
               </div>
             </div>
           </div>
