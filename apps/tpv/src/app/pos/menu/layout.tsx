@@ -1079,6 +1079,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     createdAt: o.createdAt,
     itemsCount: Array.isArray(o.items) ? o.items.length : 0,
     address: o.deliveryAddress || o.address?.street || null,
+    // Para que el cajero sepa de un vistazo si ya entró el dinero (pago en
+    // línea PAID) o hay que cobrarlo (contra entrega / pendiente).
+    paymentStatus: o.paymentStatus || null,
+    paymentMethod: o.paymentMethod || null,
+    cashCollected: o.cashCollected === true,
   }));
 
   const canMergeOpenOrders = currentEmployee?.role

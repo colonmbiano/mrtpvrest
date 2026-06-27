@@ -47,6 +47,7 @@ interface Order {
   id: string; orderNumber: string; status: StatusKey;
   customerName?: string; customerPhone?: string; user?: { name?: string };
   total?: number; source?: string; orderType?: string; paymentMethod?: string;
+  paymentStatus?: string; cashCollected?: boolean;
   createdAt: string; updatedAt: string;
   items?: OrderItem[]; deliveryAddress?: string; notes?: string;
   deliveryDriverId?: string;
@@ -73,6 +74,7 @@ function OrderCard({ order, drivers, onStatusChange, onAssignDriver }: {
   const elapsed = Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000);
   const urgent = elapsed > 30 && !["DELIVERED", "CANCELLED"].includes(order.status);
   const Icon = meta?.icon ?? Inbox;
+  const paid = order.paymentStatus === "PAID" || order.cashCollected === true;
 
   return (
     <WtCard
@@ -89,6 +91,7 @@ function OrderCard({ order, drivers, onStatusChange, onAssignDriver }: {
             <Pill tone={meta?.tone ?? "neutral"}>
               <Icon size={11} strokeWidth={2} /> {meta?.label ?? order.status}
             </Pill>
+            <Pill tone={paid ? "ok" : "warn"}>{paid ? "Pagado" : "Por cobrar"}</Pill>
           </div>
           <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-tx-mut">
             <span>{order.customerName || order.user?.name || "Invitado"}</span>
