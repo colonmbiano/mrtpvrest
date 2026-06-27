@@ -234,7 +234,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
 
   function formatTime(date: string) {
     return new Date(date).toLocaleString("es-MX", {
-      day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"
+      timeZone: "America/Mexico_City", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"
     });
   }
 
@@ -474,7 +474,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-bold truncate">{ci.description}</div>
                         <div className="text-xs" style={{ color: "var(--muted)" }}>
-                          {new Date(ci.createdAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                          {new Date(ci.createdAt).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" })}
                         </div>
                       </div>
                       <div className="font-syne font-semibold" style={{ color: "#22c55e" }}>+${ci.amount.toFixed(0)}</div>
@@ -549,7 +549,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-bold truncate">{exp.description}</div>
                         <div className="text-xs" style={{ color: "var(--muted)" }}>
-                          {new Date(exp.createdAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                          {new Date(exp.createdAt).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" })}
                         </div>
                       </div>
                       <div className="font-syne font-semibold" style={{ color: "#ef4444" }}>${exp.amount.toFixed(0)}</div>

@@ -38,7 +38,7 @@ const fmtMoney = (n: number) =>
     ? n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2, maximumFractionDigits: 4 })
     : "—";
 
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "2-digit" });
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City", day: "2-digit", month: "short", year: "2-digit" });
 
 export default function CentroCostosPage() {
   const [list, setList] = useState<AggRow[] | null>(null);

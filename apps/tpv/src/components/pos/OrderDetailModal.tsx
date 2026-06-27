@@ -84,7 +84,8 @@ interface OrderDetailModalProps {
 const formatTime = (iso?: string | null) => {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleTimeString([], {
+    return new Date(iso).toLocaleTimeString("es-MX", {
+      timeZone: "America/Mexico_City",
       hour: "2-digit",
       minute: "2-digit",
     });

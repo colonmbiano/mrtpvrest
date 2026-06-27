@@ -472,7 +472,7 @@ export default function ComprasPage() {
                   {history.map((po) => (
                     <tr key={po.id} style={{ borderBottom: "1px solid var(--bd-1)" }}>
                       <td className="px-4 py-3 font-bold text-tx-hi">{po.poNumber}</td>
-                      <td className="px-4 py-3 text-tx-mut">{new Date(po.receivedAt || po.createdAt).toLocaleDateString("es-MX")}</td>
+                      <td className="px-4 py-3 text-tx-mut">{new Date(po.receivedAt || po.createdAt).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" })}</td>
                       <td className="px-4 py-3 text-tx-mut">{po.supplier?.name || "—"}</td>
                       <td className="px-4 py-3 text-tx-mut">{po.location?.name || "—"}</td>
                       <td className="px-4 py-3 text-xs text-tx-mut">{po.paymentMethod}</td>
@@ -492,7 +492,7 @@ export default function ComprasPage() {
                     <span className="font-display text-base font-extrabold text-primary">{money(po.totalAmount)}</span>
                   </div>
                   <div className="mt-1 text-[11px] text-tx-mut">
-                    {new Date(po.receivedAt || po.createdAt).toLocaleDateString("es-MX")} · {po.supplier?.name || "—"} · {po.location?.name || "—"}
+                    {new Date(po.receivedAt || po.createdAt).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" })} · {po.supplier?.name || "—"} · {po.location?.name || "—"}
                   </div>
                   <div className="mt-1 text-[11px] text-tx-mut">{po.paymentMethod} · {po.items?.length ?? 0} renglones</div>
                 </WtCard>
@@ -697,7 +697,7 @@ export default function ComprasPage() {
                     <tbody>
                       {transfers.map((t) => (
                         <tr key={t.id} style={{ borderBottom: "1px solid var(--bd-1)" }}>
-                          <td className="px-4 py-3 text-tx-mut">{new Date(t.createdAt).toLocaleString("es-MX")}</td>
+                          <td className="px-4 py-3 text-tx-mut">{new Date(t.createdAt).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}</td>
                           <td className="px-4 py-3 text-tx-hi">{t.fromLocation?.name || "—"}</td>
                           <td className="px-4 py-3 text-tx-mut">{t.items?.length ?? 0}</td>
                           <td className="px-4 py-3 font-display font-extrabold text-primary">{money(t.totalCost)}</td>
@@ -716,7 +716,7 @@ export default function ComprasPage() {
                         <span className="font-display font-extrabold text-primary">{money(t.totalCost)}</span>
                       </div>
                       <div className="mt-1 text-[11px] text-tx-mut">
-                        {new Date(t.createdAt).toLocaleString("es-MX")} · {t.items?.length ?? 0} renglones · {t.createdBy?.name || "—"}
+                        {new Date(t.createdAt).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })} · {t.items?.length ?? 0} renglones · {t.createdBy?.name || "—"}
                       </div>
                     </WtCard>
                   ))}

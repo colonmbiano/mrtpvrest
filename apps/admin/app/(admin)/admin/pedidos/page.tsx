@@ -290,7 +290,7 @@ export default function PedidosPage() {
   const todayRevenue = todayDelivered.reduce((s, o) => s + (o.total || 0), 0);
 
   const hasFilters = filterStatus !== "all" || filterSource !== "all" || Boolean(search);
-  const updatedLabel = lastUpdate.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  const updatedLabel = lastUpdate.toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" });
 
   return (
     <WtScreen>

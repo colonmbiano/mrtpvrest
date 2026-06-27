@@ -80,7 +80,7 @@ function row(left, right, total = 32) {
 
 // ── TICKET DE COCINA ──────────────────────────────────────────────────────
 function buildKitchenTicket(order, items, stationName) {
-  const now = new Date().toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' });
+  const now = new Date().toLocaleString('es-MX', { timeZone: "America/Mexico_City", dateStyle:'short', timeStyle:'short' });
   let d = CMD.INIT;
 
   // Encabezado
@@ -146,7 +146,7 @@ function buildKitchenTicket(order, items, stationName) {
 
 // ── TICKET DE COBRO ───────────────────────────────────────────────────────
 function buildCashierTicket(order, config) {
-  const now = new Date().toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' });
+  const now = new Date().toLocaleString('es-MX', { timeZone: "America/Mexico_City", dateStyle:'short', timeStyle:'short' });
   const items = order.items || [];
   const subtotal = Number(order.subtotal) || items.reduce((s, i) => s + Number(i.subtotal), 0);
   const discount = Number(order.discount) || 0;
@@ -377,7 +377,7 @@ async function printBillTicket(order) {
 
 // ── TEST IMPRESORA ─────────────────────────────────────────────────────────
 async function printTest(ip, port, type) {
-  const now = new Date().toLocaleString('es-MX');
+  const now = new Date().toLocaleString('es-MX', { timeZone: "America/Mexico_City" });
   let d = CMD.INIT + CMD.ALIGN_CENTER;
   d += CMD.BOLD_ON + 'PRUEBA DE IMPRESION\n' + CMD.BOLD_OFF;
   d += type + '\n' + now + '\n';

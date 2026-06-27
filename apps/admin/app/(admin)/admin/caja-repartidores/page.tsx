@@ -156,7 +156,7 @@ export default function CajaRepartidoresPage() {
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-bold text-tx">{r.driverName}</div>
                 <div className="text-[11px] text-tx-mut">
-                  Solicitó cerrar turno · {new Date(r.createdAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                  Solicitó cerrar turno · {new Date(r.createdAt).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" })}
                 </div>
               </div>
               <div className="hidden text-right sm:block">
@@ -314,7 +314,7 @@ export default function CajaRepartidoresPage() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-tx">{m.description || m.category}</div>
                   <div className="flex items-center gap-2 text-[11px] text-tx-mut">
-                    {new Date(m.createdAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(m.createdAt).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" })}
                     {m.approved && <span className="inline-flex items-center gap-1" style={{ color: "var(--ok)" }}><CheckCircle2 size={11} /> Aprobado</span>}
                   </div>
                 </div>
@@ -359,7 +359,7 @@ export default function CajaRepartidoresPage() {
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-bold text-tx">{cut.driverName}</div>
                 <div className="text-[11px] text-tx-mut">
-                  {new Date(cut.createdAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  {new Date(cut.createdAt).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                   {" · "}{cut.movements} movimientos
                 </div>
                 {cut.notes && <div className="mt-0.5 text-[11px] text-primary">{cut.notes}</div>}

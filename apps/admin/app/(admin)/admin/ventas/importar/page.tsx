@@ -241,7 +241,7 @@ export default function ImportarVentasPage() {
                       <div key={i} className="rounded-xl p-3 text-xs"
                         style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
                         <div className="mb-1 flex items-center justify-between gap-2">
-                          <span className="font-bold text-tx">{new Date(o.date).toLocaleDateString()} · {o.paymentMethod}</span>
+                          <span className="font-bold text-tx">{new Date(o.date).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" })} · {o.paymentMethod}</span>
                           <span className="tabular-nums text-tx-mut">
                             {o.customer || (o.tableName ? `Mesa ${o.tableName}` : "—")}
                           </span>

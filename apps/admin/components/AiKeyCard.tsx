@@ -79,7 +79,7 @@ export default function AiKeyCard() {
       return { tone: "err", text: "La API key guardada no se puede desencriptar. Vuelve a capturarla." };
     }
     if (status.configured) {
-      return { tone: "ok", text: `Activa: ${status.masked}${status.validatedAt ? ` - validada ${new Date(status.validatedAt).toLocaleDateString("es-MX")}` : ""}` };
+      return { tone: "ok", text: `Activa: ${status.masked}${status.validatedAt ? ` - validada ${new Date(status.validatedAt).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" })}` : ""}` };
     }
     if (status.trialActive) {
       return { tone: "warn", text: `Usando la cortesia de plataforma durante el trial${daysLeft != null ? ` (${daysLeft} dia${daysLeft === 1 ? "" : "s"} restantes)` : ""}. Configura tu propia key antes de que expire.` };

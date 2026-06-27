@@ -62,7 +62,7 @@ const REASON_TONES: Record<WasteReason, string> = {
 const fmtMoney = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  new Date(iso).toLocaleString("es-MX", { timeZone: "America/Mexico_City", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 
 export default function CentroMermasPage() {
   const [rows, setRows] = useState<WasteRow[] | null>(null);

@@ -406,7 +406,7 @@ export default function PromocionesPage() {
                   <div>
                     <div className="font-mono text-[9px] uppercase tracking-wider text-tx-dim">Actualizado</div>
                     <div className="text-[10.5px] text-tx-mut">
-                      {new Date(item.updatedAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}
+                      {new Date(item.updatedAt).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City", day: "2-digit", month: "short" })}
                     </div>
                   </div>
                 </div>

@@ -322,6 +322,7 @@ export default function LogisticaPage() {
                           {r.startMileage != null ? ` · ${r.startMileage} km` : ""}
                           {" · inicio "}
                           {new Date(r.startTime).toLocaleString("es-MX", {
+                            timeZone: "America/Mexico_City",
                             hour: "2-digit",
                             minute: "2-digit",
                             day: "2-digit",

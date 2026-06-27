@@ -645,7 +645,7 @@ export default function DeliveryApp() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{m.description || m.category}</div>
-                <div className="text-xs" style={{color:"var(--muted)"}}>{new Date(m.createdAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</div>
+                <div className="text-xs" style={{color:"var(--muted)"}}>{new Date(m.createdAt).toLocaleTimeString('es-MX',{timeZone:"America/Mexico_City",hour:'2-digit',minute:'2-digit'})}</div>
               </div>
               {m.photoUrl && (
                 <a href={m.photoUrl} target="_blank" rel="noreferrer" className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0">
@@ -737,7 +737,7 @@ export default function DeliveryApp() {
               <div className="text-right">
                 <div className="font-black text-sm" style={{color:"var(--gold)"}}>${Number(order.total).toFixed(0)}</div>
                 <div className="text-xs" style={{color:"var(--muted)"}}>
-                  {new Date(order.createdAt).toLocaleDateString('es-MX',{weekday:'short', day:'numeric'})}
+                  {new Date(order.createdAt).toLocaleDateString('es-MX',{timeZone:"America/Mexico_City",weekday:'short', day:'numeric'})}
                 </div>
               </div>
             </div>
@@ -840,7 +840,7 @@ export default function DeliveryApp() {
                 border: msg.fromDriver ? "none" : "1px solid var(--border)"}}>
               <div>{msg.message}</div>
               <div className="text-xs mt-1 opacity-60">
-                {new Date(msg.createdAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}
+                {new Date(msg.createdAt).toLocaleTimeString('es-MX',{timeZone:"America/Mexico_City",hour:'2-digit',minute:'2-digit'})}
               </div>
             </div>
           </div>
@@ -892,7 +892,7 @@ export default function DeliveryApp() {
                 <div className="font-syne font-black text-sm">{order.orderNumber}</div>
                 <div className="text-xs truncate" style={{color:"var(--muted)"}}>{order.customerName || "Cliente"}</div>
                 <div className="text-xs" style={{color:"var(--muted)"}}>
-                  {new Date(order.createdAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}
+                  {new Date(order.createdAt).toLocaleTimeString('es-MX',{timeZone:"America/Mexico_City",hour:'2-digit',minute:'2-digit'})}
                 </div>
               </div>
               <div className="text-right flex-shrink-0">

@@ -233,7 +233,7 @@ export default function SeguridadPanel() {
                   </span>
                 </div>
                 <span className="text-[10px] tabular-nums font-medium text-white/40 flex-shrink-0">
-                  {new Date(l.createdAt).toLocaleString("es-MX")}
+                  {new Date(l.createdAt).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}
                 </span>
               </li>
             ))}

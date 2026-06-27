@@ -116,7 +116,7 @@ export default function WaiterLayout({ children }: { children: React.ReactNode }
               {shiftStartAt && (
                 <span className="text-[9px] font-bold text-[var(--success)]">
                   Turno desde{" "}
-                  {new Date(shiftStartAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {new Date(shiftStartAt).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" })}
                 </span>
               )}
             </div>

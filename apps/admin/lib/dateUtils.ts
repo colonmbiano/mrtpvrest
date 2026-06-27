@@ -5,14 +5,20 @@ export function timeAgo(date: string): string {
   return `Hace ${diff} días`;
 }
 
+/** Zona horaria del restaurante (default MX). Fija la hora local sin importar
+ *  si el código corre en el navegador o en el servidor (Vercel/Railway = UTC). */
+export const APP_TZ = "America/Mexico_City";
+
 export function formatDate(date: string, options?: Intl.DateTimeFormatOptions): string {
-  return new Date(date).toLocaleDateString("es-MX", options ?? {
-    day: "numeric", month: "short", year: "numeric",
+  return new Date(date).toLocaleDateString("es-MX", {
+    timeZone: APP_TZ,
+    ...(options ?? { day: "numeric", month: "short", year: "numeric" }),
   });
 }
 
 export function formatDateTime(date: string): string {
   return new Date(date).toLocaleDateString("es-MX", {
+    timeZone: APP_TZ,
     day: "numeric", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });

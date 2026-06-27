@@ -80,7 +80,7 @@ function stockLevel(ing: Ingredient): StockLevel {
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleString("es-MX", {
-    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+    timeZone: "America/Mexico_City", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
   });
 }
 

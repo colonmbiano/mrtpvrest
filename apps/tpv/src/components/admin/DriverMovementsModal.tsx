@@ -581,7 +581,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                         </div>
                         <div className="min-w-0">
                           <div className="text-xs font-bold text-white truncate">{m.description || m.category}</div>
-                          <div className="text-[10px] text-[var(--text-secondary)]">{new Date(m.createdAt).toLocaleTimeString()}</div>
+                          <div className="text-[10px] text-[var(--text-secondary)]">{new Date(m.createdAt).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" })}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -743,7 +743,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                               {o.customer || "Público General"}
                             </div>
                             <div className="text-[10px] text-[var(--text-secondary)]">
-                              {o.orderNumber} · {new Date(o.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              {o.orderNumber} · {new Date(o.createdAt).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" })}
                             </div>
                           </div>
                           <div className="text-right shrink-0">

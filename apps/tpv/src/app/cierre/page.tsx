@@ -517,7 +517,7 @@ export default function CierreTurno() {
             <div className="hidden md:flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10">
               <AlarmClock size={14} className="text-[var(--brand)]" />
               <span className="text-xs font-bold text-white">
-                {new Date(shift.openedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} → {new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} · {elapsed(shift.openedAt)}
+                {new Date(shift.openedAt).toLocaleTimeString('es-MX', { timeZone: "America/Mexico_City", hour: '2-digit', minute: '2-digit' })} → {new Date().toLocaleTimeString('es-MX', { timeZone: "America/Mexico_City", hour: '2-digit', minute: '2-digit' })} · {elapsed(shift.openedAt)}
               </span>
             </div>
           )}
