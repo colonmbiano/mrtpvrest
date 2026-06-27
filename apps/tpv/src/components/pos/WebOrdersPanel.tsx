@@ -10,6 +10,8 @@ import {
   MapPin,
   Phone,
   Loader2,
+  CreditCard,
+  Wallet,
 } from "lucide-react";
 
 // Shape reducido de un pedido web que consume el panel. Lo arma el layout a
@@ -27,6 +29,12 @@ export interface WebOrder {
   createdAt: string;
   itemsCount: number;
   address?: string | null;
+  /** PENDING | PAID — define si ya entró el dinero (pago en línea) o falta cobrar. */
+  paymentStatus?: string | null;
+  /** CASH | CARD | TRANSFER | ONLINE … — para distinguir pago en línea de contra entrega. */
+  paymentMethod?: string | null;
+  /** true si el efectivo ya entró a caja (contra entrega cobrado). */
+  cashCollected?: boolean;
 }
 
 interface Props {
@@ -256,6 +264,13 @@ function WebOrderCard({
   const typeTone = TYPE_TONE[typeKey] || TYPE_TONE.TAKEOUT;
   const typeLabel = TYPE_LABEL[typeKey] || order.orderType || "Pedido";
 
+  // ¿Ya entró el dinero? PAID = pagado en línea (o efectivo ya cobrado).
+  // PENDING = falta cobrar (contra entrega / pago en línea no completado).
+  const paid = order.paymentStatus === "PAID" || order.cashCollected === true;
+  const methodKey = String(order.paymentMethod || "").toUpperCase();
+  const onlineMethod = methodKey === "CARD" || methodKey === "ONLINE";
+  const paidLabel = paid ? (onlineMethod ? "Pagado en línea" : "Pagado") : "Por cobrar";
+
   return (
     <div
       className={`rounded-2xl border p-4 transition-all ${
@@ -270,11 +285,21 @@ function WebOrderCard({
           <p className="text-[15px] font-semibold text-white truncate leading-tight">
             {order.customerName}
           </p>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex flex-wrap items-center gap-2 mt-1">
             <span
               className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md border ${typeTone}`}
             >
               {typeLabel}
+            </span>
+            <span
+              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border inline-flex items-center gap-1 ${
+                paid
+                  ? "bg-[#88D66C]/15 text-[#88D66C] border-[#88D66C]/35"
+                  : "bg-amber-400/15 text-amber-300 border-amber-400/40"
+              }`}
+            >
+              {paid ? <CreditCard size={11} /> : <Wallet size={11} />}
+              {paidLabel}
             </span>
             <span className="text-[11px] font-bold text-white/40">
               {order.orderNumber}
