@@ -184,14 +184,19 @@ export default function DriversPanel({
     }
   }
 
-  // Marca el pedido como cobrado: el efectivo del repartidor entra a caja.
-  // Mismo endpoint que usa el admin (PUT /api/orders/:id/confirm-cash): pone
-  // paidAt, dispara el kick del cajón y notifica al TPV.
-  async function confirmCash(orderId: string) {
-    setConfirmingId(orderId);
+  // Marca el pedido como cobrado. Mismo endpoint que usa el admin
+  // (PUT /api/orders/:id/confirm-cash): pone paidAt y notifica al TPV. Se pasa
+  // el método para que una "transferencia pendiente" se liquide como TRANSFER
+  // (no como efectivo: no entra al arqueo del repartidor ni abre el cajón).
+  function settleMethod(o: PendingOrder) {
+    return o.paymentMethod === "TRANSFER" ? "TRANSFER" : "CASH";
+  }
+
+  async function confirmCash(order: PendingOrder) {
+    setConfirmingId(order.id);
     try {
-      await api.put(`/api/orders/${orderId}/confirm-cash`);
-      setPending(prev => prev.filter(o => o.id !== orderId));
+      await api.put(`/api/orders/${order.id}/confirm-cash`, { paymentMethod: settleMethod(order) });
+      setPending(prev => prev.filter(o => o.id !== order.id));
       fetchLive(true); // refresca el resumen de efectivo del repartidor
     } catch (error: unknown) {
       const e = error as AxiosError<ApiError>;
@@ -210,7 +215,7 @@ export default function DriversPanel({
     try {
       for (const o of [...pending]) {
         try {
-          await api.put(`/api/orders/${o.id}/confirm-cash`);
+          await api.put(`/api/orders/${o.id}/confirm-cash`, { paymentMethod: settleMethod(o) });
           setPending(prev => prev.filter(p => p.id !== o.id));
         } catch { /* deja el pendiente en la lista para reintentar */ }
       }
@@ -322,9 +327,11 @@ export default function DriversPanel({
                 {pending.map(o => {
                   const method = o.paymentMethod === "CASH"
                     ? "Efectivo"
-                    : o.paymentMethod === "PENDING"
-                      ? "Por cobrar"
-                      : (o.paymentMethod || "—");
+                    : o.paymentMethod === "TRANSFER"
+                      ? "Transferencia · pendiente"
+                      : o.paymentMethod === "PENDING"
+                        ? "Por cobrar"
+                        : (o.paymentMethod || "—");
                   return (
                     <div
                       key={o.id}
@@ -346,7 +353,7 @@ export default function DriversPanel({
                       </div>
                       <button
                         type="button"
-                        onClick={() => confirmCash(o.id)}
+                        onClick={() => confirmCash(o)}
                         disabled={confirmingId === o.id || confirmingAll}
                         aria-label="Confirmar cobro"
                         className="shrink-0 min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl flex items-center justify-center disabled:opacity-50 active:scale-95 transition-transform"

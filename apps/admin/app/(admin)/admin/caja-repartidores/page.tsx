@@ -54,7 +54,10 @@ export default function CajaRepartidoresPage() {
   async function doConfirmCash(order: any) {
     setConfirmingId(order.id);
     try {
-      await api.put(`/api/orders/${order.id}/confirm-cash`);
+      // Una "transferencia pendiente" se liquida como TRANSFER (no como
+      // efectivo): no entra al arqueo del repartidor ni abre el cajón.
+      const method = order.paymentMethod === "TRANSFER" ? "TRANSFER" : "CASH";
+      await api.put(`/api/orders/${order.id}/confirm-cash`, { paymentMethod: method });
       setPending((prev) => prev.filter((o) => o.id !== order.id));
       fetchAll();
     } catch (err: any) { alert(err.response?.data?.error || "Error al confirmar el cobro"); }
@@ -192,7 +195,7 @@ export default function CajaRepartidoresPage() {
                 </div>
                 <div className="truncate text-[11px] text-tx-mut">
                   {o.driverName ? `${o.driverName} · ` : ""}
-                  {o.paymentMethod === "CASH" ? "Efectivo" : o.paymentMethod === "PENDING" ? "Por cobrar" : o.paymentMethod}
+                  {o.paymentMethod === "CASH" ? "Efectivo" : o.paymentMethod === "TRANSFER" ? "Transferencia · pendiente" : o.paymentMethod === "PENDING" ? "Por cobrar" : o.paymentMethod}
                   {o.deliveryAddress ? ` · ${o.deliveryAddress}` : ""}
                 </div>
               </div>
