@@ -156,7 +156,7 @@ export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCe
                     {m.description || m.category}
                   </div>
                   <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
-                    {new Date(m.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(m.createdAt).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
               </div>

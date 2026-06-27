@@ -84,7 +84,7 @@ export function DesempenoScreen({ history, onBack }: DesempenoScreenProps) {
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>#{h.orderNumber}</div>
                   <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
-                    {new Date(h.updatedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(h.updatedAt).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
               </div>

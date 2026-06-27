@@ -23,7 +23,7 @@ export default function StorefrontHalo({
           <span className="text-white/60">NODE-A1.MX</span>
         </div>
         <div className="flex items-center gap-2 text-[10px]">
-          <span style={{ color: '#00F0FF' }} className="font-bold">{new Date().toLocaleTimeString('es-MX', { hour12: false })}</span>
+          <span style={{ color: '#00F0FF' }} className="font-bold">{new Date().toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour12: false })}</span>
           <div className="flex items-end gap-px">
             <div className="w-0.5 h-1 bg-emerald-500" />
             <div className="w-0.5 h-1.5 bg-emerald-500" />

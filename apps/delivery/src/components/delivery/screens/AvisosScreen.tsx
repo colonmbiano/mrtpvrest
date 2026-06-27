@@ -75,9 +75,9 @@ export function AvisosScreen({ avisos, onBack, onRead }: AvisosScreenProps) {
                       {a.title || 'Aviso'}
                     </div>
                     <div style={{ fontSize: 9, color: C.textMuted }}>
-                      {new Date(a.createdAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+                      {new Date(a.createdAt).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: 'short' })}
                       {' · '}
-                      {new Date(a.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(a.createdAt).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
                   <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
