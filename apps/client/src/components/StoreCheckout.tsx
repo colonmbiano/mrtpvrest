@@ -47,6 +47,7 @@ export default function StoreCheckout({
   // Datos del cliente
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [geoStatus, setGeoStatus] = useState<'' | 'loading' | 'ok' | 'error'>('');
@@ -193,6 +194,9 @@ export default function StoreCheckout({
     e.preventDefault();
     setError('');
     if (!customerName.trim()) { setError('Tu nombre es requerido.'); return; }
+    if (customerEmail.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail.trim())) {
+      setError('El correo no tiene un formato válido.'); return;
+    }
     if (isDelivery && !deliveryAddress.trim()) { setError('La dirección de entrega es requerida.'); return; }
     if (orderType === 'DINE_IN' && !tableNumber.trim()) { setError('Indica el número de mesa.'); return; }
     if (belowMin) { setError(`El pedido mínimo es de ${fmt(minOrderAmount)}.`); return; }
@@ -204,6 +208,7 @@ export default function StoreCheckout({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerName, customerPhone,
+          customerEmail: customerEmail.trim() || undefined,
           orderType,
           deliveryAddress: isDelivery ? deliveryAddress : undefined,
           deliveryLat: isDelivery ? (coords?.lat ?? null) : null,
@@ -368,6 +373,7 @@ export default function StoreCheckout({
               )}
               <input required placeholder="Tu nombre" className={field} value={customerName} onChange={e => setCustomerName(e.target.value)} />
               <input placeholder="Tu teléfono" className={field} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
+              <input type="email" inputMode="email" placeholder="Tu correo (opcional, para tu confirmación)" className={field} value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
               {isDelivery && (
                 <>
                   <textarea required placeholder="Dirección de entrega" className={`${field} h-20`} value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} />

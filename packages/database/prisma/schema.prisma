@@ -825,6 +825,7 @@ model Order {
   deliveryDistanceKm Float?
   customerName     String?
   customerPhone    String?
+  customerEmail    String?
   paidAt           DateTime?
 
   cashCollected   Boolean   @default(false)

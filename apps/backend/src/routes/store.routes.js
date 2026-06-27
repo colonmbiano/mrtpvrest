@@ -26,6 +26,7 @@ const {
 const { computeDeliveryFee } = require('../lib/delivery-fee');
 const { filterLiveBanners } = require('../lib/banner-schedule');
 const { nextOrderNumber } = require('../lib/order-number');
+const { sendOrderPaidEmail } = require('../lib/order-confirmation-mailer');
 const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
 const { addLoyaltyPoints, genLoyaltyQr } = require('../services/loyalty.service');
@@ -435,6 +436,7 @@ router.post('/orders', async (req, res) => {
     items,
     customerName,
     customerPhone,
+    customerEmail: rawCustomerEmail,
     orderType = 'DELIVERY',
     deliveryAddress,
     deliveryLat: rawLat,
@@ -451,6 +453,13 @@ router.post('/orders', async (req, res) => {
   } = req.body;
   const deliveryLat = (rawLat != null && !Number.isNaN(Number(rawLat))) ? Number(rawLat) : null;
   const deliveryLng = (rawLng != null && !Number.isNaN(Number(rawLng))) ? Number(rawLng) : null;
+  // Correo opcional del cliente para la confirmación de pedido por email.
+  // Se ignora silenciosamente si viene vacío o con forma inválida (no bloquea
+  // el pedido: el correo es un extra best-effort, no un requisito).
+  const customerEmail = (() => {
+    const e = typeof rawCustomerEmail === 'string' ? rawCustomerEmail.trim().toLowerCase() : '';
+    return e && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) ? e : null;
+  })();
   const tip = Math.max(0, Number(rawTip) || 0);
   const couponCode = typeof rawCouponCode === 'string' ? rawCouponCode.trim().toUpperCase() : '';
   const loyaltyQrCode = typeof rawLoyaltyQr === 'string' ? rawLoyaltyQr.trim() : '';
@@ -794,6 +803,7 @@ router.post('/orders', async (req, res) => {
           source,
           customerName:    customerName.trim(),
           customerPhone:   customerPhone?.trim() || null,
+          customerEmail,
           deliveryAddress: resolvedOrderType === 'DELIVERY' ? deliveryAddress.trim() : null,
           deliveryLat:     resolvedOrderType === 'DELIVERY' ? deliveryLat : null,
           deliveryLng:     resolvedOrderType === 'DELIVERY' ? deliveryLng : null,
@@ -1091,6 +1101,13 @@ async function applyStorePaymentResult(orderId, { status, rawStatus, providerId 
     io.to(`restaurant:${order.restaurantId}`).emit('order:paid', paidPayload);
     io.to(`restaurant:${order.restaurantId}`).emit('order:new', { orderId, source: 'ONLINE' });
     io.to(`restaurant:${order.restaurantId}:kitchen`).emit('order:new', { orderId, source: 'ONLINE' });
+  }
+  // Confirmación por correo al cliente (best-effort, no bloquea el webhook).
+  // Solo se envía si el pedido trae correo (invitado en checkout o cliente
+  // registrado); si no hay, sendOrderPaidEmail simplemente no hace nada.
+  if (status === 'PAID') {
+    sendOrderPaidEmail(orderId).catch((e) =>
+      console.error('[store] order paid email error:', e.message));
   }
 }
 
