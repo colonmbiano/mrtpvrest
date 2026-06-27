@@ -157,7 +157,7 @@ export default function KDSPage() {
         <div className="flex items-center gap-3">
           {/* Reloj */}
           <div className="text-sm font-black" style={{color:"#555"}}>
-            {new Date(now).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}
+            {new Date(now).toLocaleTimeString('es-MX',{timeZone:"America/Mexico_City",hour:'2-digit',minute:'2-digit'})}
           </div>
           {/* Contador */}
           <div className="px-3 py-1.5 rounded-xl text-sm font-black"

@@ -65,7 +65,7 @@ const STATUS_TONE: Record<
 };
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" });
 }
 
 function elapsedMinutes(iso: string, now: number) {

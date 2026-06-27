@@ -68,7 +68,7 @@ export default function KDSMessages() {
                 <div className="text-xs font-bold">{msg.orderId}</div>
                 <div className="text-sm mt-0.5">{msg.message}</div>
                 <div className="text-xs mt-1" style={{color:"var(--muted)"}}>
-                  {new Date(msg.createdAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}
+                  {new Date(msg.createdAt).toLocaleTimeString('es-MX',{timeZone:"America/Mexico_City",hour:'2-digit',minute:'2-digit'})}
                 </div>
               </div>
               <button onClick={() => markRead(msg.id)}

@@ -239,8 +239,8 @@ const formatClock = (iso?: string): { time: string; date: string } => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return { time: "--:--", date: "" };
   return {
-    time: d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false }),
-    date: d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" }),
+    time: d.toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit", hour12: false }),
+    date: d.toLocaleDateString("es-MX", { timeZone: "America/Mexico_City", day: "2-digit", month: "short" }),
   };
 };
 

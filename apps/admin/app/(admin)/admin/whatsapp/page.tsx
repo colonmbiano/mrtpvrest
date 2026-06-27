@@ -50,7 +50,7 @@ type Tab = "reportes" | "contactos" | "campanas" | "juegos";
 
 const money = (n: number) =>
   "$" + (Number(n) || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fecha = (s: string | null) => (s ? new Date(s).toLocaleDateString("es-MX") : "—");
+const fecha = (s: string | null) => (s ? new Date(s).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" }) : "—");
 
 const SEGMENT_LABELS: Record<string, string> = {
   ALL: "Todos los clientes",

@@ -178,6 +178,7 @@ const formatDateTime = (iso?: string): string => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleString("es-MX", {
+    timeZone: "America/Mexico_City",
     day: "2-digit",
     month: "short",
     hour: "2-digit",

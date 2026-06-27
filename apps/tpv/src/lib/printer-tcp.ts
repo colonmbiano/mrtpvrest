@@ -112,7 +112,7 @@ export function row(left: string, right: string, width: number = LINE_WIDTH): st
 export type PrinterStation = "CASHIER" | "KITCHEN" | "BAR";
 
 export function buildTestTicket(station: PrinterStation): string {
-  const now = new Date().toLocaleString("es-MX");
+  const now = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
   let d = CMD.INIT + CMD.ALIGN_CENTER;
   d += CMD.BOLD_ON + "PRUEBA DE IMPRESION\n" + CMD.BOLD_OFF;
   d += station + "\n" + now + "\n";
@@ -753,7 +753,7 @@ export function qrCode(data: string, moduleSize = 6): string {
 // ── Builders ──────────────────────────────────────────────────────────────
 
 export function buildKitchenTicket(input: KitchenTicketInput): string {
-  const time = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  const time = new Date().toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" });
   // Defaults — equivalentes al comportamiento previo a la introducción del
   // config admin, para que call-sites sin config sigan funcionando igual.
   const cfg: Required<KitchenTicketConfig> = {
@@ -1086,7 +1086,7 @@ async function injectLogo(text: string, input: ReceiptInput): Promise<PrintPaylo
 }
 
 export function buildCustomerReceipt(input: ReceiptInput): string {
-  const now = new Date().toLocaleString("es-MX");
+  const now = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
   // Tipografía configurable (admin). lw = ancho real en caracteres según
   // fuente/papel; heavy/light controlan qué tan marcadas van las líneas.
   const lw = lineWidthFor(input.fontFamily, input.paperWidth);
@@ -1370,7 +1370,7 @@ export function buildShiftCloseTicket(input: ShiftCloseTicketInput): string {
     const dt = new Date(iso);
     if (Number.isNaN(dt.getTime())) return "-";
     return dt.toLocaleString("es-MX", {
-      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+      timeZone: "America/Mexico_City", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
     });
   };
 
@@ -1479,7 +1479,7 @@ export function buildShiftCloseTicket(input: ShiftCloseTicketInput): string {
 
   d += (heavy ? CMD.DBLSTRIKE_OFF : "");
   d += CMD.ALIGN_CENTER + CMD.LF;
-  d += "Impreso: " + new Date().toLocaleString("es-MX") + "\n";
+  d += "Impreso: " + new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" }) + "\n";
   d += CMD.LF + CMD.LF + CMD.CUT;
   return d;
 }

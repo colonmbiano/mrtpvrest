@@ -186,8 +186,8 @@ export default function BannersPage() {
     if (banner.scheduleStart && banner.scheduleEnd)
       parts.push(`${banner.scheduleStart} - ${banner.scheduleEnd}`);
     if (banner.dateFrom || banner.dateTo) {
-      const from = banner.dateFrom ? new Date(banner.dateFrom).toLocaleDateString("es-MX") : "...";
-      const to   = banner.dateTo   ? new Date(banner.dateTo).toLocaleDateString("es-MX")   : "...";
+      const from = banner.dateFrom ? new Date(banner.dateFrom).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" }) : "...";
+      const to   = banner.dateTo   ? new Date(banner.dateTo).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" })   : "...";
       parts.push(`${from} → ${to}`);
     }
     return parts.length > 0 ? parts.join(" · ") : "Sin programación";

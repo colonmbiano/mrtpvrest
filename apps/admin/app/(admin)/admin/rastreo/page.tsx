@@ -415,9 +415,9 @@ export default function RastreoPage() {
                           <span className="font-mono text-[11px] text-tx-mut">{formatDur(route.startAt, route.endAt)}</span>
                         </div>
                         <div className="text-[11px] text-tx-mut">
-                          {new Date(route.startAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                          {new Date(route.startAt).toLocaleDateString('es-MX', { timeZone: "America/Mexico_City", day: 'numeric', month: 'short' })}
                           {" "}
-                          {new Date(route.startAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(route.startAt).toLocaleTimeString('es-MX', { timeZone: "America/Mexico_City", hour: '2-digit', minute: '2-digit' })}
                           {" · "}{route.points} pts
                         </div>
                         {!route.endAt && (
@@ -453,7 +453,7 @@ export default function RastreoPage() {
                 {selectedRoute.trigger === "ORDER_ASSIGNED" ? "Ruta de pedido" : "Ruta manual"}
               </div>
               <div className="text-tx-mut">
-                {new Date(selectedRoute.startAt).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                {new Date(selectedRoute.startAt).toLocaleString('es-MX', { timeZone: "America/Mexico_City", day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
               </div>
               <div className="text-tx-mut">{routePoints.length} puntos GPS</div>
               <div className="font-mono text-primary">{formatDur(selectedRoute.startAt, selectedRoute.endAt)}</div>

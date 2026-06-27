@@ -13,7 +13,7 @@ import {
 function fmt(n: number) { return `$${(n || 0).toFixed(2)}`; }
 function fmtDate(d: string) {
   return new Date(d).toLocaleString("es-MX", {
-    day: "2-digit", month: "short", year: "numeric",
+    timeZone: "America/Mexico_City", day: "2-digit", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
 }

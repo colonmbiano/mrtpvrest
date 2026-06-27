@@ -854,7 +854,7 @@ function HistoryTab({
 
   const fmtTime = (iso: string) => {
     try {
-      return new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+      return new Date(iso).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" });
     } catch {
       return "";
     }

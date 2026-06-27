@@ -764,10 +764,10 @@ export default function EmpleadosPage() {
             ) : shifts.map((shift: any) => (
               <div key={shift.id} className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid var(--bd-1)" }}>
                 <div>
-                  <div className="text-sm font-medium text-tx">{new Date(shift.startAt).toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short" })}</div>
+                  <div className="text-sm font-medium text-tx">{new Date(shift.startAt).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City", weekday: "short", day: "numeric", month: "short" })}</div>
                   <div className="text-[11px] text-tx-mut">
-                    {new Date(shift.startAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
-                    {shift.endAt && ` → ${new Date(shift.endAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}`}
+                    {new Date(shift.startAt).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" })}
+                    {shift.endAt && ` → ${new Date(shift.endAt).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" })}`}
                   </div>
                 </div>
                 {shift.endAt ? (
