@@ -273,10 +273,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   const handleConfirmDrawerPayment = async (
     method: string,
-    _tip?: unknown,
+    tip?: { percent: number; amount: number },
     _driverId?: string | null,
     _printReceipt?: boolean,
     account?: { employeeId: string; discountPct: number | null } | null,
+    payments?: { method: string; amount: number }[],
   ) => {
     if (!payOrder) return;
 
@@ -309,11 +310,17 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       return;
     }
 
+    // Cobro mixto: manda los renglones por método (+ propina) para que el
+    // backend valide el cuadre y guarde el desglose; el servidor re-valida.
+    const isMixed = method === "MIXED" && Array.isArray(payments) && payments.length > 0;
+    const payBody = isMixed
+      ? { payments, tip: tip?.amount ?? 0 }
+      : { paymentMethod: method };
     const res = await apiOrQueue(
       "payment",
       "PUT",
       `/api/orders/${payOrder.id}/payment`,
-      { paymentMethod: method }
+      payBody
     );
     if (!res.ok) {
       toast.error("Error al cobrar: " + (res.error || ""));

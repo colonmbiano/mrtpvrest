@@ -260,7 +260,10 @@ async function performShiftClose(req, res, shift) {
         // quedaban fuera, así que sus ventas en efectivo aparecían como sobrante
         // inexplicable en el cajón y las ventas totales salían cortas.
         source: { in: ['TPV', 'WAITER', 'ONLINE', 'WHATSAPP', 'KIOSK'] },
-      }
+      },
+      // Cobro mixto: traer el desglose para sumar la porción de cada método a su
+      // bucket (sin esto, una orden MIXED no entraría a ningún bucket del corte).
+      include: { payments: { select: { method: true, amount: true, status: true } } },
     });
 
     const totals = summarizePayments(orders);
@@ -690,7 +693,13 @@ async function liveShiftTotals(shift) {
       ],
       source: { in: ['TPV', 'WAITER', 'ONLINE', 'WHATSAPP', 'KIOSK'] },
     },
-    select: { paymentMethod: true, total: true },
+    // Cobro mixto: el desglose por método permite sumar la porción en efectivo
+    // de una orden MIXED al efectivo esperado (ver lib/money.summarizePayments).
+    select: {
+      paymentMethod: true,
+      total: true,
+      payments: { select: { method: true, amount: true, status: true } },
+    },
   });
   const totals = summarizePayments(orders);
   const totalExpenses = (shift.expenses || []).reduce((s, e) => s + e.amount, 0);

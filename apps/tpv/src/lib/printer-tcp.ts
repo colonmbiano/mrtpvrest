@@ -561,6 +561,8 @@ export interface ReceiptInput {
   deliveryFeeTaxed?: boolean;
   total: number;
   paymentMethod?: string | null;
+  /** Cobro mixto (split-tender): desglose por método. Se imprime bajo "Pago:". */
+  paymentBreakdown?: { method: string; amount: number }[] | null;
   businessName?: string | null;
   businessFooter?: string | null;
   // Nuevos campos de configuración
@@ -635,6 +637,8 @@ const PAYMENT_LABEL: Record<string, string> = {
   OXXO:             "OXXO",
   COURTESY:         "CORTESIA",
   PENDING:          "PENDIENTE",
+  EMPLOYEE_ACCOUNT: "A CUENTA (EMPLEADO)",
+  MIXED:            "MIXTO",
 };
 
 /** Traduce el método de pago a español; desconocido → se muestra tal cual (upper). */
@@ -1255,6 +1259,12 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
   // ── 5. PAGO (método traducido) + propina sugerida (informativa) ──────────
   if (input.paymentMethod) {
     d += row("Pago:", paymentLabel(input.paymentMethod), lw);
+    // Cobro mixto: desglose por método debajo del "Pago: MIXTO".
+    if (Array.isArray(input.paymentBreakdown) && input.paymentBreakdown.length > 0) {
+      for (const p of input.paymentBreakdown) {
+        d += row(`  ${paymentLabel(p.method)}:`, fmtMoney(Number(p.amount) || 0), lw);
+      }
+    }
   }
   const tipPcts = input.suggestedTipPercents
     ?? (input.orderType === "DINE_IN" ? [10] : []);

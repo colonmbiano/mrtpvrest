@@ -7,6 +7,7 @@ const {
   computeOrderTotals,
   computeEmployeeDiscount,
   summarizePayments,
+  normalizeTenders,
   cashCutSummary,
   PAYMENT_METHOD_MAP,
 } = require('../src/lib/money');
@@ -267,6 +268,114 @@ describe('money :: summarizePayments', () => {
     expect(Object.keys(PAYMENT_METHOD_MAP).sort()).toEqual(
       ['CARD', 'CARD_PRESENT', 'CASH', 'CASH_ON_DELIVERY', 'COURTESY', 'OXXO', 'SPEI', 'TRANSFER'].sort()
     );
+  });
+
+  // ── COBRO MIXTO: la orden con payments[] reparte cada renglón a su bucket ──
+  test('cobro mixto: reparte la porción de cada método a su bucket', () => {
+    const orders = [
+      // Orden mixta $300 = $180 efectivo + $120 tarjeta.
+      {
+        paymentMethod: 'MIXED', total: 300,
+        payments: [
+          { method: 'CASH', amount: 180, status: 'PAID' },
+          { method: 'CARD', amount: 120, status: 'PAID' },
+        ],
+      },
+      // Orden de método único SIN payments → cae al total completo (legacy).
+      { paymentMethod: 'CASH', total: 100 },
+    ];
+    expect(summarizePayments(orders)).toEqual({
+      totalCash: 280,   // 180 (mixta) + 100 (única)
+      totalCard: 120,
+      totalTransfer: 0,
+      totalCourtesy: 0,
+    });
+  });
+
+  test('cobro mixto: ignora renglones FAILED/REFUNDED', () => {
+    const orders = [{
+      paymentMethod: 'MIXED', total: 200,
+      payments: [
+        { method: 'CASH', amount: 200, status: 'PAID' },
+        { method: 'CARD', amount: 50, status: 'REFUNDED' }, // no cuenta
+      ],
+    }];
+    expect(summarizePayments(orders).totalCash).toBe(200);
+    expect(summarizePayments(orders).totalCard).toBe(0);
+  });
+
+  test('cobro mixto: payments vacío cae al método único', () => {
+    const orders = [{ paymentMethod: 'CARD', total: 99, payments: [] }];
+    expect(summarizePayments(orders).totalCard).toBe(99);
+  });
+});
+
+// ── normalizeTenders (validación server-side del cobro mixto) ────────────────
+describe('money :: normalizeTenders', () => {
+  test('renglones que cuadran → MIXED con cashCollected', () => {
+    const r = normalizeTenders(
+      [{ method: 'CASH', amount: 180 }, { method: 'CARD', amount: 120 }],
+      300,
+    );
+    expect(r.isMixed).toBe(true);
+    expect(r.primaryMethod).toBe('MIXED');
+    expect(r.cashCollected).toBe(true);
+    expect(r.sum).toBe(300);
+    expect(r.tenders).toEqual([
+      { method: 'CASH', amount: 180 },
+      { method: 'CARD', amount: 120 },
+    ]);
+  });
+
+  test('un solo método → no es MIXED (primaryMethod = ese método)', () => {
+    const r = normalizeTenders([{ method: 'CARD', amount: 150 }], 150);
+    expect(r.isMixed).toBe(false);
+    expect(r.primaryMethod).toBe('CARD');
+    expect(r.cashCollected).toBe(false);
+  });
+
+  test('colapsa renglones del mismo método', () => {
+    const r = normalizeTenders(
+      [{ method: 'CASH', amount: 50 }, { method: 'CASH', amount: 50 }, { method: 'CARD', amount: 100 }],
+      200,
+    );
+    expect(r.tenders).toEqual([
+      { method: 'CASH', amount: 100 },
+      { method: 'CARD', amount: 100 },
+    ]);
+    expect(r.isMixed).toBe(true);
+  });
+
+  test('propina: la suma debe cuadrar con total + tip', () => {
+    const r = normalizeTenders(
+      [{ method: 'CASH', amount: 130 }, { method: 'CARD', amount: 200 }],
+      300, { tip: 30 },
+    );
+    expect(r.sum).toBe(330);
+    expect(r.isMixed).toBe(true);
+  });
+
+  test('suma que NO cuadra → TENDER_MISMATCH', () => {
+    expect(() =>
+      normalizeTenders([{ method: 'CASH', amount: 100 }, { method: 'CARD', amount: 50 }], 300),
+    ).toThrow(/no cuadran/i);
+    try {
+      normalizeTenders([{ method: 'CASH', amount: 100 }], 300);
+    } catch (e) {
+      expect(e.code).toBe('TENDER_MISMATCH');
+    }
+  });
+
+  test('tolerancia de 1 peso por redondeo', () => {
+    // 299.50 vs 300 → dentro de tolerancia (no lanza).
+    const r = normalizeTenders([{ method: 'CASH', amount: 299.5 }], 300);
+    expect(r.primaryMethod).toBe('CASH');
+  });
+
+  test('ignora montos <= 0 y métodos vacíos; sin renglones válidos → null', () => {
+    expect(normalizeTenders([{ method: 'CASH', amount: 0 }, { method: '', amount: 5 }], 300)).toBeNull();
+    expect(normalizeTenders([], 300)).toBeNull();
+    expect(normalizeTenders(undefined, 300)).toBeNull();
   });
 });
 

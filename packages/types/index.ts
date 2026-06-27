@@ -37,7 +37,11 @@ export type PaymentMethod =
   | "CARD"
   | "OXXO"
   | "SPEI"
-  | "CASH_ON_DELIVERY";
+  | "CASH_ON_DELIVERY"
+  | "EMPLOYEE_ACCOUNT"
+  // Cobro mixto (split-tender): la orden se pagó con >1 método. El desglose vive
+  // en Order.payments (payment_transactions). Ver lib/money.normalizeTenders.
+  | "MIXED";
 
 export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "REFUNDED";
 

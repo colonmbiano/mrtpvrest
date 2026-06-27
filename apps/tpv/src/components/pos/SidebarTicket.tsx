@@ -700,6 +700,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     driverId?: string | null,
     printReceipt?: boolean,
     account?: { employeeId: string; discountPct: number | null } | null,
+    payments?: { method: string; amount: number }[],
   ) => {
     if (ticket.items.length === 0 && previousItems.length === 0) return;
     if (processing) return; // evita doble cobro / ronda duplicada por doble-tap
@@ -717,6 +718,13 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         }
       }
       const tipAmount = tip?.amount ?? 0;
+      // Cobro mixto: cuando llegan renglones por método, el cobro manda
+      // `{ payments, tip }` y la orden queda MIXED; el servidor re-valida el
+      // cuadre. Sin renglones, sigue el método único de siempre.
+      const isMixed = method === "MIXED" && Array.isArray(payments) && payments.length > 0;
+      const payBody: Record<string, unknown> = isMixed
+        ? { payments, tip: tipAmount }
+        : { paymentMethod: method };
       const itemsPayload = buildItemsPayload();
       const printItems = buildTicketItems();
 
@@ -796,6 +804,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           // pero sin el cargo ni el descuento.
           paymentMethod: isEmployeeAccount ? "PENDING" : method,
           status: isEmployeeAccount ? "CONFIRMED" : "DELIVERED",
+          // Cobro mixto al crear-y-pagar: el backend valida el cuadre y crea un
+          // payment_transactions por método dentro de la misma transacción.
+          ...(isMixed ? { payments, tip: tipAmount } : {}),
           notes: tip && tip.percent > 0
             ? `Propina ${tip.percent}% ($${tipAmount.toFixed(2)})`
             : undefined,
@@ -893,7 +904,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             "payment",
             "PUT",
             `/api/orders/${payableOrderId}/payment`,
-            { paymentMethod: method },
+            payBody,
           );
           if (!payRes.ok) {
             toast.error("Error al cobrar: " + (payRes.error || ""));
@@ -906,7 +917,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             "payment",
             "PUT",
             `/api/orders/${activeOrderId}/payment`,
-            { paymentMethod: method },
+            payBody,
           );
           if (!payRes.ok) {
             toast.error("Error al encolar cobro: " + (payRes.error || ""));
@@ -975,6 +986,8 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         deliveryFee: useServerTotals && Number.isFinite(srvDelivery) ? srvDelivery : deliveryFee,
         total: (useServerTotals ? srvTotal : total) + tipAmount,
         paymentMethod: method,
+        // Cobro mixto: el recibo imprime el desglose por método bajo "Pago".
+        paymentBreakdown: isMixed ? payments : undefined,
         tipPercent: tip?.percent ?? 0,
         tipAmount,
         paid: true, // el recibo se imprime al cobrar → orden pagada

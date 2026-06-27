@@ -724,6 +724,10 @@ enum PaymentMethod {
   // Consumo a cuenta de un empleado: la orden se cierra SIN entrar a caja y
   // genera un EmployeeCharge que se descuenta de su raya. Ver employee_charges.
   EMPLOYEE_ACCOUNT
+  // Cobro mixto (split-tender): la orden se pagó con >1 método a la vez (p.ej.
+  // efectivo + tarjeta). El desglose vive en payment_transactions (Order.payments);
+  // el corte de caja suma cada renglón a su bucket. Ver lib/money.normalizeTenders.
+  MIXED
 }
 
 enum PaymentStatus {
