@@ -166,18 +166,83 @@ const PAYMENT_METHOD_MAP = {
 };
 
 /**
- * Agrupa los totales de órdenes por método de pago.
- * @param {{paymentMethod:string,total:number|string}[]} orders
+ * Agrupa los totales de órdenes por método de pago (buckets del corte de caja).
+ *
+ * COBRO MIXTO: si la orden trae `payments[]` (renglones de payment_transactions,
+ * un pago por método), se suma cada renglón a su bucket — así la porción en
+ * efectivo de un pago mixto entra al efectivo esperado y la de tarjeta no. Si no
+ * trae payments (el caso común: un solo método, sin renglones), cae al método
+ * único `order.paymentMethod` con el total completo — backward compatible con
+ * todas las órdenes históricas. Las órdenes MIXED SIEMPRE tienen payments; si la
+ * query que las trajo olvidó incluirlas, NO se cuentan (MIXED no está en el mapa)
+ * — por eso las queries del corte deben hacer `include: { payments }`.
+ *
+ * @param {{paymentMethod:string,total:number|string,payments?:{method:string,amount:number|string,status?:string}[]}[]} orders
  * @param {object} [pmMap] Mapa método→bucket (default PAYMENT_METHOD_MAP).
  * @returns {{totalCash:number,totalCard:number,totalTransfer:number,totalCourtesy:number}}
  */
 function summarizePayments(orders, pmMap = PAYMENT_METHOD_MAP) {
   const totals = { totalCash: 0, totalCard: 0, totalTransfer: 0, totalCourtesy: 0 };
   for (const order of orders || []) {
-    const key = pmMap[order.paymentMethod];
-    if (key) totals[key] += Number(order.total);
+    // Solo cuentan los pagos efectivamente acreditados (un FAILED/REFUNDED no
+    // entra a caja). Los renglones manuales del TPV se crean ya en PAID.
+    const tenders = Array.isArray(order.payments)
+      ? order.payments.filter((p) => p && p.status !== 'FAILED' && p.status !== 'REFUNDED')
+      : [];
+    if (tenders.length > 0) {
+      for (const p of tenders) {
+        const key = pmMap[p.method];
+        if (key) totals[key] += Number(p.amount) || 0;
+      }
+    } else {
+      const key = pmMap[order.paymentMethod];
+      if (key) totals[key] += Number(order.total) || 0;
+    }
   }
   return totals;
+}
+
+/**
+ * Valida y normaliza los renglones de un cobro mixto (split-tender) server-side.
+ * REGLA DE DINERO: nunca se confía en el cliente — la suma de los pagos debe
+ * cuadrar con el total que la orden tiene en la BD (más la propina, que solo
+ * AÑADE dinero que el cliente paga, nunca reduce lo que debe → no es exploit).
+ *
+ * - Colapsa renglones del mismo método (CASH+CASH → un solo CASH).
+ * - Ignora montos <= 0 y métodos vacíos.
+ * - Lanza Error con .code='TENDER_MISMATCH' si la suma no cuadra (± tolerance).
+ *
+ * @param {{method:string,amount:number|string}[]} payments
+ * @param {number} orderTotal  Total de la orden en BD (sin propina).
+ * @param {object} [opts]
+ * @param {number} [opts.tip=0]         Propina que el cliente paga además del total.
+ * @param {number} [opts.tolerance=1]   Holgura de redondeo permitida (en pesos).
+ * @returns {null | {tenders:{method:string,amount:number}[], primaryMethod:string, isMixed:boolean, cashCollected:boolean, sum:number}}
+ *          null si no hay renglones válidos (el caller cae al método único).
+ */
+function normalizeTenders(payments, orderTotal, { tip = 0, tolerance = 1 } = {}) {
+  const list = (Array.isArray(payments) ? payments : [])
+    .map((p) => ({ method: String(p?.method || '').toUpperCase().trim(), amount: round2(Number(p?.amount) || 0) }))
+    .filter((p) => p.method && p.amount > 0);
+  if (list.length === 0) return null;
+
+  const expected = round2((Number(orderTotal) || 0) + (Number(tip) || 0));
+  const sum = round2(list.reduce((s, p) => s + p.amount, 0));
+  if (Math.abs(sum - expected) > tolerance) {
+    const err = new Error(`Los pagos ($${sum.toFixed(2)}) no cuadran con el total a cobrar ($${expected.toFixed(2)})`);
+    err.code = 'TENDER_MISMATCH';
+    throw err;
+  }
+
+  // Colapsa por método para no duplicar renglones del mismo tipo.
+  const byMethod = new Map();
+  for (const p of list) byMethod.set(p.method, round2((byMethod.get(p.method) || 0) + p.amount));
+  const tenders = [...byMethod.entries()].map(([method, amount]) => ({ method, amount }));
+
+  const isMixed = tenders.length > 1;
+  const cashCollected = tenders.some((p) => p.method === 'CASH' || p.method === 'CASH_ON_DELIVERY');
+  const primaryMethod = isMixed ? 'MIXED' : tenders[0].method;
+  return { tenders, primaryMethod, isMixed, cashCollected, sum };
 }
 
 /**
@@ -210,6 +275,7 @@ module.exports = {
   computeOrderTotals,
   computeEmployeeDiscount,
   summarizePayments,
+  normalizeTenders,
   cashCutSummary,
   PAYMENT_METHOD_MAP,
 };

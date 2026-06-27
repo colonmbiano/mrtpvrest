@@ -21,6 +21,14 @@ const cartItemSchema = z.object({
 
 const orderTypeSchema = z.enum(['DINE_IN', 'TAKEOUT', 'DELIVERY']);
 
+// Cobro mixto (split-tender): un renglón por método con su monto. El servidor
+// re-valida que la suma cuadre con el total (lib/money.normalizeTenders); el
+// monto del cliente nunca decide cuánto debe la orden.
+const paymentTenderSchema = z.object({
+  method: z.string().min(1).max(40),
+  amount: z.coerce.number().nonnegative(),
+}).passthrough();
+
 const createOrderSchema = z.object({
   items:         z.array(cartItemSchema).min(1, 'Sin productos'),
   orderType:     orderTypeSchema.optional(),
@@ -32,6 +40,10 @@ const createOrderSchema = z.object({
   // Cuántos comensales se sentaron al iniciar la cuenta DINE_IN.
   numberOfGuests: z.coerce.number().int().positive().max(50).optional().nullable(),
   paymentMethod: z.string().optional(),
+  // Cobro mixto al crear-y-pagar (TAKEOUT/DELIVERY de un toque): desglose por
+  // método. Si viene, gana sobre paymentMethod y la orden queda MIXED.
+  payments:      z.array(paymentTenderSchema).min(1).optional(),
+  tip:           z.coerce.number().nonnegative().optional(),
   subtotal:      z.coerce.number().nonnegative().optional(),
   discount:      z.coerce.number().nonnegative().optional(),
   total:         z.coerce.number().nonnegative().optional(),
@@ -57,9 +69,16 @@ const updateStatusSchema = z.object({
   ]),
 }).passthrough();
 
+// Cobro de una orden abierta. Acepta el método único (legacy) o el desglose
+// de cobro mixto `payments[]` (+ propina opcional). Al menos uno es obligatorio.
 const updatePaymentSchema = z.object({
-  paymentMethod: z.string().min(1),
-}).passthrough();
+  paymentMethod: z.string().min(1).optional(),
+  payments:      z.array(paymentTenderSchema).min(1).optional(),
+  tip:           z.coerce.number().nonnegative().optional(),
+}).passthrough().refine(
+  (d) => Boolean(d.paymentMethod) || (Array.isArray(d.payments) && d.payments.length > 0),
+  { message: 'paymentMethod o payments requerido' },
+);
 
 const messageSchema = z.object({
   message:    z.string().min(1).max(2000),
@@ -68,6 +87,7 @@ const messageSchema = z.object({
 
 module.exports = {
   cartItemSchema,
+  paymentTenderSchema,
   createOrderSchema,
   addItemsSchema,
   updateStatusSchema,

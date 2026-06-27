@@ -299,7 +299,7 @@ const { normalizePhone } = require('@mrtpvrest/config/phone');
 const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePermission, userHasPermission, hasValidOverride } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
-const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals, computeEmployeeDiscount } = require('../lib/money');
+const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals, computeEmployeeDiscount, normalizeTenders } = require('../lib/money');
 const { requireModule, MODULES } = require('../lib/modules');
 const { computeBulkPromoDiscount, loadActiveBulkPromos } = require('../lib/bulk-promo');
 const { nextOrderNumber } = require('../lib/order-number');
@@ -529,7 +529,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
 
     // OJO: subtotal/total del body se IGNORAN a propósito — se recalculan
     // server-side desde las líneas resueltas (ver computeOrderTotals abajo).
-    const { items, tableNumber, tableId, numberOfGuests, paymentMethod, discount, customerName, customerPhone, deliveryAddress, status, clientOrderId } = req.body;
+    const { items, tableNumber, tableId, numberOfGuests, paymentMethod, payments, tip, discount, customerName, customerPhone, deliveryAddress, status, clientOrderId } = req.body;
     // Tolerancia de nombre: clientes viejos (y replays de la cola offline)
     // mandan `type` en vez de `orderType`. Sin esto un DINE_IN con tableId
     // entraba como TAKEOUT/CONFIRMED: sin ronda 1 y con la mesa libre.
@@ -765,6 +765,22 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       promoDiscount: bulkPromoDiscount,
     });
 
+    // COBRO MIXTO al crear-y-pagar: si la orden se marca pagada en el create
+    // (paidOnCreate) y trae renglones `payments[]`, validamos server-side que
+    // cuadren con el total recién computado (+ propina). Si no cuadran → 400.
+    // Los renglones se persisten dentro de la $transaction de creación.
+    let createTenders = null;
+    if (paidOnCreate && Array.isArray(payments) && payments.length > 0) {
+      try {
+        createTenders = normalizeTenders(payments, serverTotal, { tip });
+      } catch (err) {
+        if (err.code === 'TENDER_MISMATCH') {
+          return res.status(400).json({ error: err.message, code: err.code });
+        }
+        throw err;
+      }
+    }
+
     // ── Defensa en profundidad anti multi-tap ───────────────────────────────
     // Aunque el TPV ya deshabilita el botón Cobrar desde el primer tap, un
     // burst (p.ej. el botón "Cobrar" pulsado N veces) genera N clientOrderId
@@ -889,11 +905,18 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           tableNumber: tableNumber || (table ? null : null),
           tableId: tableId || null,
           numberOfGuests: safeGuests,
-          paymentMethod: paymentMethod || 'CASH',
+          // Cobro mixto en el create: el método queda 'MIXED' y el cajón cobra
+          // efectivo si alguno de los renglones es efectivo (createTenders).
+          paymentMethod: createTenders ? createTenders.primaryMethod : (paymentMethod || 'CASH'),
           paymentStatus: paidOnCreate ? 'PAID' : 'PENDING',
           paidAt: paidOnCreate ? new Date() : null,
-          cashCollected: paidOnCreate && paymentMethod === 'CASH',
-          cashCollectedAt: paidOnCreate && paymentMethod === 'CASH' ? new Date() : null,
+          cashCollected: createTenders
+            ? createTenders.cashCollected
+            : (paidOnCreate && paymentMethod === 'CASH'),
+          cashCollectedAt: (createTenders ? createTenders.cashCollected : (paidOnCreate && paymentMethod === 'CASH'))
+            ? new Date()
+            : null,
+          ...(createTenders && Number(tip) > 0 ? { tip: Number(tip) } : {}),
           subtotal: serverSubtotal,
           discount: serverDiscount,
           promoDiscount: serverPromoDiscount,
@@ -904,6 +927,21 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           customerId,
         },
       });
+
+      // Desglose del cobro mixto: un payment_transactions por método. Va en la
+      // misma $transaction que la orden (entran o no entran juntos).
+      if (createTenders) {
+        await tx.paymentTransaction.createMany({
+          data: createTenders.tenders.map((p) => ({
+            orderId: created.id,
+            method: p.method,
+            amount: p.amount,
+            status: 'PAID',
+            gateway: 'MANUAL',
+            paidAt: new Date(),
+          })),
+        });
+      }
 
       let roundId = null;
       if (isDineInTab) {
@@ -1624,17 +1662,69 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
 // legítimo de cobro de mesero (los repartidores cobran por /driver-cash/collect).
 router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), validateBody(updatePaymentSchema), async (req, res) => {
   try {
-    const { paymentMethod } = req.body;
-    const order = await prisma.order.update({
-      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.restaurantId },
-      data: {
-        paymentMethod,
-        paymentStatus: 'PAID',
-        status: 'DELIVERED',
-        paidAt: new Date(),
-        cashCollected: paymentMethod === 'CASH',
-        cashCollectedAt: paymentMethod === 'CASH' ? new Date() : null,
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const { paymentMethod, payments, tip } = req.body;
+    const now = new Date();
+
+    // COBRO MIXTO (split-tender): si vienen renglones `payments[]`, se valida
+    // server-side que su suma cuadre con el total REAL de la orden (re-leído de
+    // BD, + propina) — el monto del cliente nunca decide cuánto debe la orden.
+    // El desglose se guarda en payment_transactions dentro de la MISMA
+    // $transaction que cierra la orden (entran o no entran juntos).
+    let tenderResult = null;
+    if (Array.isArray(payments) && payments.length > 0) {
+      const current = await prisma.order.findFirst({
+        where: { id: req.params.id, restaurantId },
+        select: { id: true, total: true },
+      });
+      if (!current) return res.status(404).json({ error: 'Orden no encontrada' });
+      try {
+        tenderResult = normalizeTenders(payments, current.total, { tip });
+      } catch (err) {
+        if (err.code === 'TENDER_MISMATCH') {
+          return res.status(400).json({ error: err.message, code: err.code });
+        }
+        throw err;
       }
+    }
+
+    const order = await prisma.$transaction(async (tx) => {
+      let resolvedMethod;
+      let cashCollected;
+      if (tenderResult) {
+        resolvedMethod = tenderResult.primaryMethod; // 'MIXED' si hay >1 método
+        cashCollected = tenderResult.cashCollected;   // hay efectivo en la mezcla
+        // Re-cobro idempotente (corrección / replay del outbox): se reescribe el
+        // desglose completo en vez de acumular renglones duplicados.
+        await tx.paymentTransaction.deleteMany({ where: { orderId: req.params.id } });
+        await tx.paymentTransaction.createMany({
+          data: tenderResult.tenders.map((p) => ({
+            orderId: req.params.id,
+            method: p.method,
+            amount: p.amount,
+            status: 'PAID',
+            gateway: 'MANUAL',
+            paidAt: now,
+          })),
+        });
+      } else {
+        resolvedMethod = paymentMethod;
+        cashCollected = paymentMethod === 'CASH';
+      }
+      return tx.order.update({
+        where: { id: req.params.id, restaurantId },
+        data: {
+          paymentMethod: resolvedMethod,
+          paymentStatus: 'PAID',
+          status: 'DELIVERED',
+          paidAt: now,
+          cashCollected,
+          cashCollectedAt: cashCollected ? now : null,
+          // La propina del cobro mixto sí se persiste (mejora el cuadre del
+          // cajón vs. el método único, que la deja informativa en notas).
+          ...(tenderResult && Number(tip) > 0 ? { tip: Number(tip) } : {}),
+        },
+      });
     });
 
     await releaseTableIfDineIn(order.id);

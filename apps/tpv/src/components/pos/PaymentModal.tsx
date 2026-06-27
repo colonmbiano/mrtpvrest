@@ -18,6 +18,7 @@ import {
   UserRound,
   Percent,
   Search,
+  Layers,
 } from "lucide-react";
 import api from "@/lib/api";
 import DiscountModal from "@/components/pos/DiscountModal";
@@ -68,6 +69,12 @@ export interface EmployeeAccountPayload {
   discountPct: number | null;
 }
 
+/** Un renglón de cobro mixto (split-tender): cuánto entra por cada método. */
+export interface PaymentTender {
+  method: string;
+  amount: number;
+}
+
 interface EmployeeLite {
   id: string;
   name: string;
@@ -98,6 +105,8 @@ interface PaymentModalProps {
     driverId?: string | null,
     printReceipt?: boolean,
     account?: EmployeeAccountPayload | null,
+    /** Cobro mixto: desglose por método. Presente solo cuando method='MIXED'. */
+    payments?: PaymentTender[],
   ) => void | Promise<void>;
   /** Habilita el método "Empleado" (consumo a cuenta). Off por defecto: se
    *  enciende cuando el tenant tiene el módulo de nómina activo. */
@@ -142,6 +151,16 @@ const METHODS = [
 // orden sin efectivo y genera un cargo que se descuenta de la raya.
 const EMPLOYEE_METHOD = { id: "EMPLOYEE_ACCOUNT", icon: UserRound, label: "Empleado" } as const;
 
+// Método "Mixto" (cobro dividido por método: efectivo + tarjeta en la misma
+// cuenta). Solo aparece en PAGO TOTAL — en DIVIDIR CUENTA el método aplica igual
+// a cada parte, así que no tiene sentido. Los métodos que se reparten en el panel.
+const MIXED_METHOD = { id: "MIXED", icon: Layers, label: "Mixto" } as const;
+const MIXED_TENDER_METHODS = [
+  { id: "CASH",     icon: Banknote,   label: "Efectivo" },
+  { id: "CARD",     icon: CreditCard, label: "Tarjeta" },
+  { id: "TRANSFER", icon: QrCode,     label: "Transfer" },
+] as const;
+
 const PaymentModal: React.FC<PaymentModalProps> = ({
   isOpen,
   onClose,
@@ -170,6 +189,9 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   // sugerido/auto (= grandTotal). Se resetea junto con cashReceived.
   const [cashEntry, setCashEntry] = useState<string>("");
   const [equalParts, setEqualParts] = useState<number>(2);
+  // Cobro mixto: monto tecleado por método (string para edición libre). "" = 0.
+  const [mixedAmounts, setMixedAmounts] = useState<Record<string, string>>({});
+  const isMixed = method === "MIXED";
   const [showDiscount, setShowDiscount] = useState(false);
   const [discountSaving, setDiscountSaving] = useState(false);
 
@@ -286,11 +308,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   }
 
-  // Reset propina al abrir. Render-phase (ver CategoryModal).
+  // Reset propina + panel mixto al abrir. Render-phase (ver CategoryModal).
   const [prevOpenTip, setPrevOpenTip] = useState(isOpen);
   if (prevOpenTip !== isOpen) {
     setPrevOpenTip(isOpen);
-    if (isOpen) setTipPercent(0);
+    if (isOpen) {
+      setTipPercent(0);
+      setMixedAmounts({});
+    }
   }
 
   // FASE 12 · grouping por asiento. Items sin seat → "Compartidos" que
@@ -420,10 +445,29 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         }
       : null;
 
-  // Gate de confirmación: DELIVERY exige repartidor; "Empleado" exige empleado.
+  // ── Cobro mixto: desglose y validación de cuadre ────────────────────────────
+  // El cobro mixto reparte el TOTAL A COBRAR (grandTotal = total + propina) entre
+  // los métodos. Cada renglón es el monto APLICADO a la cuenta (no el efectivo
+  // recibido); el cambio del efectivo se muestra aparte. La suma debe cuadrar con
+  // grandTotal (± 1 centavo) para poder confirmar — el servidor re-valida igual.
+  const mixedTenders: PaymentTender[] = MIXED_TENDER_METHODS
+    .map((m) => ({ method: m.id, amount: Number(mixedAmounts[m.id]) || 0 }))
+    .filter((t) => t.amount > 0);
+  const mixedSum = mixedTenders.reduce((s, t) => s + t.amount, 0);
+  const mixedRemaining = grandTotal - mixedSum;
+  const mixedOk = Math.abs(mixedRemaining) < 0.01 && mixedTenders.length > 0;
+  // Payload de pagos para onConfirm — solo cuando el método es Mixto y cuadra.
+  const paymentsPayload: PaymentTender[] | undefined =
+    isMixed && mixedOk
+      ? mixedTenders.map((t) => ({ method: t.method, amount: Math.round(t.amount * 100) / 100 }))
+      : undefined;
+
+  // Gate de confirmación: DELIVERY exige repartidor; "Empleado" exige empleado;
+  // "Mixto" exige que los renglones cuadren con el total.
   const canConfirm =
     (!isDelivery || Boolean(driverId)) &&
     (!isEmployeeAccount || Boolean(accountEmployeeId)) &&
+    (!isMixed || mixedOk) &&
     !discountSaving;
 
   const handleConfirm = async () => {
@@ -435,7 +479,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     setSubmitting(true);
     try {
       if (tab === "TOTAL") {
-        await onConfirm(method, tipPayload, driverId, printReceipt, accountPayload);
+        await onConfirm(
+          method,
+          tipPayload,
+          driverId,
+          printReceipt,
+          accountPayload,
+          paymentsPayload,
+        );
         return;
       }
       // SPLIT
@@ -549,7 +600,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             />
             <TabButton
               active={tab === "SPLIT"}
-              onClick={() => setTab("SPLIT")}
+              onClick={() => {
+                // "Mixto" no aplica a Dividir cuenta (el método va por parte).
+                // Sin esto, el método quedaría en MIXED sin renglones y el corte
+                // no contaría la venta. Caemos a Efectivo al cambiar de pestaña.
+                if (method === "MIXED") setMethod("CASH");
+                setTab("SPLIT");
+              }}
               icon={<Divide size={14} />}
               label="Dividir cuenta"
             />
@@ -692,6 +749,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 accountDiscount={accountDiscount}
                 onAccountDiscountChange={setAccountDiscount}
                 subtotal={subtotal}
+                allowMixed={!isDelivery}
+                mixedAmounts={mixedAmounts}
+                onMixedAmountChange={(id, val) =>
+                  setMixedAmounts((prev) => ({ ...prev, [id]: val }))
+                }
+                mixedSum={mixedSum}
+                mixedRemaining={mixedRemaining}
               />
             ) : (
               <SplitView
@@ -916,16 +980,24 @@ function MethodGrid({
   method,
   onChange,
   allowEmployee = false,
+  allowMixed = false,
 }: {
   method: string;
   onChange: (m: string) => void;
   allowEmployee?: boolean;
+  allowMixed?: boolean;
 }) {
-  const list = allowEmployee
-    ? [...METHODS, EMPLOYEE_METHOD]
-    : METHODS;
+  const list = [
+    ...METHODS,
+    ...(allowMixed ? [MIXED_METHOD] : []),
+    ...(allowEmployee ? [EMPLOYEE_METHOD] : []),
+  ];
+  // 4 base + opcionales (mixto/empleado): rejilla flexible para no apretar.
+  const cols = list.length >= 6 ? "grid-cols-3 sm:grid-cols-6"
+    : list.length === 5 ? "grid-cols-3 sm:grid-cols-5"
+    : "grid-cols-4";
   return (
-    <div className={`grid gap-3 ${allowEmployee ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-4"}`}>
+    <div className={`grid gap-3 ${cols}`}>
       {list.map((m) => {
         const Icon = m.icon;
         const isSelected = method === m.id;
@@ -1093,6 +1165,109 @@ function EmployeeAccountPanel({
   );
 }
 
+function MixedPanel({
+  total,
+  amounts,
+  onChange,
+  sum,
+  remaining,
+}: {
+  total: number;
+  amounts: Record<string, string>;
+  onChange: (methodId: string, value: string) => void;
+  sum: number;
+  remaining: number;
+}) {
+  const ok = Math.abs(remaining) < 0.01 && sum > 0;
+  const over = remaining < -0.005;
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="w-11 h-11 rounded-2xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center shrink-0">
+          <Layers size={20} />
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-[13px] font-black text-white tracking-tight">
+            Cobro mixto
+          </h3>
+          <p className="text-[11px] text-white/45 font-medium">
+            Reparte el total entre métodos (efectivo + tarjeta…).
+          </p>
+        </div>
+        <div className="ml-auto text-right shrink-0">
+          <div className="text-[9px] font-semibold tracking-[0.2em] text-white/40 uppercase">
+            A cobrar
+          </div>
+          <div className="tabular-nums text-xl font-black text-white leading-none">
+            ${total.toFixed(2)}
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2.5">
+        {MIXED_TENDER_METHODS.map((m) => {
+          const Icon = m.icon;
+          const raw = amounts[m.id] ?? "";
+          // "Resto" rellena este método con lo que falta para cuadrar.
+          const fillRest = () => {
+            const next = (Number(raw) || 0) + remaining;
+            onChange(m.id, next > 0 ? (Math.round(next * 100) / 100).toString() : "");
+          };
+          return (
+            <div
+              key={m.id}
+              className="flex items-center gap-3 rounded-2xl bg-white/[0.03] border border-white/10 p-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 text-white/70 flex items-center justify-center shrink-0">
+                <Icon size={18} />
+              </div>
+              <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-white/70 w-20 shrink-0">
+                {m.label}
+              </span>
+              <div className="flex items-center gap-1 flex-1 min-w-0">
+                <span className="text-white/40 text-lg font-bold">$</span>
+                <input
+                  value={raw}
+                  onChange={(e) => onChange(m.id, e.target.value.replace(/[^0-9.]/g, ""))}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  className="w-full min-h-[48px] px-2 rounded-xl bg-white/5 border border-white/10 text-white text-xl font-black tabular-nums outline-none focus:border-[var(--brand)] placeholder:text-white/25"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={fillRest}
+                disabled={Math.abs(remaining) < 0.01}
+                className="min-h-[40px] px-3 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand)]/40 text-[var(--brand)] text-[10px] font-semibold uppercase tracking-widest active:scale-95 transition-transform disabled:opacity-30 shrink-0"
+              >
+                Resto
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Estado del cuadre */}
+      <div
+        className={`flex items-center justify-between p-4 rounded-2xl border ${
+          ok
+            ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
+            : over
+              ? "bg-[var(--warning)]/10 border-[var(--warning)]/40 text-[var(--warning)]"
+              : "bg-white/5 border-white/10 text-white/70"
+        }`}
+      >
+        <span className="text-[11px] font-semibold uppercase tracking-[0.15em]">
+          {ok ? "Cuadra ✓" : over ? "Sobra" : "Falta"}
+        </span>
+        <span className="tabular-nums text-2xl font-black">
+          {ok ? `$${sum.toFixed(2)}` : `$${Math.abs(remaining).toFixed(2)}`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function TotalView({
   method,
   onMethodChange,
@@ -1118,6 +1293,11 @@ function TotalView({
   accountDiscount,
   onAccountDiscountChange,
   subtotal,
+  allowMixed,
+  mixedAmounts,
+  onMixedAmountChange,
+  mixedSum,
+  mixedRemaining,
 }: {
   method: string;
   onMethodChange: (m: string) => void;
@@ -1143,6 +1323,11 @@ function TotalView({
   accountDiscount: string;
   onAccountDiscountChange: (s: string) => void;
   subtotal: number;
+  allowMixed: boolean;
+  mixedAmounts: Record<string, string>;
+  onMixedAmountChange: (methodId: string, value: string) => void;
+  mixedSum: number;
+  mixedRemaining: number;
 }) {
   // Tecleo manual del efectivo recibido. El buffer cashEntry vive en el
   // padre (se resetea con cashReceived). Tipear reemplaza el monto auto.
@@ -1173,9 +1358,19 @@ function TotalView({
         onChange={onTipChange}
       />
 
-      <MethodGrid method={method} onChange={onMethodChange} allowEmployee={employeeAccountEnabled} />
+      <MethodGrid method={method} onChange={onMethodChange} allowEmployee={employeeAccountEnabled} allowMixed={allowMixed} />
 
       <div className="rounded-3xl bg-white/5 border border-white/10 p-6">
+        {method === "MIXED" && (
+          <MixedPanel
+            total={total}
+            amounts={mixedAmounts}
+            onChange={onMixedAmountChange}
+            sum={mixedSum}
+            remaining={mixedRemaining}
+          />
+        )}
+
         {method === "EMPLOYEE_ACCOUNT" && (
           <EmployeeAccountPanel
             employees={employees}
