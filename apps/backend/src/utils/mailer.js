@@ -122,6 +122,57 @@ function cashCutEmailHtml(p) {
   `;
 }
 
+// Confirmación de pago de un pedido de tienda en línea, enviada al CLIENTE.
+// payload: { restaurantName, orderNumber, customerName, items:[{name,quantity,price}],
+//   subtotal, deliveryFee, discount, total, orderTypeLabel, etaLabel }
+function orderPaidEmailHtml(p) {
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const itemRow = (it) => `
+    <tr>
+      <td style="padding:8px 0;color:#334155;font-size:14px;">
+        <span style="display:inline-block;min-width:26px;font-weight:800;color:#0f172a;">${Number(it.quantity) || 1}×</span> ${esc(it.name)}
+      </td>
+      <td style="padding:8px 0;text-align:right;color:#0f172a;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;">${pesos((Number(it.price) || 0) * (Number(it.quantity) || 1))}</td>
+    </tr>`;
+  const sumRow = (label, value, opts = {}) => `
+    <tr>
+      <td style="padding:6px 0;color:${opts.strong ? '#0f172a' : '#64748b'};font-size:${opts.strong ? '16' : '13'}px;font-weight:${opts.strong ? '800' : '500'};">${label}</td>
+      <td style="padding:6px 0;text-align:right;color:${opts.strong ? '#16a34a' : '#334155'};font-size:${opts.strong ? '16' : '13'}px;font-weight:${opts.strong ? '800' : '600'};font-variant-numeric:tabular-nums;">${value}</td>
+    </tr>`;
+  const items = Array.isArray(p.items) ? p.items : [];
+  return `
+    <div style="font-family:'DM Sans',Inter,Arial,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;color:#0f172a;border-radius:20px;overflow:hidden;border:1px solid #e2e8f0;">
+      <div style="background:linear-gradient(135deg,#16a34a,#22c55e);padding:24px 32px;">
+        <h1 style="margin:0;font-size:18px;font-weight:900;letter-spacing:-0.5px;color:#fff;">✓ Pago confirmado</h1>
+        <p style="margin:4px 0 0;color:rgba(255,255,255,0.9);font-size:13px;">${esc(p.restaurantName) || 'Tu pedido'}</p>
+      </div>
+      <div style="padding:28px 32px;">
+        <p style="margin:0 0 2px;font-size:13px;color:#64748b;">Pedido</p>
+        <p style="margin:0 0 4px;font-size:24px;font-weight:900;letter-spacing:-0.4px;">${esc(p.orderNumber)}</p>
+        <p style="margin:0 0 22px;font-size:14px;color:#334155;">
+          ¡Gracias${p.customerName ? ', ' + esc(p.customerName) : ''}! Tu pago se recibió y tu pedido está confirmado${p.orderTypeLabel ? ' · ' + esc(p.orderTypeLabel) : ''}.
+        </p>
+
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:8px 18px;">
+          <table style="width:100%;border-collapse:collapse;">
+            <tr><td colspan="2" style="padding:10px 0 2px;color:#94a3b8;font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">Tu pedido</td></tr>
+            ${items.map(itemRow).join('')}
+            <tr><td colspan="2" style="padding:0;"><div style="height:1px;background:#e2e8f0;margin:6px 0;"></div></td></tr>
+            ${Number(p.deliveryFee) ? sumRow('Envío', pesos(p.deliveryFee)) : ''}
+            ${Number(p.discount) ? sumRow('Descuento', '−' + pesos(p.discount)) : ''}
+            ${sumRow('Total pagado', pesos(p.total), { strong: true })}
+          </table>
+        </div>
+
+        ${p.etaLabel ? `<p style="margin:18px 0 0;font-size:13px;color:#64748b;">Tiempo estimado: <strong style="color:#334155;">${esc(p.etaLabel)}</strong></p>` : ''}
+      </div>
+      <div style="padding:16px 32px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:12px;">
+        ${esc(p.restaurantName) || 'MRTPVREST'} · Confirmación automática de tu pedido en línea
+      </div>
+    </div>
+  `;
+}
+
 function verificationEmailHtml(ownerName, tenantName, verifyUrl) {
   return `
     <div style="font-family:'DM Sans',Inter,sans-serif;max-width:560px;margin:0 auto;background:#080810;color:#f0f0f8;border-radius:16px;overflow:hidden;border:1px solid #1e1e30;">
@@ -223,4 +274,4 @@ function welcomeEmailHtml(ownerName, tenantName, downloadsUrl) {
   `
 }
 
-module.exports = { sendEmail, parseEmailList, verificationEmailHtml, trialReminderHtml, trialExpiredHtml, welcomeEmailHtml, cashCutEmailHtml }
+module.exports = { sendEmail, parseEmailList, verificationEmailHtml, trialReminderHtml, trialExpiredHtml, welcomeEmailHtml, cashCutEmailHtml, orderPaidEmailHtml }
