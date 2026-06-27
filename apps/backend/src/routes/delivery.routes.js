@@ -225,6 +225,18 @@ router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAcces
         data.paymentStatus = 'PENDING';
         data.cashCollected = false;
         data.paidAt = null;
+      } else if (paymentMethod === 'TRANSFER_PENDING') {
+        // Transferencia que el repartidor REPORTA pero que aún no confirma que
+        // haya llegado: se guarda como "por cobrar" (no entra a caja) recordando
+        // que el método es transferencia. Aparece en "Pendientes de cobro" y la
+        // caja la liquida con PUT /orders/:id/confirm-cash {paymentMethod:'TRANSFER'}
+        // cuando el banco la refleje. No marcar PAID aquí evita contar como
+        // venta cobrada un dinero que nunca entró. (TRANSFER_PENDING no es un
+        // valor del enum PaymentMethod; se persiste como TRANSFER.)
+        data.paymentMethod = 'TRANSFER';
+        data.paymentStatus = 'PENDING';
+        data.cashCollected = false;
+        data.paidAt = null;
       } else if (paymentMethod === 'PENDING' || !paymentMethod) {
         // Entregado SIN cobrar (por cobrar / fiado): no entró dinero. El pedido
         // queda abierto y aparece en "Pendientes de cobro" del admin hasta que

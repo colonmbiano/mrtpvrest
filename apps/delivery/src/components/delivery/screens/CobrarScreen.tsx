@@ -6,9 +6,12 @@ import { C, S } from '@/lib/tokens';
 interface CobrarScreenProps {
   order: any;
   onBack: () => void;
-  // 'PENDING' = entregar sin cobrar: el pedido queda abierto hasta que la
-  // caja confirme el cobro.
-  onConfirm: (method: 'CASH' | 'TRANSFER' | 'PENDING') => void;
+  // 'PENDING'          = entregar sin cobrar: el pedido queda abierto hasta que
+  //                       la caja confirme el cobro.
+  // 'TRANSFER_PENDING' = el cliente dijo que transfiere pero el dinero aún no
+  //                       llega: queda "por cobrar" como transferencia (no se
+  //                       da por pagado) hasta que la caja lo confirme.
+  onConfirm: (method: 'CASH' | 'TRANSFER' | 'TRANSFER_PENDING' | 'PENDING') => void;
 }
 
 export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
@@ -120,15 +123,46 @@ export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
           </div>
         )}
 
-        {/* Confirm */}
-        <button onClick={() => onConfirm(payMethod)} style={S.btnSuccess}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-            strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-            <polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
-          CONFIRMAR ENTREGA
-        </button>
+        {/* Confirm — para EFECTIVO un solo botón. Para TRANSFERENCIA se separa
+            en dos: "ya me transfirieron" (pagado) vs "pendiente" (por cobrar,
+            cuando el cliente promete transferir pero el dinero aún no llega). */}
+        {payMethod === 'TRANSFER' ? (
+          <>
+            <button onClick={() => onConfirm('TRANSFER')} style={S.btnSuccess}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              YA ME TRANSFIRIERON
+            </button>
+            <button
+              onClick={() => onConfirm('TRANSFER_PENDING')}
+              style={{
+                height: 56, borderRadius: 16, cursor: 'pointer',
+                background: C.amberSoft, border: '1px dashed rgba(255,184,77,0.5)',
+                color: C.amber, fontFamily: C.fontBody,
+                fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              Transferencia pendiente · aún no llega
+            </button>
+          </>
+        ) : (
+          <button onClick={() => onConfirm('CASH')} style={S.btnSuccess}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            CONFIRMAR ENTREGA
+          </button>
+        )}
 
         {/* Entregar sin cobrar — deja el pedido abierto (por cobrar) para que
             la caja confirme el cobro más tarde. */}

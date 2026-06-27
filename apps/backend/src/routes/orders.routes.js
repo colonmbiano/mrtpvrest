@@ -1546,23 +1546,35 @@ router.put('/:id/discount', authenticate, requireTenantAccess, requireRole('CASH
 
 router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, res) => {
   try {
+    // Método con el que la caja liquida el pendiente de cobro. Default CASH para
+    // los callers existentes (efectivo que trae el repartidor). Para una
+    // "transferencia pendiente" el cajero confirma con paymentMethod:'TRANSFER'
+    // y así NO se marca como efectivo (no entra al arqueo de caja ni abre el
+    // cajón), evitando descuadrar la caja del repartidor.
+    const rawMethod = String(req.body?.paymentMethod || 'CASH').toUpperCase();
+    const method = ['CASH', 'TRANSFER', 'CARD', 'OTHER'].includes(rawMethod) ? rawMethod : 'CASH';
+    const isCash = method === 'CASH';
     const order = await prisma.order.update({
       where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
       data: {
-        cashCollected: true,
-        cashCollectedAt: new Date(),
+        paymentMethod: method,
+        cashCollected: isCash,
+        cashCollectedAt: isCash ? new Date() : null,
         paymentStatus: 'PAID',
         paidAt: new Date(),
         status: 'DELIVERED',
       }
     });
 
-    // Kick del cajón: fire-and-forget. Un cobro nunca debe fallar porque el
-    // cajón esté desconectado o no haya impresora de caja configurada.
-    try {
-      const { kickCashDrawerForLocation } = require('../services/printer.service');
-      kickCashDrawerForLocation(order.locationId).catch(() => {});
-    } catch (err) { console.error('Drawer kick no disponible:', err.message); }
+    // Kick del cajón solo para efectivo: una transferencia no abre la caja.
+    // Fire-and-forget: un cobro nunca debe fallar porque el cajón esté
+    // desconectado o no haya impresora de caja configurada.
+    if (isCash) {
+      try {
+        const { kickCashDrawerForLocation } = require('../services/printer.service');
+        kickCashDrawerForLocation(order.locationId).catch(() => {});
+      } catch (err) { console.error('Drawer kick no disponible:', err.message); }
+    }
 
     // Si era dine-in, dejar la mesa limpia y disponible.
     await releaseTableIfDineIn(order.id);
@@ -1577,8 +1589,8 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
         orderId: order.id,
         orderNumber: order.orderNumber,
         total: order.total,
-        paymentMethod: 'CASH',
-        source: 'CASH',
+        paymentMethod: method,
+        source: method,
       };
       // Sala base: el TPV se auto-une ahí (index.js). Un solo emit — no a
       // location-admins también, o el TPV lo recibiría doble.
