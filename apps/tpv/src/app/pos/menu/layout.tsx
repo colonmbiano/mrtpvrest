@@ -1142,6 +1142,48 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     [],
   );
 
+  // Reembolsar un ticket YA cobrado (pestaña "Cobradas"), total o parcial, por
+  // un error de cobro. Mismo gate que corregir el método (reopen_table). El
+  // backend valida el monto server-side y cuadra la caja (cajón / repartidor).
+  const handleRefund = useCallback(
+    async (
+      o: { id: string; total?: number },
+      payload: { amount?: number; reason: string },
+    ) => {
+      try {
+        const { data } = await api.post(`/api/orders/${o.id}/refund`, {
+          amount: payload.amount,
+          reason: payload.reason,
+        });
+        const type = data?.refund?.type;
+        const amt = data?.refund?.amount;
+        const amtLabel = amt != null ? `: $${Number(amt).toFixed(2)}` : "";
+        // Reembolso TOTAL ⇒ ya no es una venta cobrada, sale de la lista.
+        // Parcial ⇒ se conserva (sigue cobrada por el saldo restante).
+        setPaidOrders((prev) => {
+          const next =
+            type === "FULL" ? prev.filter((p) => p.id !== o.id) : prev;
+          writePaidTicketsCache(next);
+          return next;
+        });
+        toast.success(
+          `Reembolso ${type === "PARTIAL" ? "parcial" : "total"} procesado${amtLabel}`,
+        );
+        if (data?.shiftAdjusted === "no_open_shift") {
+          toast.warning(
+            "No hay turno de caja abierto; el efectivo del reembolso no se descontó del corte automáticamente.",
+          );
+        }
+      } catch (err: any) {
+        toast.error(
+          err?.response?.data?.error || "No se pudo procesar el reembolso",
+        );
+        throw err;
+      }
+    },
+    [],
+  );
+
   const handleMergeOpenOrders = useCallback(
     async (
       targetOrder: { id: string; orderNumber: string },
@@ -1405,6 +1447,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         onSendToKitchen={handleSendOrdersToKitchen}
         canCorrectPaymentMethod={canCorrectPayment && ordersMode === "paid"}
         onCorrectPaymentMethod={handleCorrectPaymentMethod}
+        canRefund={canCorrectPayment && ordersMode === "paid"}
+        onRefund={handleRefund}
       />
 
       {reprintKitchenOrder && (
