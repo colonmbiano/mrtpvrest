@@ -267,10 +267,15 @@ router.patch(
   },
 );
 
-// ── Asignar fondo de cambio (caja chica) — sólo admin ────────────────────
+// ── Asignar fondo de cambio (caja chica) — manager de caja del repartidor ──
 // El repartidor no puede asignarse fondo a sí mismo: se registra como un
 // movimiento FLOAT que suma al efectivo en mano sin contar como "cobrado".
-router.post('/:driverId/float', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+// Gate alineado con el resto de la caja del repartidor (requireDriverCashManager,
+// no requireAdmin): quien asigna el fondo desde el cajón es el cajero al que el
+// admin le delegó `manage_driver_cash` — el modal "Asignar fondo" del TPV vive en
+// caja y el front ya lo muestra con ese permiso. Con requireAdmin el cajero
+// recibía 403 aunque tuviera el permiso (el endpoint quedó fuera del modelo).
+router.post('/:driverId/float', authenticate, requireTenantAccess, requireDriverCashManager, async (req, res) => {
   try {
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
