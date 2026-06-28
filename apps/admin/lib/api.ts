@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { getApiUrl } from "./config";
+import { getRefreshToken, rotateRefreshToken, clearRefreshToken } from "./auth";
 
 // En el browser usamos paths relativos ("") para que pasen por el rewrite
 // de next.config.js (same-origin, sin CORS). En SSR/Node seguimos usando la
@@ -27,7 +28,48 @@ api.interceptors.request.use((config) => {
 // red falla sin respuesta. Solo aplica a métodos seguros (GET/HEAD/OPTIONS)
 // para no causar efectos duplicados en POST/PUT/DELETE.
 
-type RetriableConfig = InternalAxiosRequestConfig & { __retryCount?: number };
+type RetriableConfig = InternalAxiosRequestConfig & {
+  __retryCount?: number;
+  __didRefresh?: boolean;
+};
+
+// ── Refresh de access token ────────────────────────────────────────────────
+// El access token dura 15 min. En vez de botar al usuario al primer 401, lo
+// renovamos con el refreshToken (válido 30 días) vía POST /api/auth/refresh,
+// que rota ambos tokens. Un único refresh en vuelo a la vez: si varias
+// peticiones reciben 401 al mismo tiempo, todas esperan la misma promesa.
+let refreshPromise: Promise<string | null> | null = null;
+
+function hardLogout() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("accessToken");
+  clearRefreshToken();
+  localStorage.removeItem("user");
+  document.cookie = "mb-role=; path=/; max-age=0; SameSite=Lax";
+  if (!window.location.pathname.includes("/login")) {
+    window.location.href = "/login";
+  }
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+  try {
+    // axios "crudo" (sin el instance `api`) para no recursar en este interceptor.
+    const { data } = await axios.post(
+      `${baseURL}/api/auth/refresh`,
+      { refreshToken },
+      { headers: { "Content-Type": "application/json" } }
+    );
+    if (!data?.accessToken) return null;
+    localStorage.setItem("accessToken", data.accessToken);
+    if (data.refreshToken) rotateRefreshToken(data.refreshToken);
+    return data.accessToken as string;
+  } catch {
+    return null;
+  }
+}
 
 const MAX_RETRIES = 3;
 const SAFE_METHODS = new Set(["get", "head", "options"]);
@@ -63,14 +105,31 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const config = error.config as RetriableConfig | undefined;
 
-    // 401 → logout y redirect (preservar comportamiento actual)
+    // 401 → intentar renovar el access token una sola vez; si falla, logout.
     if (error.response?.status === 401 && typeof window !== "undefined") {
-      if (!window.location.pathname.includes("/login")) {
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("user");
-        document.cookie = "mb-role=; path=/; max-age=0; SameSite=Lax";
-        window.location.href = "/login";
+      const reqConfig = config as RetriableConfig | undefined;
+      const url = reqConfig?.url || "";
+      // No intentar refrescar para el propio login/refresh ni si ya reintentamos.
+      const isAuthEndpoint = url.includes("/auth/refresh") || url.includes("/auth/login");
+
+      if (reqConfig && !reqConfig.__didRefresh && !isAuthEndpoint) {
+        if (!refreshPromise) refreshPromise = refreshAccessToken();
+        let newToken: string | null = null;
+        try {
+          newToken = await refreshPromise;
+        } finally {
+          refreshPromise = null;
+        }
+
+        if (newToken) {
+          reqConfig.__didRefresh = true;
+          reqConfig.headers = reqConfig.headers ?? {};
+          reqConfig.headers.Authorization = `Bearer ${newToken}`;
+          return api.request(reqConfig);
+        }
       }
+
+      hardLogout();
       return Promise.reject(error);
     }
 
