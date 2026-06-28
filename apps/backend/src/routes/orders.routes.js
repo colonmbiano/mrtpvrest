@@ -299,7 +299,7 @@ const { normalizePhone } = require('@mrtpvrest/config/phone');
 const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePermission, userHasPermission, hasValidOverride } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
-const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals, computeEmployeeDiscount, normalizeTenders } = require('../lib/money');
+const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals, computeEmployeeDiscount, normalizeTenders, round2 } = require('../lib/money');
 const { requireModule, MODULES } = require('../lib/modules');
 const { computeBulkPromoDiscount, loadActiveBulkPromos } = require('../lib/bulk-promo');
 const { nextOrderNumber } = require('../lib/order-number');
@@ -311,6 +311,7 @@ const {
   updateStatusSchema,
   updatePaymentSchema,
   messageSchema,
+  refundSchema,
 } = require('../schemas/orders.schema');
 const router = express.Router();
 
@@ -2424,6 +2425,198 @@ router.put('/:id/correct-payment-method', authenticate, requireTenantAccess, req
     }
 
     res.json({ order: updated, cashAdjusted });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /:id/refund — Reembolsar un ticket YA cobrado (total o parcial) ──────
+// Caso: hubo un error de cobro y hay que DEVOLVER dinero de una orden PAID.
+// Distinto de void-payment (que reabre el cobro dejándola PENDIENTE) y de
+// correct-payment-method (que cambia el método sin mover dinero).
+//
+// Diseño (alineado con CLAUDE.md · dinero):
+//  · El monto SIEMPRE se valida server-side contra el total real de la orden;
+//    `amount` del body nunca decide solo cuánto devolver. Sin `amount` ⇒ se
+//    reembolsa el saldo restante (reembolso total).
+//  · Guard atómico anti-doble-reembolso: updateMany condicional en la MISMA
+//    $transaction (`paymentStatus PAID` + `refundedAmount <= total − monto`) —
+//    solo gana si aún cabe ese reembolso. Mismo patrón que el consumo de
+//    cupones. Si count !== 1 ⇒ 409 (ya reembolsado / carrera).
+//  · Cuadre de caja en la MISMA $transaction:
+//      - efectivo en mano de un repartidor (orden de delivery cobrada en
+//        efectivo) → DriverCashMovement EXPENSE/DELIVERY ligado a la orden;
+//        compensa el INCOME del /collect y baja su balance en el próximo corte.
+//      - efectivo de mostrador → ShiftExpense (categoría REFUND) en el turno
+//        ABIERTO de la sucursal: el cajón pierde ese efectivo HOY y el corte
+//        resta el esperado solo (totalExpenses se recalcula de las filas). Sin
+//        turno abierto ⇒ shiftAdjusted:'no_open_shift' (el reembolso igual se
+//        aplica; el cuadre manual queda al operador).
+//      - transferencia/tarjeta → no mueve efectivo físico (la devolución va por
+//        la pasarela/banco fuera de este flujo).
+//  · Inventario: en reembolso TOTAL se repone el stock vendido (reusa
+//    restoreInventoryForCancelledOrder, best-effort FUERA de la tx de dinero,
+//    igual que la cancelación). Parcial por monto no cancela productos concretos
+//    ⇒ no repone (salvo restock:true explícito en un total).
+//  · Auditoría: evento ORDER_REFUND (quién, cuánto, motivo, total/parcial).
+// Permiso: el mismo que void-payment / correct-payment-method (reopen_table).
+router.post('/:id/refund', authenticate, requireTenantAccess, requirePermission('reopen_table'), validateBody(refundSchema), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const { reason } = req.body;
+
+    const existing = await prisma.order.findFirst({ where: { id, restaurantId } });
+    if (!existing) return res.status(404).json({ error: 'Orden no encontrada' });
+    if (existing.paymentStatus !== 'PAID') {
+      return res.status(400).json({ error: 'Solo se reembolsa una orden ya pagada' });
+    }
+
+    const total = round2(existing.total);
+    const already = round2(existing.refundedAmount || 0);
+    const remaining = round2(total - already);
+    if (remaining <= 0) {
+      return res.status(409).json({ error: 'La orden ya fue reembolsada por completo', code: 'ALREADY_REFUNDED' });
+    }
+
+    // Monto server-side: sin `amount` ⇒ saldo restante (reembolso total).
+    const requested = req.body.amount !== undefined ? round2(req.body.amount) : remaining;
+    if (!(requested > 0)) {
+      return res.status(400).json({ error: 'Monto de reembolso inválido' });
+    }
+    if (requested > remaining) {
+      return res.status(400).json({
+        error: `El reembolso ($${requested}) excede el saldo cobrado disponible ($${remaining})`,
+        code: 'REFUND_EXCEEDS_TOTAL',
+      });
+    }
+
+    const isFull = round2(already + requested) >= total;
+    // Método del reembolso: por defecto el original. Solo CASH mueve efectivo.
+    const orderMethod = String(existing.paymentMethod || '').toUpperCase();
+    const refundMethod = req.body.refundMethod
+      ? String(req.body.refundMethod).toUpperCase()
+      : (['CASH', 'TRANSFER', 'CARD', 'OTHER'].includes(orderMethod) ? orderMethod : 'OTHER');
+    const isCashRefund = refundMethod === 'CASH';
+    // Efectivo en mano del repartidor: orden de delivery cobrada en efectivo.
+    const driverHeldCash = Boolean(existing.deliveryDriverId) && (orderMethod === 'CASH' || existing.cashCollected === true);
+
+    const refundedBy = req.user?.name || req.user?.email || `empleado#${req.user?.id}`;
+    const stamp = new Date().toISOString();
+    const auditNote = `[Reembolso ${isFull ? 'total' : 'parcial'} de $${requested} por ${refundedBy} el ${stamp} · ${reason}]`;
+    const notes = existing.notes ? `${existing.notes}\n${auditNote}` : auditNote;
+
+    let cashAdjusted = null;   // caja del repartidor: 'created' | null
+    let shiftAdjusted = null;  // cajón de mostrador: 'expense_created' | 'no_open_shift' | null
+
+    let updated;
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        // Guard atómico: solo aplica si la orden sigue PAID y aún cabe el monto.
+        const guard = await tx.order.updateMany({
+          where: {
+            id,
+            restaurantId,
+            paymentStatus: 'PAID',
+            refundedAmount: { lte: round2(total - requested) + 0.005 },
+          },
+          data: {
+            refundedAmount: { increment: requested },
+            refundedAt: new Date(),
+            ...(isFull ? { paymentStatus: 'REFUNDED' } : {}),
+            notes,
+          },
+        });
+        if (guard.count !== 1) {
+          const err = new Error('Reembolso en conflicto (ya aplicado o monto excedido)');
+          err.code = 'REFUND_CONFLICT';
+          throw err;
+        }
+
+        if (isCashRefund && driverHeldCash) {
+          // El efectivo está en la caja del repartidor: sale como EXPENSE que
+          // compensa el INCOME del cobro y baja su balance en el próximo corte.
+          await tx.driverCashMovement.create({
+            data: {
+              driverId: existing.deliveryDriverId,
+              type: 'EXPENSE',
+              category: 'DELIVERY',
+              amount: requested,
+              description: `Reembolso · ${existing.orderNumber || id} · ${reason}`.slice(0, 200),
+              orderId: id,
+            },
+          });
+          cashAdjusted = 'created';
+        } else if (isCashRefund) {
+          // Efectivo del cajón de mostrador: gasto del turno ABIERTO.
+          const openShift = await tx.cashShift.findFirst({
+            where: { locationId: existing.locationId, isOpen: true },
+            orderBy: { openedAt: 'desc' },
+            select: { id: true },
+          });
+          if (openShift) {
+            await tx.shiftExpense.create({
+              data: {
+                shiftId: openShift.id,
+                description: `Reembolso ${existing.orderNumber || id} · ${reason}`.slice(0, 200),
+                amount: requested,
+                category: 'REFUND',
+              },
+            });
+            shiftAdjusted = 'expense_created';
+          } else {
+            shiftAdjusted = 'no_open_shift';
+          }
+        }
+
+        return tx.order.findUnique({
+          where: { id },
+          include: {
+            user: { select: { name: true, phone: true } },
+            items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
+          },
+        });
+      });
+    } catch (e) {
+      if (e.code === 'REFUND_CONFLICT') {
+        return res.status(409).json({ error: e.message, code: e.code });
+      }
+      throw e;
+    }
+
+    // Inventario: reponer el stock vendido SOLO en reembolso total (la venta se
+    // deshace). Fuera de la tx de dinero y best-effort, igual que la cancelación.
+    const shouldRestock = req.body.restock !== undefined ? req.body.restock === true : isFull;
+    if (shouldRestock && isFull) {
+      await restoreInventoryForCancelledOrder(prisma, id).catch((e) =>
+        console.error('[orders] restoreInventory al reembolsar:', e.message)
+      );
+    }
+
+    // Auditoría (best-effort): acción sensible de dinero.
+    audit.record(req, audit.AUDIT_EVENTS.ORDER_REFUND, {
+      resource: `order:${id}`,
+      reason,
+      after: {
+        orderNumber: existing.orderNumber,
+        amount: requested,
+        type: isFull ? 'FULL' : 'PARTIAL',
+        refundMethod,
+        refundedTotal: round2(already + requested),
+        orderTotal: total,
+      },
+    }).catch(() => {});
+
+    const io = req.app.get('io');
+    if (io && existing.locationId) {
+      io.to(`restaurant:${restaurantId}:location:${existing.locationId}:admins`)
+        .emit('order:updated', updated);
+    }
+
+    res.json({
+      order: updated,
+      refund: { amount: requested, type: isFull ? 'FULL' : 'PARTIAL', method: refundMethod, reason },
+      cashAdjusted,
+      shiftAdjusted,
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -20,6 +20,7 @@ import {
   Banknote,
   CreditCard,
   ArrowLeftRight,
+  Undo2,
 } from "lucide-react";
 import { hapticMedium } from "@/lib/haptics";
 
@@ -95,6 +96,17 @@ interface OrdersDrawerProps {
   /** Aplica el nuevo método al pedido ya cobrado. El caller llama al backend
    *  (PUT /orders/:id/correct-payment-method) y refresca el cache de cobrados. */
   onCorrectPaymentMethod?: (order: DrawerOrder, method: string) => Promise<void>;
+  /** Solo modo "Cobradas": habilita REEMBOLSAR un ticket ya cobrado (total o
+   *  parcial) cuando hubo un error de cobro. Mismo permiso que corregir el
+   *  método (reopen_table / rol privilegiado). */
+  canRefund?: boolean;
+  /** Procesa el reembolso. El caller llama al backend
+   *  (POST /orders/:id/refund) con el monto (opcional = total) y el motivo, y
+   *  refresca el cache de cobrados. */
+  onRefund?: (
+    order: DrawerOrder,
+    payload: { amount?: number; reason: string },
+  ) => Promise<void>;
 }
 
 // Métodos a los que se puede corregir un cobro desde la pestaña "Cobradas".
@@ -206,6 +218,8 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   paidLoading = false,
   canCorrectPaymentMethod = false,
   onCorrectPaymentMethod,
+  canRefund = false,
+  onRefund,
 }) => {
   const paidMode = mode === "paid";
   const [activeFilter, setActiveFilter] = useState<FilterKey>("Todos");
@@ -223,6 +237,12 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   // abierto, y el id que está guardando contra el backend (spinner).
   const [correctingId, setCorrectingId] = useState<string | null>(null);
   const [correctingSaveId, setCorrectingSaveId] = useState<string | null>(null);
+  // Modo "Cobradas": id del ticket con el panel de reembolso abierto, el monto y
+  // el motivo capturados, y el id que está procesando contra el backend.
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [refundAmount, setRefundAmount] = useState<string>("");
+  const [refundReason, setRefundReason] = useState<string>("");
+  const [refundSaveId, setRefundSaveId] = useState<string | null>(null);
 
   // Refs para el "dejar presionado" (long-press) que entra a seleccion.
   const longPressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -753,7 +773,143 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                               <Wallet size={15} strokeWidth={2.5} /> Corregir cobro
                             </button>
                           )}
+                          {canRefund && onRefund && (
+                            <button
+                              type="button"
+                              aria-label={`Reembolsar ticket de ${order.customerName}`}
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                hapticMedium();
+                                setCorrectingId(null);
+                                setRefundingId((cur) => {
+                                  if (cur === order.id) return null;
+                                  // Al abrir: prefijar el monto con el total.
+                                  setRefundAmount(String(order.total ?? ""));
+                                  setRefundReason("");
+                                  return order.id;
+                                });
+                              }}
+                              className={`flex-1 h-9 rounded-lg border text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform ${
+                                refundingId === order.id
+                                  ? "bg-red-500 border-red-500 text-white"
+                                  : "bg-red-500/10 border-red-500/30 text-red-300"
+                              }`}
+                            >
+                              <Undo2 size={15} strokeWidth={2.5} /> Reembolsar
+                            </button>
+                          )}
                         </div>
+
+                        {/* Panel inline de reembolso (monto total/parcial + motivo). */}
+                        {canRefund && onRefund && refundingId === order.id && (
+                          <div className="rounded-lg border border-red-500/25 bg-red-500/5 p-2.5 flex flex-col gap-2">
+                            <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-red-300/80 px-0.5">
+                              Reembolsar · ${Number(order.total ?? 0).toFixed(2)}
+                            </p>
+                            <div className="flex items-stretch gap-2">
+                              <div className="flex-1">
+                                <label className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/40 px-0.5">
+                                  Monto
+                                </label>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={0}
+                                  step="0.01"
+                                  value={refundAmount}
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => setRefundAmount(e.target.value)}
+                                  className="w-full h-9 rounded-lg bg-black/30 border border-white/10 px-2 text-white text-sm font-mono focus:outline-none focus:border-red-400/60"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRefundAmount(String(order.total ?? ""));
+                                }}
+                                className="self-end h-9 px-3 rounded-lg bg-white/5 border border-white/10 text-white/70 text-[10px] font-semibold uppercase tracking-[0.1em] active:scale-95 transition-transform"
+                              >
+                                Total
+                              </button>
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/40 px-0.5">
+                                Motivo
+                              </label>
+                              <input
+                                type="text"
+                                value={refundReason}
+                                placeholder="p. ej. cobré de más"
+                                maxLength={500}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => setRefundReason(e.target.value)}
+                                className="w-full h-9 rounded-lg bg-black/30 border border-white/10 px-2 text-white text-sm focus:outline-none focus:border-red-400/60"
+                              />
+                            </div>
+                            <div className="flex items-stretch gap-2">
+                              <button
+                                type="button"
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRefundingId(null);
+                                }}
+                                className="flex-1 h-9 rounded-lg bg-white/5 border border-white/10 text-white/70 text-[11px] font-semibold uppercase tracking-[0.1em] active:scale-95 transition-transform"
+                              >
+                                Cancelar
+                              </button>
+                              {(() => {
+                                const amt = Number(refundAmount);
+                                const reasonOk = refundReason.trim().length > 0;
+                                const amountOk =
+                                  Number.isFinite(amt) &&
+                                  amt > 0 &&
+                                  amt <= Number(order.total ?? 0) + 0.005;
+                                const busy = refundSaveId === order.id;
+                                return (
+                                  <button
+                                    type="button"
+                                    disabled={busy || !reasonOk || !amountOk}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      hapticMedium();
+                                      setRefundSaveId(order.id);
+                                      try {
+                                        // Sin monto explícito o igual al total ⇒
+                                        // el backend reembolsa el saldo restante.
+                                        const isFull =
+                                          Math.abs(amt - Number(order.total ?? 0)) < 0.005;
+                                        await onRefund(order, {
+                                          amount: isFull ? undefined : amt,
+                                          reason: refundReason.trim(),
+                                        });
+                                        setRefundingId(null);
+                                      } catch {
+                                        // El caller muestra el error (toast).
+                                      } finally {
+                                        setRefundSaveId(null);
+                                      }
+                                    }}
+                                    className="flex-[1.4] h-9 rounded-lg bg-red-500 border border-red-500 text-white text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40"
+                                  >
+                                    {busy ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <Undo2 size={14} strokeWidth={2.5} />
+                                    )}
+                                    Reembolsar
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Selector inline del nuevo método (excluye el actual). */}
                         {canCorrectPaymentMethod &&
