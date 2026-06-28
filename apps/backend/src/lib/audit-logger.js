@@ -18,6 +18,10 @@ const AUDIT_EVENTS = Object.freeze({
   // (p.ej. "quítale el tocino"). No requiere permiso especial (flujo
   // operativo libre) pero queda registrado: quién, qué extra y cuánto descontó.
   MODIFIER_VOID: 'MODIFIER_VOID',
+  // Reembolso de un ticket YA cobrado (total o parcial) por un error de cobro.
+  // Acción sensible (devuelve dinero): se registra quién, cuánto, motivo y si
+  // fue total o parcial. Gateada por permiso reopen_table en la ruta.
+  ORDER_REFUND: 'ORDER_REFUND',
 });
 
 const VALID_EVENTS = new Set(Object.values(AUDIT_EVENTS));

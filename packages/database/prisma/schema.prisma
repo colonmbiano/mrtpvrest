@@ -832,6 +832,16 @@ model Order {
   cashCollectedAt DateTime?
   cashCollectedBy String?
 
+  // REEMBOLSO de un ticket YA cobrado (total o parcial). refundedAmount es el
+  // acumulado devuelto (cacheado para el guard atómico anti-doble-reembolso:
+  // updateMany condicional `refundedAmount <= total - monto`, mismo patrón que
+  // el consumo de cupones). Al llegar a `total` la orden pasa a paymentStatus
+  // REFUNDED. El asiento de caja del reembolso NO vive aquí: el efectivo que
+  // sale del cajón se registra como ShiftExpense (categoría REFUND) y el de un
+  // repartidor como DriverCashMovement EXPENSE — así el corte cuadra solo.
+  refundedAmount Float     @default(0)
+  refundedAt     DateTime?
+
   // Verificación de cobro por TRANSFERENCIA: el admin confirma contra el banco
   // que el SPEI de una entrega cobrada por transferencia realmente llegó. Espeja
   // el patrón de cashCollected; solo aplica a paymentMethod=TRANSFER. No bloquea

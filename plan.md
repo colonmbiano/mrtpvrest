@@ -12,6 +12,14 @@ la caja** (PR #106, master `c0f1376`). Ver memoria `project_driver_fund_caja_dou
 
 ## 1. Reembolso en tickets ya cobrados (por cualquier error) 💰
 
+> **HECHO (2026-06-28):** `POST /api/orders/:id/refund` (total o parcial, monto
+> server-side, guard atómico anti-doble-reembolso, cuadre de caja vía
+> ShiftExpense REFUND / DriverCashMovement EXPENSE, reposición de inventario en
+> total, auditoría `ORDER_REFUND`, permiso `reopen_table`). UI: botón
+> "Reembolsar" + panel inline en la pestaña "Cobradas" del TPV. 13 tests del
+> endpoint. Migración aditiva `20260628120000_add_order_refund` (correr
+> `migrate deploy` manual en prod, Railway no aplica migraciones).
+
 **Qué:** poder **reembolsar** una orden ya pagada (PAID), total o parcial, cuando
 hubo un error de cobro. Hoy existen piezas sueltas pero **no** un reembolso de
 ticket completo:
