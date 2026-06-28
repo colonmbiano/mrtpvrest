@@ -91,6 +91,9 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
+  // Gasto a crédito: si se marca, el gasto NO baja el corte del repartidor ni
+  // la caja — se registra como cuenta por pagar (deuda del restaurante).
+  const [pendingDebt, setPendingDebt] = useState(false);
 
   // Asignar fondo de cambio al repartidor (solo roles financieros). El origen
   // decide si sale del cajón del local ("CAJA" → se refleja en el turno) o si es
@@ -216,10 +219,12 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
         category,
         amount: Number(amount),
         description,
+        ...(type === "EXPENSE" && pendingDebt ? { pending: true } : {}),
       });
       setAmount("");
       setDescription("");
       setCategory("");
+      setPendingDebt(false);
       fetchMovements();
       onRefresh();
     } catch {
@@ -442,6 +447,22 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                 />
               </div>
             </div>
+
+            {/* Gasto a crédito (cuenta por pagar) — solo aplica a gastos */}
+            {type === "EXPENSE" && (
+              <label className="flex items-center gap-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] p-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={pendingDebt}
+                  onChange={(e) => setPendingDebt(e.target.checked)}
+                  className="h-5 w-5 accent-[var(--brand-primary)]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-white">Pendiente de pago (a crédito)</span>
+                  <span className="block text-[10px] text-white/40">No baja el corte del repartidor ni la caja. Queda como cuenta por pagar.</span>
+                </span>
+              </label>
+            )}
 
             <button
               type="submit"

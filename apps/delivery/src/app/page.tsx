@@ -375,9 +375,12 @@ export default function DeliveryApp() {
     } catch (err: any) { alert(err.response?.data?.error || 'Error'); }
   }
 
-  async function saveExpense(cat: string, amount: string, desc: string) {
+  async function saveExpense(cat: string, amount: string, desc: string, pending = false) {
     if (!amount || Number(amount) <= 0) return;
-    const expenseData = { type: 'EXPENSE', category: cat, amount, description: desc, driverId: driver.id };
+    const expenseData = {
+      type: 'EXPENSE', category: cat, amount, description: desc, driverId: driver.id,
+      ...(pending ? { pending: 'true' } : {}),
+    };
 
     if (!navigator.onLine) {
       useOfflineStore.getState().addToQueue({ type: 'LOG_EXPENSE', data: expenseData });
