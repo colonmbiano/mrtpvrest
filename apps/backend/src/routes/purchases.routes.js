@@ -25,6 +25,7 @@ router.use(authenticate, requireTenantAccess, requireFeatureFlag('hasInventory',
 const CASHIER_LIMIT_PER_PURCHASE = 1000; // MXN
 const ALLOWED_ROLES = ['CASHIER', 'WAITER', 'KITCHEN', 'ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'];
 const VALID_PAYMENT_METHODS = ['CASH_DRAWER', 'CORPORATE_CARD', 'TRANSFER'];
+const VALID_SETTLEMENT = ['PAID', 'PENDING'];
 
 // Genera un PO number único por location: PO-YYYYMMDD-XXXX.
 async function nextPoNumber(tx, locationId) {
@@ -67,6 +68,8 @@ router.post('/', async (req, res) => {
       photoUrl,
       notes,
       occurredAt,
+      settlementStatus,
+      dueDate,
     } = req.body || {};
 
     // Validaciones
@@ -74,6 +77,13 @@ router.post('/', async (req, res) => {
     if (!VALID_PAYMENT_METHODS.includes(paymentMethod)) {
       return res.status(400).json({ error: 'paymentMethod inválido' });
     }
+    const settlement = settlementStatus || 'PAID';
+    if (!VALID_SETTLEMENT.includes(settlement)) {
+      return res.status(400).json({ error: 'settlementStatus inválido' });
+    }
+    // PENDING = la mercancía se recibe (sube stock) pero el pago queda a deber:
+    // no exige turno ni crea ShiftExpense hasta liquidarse.
+    const isPending = settlement === 'PENDING';
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'items requerido (mínimo 1)' });
     }
@@ -106,9 +116,9 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Si CASH_DRAWER, validar turno abierto
+    // Si CASH_DRAWER y NO es deuda pendiente, validar turno abierto.
     let cashShiftId = null;
-    if (paymentMethod === 'CASH_DRAWER') {
+    if (!isPending && paymentMethod === 'CASH_DRAWER') {
       const openShift = await prisma.cashShift.findFirst({
         where: { locationId, isOpen: true },
         orderBy: { openedAt: 'desc' },
@@ -173,6 +183,8 @@ router.post('/', async (req, res) => {
           notes: notes || null,
           receivedAt: occurredAt ? new Date(occurredAt) : new Date(),
           createdById,
+          settlementStatus: settlement,
+          dueDate: dueDate ? new Date(dueDate) : null,
         },
       });
 
@@ -239,6 +251,90 @@ router.post('/', async (req, res) => {
   } catch (e) {
     console.error('POST /api/purchases:', e);
     res.status(500).json({ error: 'Error al registrar compra: ' + e.message });
+  }
+});
+
+// ── POST /api/purchases/:id/settle ───────────────────────────────────────
+// Liquida una compra PENDIENTE. Body: { paymentMethod, occurredAt? }.
+// Si paymentMethod=CASH_DRAWER crea el ShiftExpense en el turno abierto AHORA
+// (golpea la caja del día en que se paga). Idempotente.
+router.post('/:id/settle', async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const { id } = req.params;
+    const { paymentMethod, occurredAt } = req.body || {};
+    if (!VALID_PAYMENT_METHODS.includes(paymentMethod)) {
+      return res.status(400).json({ error: 'paymentMethod inválido' });
+    }
+
+    const po = await prisma.purchaseOrder.findFirst({
+      where: { id, location: { restaurantId } },
+      select: { id: true, totalAmount: true, poNumber: true, locationId: true, settlementStatus: true, supplier: { select: { name: true } } },
+    });
+    if (!po) return res.status(404).json({ error: 'Compra no encontrada' });
+    if (po.settlementStatus !== 'PENDING') {
+      return res.status(409).json({ error: 'La compra ya fue liquidada', code: 'ALREADY_SETTLED' });
+    }
+
+    let cashShiftId = null;
+    if (paymentMethod === 'CASH_DRAWER') {
+      const openShift = await prisma.cashShift.findFirst({
+        where: { locationId: po.locationId, isOpen: true },
+        orderBy: { openedAt: 'desc' },
+        select: { id: true },
+      });
+      if (!openShift) {
+        return res.status(409).json({
+          error: 'No hay turno de caja abierto. Abre un turno antes de pagar en efectivo.',
+          code: 'NO_OPEN_SHIFT',
+        });
+      }
+      cashShiftId = openShift.id;
+    }
+
+    const settledAt = occurredAt ? new Date(occurredAt) : new Date();
+
+    const settled = await prisma.$transaction(async (tx) => {
+      const upd = await tx.purchaseOrder.updateMany({
+        where: { id, settlementStatus: 'PENDING' },
+        data: {
+          settlementStatus: 'PAID',
+          settledAt,
+          settledMethod: paymentMethod,
+          settledShiftId: cashShiftId,
+          paymentMethod,
+          cashShiftId,
+        },
+      });
+      if (upd.count === 0) return false;
+
+      if (cashShiftId) {
+        await tx.shiftExpense.create({
+          data: {
+            shiftId: cashShiftId,
+            description: `Compra: ${po.supplier?.name || ''} (${po.poNumber})`,
+            amount: po.totalAmount,
+            category: 'PURCHASE',
+            purchaseOrderId: po.id,
+          },
+        });
+        await tx.cashShift.update({
+          where: { id: cashShiftId },
+          data: { totalExpenses: { increment: po.totalAmount } },
+        });
+      }
+      return true;
+    });
+
+    if (!settled) {
+      return res.status(409).json({ error: 'La compra ya fue liquidada', code: 'ALREADY_SETTLED' });
+    }
+    res.json({ ok: true, id, settledAt, settledMethod: paymentMethod });
+  } catch (e) {
+    console.error('POST /api/purchases/:id/settle:', e);
+    res.status(500).json({ error: 'Error al liquidar compra: ' + e.message });
   }
 });
 

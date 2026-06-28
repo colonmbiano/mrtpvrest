@@ -5,7 +5,7 @@ import { C, S } from '@/lib/tokens';
 
 interface GastoScreenProps {
   onBack: () => void;
-  onSave: (category: string, amount: string, description: string) => void;
+  onSave: (category: string, amount: string, description: string, pending: boolean) => void;
 }
 
 // Categorías canónicas — alineadas al catálogo de gastos (OperatingExpenseCategory)
@@ -46,6 +46,8 @@ export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
   const [cat, setCat]     = useState('');
   const [amount, setAmount] = useState('');
   const [desc, setDesc]   = useState('');
+  // Gasto a crédito: NO baja tu corte; queda como cuenta por pagar del negocio.
+  const [pending, setPending] = useState(false);
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.fontBody }}>
@@ -145,9 +147,36 @@ export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
             }} />
         </div>
 
+        {/* Estado de pago */}
+        <div style={S.card}>
+          <div style={S.sectionLabel}>Estado de pago</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {([
+              { v: false, label: 'Lo pagué' },
+              { v: true,  label: 'A crédito' },
+            ] as const).map(o => {
+              const active = pending === o.v;
+              return (
+                <button key={String(o.v)} onClick={() => setPending(o.v)} style={{
+                  flex: 1, height: 48, borderRadius: 14, cursor: 'pointer',
+                  border: `1px solid ${active ? 'rgba(255,184,77,0.45)' : C.border}`,
+                  background: active ? 'rgba(255,184,77,0.12)' : C.surf2,
+                  color: active ? C.amber : C.textDim,
+                  fontSize: 13, fontWeight: 700, fontFamily: C.fontBody, transition: 'all 0.15s',
+                }}>{o.label}</button>
+              );
+            })}
+          </div>
+          {pending && (
+            <div style={{ marginTop: 8, fontSize: 11.5, color: C.textDim, lineHeight: 1.4 }}>
+              No baja tu corte. Queda como cuenta por pagar del negocio.
+            </div>
+          )}
+        </div>
+
         {/* Guardar */}
         <button
-          onClick={() => amount && cat && onSave(cat, amount, desc)}
+          onClick={() => amount && cat && onSave(cat, amount, desc, pending)}
           disabled={!amount || !cat}
           style={{
             ...S.btnPrimary,

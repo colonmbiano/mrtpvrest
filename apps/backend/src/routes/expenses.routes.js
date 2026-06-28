@@ -29,6 +29,7 @@ const CASHIER_LIMIT_PER_EXPENSE = 500; // MXN
 const ALLOWED_ROLES = ['CASHIER', 'WAITER', 'KITCHEN', 'ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'];
 
 const VALID_PAYMENT_METHODS = ['CASH_DRAWER', 'CORPORATE_CARD', 'TRANSFER'];
+const VALID_SETTLEMENT = ['PAID', 'PENDING'];
 
 // ── GET /api/expenses ────────────────────────────────────────────────────
 // Lista los gastos del restaurant (filtros opcionales: from, to, categoryId).
@@ -93,6 +94,9 @@ router.post('/', async (req, res) => {
       photoUrl,
       notes,
       locationId: bodyLocationId,
+      settlementStatus,
+      supplierId,
+      dueDate,
     } = req.body || {};
 
     // Validaciones
@@ -106,8 +110,23 @@ router.post('/', async (req, res) => {
     if (!VALID_PAYMENT_METHODS.includes(paymentMethod)) {
       return res.status(400).json({ error: 'paymentMethod inválido' });
     }
+    const settlement = settlementStatus || 'PAID';
+    if (!VALID_SETTLEMENT.includes(settlement)) {
+      return res.status(400).json({ error: 'settlementStatus inválido' });
+    }
+    // PENDING = deuda a pagar después: no exige turno ni toca caja al crearse.
+    const isPending = settlement === 'PENDING';
     const locationId = bodyLocationId || userLocationId;
     if (!locationId) return res.status(400).json({ error: 'locationId requerido' });
+
+    // Si se indica proveedor, validar que pertenezca al restaurant.
+    if (supplierId) {
+      const supplier = await prisma.supplier.findFirst({
+        where: { id: supplierId, restaurantId },
+        select: { id: true },
+      });
+      if (!supplier) return res.status(400).json({ error: 'Proveedor no pertenece a este restaurant' });
+    }
 
     // Tope para cashier — si excede, debe haber sido autorizado por admin
     // (frontend pide PIN y vuelve a postear con header x-admin-authorized).
@@ -122,9 +141,10 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Si es CASH_DRAWER, debe haber turno abierto
+    // Si es CASH_DRAWER y NO es deuda pendiente, debe haber turno abierto.
+    // Un gasto PENDING no toca caja todavía (no exige turno).
     let cashShiftId = null;
-    if (paymentMethod === 'CASH_DRAWER') {
+    if (!isPending && paymentMethod === 'CASH_DRAWER') {
       const openShift = await prisma.cashShift.findFirst({
         where: { locationId, isOpen: true },
         orderBy: { openedAt: 'desc' },
@@ -171,6 +191,9 @@ router.post('/', async (req, res) => {
           notes: notes || null,
           createdById,
           cashShiftId,
+          settlementStatus: settlement,
+          supplierId: supplierId || null,
+          dueDate: dueDate ? new Date(dueDate) : null,
         },
       });
 
@@ -206,6 +229,102 @@ router.post('/', async (req, res) => {
   } catch (e) {
     console.error('POST /api/expenses:', e);
     res.status(500).json({ error: 'Error al registrar gasto: ' + e.message });
+  }
+});
+
+// ── POST /api/expenses/:id/settle ────────────────────────────────────────
+// Liquida un gasto PENDIENTE (cuenta por pagar). Body: { paymentMethod, occurredAt? }.
+// Esta es la transición que recién golpea la caja del DÍA en que se paga:
+// si paymentMethod=CASH_DRAWER crea el ShiftExpense en el turno abierto AHORA.
+// Idempotente: solo la primera liquidación gana (updateMany condicional).
+router.post('/:id/settle', async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const { id } = req.params;
+    const { paymentMethod, occurredAt } = req.body || {};
+    if (!VALID_PAYMENT_METHODS.includes(paymentMethod)) {
+      return res.status(400).json({ error: 'paymentMethod inválido' });
+    }
+
+    const expense = await prisma.operatingExpense.findFirst({
+      where: { id, restaurantId },
+      select: { id: true, amount: true, concept: true, locationId: true, categoryId: true, settlementStatus: true },
+    });
+    if (!expense) return res.status(404).json({ error: 'Gasto no encontrado' });
+    if (expense.settlementStatus !== 'PENDING') {
+      return res.status(409).json({ error: 'El gasto ya fue liquidado', code: 'ALREADY_SETTLED' });
+    }
+
+    // Si se paga con efectivo, debe haber turno abierto en su location.
+    let cashShiftId = null;
+    if (paymentMethod === 'CASH_DRAWER') {
+      const openShift = await prisma.cashShift.findFirst({
+        where: { locationId: expense.locationId, isOpen: true },
+        orderBy: { openedAt: 'desc' },
+        select: { id: true },
+      });
+      if (!openShift) {
+        return res.status(409).json({
+          error: 'No hay turno de caja abierto. Abre un turno antes de pagar en efectivo.',
+          code: 'NO_OPEN_SHIFT',
+        });
+      }
+      cashShiftId = openShift.id;
+    }
+
+    const settledAt = occurredAt ? new Date(occurredAt) : new Date();
+
+    const settled = await prisma.$transaction(async (tx) => {
+      // Solo gana la primera liquidación: el WHERE condicional hace la operación
+      // idempotente frente a doble-tap / reintentos de red.
+      const upd = await tx.operatingExpense.updateMany({
+        where: { id, settlementStatus: 'PENDING' },
+        data: {
+          settlementStatus: 'PAID',
+          settledAt,
+          settledMethod: paymentMethod,
+          settledShiftId: cashShiftId,
+          paymentMethod,
+          cashShiftId,
+        },
+      });
+      if (upd.count === 0) return false;
+
+      if (cashShiftId) {
+        let categoryLabel = 'OTHER';
+        if (expense.categoryId) {
+          const cat = await tx.operatingExpenseCategory.findUnique({
+            where: { id: expense.categoryId },
+            select: { name: true },
+          });
+          if (cat?.name) categoryLabel = cat.name;
+        }
+        await tx.shiftExpense.create({
+          data: {
+            shiftId: cashShiftId,
+            description: expense.concept,
+            amount: expense.amount,
+            category: categoryLabel,
+            operatingExpenseId: expense.id,
+          },
+        });
+        await tx.cashShift.update({
+          where: { id: cashShiftId },
+          data: { totalExpenses: { increment: expense.amount } },
+        });
+      }
+      return true;
+    });
+
+    if (!settled) {
+      return res.status(409).json({ error: 'El gasto ya fue liquidado', code: 'ALREADY_SETTLED' });
+    }
+    res.json({ ok: true, id, settledAt, settledMethod: paymentMethod });
+  } catch (e) {
+    console.error('POST /api/expenses/:id/settle:', e);
+    res.status(500).json({ error: 'Error al liquidar gasto: ' + e.message });
   }
 });
 

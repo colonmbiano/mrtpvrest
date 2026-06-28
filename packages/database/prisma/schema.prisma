@@ -1514,6 +1514,7 @@ model Supplier {
   // FASE INVENTARIO/COSTEO · multi-supplier + órdenes de compra
   ingredientSuppliers IngredientSupplier[]
   purchaseOrders      PurchaseOrder[]
+  operatingExpenses   OperatingExpense[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3150,6 +3151,15 @@ model PurchaseOrder {
   cashShiftId   String?  // turno donde se pagó (solo cuando CASH_DRAWER)
   cashShift     CashShift? @relation("PurchaseOrderCashShift", fields: [cashShiftId], references: [id])
 
+  // ── Cuentas por pagar (ver OperatingExpense / SettlementStatus) ──
+  // PENDING ⇒ la mercancía se recibe (sube stock) pero el pago queda a deber:
+  // NO crea ShiftExpense hasta liquidarse vía POST /api/purchases/:id/settle.
+  settlementStatus SettlementStatus     @default(PAID)
+  dueDate          DateTime?
+  settledAt        DateTime?
+  settledShiftId   String?
+  settledMethod    ExpensePaymentMethod?
+
   items       PurchaseOrderItem[]
   shiftExpenses ShiftExpense[]   // 1:N (en teoría siempre 1 cuando es CASH_DRAWER)
   createdById String?
@@ -3161,6 +3171,7 @@ model PurchaseOrder {
   @@index([locationId, status])
   @@index([supplierId])
   @@index([cashShiftId])
+  @@index([settlementStatus])
   @@map("purchase_orders")
 }
 
@@ -3695,6 +3706,16 @@ enum ExpensePaymentMethod {
   TRANSFER          // transferencia bancaria (solo contable)
 }
 
+// Estado de liquidación de un gasto/compra (cuentas por pagar).
+//   PAID    → ya pagado (comportamiento histórico y default).
+//   PENDING → deuda registrada que NO toca caja todavía: no crea ShiftExpense
+//             ni descuenta efectivo. Solo al liquidar (POST /settle) golpea la
+//             caja del día en que realmente se paga.
+enum SettlementStatus {
+  PAID
+  PENDING
+}
+
 // ── OperatingExpenseCategory · taxonomía referenciable de gastos del local
 // Sembradas al crear restaurant. Cada restaurant puede agregar las suyas.
 // Default: LUZ, AGUA, INTERNET, GAS, MANTENIMIENTO, SUELDOS,
@@ -3739,6 +3760,16 @@ model OperatingExpense {
   paymentMethod ExpensePaymentMethod
   occurredAt    DateTime              @default(now())
 
+  // ── Cuentas por pagar ──
+  // PENDING ⇒ deuda que NO toca caja hasta liquidarse (ver SettlementStatus).
+  settlementStatus SettlementStatus     @default(PAID)
+  supplierId       String?
+  supplier         Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  dueDate          DateTime?
+  settledAt        DateTime?
+  settledShiftId   String?              // turno donde se liquidó (si fue CASH_DRAWER)
+  settledMethod    ExpensePaymentMethod?
+
   // Si paymentMethod=CASH_DRAWER, el turno activo donde se descontó.
   cashShiftId String?
   cashShift   CashShift? @relation("OperatingExpenseCashShift", fields: [cashShiftId], references: [id])
@@ -3758,5 +3789,7 @@ model OperatingExpense {
   @@index([locationId, occurredAt])
   @@index([categoryId])
   @@index([cashShiftId])
+  @@index([settlementStatus])
+  @@index([supplierId])
   @@map("operating_expenses")
 }

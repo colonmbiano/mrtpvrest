@@ -119,6 +119,12 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
   const [tab, setTab] = useState<Tab>("expense");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH_DRAWER");
 
+  // Estado de pago: PAID = se paga ahora (afecta caja); PENDING = cuenta por
+  // pagar (queda como deuda, NO toca la caja hasta liquidarla en el admin).
+  const [settlement, setSettlement] = useState<"PAID" | "PENDING">("PAID");
+  const [dueDate, setDueDate] = useState("");            // YYYY-MM-DD
+  const [expenseSupplierId, setExpenseSupplierId] = useState("");
+
   // GASTO
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [categoryId, setCategoryId] = useState<string>("");
@@ -213,6 +219,9 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
     if (!isOpen) {
       setTab("expense");
       setPaymentMethod("CASH_DRAWER");
+      setSettlement("PAID");
+      setDueDate("");
+      setExpenseSupplierId("");
       setCategoryId("");
       setConcept("");
       setAmount("");
@@ -347,8 +356,13 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
         amount: amt,
         paymentMethod,
         notes: notes || null,
+        settlementStatus: settlement,
+        ...(settlement === "PENDING" && {
+          supplierId: expenseSupplierId || null,
+          dueDate: dueDate || null,
+        }),
       });
-      toast.success("Gasto registrado");
+      toast.success(settlement === "PENDING" ? "Deuda registrada" : "Gasto registrado");
       onClose();
     } catch (err: any) {
       const code = err?.response?.data?.code;
@@ -386,8 +400,14 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
           unitPrice: parseFloat(l.unitPrice),
         })),
         notes: notes || null,
+        settlementStatus: settlement,
+        ...(settlement === "PENDING" && { dueDate: dueDate || null }),
       });
-      toast.success(`Compra registrada · $${purchaseTotal.toFixed(2)}`);
+      toast.success(
+        settlement === "PENDING"
+          ? `Compra a crédito registrada · $${purchaseTotal.toFixed(2)}`
+          : `Compra registrada · $${purchaseTotal.toFixed(2)}`,
+      );
       onClose();
     } catch (err: any) {
       const code = err?.response?.data?.code;
@@ -513,8 +533,70 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
             className="hidden"
           />
 
-          {/* Payment method — solo en tabs de captura, no en historial */}
+          {/* Estado de pago — Pagado ahora vs Pendiente (cuenta por pagar) */}
           {tab !== "history" && (
+          <div className="mt-6">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 mb-2">Estado de pago</p>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { id: "PAID", label: "Pagado" },
+                { id: "PENDING", label: "Pendiente" },
+              ] as const).map((s) => {
+                const isActive = settlement === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSettlement(s.id)}
+                    className={`h-12 rounded-2xl border text-[11px] font-semibold uppercase tracking-[0.1em] transition-all ${
+                      isActive
+                        ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
+                        : "bg-white/5 border-white/10 text-white/60"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {settlement === "PENDING" && (
+              <div className="mt-3 space-y-3 rounded-2xl bg-white/5 border border-white/10 p-3">
+                <p className="text-[10px] text-white/50 flex items-center gap-1.5">
+                  <AlertTriangle size={12} className="text-[var(--warning)]" />
+                  Se guarda como cuenta por pagar. No afecta la caja hasta liquidarla.
+                </p>
+                {tab === "expense" && (
+                  <div>
+                    <label className="text-[9px] font-semibold uppercase tracking-[0.2em] text-white/40 block mb-1.5">Proveedor (opcional)</label>
+                    <select
+                      value={expenseSupplierId}
+                      onChange={(e) => setExpenseSupplierId(e.target.value)}
+                      className="w-full h-11 bg-white/5 border border-white/10 rounded-xl px-3 text-sm text-white outline-none focus:border-[var(--brand)]"
+                    >
+                      <option value="">Sin proveedor</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id} className="bg-[var(--surface-1)]">{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="text-[9px] font-semibold uppercase tracking-[0.2em] text-white/40 block mb-1.5">Vence (opcional)</label>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full h-11 bg-white/5 border border-white/10 rounded-xl px-3 text-sm text-white outline-none focus:border-[var(--brand)]"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* Método de pago — solo cuando se paga ahora (no en pendiente) */}
+          {tab !== "history" && settlement === "PAID" && (
           <div className="mt-6">
             <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 mb-2">Método de pago</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">

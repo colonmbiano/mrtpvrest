@@ -333,7 +333,7 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
   try {
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
-    const { type, category, amount, description, orderId } = req.body;
+    const { type, category, amount, description, orderId, supplierId, dueDate, pending } = req.body;
     const numericAmount = Number(amount);
     if (!['INCOME', 'EXPENSE', 'RETURN'].includes(type)) return res.status(400).json({ error: 'type invalido' });
     if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 50000) {
@@ -367,6 +367,41 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
     }
 
     const photoUrl = req.file ? await uploadPhoto(req.file.buffer, 'driver-cash') : null;
+
+    // ── Gasto PENDIENTE de pago (cuenta por pagar) ──
+    // Cuando el repartidor compra a crédito (p.ej. "pago pendiente con Pepe"),
+    // NO salió efectivo: no debe bajar su balance ni el efectivo esperado de la
+    // caja. En lugar de un DriverCashMovement EXPENSE (que restaría su corte Y
+    // espejearía a ShiftExpense), lo registramos como deuda del restaurante
+    // (OperatingExpense PENDING) para liquidarse luego vía /api/payables. Así su
+    // corte queda intacto y la deuda no se pierde.
+    if (type === 'EXPENSE' && (pending === true || pending === 'true')) {
+      const restaurantId = req.restaurantId || req.user?.restaurantId;
+      const locationId = driver.locationId || req.locationId || req.user?.locationId;
+      if (!locationId) return res.status(400).json({ error: 'locationId requerido para registrar la deuda' });
+      if (supplierId) {
+        const sup = await prisma.supplier.findFirst({
+          where: { id: supplierId, restaurantId },
+          select: { id: true },
+        });
+        if (!sup) return res.status(400).json({ error: 'Proveedor no pertenece a este restaurant' });
+      }
+      const payable = await prisma.operatingExpense.create({
+        data: {
+          restaurantId,
+          locationId,
+          concept: (description && description.trim()) || `Gasto pendiente · ${driver.name}`,
+          amount: numericAmount,
+          paymentMethod: 'CASH_DRAWER', // método previsto al liquidar
+          settlementStatus: 'PENDING',
+          supplierId: supplierId || null,
+          dueDate: dueDate ? new Date(dueDate) : null,
+          photoUrl,
+          notes: `Repartidor ${driver.name}`,
+        },
+      });
+      return res.json({ pending: true, payable });
+    }
 
     // Reflejo en el corte de la CAJA PRINCIPAL según el tipo de movimiento.
     // Regla de oro (modelo de una sola caja, sin doble gasto ni doble ingreso):
