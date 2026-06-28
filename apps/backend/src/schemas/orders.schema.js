@@ -85,6 +85,20 @@ const messageSchema = z.object({
   fromDriver: z.boolean().optional(),
 }).passthrough();
 
+// Reembolso de un ticket YA cobrado. `amount` es OPCIONAL: si no viene, el
+// servidor reembolsa el saldo restante (total − ya reembolsado) = reembolso
+// total. El monto NUNCA decide por sí solo cuánto devolver: el handler lo
+// re-valida contra el total real de la orden (server-side). `reason` es
+// obligatorio (auditoría). `refundMethod` por defecto sigue el método original;
+// solo CASH afecta el cajón / la caja del repartidor. `restock` fuerza o evita
+// la reposición de inventario (default: reponer solo en reembolso total).
+const refundSchema = z.object({
+  amount:       z.coerce.number().positive().optional(),
+  reason:       z.string().trim().min(1, 'Motivo requerido').max(500),
+  refundMethod: z.enum(['CASH', 'TRANSFER', 'CARD', 'OTHER']).optional(),
+  restock:      z.boolean().optional(),
+}).passthrough();
+
 module.exports = {
   cartItemSchema,
   paymentTenderSchema,
@@ -93,4 +107,5 @@ module.exports = {
   updateStatusSchema,
   updatePaymentSchema,
   messageSchema,
+  refundSchema,
 };
