@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import { getApiUrl } from "@/lib/config";
+import { setRefreshToken } from "@/lib/auth";
 
 const highlights = [
   { icon: ShoppingBag, value: "142", label: "Pedidos hoy" },
@@ -25,6 +26,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const [remember, setRemember] = useState(true);
   const [pendingEmail, setPendingEmail] = useState("");
   const [resending, setResending] = useState(false);
   const [resendDone, setResendDone] = useState(false);
@@ -55,7 +57,9 @@ export default function LoginPage() {
     try {
       const { data } = await api.post("/api/auth/login", { email, password });
       localStorage.setItem("accessToken", data.accessToken);
-      localStorage.setItem("refreshToken", data.refreshToken);
+      // "Mantener sesión iniciada" → refresh en localStorage (persiste ~30 días).
+      // Sin marcar → sessionStorage (la sesión se cierra al cerrar el navegador).
+      setRefreshToken(data.refreshToken, remember);
       localStorage.setItem("user", JSON.stringify(data.user));
       if (data.user?.restaurantId) localStorage.setItem("restaurantId", data.user.restaurantId);
       document.cookie = `mb-role=${data.user.role}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
@@ -249,6 +253,20 @@ export default function LoginPage() {
                     </button>
                   </div>
                 </div>
+
+                <label htmlFor="remember" className="flex cursor-pointer items-start gap-3 rounded-xl border border-bd-1 bg-surf-2/40 p-3.5 transition hover:border-bd-2">
+                  <input
+                    id="remember"
+                    type="checkbox"
+                    checked={remember}
+                    onChange={(event) => setRemember(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[var(--brand-primary)]"
+                  />
+                  <span className="text-sm leading-snug text-tx">
+                    <span className="font-bold text-tx-hi">Mantener sesión iniciada por 30 días</span>
+                    <span className="mt-0.5 block text-xs text-tx-mut">Desactívalo en equipos compartidos: cerrarás sesión al cerrar el navegador.</span>
+                  </span>
+                </label>
 
                 <button
                   type="submit"
