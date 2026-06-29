@@ -204,6 +204,15 @@ router.get('/items', async (req, res) => {
         printerGroups: {
           include: { printerGroup: { select: { id: true, name: true } } },
         },
+        comboComponents: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            options: {
+              orderBy: { sortOrder: 'asc' },
+              include: { optionMenuItem: { select: { id: true, name: true, imageUrl: true } } },
+            },
+          },
+        },
       },
       orderBy: [{ isFavorite: 'desc' }, { isPromo: 'desc' }, { isPopular: 'desc' }, { name: 'asc' }],
     })
@@ -232,6 +241,15 @@ router.get('/items/:id', async (req, res) => {
         variants: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
         complements: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
         modifierGroups: { include: { modifiers: true } },
+        comboComponents: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            options: {
+              orderBy: { sortOrder: 'asc' },
+              include: { optionMenuItem: { select: { id: true, name: true, imageUrl: true } } },
+            },
+          },
+        },
       },
     })
     if (!item) return res.status(404).json({ error: 'Platillo no encontrado' })
@@ -258,7 +276,7 @@ router.get('/items/:id', async (req, res) => {
 
 router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, soldByWeight, saleUnit, unit } = req.body
+    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isCombo, soldByWeight, saleUnit, unit } = req.body
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
     // Unidad de venta (comportamiento) normalizada; soldByWeight deriva de ella.
     const sUnit = normalizeSaleUnit(saleUnit, soldByWeight)
@@ -281,6 +299,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
         preparationTime: preparationTime || 15,
         availableOnline: availableOnline === undefined ? true : !!availableOnline,
         availableOnKiosk: availableOnKiosk === undefined ? true : !!availableOnKiosk,
+        isCombo: !!isCombo,
         isPopular: isPopular || false,
         isPromo: promo.isPromo,
         promoPrice: promo.promoPrice,
@@ -307,7 +326,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
 router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId
-    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, soldByWeight, saleUnit, unit } = req.body
+    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isCombo, soldByWeight, saleUnit, unit } = req.body
     const existingItem = await prisma.menuItem.findFirst({
       where: { id: req.params.id, restaurantId },
       select: { price: true, isPromo: true, promoPrice: true },
@@ -334,6 +353,7 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
         ...(isAvailable !== undefined && { isAvailable }),
         ...(availableOnline !== undefined && { availableOnline: !!availableOnline }),
         ...(availableOnKiosk !== undefined && { availableOnKiosk: !!availableOnKiosk }),
+        ...(isCombo !== undefined && { isCombo: !!isCombo }),
         ...(isPopular !== undefined && { isPopular }),
         ...(isFavorite !== undefined && { isFavorite: !!isFavorite }),
         ...(imageUrl !== undefined && { imageUrl }),
@@ -830,6 +850,131 @@ router.delete('/modifiers/:modifierId', authenticate, requireTenantAccess, requi
     if (check.error) return res.status(check.code).json({ error: check.error });
 
     await prisma.modifier.delete({ where: { id: req.params.modifierId } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── COMBOS: componentes (slots) y opciones ─────────────────────────────────
+async function assertComboComponentBelongsToTenant(componentId, restaurantId) {
+  const comp = await prisma.comboComponent.findUnique({
+    where: { id: componentId },
+    select: { id: true, menuItem: { select: { restaurantId: true } } },
+  });
+  if (!comp) return { error: 'Componente no encontrado', code: 404 };
+  if (comp.menuItem.restaurantId !== restaurantId) return { error: 'No autorizado', code: 403 };
+  return { ok: true };
+}
+async function assertComboOptionBelongsToTenant(optionId, restaurantId) {
+  const opt = await prisma.comboOption.findUnique({
+    where: { id: optionId },
+    select: { id: true, component: { select: { menuItem: { select: { restaurantId: true } } } } },
+  });
+  if (!opt) return { error: 'Opción no encontrada', code: 404 };
+  if (opt.component.menuItem.restaurantId !== restaurantId) return { error: 'No autorizado', code: 403 };
+  return { ok: true };
+}
+
+router.post('/items/:itemId/combo-components', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertItemBelongsToTenant(req.params.itemId, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+    const { name, minSelect, maxSelect, isRequired, sortOrder } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nombre requerido' });
+    const component = await prisma.comboComponent.create({
+      data: {
+        menuItemId: req.params.itemId,
+        name,
+        minSelect: Number.isFinite(parseInt(minSelect)) ? parseInt(minSelect) : 1,
+        maxSelect: Number.isFinite(parseInt(maxSelect)) ? parseInt(maxSelect) : 1,
+        isRequired: isRequired === undefined ? true : !!isRequired,
+        sortOrder: parseInt(sortOrder) || 0,
+      },
+      include: { options: true },
+    });
+    res.status(201).json(component);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/combo-components/:componentId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertComboComponentBelongsToTenant(req.params.componentId, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+    const { name, minSelect, maxSelect, isRequired, sortOrder } = req.body;
+    const component = await prisma.comboComponent.update({
+      where: { id: req.params.componentId },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(minSelect !== undefined && { minSelect: parseInt(minSelect) || 0 }),
+        ...(maxSelect !== undefined && { maxSelect: parseInt(maxSelect) || 0 }),
+        ...(isRequired !== undefined && { isRequired: !!isRequired }),
+        ...(sortOrder !== undefined && { sortOrder: parseInt(sortOrder) || 0 }),
+      },
+      include: { options: true },
+    });
+    res.json(component);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/combo-components/:componentId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertComboComponentBelongsToTenant(req.params.componentId, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+    await prisma.comboComponent.delete({ where: { id: req.params.componentId } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/combo-components/:componentId/options', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertComboComponentBelongsToTenant(req.params.componentId, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+    const { optionMenuItemId, priceDelta, isAvailable, sortOrder } = req.body;
+    if (!optionMenuItemId) return res.status(400).json({ error: 'optionMenuItemId requerido' });
+    // Anti-IDOR: la opción debe apuntar a un producto del MISMO restaurante.
+    const opt = await assertItemBelongsToTenant(optionMenuItemId, restaurantId);
+    if (opt.error) return res.status(opt.code).json({ error: 'La opción no pertenece a este restaurante' });
+    const option = await prisma.comboOption.create({
+      data: {
+        componentId: req.params.componentId,
+        optionMenuItemId,
+        priceDelta: parseFloat(priceDelta) || 0,
+        isAvailable: isAvailable === undefined ? true : !!isAvailable,
+        sortOrder: parseInt(sortOrder) || 0,
+      },
+      include: { optionMenuItem: { select: { id: true, name: true } } },
+    });
+    res.status(201).json(option);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/combo-options/:optionId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertComboOptionBelongsToTenant(req.params.optionId, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+    const { priceDelta, isAvailable, sortOrder } = req.body;
+    const option = await prisma.comboOption.update({
+      where: { id: req.params.optionId },
+      data: {
+        ...(priceDelta !== undefined && { priceDelta: parseFloat(priceDelta) || 0 }),
+        ...(isAvailable !== undefined && { isAvailable: !!isAvailable }),
+        ...(sortOrder !== undefined && { sortOrder: parseInt(sortOrder) || 0 }),
+      },
+    });
+    res.json(option);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/combo-options/:optionId', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const check = await assertComboOptionBelongsToTenant(req.params.optionId, restaurantId);
+    if (check.error) return res.status(check.code).json({ error: check.error });
+    await prisma.comboOption.delete({ where: { id: req.params.optionId } });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

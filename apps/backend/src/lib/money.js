@@ -60,6 +60,58 @@ function resolveVariantSelection(menuItem, item) {
 }
 
 /**
+ * Resuelve la selección de un COMBO configurable contra su definición en DB.
+ * Valida min/max e isAvailable por componente, re-lee el priceDelta del servidor
+ * (anti-manipulación) y arma el snapshot de selección que se persiste en
+ * ComboSelection. El cliente solo manda { componentId, optionId } por slot.
+ *
+ * @param {object} menuItem  MenuItem con isCombo + comboComponents[].options[].
+ * @param {object} item      línea del pedido (item.comboSelections = [{componentId, optionId}]).
+ * @returns {{ priceDelta: number, selections: object[] }}
+ */
+function resolveComboSelection(menuItem, item) {
+  if (!menuItem?.isCombo) return { priceDelta: 0, selections: [] };
+  const components = menuItem.comboComponents || [];
+  const requested = Array.isArray(item.comboSelections) ? item.comboSelections : [];
+
+  const byComponent = new Map();
+  for (const sel of requested) {
+    if (!sel || !sel.componentId || !sel.optionId) continue;
+    const arr = byComponent.get(sel.componentId) || [];
+    arr.push(sel.optionId);
+    byComponent.set(sel.componentId, arr);
+  }
+
+  const selections = [];
+  let priceDelta = 0;
+  for (const comp of components) {
+    const chosen = byComponent.get(comp.id) || [];
+    if (comp.isRequired && chosen.length < (comp.minSelect || 1)) {
+      throw new Error(`Elige una opción para "${comp.name}".`);
+    }
+    if (comp.maxSelect > 0 && chosen.length > comp.maxSelect) {
+      throw new Error(`Máximo ${comp.maxSelect} en "${comp.name}".`);
+    }
+    for (const optId of chosen) {
+      const opt = (comp.options || []).find((o) => o.id === optId);
+      if (!opt || opt.isAvailable === false) {
+        throw new Error(`Opción no disponible en "${comp.name}".`);
+      }
+      const delta = Number(opt.priceDelta || 0); // SIEMPRE de DB, nunca del cliente
+      priceDelta += delta;
+      selections.push({
+        componentId: comp.id,
+        optionId: opt.id,
+        optionMenuItemId: opt.optionMenuItemId,
+        name: `${comp.name}: ${opt.optionMenuItem?.name || ''}`.trim(),
+        priceDelta: delta,
+      });
+    }
+  }
+  return { priceDelta, selections };
+}
+
+/**
  * Aplica `freeModifiersLimit` por grupo: dentro de cada grupo, los modificadores
  * más baratos van gratis primero (los primeros `free` no se cobran).
  *
@@ -269,6 +321,7 @@ function cashCutSummary({ openingFloat = 0, totalCash = 0, totalExpenses = 0, to
 
 module.exports = {
   resolveVariantSelection,
+  resolveComboSelection,
   applyFreeModifiers,
   lineSubtotal,
   round2,

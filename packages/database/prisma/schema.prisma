@@ -655,6 +655,13 @@ model MenuItem {
 
   printerGroups MenuItemPrinterGroup[]
 
+  // Combos configurables: si isCombo, este "producto" es un combo cuyos slots
+  // (comboComponents) arma el cliente. comboOptionsFor = opciones de OTROS combos
+  // que apuntan a este producto como elegible.
+  isCombo         Boolean          @default(false)
+  comboComponents ComboComponent[] @relation("ComboOwner")
+  comboOptionsFor ComboOption[]    @relation("ComboOptionMenuItem")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1023,10 +1030,66 @@ model OrderItem {
   costSnapshot Float? // CMV (costo de materia prima) al momento de venta
   recipeIdSnap String? // id de Recipe usada (auditoría — referencia débil, no FK)
 
+  // Combos: selección del cliente por componente (snapshot histórico).
+  comboSelections ComboSelection[]
+
   @@index([roundId])
   @@index([seatNumber])
   @@index([course])
   @@map("order_items")
+}
+
+// ── COMBOS CONFIGURABLES ──────────────────────────────────────────────────
+// Un combo es un MenuItem con isCombo=true. Sus slots (Principal, Guarnición,
+// Bebida…) son ComboComponent; cada slot ofrece ComboOption que apunta a un
+// MenuItem real (con priceDelta de upgrade). La selección del cliente se
+// snapshotea en ComboSelection (hija de OrderItem). Ningún modelo lleva
+// restaurantId (el scope sube por el MenuItem dueño) → no van a SCOPED_MODELS.
+model ComboComponent {
+  id         String        @id @default(cuid())
+  menuItemId String
+  menuItem   MenuItem      @relation("ComboOwner", fields: [menuItemId], references: [id], onDelete: Cascade)
+  name       String
+  minSelect  Int           @default(1)
+  maxSelect  Int           @default(1)
+  isRequired Boolean       @default(true)
+  sortOrder  Int           @default(0)
+  options    ComboOption[]
+
+  @@index([menuItemId])
+  @@map("combo_components")
+}
+
+model ComboOption {
+  id               String         @id @default(cuid())
+  componentId      String
+  component        ComboComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  // El MenuItem real elegible. Cascade (NO Restrict) para no romper el borrado
+  // de productos ni el wipe-all: si se borra el producto, su opción desaparece.
+  optionMenuItemId String
+  optionMenuItem   MenuItem       @relation("ComboOptionMenuItem", fields: [optionMenuItemId], references: [id], onDelete: Cascade)
+  priceDelta       Float          @default(0)
+  isAvailable      Boolean        @default(true)
+  sortOrder        Int            @default(0)
+
+  @@index([componentId])
+  @@map("combo_options")
+}
+
+model ComboSelection {
+  id          String    @id @default(cuid())
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  // Referencias blandas (sin FK): el componente/opción pueden borrarse después
+  // de la venta; el snapshot de nombre/precio/optionMenuItemId queda inmutable.
+  componentId      String?
+  optionId         String?
+  optionMenuItemId String
+  name             String
+  priceDelta       Float   @default(0)
+
+  @@index([orderItemId])
+  @@map("combo_selections")
 }
 
 model OrderItemModifier {

@@ -10,6 +10,7 @@ import {
 import api from "@/lib/api";
 import { getApiUrl } from "@/lib/config";
 import ModifierGroupsEditor from "@/components/admin/ModifierGroupsEditor";
+import ComboBuilder from "@/components/admin/ComboBuilder";
 import { uploadMenuImage } from "@/lib/supabaseUpload";
 import { extractErrorMessage } from "@/lib/errors";
 import {
@@ -145,7 +146,7 @@ export default function MenuPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, availableOnKiosk:true, saleUnit:"PIECE", unit:"pz" });
+  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, availableOnKiosk:true, isCombo:false, saleUnit:"PIECE", unit:"pz" });
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -321,7 +322,7 @@ export default function MenuPage() {
   function openForm(item?: any) {
     if (item) {
       setEditItem(item);
-      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0, availableOnline:item.availableOnline ?? true, availableOnKiosk:item.availableOnKiosk ?? true, saleUnit:(item.saleUnit || (item.soldByWeight ? "WEIGHT" : "PIECE")), unit:(item.unit || "pz") });
+      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0, availableOnline:item.availableOnline ?? true, availableOnKiosk:item.availableOnKiosk ?? true, isCombo:item.isCombo ?? false, saleUnit:(item.saleUnit || (item.soldByWeight ? "WEIGHT" : "PIECE")), unit:(item.unit || "pz") });
       setImagePreview(item.imageUrl||"");
       api.get(`/api/menu/items/${item.id}`).then(r => {
         setComplements(r.data.complements || []);
@@ -332,7 +333,7 @@ export default function MenuPage() {
       }).catch(() => { setComplements([]); setVariants([]); setInitialTemplateIds([]); });
     } else {
       setEditItem(null);
-      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, availableOnKiosk:true, saleUnit:"PIECE", unit:"pz" });
+      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, availableOnKiosk:true, isCombo:false, saleUnit:"PIECE", unit:"pz" });
       setImagePreview("");
       setComplements([]);
       setVariants([]);
@@ -1228,6 +1229,22 @@ export default function MenuPage() {
                     <p className="rounded-xl border border-dashed p-3 text-xs text-tx-mut">
                       Guarda primero el platillo para agregar grupos de modificadores (ej. “Tipo de leche”, “Sin azúcar”).
                     </p>
+                  )}
+                </div>
+
+                {/* Combo configurable */}
+                <div className="col-span-2">
+                  <div className="mb-2 flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
+                    style={{ background: form.isCombo ? "var(--ok-soft)" : "var(--surf-2)", border: `1px solid ${form.isCombo ? "var(--ok)" : "var(--bd-1)"}` }}>
+                    <div>
+                      <span className="font-bold text-tx">Es un combo configurable</span>
+                      <p className="mt-0.5 text-xs text-tx-mut">El cliente arma el combo eligiendo entre componentes (principal, guarnición, bebida…).</p>
+                    </div>
+                    <Toggle checked={form.isCombo} onChange={() => setForm(p => ({ ...p, isCombo: !p.isCombo }))} label="Es un combo configurable" />
+                  </div>
+                  {form.isCombo && (editItem
+                    ? <ComboBuilder itemId={editItem.id} products={items.map((it: any) => ({ id: it.id, name: it.name }))} />
+                    : <p className="rounded-xl border border-dashed p-3 text-xs text-tx-mut">Guarda primero el combo para armar sus componentes y opciones.</p>
                   )}
                 </div>
 
