@@ -243,6 +243,103 @@ async function discountInventory(prisma, orderItems, orderId, restaurantId, loca
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// assertStockAvailable · pre-check de stock ANTES de crear la orden. Recorre las
+// líneas resueltas (no necesita orderItem.id: usa _modifiers con nombres) y suma
+// el consumo por ingrediente con la MISMA lógica de receta/subreceta/modificador
+// que discountInventory. Lanza { code:'INSUFFICIENT_STOCK' } si algún insumo no
+// alcanza. Read-only (no escribe). Gate preventivo opt-in
+// (RestaurantConfig.blockOnInsufficientStock); NO reemplaza el descuento real,
+// que sigue en discountInventory post-cobro. Si la lógica de discountInventory
+// cambia, replicarlo aquí (duplicación consciente para no tocar el path legacy).
+async function assertStockAvailable(prisma, resolvedItems, restaurantId) {
+  if (!Array.isArray(resolvedItems) || resolvedItems.length === 0) return;
+
+  const needByIngredient = new Map(); // ingredientId -> { needed, name }
+  const addNeed = (ingredient, qty) => {
+    if (!ingredient || !(qty > 0)) return;
+    const cur = needByIngredient.get(ingredient.id);
+    if (cur) cur.needed += qty;
+    else needByIngredient.set(ingredient.id, { needed: qty, name: ingredient.name });
+  };
+
+  for (const line of resolvedItems) {
+    const multiplier = line.weightKg != null ? Number(line.weightKg) : Number(line.quantity || 1);
+    if (!(multiplier > 0)) continue;
+
+    // Receta del platillo (variante embebida en line.name), con fallback legacy.
+    const recipes = await prisma.recipe.findMany({
+      where: { menuItemId: line.menuItemId, restaurantId, isActive: true },
+      select: { id: true, variantId: true, variant: { select: { name: true } } },
+    });
+    let chosenRecipeId = null;
+    if (recipes.length > 0) {
+      const variantRecipes = recipes.filter((r) => r.variantId && r.variant);
+      if (variantRecipes.length > 0) {
+        const nm = (line.name || '').toLowerCase();
+        const match = variantRecipes.find((r) => nm.includes(r.variant.name.toLowerCase()));
+        const base = recipes.find((r) => !r.variantId);
+        chosenRecipeId = (match || base || recipes[0]).id;
+      } else {
+        chosenRecipeId = recipes[0].id;
+      }
+    }
+    const recipeItems = await prisma.recipeItem.findMany({
+      where: chosenRecipeId
+        ? { recipeId: chosenRecipeId }
+        : { menuItemId: line.menuItemId, menuItem: { restaurantId } },
+      include: { ingredient: true },
+    });
+    for (const r of recipeItems) {
+      const wf = 1 + (Number(r.wastagePercent || 0) / 100);
+      const qtyPerUnit = Number(r.quantity) * wf;
+      if (r.ingredientId && r.ingredient) {
+        addNeed(r.ingredient, qtyPerUnit * multiplier);
+      } else if (r.subRecipeId) {
+        const expanded = await expandSubRecipeToIngredients(prisma, r.subRecipeId, qtyPerUnit);
+        for (const exp of expanded) addNeed(exp.ingredient, exp.qtyToConsume * multiplier);
+      }
+    }
+
+    // Modificadores con consumo (mapeados por nombre).
+    const modNames = [...new Set((line._modifiers || []).map((m) => m.name).filter(Boolean))];
+    if (modNames.length > 0) {
+      const modMaps = await prisma.modifierIngredient.findMany({
+        where: { restaurantId, name: { in: modNames } },
+        include: { ingredient: true },
+      });
+      for (const mm of modMaps) {
+        const wf = 1 + (Number(mm.wastagePercent || 0) / 100);
+        const q = Number(mm.quantity) * wf;
+        if (mm.ingredientId && mm.ingredient) {
+          addNeed(mm.ingredient, q * multiplier);
+        } else if (mm.subRecipeId) {
+          const expanded = await expandSubRecipeToIngredients(prisma, mm.subRecipeId, q);
+          for (const exp of expanded) addNeed(exp.ingredient, exp.qtyToConsume * multiplier);
+        }
+      }
+    }
+  }
+
+  if (needByIngredient.size === 0) return;
+
+  const ids = [...needByIngredient.keys()];
+  const stocks = await prisma.ingredient.findMany({
+    where: { id: { in: ids }, restaurantId },
+    select: { id: true, name: true, stock: true },
+  });
+  const stockById = new Map(stocks.map((s) => [s.id, s]));
+  for (const [id, need] of needByIngredient) {
+    const available = Number(stockById.get(id)?.stock || 0);
+    if (need.needed > available + 1e-6) {
+      const err = new Error(`Sin stock suficiente de "${need.name}".`);
+      err.code = 'INSUFFICIENT_STOCK';
+      err.ingredientName = need.name;
+      throw err;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // restoreInventoryForCancelledOrder · revierte el stock descontado por una
 // orden al cancelarla. No recalcula recetas (pueden haber cambiado desde la
 // venta): repone exactamente lo que registran los StockMovements SALE de la
@@ -842,6 +939,23 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       }
     }
 
+    // A.4 · Bloqueo preventivo de stock (opt-in por tenant). Read-only: si algún
+    // insumo no alcanza, rechazamos ANTES de crear la orden (sin hueco de folio).
+    const stockCfg = await prisma.restaurantConfig.findUnique({
+      where: { restaurantId },
+      select: { blockOnInsufficientStock: true },
+    });
+    if (stockCfg?.blockOnInsufficientStock) {
+      try {
+        await assertStockAvailable(prisma, resolvedItems, restaurantId);
+      } catch (err) {
+        if (err.code === 'INSUFFICIENT_STOCK') {
+          return res.status(409).json({ error: err.message, code: err.code, ingredient: err.ingredientName });
+        }
+        throw err;
+      }
+    }
+
     // Si es dine-in con mesa: status=OPEN (cuenta abierta) y la primera ronda
     // se crea explícita para que el flujo de rondas posteriores quede limpio.
     const order = await prisma.$transaction(async (tx) => {
@@ -1115,6 +1229,22 @@ async function addRoundHandler(req, res) {
     // Promos NxM activas: la cuenta crece al agregar ronda, así que el 3x2 se
     // re-evalúa sobre TODOS los items (viejos + nuevos), no solo los de la ronda.
     const activeBulkPromos = await loadActiveBulkPromos(prisma, restaurantId);
+
+    // A.4 · Bloqueo preventivo de stock (opt-in) — mismas reglas que POST /tpv.
+    const stockCfg = await prisma.restaurantConfig.findUnique({
+      where: { restaurantId },
+      select: { blockOnInsufficientStock: true },
+    });
+    if (stockCfg?.blockOnInsufficientStock) {
+      try {
+        await assertStockAvailable(prisma, newItemsData, restaurantId);
+      } catch (err) {
+        if (err.code === 'INSUFFICIENT_STOCK') {
+          return res.status(409).json({ error: err.message, code: err.code, ingredient: err.ingredientName });
+        }
+        throw err;
+      }
+    }
 
     // Transaccional: crear OrderRound, insertar items con roundId, recalcular totales.
     const { updated, round } = await prisma.$transaction(async (tx) => {

@@ -63,6 +63,7 @@ export default function ComprasPage() {
   const [centralEnabled, setCentralEnabled] = useState(false);
   const [locations, setLocations] = useState<LocationRow[]>([]);
   const [savingCfg, setSavingCfg] = useState(false);
+  const [blockStock, setBlockStock] = useState(false);
   const centralLoc = locations.find(l => l.isCentralWarehouse) || null;
   const branches = locations.filter(l => !l.isCentralWarehouse);
 
@@ -106,6 +107,7 @@ export default function ComprasPage() {
         api.get("/api/purchases/lookup/suppliers").catch(() => ({ data: [] })),
       ]);
       setCentralEnabled(Boolean(cfg.data?.centralWarehouseEnabled));
+      setBlockStock(Boolean(cfg.data?.blockOnInsufficientStock));
       const locList: LocationRow[] = locs.data || [];
       setLocations(locList);
       setSuppliers(sup.data || []);
@@ -151,6 +153,17 @@ export default function ComprasPage() {
     try {
       await api.put("/api/admin/config", { centralWarehouseEnabled: next });
       setCentralEnabled(next);
+    } catch (e: any) {
+      alert(e.response?.data?.error || "Error al guardar configuración");
+    } finally { setSavingCfg(false); }
+  }
+
+  // ── Config: bloquear venta sin stock suficiente ────────────────────────
+  async function toggleBlockStock(next: boolean) {
+    setSavingCfg(true);
+    try {
+      await api.put("/api/admin/config", { blockOnInsufficientStock: next });
+      setBlockStock(next);
     } catch (e: any) {
       alert(e.response?.data?.error || "Error al guardar configuración");
     } finally { setSavingCfg(false); }
@@ -321,6 +334,23 @@ export default function ComprasPage() {
       >
         <ChevronLeft size={15} /> Inventario
       </a>
+
+      {/* ── Bloqueo por stock insuficiente ───────────────────────────────── */}
+      <WtCard className="mb-4 p-4 md:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-sm font-extrabold text-tx-hi">Bloquear venta sin stock</p>
+            <p className="mt-1 max-w-xl text-xs text-tx-mut">
+              Apagado (recomendado para TPV con red intermitente): se cobra aunque el inventario no alcance.
+              Encendido: la orden se rechaza si algún insumo de la receta no tiene stock suficiente.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Pill tone={blockStock ? "ok" : "neutral"}>{blockStock ? "Activado" : "Desactivado"}</Pill>
+            <Toggle checked={blockStock} onChange={(n) => !savingCfg && toggleBlockStock(n)} label="Bloquear venta sin stock" />
+          </div>
+        </div>
+      </WtCard>
 
       {/* ── Configuración Bodega Central ─────────────────────────────────── */}
       <WtCard className="mb-4 p-4 md:p-5">
