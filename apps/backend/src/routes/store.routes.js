@@ -278,10 +278,11 @@ router.get('/menu', async (req, res) => {
               id: true, name: true,
               required: true, multiSelect: true,
               minSelection: true, maxSelection: true,
-              // NOTA: el modelo Modifier NO tiene campo isAvailable; filtrar por
-              // él hacía que toda la consulta del menú fallara con 500.
+              // Exponemos isAvailable para pintar el extra como "Agotado" en el
+              // modal (NO lo filtramos: queremos mostrarlo deshabilitado, no
+              // ocultarlo, para que el cliente sepa que existe pero no hay).
               modifiers: {
-                select: { id: true, name: true, priceAdd: true },
+                select: { id: true, name: true, priceAdd: true, isAvailable: true },
               },
             },
           },
@@ -599,6 +600,12 @@ router.post('/orders', async (req, res) => {
           const mod = (menuItem.modifierGroups || [])
             .flatMap(g => g.modifiers)
             .find(m => m.id === mid);
+          // Disponibilidad: un extra agotado no se puede pedir aunque el cliente
+          // fuerce el POST. Es validación de disponibilidad (no consumo de un
+          // recurso agotable), así que NO requiere ir dentro de la $transaction.
+          if (mod && mod.isAvailable === false) {
+            throw new Error(`El extra "${mod.name}" no está disponible en este momento.`);
+          }
           if (mod) selectedModifiers.push(mod);
         }
         const modifiersAdd = selectedModifiers.reduce((s, m) => s + Number(m.priceAdd || 0), 0);

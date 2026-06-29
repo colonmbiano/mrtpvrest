@@ -21,7 +21,7 @@ interface ModItem {
   ingredient?: { id: string; name: string; baseUnit: BaseUnit; cost: number };
   subRecipe?: { id: string; name: string; yieldUnit: BaseUnit };
 }
-interface Modifier { name: string; priceAdd: number; count: number; items: ModItem[] }
+interface Modifier { name: string; priceAdd: number; count: number; items: ModItem[]; isAvailable?: boolean }
 
 const cellCls = "rounded-lg px-3 py-2 text-sm outline-none";
 const cellStyle = { background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
@@ -102,6 +102,17 @@ export default function ExtrasPage() {
     } finally { setSaving(false); }
   }
 
+  async function toggleAvailability(m: Modifier, next: boolean) {
+    try {
+      await api.patch("/api/recipes/modifiers/availability", { name: m.name, isAvailable: next });
+      await reload();
+      setSelected((cur) => (cur && cur.name === m.name ? { ...cur, isAvailable: next } : cur));
+      setMsg({ kind: "ok", text: next ? "Extra marcado disponible" : "Extra marcado agotado" });
+    } catch {
+      setMsg({ kind: "err", text: "No se pudo cambiar la disponibilidad" });
+    }
+  }
+
   const filtered = mods.filter((m) => m.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -141,6 +152,9 @@ export default function ExtrasPage() {
                       title={mapped ? "Mapeado" : "Sin mapear"}
                     />
                     <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-tx">{m.name}</span>
+                    {m.isAvailable === false && (
+                      <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-black uppercase" style={{ background: "var(--err-soft)", color: "var(--err)" }}>Agotado</span>
+                    )}
                     <span className="font-mono text-[11px] text-tx-mut">{m.priceAdd > 0 ? `+${money(m.priceAdd)}` : "—"}</span>
                   </button>
                 );
@@ -163,9 +177,22 @@ export default function ExtrasPage() {
                     aparece en <strong className="text-tx">{selected.count}</strong> platillo(s)
                   </p>
                 </div>
-                <PrimaryBtn full={false} icon={Save} onClick={save} disabled={saving}>
-                  {saving ? "Guardando…" : "Guardar"}
-                </PrimaryBtn>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleAvailability(selected, selected.isAvailable === false)}
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] px-3 text-xs font-bold"
+                    style={selected.isAvailable === false
+                      ? { background: "var(--err-soft)", color: "var(--err)", border: "1px solid var(--err)" }
+                      : { background: "var(--ok-soft)", color: "var(--ok)", border: "1px solid var(--bd-1)" }}
+                    title="Disponibilidad del extra en la tienda en línea (afecta todas las opciones con este nombre)"
+                  >
+                    {selected.isAvailable === false ? "Agotado · marcar disponible" : "Disponible · marcar agotado"}
+                  </button>
+                  <PrimaryBtn full={false} icon={Save} onClick={save} disabled={saving}>
+                    {saving ? "Guardando…" : "Guardar"}
+                  </PrimaryBtn>
+                </div>
               </div>
 
               {msg && (

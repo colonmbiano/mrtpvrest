@@ -181,7 +181,7 @@ router.get('/modifiers', requireAdmin, async (req, res) => {
     const [mods, maps] = await Promise.all([
       prisma.modifier.findMany({
         where: { group: { menuItem: { restaurantId } } },
-        select: { name: true, priceAdd: true },
+        select: { name: true, priceAdd: true, isAvailable: true },
       }),
       prisma.modifierIngredient.findMany({
         where: { restaurantId },
@@ -194,8 +194,11 @@ router.get('/modifiers', requireAdmin, async (req, res) => {
 
     const nameMap = new Map();
     for (const m of mods) {
-      const e = nameMap.get(m.name) || { name: m.name, priceAdd: 0, count: 0 };
+      const e = nameMap.get(m.name) || { name: m.name, priceAdd: 0, count: 0, isAvailable: true };
       e.priceAdd = Math.max(e.priceAdd, Number(m.priceAdd || 0));
+      // Agotado por nombre = TODAS las opciones con ese nombre están agotadas.
+      // Un undefined (registro viejo sin la columna) NO marca falso.
+      e.isAvailable = e.isAvailable && (m.isAvailable !== false);
       e.count += 1;
       nameMap.set(m.name, e);
     }
@@ -247,6 +250,28 @@ router.post('/modifiers', requireAdmin, async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('POST /api/recipes/modifiers:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PATCH /api/recipes/modifiers/availability — marca agotado/disponible un extra
+// por NOMBRE (afecta todas las opciones de modificador con ese nombre del tenant).
+// Body: { name, isAvailable }. El filtro group.menuItem.restaurantId es el único
+// aislamiento (Modifier no tiene restaurantId, no es modelo SCOPED).
+router.patch('/modifiers/availability', requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { name, isAvailable } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'name requerido' });
+
+    const result = await prisma.modifier.updateMany({
+      where: { name: String(name), group: { menuItem: { restaurantId } } },
+      data: { isAvailable: !!isAvailable },
+    });
+    res.json({ ok: true, updated: result.count });
+  } catch (e) {
+    console.error('PATCH /api/recipes/modifiers/availability:', e);
     res.status(500).json({ error: e.message });
   }
 });

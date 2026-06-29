@@ -5,7 +5,7 @@ import { useCart } from '../lib/cartStore';
 import { cldImage } from '@/lib/cloudinary';
 
 type Variant = { id: string; name: string; price: number };
-type Modifier = { id: string; name: string; priceAdd: number };
+type Modifier = { id: string; name: string; priceAdd: number; isAvailable?: boolean };
 type Complement = { id: string; name: string; price: number };
 type ModifierGroup = {
   id: string; name: string; required?: boolean; multiSelect?: boolean;
@@ -92,6 +92,10 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
     // Validaciones de grupos requeridos / mínimos
     for (const g of groups) {
       const cur = selected[g.id] || [];
+      // Si un grupo requerido se quedó sin opciones disponibles (todas agotadas),
+      // no podemos exigir selección o el cliente queda trabado.
+      const hasAvailable = g.modifiers.some(m => m.isAvailable !== false);
+      if (!hasAvailable) continue;
       if (g.required && cur.length === 0) { setError(`Selecciona una opción en "${g.name}".`); return; }
       if (g.minSelection && g.minSelection > 0 && cur.length < g.minSelection) {
         setError(`Elige al menos ${g.minSelection} en "${g.name}".`); return;
@@ -176,9 +180,10 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
               <div className="space-y-2">
                 {g.modifiers.map(m => {
                   const on = (selected[g.id] || []).includes(m.id);
+                  const soldOut = m.isAvailable === false;
                   return (
-                    <button key={m.id} onClick={() => toggleMod(g, m.id)}
-                      className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 transition-all"
+                    <button key={m.id} disabled={soldOut} onClick={() => !soldOut && toggleMod(g, m.id)}
+                      className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ borderColor: on ? accent : (dark ? '#FFFFFF14' : '#e5e7eb'), background: on ? `${accent}14` : 'transparent' }}>
                       <span className="font-bold text-sm flex items-center gap-2">
                         <span className={`w-4 h-4 rounded-${g.multiSelect ? 'md' : 'full'} border-2 flex items-center justify-center`}
@@ -187,7 +192,9 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
                         </span>
                         {m.name}
                       </span>
-                      {m.priceAdd > 0 && <span className="text-sm font-bold" style={{ color: subText }}>+{fmt(m.priceAdd)}</span>}
+                      {soldOut
+                        ? <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: subText }}>Agotado</span>
+                        : (m.priceAdd > 0 && <span className="text-sm font-bold" style={{ color: subText }}>+{fmt(m.priceAdd)}</span>)}
                     </button>
                   );
                 })}
