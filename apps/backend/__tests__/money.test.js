@@ -440,4 +440,24 @@ describe('money :: cashCutSummary', () => {
     });
     expect(variance).toBe(0);
   });
+
+  // ── Candado de regresión del cuadre real (turno cmqwuxmij, 2026-06-27) ──
+  // El fondo a repartidores (totalCashIn FONDO_REPARTIDOR) SUMA al esperado y
+  // es CORRECTO: el closingFloat se cuenta tras el auto-corte, cuando el sobre
+  // del repartidor —con el fondo dentro— ya volvió al cajón. Un análisis
+  // adversarial (2026-06-28) confirmó que NO hay doble-conteo; "corregirlo"
+  // quitando el cash-in metería un faltante fantasma de $2,000 (varianza
+  // pasaría a +2477). Este test ancla los números reales para que ningún
+  // cambio futuro rompa el cuadre. Ver memoria project_driver_fund_caja_double_count.
+  test('cuadre real con fondo a repartidor: esperado 14605, sobrante +477 (NO tocar)', () => {
+    const { expectedCash, variance } = cashCutSummary({
+      openingFloat: 1101,
+      totalCash: 13430,     // incluye 4590 de entregas cobradas en efectivo
+      totalCashIn: 2000,    // fondo a repartidores (Mau 600 + Kebra 1400)
+      totalExpenses: 1926,  // compras de insumos de los repartidores
+      countedCash: 15082,
+    });
+    expect(expectedCash).toBe(14605);
+    expect(variance).toBe(477);
+  });
 });

@@ -102,6 +102,7 @@ const SECTIONS = [
       { href: "/admin/reportes/cortes",   icon: <IBarChart />, label: "Cortes" },
       { href: "/admin/turnos",            icon: <IClock />,  label: "Turnos de caja" },
       { href: "/admin/caja-repartidores", icon: <IWallet />, label: "Caja Rep." },
+      { href: "/admin/finanzas/conciliacion", icon: <ICreditCard />, label: "Conciliar SPEI" },
       { href: "/admin/reportes/repartidores", icon: <ITrending />, label: "Reporte Rep." },
       { href: "/admin/rastreo",           icon: <IMapPin />, label: "Rastreo GPS" },
       { href: "/admin/logistica",         icon: <IMapPin />, label: "Logística & Flota" },
