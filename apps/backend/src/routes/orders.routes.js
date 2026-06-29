@@ -69,6 +69,49 @@ async function expandSubRecipeToIngredients(prisma, subRecipeId, qtyRequested, v
 //   5. Expansión recursiva de SubRecipe: si un RecipeItem apunta a una
 //      SubRecipe, se calcula el consumo proporcional de cada ingrediente
 //      hoja (incluyendo nested SubRecipes hasta profundidad 5).
+// resolveRecipeFlatItems · resuelve la receta de un MenuItem (variante embebida
+// en `nameForMatch`, con fallback a la base/legacy) y devuelve la lista plana de
+// ingredientes a consumir POR UNIDAD. Compartido por discountInventory para el
+// header del platillo O para cada componente de un combo — misma lógica.
+async function resolveRecipeFlatItems(prisma, menuItemId, nameForMatch, restaurantId) {
+  const recipes = await prisma.recipe.findMany({
+    where: { menuItemId, restaurantId, isActive: true },
+    select: { id: true, variantId: true, variant: { select: { name: true } } },
+  });
+  let chosenRecipeId = null;
+  if (recipes.length > 0) {
+    const variantRecipes = recipes.filter((r) => r.variantId && r.variant);
+    if (variantRecipes.length > 0) {
+      const nm = (nameForMatch || '').toLowerCase();
+      const match = variantRecipes.find((r) => nm.includes(r.variant.name.toLowerCase()));
+      const base = recipes.find((r) => !r.variantId);
+      chosenRecipeId = (match || base || recipes[0]).id;
+    } else {
+      chosenRecipeId = recipes[0].id; // solo receta base
+    }
+  }
+  const recipeItems = await prisma.recipeItem.findMany({
+    where: chosenRecipeId ? { recipeId: chosenRecipeId } : { menuItemId, menuItem: { restaurantId } },
+    include: { ingredient: true, recipe: true },
+  });
+  const flatItems = [];
+  let recipeIdSnap = null;
+  for (const r of recipeItems) {
+    if (r.recipeId && !recipeIdSnap) recipeIdSnap = r.recipeId;
+    const wastageFactor = 1 + (Number(r.wastagePercent || 0) / 100);
+    const qtyPerUnit = Number(r.quantity) * wastageFactor;
+    if (r.ingredientId && r.ingredient) {
+      flatItems.push({ ingredient: r.ingredient, qtyToConsumePerUnit: qtyPerUnit });
+    } else if (r.subRecipeId) {
+      const expanded = await expandSubRecipeToIngredients(prisma, r.subRecipeId, qtyPerUnit);
+      for (const exp of expanded) {
+        flatItems.push({ ingredient: exp.ingredient, qtyToConsumePerUnit: exp.qtyToConsume });
+      }
+    }
+  }
+  return { flatItems, recipeIdSnap };
+}
+
 async function discountInventory(prisma, orderItems, orderId, restaurantId, locationId) {
   if (!Array.isArray(orderItems) || orderItems.length === 0) return;
   if (!locationId) {
@@ -78,60 +121,27 @@ async function discountInventory(prisma, orderItems, orderId, restaurantId, loca
 
   try {
     for (const oi of orderItems) {
-      // Resolver la receta del platillo. Un platillo puede tener:
-      //   - una receta base (variantId NULL), y/o
-      //   - recetas por variante (p.ej. Alambre 350gr Arrachera/Pollo/Res-Cerdo).
-      // order_items NO guarda variantId; la variante viene embebida en oi.name
-      // como "Platillo (Variante)". Elegimos la receta de la variante vendida
-      // y, si no hay match, caemos a la receta base.
-      const recipes = await prisma.recipe.findMany({
-        where: { menuItemId: oi.menuItemId, restaurantId, isActive: true },
-        select: { id: true, variantId: true, variant: { select: { name: true } } },
+      // Combo: descontar las recetas de los COMPONENTES elegidos (cada
+      // ComboSelection.optionMenuItemId es un MenuItem real con su receta), NO la
+      // receta del header del combo (evita doble/falso conteo). Items normales:
+      // su propia receta, con la variante embebida en oi.name. Misma lógica de
+      // receta/subreceta vía resolveRecipeFlatItems.
+      const comboSels = await prisma.comboSelection.findMany({
+        where: { orderItemId: oi.id },
+        select: { optionMenuItemId: true },
       });
-
-      let chosenRecipeId = null;
-      if (recipes.length > 0) {
-        const variantRecipes = recipes.filter((r) => r.variantId && r.variant);
-        if (variantRecipes.length > 0) {
-          const nm = (oi.name || '').toLowerCase();
-          const match = variantRecipes.find((r) => nm.includes(r.variant.name.toLowerCase()));
-          const base = recipes.find((r) => !r.variantId);
-          chosenRecipeId = (match || base || recipes[0]).id;
-        } else {
-          chosenRecipeId = recipes[0].id; // solo receta base
-        }
-      }
-
-      // RecipeItems de la receta elegida; si el platillo no tiene Recipe formal,
-      // fallback a la forma legacy (RecipeItem.menuItemId directo).
-      const recipeItems = await prisma.recipeItem.findMany({
-        where: chosenRecipeId
-          ? { recipeId: chosenRecipeId }
-          : { menuItemId: oi.menuItemId, menuItem: { restaurantId } },
-        include: { ingredient: true, recipe: true },
-      });
-
-      // Lista plana de ingredientes a consumir POR UNIDAD del MenuItem.
-      // [{ ingredient, qtyToConsumePerUnit }]
       const flatItems = [];
       let recipeIdSnap = null;
-
-      for (const r of recipeItems) {
-        if (r.recipeId && !recipeIdSnap) recipeIdSnap = r.recipeId;
-
-        const wastageFactor = 1 + (Number(r.wastagePercent || 0) / 100);
-        const qtyPerUnit = Number(r.quantity) * wastageFactor;
-
-        if (r.ingredientId && r.ingredient) {
-          // Ingrediente directo
-          flatItems.push({ ingredient: r.ingredient, qtyToConsumePerUnit: qtyPerUnit });
-        } else if (r.subRecipeId) {
-          // Expansión recursiva de SubRecipe
-          const expanded = await expandSubRecipeToIngredients(prisma, r.subRecipeId, qtyPerUnit);
-          for (const exp of expanded) {
-            flatItems.push({ ingredient: exp.ingredient, qtyToConsumePerUnit: exp.qtyToConsume });
-          }
+      if (comboSels.length > 0) {
+        for (const cs of comboSels) {
+          const r = await resolveRecipeFlatItems(prisma, cs.optionMenuItemId, '', restaurantId);
+          flatItems.push(...r.flatItems);
+          if (r.recipeIdSnap && !recipeIdSnap) recipeIdSnap = r.recipeIdSnap;
         }
+      } else {
+        const r = await resolveRecipeFlatItems(prisma, oi.menuItemId, oi.name, restaurantId);
+        flatItems.push(...r.flatItems);
+        recipeIdSnap = r.recipeIdSnap;
       }
 
       // Consumo por MODIFICADORES (extras): cada modificador de la línea puede
@@ -266,38 +276,15 @@ async function assertStockAvailable(prisma, resolvedItems, restaurantId) {
     const multiplier = line.weightKg != null ? Number(line.weightKg) : Number(line.quantity || 1);
     if (!(multiplier > 0)) continue;
 
-    // Receta del platillo (variante embebida en line.name), con fallback legacy.
-    const recipes = await prisma.recipe.findMany({
-      where: { menuItemId: line.menuItemId, restaurantId, isActive: true },
-      select: { id: true, variantId: true, variant: { select: { name: true } } },
-    });
-    let chosenRecipeId = null;
-    if (recipes.length > 0) {
-      const variantRecipes = recipes.filter((r) => r.variantId && r.variant);
-      if (variantRecipes.length > 0) {
-        const nm = (line.name || '').toLowerCase();
-        const match = variantRecipes.find((r) => nm.includes(r.variant.name.toLowerCase()));
-        const base = recipes.find((r) => !r.variantId);
-        chosenRecipeId = (match || base || recipes[0]).id;
-      } else {
-        chosenRecipeId = recipes[0].id;
-      }
-    }
-    const recipeItems = await prisma.recipeItem.findMany({
-      where: chosenRecipeId
-        ? { recipeId: chosenRecipeId }
-        : { menuItemId: line.menuItemId, menuItem: { restaurantId } },
-      include: { ingredient: true },
-    });
-    for (const r of recipeItems) {
-      const wf = 1 + (Number(r.wastagePercent || 0) / 100);
-      const qtyPerUnit = Number(r.quantity) * wf;
-      if (r.ingredientId && r.ingredient) {
-        addNeed(r.ingredient, qtyPerUnit * multiplier);
-      } else if (r.subRecipeId) {
-        const expanded = await expandSubRecipeToIngredients(prisma, r.subRecipeId, qtyPerUnit);
-        for (const exp of expanded) addNeed(exp.ingredient, exp.qtyToConsume * multiplier);
-      }
+    // Combo: el consumo sale de los COMPONENTES elegidos (no del header); item
+    // normal: su propia receta (variante embebida en line.name). Misma lógica de
+    // receta/subreceta que discountInventory vía resolveRecipeFlatItems.
+    const recipeSources = (line._comboSelections && line._comboSelections.length)
+      ? line._comboSelections.map((s) => ({ menuItemId: s.optionMenuItemId, name: '' }))
+      : [{ menuItemId: line.menuItemId, name: line.name }];
+    for (const src of recipeSources) {
+      const { flatItems } = await resolveRecipeFlatItems(prisma, src.menuItemId, src.name, restaurantId);
+      for (const fi of flatItems) addNeed(fi.ingredient, fi.qtyToConsumePerUnit * multiplier);
     }
 
     // Modificadores con consumo (mapeados por nombre).
@@ -396,7 +383,7 @@ const { normalizePhone } = require('@mrtpvrest/config/phone');
 const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePermission, userHasPermission, hasValidOverride } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
-const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals, computeEmployeeDiscount, normalizeTenders, round2 } = require('../lib/money');
+const { resolveVariantSelection, resolveComboSelection, applyFreeModifiers, computeOrderTotals, computeEmployeeDiscount, normalizeTenders, round2 } = require('../lib/money');
 const { canTransition } = require('../lib/order-status');
 const { requireModule, MODULES } = require('../lib/modules');
 const { computeBulkPromoDiscount, loadActiveBulkPromos } = require('../lib/bulk-promo');
@@ -738,10 +725,17 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           modifierGroups: { include: { modifiers: true } },
           complements: true,
           variants: true,
+          comboComponents: {
+            orderBy: { sortOrder: 'asc' },
+            include: { options: { include: { optionMenuItem: { select: { id: true, name: true } } } } },
+          },
         },
       });
 
       const variantSelection = resolveVariantSelection(menuItem, item);
+      // Combo configurable: resuelve la selección (re-lee priceDelta de DB, valida
+      // min/max y pertenencia). El delta entra al precio unitario server-side.
+      const combo = resolveComboSelection(menuItem, item);
       const modifierIds = extractIds(item.modifiers, 'modifierId');
       const complementIds = extractIds(item.complements, 'complementId');
       const variantIds = extractIds(item.variants, 'variantId');
@@ -797,7 +791,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         selectedVariants.push(variant);
       }
 
-      const unitPrice = variantSelection.basePrice + unitExtra;
+      const unitPrice = variantSelection.basePrice + unitExtra + combo.priceDelta;
       // Venta por peso: si el producto es soldByWeight y el cliente mandó un
       // weightKg válido, la línea se cobra price/kg × kg con quantity=1. El
       // multiplicador del subtotal es el peso; el precio sigue saliendo del
@@ -822,10 +816,13 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         quantity: lineQty,
         weightKg,
         subtotal: unitPrice * lineMultiplier,
-        notes: appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants),
+        notes: combo.selections.length
+          ? [appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants), combo.selections.map(s => s.name).join('\n')].filter(Boolean).join('\n')
+          : appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants),
         seatNumber,
         course,
         _modifiers: flatMods,
+        _comboSelections: combo.selections,
         // Categoría del producto: la usa el cálculo de promos NxM (qué líneas
         // son elegibles). Prefijo `_` → no se persiste como columna de OrderItem.
         _categoryId: menuItem?.categoryId || null,
@@ -898,8 +895,15 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           .filter(Boolean)
           .sort()
           .join('+');
+        // Huella del combo: dos combos del mismo precio con distinto contenido
+        // NO deben fusionarse por el dedup anti multi-tap.
+        const combo = (it._comboSelections || it.comboSelections || [])
+          .map((c) => `${c.componentId || ''}:${c.optionId || ''}`)
+          .filter((s) => s !== ':')
+          .sort()
+          .join('+');
         const w = it.weightKg != null ? Number(it.weightKg).toFixed(3) : '';
-        return `${it.menuItemId}:${it.quantity}:${w}:${Number(it.price).toFixed(2)}:${it.seatNumber ?? ''}:${mods}`;
+        return `${it.menuItemId}:${it.quantity}:${w}:${Number(it.price).toFixed(2)}:${it.seatNumber ?? ''}:${mods}:${combo}`;
       })
       .sort()
       .join('|');
@@ -914,7 +918,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           orderType: orderType || 'TAKEOUT',
           createdAt: { gte: new Date(Date.now() - DEDUP_WINDOW_MS) },
         },
-        include: { items: { include: { modifiers: true } } },
+        include: { items: { include: { modifiers: true, comboSelections: true } } },
         orderBy: { createdAt: 'desc' },
         take: 10,
       });
@@ -1071,7 +1075,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       // Creamos cada OrderItem individualmente porque los modificadores son
       // una relación nested write (no se puede con createMany).
       for (const it of resolvedItems) {
-        const { _modifiers, _categoryId, ...itemData } = it;
+        const { _modifiers, _comboSelections, _categoryId, ...itemData } = it;
         await tx.orderItem.create({
           data: {
             ...itemData,
@@ -1079,6 +1083,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
             roundId,
             modifiers: _modifiers.length
               ? { create: _modifiers.map(m => ({ modifierId: m.modifierId, name: m.name, priceAdd: m.priceAdd })) }
+              : undefined,
+            comboSelections: (_comboSelections && _comboSelections.length)
+              ? { create: _comboSelections.map(s => ({ componentId: s.componentId, optionId: s.optionId, optionMenuItemId: s.optionMenuItemId, name: s.name, priceDelta: s.priceDelta })) }
               : undefined,
           },
         });
@@ -1150,9 +1157,14 @@ async function addRoundHandler(req, res) {
           modifierGroups: { include: { modifiers: true } },
           complements: true,
           variants: true,
+          comboComponents: {
+            orderBy: { sortOrder: 'asc' },
+            include: { options: { include: { optionMenuItem: { select: { id: true, name: true } } } } },
+          },
         },
       });
       const variantSelection = resolveVariantSelection(menuItem, item);
+      const combo = resolveComboSelection(menuItem, item);
       const modifierIds = extractIds(item.modifiers, 'modifierId');
       const complementIds = extractIds(item.complements, 'complementId');
       const variantIds = extractIds(item.variants, 'variantId');
@@ -1202,7 +1214,7 @@ async function addRoundHandler(req, res) {
         selectedVariants.push(variant);
       }
 
-      const price = variantSelection.basePrice + unitExtra;
+      const price = variantSelection.basePrice + unitExtra + combo.priceDelta;
       // Venta por peso (ver create-order): peso × precio/kg, quantity=1.
       const weightKg = resolveWeightKg(menuItem, item.weightKg);
       const qty = weightKg != null ? 1 : Math.max(1, parseInt(item.quantity, 10) || 1);
@@ -1220,10 +1232,13 @@ async function addRoundHandler(req, res) {
         quantity: qty,
         weightKg,
         subtotal: price * lineMultiplier,
-        notes: appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants),
+        notes: combo.selections.length
+          ? [appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants), combo.selections.map(s => s.name).join('\n')].filter(Boolean).join('\n')
+          : appendVariantNotes(appendComplementNotes(item.notes, selectedComplements), selectedVariants),
         seatNumber,
         course,
         _modifiers: flatMods,
+        _comboSelections: combo.selections,
       };
     }));
 
@@ -1261,7 +1276,7 @@ async function addRoundHandler(req, res) {
       });
 
       for (const itemData of newItemsData) {
-        const { _modifiers, ...data } = itemData;
+        const { _modifiers, _comboSelections, ...data } = itemData;
         await tx.orderItem.create({
           data: {
             ...data,
@@ -1269,6 +1284,9 @@ async function addRoundHandler(req, res) {
             roundId: newRound.id,
             modifiers: _modifiers.length
               ? { create: _modifiers.map(m => ({ modifierId: m.modifierId, name: m.name, priceAdd: m.priceAdd })) }
+              : undefined,
+            comboSelections: (_comboSelections && _comboSelections.length)
+              ? { create: _comboSelections.map(s => ({ componentId: s.componentId, optionId: s.optionId, optionMenuItemId: s.optionMenuItemId, name: s.name, priceDelta: s.priceDelta })) }
               : undefined,
           },
         });

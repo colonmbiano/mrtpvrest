@@ -17,6 +17,11 @@ const cartItemSchema = z.object({
   notes:      z.string().max(500).optional(),
   // Comensal al que pertenece el item (1..N). null/undefined = compartido.
   seatNumber: z.coerce.number().int().positive().max(50).optional().nullable(),
+  // Selección de combo: { componentId, optionId } por slot. Acotado (anti-abuso).
+  comboSelections: z.array(z.object({
+    componentId: z.string().min(1).max(40),
+    optionId:    z.string().min(1).max(40),
+  }).passthrough()).max(20).optional(),
 }).passthrough();
 
 const orderTypeSchema = z.enum(['DINE_IN', 'TAKEOUT', 'DELIVERY']);
