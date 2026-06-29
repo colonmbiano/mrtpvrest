@@ -86,6 +86,8 @@ const SECTIONS = [
       { href: "/admin/pantalla-cliente", icon: <IImage />,   label: "Pantalla Cliente" },
       { href: "/admin/inventario",          icon: <IBox />,      label: "Inventario" },
       { href: "/admin/inventario/compras",   icon: <IBox />,      label: "Compras & Bodega" },
+      { href: "/admin/inventario/por-pagar", icon: <IWallet />,   label: "Cuentas por pagar" },
+      { href: "/admin/finanzas",             icon: <IBarChart />, label: "Finanzas (food cost)" },
     ],
   },
   {
