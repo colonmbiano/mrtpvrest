@@ -12,6 +12,7 @@
 
 const express = require('express');
 const { prisma, runWithBypass } = require('@mrtpvrest/database');
+const { round2 } = require('../lib/money');
 const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware');
 const { requireFeatureFlag } = require('../lib/modules');
 const router = express.Router();
@@ -233,31 +234,43 @@ router.post('/', async (req, res) => {
 });
 
 // ── POST /api/expenses/:id/settle ────────────────────────────────────────
-// Liquida un gasto PENDIENTE (cuenta por pagar). Body: { paymentMethod, occurredAt? }.
-// Esta es la transición que recién golpea la caja del DÍA en que se paga:
-// si paymentMethod=CASH_DRAWER crea el ShiftExpense en el turno abierto AHORA.
-// Idempotente: solo la primera liquidación gana (updateMany condicional).
+// Liquida (total o PARCIAL) un gasto PENDIENTE. Body: { paymentMethod, amount?, occurredAt? }.
+//   - amount omitido → liquida el saldo restante completo.
+//   - amount < saldo → ABONO parcial (queda PENDIENTE con paidAmount mayor).
+// Cada abono en efectivo (CASH_DRAWER) crea un ShiftExpense por ese monto y
+// golpea la caja del día. Idempotente: el WHERE condicional incluye paidAmount,
+// así un doble-tap con el mismo saldo observado no abona dos veces.
 router.post('/:id/settle', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
 
     const { id } = req.params;
-    const { paymentMethod, occurredAt } = req.body || {};
+    const { paymentMethod, amount, occurredAt } = req.body || {};
     if (!VALID_PAYMENT_METHODS.includes(paymentMethod)) {
       return res.status(400).json({ error: 'paymentMethod inválido' });
     }
 
     const expense = await prisma.operatingExpense.findFirst({
       where: { id, restaurantId },
-      select: { id: true, amount: true, concept: true, locationId: true, categoryId: true, settlementStatus: true },
+      select: { id: true, amount: true, paidAmount: true, concept: true, locationId: true, categoryId: true, settlementStatus: true },
     });
     if (!expense) return res.status(404).json({ error: 'Gasto no encontrado' });
     if (expense.settlementStatus !== 'PENDING') {
       return res.status(409).json({ error: 'El gasto ya fue liquidado', code: 'ALREADY_SETTLED' });
     }
 
-    // Si se paga con efectivo, debe haber turno abierto en su location.
+    const prevPaid = Number(expense.paidAmount || 0);
+    const remaining = round2(Number(expense.amount) - prevPaid);
+    const reqAmt = amount != null ? Number(amount) : remaining;
+    if (!Number.isFinite(reqAmt) || reqAmt <= 0) {
+      return res.status(400).json({ error: 'amount inválido' });
+    }
+    const pay = round2(Math.min(reqAmt, remaining));        // nunca sobre-pagar
+    const newPaid = round2(prevPaid + pay);
+    const fully = newPaid >= Number(expense.amount) - 0.005; // tolerancia de centavos
+
+    // Si el abono es en efectivo, debe haber turno abierto en su location.
     let cashShiftId = null;
     if (paymentMethod === 'CASH_DRAWER') {
       const openShift = await prisma.cashShift.findFirst({
@@ -276,18 +289,19 @@ router.post('/:id/settle', async (req, res) => {
 
     const settledAt = occurredAt ? new Date(occurredAt) : new Date();
 
-    const settled = await prisma.$transaction(async (tx) => {
-      // Solo gana la primera liquidación: el WHERE condicional hace la operación
-      // idempotente frente a doble-tap / reintentos de red.
+    const applied = await prisma.$transaction(async (tx) => {
+      // El WHERE incluye el paidAmount observado: si otra petición ya abonó, el
+      // count es 0 y no duplicamos el cargo (idempotente ante doble-tap).
       const upd = await tx.operatingExpense.updateMany({
-        where: { id, settlementStatus: 'PENDING' },
+        where: { id, settlementStatus: 'PENDING', paidAmount: prevPaid },
         data: {
-          settlementStatus: 'PAID',
-          settledAt,
-          settledMethod: paymentMethod,
-          settledShiftId: cashShiftId,
-          paymentMethod,
-          cashShiftId,
+          paidAmount: newPaid,
+          ...(fully ? {
+            settlementStatus: 'PAID',
+            settledAt,
+            settledMethod: paymentMethod,
+            settledShiftId: cashShiftId,
+          } : {}),
         },
       });
       if (upd.count === 0) return false;
@@ -304,24 +318,24 @@ router.post('/:id/settle', async (req, res) => {
         await tx.shiftExpense.create({
           data: {
             shiftId: cashShiftId,
-            description: expense.concept,
-            amount: expense.amount,
+            description: fully ? expense.concept : `${expense.concept} (abono)`,
+            amount: pay,
             category: categoryLabel,
             operatingExpenseId: expense.id,
           },
         });
         await tx.cashShift.update({
           where: { id: cashShiftId },
-          data: { totalExpenses: { increment: expense.amount } },
+          data: { totalExpenses: { increment: pay } },
         });
       }
       return true;
     });
 
-    if (!settled) {
-      return res.status(409).json({ error: 'El gasto ya fue liquidado', code: 'ALREADY_SETTLED' });
+    if (!applied) {
+      return res.status(409).json({ error: 'El saldo cambió o ya fue liquidado', code: 'STALE_OR_SETTLED' });
     }
-    res.json({ ok: true, id, settledAt, settledMethod: paymentMethod });
+    res.json({ ok: true, id, paid: pay, paidAmount: newPaid, remaining: round2(Number(expense.amount) - newPaid), fully, settledMethod: paymentMethod });
   } catch (e) {
     console.error('POST /api/expenses/:id/settle:', e);
     res.status(500).json({ error: 'Error al liquidar gasto: ' + e.message });
