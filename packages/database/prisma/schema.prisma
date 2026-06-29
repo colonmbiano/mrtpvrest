@@ -882,6 +882,7 @@ model Order {
   statusHistory OrderStatusHistory[]
   rounds        OrderRound[]
   payments      PaymentTransaction[]
+  packingChecks OrderPackingCheck[]
 
   // FASE NÓMINA · si la orden se cobró "a cuenta de empleado", aquí cuelga el
   // cargo generado (1:1). Nullable: la inmensa mayoría de órdenes no lo tienen.
@@ -1093,6 +1094,24 @@ model ComboSelection {
 
   @@index([orderItemId])
   @@map("combo_selections")
+}
+
+// ── EMPAQUE ────────────────────────────────────────────────────────────────
+// Checklist de verificación por pedido en la etapa PACKING. Sin restaurantId (el
+// scope sube por la Order) → no entra a SCOPED_MODELS. checkedById es referencia
+// blanda (string sin FK) al empleado que marcó.
+model OrderPackingCheck {
+  id          String    @id @default(cuid())
+  orderId     String
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  checkKey    String    // DRINKS_COMPLETE | SAUCES_PACKED | TICKET_PRINTED | ADDRESS_CONFIRMED | PAYMENT_CONFIRMED
+  checked     Boolean   @default(false)
+  checkedAt   DateTime?
+  checkedById String?
+
+  @@unique([orderId, checkKey])
+  @@index([orderId])
+  @@map("order_packing_checks")
 }
 
 model OrderItemModifier {
@@ -1318,6 +1337,11 @@ model RestaurantConfig {
   // recetas y RECHAZA (409) si no alcanza. Default false: el comportamiento
   // legacy (descuento best-effort post-cobro, sin bloqueo) se mantiene intacto.
   blockOnInsufficientStock Boolean @default(false)
+
+  // EMPAQUE · si true, las órdenes pasan por la etapa PACKING (checklist de
+  // verificación en KDS) antes de READY. Default false: el flujo legacy (cocina
+  // marca READY directo) queda intacto para los ~tenants sin empaque.
+  hasPackingStage Boolean @default(false)
 
   // CORTE DE CAJA · si true (default), los roles admin ven el efectivo
   // esperado aunque el turno sea ciego. false → corte ciego también para

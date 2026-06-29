@@ -64,6 +64,7 @@ export default function ComprasPage() {
   const [locations, setLocations] = useState<LocationRow[]>([]);
   const [savingCfg, setSavingCfg] = useState(false);
   const [blockStock, setBlockStock] = useState(false);
+  const [packingStage, setPackingStage] = useState(false);
   const centralLoc = locations.find(l => l.isCentralWarehouse) || null;
   const branches = locations.filter(l => !l.isCentralWarehouse);
 
@@ -108,6 +109,7 @@ export default function ComprasPage() {
       ]);
       setCentralEnabled(Boolean(cfg.data?.centralWarehouseEnabled));
       setBlockStock(Boolean(cfg.data?.blockOnInsufficientStock));
+      setPackingStage(Boolean(cfg.data?.hasPackingStage));
       const locList: LocationRow[] = locs.data || [];
       setLocations(locList);
       setSuppliers(sup.data || []);
@@ -164,6 +166,17 @@ export default function ComprasPage() {
     try {
       await api.put("/api/admin/config", { blockOnInsufficientStock: next });
       setBlockStock(next);
+    } catch (e: any) {
+      alert(e.response?.data?.error || "Error al guardar configuración");
+    } finally { setSavingCfg(false); }
+  }
+
+  // ── Config: etapa de empaque (PACKING + checklist en KDS) ──────────────
+  async function togglePackingStage(next: boolean) {
+    setSavingCfg(true);
+    try {
+      await api.put("/api/admin/config", { hasPackingStage: next });
+      setPackingStage(next);
     } catch (e: any) {
       alert(e.response?.data?.error || "Error al guardar configuración");
     } finally { setSavingCfg(false); }
@@ -348,6 +361,23 @@ export default function ComprasPage() {
           <div className="flex shrink-0 items-center gap-2">
             <Pill tone={blockStock ? "ok" : "neutral"}>{blockStock ? "Activado" : "Desactivado"}</Pill>
             <Toggle checked={blockStock} onChange={(n) => !savingCfg && toggleBlockStock(n)} label="Bloquear venta sin stock" />
+          </div>
+        </div>
+      </WtCard>
+
+      {/* ── Etapa de empaque ─────────────────────────────────────────────── */}
+      <WtCard className="mb-4 p-4 md:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-sm font-extrabold text-tx-hi">Etapa de empaque</p>
+            <p className="mt-1 max-w-xl text-xs text-tx-mut">
+              Apagado: cocina marca el pedido “Listo” directo. Encendido: los pedidos pasan por
+              “En empaque” (checklist de verificación en el KDS) antes de quedar listos.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Pill tone={packingStage ? "ok" : "neutral"}>{packingStage ? "Activado" : "Desactivado"}</Pill>
+            <Toggle checked={packingStage} onChange={(n) => !savingCfg && togglePackingStage(n)} label="Etapa de empaque" />
           </div>
         </div>
       </WtCard>

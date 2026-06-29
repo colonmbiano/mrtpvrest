@@ -2,7 +2,11 @@ const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const { requireFeatureFlag } = require('../lib/modules');
+const { pick } = require('../lib/validate');
 const router = express.Router();
+
+// Checklist canónico de empaque (fijo en servidor).
+const PACKING_CHECKS = ['DRINKS_COMPLETE', 'SAUCES_PACKED', 'TICKET_PRINTED', 'ADDRESS_CONFIRMED', 'PAYMENT_CONFIRMED'];
 
 // Gate: hasKDS en el plan del tenant. En modo warn-only por default.
 router.use(authenticate, requireTenantAccess, requireFeatureFlag('hasKDS', 'KDS Cocina'));
@@ -143,21 +147,97 @@ router.put('/item/:orderItemId/done', kdsWriteRoles, async (req, res) => {
         station, done, doneAt: done ? new Date() : null
       }
     });
-    // Si todos los items están listos, avanzar orden a READY
+    // Si todos los items están listos, avanzar la orden. Cuenta orderItems
+    // DISTINTOS (un item puede tener varias filas kdsItemStatus si va a más de
+    // una estación → no sobrecontar). Si el tenant usa empaque, va a PACKING
+    // (verificación) en vez de READY directo; gate por flag para no atascar a
+    // quien no lo usa.
     if (done) {
       const order = await prisma.order.findUnique({
-        where: { id: orderId }, include: { items: true }
+        where: { id: orderId }, include: { items: { select: { id: true } } }
       });
-      const allDone = await prisma.kdsItemStatus.findMany({
-        where: { orderId, done: true }
+      const doneRows = await prisma.kdsItemStatus.findMany({
+        where: { orderId, done: true }, select: { orderItemId: true }
       });
-      if (order && allDone.length >= order.items.length) {
+      const doneItemIds = new Set(doneRows.map((r) => r.orderItemId));
+      if (order && doneItemIds.size >= order.items.length) {
+        const cfg = await prisma.restaurantConfig.findUnique({
+          where: { restaurantId: req.restaurantId || req.user?.restaurantId },
+          select: { hasPackingStage: true },
+        });
         await prisma.order.update({
-          where: { id: orderId }, data: { status: 'READY' }
+          where: { id: orderId }, data: { status: cfg?.hasPackingStage ? 'PACKING' : 'READY' }
         });
       }
     }
     res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── EMPAQUE ────────────────────────────────────────────────────────────────
+// GET pedidos en PACKING + su checklist (5 checks canónicos mergeados).
+router.get('/packing/orders', async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const where = { restaurantId, status: 'PACKING' };
+    if (req.locationId) where.locationId = req.locationId;
+    const orders = await prisma.order.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      include: {
+        items: { select: { id: true, name: true, quantity: true, notes: true } },
+        packingChecks: true,
+      },
+    });
+    const result = orders.map((o) => {
+      const byKey = new Map(o.packingChecks.map((c) => [c.checkKey, c.checked]));
+      return {
+        id: o.id,
+        orderNumber: o.orderNumber,
+        orderType: o.orderType,
+        customerName: o.customerName,
+        deliveryAddress: o.deliveryAddress,
+        paymentStatus: o.paymentStatus,
+        createdAt: o.createdAt,
+        items: o.items,
+        checks: PACKING_CHECKS.map((key) => ({ key, checked: !!byKey.get(key) })),
+      };
+    });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT marcar/desmarcar un check; al completar los 5 la orden avanza a READY.
+router.put('/packing/:orderId/check', kdsWriteRoles, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const { checkKey, checked } = pick(req.body, ['checkKey', 'checked']);
+    if (!PACKING_CHECKS.includes(checkKey)) return res.status(400).json({ error: 'checkKey inválido' });
+    // findFirst scoped + estado PACKING (no se puede empacar algo que no lo está).
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.orderId, restaurantId, status: 'PACKING' },
+      select: { id: true },
+    });
+    if (!order) return res.status(404).json({ error: 'El pedido no está en empaque' });
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.orderPackingCheck.upsert({
+        where: { orderId_checkKey: { orderId: order.id, checkKey } },
+        update: { checked: !!checked, checkedAt: checked ? new Date() : null, checkedById: req.user?.id || null },
+        create: { orderId: order.id, checkKey, checked: !!checked, checkedAt: checked ? new Date() : null, checkedById: req.user?.id || null },
+      });
+      const done = await tx.orderPackingCheck.findMany({ where: { orderId: order.id, checked: true }, select: { checkKey: true } });
+      const doneKeys = new Set(done.map((c) => c.checkKey));
+      const allDone = PACKING_CHECKS.every((k) => doneKeys.has(k));
+      let advanced = false;
+      if (allDone) {
+        // Condicional (idempotente): solo avanza si sigue en PACKING.
+        const upd = await tx.order.updateMany({ where: { id: order.id, status: 'PACKING' }, data: { status: 'READY' } });
+        advanced = upd.count > 0;
+      }
+      return { allDone, advanced };
+    });
+    res.json({ ok: true, ...result });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
