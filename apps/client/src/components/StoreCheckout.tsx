@@ -223,6 +223,7 @@ export default function StoreCheckout({
             menuItemId: l.menuItemId,
             variantId: l.variantId || undefined,
             modifierIds: l.modifierIds || [],
+            notes: l.note || undefined,
             quantity: l.quantity,
           })),
         }),

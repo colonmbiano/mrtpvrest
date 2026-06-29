@@ -8,6 +8,7 @@ export type CartLine = {
   quantity: number;
   variantId?: string | null;
   modifierIds?: string[];
+  note?: string;            // nota libre del cliente para la cocina (por línea)
 };
 
 export type AddInput = {
@@ -17,6 +18,7 @@ export type AddInput = {
   menuItemId?: string;
   variantId?: string | null;
   modifierIds?: string[];
+  note?: string;
   quantity?: number;
 };
 
@@ -50,6 +52,7 @@ export const useCart = create<CartState>((set, get) => ({
         quantity: qty,
         variantId: item.variantId ?? null,
         modifierIds: item.modifierIds ?? [],
+        note: item.note,
       };
       return { lines: [...state.lines, line] };
     }),
