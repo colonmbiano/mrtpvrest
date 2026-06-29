@@ -246,6 +246,13 @@ router.get('/info', async (req, res) => {
 });
 
 // ── GET /api/store/menu ──────────────────────────────────────────────────────
+// Canal de la petición para filtrar el catálogo: el kiosk se identifica por el
+// header x-kiosk-terminal-id o por ?source=KIOSK. La web no manda ninguno.
+function requestIsKiosk(req) {
+  if (req.headers['x-kiosk-terminal-id'] != null) return true;
+  return String(req.query?.source || '').toUpperCase() === 'KIOSK';
+}
+
 router.get('/menu', async (req, res) => {
   const store = await resolveStore(req, res);
   if (!store) return;
@@ -259,7 +266,7 @@ router.get('/menu', async (req, res) => {
         select: { id: true, name: true, description: true, imageUrl: true, sortOrder: true },
       }),
       prisma.menuItem.findMany({
-        where: { restaurantId: restaurant.id, isAvailable: true, availableOnline: true },
+        where: { restaurantId: restaurant.id, isAvailable: true, ...(requestIsKiosk(req) ? { availableOnKiosk: true } : { availableOnline: true }) },
         select: {
           id: true, name: true, description: true, price: true,
           isPromo: true, promoPrice: true, imageUrl: true,
@@ -552,7 +559,7 @@ router.post('/orders', async (req, res) => {
         // y un POST directo con el id podía pedir un producto oculto/no
         // disponible. findFirst respeta todo el where.
         const menuItem = await prisma.menuItem.findFirst({
-          where: { id: menuItemId, restaurantId: restaurant.id, isAvailable: true, availableOnline: true },
+          where: { id: menuItemId, restaurantId: restaurant.id, isAvailable: true, ...(source === 'KIOSK' ? { availableOnKiosk: true } : { availableOnline: true }) },
           include: {
             variants: true,
             modifierGroups: { include: { modifiers: true } },

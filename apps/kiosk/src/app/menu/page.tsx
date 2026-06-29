@@ -43,7 +43,7 @@ function Inner() {
   const { items, total, qty, dispatch } = useCart();
 
   useEffect(() => {
-    api.get("/api/store/menu").then(({ data }) => {
+    api.get("/api/store/menu?source=KIOSK").then(({ data }) => {
       setCategories(data.categories || []);
       if (data.categories?.[0]) setActiveCat(data.categories[0].id);
     }).catch((e) => console.error("menu fetch:", e));
