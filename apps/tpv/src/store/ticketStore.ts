@@ -50,6 +50,25 @@ export type MenuItemComplement = {
   sortOrder?: number;
 };
 
+export type ComboOption = {
+  id: string;
+  optionMenuItemId: string;
+  priceDelta: number;
+  isAvailable?: boolean;
+  sortOrder?: number;
+  optionMenuItem?: { id: string; name: string };
+};
+
+export type ComboComponent = {
+  id: string;
+  name: string;
+  minSelect: number;
+  maxSelect: number;
+  isRequired: boolean;
+  sortOrder?: number;
+  options: ComboOption[];
+};
+
 export type Product = {
   id: string;
   name: string;
@@ -78,6 +97,9 @@ export type Product = {
   variants?: MenuItemVariant[];
   complements?: MenuItemComplement[];
   modifierGroups?: ModifierGroup[];
+  // Combo configurable: el cliente arma el combo eligiendo entre componentes.
+  isCombo?: boolean;
+  comboComponents?: ComboComponent[];
 };
 
 export type CartItem = Product & {
