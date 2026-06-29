@@ -377,8 +377,13 @@ export default function DeliveryApp() {
 
   async function saveExpense(cat: string, amount: string, desc: string, pending = false) {
     if (!amount || Number(amount) <= 0) return;
+    // Clave de idempotencia estable por captura: dedupea doble-tap y replays de
+    // la cola offline (el middleware global la cubre) para no duplicar el gasto.
+    const movementId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `${driver.id}-${Date.now()}`;
     const expenseData = {
-      type: 'EXPENSE', category: cat, amount, description: desc, driverId: driver.id,
+      type: 'EXPENSE', category: cat, amount, description: desc, driverId: driver.id, movementId,
       ...(pending ? { pending: 'true' } : {}),
     };
 
@@ -390,7 +395,9 @@ export default function DeliveryApp() {
     try {
       const formData = new FormData();
       Object.entries(expenseData).forEach(([k, v]) => formData.append(k, v as string));
-      await api.post(`/api/driver-cash/${driver.id}/movements`, formData);
+      await api.post(`/api/driver-cash/${driver.id}/movements`, formData, {
+        headers: { 'Idempotency-Key': movementId },
+      });
       setScreen('caja');
     } catch {}
   }

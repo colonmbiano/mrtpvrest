@@ -22,6 +22,40 @@ router.use(authenticate, requireTenantAccess, requireFeatureFlag('hasInventory',
 
 const VALID_FREQ = ['MONTHLY', 'BIWEEKLY', 'WEEKLY'];
 
+// Las plantillas recurrentes generan deuda cada periodo → operación admin-grade.
+const ADMIN_ROLES = ['ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'];
+function denyNonManager(req, res) {
+  if (ADMIN_ROLES.includes(req.user?.role)) return false;
+  res.status(403).json({ error: 'Rol sin permiso para gestionar gastos recurrentes' });
+  return true;
+}
+
+// Valida que supplier/category/location referenciados pertenezcan al restaurant
+// (RecurringExpense no tiene FKs; sin esto un id ajeno/colgante se persiste y
+// luego rompe el create de OperatingExpense). Devuelve mensaje de error o null.
+async function validateRefs(restaurantId, { supplierId, categoryId, locationId }) {
+  if (supplierId) {
+    const s = await prisma.supplier.findFirst({ where: { id: supplierId, restaurantId }, select: { id: true } });
+    if (!s) return 'Proveedor no pertenece a este restaurant';
+  }
+  if (categoryId) {
+    const c = await prisma.operatingExpenseCategory.findFirst({ where: { id: categoryId, restaurantId }, select: { id: true } });
+    if (!c) return 'Categoría no pertenece a este restaurant';
+  }
+  if (locationId) {
+    const l = await prisma.location.findFirst({ where: { id: locationId, restaurantId }, select: { id: true } });
+    if (!l) return 'Sucursal no pertenece a este restaurant';
+  }
+  return null;
+}
+
+function dayOfMonthError(v) {
+  if (v == null) return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > 28) return 'dayOfMonth debe ser entero entre 1 y 28';
+  return null;
+}
+
 // ── GET /api/payables ──────────────────────────────────────────────────────
 // Deudas pendientes (gastos + compras) con saldo, ordenadas por vencimiento.
 router.get('/', async (req, res) => {
@@ -159,6 +193,7 @@ router.post('/recurring', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    if (denyNonManager(req, res)) return;
 
     const body = pick(req.body, ['locationId', 'categoryId', 'supplierId', 'concept', 'amount', 'frequency', 'dayOfMonth', 'nextDueAt', 'isActive']);
     const concept = String(body.concept || '').trim();
@@ -167,9 +202,14 @@ router.post('/recurring', async (req, res) => {
     if (!concept) return res.status(400).json({ error: 'concept requerido' });
     if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'amount debe ser > 0' });
     if (!VALID_FREQ.includes(frequency)) return res.status(400).json({ error: 'frequency inválida' });
+    const domErr = dayOfMonthError(body.dayOfMonth);
+    if (domErr) return res.status(400).json({ error: domErr });
 
     const locationId = body.locationId || req.locationId || req.headers['x-location-id'] || null;
     if (!locationId) return res.status(400).json({ error: 'locationId requerido' });
+
+    const refErr = await validateRefs(restaurantId, { supplierId: body.supplierId, categoryId: body.categoryId, locationId });
+    if (refErr) return res.status(400).json({ error: refErr });
 
     const nextDueAt = body.nextDueAt ? new Date(body.nextDueAt) : new Date();
     if (isNaN(nextDueAt.getTime())) return res.status(400).json({ error: 'nextDueAt inválida' });
@@ -201,6 +241,7 @@ router.patch('/recurring/:id', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    if (denyNonManager(req, res)) return;
     const { id } = req.params;
 
     const data = pick(req.body, ['locationId', 'categoryId', 'supplierId', 'concept', 'amount', 'frequency', 'dayOfMonth', 'nextDueAt', 'isActive']);
@@ -211,6 +252,16 @@ router.patch('/recurring/:id', async (req, res) => {
     if (data.frequency != null && !VALID_FREQ.includes(data.frequency)) {
       return res.status(400).json({ error: 'frequency inválida' });
     }
+    if ('dayOfMonth' in data) {
+      const domErr = dayOfMonthError(data.dayOfMonth);
+      if (domErr) return res.status(400).json({ error: domErr });
+    }
+    // locationId presente no puede quedar vacío (rompería el create del generador).
+    if ('locationId' in data && !data.locationId) {
+      return res.status(400).json({ error: 'locationId no puede ser vacío' });
+    }
+    const refErr = await validateRefs(restaurantId, { supplierId: data.supplierId, categoryId: data.categoryId, locationId: data.locationId });
+    if (refErr) return res.status(400).json({ error: refErr });
 
     const upd = await prisma.recurringExpense.updateMany({ where: { id, restaurantId }, data });
     if (upd.count === 0) return res.status(404).json({ error: 'Recurrente no encontrado' });
@@ -226,6 +277,7 @@ router.delete('/recurring/:id', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    if (denyNonManager(req, res)) return;
     const upd = await prisma.recurringExpense.deleteMany({ where: { id: req.params.id, restaurantId } });
     if (upd.count === 0) return res.status(404).json({ error: 'Recurrente no encontrado' });
     res.json({ ok: true });
@@ -243,6 +295,7 @@ router.post('/recurring/run', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    if (denyNonManager(req, res)) return;
     const result = await generateDueRecurring({ restaurantId });
     res.json(result);
   } catch (e) {

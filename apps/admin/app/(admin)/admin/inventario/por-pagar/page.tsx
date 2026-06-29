@@ -91,8 +91,11 @@ export default function PorPagarPage() {
 
   async function confirmPay() {
     if (!target) return;
-    const amt = Number(payAmount);
-    if (!Number.isFinite(amt) || amt <= 0) return;
+    const raw = Number(payAmount);
+    if (!Number.isFinite(raw) || raw <= 0) return;
+    // Nunca enviar más que el saldo (el backend igual lo capa, pero evitamos
+    // confundir al cajero con un "pago" mayor al adeudo).
+    const amt = Math.min(raw, target.remaining);
     setSaving(true);
     try {
       await api.post(target.settleUrl, { paymentMethod: method, amount: amt });

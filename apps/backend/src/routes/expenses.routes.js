@@ -246,6 +246,10 @@ router.post('/:id/settle', async (req, res) => {
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
 
     const { id } = req.params;
+    const userRole = req.user?.role || 'CUSTOMER';
+    if (!ALLOWED_ROLES.includes(userRole)) {
+      return res.status(403).json({ error: 'Rol sin permiso para liquidar gastos' });
+    }
     const { paymentMethod, amount, occurredAt } = req.body || {};
     if (!VALID_PAYMENT_METHODS.includes(paymentMethod)) {
       return res.status(400).json({ error: 'paymentMethod inválido' });
@@ -269,6 +273,16 @@ router.post('/:id/settle', async (req, res) => {
     const pay = round2(Math.min(reqAmt, remaining));        // nunca sobre-pagar
     const newPaid = round2(prevPaid + pay);
     const fully = newPaid >= Number(expense.amount) - 0.005; // tolerancia de centavos
+
+    // Tope del cajero también al LIQUIDAR (no solo al crear): un pago en
+    // efectivo grande requiere autorización admin, igual que la creación.
+    if (userRole === 'CASHIER' && pay > CASHIER_LIMIT_PER_EXPENSE && req.headers['x-admin-authorized'] !== 'true') {
+      return res.status(402).json({
+        error: `Pago excede el límite de cajero ($${CASHIER_LIMIT_PER_EXPENSE}). Se requiere autorización de admin.`,
+        code: 'ADMIN_AUTH_REQUIRED',
+        limit: CASHIER_LIMIT_PER_EXPENSE,
+      });
+    }
 
     // Si el abono es en efectivo, debe haber turno abierto en su location.
     let cashShiftId = null;

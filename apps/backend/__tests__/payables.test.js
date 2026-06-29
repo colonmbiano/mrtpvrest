@@ -76,6 +76,10 @@ function makeApp(base, router) {
 beforeEach(() => {
   jest.clearAllMocks();
   prisma.user.findUnique.mockResolvedValue(null);
+  // clearAllMocks no resetea implementaciones: default explícito para el dedup
+  // del gasto pendiente del repartidor (si no, el mockResolvedValue de un test
+  // de /settle se filtra y simula un duplicado inexistente).
+  prisma.operatingExpense.findFirst.mockResolvedValue(null);
   prisma.employee.findFirst.mockResolvedValue({ id: 'd1', name: 'Kebra', locationId: 'loc1' });
   prisma.driverCashMovement.findFirst.mockResolvedValue(null);
   prisma.cashShift.findFirst.mockResolvedValue({ id: 'shift1' });

@@ -55,8 +55,10 @@ async function processTransaction(tx: OfflineTransaction) {
     case 'LOG_EXPENSE':
       // El gasto se registra como movimiento del repartidor (mismo endpoint que
       // la ruta online). /api/driver-cash/expenses no existe → daba 404 y el
-      // gasto offline se perdía.
-      return api.post(`/api/driver-cash/${data.driverId}/movements`, data);
+      // gasto offline se perdía. Reenvía la Idempotency-Key para que un replay
+      // (el reintento cada 5s) no duplique el gasto/la deuda.
+      return api.post(`/api/driver-cash/${data.driverId}/movements`, data,
+        data.movementId ? { headers: { 'Idempotency-Key': data.movementId } } : undefined);
 
     case 'MARK_ERRAND_DONE':
       return api.put(`/api/delivery/errands/${data.id}/done`, data);

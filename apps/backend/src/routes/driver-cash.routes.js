@@ -461,6 +461,19 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
       const restaurantId = req.restaurantId || req.user?.restaurantId;
       const locationId = driver.locationId || req.locationId || req.user?.locationId;
       if (!locationId) return res.status(400).json({ error: 'locationId requerido para registrar la deuda' });
+
+      // Tope: una deuda grande creada por el propio repartidor requiere
+      // autorización de admin (mismo espíritu que CASHIER_LIMIT en /api/expenses).
+      // El staff (admin/manager o manage_driver_cash) no tiene tope.
+      const DRIVER_PAYABLE_LIMIT = 500;
+      if (numericAmount > DRIVER_PAYABLE_LIMIT && !isStaff(req.user) && req.headers['x-admin-authorized'] !== 'true') {
+        return res.status(402).json({
+          error: `La deuda excede el límite del repartidor ($${DRIVER_PAYABLE_LIMIT}). Se requiere autorización de admin.`,
+          code: 'ADMIN_AUTH_REQUIRED',
+          limit: DRIVER_PAYABLE_LIMIT,
+        });
+      }
+
       if (supplierId) {
         const sup = await prisma.supplier.findFirst({
           where: { id: supplierId, restaurantId },
@@ -468,11 +481,29 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
         });
         if (!sup) return res.status(400).json({ error: 'Proveedor no pertenece a este restaurant' });
       }
+
+      const concept = (description && description.trim()) || `Gasto pendiente · ${driver.name}`;
+      // Idempotencia: esta rama NO crea DriverCashMovement, así que el dedup de
+      // arriba (que consulta esa tabla) no la cubre. Dedup propio contra
+      // OperatingExpense recientes para que un doble-tap o replay offline no
+      // duplique la deuda (se pagaría dos veces vía /api/payables).
+      const since = new Date(Date.now() - 30 * 1000);
+      const dup = await prisma.operatingExpense.findFirst({
+        where: {
+          restaurantId, locationId, concept,
+          amount: numericAmount,
+          settlementStatus: 'PENDING',
+          supplierId: supplierId || null,
+          createdAt: { gte: since },
+        },
+      });
+      if (dup) return res.json({ pending: true, payable: dup, deduped: true });
+
       const payable = await prisma.operatingExpense.create({
         data: {
           restaurantId,
           locationId,
-          concept: (description && description.trim()) || `Gasto pendiente · ${driver.name}`,
+          concept,
           amount: numericAmount,
           paymentMethod: 'CASH_DRAWER', // método previsto al liquidar
           settlementStatus: 'PENDING',
