@@ -2479,10 +2479,19 @@ router.put('/:id/void-payment', authenticate, requireTenantAccess, requirePermis
 });
 
 // ── PUT /:id/correct-payment-method ───────────────────────────────────────
-// Corrige el MÉTODO de pago de una orden YA pagada sin reabrir el cobro. Caso
-// típico: el repartidor cobró en efectivo pero quedó registrado como
-// transferencia (o viceversa). El total NO se recalcula; solo cambia el método
-// y se reconcilia la caja del repartidor en la MISMA transacción:
+// Corrige el MÉTODO de pago de una orden sin reabrir el cobro. Caso típico: el
+// repartidor cobró en efectivo pero quedó registrado como transferencia (o
+// viceversa). El total NO se recalcula; solo cambia el método.
+//
+// Dos escenarios, según el estado de cobro de la orden:
+//  · YA pagada (paymentStatus PAID): además se reconcilia la caja del
+//    repartidor en la MISMA transacción (ver abajo).
+//  · AÚN sin liquidar (efectivo sin cobrar): un admin/owner puede corregir el
+//    método antes de cobrar/cerrar. Solo cambia la etiqueta; no marca cobrada
+//    ni mueve la caja (el efectivo todavía no entró). La transferencia
+//    resultante pasa por su verificación normal contra el banco.
+//
+// Reconciliación de caja (solo órdenes ya pagadas), en la MISMA transacción:
 //   · pasa a CASH  → crea el movimiento DELIVERY/INCOME ligado a la orden (si
 //                    no existe) para que ese efectivo entre a su corte.
 //   · deja de ser CASH → borra ese movimiento, PERO solo si aún no está
@@ -2504,13 +2513,21 @@ router.put('/:id/correct-payment-method', authenticate, requireTenantAccess, req
     if (existing.restaurantId !== restaurantId) {
       return res.status(403).json({ error: 'La orden pertenece a otro restaurante' });
     }
-    if (existing.paymentStatus !== 'PAID') {
-      return res.status(400).json({ error: 'Solo se corrige el método de una orden ya pagada' });
+    if (existing.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'No se puede corregir el método de una orden cancelada' });
     }
     if (existing.paymentMethod === newMethod) {
       return res.status(400).json({ error: 'La orden ya tiene ese método de pago' });
     }
 
+    // Una orden YA pagada reconcilia la caja del repartidor (crea/retira el
+    // ingreso en efectivo de su corte). Una orden AÚN SIN LIQUIDAR (p. ej. el
+    // repartidor marcó efectivo por error y un admin/owner lo corrige a
+    // transferencia antes de cobrar/cerrar) solo cambia la etiqueta del método:
+    // no hay efectivo liquidado que mover — la conciliación ocurre al liquidar
+    // (confirm-cash) y la transferencia pasa por su verificación normal contra
+    // el banco (queda como "transferencia sin verificar").
+    const isPaid = existing.paymentStatus === 'PAID';
     const wasCash = existing.paymentMethod === 'CASH';
     const willBeCash = newMethod === 'CASH';
     const correctedBy =
@@ -2527,11 +2544,13 @@ router.put('/:id/correct-payment-method', authenticate, requireTenantAccess, req
         where: { id },
         data: {
           paymentMethod: newMethod,
-          // El efectivo se marca como cobrado; al dejar de ser efectivo se limpia
+          // Pagada: el efectivo se marca como cobrado; al dejar de serlo se limpia
           // el rastro de cobro en mano (no aplica para transferencia/tarjeta).
-          cashCollected: willBeCash,
-          cashCollectedAt: willBeCash ? (existing.cashCollectedAt || new Date()) : null,
-          cashCollectedBy: willBeCash ? existing.cashCollectedBy : null,
+          // Sin liquidar: nunca se marca cobrada (el efectivo aún no entra), sea
+          // cual sea el método corregido.
+          cashCollected: isPaid ? willBeCash : false,
+          cashCollectedAt: isPaid && willBeCash ? (existing.cashCollectedAt || new Date()) : null,
+          cashCollectedBy: isPaid && willBeCash ? existing.cashCollectedBy : null,
           notes,
         },
         include: {
@@ -2540,8 +2559,9 @@ router.put('/:id/correct-payment-method', authenticate, requireTenantAccess, req
         },
       });
 
-      // Reconciliar la caja SOLO si la orden tiene repartidor asignado.
-      if (existing.deliveryDriverId) {
+      // Reconciliar la caja SOLO si la orden YA estaba pagada y tiene repartidor
+      // asignado. Una orden sin liquidar no tiene efectivo en el corte que mover.
+      if (isPaid && existing.deliveryDriverId) {
         const movement = await tx.driverCashMovement.findFirst({
           where: {
             driverId: existing.deliveryDriverId,
