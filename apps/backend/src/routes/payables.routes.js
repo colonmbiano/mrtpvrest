@@ -15,22 +15,12 @@ const { authenticate, requireTenantAccess } = require('../middleware/auth.middle
 const { requireFeatureFlag } = require('../lib/modules');
 const { pick } = require('../lib/validate');
 const { round2: r2 } = require('../lib/money');
+const { generateDueRecurring } = require('../services/recurring-expenses.service');
 const router = express.Router();
 
 router.use(authenticate, requireTenantAccess, requireFeatureFlag('hasInventory', 'Inventario y costeo'));
 
 const VALID_FREQ = ['MONTHLY', 'BIWEEKLY', 'WEEKLY'];
-
-// Avanza la próxima fecha de generación según la frecuencia. MONTHLY ancla al
-// dayOfMonth (acotado a 28 para que exista en todos los meses).
-function advanceDue(date, freq, dayOfMonth) {
-  const d = new Date(date);
-  if (freq === 'WEEKLY') { d.setDate(d.getDate() + 7); return d; }
-  if (freq === 'BIWEEKLY') { d.setDate(d.getDate() + 14); return d; }
-  const day = dayOfMonth || d.getDate();
-  d.setMonth(d.getMonth() + 1, Math.min(day, 28));
-  return d;
-}
 
 // ── GET /api/payables ──────────────────────────────────────────────────────
 // Deudas pendientes (gastos + compras) con saldo, ordenadas por vencimiento.
@@ -253,40 +243,8 @@ router.post('/recurring/run', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
-
-    const now = new Date();
-    const due = await prisma.recurringExpense.findMany({
-      where: { restaurantId, isActive: true, nextDueAt: { lte: now } },
-    });
-
-    let generated = 0;
-    for (const t of due) {
-      const next = advanceDue(t.nextDueAt, t.frequency, t.dayOfMonth);
-      const ok = await prisma.$transaction(async (tx) => {
-        const upd = await tx.recurringExpense.updateMany({
-          where: { id: t.id, nextDueAt: t.nextDueAt },
-          data: { nextDueAt: next, lastGeneratedAt: now },
-        });
-        if (upd.count === 0) return false; // otra corrida ya la generó
-        await tx.operatingExpense.create({
-          data: {
-            restaurantId,
-            locationId: t.locationId,
-            categoryId: t.categoryId || null,
-            supplierId: t.supplierId || null,
-            concept: t.concept,
-            amount: t.amount,
-            paymentMethod: 'TRANSFER',       // intención; se define al liquidar
-            settlementStatus: 'PENDING',
-            dueDate: t.nextDueAt,
-            notes: 'Generado de gasto recurrente',
-          },
-        });
-        return true;
-      });
-      if (ok) generated++;
-    }
-    res.json({ generated, scanned: due.length });
+    const result = await generateDueRecurring({ restaurantId });
+    res.json(result);
   } catch (e) {
     console.error('POST /api/payables/recurring/run:', e);
     res.status(500).json({ error: 'Error al generar recurrentes: ' + e.message });

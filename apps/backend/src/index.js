@@ -323,6 +323,9 @@ startAutoPromosJob()
 const { startUnverifiedPurgeJob } = require('./jobs/unverifiedPurge.job')
 startUnverifiedPurgeJob()
 
+const { startRecurringPayablesJob } = require('./jobs/recurringPayables.job')
+startRecurringPayablesJob()
+
 const PORT = process.env.PORT || 3001
 server.listen(PORT,'0.0.0.0', () => {
   console.log('┌─────────────────────────────────┐')
