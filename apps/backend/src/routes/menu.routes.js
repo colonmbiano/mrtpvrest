@@ -707,13 +707,21 @@ async function assertModifierBelongsToTenant(modifierId, restaurantId) {
   return { modifier };
 }
 
+// "cebolla" -> "Sin cebolla"; "Sin cebolla" -> "Sin cebolla" (idempotente). Los
+// modificadores de grupos REMOVE deben empezar con "Sin " para que la impresión
+// los marque como quitar y para que jamás colisionen con un ModifierIngredient.
+function ensureSinPrefix(name) {
+  const t = String(name).trim();
+  return /^sin\s/i.test(t) ? t : `Sin ${t}`;
+}
+
 router.post('/items/:itemId/modifier-groups', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     const check = await assertItemBelongsToTenant(req.params.itemId, restaurantId);
     if (check.error) return res.status(check.code).json({ error: check.error });
 
-    const { name, required, multiSelect, minSelection, maxSelection, freeModifiersLimit } = req.body;
+    const { name, required, multiSelect, minSelection, maxSelection, freeModifiersLimit, groupType } = req.body;
     if (!name) return res.status(400).json({ error: 'Nombre requerido' });
 
     const group = await prisma.modifierGroup.create({
@@ -725,6 +733,7 @@ router.post('/items/:itemId/modifier-groups', authenticate, requireTenantAccess,
         minSelection: parseInt(minSelection) || 0,
         maxSelection: parseInt(maxSelection) || 0,
         freeModifiersLimit: parseInt(freeModifiersLimit) || 0,
+        groupType: groupType === 'REMOVE' ? 'REMOVE' : 'ADD',
       },
       include: { modifiers: true },
     });
@@ -738,7 +747,7 @@ router.put('/modifier-groups/:groupId', authenticate, requireTenantAccess, requi
     const check = await assertGroupBelongsToTenant(req.params.groupId, restaurantId);
     if (check.error) return res.status(check.code).json({ error: check.error });
 
-    const { name, required, multiSelect, minSelection, maxSelection, freeModifiersLimit } = req.body;
+    const { name, required, multiSelect, minSelection, maxSelection, freeModifiersLimit, groupType } = req.body;
     const group = await prisma.modifierGroup.update({
       where: { id: req.params.groupId },
       data: {
@@ -748,6 +757,7 @@ router.put('/modifier-groups/:groupId', authenticate, requireTenantAccess, requi
         ...(minSelection !== undefined && { minSelection: parseInt(minSelection) || 0 }),
         ...(maxSelection !== undefined && { maxSelection: parseInt(maxSelection) || 0 }),
         ...(freeModifiersLimit !== undefined && { freeModifiersLimit: parseInt(freeModifiersLimit) || 0 }),
+        ...(groupType !== undefined && { groupType: groupType === 'REMOVE' ? 'REMOVE' : 'ADD' }),
       },
       include: { modifiers: true },
     });
@@ -775,11 +785,15 @@ router.post('/modifier-groups/:groupId/modifiers', authenticate, requireTenantAc
     const { name, priceAdd, isDefault } = req.body;
     if (!name) return res.status(400).json({ error: 'Nombre requerido' });
 
+    // En grupos REMOVE el modificador es gratis y con prefijo "Sin " forzado.
+    const grp = await prisma.modifierGroup.findUnique({ where: { id: req.params.groupId }, select: { groupType: true } });
+    const isRemoval = grp?.groupType === 'REMOVE';
+
     const modifier = await prisma.modifier.create({
       data: {
         groupId: req.params.groupId,
-        name,
-        priceAdd: parseFloat(priceAdd) || 0,
+        name: isRemoval ? ensureSinPrefix(name) : name,
+        priceAdd: isRemoval ? 0 : (parseFloat(priceAdd) || 0),
         isDefault: !!isDefault,
       },
     });

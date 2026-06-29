@@ -275,7 +275,7 @@ router.get('/menu', async (req, res) => {
           },
           modifierGroups: {
             select: {
-              id: true, name: true,
+              id: true, name: true, groupType: true,
               required: true, multiSelect: true,
               minSelection: true, maxSelection: true,
               // Exponemos isAvailable para pintar el extra como "Agotado" en el

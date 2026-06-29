@@ -931,7 +931,12 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     }
     if (cfg.showModifiers && item.modifiers && item.modifiers.length > 0) {
       s += itemSizeOff;
-      for (const m of item.modifiers) s += `  + ${m.name}\n`;
+      for (const m of item.modifiers) {
+        // "Quitar ingredientes": el modificador se llama "Sin X" → lo imprimimos
+        // como "SIN X" (sin el "+" que sugeriría que se agrega/cobra).
+        const isRemoval = /^sin\s/i.test(m.name);
+        s += isRemoval ? `  ${m.name.replace(/^sin\s/i, "SIN ")}\n` : `  + ${m.name}\n`;
+      }
       s += itemSizeOn;
     }
     if (cfg.showNotes && item.notes && item.notes.trim()) {
@@ -1212,8 +1217,11 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
     if (showMods) {
       for (const m of item.modifiers || []) {
         // Subline con sangría: "+ Nombre        +monto" alineado a la derecha.
+        // Los "Sin X" (quitar) se imprimen como "SIN X" sin "+" ni monto.
+        const isRemoval = /^sin\s/i.test(m.name);
         const right = showPrices && m.priceAdd ? "+" + fmtMoney(m.priceAdd) : "";
-        d += row(modIndent + "+ " + m.name, right, lw);
+        const left = isRemoval ? modIndent + m.name.replace(/^sin\s/i, "SIN ") : modIndent + "+ " + m.name;
+        d += row(left, right, lw);
       }
     }
     if (showNotes && item.notes) {
