@@ -22,6 +22,8 @@ import type {
 
 export const COMPLEMENT_MODIFIER_PREFIX = "complement:";
 export const VARIANT_MODIFIER_PREFIX = "variant:";
+// Opción de combo aplanada como modificador: id = "combo:<componentId>:<optionId>".
+export const COMBO_MODIFIER_PREFIX = "combo:";
 
 export const COMPLEMENTS_GROUP_ID = "__complements";
 export const VARIANTS_GROUP_ID = "__variants";
@@ -31,7 +33,8 @@ export function hasQuickOptions(product: Product): boolean {
   return (
     (product.hasVariants && (product.variants?.some((v) => v.isAvailable !== false) ?? false)) ||
     (product.modifierGroups?.some((group) => group.modifiers?.length > 0) ?? false) ||
-    (product.complements?.some((complement) => complement.isAvailable !== false) ?? false)
+    (product.complements?.some((complement) => complement.isAvailable !== false) ?? false) ||
+    (product.isCombo === true && (product.comboComponents?.length ?? 0) > 0)
   );
 }
 
@@ -82,7 +85,28 @@ export function buildOptionGroups(
           },
         ];
 
-  return [...variantGroups, ...(product.modifierGroups || []), ...complementGroups];
+  // Componentes del combo aplanados como grupos: cada opción es un "modificador"
+  // con priceAdd = priceDelta. El id "combo:<comp>:<opt>" lo separa
+  // splitModifierSelections en comboSelections para el backend.
+  const comboGroups: ModifierGroup[] = (product.isCombo ? (product.comboComponents || []) : []).map((comp) => ({
+    id: `__combo:${comp.id}`,
+    name: comp.name,
+    required: comp.isRequired !== false,
+    multiSelect: (comp.maxSelect || 1) > 1,
+    minSelection: comp.isRequired !== false ? Math.max(1, comp.minSelect || 1) : (comp.minSelect || 0),
+    maxSelection: comp.maxSelect || 1,
+    freeModifiersLimit: 0,
+    modifiers: (comp.options || [])
+      .filter((opt) => opt.isAvailable !== false)
+      .map((opt) => ({
+        id: `${COMBO_MODIFIER_PREFIX}${comp.id}:${opt.id}`,
+        groupId: `__combo:${comp.id}`,
+        name: opt.optionMenuItem?.name || "Opción",
+        priceAdd: Number(opt.priceDelta || 0),
+      })),
+  }));
+
+  return [...variantGroups, ...comboGroups, ...(product.modifierGroups || []), ...complementGroups];
 }
 
 export function computeUnitExtra(
@@ -173,6 +197,7 @@ export function splitModifierSelections(modifiers: ModifierSelection[]): {
   modifiers: { modifierId: string }[];
   complements: { complementId: string }[];
   variants: { variantId: string }[];
+  comboSelections: { componentId: string; optionId: string }[];
 } {
   const complementIds = modifiers
     .map((m) => (m.id.startsWith(COMPLEMENT_MODIFIER_PREFIX) ? m.id.slice(COMPLEMENT_MODIFIER_PREFIX.length) : null))
@@ -180,15 +205,28 @@ export function splitModifierSelections(modifiers: ModifierSelection[]): {
   const variantIds = modifiers
     .map((m) => (m.id.startsWith(VARIANT_MODIFIER_PREFIX) ? m.id.slice(VARIANT_MODIFIER_PREFIX.length) : null))
     .filter((id): id is string => Boolean(id));
+  // "combo:<componentId>:<optionId>" → { componentId, optionId }. Los ids son
+  // cuids (sin ':'), así que el primer ':' separa componente de opción.
+  const comboSelections = modifiers
+    .map((m) => {
+      if (!m.id.startsWith(COMBO_MODIFIER_PREFIX)) return null;
+      const rest = m.id.slice(COMBO_MODIFIER_PREFIX.length);
+      const idx = rest.indexOf(":");
+      if (idx < 0) return null;
+      return { componentId: rest.slice(0, idx), optionId: rest.slice(idx + 1) };
+    })
+    .filter((x): x is { componentId: string; optionId: string } => Boolean(x));
   return {
     modifiers: modifiers
       .filter(
         (m) =>
           !m.id.startsWith(COMPLEMENT_MODIFIER_PREFIX) &&
-          !m.id.startsWith(VARIANT_MODIFIER_PREFIX),
+          !m.id.startsWith(VARIANT_MODIFIER_PREFIX) &&
+          !m.id.startsWith(COMBO_MODIFIER_PREFIX),
       )
       .map((m) => ({ modifierId: m.id })),
     complements: complementIds.map((complementId) => ({ complementId })),
     variants: variantIds.map((variantId) => ({ variantId })),
+    comboSelections,
   };
 }
