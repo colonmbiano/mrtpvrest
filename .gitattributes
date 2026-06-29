@@ -1,1 +1,11 @@
+# Migraciones Prisma: EOL determinista = LF para todo el folder, sin importar
+# core.autocrlf/plataforma. El checksum que prod guarda en _prisma_migrations es
+# el sha256 del archivo; si un checkout en Windows (autocrlf=true) los convirtiera
+# a CRLF, darían un falso "migration modified" contra prod. Forzando LF, el
+# checksum casa siempre (las migraciones recientes en prod están en LF).
+packages/database/prisma/migrations/**/migration.sql text eol=lf
+
+# Excepción: esta migración se aplicó a prod en CRLF (su checksum registrado es el
+# del archivo CRLF). La dejamos binaria (-text) para preservar los bytes exactos.
+# Regla más específica = gana (última coincidencia).
 packages/database/prisma/migrations/20260615193000_add_ingredient_image_url/migration.sql -text
