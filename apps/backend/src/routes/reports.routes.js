@@ -2,6 +2,7 @@
 const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const { localDayRange } = require('../utils/dayRange')
+const { parseVariantsFromItem } = require('../lib/parse-variant')
 const DAY_MS = 86_400_000
 const router  = express.Router()
 
@@ -254,6 +255,100 @@ router.get('/saved', authenticate, requireTenantAccess, requireAdmin, async (req
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── REPORTES POR DIMENSIÓN (canal / variante / extra / combo) ──────────────
+// Where base por restaurante + rango (mismo patrón que /dashboard). Default
+// acotado a 30 días (NO histórico) para no escanear todo en by-variant (anti-OOM).
+function dimensionWhere(req) {
+  const { from, to, days } = req.query;
+  const where = { restaurantId: req.user?.restaurantId || req.restaurantId, status: { not: 'CANCELLED' } };
+  if (days) {
+    const n = Math.max(1, Math.min(parseInt(days) || 30, 366));
+    where.createdAt = { gte: new Date(localDayRange().from.getTime() - (n - 1) * DAY_MS), lte: localDayRange().to };
+  } else if (from || to) {
+    where.createdAt = {};
+    if (from) where.createdAt.gte = localDayRange(String(from)).from;
+    if (to)   where.createdAt.lte = localDayRange(String(to)).to;
+  } else {
+    where.createdAt = { gte: new Date(localDayRange().from.getTime() - 29 * DAY_MS), lte: localDayRange().to };
+  }
+  return where;
+}
+
+// Por CANAL (orderType): pedidos + ingreso.
+router.get('/by-channel', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const rows = await prisma.order.groupBy({
+      by: ['orderType'],
+      where: dimensionWhere(req),
+      _sum: { total: true },
+      _count: { id: true },
+      orderBy: { _sum: { total: 'desc' } },
+    });
+    res.json(rows.map((r) => ({ channel: r.orderType, orders: r._count.id, revenue: Number(r._sum.total || 0) })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Por EXTRA/MODIFICADOR. Aislamiento por tenant = where ANIDADO
+// (OrderItemModifier no tiene restaurantId, no es SCOPED). _sum sobre priceAdd =
+// ingreso atribuible al extra (NO ventas totales).
+router.get('/by-modifier', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const rows = await prisma.orderItemModifier.groupBy({
+      by: ['name'],
+      where: { orderItem: { order: dimensionWhere(req) } },
+      _sum: { priceAdd: true },
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 100,
+    });
+    res.json(rows.map((r) => ({ name: r.name, count: r._count.id, revenue: Number(r._sum.priceAdd || 0) })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Por COMBO: agrupa por menuItemId (NO por nombre, que lleva sufijo de variante);
+// resuelve el nombre canónico vía MenuItem. Filtra combos/promos.
+router.get('/by-combo', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const rows = await prisma.orderItem.groupBy({
+      by: ['menuItemId'],
+      where: { order: dimensionWhere(req), menuItem: { OR: [{ isCombo: true }, { isPromo: true }] } },
+      _sum: { quantity: true, subtotal: true },
+      orderBy: { _sum: { subtotal: 'desc' } },
+      take: 100,
+    });
+    const ids = rows.map((r) => r.menuItemId);
+    const names = await prisma.menuItem.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
+    const nameById = new Map(names.map((n) => [n.id, n.name]));
+    res.json(rows.map((r) => ({ menuItemId: r.menuItemId, name: nameById.get(r.menuItemId) || 'Combo', units: Number(r._sum.quantity || 0), revenue: Number(r._sum.subtotal || 0) })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Por VARIANTE: vive en el nombre ("Producto (Grande)") y/o en notes ("Variantes:
+// X"). Parseamos AMBAS fuentes (lib/parse-variant). Cap duro anti-OOM + prefiltro.
+// El ingreso se reparte entre las variantes del item (atribuible, no total).
+router.get('/by-variant', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const items = await prisma.orderItem.findMany({
+      where: { order: dimensionWhere(req), OR: [{ name: { contains: '(' } }, { notes: { contains: 'Variantes:' } }] },
+      select: { name: true, notes: true, quantity: true, subtotal: true },
+      take: 20000,
+    });
+    const agg = new Map();
+    for (const it of items) {
+      const variants = parseVariantsFromItem(it.name, it.notes);
+      if (variants.length === 0) continue;
+      const revShare = Number(it.subtotal || 0) / variants.length;
+      for (const v of variants) {
+        const cur = agg.get(v) || { variant: v, units: 0, revenue: 0 };
+        cur.units += Number(it.quantity || 0);
+        cur.revenue += revShare;
+        agg.set(v, cur);
+      }
+    }
+    res.json([...agg.values()].sort((a, b) => b.units - a.units).slice(0, 100));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router
