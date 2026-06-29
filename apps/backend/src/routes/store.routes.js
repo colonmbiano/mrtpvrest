@@ -23,6 +23,7 @@ const {
   instantiateFromIntegration,
 } = require('../lib/payment-providers');
 // Cálculo de envío: fuente única compartida con el chatbot de WhatsApp.
+const { resolveComboSelection } = require('../lib/money');
 const { computeDeliveryFee } = require('../lib/delivery-fee');
 const { filterLiveBanners } = require('../lib/banner-schedule');
 const { nextOrderNumber } = require('../lib/order-number');
@@ -270,7 +271,7 @@ router.get('/menu', async (req, res) => {
         select: {
           id: true, name: true, description: true, price: true,
           isPromo: true, promoPrice: true, imageUrl: true,
-          categoryId: true,
+          categoryId: true, isCombo: true,
           variants: {
             where: { isAvailable: true },
             select: { id: true, name: true, price: true },
@@ -290,6 +291,20 @@ router.get('/menu', async (req, res) => {
               // ocultarlo, para que el cliente sepa que existe pero no hay).
               modifiers: {
                 select: { id: true, name: true, priceAdd: true, isAvailable: true },
+              },
+            },
+          },
+          comboComponents: {
+            orderBy: { sortOrder: 'asc' },
+            select: {
+              id: true, name: true, minSelect: true, maxSelect: true, isRequired: true, sortOrder: true,
+              options: {
+                where: { isAvailable: true },
+                orderBy: { sortOrder: 'asc' },
+                select: {
+                  id: true, priceDelta: true, optionMenuItemId: true,
+                  optionMenuItem: { select: { id: true, name: true, imageUrl: true } },
+                },
               },
             },
           },
@@ -551,7 +566,7 @@ router.post('/orders', async (req, res) => {
   try {
     // Verificar y calcular items desde la BD (nunca confiar en precios del cliente)
     const itemsData = await Promise.all(
-      items.map(async ({ menuItemId, variantId, quantity = 1, notes: itemNotes, modifierIds }) => {
+      items.map(async ({ menuItemId, variantId, quantity = 1, notes: itemNotes, modifierIds, comboSelections }) => {
         if (!menuItemId) throw new Error('menuItemId requerido en cada item.');
 
         // findFirst (no findUnique): findUnique ignora silenciosamente los
@@ -564,6 +579,10 @@ router.post('/orders', async (req, res) => {
             variants: true,
             modifierGroups: { include: { modifiers: true } },
             complements: true,
+            comboComponents: {
+              orderBy: { sortOrder: 'asc' },
+              include: { options: { include: { optionMenuItem: { select: { id: true, name: true } } } } },
+            },
           },
         });
         if (!menuItem) throw new Error(`Producto ${menuItemId} no disponible.`);
@@ -631,7 +650,11 @@ router.post('/orders', async (req, res) => {
         }
         const complementsAdd = selectedComplements.reduce((s, c) => s + Number(c.price || 0), 0);
 
-        const unitPrice = basePrice + modifiersAdd + complementsAdd;
+        // Combos: resuelve la selección del cliente (re-lee priceDelta de DB,
+        // valida min/max y pertenencia). El desglose va a notas (comanda) y a la
+        // relación comboSelections (snapshot histórico).
+        const combo = resolveComboSelection(menuItem, { comboSelections });
+        const unitPrice = basePrice + modifiersAdd + complementsAdd + combo.priceDelta;
 
         const qty = Math.max(1, parseInt(quantity) || 1);
         const displayName = variantName ? `${menuItem.name} (${variantName})` : menuItem.name;
@@ -639,6 +662,10 @@ router.post('/orders', async (req, res) => {
         // Complementos al texto de notas (no hay tabla relacional para ellos).
         const complementNote = selectedComplements.length > 0
           ? `Complementos: ${selectedComplements.map(c => c.name).filter(Boolean).join(', ')}`
+          : '';
+        // Desglose del combo para la comanda (además de la relación comboSelections).
+        const comboNote = combo.selections.length > 0
+          ? combo.selections.map(s => s.name).join('\n')
           : '';
         // Nota libre del cliente: solo texto. Quitamos caracteres de control
         // (anti-inyección ESC/POS en la impresión térmica) y capamos a 200 —
@@ -648,6 +675,7 @@ router.post('/orders', async (req, res) => {
           : '';
         const finalNotes = [
           cleanItemNote,
+          comboNote,
           complementNote,
         ].filter(Boolean).join('\n') || null;
 
@@ -665,6 +693,18 @@ router.post('/orders', async (req, res) => {
                 modifierId: m.id,
                 name: m.name,
                 priceAdd: Number(m.priceAdd || 0),
+              })),
+            },
+          }),
+          // Selección del combo — snapshot histórico en ComboSelection.
+          ...(combo.selections.length > 0 && {
+            comboSelections: {
+              create: combo.selections.map(s => ({
+                componentId: s.componentId,
+                optionId: s.optionId,
+                optionMenuItemId: s.optionMenuItemId,
+                name: s.name,
+                priceDelta: s.priceDelta,
               })),
             },
           }),

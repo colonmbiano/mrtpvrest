@@ -11,10 +11,13 @@ type ModifierGroup = {
   id: string; name: string; required?: boolean; multiSelect?: boolean;
   minSelection?: number; maxSelection?: number; modifiers: Modifier[];
 };
+type ComboOption = { id: string; priceDelta: number; optionMenuItemId: string; optionMenuItem?: { id: string; name: string; imageUrl?: string | null } };
+type ComboComponent = { id: string; name: string; minSelect: number; maxSelect: number; isRequired: boolean; options: ComboOption[] };
 export type StoreProduct = {
   id: string; name: string; description?: string; price: number;
   isPromo?: boolean; promoPrice?: number; imageUrl?: string | null; imageFit?: string | null;
   variants?: Variant[]; modifierGroups?: ModifierGroup[]; complements?: Complement[];
+  isCombo?: boolean; comboComponents?: ComboComponent[];
 };
 
 // Los complementos viajan dentro de modifierIds con este prefijo; el backend
@@ -32,7 +35,8 @@ type ProductModalProps = {
 export function needsModal(p: StoreProduct) {
   return (p.variants && p.variants.length > 0)
     || (p.modifierGroups && p.modifierGroups.length > 0)
-    || (p.complements && p.complements.length > 0);
+    || (p.complements && p.complements.length > 0)
+    || (!!p.isCombo && !!p.comboComponents && p.comboComponents.length > 0);
 }
 
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
@@ -44,11 +48,13 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
   const variants = product.variants || [];
   const groups = product.modifierGroups || [];
   const complements = product.complements || [];
+  const comboComponents = product.comboComponents || [];
   const basePromo = product.isPromo && product.promoPrice ? product.promoPrice : product.price;
 
   const [variantId, setVariantId] = useState<string | null>(variants[0]?.id ?? null);
   const [selected, setSelected] = useState<Record<string, string[]>>({}); // groupId -> modifierIds
   const [selectedComplements, setSelectedComplements] = useState<string[]>([]); // complementIds
+  const [comboSel, setComboSel] = useState<Record<string, string[]>>({}); // componentId -> optionIds
   const [qty, setQty] = useState(1);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -64,8 +70,13 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
     () => selectedComplements.reduce((s, id) => s + (complements.find(c => c.id === id)?.price || 0), 0),
     [selectedComplements, complements],
   );
+  const allComboOptions = useMemo(() => comboComponents.flatMap(c => c.options), [comboComponents]);
+  const comboAdd = useMemo(() => {
+    const ids = Object.values(comboSel).flat();
+    return ids.reduce((s, id) => s + (allComboOptions.find(o => o.id === id)?.priceDelta || 0), 0);
+  }, [comboSel, allComboOptions]);
 
-  const unitPrice = basePrice + modifiersAdd + complementsAdd;
+  const unitPrice = basePrice + modifiersAdd + complementsAdd + comboAdd;
 
   const toggleMod = (g: ModifierGroup, modId: string) => {
     setError('');
@@ -88,6 +99,20 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
     );
   };
 
+  const toggleComboOption = (comp: ComboComponent, optionId: string) => {
+    setError('');
+    setComboSel(prev => {
+      const cur = prev[comp.id] || [];
+      const multi = (comp.maxSelect || 1) > 1;
+      if (multi) {
+        if (cur.includes(optionId)) return { ...prev, [comp.id]: cur.filter(x => x !== optionId) };
+        if (comp.maxSelect > 0 && cur.length >= comp.maxSelect) return prev;
+        return { ...prev, [comp.id]: [...cur, optionId] };
+      }
+      return { ...prev, [comp.id]: cur.includes(optionId) ? [] : [optionId] };
+    });
+  };
+
   const handleAdd = () => {
     // Validaciones de grupos requeridos / mínimos
     for (const g of groups) {
@@ -101,6 +126,11 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
         setError(`Elige al menos ${g.minSelection} en "${g.name}".`); return;
       }
     }
+    // Validar componentes obligatorios del combo.
+    for (const c of comboComponents) {
+      const cur = comboSel[c.id] || [];
+      if (c.isRequired && cur.length < (c.minSelect || 1)) { setError(`Elige una opción en "${c.name}".`); return; }
+    }
     const modifierIds = Object.values(selected).flat();
     // Complementos prefijados para que el backend los distinga de modificadores.
     const complementPayloadIds = selectedComplements.map(id => `${COMPLEMENT_PREFIX}${id}`);
@@ -108,14 +138,19 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
     const variantName = variantId ? variants.find(v => v.id === variantId)?.name : null;
     const modNames = modifierIds.map(id => allMods.find(m => m.id === id)?.name).filter(Boolean);
     const complementNames = selectedComplements.map(id => complements.find(c => c.id === id)?.name).filter(Boolean);
-    const extraNames = [...modNames, ...complementNames];
+    const comboSelections = comboComponents.flatMap(c => (comboSel[c.id] || []).map(optionId => ({ componentId: c.id, optionId })));
+    const comboNames = comboSelections
+      .map(s => allComboOptions.find(o => o.id === s.optionId)?.optionMenuItem?.name)
+      .filter(Boolean) as string[];
+    const extraNames = [...comboNames, ...modNames, ...complementNames];
     const displayName = [product.name, variantName ? `(${variantName})` : '', extraNames.length ? `· ${extraNames.join(', ')}` : '']
       .filter(Boolean).join(' ');
     const trimmedNote = note.trim();
-    // La nota entra en la clave de dedup: dos líneas iguales con notas distintas
-    // NO deben fusionarse (cada nota es una instrucción de cocina propia).
-    const key = `${product.id}|${variantId || ''}|${[...payloadIds].sort().join(',')}|${trimmedNote}`;
-    add({ id: key, menuItemId: product.id, name: displayName, price: unitPrice, variantId, modifierIds: payloadIds, note: trimmedNote || undefined, quantity: qty });
+    // La nota y la selección del combo entran en la clave de dedup: dos líneas
+    // "iguales" con combos/notas distintos NO deben fusionarse.
+    const comboSig = comboSelections.map(s => `${s.componentId}:${s.optionId}`).sort().join(',');
+    const key = `${product.id}|${variantId || ''}|${[...payloadIds].sort().join(',')}|${comboSig}|${trimmedNote}`;
+    add({ id: key, menuItemId: product.id, name: displayName, price: unitPrice, variantId, modifierIds: payloadIds, comboSelections: comboSelections.length ? comboSelections : undefined, note: trimmedNote || undefined, quantity: qty });
     onClose();
   };
 
@@ -167,6 +202,37 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
               </div>
             </div>
           )}
+
+          {/* Componentes del combo (Principal / Guarnición / Bebida…) */}
+          {comboComponents.map(c => (
+            <div key={c.id} className="mt-5">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] font-black uppercase tracking-widest" style={{ color: subText }}>{c.name}</p>
+                <span className="text-[10px] font-bold" style={{ color: subText }}>
+                  {c.isRequired ? 'Obligatorio' : 'Opcional'}{c.maxSelect > 1 ? ` · máx ${c.maxSelect}` : ''}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {c.options.map(o => {
+                  const on = (comboSel[c.id] || []).includes(o.id);
+                  return (
+                    <button key={o.id} onClick={() => toggleComboOption(c, o.id)}
+                      className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 transition-all"
+                      style={{ borderColor: on ? accent : (dark ? '#FFFFFF14' : '#e5e7eb'), background: on ? `${accent}14` : 'transparent' }}>
+                      <span className="font-bold text-sm flex items-center gap-2">
+                        <span className={`w-4 h-4 rounded-${(c.maxSelect || 1) > 1 ? 'md' : 'full'} border-2 flex items-center justify-center`}
+                          style={{ borderColor: on ? accent : (dark ? '#FFFFFF40' : '#cbd5e1'), background: on ? accent : 'transparent' }}>
+                          {on && <span className="text-white text-[10px]">✓</span>}
+                        </span>
+                        {o.optionMenuItem?.name || 'Opción'}
+                      </span>
+                      {o.priceDelta > 0 && <span className="text-sm font-bold" style={{ color: subText }}>+{fmt(o.priceDelta)}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
 
           {/* Grupos de modificadores */}
           {groups.map(g => (
