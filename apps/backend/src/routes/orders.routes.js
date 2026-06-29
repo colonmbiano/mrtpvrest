@@ -397,6 +397,7 @@ const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePer
 const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
 const { resolveVariantSelection, applyFreeModifiers, computeOrderTotals, computeEmployeeDiscount, normalizeTenders, round2 } = require('../lib/money');
+const { canTransition } = require('../lib/order-status');
 const { requireModule, MODULES } = require('../lib/modules');
 const { computeBulkPromoDiscount, loadActiveBulkPromos } = require('../lib/bulk-promo');
 const { nextOrderNumber } = require('../lib/order-number');
@@ -476,7 +477,7 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
     // estado (mayormente cerrados) con todos sus items, y el TPV los descargaba
     // solo para descartar ~el 90% en el cliente → el drawer tardaba en cargar.
     // Las páginas admin siguen pidiendo el historial completo (sin el param).
-    const ACTIVE_ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'OPEN', 'ON_THE_WAY'];
+    const ACTIVE_ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING', 'OPEN', 'ON_THE_WAY'];
     const isPaidScope = req.query.scope === 'paid';
     if (req.query.scope === 'active' || req.query.status === 'active') {
       where.status = { in: ACTIVE_ORDER_STATUSES };
@@ -1743,6 +1744,15 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
     });
     if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
 
+    // Máquina de estados: solo transiciones válidas por estado + rol. El no-op
+    // (mismo estado) se permite pero NO re-emite socket/notify (evita push
+    // duplicado en replays del outbox).
+    const role = req.user?.role;
+    const statusChanged = existing.status !== status;
+    if (statusChanged && !canTransition(existing.status, status, role)) {
+      return res.status(409).json({ error: `Transición inválida (${existing.status} → ${status})`, code: 'INVALID_TRANSITION' });
+    }
+
     const order = await prisma.order.update({
       where: { id: existing.id },
       data: { status }
@@ -1767,18 +1777,22 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
       }).catch(() => {});
     }
 
-    const io = req.app.get('io');
-    if (io) {
-      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
-    }
+    // Solo emitimos/notificamos si el estado realmente cambió (un no-op no debe
+    // disparar push/WhatsApp duplicados en replays).
+    if (statusChanged) {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
+      }
 
-    // Notificar al cliente el cambio de estado (push + WhatsApp con la config
-    // del restaurante). Best-effort: no bloquea la respuesta al operador y los
-    // pedidos sin teléfono (ej. dine-in del TPV) se omiten dentro del servicio.
-    const { notifyOrderStatus } = require('../services/notifications.service');
-    notifyOrderStatus(order, status).catch((err) =>
-      console.error('[orders] notifyOrderStatus:', err.message)
-    );
+      // Notificar al cliente el cambio de estado (push + WhatsApp con la config
+      // del restaurante). Best-effort: no bloquea la respuesta al operador y los
+      // pedidos sin teléfono (ej. dine-in del TPV) se omiten dentro del servicio.
+      const { notifyOrderStatus } = require('../services/notifications.service');
+      notifyOrderStatus(order, status).catch((err) =>
+        console.error('[orders] notifyOrderStatus:', err.message)
+      );
+    }
 
     // Auditoría best-effort de la cancelación (acción sensible: quién y qué).
     if (status === 'CANCELLED') {

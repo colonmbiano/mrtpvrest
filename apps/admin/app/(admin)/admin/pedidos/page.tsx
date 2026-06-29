@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   ChevronDown, ChevronUp, Inbox, CheckCircle2, ChefHat, BellRing,
   Bike, Home, MessageCircle, X, RotateCw, LayoutGrid, List, Search,
-  Flame, Store, MapPin, StickyNote,
+  Flame, Store, MapPin, StickyNote, Package,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
@@ -13,7 +13,7 @@ import {
 
 /* ── status model ────────────────────────────────────────────────── */
 type StatusKey =
-  | "PENDING" | "CONFIRMED" | "PREPARING" | "READY"
+  | "PENDING" | "CONFIRMED" | "PREPARING" | "READY" | "PACKING"
   | "ON_THE_WAY" | "DELIVERED" | "CANCELLED";
 
 const STATUSES: { key: StatusKey; label: string; icon: typeof Inbox; tone: Tone }[] = [
@@ -21,6 +21,7 @@ const STATUSES: { key: StatusKey; label: string; icon: typeof Inbox; tone: Tone 
   { key: "CONFIRMED",  label: "Confirmados", icon: CheckCircle2, tone: "info" },
   { key: "PREPARING",  label: "Preparando",  icon: ChefHat,      tone: "ac"   },
   { key: "READY",      label: "Listos",      icon: BellRing,     tone: "info" },
+  { key: "PACKING",    label: "En empaque",  icon: Package,      tone: "ac"   },
   { key: "ON_THE_WAY", label: "En camino",   icon: Bike,         tone: "ac"   },
   { key: "DELIVERED",  label: "Entregados",  icon: Home,         tone: "ok"   },
 ];
@@ -28,9 +29,11 @@ const STATUSES: { key: StatusKey; label: string; icon: typeof Inbox; tone: Tone 
 const STATUS_META: Record<string, { label: string; icon: typeof Inbox; tone: Tone }> =
   Object.fromEntries(STATUSES.map((s) => [s.key, s]));
 
+// Avance por defecto. READY → ON_THE_WAY se mantiene (la mayoría no usa empaque);
+// PACKING (cuando el tenant lo activa) avanza a ON_THE_WAY.
 const NEXT_STATUS: Record<string, StatusKey> = {
   PENDING: "CONFIRMED", CONFIRMED: "PREPARING",
-  PREPARING: "READY", READY: "ON_THE_WAY", ON_THE_WAY: "DELIVERED",
+  PREPARING: "READY", READY: "ON_THE_WAY", PACKING: "ON_THE_WAY", ON_THE_WAY: "DELIVERED",
 };
 
 const SOURCE_LABELS: Record<string, string> = {

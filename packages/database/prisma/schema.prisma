@@ -722,6 +722,9 @@ enum OrderStatus {
   // dependiera del orden PENDING < CONFIRMED < ... < CANCELLED se mantiene
   // intacto.
   OPEN
+  // PACKING = en empaque (verificación final antes de salir/entregar). Al final
+  // del enum por la misma razón que OPEN (Postgres ordena por declaración).
+  PACKING
 }
 
 enum PaymentMethod {
