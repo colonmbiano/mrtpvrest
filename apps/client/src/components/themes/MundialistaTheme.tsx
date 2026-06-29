@@ -47,6 +47,12 @@ const BODY = 'var(--font-montserrat), system-ui, sans-serif';
 
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
 const priceOf = (p: any) => (p.isPromo && p.promoPrice ? p.promoPrice : p.price);
+// Precio "Desde" para productos con variantes: menor precio de variante > 0; si no
+// hay variantes con precio, cae al precio base (evita mostrar "Desde $0").
+const priceFrom = (p: any): { value: number; from: boolean } => {
+  const vs = (p.variants || []).map((v: any) => Number(v.price)).filter((n: number) => n > 0);
+  return vs.length ? { value: Math.min(...vs), from: true } : { value: priceOf(p), from: false };
+};
 
 // La portada (hero) se sube a 1600px (mode=hero), así que NO usamos cldImage
 // (que capa a 800). Servimos f_auto/q_auto hasta 1600 sin recortar. URLs que no
@@ -86,7 +92,7 @@ const isShippingCat = (name?: string | null) => !!name && /env[ií]o/i.test(name
 
 type Info = {
   id: string; name: string; slug: string; logo: string | null; hasWebStore: boolean;
-  whatsappNumber: string | null; minOrderAmount?: number; estimatedDelivery?: number;
+  whatsappNumber: string | null; minOrderAmount?: number; estimatedDelivery?: number; isOpen?: boolean;
   onlinePayment?: boolean; delivery?: DeliveryConfig; heroImageUrl?: string | null;
   themeConfig: { theme?: string; primaryColor?: string } | null;
 };
@@ -339,6 +345,17 @@ function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, o
             <img src={cldImage(info.logo, { width: 120 })} alt={info.name} loading="eager" decoding="async" className="w-10 h-10 rounded-full object-cover shrink-0" style={{ border: `1.5px solid ${GOLD}` }} />
           ) : <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-extrabold" style={{ background: `${GOLD}22`, color: GOLD }}>{info.name.trim().charAt(0)}</div>}
 
+          {/* Estado de la tienda. Solo se monta el tema cuando está abierta
+              (page.tsx corta en isOpen===false); el tiempo es de ENTREGA y solo
+              aplica en modo DELIVERY. */}
+          {info.isOpen !== false && (
+            <span className="flex items-center gap-1.5 shrink-0 px-2.5 h-7 rounded-full text-[11px] font-bold" style={{ background: '#22c55e1a', color: '#22c55e', border: '1px solid #22c55e40' }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e' }} />
+              Abierto
+              {orderMode === 'DELIVERY' && info.estimatedDelivery ? <span className="hidden sm:inline font-semibold opacity-80">· ~{info.estimatedDelivery} min</span> : null}
+            </span>
+          )}
+
           {/* Selector de dirección (desktop) */}
           <button className="hidden md:flex items-center gap-2 px-3 h-10 rounded-xl max-w-[220px]" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
             <MapPin className="w-4 h-4 shrink-0" style={{ color: GOLD }} />
@@ -565,6 +582,7 @@ function ProductCard({ p, onOpen }: { p: any; onOpen: () => void }) {
   const remove = useCart(s => s.remove);
   const line = lines.find(l => l.id === p.id);
   const price = priceOf(p);
+  const pf = priceFrom(p);
 
   return (
     <article className="group relative rounded-[16px] p-2.5 flex flex-col transition-all" style={{ background: SURF, border: `1px solid ${BORDER}` }}>
@@ -587,10 +605,12 @@ function ProductCard({ p, onOpen }: { p: any; onOpen: () => void }) {
 
       <div className="mt-2.5 flex items-end justify-between gap-2">
         <div className="flex flex-col leading-none min-w-0">
-          {p.isPromo && <span className="text-[10px] line-through" style={{ color: '#FFFFFF40' }}>{fmt(p.price)}</span>}
-          <span className="font-extrabold text-[17px]" style={{ color: GOLD }}>{fmt(price)}</span>
+          {pf.from
+            ? <span className="text-[9px] font-bold uppercase tracking-wide leading-none mb-0.5" style={{ color: MUTED }}>Desde</span>
+            : (p.isPromo && <span className="text-[10px] line-through" style={{ color: '#FFFFFF40' }}>{fmt(p.price)}</span>)}
+          <span className="font-extrabold text-[17px]" style={{ color: GOLD }}>{fmt(pf.value)}</span>
         </div>
-        {line ? (
+        {line && !needsModal(p) ? (
           <div className="flex items-center gap-1 rounded-full px-1 py-1 shrink-0" style={{ background: SURF2 }}>
             <button onClick={() => remove(p.id)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ color: '#FFFFFFcc' }} aria-label="Quitar">
               {line.quantity > 1 ? <Minus className="w-3.5 h-3.5" /> : <Trash2 className="w-3.5 h-3.5" />}
