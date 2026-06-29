@@ -18,9 +18,9 @@
   },
   "dependencies": {
     "@capacitor/core": "^8.4.1",
-    "@capgo/capacitor-updater": "^8.49.7",
-    "axios": "^1.18.0",
-    "framer-motion": "^12.40.0",
+    "@capgo/capacitor-updater": "^8.50.1",
+    "axios": "^1.18.1",
+    "framer-motion": "^12.42.0",
     "jsqr": "^1.4.0",
     "lucide-react": "^0.577.0",
     "next": "16.2.9",

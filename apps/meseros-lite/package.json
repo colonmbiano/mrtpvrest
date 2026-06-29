@@ -19,9 +19,9 @@
   "dependencies": {
     "@capacitor/app": "^8.1.0",
     "@capacitor/core": "^8.4.1",
-    "@capgo/capacitor-updater": "^8.49.7",
+    "@capgo/capacitor-updater": "^8.50.1",
     "@mrtpvrest/types": "workspace:*",
-    "axios": "^1.18.0",
+    "axios": "^1.18.1",
     "capacitor-tcp-socket": "^7.1.1",
     "lucide-react": "^0.577.0",
     "next": "16.2.9",
