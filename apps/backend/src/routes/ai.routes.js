@@ -1,10 +1,11 @@
 const express = require('express');
-const { scanMenuFromImages, scanInventoryFromImages, parseInventoryFile, isSpreadsheet, generateRecipeForId } = require('../services/ai.service');
+const { scanMenuFromImages, scanInventoryFromImages, scanPurchaseTicketFromImages, parseInventoryFile, isSpreadsheet, generateRecipeForId } = require('../services/ai.service');
 const { runAssistant } = require('../services/assistant.service');
 const { runVoiceAgent } = require('../services/voice-agent.service');
 const { runOrderDictationSmart } = require('../services/order-dictation.service');
 const { resolveGeminiKey } = require('../services/ai-key.service');
 const { authenticate, requireAdmin, requireRole, requireTenantAccess } = require('../middleware/auth.middleware');
+const { prisma } = require('@mrtpvrest/database');
 
 // Roles que pueden escanear tickets de compra (mismos que registran compras
 // desde el TPV). El escaneo de inventario alimenta el flujo de Compras, así
@@ -53,6 +54,39 @@ const upload = multer({
     else cb(new Error('Tipo de archivo no permitido'));
   },
 });
+
+function normalizeForMatch(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function scoreNameMatch(source, target) {
+  const a = normalizeForMatch(source);
+  const b = normalizeForMatch(target);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.includes(b) || b.includes(a)) return 0.86;
+  const sourceTokens = new Set(a.split(' ').filter((token) => token.length > 2));
+  const targetTokens = new Set(b.split(' ').filter((token) => token.length > 2));
+  if (!sourceTokens.size || !targetTokens.size) return 0;
+  const hits = [...sourceTokens].filter((token) => targetTokens.has(token)).length;
+  return hits / Math.max(sourceTokens.size, targetTokens.size);
+}
+
+function bestMatch(name, rows, labelKey = 'name') {
+  let best = null;
+  for (const row of rows) {
+    const score = scoreNameMatch(name, row[labelKey]);
+    if (!best || score > best.score) best = { row, score };
+  }
+  if (!best || best.score < 0.32) return null;
+  return { ...best.row, confidence: Number(best.score.toFixed(2)) };
+}
 
 // Escanear MENÚ (Platos y Precios) — visión, usa Gemini con key de plataforma.
 router.post('/scan-menu', authenticate, requireTenantAccess, requireAdmin, upload.array('images', 10), async (req, res) => {
@@ -123,6 +157,72 @@ router.post('/scan-inventory', authenticate, requireTenantAccess, requireRole(..
 // POST /api/ai/assistant — chat con el asistente administrativo (Claude)
 // Body: { messages: [{ role: "user"|"assistant", content: string|Array }] }
 // Responde con { messages, usage } incluyendo la respuesta final del asistente.
+// Escanear TICKET DE COMPRA con IA para captura supervisada.
+// Devuelve borrador + matches sugeridos. No mueve stock; la app confirma y
+// registra la compra despues con /api/purchases.
+router.post('/scan-purchase-ticket', authenticate, requireTenantAccess, requireRole(...PURCHASE_SCAN_ROLES), upload.array('images', 5), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No se recibieron fotos del ticket.' });
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const locationId = req.locationId || req.headers['x-location-id'];
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const { apiKey } = resolveGeminiKey();
+    const imageParts = req.files.map((file) => ({
+      data: file.buffer.toString('base64'),
+      mimeType: file.mimetype || 'image/jpeg',
+    }));
+
+    const [ticket, ingredients, suppliers] = await Promise.all([
+      scanPurchaseTicketFromImages(imageParts, apiKey),
+      prisma.ingredient.findMany({
+        where: { restaurantId, OR: [{ locationId }, { locationId: null }] },
+        select: { id: true, name: true, unit: true, baseUnit: true, stock: true, cost: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.supplier.findMany({
+        where: { restaurantId },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+
+    const supplierMatch = bestMatch(ticket.supplierName, suppliers);
+    const items = (ticket.items || []).map((item, index) => {
+      const ingredientMatch = bestMatch(item.name, ingredients);
+      return {
+        id: `ticket-line-${index + 1}`,
+        ...item,
+        ingredientMatch: ingredientMatch
+          ? {
+              id: ingredientMatch.id,
+              name: ingredientMatch.name,
+              unit: ingredientMatch.unit,
+              baseUnit: ingredientMatch.baseUnit,
+              confidence: ingredientMatch.confidence,
+            }
+          : null,
+        needsReview: item.confidence < 0.7 || !ingredientMatch || ingredientMatch.confidence < 0.58,
+      };
+    });
+
+    res.json({
+      message: 'Ticket analizado con IA',
+      source: 'ai',
+      data: {
+        ...ticket,
+        supplierMatch: supplierMatch ? { id: supplierMatch.id, name: supplierMatch.name, confidence: supplierMatch.confidence } : null,
+        items,
+      },
+    });
+  } catch (error) {
+    if (error?.code) return sendAiError(res, error);
+    console.error('Error en AI Purchase Ticket Route:', error);
+    res.status(500).json({ error: error?.message || 'Hubo un problema al leer el ticket.' });
+  }
+});
+
 router.post('/assistant', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;

@@ -316,6 +316,88 @@ Si no puedes determinar un valor, usa 0. Consolida duplicados en una sola entrad
   }
 }
 
+/**
+ * Escanea fotos de tickets de compra para captura supervisada.
+ * La salida se usa como borrador: el usuario siempre confirma antes de
+ * afectar inventario.
+ * @param {Array<{data: string, mimeType: string}>} imageParts
+ */
+async function scanPurchaseTicketFromImages(imageParts, apiKey) {
+  try {
+    const model = getGeminiModel(apiKey, true);
+    const prompt = `Eres un capturista experto de compras para restaurante.
+Analiza las fotos de un ticket, factura o nota de compra y extrae la informacion para actualizar inventario.
+
+Reglas:
+- Devuelve SOLO JSON valido.
+- Conserva los nombres tal como se entienden en el ticket, pero normalizados a espanol claro.
+- Cada renglon debe ser un producto comprado, no subtotales ni metodos de pago.
+- quantity es la cantidad comprada. Si el ticket dice 2 x $15, quantity=2 y unitPrice=15.
+- Si solo aparece importe total del renglon, calcula unitPrice = lineTotal / quantity.
+- confidence va de 0 a 1. Usa menos de 0.70 si el renglon esta borroso, abreviado o dudoso.
+- Si un dato no se ve, usa null para texto/fecha y 0 para numeros.
+
+Formato exacto:
+{
+  "supplierName": "string|null",
+  "ticketNumber": "string|null",
+  "purchaseDate": "YYYY-MM-DD|null",
+  "subtotal": 0,
+  "tax": 0,
+  "total": 0,
+  "currency": "MXN",
+  "notes": "string",
+  "items": [
+    {
+      "rawText": "texto del renglon",
+      "name": "producto",
+      "quantity": 0,
+      "unit": "pz|kg|g|l|ml|caja|paquete|otro",
+      "unitPrice": 0,
+      "lineTotal": 0,
+      "confidence": 0
+    }
+  ]
+}`;
+
+    const formattedImages = imageParts.map(p => ({ inlineData: { data: p.data, mimeType: p.mimeType || "image/jpeg" } }));
+    const result = await model.generateContent([prompt, ...formattedImages]);
+    const text = result.response.text();
+    const parsed = extractJsonObject(text);
+    const items = Array.isArray(parsed.items) ? parsed.items : [];
+
+    return {
+      supplierName: parsed.supplierName || null,
+      ticketNumber: parsed.ticketNumber || null,
+      purchaseDate: parsed.purchaseDate || null,
+      subtotal: Number(parsed.subtotal) || 0,
+      tax: Number(parsed.tax) || 0,
+      total: Number(parsed.total) || 0,
+      currency: parsed.currency || 'MXN',
+      notes: parsed.notes || '',
+      items: items
+        .map((item) => {
+          const quantity = Number(item.quantity) || 0;
+          const lineTotal = Number(item.lineTotal) || 0;
+          const unitPrice = Number(item.unitPrice) || (quantity > 0 ? lineTotal / quantity : 0);
+          return {
+            rawText: normalizeName(item.rawText),
+            name: normalizeName(item.name),
+            quantity,
+            unit: normalizeName(item.unit) || 'pz',
+            unitPrice,
+            lineTotal: lineTotal || quantity * unitPrice,
+            confidence: Math.max(0, Math.min(1, Number(item.confidence) || 0)),
+          };
+        })
+        .filter((item) => item.name && item.quantity > 0),
+    };
+  } catch (error) {
+    console.error('Error IA Ticket Compra:', error);
+    throw error;
+  }
+}
+
 async function generateRecipeForId({ menuItemId, restaurantId, apiKey }) {
   const menuItem = await prisma.menuItem.findFirst({ where: { id: menuItemId, restaurantId } });
   if (!menuItem) throw new Error('Platillo no encontrado');
@@ -509,4 +591,4 @@ Genera las recetas automáticas para el siguiente platillo:
   });
 }
 
-module.exports = { scanMenuFromImages, scanInventoryFromImages, parseInventoryFile, isSpreadsheet, generateRecipeForId };
+module.exports = { scanMenuFromImages, scanInventoryFromImages, scanPurchaseTicketFromImages, parseInventoryFile, isSpreadsheet, generateRecipeForId };

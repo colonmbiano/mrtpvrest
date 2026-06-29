@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import OtaUpdater from "@/components/OtaUpdater";
 
 export const metadata: Metadata = {
   title: "MRTPV KDS · Estación de cocina",
@@ -44,6 +45,7 @@ export default function RootLayout({
           fontFamily: "'Outfit', system-ui, sans-serif",
         }}
       >
+        <OtaUpdater />
         {children}
       </body>
     </html>

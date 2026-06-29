@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { AccentInjector } from "@/components/AccentInjector";
 import { KioskStyleInjector } from "@/components/KioskStyleInjector";
 import { AccessibilityBar } from "@/components/AccessibilityBar";
+import OtaUpdater from "@/components/OtaUpdater";
 
 export const metadata: Metadata = {
   title: "Kiosko — Autoservicio",
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         <KioskStyleInjector />
         <AccentInjector />
+        <OtaUpdater />
         <ThemeProvider>{children}</ThemeProvider>
         <AccessibilityBar />
       </body>

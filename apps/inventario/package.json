@@ -1,0 +1,37 @@
+{
+  "name": "@mrtpvrest/inventario",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3011 --webpack",
+    "build": "next build",
+    "start": "next start -p 3011",
+    "build:apk": "cross-env CAPACITOR_BUILD=true next build && npx cap sync android",
+    "apk:debug": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleDebug && cd ..",
+    "apk:release": "cross-env CAPACITOR_BUILD=true pnpm run build:apk && cd android && gradlew.bat assembleRelease && cd ..",
+    "cap:add": "npx cap add android",
+    "cap:sync": "npx cap sync android",
+    "ota:release": "node scripts/release-ota.mjs",
+    "postinstall": "node scripts/patch-android-plugins.js"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.3.1",
+    "@capgo/capacitor-updater": "^8.0.0",
+    "axios": "^1.16.1",
+    "lucide-react": "^1.11.0",
+    "next": "16.2.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "sonner": "^2.0.7"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/cli": "^8.3.1",
+    "archiver": "^7.0.1",
+    "@types/node": "^20",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "cross-env": "^10.1.0",
+    "typescript": "^5"
+  }
+}

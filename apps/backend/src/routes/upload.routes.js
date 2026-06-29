@@ -3,21 +3,20 @@ const axios = require('axios');
 const dns = require('dns').promises;
 const net = require('net');
 const { upload, uploadImage } = require('../services/cloudinary.service');
-const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
+const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 const MAX_REMOTE_IMAGE_BYTES = 6 * 1024 * 1024;
 const ALLOWED_REMOTE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
-// Middleware para permitir ADMIN o SUPER_ADMIN
+// Middleware para permitir roles administrativos que pueden operar inventario/menu.
 const requireStaffOrSuper = (req, res, next) => {
-  if (req.user && (req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN')) {
+  if (req.user && ['OWNER', 'ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(req.user.role)) {
     next();
   } else {
     res.status(403).json({ error: 'Acceso denegado' });
   }
 };
-
 
 function isPrivateIp(address) {
   const version = net.isIP(address);
@@ -117,7 +116,6 @@ router.post('/image', authenticate, requireTenantAccess, requireStaffOrSuper, up
     res.status(500).json({ error: 'Error al subir imagen a la nube' });
   }
 });
-
 
 router.post('/image-from-url', authenticate, requireTenantAccess, requireStaffOrSuper, async (req, res) => {
   try {

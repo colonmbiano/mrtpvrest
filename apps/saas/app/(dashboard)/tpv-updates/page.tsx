@@ -19,6 +19,16 @@ interface OtaBundle {
 const CHANNELS = ["production", "beta", "dev"] as const;
 type Channel = typeof CHANNELS[number];
 
+const OTA_APPS = [
+  { key: "tpv", label: "TPV", appId: "com.mrtpvrest.tpv", path: "apps/tpv/" },
+  { key: "delivery", label: "Delivery", appId: "com.mrtpvrest.delivery", path: "apps/delivery/" },
+  { key: "kiosk", label: "Kiosk", appId: "com.mrtpvrest.kiosk", path: "apps/kiosk/" },
+  { key: "kds", label: "KDS", appId: "com.mrtpvrest.kds", path: "apps/kds/" },
+  { key: "meseros-lite", label: "Meseros Lite", appId: "com.mrtpvrest.meseroslite", path: "apps/meseros-lite/" },
+  { key: "inventario", label: "Inventario", appId: "com.mrtpvrest.inventario", path: "apps/inventario/" },
+] as const;
+type OtaAppKey = typeof OTA_APPS[number]["key"];
+
 const CHANNEL_BADGE: Record<Channel, string> = {
   production: "db-badge-green",
   beta: "db-badge-amber",
@@ -44,6 +54,7 @@ function timeAgo(iso: string): string {
 }
 
 export default function TpvUpdatesPage() {
+  const [appKey, setAppKey] = useState<OtaAppKey>("tpv");
   const [channel, setChannel] = useState<Channel>("production");
   const [bundles, setBundles] = useState<OtaBundle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +64,7 @@ export default function TpvUpdatesPage() {
   const [toast, setToast] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<OtaBundle | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedApp = OTA_APPS.find((app) => app.key === appKey) || OTA_APPS[0];
 
   function showToast(msg: string) {
     if (timer.current) clearTimeout(timer.current);
@@ -64,7 +76,7 @@ export default function TpvUpdatesPage() {
     setLoading(true);
     try {
       const { data } = await api.get<{ bundles: OtaBundle[] }>("/api/ota/bundles", {
-        params: { channel },
+        params: { channel, appId: selectedApp.appId },
       });
       setBundles(data.bundles || []);
     } catch (err: any) {
@@ -76,16 +88,17 @@ export default function TpvUpdatesPage() {
 
   useEffect(() => {
     load();
-  }, [channel]);
+  }, [appKey, channel]);
 
   async function triggerBuild() {
     setTriggering(true);
     try {
       const { data } = await api.post("/api/ota/trigger-build", {
+        appId: selectedApp.appId,
         channel,
         notes: triggerNotes || undefined,
       });
-      showToast(`Build disparado · canal ${channel}`);
+      showToast(`Build disparado: ${selectedApp.label} · ${channel}`);
       setShowTrigger(false);
       setTriggerNotes("");
       // El workflow tarda 3-5 min. Recargamos en 30s para empezar a ver.
@@ -117,9 +130,9 @@ export default function TpvUpdatesPage() {
     <div className="db-container">
       <header className="db-page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <h1 className="db-page-title">TPV Updates · OTA</h1>
+          <h1 className="db-page-title">OTA Updates</h1>
           <p className="db-page-subtitle">
-            Live updates del bundle web del TPV. Cada push a <code>apps/tpv/</code> en master genera un release automáticamente.
+            Live updates del bundle web. Cada push a <code>{selectedApp.path}</code> en master genera un release automaticamente.
           </p>
         </div>
         <button
@@ -131,9 +144,20 @@ export default function TpvUpdatesPage() {
         </button>
       </header>
 
-      {/* Channel selector */}
-      <div className="db-card" style={{ padding: 16, marginBottom: 16, display: "flex", gap: 8, alignItems: "center" }}>
-        <span className="db-label">Canal:</span>
+      {/* App and channel selector */}
+      <div className="db-card" style={{ padding: 16, marginBottom: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span className="db-label">App:</span>
+        {OTA_APPS.map((app) => (
+          <button
+            key={app.key}
+            onClick={() => setAppKey(app.key)}
+            className={`db-chip ${appKey === app.key ? "db-chip-active" : ""}`}
+            style={{ fontSize: 11, fontWeight: 700 }}
+          >
+            {app.label}
+          </button>
+        ))}
+        <span className="db-label" style={{ marginLeft: 12 }}>Canal:</span>
         {CHANNELS.map((c) => (
           <button
             key={c}
@@ -207,7 +231,7 @@ export default function TpvUpdatesPage() {
             {!loading && bundles.length === 0 && (
               <tr>
                 <td colSpan={7} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
-                  No hay bundles publicados en el canal <strong>{channel}</strong>.
+                  No hay bundles publicados para <strong>{selectedApp.label}</strong> en el canal <strong>{channel}</strong>.
                 </td>
               </tr>
             )}
@@ -256,7 +280,7 @@ export default function TpvUpdatesPage() {
           <div className="db-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
             <h2 style={{ marginTop: 0 }}>Publicar versión ahora</h2>
             <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>
-              Dispara el workflow de GitHub Actions que builda el TPV y lo publica en el canal{" "}
+              Dispara el workflow de GitHub Actions que builda {selectedApp.label} y lo publica en el canal{" "}
               <strong>{channel}</strong>. Tarda 3-5 minutos.
             </p>
             <div style={{ marginTop: 16 }}>
