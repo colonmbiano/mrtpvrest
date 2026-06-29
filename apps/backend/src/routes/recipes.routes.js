@@ -227,6 +227,11 @@ router.post('/modifiers', requireAdmin, async (req, res) => {
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
     const { name, items = [] } = req.body || {};
     if (!name || !String(name).trim()) return res.status(400).json({ error: 'name requerido' });
+    // Los "Sin ..." (quitar ingredientes) son gratis y NO descuentan inventario:
+    // prohibido mapearles insumos (evita descuento fantasma por colisión de nombre).
+    if (/^sin\s/i.test(String(name).trim()) && (items?.length ?? 0) > 0) {
+      return res.status(400).json({ error: 'Un "Sin ..." (quitar ingrediente) no descuenta inventario; no se le mapean insumos.' });
+    }
 
     const normalized = validateItems(items);
     if (normalized.error) return res.status(400).json({ error: normalized.error });

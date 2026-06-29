@@ -17,6 +17,7 @@ type ModifierGroup = {
   minSelection: number;
   maxSelection: number;
   freeModifiersLimit: number;
+  groupType?: string;
   modifiers: Modifier[];
 };
 
@@ -27,6 +28,7 @@ type GroupForm = {
   minSelection: string;
   maxSelection: string;
   freeModifiersLimit: string;
+  groupType: string;
 };
 
 const emptyGroupForm: GroupForm = {
@@ -36,6 +38,7 @@ const emptyGroupForm: GroupForm = {
   minSelection: "0",
   maxSelection: "0",
   freeModifiersLimit: "0",
+  groupType: "ADD",
 };
 
 export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
@@ -80,6 +83,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
       minSelection: String(g.minSelection),
       maxSelection: String(g.maxSelection),
       freeModifiersLimit: String(g.freeModifiersLimit),
+      groupType: g.groupType || "ADD",
     });
     setShowGroupForm(true);
   }
@@ -96,6 +100,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
         minSelection: parseInt(groupForm.minSelection) || 0,
         maxSelection: parseInt(groupForm.maxSelection) || 0,
         freeModifiersLimit: parseInt(groupForm.freeModifiersLimit) || 0,
+        groupType: groupForm.groupType === "REMOVE" ? "REMOVE" : "ADD",
       };
       if (editingGroupId) {
         await api.put(`/api/menu/modifier-groups/${editingGroupId}`, payload);
@@ -190,7 +195,12 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex flex-col">
-                <span className="font-bold text-sm">{g.name}</span>
+                <span className="font-bold text-sm flex items-center gap-1.5">
+                  {g.name}
+                  {g.groupType === "REMOVE" && (
+                    <span className="rounded px-1.5 py-0.5 text-[9px] font-black uppercase" style={{ background: "var(--surf)", color: "var(--muted)", border: "1px solid var(--border)" }}>Quitar</span>
+                  )}
+                </span>
                 <span className="text-[11px]" style={{ color: "var(--muted)" }}>
                   {g.multiSelect ? "Multi-selección" : "Selección única"}
                   {g.required ? " · Obligatorio" : " · Opcional"}
@@ -274,21 +284,23 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
 
             <div className="flex gap-1.5">
               <input
-                placeholder="Nueva opción (ej. Leche light)"
+                placeholder={g.groupType === "REMOVE" ? "Quitar (ej. Cebolla)" : "Nueva opción (ej. Leche light)"}
                 value={modForm.name}
                 onChange={(e) => setModField(g.id, { name: e.target.value })}
                 className="flex-1 px-2.5 py-1.5 rounded-lg text-xs outline-none"
                 style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }}
               />
-              <input
-                type="number"
-                step="0.01"
-                placeholder="+$0"
-                value={modForm.priceAdd}
-                onChange={(e) => setModField(g.id, { priceAdd: e.target.value })}
-                className="w-20 px-2.5 py-1.5 rounded-lg text-xs outline-none"
-                style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }}
-              />
+              {g.groupType !== "REMOVE" && (
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="+$0"
+                  value={modForm.priceAdd}
+                  onChange={(e) => setModField(g.id, { priceAdd: e.target.value })}
+                  className="w-20 px-2.5 py-1.5 rounded-lg text-xs outline-none"
+                  style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }}
+                />
+              )}
               <button
                 type="button"
                 onClick={() => addModifier(g.id)}
@@ -318,6 +330,21 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
             style={{ background: "var(--surf)", border: "1px solid var(--border)", color: "var(--text)" }}
             required
           />
+          <div className="flex gap-1.5 text-xs">
+            {(["ADD", "REMOVE"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setGroupForm((p) => ({ ...p, groupType: t }))}
+                className="flex-1 py-1.5 rounded-lg font-bold border"
+                style={groupForm.groupType === t
+                  ? { background: "var(--gold)", color: "#000", borderColor: "var(--gold)" }
+                  : { background: "var(--surf)", color: "var(--muted)", borderColor: "var(--border)" }}
+              >
+                {t === "ADD" ? "Agregar (extras +$)" : "Quitar (Sin… gratis)"}
+              </button>
+            ))}
+          </div>
           <div className="flex flex-wrap gap-3 text-xs" style={{ color: "var(--muted)" }}>
             <label className="flex items-center gap-1.5 cursor-pointer">
               <input

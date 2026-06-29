@@ -605,6 +605,9 @@ model ModifierGroup {
   // "Los primeros N modificadores no cobran extra" (ej. 2 toppings gratis,
   // los siguientes con priceAdd). 0 = todos cobran.
   freeModifiersLimit Int        @default(0)
+  // "ADD" = extras que suman (Tocino +$20). "REMOVE" = quitar ingredientes
+  // gratis (Sin cebolla). String libre (consistente con saleUnit/storefrontTheme).
+  groupType          String     @default("ADD")
   modifiers          Modifier[]
 
   @@map("modifier_groups")
