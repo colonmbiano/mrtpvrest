@@ -19,15 +19,17 @@ const tabs = [
 ] as const;
 
 const moreGroups = [
-  { label: "Negocio", items: [["/admin/mi-marca", "Mi Marca"], ["/admin/tienda", "Tienda online"], ["/admin/pantalla-cliente", "Pantalla cliente"]] },
-  { label: "Operación", items: [["/admin/inventario", "Inventario"], ["/admin/inventario/compras", "Compras & Bodega"], ["/admin/rastreo", "Logística & Flota"], ["/admin/caja-repartidores", "Caja repartidores"]] },
+  { label: "Negocio", items: [["/admin/mi-marca", "Mi Marca"], ["/admin/tienda", "Tienda online"], ["/admin/retail", "Retail SKU"], ["/admin/pantalla-cliente", "Pantalla cliente"]] },
+  { label: "Operación", items: [["/admin/retail/pos", "Caja retail"], ["/admin/inventario", "Inventario"], ["/admin/inventario/compras", "Compras & Bodega"], ["/admin/rastreo", "Logística & Flota"], ["/admin/caja-repartidores", "Caja repartidores"]] },
   { label: "Crecimiento", items: [["/admin/reportes/ia", "Reportes IA"], ["/admin/promociones", "Promociones IA"], ["/admin/whatsapp", "WhatsApp Bot"], ["/admin/banners", "Banners"]] },
   { label: "Cuenta", items: [["/admin/modulos", "Módulos"], ["/admin/integraciones", "Integraciones"], ["/admin/billing", "Facturación"], ["/admin/descargas", "Apps & Descargas"]] },
 ] as const;
 
 const routeTitles: Array<[string, string, string]> = [
   ["/admin/pedidos", "Pedidos", "Operación en vivo"],
-  ["/admin/menu", "Menú", "Platillos y categorías"],
+  ["/admin/menu", "Menú", "Productos y categorías"],
+  ["/admin/retail/pos", "Caja retail", "Venta por SKU"],
+  ["/admin/retail", "Retail SKU", "Inventario por variante"],
   ["/admin/empleados", "Personal", "Equipo y permisos"],
   ["/admin/turnos", "Caja & Turnos", "Control operativo"],
   ["/admin/inventario", "Inventario", "Stock y compras"],
@@ -95,7 +97,7 @@ export default function MobileAdminChrome() {
     <>
       <header className="md:hidden sticky top-0 z-30 px-[18px] pt-[max(12px,env(safe-area-inset-top))] pb-2.5" style={{ background: "var(--bg)", borderBottom: "1px solid var(--bd-1)" }}>
         <div className="flex items-center gap-3">
-          <Link href="/admin" aria-label="Ir al inicio" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl font-display text-[13px] font-extrabold" style={{ color: "#fffaf4", background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", boxShadow: "0 4px 14px var(--iris-glow)" }}>
+          <Link href="/admin" aria-label="Ir al inicio" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl font-display text-[13px] font-extrabold" style={{ color: "#f7fbf8", background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", boxShadow: "0 4px 14px var(--iris-glow)" }}>
             {brand.name ? brand.name.slice(0, 2).toUpperCase() : "MR"}
           </Link>
           <div className="min-w-0 flex-1">
