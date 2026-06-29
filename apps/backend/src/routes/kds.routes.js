@@ -74,6 +74,7 @@ router.get('/orders/:station', async (req, res) => {
           include: {
             menuItem: { include: { category: true } },
             modifiers: true,
+            comboSelections: true,
           }
         }
       },
@@ -121,6 +122,12 @@ router.get('/orders/:station', async (req, res) => {
           id: mod.id,
           name: mod.name || mod.modifier?.name || 'Modificador',
           priceAdd: mod.priceAdd,
+        })),
+        // Componentes del combo (para el consolidado de producción: lo que la
+        // cocina realmente arma son los componentes, no el contenedor del combo).
+        comboSelections: (item.comboSelections || []).map(cs => ({
+          optionMenuItemId: cs.optionMenuItemId,
+          name: cs.name,
         })),
         done: itemStatuses.some(s => s.orderItemId === item.id && s.done)
       })),

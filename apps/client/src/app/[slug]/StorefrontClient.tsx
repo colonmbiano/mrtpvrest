@@ -32,6 +32,7 @@ export default function StorefrontClient({
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
+  const setNote = useCart(s => s.setNote);
   const clear = useCart(s => s.clear);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
@@ -110,7 +111,7 @@ export default function StorefrontClient({
           locationId: selectedLocation?.id,
           deliveryLat: coords?.lat ?? null,
           deliveryLng: coords?.lng ?? null,
-          items: lines.map(l => ({ menuItemId: l.menuItemId, variantId: l.variantId || undefined, modifierIds: l.modifierIds || [], quantity: l.quantity })),
+          items: lines.map(l => ({ menuItemId: l.menuItemId, variantId: l.variantId || undefined, modifierIds: l.modifierIds || [], notes: l.note || undefined, quantity: l.quantity })),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -173,6 +174,25 @@ export default function StorefrontClient({
             onClick={e => e.stopPropagation()}
           >
             <h2 className="text-2xl font-black uppercase tracking-tighter mb-6">Finalizar Compra</h2>
+            {lines.length > 0 && (
+              <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+                {lines.map(l => (
+                  <div key={l.id} className="rounded-2xl bg-gray-50 p-3">
+                    <div className="flex justify-between text-sm font-bold">
+                      <span className="truncate pr-2">{l.quantity}× {l.name}</span>
+                      <span className="shrink-0">{fmt(l.price * l.quantity)}</span>
+                    </div>
+                    <input
+                      value={l.note || ''}
+                      onChange={e => setNote(l.id, e.target.value)}
+                      maxLength={200}
+                      placeholder="Nota para cocina (opcional): sin cebolla…"
+                      className="mt-2 w-full px-3 py-2 rounded-xl bg-white text-sm outline-none border border-gray-200"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
             <form onSubmit={handleSendOrder} className="space-y-4">
               <input required placeholder="Tu nombre"
                 className="w-full p-4 bg-gray-100 rounded-2xl outline-none focus:ring-2"

@@ -7,6 +7,7 @@ type Modifier = {
   name: string;
   priceAdd: number;
   isDefault: boolean;
+  isAvailable?: boolean;
 };
 
 type ModifierGroup = {
@@ -164,7 +165,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
     }
   }
 
-  async function updateModifierField(mod: Modifier, patch: Partial<{ name: string; priceAdd: number; isDefault: boolean }>) {
+  async function updateModifierField(mod: Modifier, patch: Partial<{ name: string; priceAdd: number; isDefault: boolean; isAvailable: boolean }>) {
     try {
       await api.put(`/api/menu/modifiers/${mod.id}`, patch);
       await fetchGroups();
@@ -268,6 +269,14 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
                       onChange={(e) => updateModifierField(m, { isDefault: e.target.checked })}
                     />
                     DEFAULT
+                  </label>
+                  <label className="flex items-center gap-1 text-[10px] font-bold cursor-pointer" style={{ color: m.isAvailable === false ? "#ff5c35" : "var(--muted)" }} title="Agotado: no se puede pedir desde la tienda en línea">
+                    <input
+                      type="checkbox"
+                      checked={m.isAvailable === false}
+                      onChange={(e) => updateModifierField(m, { isAvailable: !e.target.checked })}
+                    />
+                    AGOTADO
                   </label>
                   <button
                     type="button"
