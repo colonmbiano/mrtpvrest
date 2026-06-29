@@ -97,7 +97,7 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       'phone','whatsappNumber','address','countryCode','deliveryFee','freeDeliveryFrom',
       'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
       'pointsPerTen','pointsValuePesos','storefrontTheme','storefrontHeroUrl',
-      'centralWarehouseEnabled','adminCanViewExpectedCash','blockOnInsufficientStock',
+      'centralWarehouseEnabled','adminCanViewExpectedCash','blockOnInsufficientStock','hasPackingStage',
       // Corte de caja por correo (toggle + lista de destinatarios)
       'cashCutEmailEnabled','cashCutEmails',
       // Horario de atención (businessHours llega como JSON serializado)
