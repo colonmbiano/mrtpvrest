@@ -114,7 +114,7 @@ export default function AiKeyCard() {
             width: 56,
             height: 56,
             borderRadius: 16,
-            background: "linear-gradient(135deg,#f97316,#ef4444,#7c3aed)",
+            background: "linear-gradient(135deg,#f97316,#ef4444,#1f9d63)",
             display: "grid",
             placeItems: "center",
             fontSize: 28,
@@ -171,7 +171,7 @@ export default function AiKeyCard() {
           Como obtener tu API key gratis (Groq Cloud)
         </summary>
         <ol style={{ color: "#c4c4de", fontSize: 13, lineHeight: 1.8, paddingLeft: 20, marginTop: 8 }}>
-          <li>Abre <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{ color: "#7c3aed", textDecoration: "underline" }}>console.groq.com/keys</a> e inicia sesion.</li>
+          <li>Abre <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{ color: "#1f9d63", textDecoration: "underline" }}>console.groq.com/keys</a> e inicia sesion.</li>
           <li>Acepta los terminos si es la primera vez.</li>
           <li>Click en <strong>&quot;Create API key&quot;</strong>.</li>
           <li>Copia la key que empieza con <code style={{ background: "#222", padding: "1px 6px", borderRadius: 4 }}>gsk_...</code>.</li>
@@ -189,13 +189,13 @@ export default function AiKeyCard() {
             style={{
               padding: "10px 18px",
               borderRadius: 10,
-              background: "#7c3aed",
+              background: "#1f9d63",
               color: "#fff",
               border: "none",
               fontWeight: 700,
               fontSize: 13,
               cursor: "pointer",
-              boxShadow: "0 4px 14px rgba(124,58,237,.35)",
+              boxShadow: "0 4px 14px rgba(52,201,136,.30)",
             }}
           >
             {status?.configured ? "Cambiar API key" : "Configurar API key"}

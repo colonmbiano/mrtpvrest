@@ -78,7 +78,7 @@ export default function ImportTemplateModal({ mode, open, onClose, onDone }: {
         setResult(`Listo: ${res.data.created} insumos nuevos, ${res.data.updated} actualizados.`);
       } else if (mode === "recetas" && previewR) {
         const res = await api.post("/api/recipes/import/recetas/confirm", { platos: previewR.platos, subrecetas: previewR.subrecetas });
-        setResult(`Listo: ${res.data.recetasGuardadas} recetas, ${res.data.subrecetasGuardadas} subrecetas, ${res.data.ingredientesCreados} insumos nuevos${res.data.platosSinMatch ? `, ${res.data.platosSinMatch} platillos sin coincidencia (omitidos)` : ""}.`);
+        setResult(`Listo: ${res.data.recetasGuardadas} recetas, ${res.data.subrecetasGuardadas} subrecetas, ${res.data.ingredientesCreados} insumos nuevos${res.data.platosSinMatch ? `, ${res.data.platosSinMatch} productos sin coincidencia (omitidos)` : ""}.`);
       }
       setPreviewI(null); setPreviewR(null);
       onDone?.();
@@ -161,7 +161,7 @@ export default function ImportTemplateModal({ mode, open, onClose, onDone }: {
           {previewR && (
             <div>
               <div className="flex flex-wrap gap-2 mb-3 text-xs">
-                <Chip label={`${previewR.summary.platos} platillos`} tone="ok" />
+                <Chip label={`${previewR.summary.platos} productos`} tone="ok" />
                 {previewR.summary.platosSinMatch > 0 && <Chip label={`${previewR.summary.platosSinMatch} sin coincidencia`} tone="warn" />}
                 <Chip label={`${previewR.summary.subrecetas} subrecetas`} tone="ok" />
                 {previewR.summary.ingredientesNuevos > 0 && <Chip label={`${previewR.summary.ingredientesNuevos} insumos nuevos`} tone="new" />}

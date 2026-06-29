@@ -160,7 +160,7 @@ export default function ExtrasPage() {
                   <h2 className="truncate font-display text-xl font-extrabold text-tx-hi">{selected.name}</h2>
                   <p className="text-sm text-tx-mut">
                     {selected.priceAdd > 0 ? <>Cobra <strong className="text-tx">+{money(selected.priceAdd)}</strong> · </> : null}
-                    aparece en <strong className="text-tx">{selected.count}</strong> platillo(s)
+                    aparece en <strong className="text-tx">{selected.count}</strong> producto(s)
                   </p>
                 </div>
                 <PrimaryBtn full={false} icon={Save} onClick={save} disabled={saving}>
@@ -220,7 +220,7 @@ export default function ExtrasPage() {
                 )}
 
                 <p className="mt-3 text-xs text-tx-mut">
-                  Ojo: no mapees los <strong>sabores</strong> de alitas (BBQ, Mango…) si la salsa ya está en la receta base del platillo — sería doble descuento.
+                  Ojo: no mapees los <strong>sabores</strong> de alitas (BBQ, Mango…) si la salsa ya está en la receta base del producto — sería doble descuento.
                 </p>
               </div>
             </div>

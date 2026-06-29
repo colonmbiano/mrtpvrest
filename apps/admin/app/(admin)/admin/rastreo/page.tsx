@@ -263,7 +263,7 @@ export default function RastreoPage() {
             className="grid h-10 w-10 place-items-center rounded-xl"
             style={{
               background: showOriginPanel ? "var(--brand-primary)" : "var(--iris-soft)",
-              color: showOriginPanel ? "#fffaf4" : "var(--brand-primary)",
+              color: showOriginPanel ? "#f7fbf8" : "var(--brand-primary)",
             }}
           >
             <Home size={17} />

@@ -12,7 +12,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType>({
   theme: "dark",
   setTheme: () => {},
-  accentColor: "#7c3aed",
+  accentColor: "#1f9d63",
 });
 
 interface Props {
@@ -20,7 +20,7 @@ interface Props {
   accentColor?: string;
 }
 
-export function ThemeProvider({ children, accentColor = "#7c3aed" }: Props) {
+export function ThemeProvider({ children, accentColor = "#1f9d63" }: Props) {
   const [theme, setThemeState] = useState<Theme>("dark");
 
   useEffect(() => {

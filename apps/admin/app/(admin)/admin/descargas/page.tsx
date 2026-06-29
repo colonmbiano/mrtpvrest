@@ -154,7 +154,7 @@ export default function DescargasPage() {
               className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[13px] px-4 text-[13px] font-bold transition-transform active:scale-[.98]"
               style={{
                 background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))",
-                color: "#fffaf4",
+                color: "#f7fbf8",
                 boxShadow: "0 6px 18px var(--iris-glow)",
               }}
             >

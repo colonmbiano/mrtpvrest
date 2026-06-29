@@ -345,7 +345,7 @@ export default function EmpleadosPage() {
           className="min-h-10 shrink-0 rounded-full px-4 text-xs font-bold transition-colors"
           style={{
             border: `1px solid ${activeTab === "list" ? "transparent" : "var(--bd-1)"}`,
-            color: activeTab === "list" ? "#fffaf4" : "var(--tx-mut)",
+            color: activeTab === "list" ? "#f7fbf8" : "var(--tx-mut)",
             background: activeTab === "list" ? "var(--brand-primary)" : "var(--surf-1)",
           }}
         >
@@ -358,7 +358,7 @@ export default function EmpleadosPage() {
             className="min-h-10 shrink-0 rounded-full px-4 text-xs font-bold transition-colors"
             style={{
               border: `1px solid ${activeTab === "detail" ? "transparent" : "var(--bd-1)"}`,
-              color: activeTab === "detail" ? "#fffaf4" : "var(--tx-mut)",
+              color: activeTab === "detail" ? "#f7fbf8" : "var(--tx-mut)",
               background: activeTab === "detail" ? "var(--brand-primary)" : "var(--surf-1)",
             }}
           >
@@ -450,7 +450,7 @@ export default function EmpleadosPage() {
                       style={{
                         background: sel ? "var(--brand-primary)" : "var(--surf-2)",
                         border: `1px solid ${sel ? "transparent" : "var(--bd-1)"}`,
-                        color: "#fffaf4",
+                        color: "#f7fbf8",
                       }}
                     >
                       {sel && <CheckCircle2 size={14} />}
@@ -877,7 +877,7 @@ export default function EmpleadosPage() {
                         className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-2 text-[11px] font-bold transition-colors"
                         style={{
                           background: active ? "var(--brand-primary)" : "var(--surf-2)",
-                          color: active ? "#fffaf4" : "var(--tx-mut)",
+                          color: active ? "#f7fbf8" : "var(--tx-mut)",
                           border: `1px solid ${active ? "transparent" : "var(--bd-1)"}`,
                         }}
                       >
@@ -911,7 +911,7 @@ export default function EmpleadosPage() {
                         className="min-h-10 flex-1 rounded-xl text-[11px] font-bold transition-colors"
                         style={{
                           background: active ? "var(--brand-primary)" : "var(--surf-2)",
-                          color: active ? "#fffaf4" : "var(--tx-mut)",
+                          color: active ? "#f7fbf8" : "var(--tx-mut)",
                           border: `1px solid ${active ? "transparent" : "var(--bd-1)"}`,
                         }}
                       >

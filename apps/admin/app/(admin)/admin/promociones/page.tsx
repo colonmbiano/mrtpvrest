@@ -140,7 +140,7 @@ export default function PromocionesPage() {
   };
 
   const handleClearAll = async () => {
-    if (!window.confirm("¿Quitar la promoción de TODOS los platillos del restaurante? Esto desactiva todas las promos vigentes.")) return;
+    if (!window.confirm("¿Quitar la promoción de TODOS los productos del restaurante? Esto desactiva todas las promos vigentes.")) return;
     setClearing(true);
     try {
       const { data } = await api.post("/api/admin/promos/clear");
@@ -210,7 +210,7 @@ export default function PromocionesPage() {
                 <Pill tone="ac" live>IA</Pill>
               </div>
               <p className="mt-1 max-w-xl text-[12.5px] leading-relaxed text-tx-mid">
-                La IA detecta platillos con baja rotación y les aplica descuentos
+                La IA detecta productos con baja rotación y les aplica descuentos
                 automáticos según el umbral y tope que definas por sucursal.
               </p>
             </div>
@@ -323,7 +323,7 @@ export default function PromocionesPage() {
       )}
 
       {/* Items en promo */}
-      <SectionHead title={`Platillos${visibleItems.length > 0 ? ` (${visibleItems.length})` : ""}`} />
+      <SectionHead title={`Productos${visibleItems.length > 0 ? ` (${visibleItems.length})` : ""}`} />
       {loading && visibleItems.length === 0 ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -333,8 +333,8 @@ export default function PromocionesPage() {
       ) : visibleItems.length === 0 ? (
         <EmptyState
           icon={Target}
-          title="Sin platillos en promo"
-          hint="Activa el motor IA en tus sucursales y presiona Analizar todas para que la IA identifique qué platillos necesitan un empujón."
+          title="Sin productos en promo"
+          hint="Activa el motor IA en tus sucursales y presiona Analizar todas para que la IA identifique qué productos necesitan un empujón."
           action={
             enabledLocations.length > 0 ? (
               <PrimaryBtn
@@ -477,7 +477,7 @@ export default function PromocionesPage() {
                       style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
                     />
                     <p className="ml-1 mt-1.5 text-[11px] text-tx-mut">
-                      Platillos que vendan menos de esto en la ventana entran en promo.
+                      Productos que vendan menos de esto en la ventana entran en promo.
                     </p>
                   </div>
 
@@ -501,7 +501,7 @@ export default function PromocionesPage() {
 
                   <div>
                     <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
-                      Tope máximo de platillos
+                      Tope máximo de productos
                     </label>
                     <input
                       type="number"
@@ -512,7 +512,7 @@ export default function PromocionesPage() {
                       style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
                     />
                     <p className="ml-1 mt-1.5 text-[11px] text-tx-mut">
-                      Máximo de platillos en promo a la vez. 0 = sin tope. Evita que se active todo el menú.
+                      Máximo de productos en promo a la vez. 0 = sin tope. Evita que se active todo el menú.
                     </p>
                   </div>
                 </div>

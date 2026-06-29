@@ -330,7 +330,7 @@ export default function KDSPage() {
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {[
                   "Falta ingrediente",
-                  "Platillo agotado",
+                  "Producto agotado",
                   "Orden va a tardar",
                   "Error en la orden",
                   "Necesito confirmación",

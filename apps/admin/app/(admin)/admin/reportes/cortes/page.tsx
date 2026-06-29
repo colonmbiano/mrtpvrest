@@ -128,7 +128,7 @@ export default function CortesUnificadosPage() {
           {([["ALL", "Todos"], ["shift", "Caja"], ["driver", "Repartidores"]] as const).map(([k, label]) => (
             <button key={k} onClick={() => setFilter(k)} style={{
               minHeight: 34, padding: "6px 14px", borderRadius: 9, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "none",
-              fontFamily: "inherit", color: filter === k ? "#fffaf4" : "var(--tx-mut)",
+              fontFamily: "inherit", color: filter === k ? "#f7fbf8" : "var(--tx-mut)",
               background: filter === k ? "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))" : "transparent",
             }}>{label}</button>
           ))}
