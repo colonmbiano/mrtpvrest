@@ -28,6 +28,7 @@ type CartState = {
   lines: CartLine[];
   add: (item: AddInput) => void;
   remove: (id: string) => void;
+  setNote: (id: string, note: string) => void;
   clear: () => void;
   total: () => number;
   quantity: () => number;
@@ -72,6 +73,10 @@ export const useCart = create<CartState>((set, get) => ({
       }
       return { lines: state.lines.filter(l => l.id !== id) };
     }),
+  setNote: (id, note) =>
+    set(state => ({
+      lines: state.lines.map(l => (l.id === id ? { ...l, note: note || undefined } : l)),
+    })),
   clear: () => set({ lines: [] }),
   total: () => get().lines.reduce((s, l) => s + l.price * l.quantity, 0),
   quantity: () => get().lines.reduce((s, l) => s + l.quantity, 0),
