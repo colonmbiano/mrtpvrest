@@ -274,7 +274,15 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
       // Refleja el cambio en la fila sin re-fetch inmediato.
       setOrders((prev) =>
         prev.map((o) =>
-          o.id === order.id ? { ...o, paymentMethod: method, cashCollected: method === "CASH" } : o,
+          o.id === order.id
+            ? {
+                ...o,
+                paymentMethod: method,
+                // Una orden sin liquidar sigue sin cobrarse aunque cambie el
+                // método: solo una orden ya pagada queda como efectivo cobrado.
+                cashCollected: o.paymentStatus === "PAID" && method === "CASH",
+              }
+            : o,
         ),
       );
       setCorrectingFor(null);
