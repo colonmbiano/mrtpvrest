@@ -25,7 +25,7 @@ const PERIODS = new Set(['HOY', '7D', '30D', '90D', '1Y', 'AÑO', 'ANIO', 'ANO',
 // (PENDING, CONFIRMED, PREPARING, READY, ON_THE_WAY, DELIVERED, CANCELLED,
 // OPEN). Antes estaba 'DELIVERING' — no existe en el enum y Prisma reventaba
 // toda la ruta con PrismaClientValidationError.
-const ACTIVE_ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'ON_THE_WAY', 'OPEN'];
+const ACTIVE_ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING', 'ON_THE_WAY', 'OPEN'];
 
 function getRestaurantId(req) {
   return req.user?.restaurantId || req.restaurantId || null;

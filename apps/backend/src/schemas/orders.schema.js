@@ -62,7 +62,7 @@ const addItemsSchema = z.object({
 // Status update — flexible por nombres legacy. Lista canónica documentada.
 const updateStatusSchema = z.object({
   status: z.enum([
-    'OPEN', 'PENDING', 'PREPARING', 'CONFIRMED', 'READY',
+    'OPEN', 'PENDING', 'PREPARING', 'CONFIRMED', 'READY', 'PACKING',
     // ON_THE_WAY es el valor real del enum OrderStatus; OUT_FOR_DELIVERY se
     // conserva por tolerancia a nombres legacy.
     'ON_THE_WAY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'PAID',
