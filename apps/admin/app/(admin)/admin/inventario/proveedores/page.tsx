@@ -104,8 +104,8 @@ export default function ProveedoresPage() {
 
       {/* Form modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,.85)" }}>
-          <WtCard className="my-4 w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,.85)" }}>
+          <WtCard className="my-4 flex max-h-[calc(100dvh-4rem)] w-full max-w-md flex-col overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid var(--bd-1)" }}>
               <h2 className="font-display text-xl font-extrabold text-tx-hi">{editItem ? "Editar" : "Nuevo"} proveedor</h2>
               <button onClick={() => setShowForm(false)} aria-label="Cerrar"
@@ -113,7 +113,7 @@ export default function ProveedoresPage() {
                 <X size={16} />
               </button>
             </div>
-            <form onSubmit={save} className="flex flex-col gap-4 p-6">
+            <form onSubmit={save} className="flex flex-col gap-4 overflow-y-auto overscroll-contain p-6 warmtech-scrollbar">
               {fields.map(f => (
                 <div key={f.field}>
                   <label className="mb-1.5 ml-1 block font-mono text-[9.5px] font-bold uppercase tracking-[.12em] text-tx-mut">{f.label}</label>

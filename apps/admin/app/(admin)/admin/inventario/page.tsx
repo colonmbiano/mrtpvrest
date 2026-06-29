@@ -753,7 +753,7 @@ export default function InventarioPage() {
       {/* ── Modal de Ajuste de Stock ───────────────────────────────────── */}
       {adjustModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,.78)" }}>
-          <WtCard className="my-4 w-full max-w-md p-6">
+          <WtCard className="my-4 max-h-[calc(100dvh-4rem)] w-full max-w-md overflow-y-auto overscroll-contain p-6 warmtech-scrollbar">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="font-display text-xl font-extrabold text-tx-hi">Ajustar stock</h2>
@@ -811,8 +811,8 @@ export default function InventarioPage() {
 
       {/* ── Modal de Revisión IA ───────────────────────────────────────── */}
       {isReviewOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,.85)" }}>
-          <WtCard className="my-4 w-full max-w-3xl p-6 md:p-8">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,.85)" }}>
+          <WtCard className="my-4 max-h-[calc(100dvh-4rem)] w-full max-w-3xl overflow-y-auto overscroll-contain p-6 warmtech-scrollbar md:p-8">
             <div className="mb-6 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <IconBadge icon={Sparkles} tone="ac" size={40} />
@@ -926,8 +926,8 @@ export default function InventarioPage() {
 
       {/* ── Modal Nuevo / Editar Ingrediente ───────────────────────────── */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,.8)" }}>
-          <WtCard className="my-4 w-full max-w-md p-6 md:p-8">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,.8)" }}>
+          <WtCard className="my-4 max-h-[calc(100dvh-4rem)] w-full max-w-md overflow-y-auto overscroll-contain p-6 warmtech-scrollbar md:p-8">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="font-display text-xl font-extrabold text-tx-hi md:text-2xl">{editItem ? "Editar" : "Nuevo"} insumo</h2>
               <button onClick={() => setShowForm(false)} aria-label="Cerrar"

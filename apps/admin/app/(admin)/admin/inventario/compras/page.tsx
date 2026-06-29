@@ -729,8 +729,8 @@ export default function ComprasPage() {
 
       {/* ── Modal revisión IA ───────────────────────────────────────────── */}
       {scanOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,.85)" }}>
-          <WtCard className="my-4 w-full max-w-3xl p-5 md:p-7">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,.85)" }}>
+          <WtCard className="my-4 max-h-[calc(100dvh-4rem)] w-full max-w-3xl overflow-y-auto overscroll-contain p-5 warmtech-scrollbar md:p-7">
             <div className="mb-5 flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
                 <span className="grid h-10 w-10 place-items-center rounded-xl text-primary" style={{ background: "var(--iris-soft)" }}>

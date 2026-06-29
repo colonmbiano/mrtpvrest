@@ -202,7 +202,7 @@ body {
 }
 
 .warmtech-enter {
-  animation: warmtech-enter 320ms cubic-bezier(.22,.7,.3,1) both;
+  animation: warmtech-enter 320ms cubic-bezier(.22,.7,.3,1);
 }
 
 .warmtech-card {
