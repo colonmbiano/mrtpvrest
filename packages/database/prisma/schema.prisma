@@ -604,6 +604,9 @@ model MenuItem {
   // availableOnline=false (no aparece ni se puede pedir desde la web). Default
   // true para no ocultar el catálogo existente al migrar.
   availableOnline Boolean  @default(true)
+  // Visibilidad en el KIOSKO, independiente de la web. Migración hace backfill
+  // = availableOnline para no cambiar lo que el operador ya tenía oculto.
+  availableOnKiosk Boolean @default(true)
   isPopular       Boolean  @default(false)
   isPromo         Boolean  @default(false)
   // isFavorite — items que el admin destaca como "más vendidos" o de

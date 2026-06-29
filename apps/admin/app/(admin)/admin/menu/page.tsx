@@ -145,7 +145,7 @@ export default function MenuPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, saleUnit:"PIECE", unit:"pz" });
+  const [form, setForm] = useState({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[] as string[], variantTemplateIds:[] as string[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, availableOnKiosk:true, saleUnit:"PIECE", unit:"pz" });
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -321,7 +321,7 @@ export default function MenuPage() {
   function openForm(item?: any) {
     if (item) {
       setEditItem(item);
-      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0, availableOnline:item.availableOnline ?? true, saleUnit:(item.saleUnit || (item.soldByWeight ? "WEIGHT" : "PIECE")), unit:(item.unit || "pz") });
+      setForm({ name:item.name, description:item.description||"", price:String(item.price), categoryId:item.categoryId, isPopular:item.isPopular, imageUrl:item.imageUrl||"", imageFit:item.imageFit||"cover", isPromo:item.isPromo||false, promoPrice:item.promoPrice == null ? "" : String(item.promoPrice), activeDays:item.activeDays||[], variantTemplateIds:[], variantMultiSelect:!!item.variantMultiSelect, variantMinSelection:item.variantMinSelection??0, variantMaxSelection:item.variantMaxSelection??0, availableOnline:item.availableOnline ?? true, availableOnKiosk:item.availableOnKiosk ?? true, saleUnit:(item.saleUnit || (item.soldByWeight ? "WEIGHT" : "PIECE")), unit:(item.unit || "pz") });
       setImagePreview(item.imageUrl||"");
       api.get(`/api/menu/items/${item.id}`).then(r => {
         setComplements(r.data.complements || []);
@@ -332,7 +332,7 @@ export default function MenuPage() {
       }).catch(() => { setComplements([]); setVariants([]); setInitialTemplateIds([]); });
     } else {
       setEditItem(null);
-      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, saleUnit:"PIECE", unit:"pz" });
+      setForm({ name:"", description:"", price:"", categoryId:"", isPopular:false, imageUrl:"", imageFit:"cover", isPromo:false, promoPrice:"", activeDays:[], variantTemplateIds:[], variantMultiSelect:false, variantMinSelection:0, variantMaxSelection:0, availableOnline:true, availableOnKiosk:true, saleUnit:"PIECE", unit:"pz" });
       setImagePreview("");
       setComplements([]);
       setVariants([]);
@@ -755,6 +755,7 @@ export default function MenuPage() {
                           <Pill tone={item.isAvailable ? "ok" : "err"}>{item.isAvailable ? "Activo" : "Inactivo"}</Pill>
                         </button>
                         {item.availableOnline === false && <Pill tone="neutral">Sin web</Pill>}
+                        {item.availableOnKiosk === false && <Pill tone="neutral">Sin kiosko</Pill>}
                       </div>
                       <div className="col-span-3 flex justify-end gap-2">
                         <button onClick={() => openForm(item)} className="flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-tx-mut" style={{ border: "1px solid var(--bd-1)" }}>
@@ -806,6 +807,7 @@ export default function MenuPage() {
                           <Pill tone={item.isAvailable ? "ok" : "err"}>{item.isAvailable ? "Activo" : "Inactivo"}</Pill>
                         </button>
                         {item.availableOnline === false && <Pill tone="neutral">Sin web</Pill>}
+                        {item.availableOnKiosk === false && <Pill tone="neutral">Sin kiosko</Pill>}
                         <button onClick={() => openForm(item)} className="ml-auto flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-tx-mut" style={{ border: "1px solid var(--bd-1)" }}>
                           <Pencil size={13} /> Editar
                         </button>
@@ -1286,19 +1288,31 @@ export default function MenuPage() {
                   )}
                 </div>
 
-                {/* Visibilidad en tienda en línea */}
-                <div className="col-span-2">
+                {/* Visibilidad por canal: web y kiosko independientes */}
+                <div className="col-span-2 flex flex-col gap-2">
                   <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
                     style={{ background: form.availableOnline ? "var(--ok-soft)" : "var(--surf-2)", border: `1px solid ${form.availableOnline ? "var(--ok)" : "var(--bd-1)"}` }}>
                     <div>
-                      <span className="font-bold text-tx">Mostrar en tienda en línea y kiosko</span>
+                      <span className="font-bold text-tx">Mostrar en tienda en línea</span>
                       <p className="mt-0.5 text-xs text-tx-mut">
                         {form.availableOnline
-                          ? "Visible y pedible desde la web y el kiosko. Se sigue vendiendo en el TPV."
-                          : "Oculto para los clientes (web y kiosko). Sigue disponible para cobrar en el TPV."}
+                          ? "Visible y pedible desde la web. Se sigue vendiendo en el TPV."
+                          : "Oculto en la web. Sigue disponible para cobrar en el TPV."}
                       </p>
                     </div>
-                    <Toggle checked={form.availableOnline} onChange={() => setForm(p => ({ ...p, availableOnline: !p.availableOnline }))} label="Mostrar en tienda en línea y kiosko" />
+                    <Toggle checked={form.availableOnline} onChange={() => setForm(p => ({ ...p, availableOnline: !p.availableOnline }))} label="Mostrar en tienda en línea" />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
+                    style={{ background: form.availableOnKiosk ? "var(--ok-soft)" : "var(--surf-2)", border: `1px solid ${form.availableOnKiosk ? "var(--ok)" : "var(--bd-1)"}` }}>
+                    <div>
+                      <span className="font-bold text-tx">Mostrar en kiosko</span>
+                      <p className="mt-0.5 text-xs text-tx-mut">
+                        {form.availableOnKiosk
+                          ? "Visible y pedible desde el kiosko de autoservicio."
+                          : "Oculto en el kiosko. No afecta la web ni el TPV."}
+                      </p>
+                    </div>
+                    <Toggle checked={form.availableOnKiosk} onChange={() => setForm(p => ({ ...p, availableOnKiosk: !p.availableOnKiosk }))} label="Mostrar en kiosko" />
                   </div>
                 </div>
 
