@@ -14,9 +14,14 @@ import {
 interface Supplier {
   id: string; name: string; contact?: string; phone?: string;
   email?: string; address?: string; notes?: string;
+  isActive?: boolean; leadTimeDays?: number; minOrderAmount?: number;
   _count?: { ingredients: number; };
 }
-type FormState = { name: string; contact: string; phone: string; email: string; address: string; notes: string; };
+type TextField = "name" | "contact" | "phone" | "email" | "address" | "notes";
+type FormState = {
+  name: string; contact: string; phone: string; email: string; address: string; notes: string;
+  isActive: boolean; leadTimeDays: string; minOrderAmount: string;
+};
 
 function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("") || "?";
@@ -28,7 +33,7 @@ export default function ProveedoresPage() {
   const [showForm, setShowForm]   = useState(false);
   const [editItem, setEditItem]   = useState<Supplier | null>(null);
   const [saving, setSaving]       = useState(false);
-  const emptyForm: FormState = { name:"", contact:"", phone:"", email:"", address:"", notes:"" };
+  const emptyForm: FormState = { name:"", contact:"", phone:"", email:"", address:"", notes:"", isActive:true, leadTimeDays:"3", minOrderAmount:"0" };
   const [form, setForm] = useState<FormState>(emptyForm);
 
   async function fetchSuppliers() {
@@ -43,7 +48,12 @@ export default function ProveedoresPage() {
 
   function openForm(s?: Supplier) {
     setEditItem(s || null);
-    setForm(s ? { name:s.name, contact:s.contact||"", phone:s.phone||"", email:s.email||"", address:s.address||"", notes:s.notes||"" } : { ...emptyForm });
+    setForm(s ? {
+      name:s.name, contact:s.contact||"", phone:s.phone||"", email:s.email||"", address:s.address||"", notes:s.notes||"",
+      isActive: s.isActive ?? true,
+      leadTimeDays: s.leadTimeDays != null ? String(s.leadTimeDays) : "3",
+      minOrderAmount: s.minOrderAmount != null ? String(s.minOrderAmount) : "0",
+    } : { ...emptyForm });
     setShowForm(true);
   }
 
@@ -51,8 +61,14 @@ export default function ProveedoresPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      if (editItem) await api.put("/api/inventory/suppliers/" + editItem.id, form);
-      else await api.post("/api/inventory/suppliers", form);
+      const payload = {
+        name: form.name, contact: form.contact, phone: form.phone, email: form.email,
+        address: form.address, notes: form.notes, isActive: form.isActive,
+        leadTimeDays: form.leadTimeDays === "" ? 0 : Number(form.leadTimeDays),
+        minOrderAmount: form.minOrderAmount === "" ? 0 : Number(form.minOrderAmount),
+      };
+      if (editItem) await api.put("/api/inventory/suppliers/" + editItem.id, payload);
+      else await api.post("/api/inventory/suppliers", payload);
       setShowForm(false);
       fetchSuppliers();
     } catch (error) {
@@ -64,11 +80,16 @@ export default function ProveedoresPage() {
 
   async function deleteSupplier(id: string) {
     if (!confirm("¿Eliminar proveedor?")) return;
-    await api.delete("/api/inventory/suppliers/" + id);
-    fetchSuppliers();
+    try {
+      await api.delete("/api/inventory/suppliers/" + id);
+      fetchSuppliers();
+    } catch (error) {
+      const err = error as { response?: { data?: { error?: string } } };
+      alert(err.response?.data?.error || "No se pudo eliminar el proveedor");
+    }
   }
 
-  const fields: { label: string; field: keyof FormState; placeholder: string; required?: boolean; }[] = [
+  const fields: { label: string; field: TextField; placeholder: string; required?: boolean; }[] = [
     { label:"Nombre de la empresa", field:"name", placeholder:"Distribuidora XYZ", required: true },
     { label:"Contacto", field:"contact", placeholder:"Juan García" },
     { label:"Teléfono", field:"phone", placeholder:"722 000 0000" },
@@ -123,6 +144,38 @@ export default function ProveedoresPage() {
                     style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
                 </div>
               ))}
+
+              {/* Parámetros para sugerencias de orden de compra */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 ml-1 block font-mono text-[9.5px] font-bold uppercase tracking-[.12em] text-tx-mut">Lead time (días)</label>
+                  <input type="number" min={0} inputMode="numeric"
+                    value={form.leadTimeDays} onChange={e => setForm(p=>({...p,leadTimeDays:e.target.value}))}
+                    placeholder="3"
+                    className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
+                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
+                </div>
+                <div>
+                  <label className="mb-1.5 ml-1 block font-mono text-[9.5px] font-bold uppercase tracking-[.12em] text-tx-mut">Compra mínima (MXN)</label>
+                  <input type="number" min={0} step="0.01" inputMode="decimal"
+                    value={form.minOrderAmount} onChange={e => setForm(p=>({...p,minOrderAmount:e.target.value}))}
+                    placeholder="0"
+                    className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
+                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
+                </div>
+              </div>
+
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl px-4 py-3"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                <span className="flex flex-col">
+                  <span className="text-sm font-bold text-tx-hi">Proveedor activo</span>
+                  <span className="text-[11px] text-tx-mut">Los inactivos se excluyen de las sugerencias de compra.</span>
+                </span>
+                <input type="checkbox" checked={form.isActive}
+                  onChange={e => setForm(p=>({...p,isActive:e.target.checked}))}
+                  className="h-5 w-5 shrink-0 accent-[var(--brand-primary)]" />
+              </label>
+
               <div className="flex gap-3 pt-1">
                 <PrimaryBtn ghost onClick={() => setShowForm(false)}>Cancelar</PrimaryBtn>
                 <PrimaryBtn type="submit" disabled={saving}>{saving ? "…" : "Guardar"}</PrimaryBtn>
@@ -151,7 +204,10 @@ export default function ProveedoresPage() {
                     <div className="truncate font-display text-base font-extrabold text-tx-hi">{s.name}</div>
                     {s.contact && <div className="truncate text-[12px] text-tx-mut">{s.contact}</div>}
                   </div>
-                  <Pill tone="ac">{s._count?.ingredients || 0} ins.</Pill>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    {s.isActive === false && <Pill tone="neutral">Inactivo</Pill>}
+                    <Pill tone="ac">{s._count?.ingredients || 0} ins.</Pill>
+                  </div>
                 </div>
 
                 <div className="mt-3 flex flex-col gap-1.5">
