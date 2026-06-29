@@ -749,4 +749,127 @@ router.get('/summary', async (req, res) => {
   }
 })
 
+// ─────────────────────────────────────────────────────────────────────────
+// GET /api/finance/cost-vs-purchases — Ventas vs consumo real (COGS) vs compras
+//
+// Responde la pregunta "cuánto de mis ventas se fue en mercancía":
+//   - revenue   = ventas PAID del rango
+//   - cogs      = consumo REAL = Σ(costSnapshot × qty) de lo vendido (food cost)
+//   - purchases = compras RECIBIDAS en el rango (PurchaseOrder.totalAmount)
+//   - gap       = purchases − cogs  → +: compraste más de lo que vendiste
+//                 (inventario sube); −: consumiste stock previo.
+// El gap sostenido y positivo sin que suba el inventario = merma/robo.
+// ─────────────────────────────────────────────────────────────────────────
+router.get('/cost-vs-purchases', async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId
+    const locationId = req.headers['x-location-id'] || req.query.locationId || null
+    const { from, to } = parseRange(req)
+
+    // Ventas + consumo real (COGS) de órdenes PAID en el rango. Mismo criterio
+    // que /summary: usa costSnapshot y cae a computeRecipeCost si falta.
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        ...(locationId ? { locationId } : {}),
+        paymentStatus: 'PAID',
+        paidAt: { gte: from, lte: to },
+      },
+      select: {
+        total: true,
+        items: { select: { quantity: true, costSnapshot: true, menuItemId: true } },
+      },
+    })
+
+    let revenue = 0
+    let cogs = 0
+    let itemsTotal = 0
+    let itemsWithoutCost = 0   // líneas sin costo conocido → food cost subestimado
+    const costCache = new Map()
+    for (const o of orders) {
+      revenue += Number(o.total || 0)
+      for (const oi of o.items) {
+        itemsTotal += 1
+        const qty = Number(oi.quantity || 0)
+        let unit
+        if (oi.costSnapshot != null) {
+          unit = Number(oi.costSnapshot)
+        } else {
+          let c = costCache.get(oi.menuItemId)
+          if (c === undefined) { c = await computeRecipeCost(oi.menuItemId); costCache.set(oi.menuItemId, c) }
+          unit = c
+        }
+        if (!(unit > 0)) itemsWithoutCost += 1
+        cogs += unit * qty
+      }
+    }
+
+    // ── Compras / gasto en insumos del rango ──
+    // No todos los tenants usan órdenes de compra: muchos registran los insumos
+    // como gastos COMPRAS del repartidor o de caja. Sumamos las TRES fuentes
+    // desde su tabla origen (sin contar los espejos en ShiftExpense, que
+    // duplicarían): PurchaseOrder + DriverCashMovement(EXPENSE,COMPRAS) +
+    // OperatingExpense(categoría de compras).
+    const purchaseAgg = await prisma.purchaseOrder.aggregate({
+      where: {
+        location: { restaurantId },
+        ...(locationId ? { locationId } : {}),
+        receivedAt: { gte: from, lte: to },
+      },
+      _sum: { totalAmount: true },
+      _count: true,
+    })
+    const poTotal = Number(purchaseAgg._sum.totalAmount || 0)
+
+    // Compras de repartidor (categoría COMPRAS). DriverCashMovement no tiene
+    // restaurantId: acotamos por los repartidores del restaurant/sucursal.
+    const drivers = await prisma.employee.findMany({
+      where: { role: 'DELIVERY', ...(locationId ? { locationId } : { location: { restaurantId } }) },
+      select: { id: true },
+    })
+    const driverIds = drivers.map((d) => d.id)
+    const driverAgg = driverIds.length
+      ? await prisma.driverCashMovement.aggregate({
+          where: { driverId: { in: driverIds }, type: 'EXPENSE', category: 'COMPRAS', createdAt: { gte: from, lte: to } },
+          _sum: { amount: true },
+        })
+      : { _sum: { amount: 0 } }
+    const driverCompras = Number(driverAgg._sum.amount || 0)
+
+    // Gastos operativos categorizados como compra de insumos.
+    const opAgg = await prisma.operatingExpense.aggregate({
+      where: {
+        restaurantId,
+        ...(locationId ? { locationId } : {}),
+        occurredAt: { gte: from, lte: to },
+        category: { is: { name: { contains: 'ompra' } } },
+      },
+      _sum: { amount: true },
+    })
+    const operatingCompras = Number(opAgg._sum.amount || 0)
+
+    const purchases = poTotal + driverCompras + operatingCompras
+    const gap = purchases - cogs
+
+    res.json({
+      range: { from, to },
+      revenue,
+      cogs,
+      purchases,
+      purchasesBreakdown: { purchaseOrders: poTotal, driverCompras, operatingCompras },
+      gap,
+      ordersCount: orders.length,
+      purchaseOrdersCount: purchaseAgg._count || 0,
+      itemsTotal,
+      itemsWithoutCost,
+      foodCostPct: revenue > 0 ? (cogs / revenue) * 100 : 0,
+      purchasesPct: revenue > 0 ? (purchases / revenue) * 100 : 0,
+      marginPct: revenue > 0 ? ((revenue - cogs) / revenue) * 100 : 0,
+    })
+  } catch (e) {
+    console.error('[finance] GET /cost-vs-purchases error:', e)
+    res.status(500).json({ error: 'Error calculando compras vs consumo', detail: e.message })
+  }
+})
+
 module.exports = router
