@@ -626,8 +626,14 @@ router.post('/orders', async (req, res) => {
         const complementNote = selectedComplements.length > 0
           ? `Complementos: ${selectedComplements.map(c => c.name).filter(Boolean).join(', ')}`
           : '';
+        // Nota libre del cliente: solo texto. Quitamos caracteres de control
+        // (anti-inyección ESC/POS en la impresión térmica) y capamos a 200 —
+        // el maxLength del textarea es bypasseable por POST directo.
+        const cleanItemNote = typeof itemNotes === 'string'
+          ? itemNotes.replace(/[\x00-\x1F\x7F]/g, ' ').trim().slice(0, 200)
+          : '';
         const finalNotes = [
-          typeof itemNotes === 'string' ? itemNotes.trim() : '',
+          cleanItemNote,
           complementNote,
         ].filter(Boolean).join('\n') || null;
 

@@ -50,6 +50,7 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
   const [selected, setSelected] = useState<Record<string, string[]>>({}); // groupId -> modifierIds
   const [selectedComplements, setSelectedComplements] = useState<string[]>([]); // complementIds
   const [qty, setQty] = useState(1);
+  const [note, setNote] = useState('');
   const [error, setError] = useState('');
 
   const basePrice = variantId ? (variants.find(v => v.id === variantId)?.price ?? basePromo) : basePromo;
@@ -106,8 +107,11 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
     const extraNames = [...modNames, ...complementNames];
     const displayName = [product.name, variantName ? `(${variantName})` : '', extraNames.length ? `· ${extraNames.join(', ')}` : '']
       .filter(Boolean).join(' ');
-    const key = `${product.id}|${variantId || ''}|${[...payloadIds].sort().join(',')}`;
-    add({ id: key, menuItemId: product.id, name: displayName, price: unitPrice, variantId, modifierIds: payloadIds, quantity: qty });
+    const trimmedNote = note.trim();
+    // La nota entra en la clave de dedup: dos líneas iguales con notas distintas
+    // NO deben fusionarse (cada nota es una instrucción de cocina propia).
+    const key = `${product.id}|${variantId || ''}|${[...payloadIds].sort().join(',')}|${trimmedNote}`;
+    add({ id: key, menuItemId: product.id, name: displayName, price: unitPrice, variantId, modifierIds: payloadIds, note: trimmedNote || undefined, quantity: qty });
     onClose();
   };
 
@@ -219,6 +223,22 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
               </div>
             </div>
           )}
+
+          {/* Nota para la cocina (texto libre, opcional) */}
+          <div className="mt-5">
+            <p className="text-[11px] font-black uppercase tracking-widest mb-2" style={{ color: subText }}>
+              Nota para la cocina <span className="normal-case tracking-normal font-bold">(opcional)</span>
+            </p>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              maxLength={200}
+              rows={2}
+              placeholder="Ej. sin cebolla, bien dorada…"
+              className="w-full px-4 py-3 rounded-2xl border-2 text-sm font-medium outline-none resize-none transition-all"
+              style={{ borderColor: dark ? '#FFFFFF14' : '#e5e7eb', background: dark ? '#FFFFFF08' : '#fff', color: textColor }}
+            />
+          </div>
 
           {error && <p className="text-red-500 text-xs font-bold mt-4">{error}</p>}
         </div>
