@@ -88,6 +88,7 @@ const SECTIONS = [
       { href: "/admin/inventario/compras",   icon: <IBox />,      label: "Compras & Bodega" },
       { href: "/admin/inventario/por-pagar", icon: <IWallet />,   label: "Cuentas por pagar" },
       { href: "/admin/finanzas",             icon: <IBarChart />, label: "Finanzas (food cost)" },
+      { href: "/admin/finanzas/flujo",       icon: <ICash />,     label: "Flujo de caja" },
     ],
   },
   {

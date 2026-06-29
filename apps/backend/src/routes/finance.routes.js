@@ -16,6 +16,7 @@ const {
 } = require('../middleware/auth.middleware')
 const requireModule = require('../middleware/module.middleware')
 const { localDayRange } = require('../utils/dayRange')
+const { round2 } = require('../lib/money')
 
 router.use(authenticate, requireTenantAccess, requireAdmin, requireModule('FINANCE'))
 
@@ -869,6 +870,93 @@ router.get('/cost-vs-purchases', async (req, res) => {
   } catch (e) {
     console.error('[finance] GET /cost-vs-purchases error:', e)
     res.status(500).json({ error: 'Error calculando compras vs consumo', detail: e.message })
+  }
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// GET /api/finance/cashflow?days=30 — Flujo de caja proyectado.
+//
+// Vista de dueño: cruza lo que vas a DEBER (cuentas por pagar con vencimiento
+// + recurrentes proyectados) contra lo que esperas TENER (efectivo en turnos
+// abiertos + ventas esperadas según el promedio reciente), semana por semana.
+// Avisa de un "cash crunch" si el saldo proyectado se vuelve negativo.
+// ─────────────────────────────────────────────────────────────────────────
+router.get('/cashflow', async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId
+    const locationId = req.headers['x-location-id'] || req.query.locationId || null
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 7), 90)
+    const now = new Date()
+    const horizonEnd = new Date(now.getTime() + days * 86400000)
+
+    // Ingreso esperado: promedio de ventas diarias de los últimos 28 días.
+    const since28 = new Date(now.getTime() - 28 * 86400000)
+    const salesAgg = await prisma.order.aggregate({
+      where: { restaurantId, ...(locationId ? { locationId } : {}), paymentStatus: 'PAID', paidAt: { gte: since28, lte: now } },
+      _sum: { total: true },
+    })
+    const avgDailySales = round2(Number(salesAgg._sum.total || 0) / 28)
+
+    // Efectivo disponible ahora = suma de turnos abiertos.
+    const openShifts = await prisma.cashShift.findMany({
+      where: { isOpen: true, location: { restaurantId }, ...(locationId ? { locationId } : {}) },
+      select: { openingFloat: true, totalCash: true, totalCashIn: true, totalExpenses: true },
+    })
+    const startingCash = round2(openShifts.reduce(
+      (s, sh) => s + Number(sh.openingFloat) + Number(sh.totalCash) + Number(sh.totalCashIn) - Number(sh.totalExpenses), 0))
+
+    // Deudas pendientes con saldo.
+    const [exp, pos] = await Promise.all([
+      prisma.operatingExpense.findMany({ where: { restaurantId, ...(locationId ? { locationId } : {}), settlementStatus: 'PENDING' }, select: { amount: true, paidAmount: true, dueDate: true } }),
+      prisma.purchaseOrder.findMany({ where: { settlementStatus: 'PENDING', location: { restaurantId }, ...(locationId ? { locationId } : {}) }, select: { totalAmount: true, paidAmount: true, dueDate: true } }),
+    ])
+    const debts = [
+      ...exp.map((e) => ({ remaining: round2(Number(e.amount) - Number(e.paidAmount || 0)), dueDate: e.dueDate })),
+      ...pos.map((p) => ({ remaining: round2(Number(p.totalAmount) - Number(p.paidAmount || 0)), dueDate: p.dueDate })),
+    ].filter((d) => d.remaining > 0)
+    const noDateTotal = round2(debts.filter((d) => !d.dueDate).reduce((s, d) => s + d.remaining, 0))
+
+    // Recurrentes: todas las ocurrencias dentro del horizonte.
+    const recurr = await prisma.recurringExpense.findMany({
+      where: { restaurantId, isActive: true, ...(locationId ? { locationId } : {}) },
+      select: { amount: true, frequency: true, dayOfMonth: true, nextDueAt: true },
+    })
+    const recurrOcc = []
+    for (const t of recurr) {
+      let d = new Date(t.nextDueAt)
+      let guard = 0
+      while (d <= horizonEnd && guard < 12) {
+        if (d >= now) recurrOcc.push({ remaining: Number(t.amount), dueDate: new Date(d) })
+        if (t.frequency === 'WEEKLY') d = new Date(d.getTime() + 7 * 86400000)
+        else if (t.frequency === 'BIWEEKLY') d = new Date(d.getTime() + 14 * 86400000)
+        else { const nd = new Date(d); nd.setMonth(nd.getMonth() + 1, Math.min(t.dayOfMonth || nd.getDate(), 28)); d = nd }
+        guard++
+      }
+    }
+
+    // Buckets semanales. Lo vencido (dueDate < now) cae en el primer bucket.
+    const dated = [...debts.filter((d) => d.dueDate), ...recurrOcc]
+    const nBuckets = Math.ceil(days / 7)
+    const weeks = []
+    for (let i = 0; i < nBuckets; i++) {
+      const wStart = new Date(now.getTime() + i * 7 * 86400000)
+      const wEnd = new Date(now.getTime() + (i + 1) * 7 * 86400000)
+      const lo = i === 0 ? new Date(0) : wStart
+      const due = round2(dated
+        .filter((d) => new Date(d.dueDate) >= lo && new Date(d.dueDate) < wEnd)
+        .reduce((s, d) => s + d.remaining, 0))
+      const expectedSales = round2(avgDailySales * 7)
+      weeks.push({ weekStart: wStart, weekEnd: wEnd, due, expectedSales, net: round2(expectedSales - due), balance: 0 })
+    }
+    let bal = startingCash
+    let minBalance = startingCash
+    for (const w of weeks) { bal = round2(bal + w.net); w.balance = bal; if (bal < minBalance) minBalance = bal }
+
+    const totalDue = round2(dated.reduce((s, d) => s + d.remaining, 0))
+    res.json({ startingCash, avgDailySales, horizonDays: days, noDateTotal, totalDue, minBalance, cashCrunch: minBalance < 0, weeks })
+  } catch (e) {
+    console.error('[finance] GET /cashflow error:', e)
+    res.status(500).json({ error: 'Error calculando flujo de caja', detail: e.message })
   }
 })
 

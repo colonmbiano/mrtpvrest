@@ -2,8 +2,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Wallet, TrendingUp, ShoppingCart, Receipt, Percent, ArrowDownUp,
-  AlertTriangle, Lock, Trophy, Flame, Package,
+  AlertTriangle, Lock, Trophy, Flame, Package, CalendarRange,
 } from "lucide-react";
+import Link from "next/link";
 import api from "@/lib/api";
 import {
   WtScreen, PageHeader, WtCard, StatTile, SectionHead, Segmented,
@@ -132,7 +133,14 @@ export default function FinanzasPage() {
         eyebrow="Finanzas · Costeo"
         title="Centro financiero"
         subtitle="Food cost real, margen y compras vs consumo"
-        actions={<Segmented value={preset} onChange={setPreset} options={PRESETS} className="md:max-w-[360px]" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <Link href="/admin/finanzas/flujo" className="inline-flex min-h-12 items-center gap-2 rounded-[13px] px-4 text-[13px] font-bold text-tx-mid" style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>
+              <CalendarRange size={15} /> Flujo de caja
+            </Link>
+            <Segmented value={preset} onChange={setPreset} options={PRESETS} className="md:max-w-[360px]" />
+          </div>
+        }
       />
       <div className="mb-4 md:hidden">
         <Segmented value={preset} onChange={setPreset} options={PRESETS} />
