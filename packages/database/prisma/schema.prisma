@@ -685,6 +685,7 @@ model Modifier {
   name               String
   priceAdd           Float               @default(0)
   isDefault          Boolean             @default(false)
+  isAvailable        Boolean             @default(true)
   orderItemModifiers OrderItemModifier[]
 
   @@map("modifiers")

@@ -793,13 +793,14 @@ router.put('/modifiers/:modifierId', authenticate, requireTenantAccess, requireA
     const check = await assertModifierBelongsToTenant(req.params.modifierId, restaurantId);
     if (check.error) return res.status(check.code).json({ error: check.error });
 
-    const { name, priceAdd, isDefault } = req.body;
+    const { name, priceAdd, isDefault, isAvailable } = req.body;
     const modifier = await prisma.modifier.update({
       where: { id: req.params.modifierId },
       data: {
         ...(name !== undefined && { name }),
         ...(priceAdd !== undefined && { priceAdd: parseFloat(priceAdd) || 0 }),
         ...(isDefault !== undefined && { isDefault: !!isDefault }),
+        ...(isAvailable !== undefined && { isAvailable: !!isAvailable }),
       },
     });
     res.json(modifier);
