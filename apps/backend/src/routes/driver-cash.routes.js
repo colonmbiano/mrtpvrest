@@ -267,6 +267,83 @@ router.patch(
   },
 );
 
+// ── GET /api/driver-cash/transfers/pending ───────────────────────────────
+// Conciliación SPEI: TODAS las transferencias PAID del restaurante aún sin
+// verificar contra el banco (consolidado, no repartidor por repartidor).
+// Incluye pedidos web (sin repartidor). Excluye las TRANSFER pendientes de
+// cobro (paymentStatus != PAID) — esas no se concilian hasta confirmarse.
+router.get('/transfers/pending', authenticate, requireTenantAccess, requireDriverCashManager, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const orders = await prisma.order.findMany({
+      where: {
+        paymentMethod: 'TRANSFER',
+        paymentStatus: 'PAID',
+        transferVerified: false,
+        ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { restaurantId } : {}),
+      },
+      select: {
+        id: true, orderNumber: true, total: true, customerName: true,
+        deliveryDriverId: true, paidAt: true, createdAt: true,
+      },
+      orderBy: { paidAt: 'asc' }, // las más viejas primero (alertan arriba)
+      take: 300,
+    });
+
+    // Order no tiene relación nombrada al repartidor; resolvemos nombres aparte.
+    const driverIds = [...new Set(orders.map((o) => o.deliveryDriverId).filter(Boolean))];
+    const drivers = driverIds.length
+      ? await prisma.employee.findMany({ where: { id: { in: driverIds } }, select: { id: true, name: true } })
+      : [];
+    const driverName = Object.fromEntries(drivers.map((d) => [d.id, d.name]));
+
+    const now = Date.now();
+    const items = orders.map((o) => {
+      const ref = o.paidAt || o.createdAt;
+      const ageDays = ref ? Math.floor((now - new Date(ref).getTime()) / 86400000) : 0;
+      return {
+        id: o.id, orderNumber: o.orderNumber, total: o.total,
+        customerName: o.customerName,
+        driverName: o.deliveryDriverId ? (driverName[o.deliveryDriverId] || null) : null,
+        paidAt: o.paidAt, createdAt: o.createdAt, ageDays,
+      };
+    });
+    const total = items.reduce((s, i) => s + (Number(i.total) || 0), 0);
+    const oldestDays = items.reduce((m, i) => Math.max(m, i.ageDays), 0);
+    res.json({ items, count: items.length, total, oldestDays });
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
+// ── PATCH /api/driver-cash/transfers/:orderId/verify ──────────────────────
+// Verifica/desmarca una transferencia de CUALQUIER pedido del restaurante (con
+// o sin repartidor — cubre tienda online). Body {verified} default true. Deja
+// auditoría (quién/cuándo). No mueve caja.
+router.patch('/transfers/:orderId/verify', authenticate, requireTenantAccess, requireDriverCashManager, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const { orderId } = req.params;
+    const verified = req.body?.verified !== false; // default true
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { restaurantId } : {}) },
+      select: { id: true, paymentMethod: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (order.paymentMethod !== 'TRANSFER') {
+      return res.status(400).json({ error: 'El pedido no se cobró por transferencia' });
+    }
+    const updated = await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        transferVerified: verified,
+        transferVerifiedAt: verified ? new Date() : null,
+        transferVerifiedBy: verified ? (req.user?.name || req.user?.id || null) : null,
+      },
+      select: { id: true, transferVerified: true, transferVerifiedAt: true, transferVerifiedBy: true },
+    });
+    res.json(updated);
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
 // ── Asignar fondo de cambio (caja chica) — manager de caja del repartidor ──
 // El repartidor no puede asignarse fondo a sí mismo: se registra como un
 // movimiento FLOAT que suma al efectivo en mano sin contar como "cobrado".
