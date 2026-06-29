@@ -1248,6 +1248,11 @@ model RestaurantConfig {
   // luego se reparten a las demás vía StockTransfer.
   centralWarehouseEnabled Boolean @default(false)
 
+  // INVENTARIO · si true, crear una orden valida el stock de insumos contra las
+  // recetas y RECHAZA (409) si no alcanza. Default false: el comportamiento
+  // legacy (descuento best-effort post-cobro, sin bloqueo) se mantiene intacto.
+  blockOnInsufficientStock Boolean @default(false)
+
   // CORTE DE CAJA · si true (default), los roles admin ven el efectivo
   // esperado aunque el turno sea ciego. false → corte ciego también para
   // admins (solo el permiso explícito canViewExpectedCash lo revela).
