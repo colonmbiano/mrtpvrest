@@ -395,7 +395,7 @@ export default function ComprasPage() {
               className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-[10px] px-3 text-xs font-bold ${isScanning ? "animate-pulse" : ""}`}
               style={{
                 background: isScanning ? "var(--warn-soft)" : "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))",
-                color: isScanning ? "var(--warn)" : "#fffaf4",
+                color: isScanning ? "var(--warn)" : "#f7fbf8",
               }}
             >
               {isScanning ? <Bot size={15} /> : <ScanLine size={15} />}

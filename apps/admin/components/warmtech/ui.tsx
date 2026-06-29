@@ -290,7 +290,7 @@ export function Segmented<T extends string>({
             onClick={() => onChange(o.value)}
             className="min-h-10 flex-1 rounded-[10px] px-2 text-xs font-bold transition-colors"
             style={{
-              color: active ? "#fffaf4" : "var(--tx-mut)",
+              color: active ? "#f7fbf8" : "var(--tx-mut)",
               background: active
                 ? "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))"
                 : "transparent",
@@ -332,7 +332,7 @@ export function Chips<T extends string>({
             className="min-h-10 shrink-0 rounded-full px-3.5 text-xs font-bold transition-colors"
             style={{
               border: `1px solid ${active ? "transparent" : "var(--bd-1)"}`,
-              color: active ? "#fffaf4" : "var(--tx-mut)",
+              color: active ? "#f7fbf8" : "var(--tx-mut)",
               background: active ? "var(--brand-primary)" : "var(--surf-1)",
             }}
           >
@@ -407,7 +407,7 @@ export function SettingRow({
               style={{
                 padding: "2px 5px",
                 background: "var(--brand-primary)",
-                color: "#fffaf4",
+                color: "#f7fbf8",
               }}
             >
               {badge}
@@ -509,7 +509,7 @@ export function PrimaryBtn({
       ? { background: "var(--surf-2)", color: "var(--tx)", border: "1px solid var(--bd-2)" }
       : {
           background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))",
-          color: "#fffaf4",
+          color: "#f7fbf8",
           boxShadow: "0 6px 18px var(--iris-glow)",
         };
   const cls = `inline-flex min-h-12 items-center justify-center gap-2 rounded-[13px] px-4 text-[13px] font-bold transition-transform active:scale-[.98] disabled:opacity-50 ${full ? "w-full" : ""}`;
@@ -619,7 +619,7 @@ export function Avatar({
         height: size,
         borderRadius: size * 0.3,
         fontSize: size * 0.33,
-        color: "#fffaf4",
+        color: "#f7fbf8",
         background:
           gradient || "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))",
       }}

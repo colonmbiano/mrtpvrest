@@ -43,7 +43,7 @@ const CSS = `
   position: fixed; bottom: 88px; right: 18px; z-index: 30;
   width: 56px; height: 56px; border-radius: 28px;
   background: linear-gradient(140deg,var(--brand-secondary),var(--brand-primary));
-  color: #fffaf4;
+  color: #f7fbf8;
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 6px 18px var(--iris-glow);
   cursor: pointer; border: none; outline: none;
@@ -116,7 +116,7 @@ const btn = (primary?: boolean, ghost?: boolean): object => ({
   padding: "9px 14px", borderRadius: 11,
   border: primary ? "none" : `1px solid ${V.bd1}`,
   background: primary ? `linear-gradient(140deg,${V.ac2},${V.ac})` : ghost ? V.surf2 : V.surf1,
-  color: primary ? "#fffaf4" : V.txMid,
+  color: primary ? "#f7fbf8" : V.txMid,
   fontSize: 12, fontWeight: primary ? 700 : 600,
   cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" as const,
   boxShadow: primary ? `0 4px 14px ${V.acG}` : "none",
@@ -413,7 +413,7 @@ export default function ReportesIAPage() {
                   <button key={p} onClick={() => setPeriod(p)} style={{
                     minHeight: 36, padding: "6px 12px", borderRadius: 9,
                     fontFamily: "'DM Mono',monospace", fontSize: 11,
-                    color: period === p ? "#fffaf4" : V.txMut,
+                    color: period === p ? "#f7fbf8" : V.txMut,
                     cursor: "pointer", border: "none",
                     background: period === p ? `linear-gradient(140deg,${V.ac2},${V.ac})` : "transparent",
                     boxShadow: period === p ? `0 3px 10px ${V.acG}` : "none",
@@ -468,7 +468,7 @@ export default function ReportesIAPage() {
               />
               <button onClick={() => { if (prompt.trim()) { sendChat(prompt); setPrompt(""); } }} style={{
                 width: 44, height: 44, borderRadius: 12, background: `linear-gradient(140deg,${V.ac2},${V.ac})`,
-                border: "none", color: "#fffaf4", display: "grid", placeItems: "center",
+                border: "none", color: "#f7fbf8", display: "grid", placeItems: "center",
                 cursor: "pointer", boxShadow: `0 4px 14px ${V.acG}`, flexShrink: 0,
               }}>
                 <Send size={16} />
@@ -930,7 +930,7 @@ export default function ReportesIAPage() {
         <div className={`ia-chat-panel ${isChatOpen ? "open" : "closed"}`}>
           {/* Chat header */}
           <div style={{ padding: "16px 18px", borderBottom: `1px solid ${V.bd1}`, display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 11, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, display: "grid", placeItems: "center", color: "#fffaf4", position: "relative", flexShrink: 0 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 11, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, display: "grid", placeItems: "center", color: "#f7fbf8", position: "relative", flexShrink: 0 }}>
               <Bot size={18} />
               <div style={{ position: "absolute", bottom: -2, right: -2, width: 10, height: 10, background: V.ok, borderRadius: "50%", border: `2px solid ${V.surf3}` }} />
             </div>
@@ -953,14 +953,14 @@ export default function ReportesIAPage() {
             {msgs.map((m, i) => (
               <div key={i} style={{ display: "flex", gap: 10, justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
                 {m.role === "ai" && (
-                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, display: "grid", placeItems: "center", flexShrink: 0, color: "#fffaf4", fontSize: 11, fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 700 }}>M</div>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, display: "grid", placeItems: "center", flexShrink: 0, color: "#f7fbf8", fontSize: 11, fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 700 }}>M</div>
                 )}
                 <div style={{ flex: "1 1 0", minWidth: 0 }}>
                   <div style={{
                     maxWidth: 270, padding: "10px 14px", borderRadius: 14, fontSize: 13, lineHeight: 1.55,
                     ...(m.role === "ai"
                       ? { background: V.surf1, color: V.txMid, border: `1px solid ${V.bd1}`, borderTopLeftRadius: 4 }
-                      : { background: `linear-gradient(140deg,${V.ac2},${V.ac})`, color: "#fffaf4", borderTopRightRadius: 4, marginLeft: "auto" }),
+                      : { background: `linear-gradient(140deg,${V.ac2},${V.ac})`, color: "#f7fbf8", borderTopRightRadius: 4, marginLeft: "auto" }),
                   }}>
                     {m.text}
                   </div>
@@ -981,14 +981,14 @@ export default function ReportesIAPage() {
                   )}
                 </div>
                 {m.role === "user" && (
-                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(140deg,${V.ok},#2f7d52)`, display: "grid", placeItems: "center", flexShrink: 0, color: "#fffaf4", fontSize: 11, fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 700 }}>D</div>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(140deg,${V.ok},#2f7d52)`, display: "grid", placeItems: "center", flexShrink: 0, color: "#f7fbf8", fontSize: 11, fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 700 }}>D</div>
                 )}
               </div>
             ))}
             {/* Typing indicator if last message is user */}
             {msgs[msgs.length - 1]?.role === "user" && (
               <div style={{ display: "flex", gap: 10 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, display: "grid", placeItems: "center", flexShrink: 0, color: "#fffaf4" }}>M</div>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, display: "grid", placeItems: "center", flexShrink: 0, color: "#f7fbf8" }}>M</div>
                 <div style={{ background: V.surf1, border: `1px solid ${V.bd1}`, borderRadius: 14, borderTopLeftRadius: 4, padding: "10px 14px", display: "flex", gap: 3 }}>
                   {[0,1,2].map(k => <span key={k} className="ia-tp" style={{ width: 6, height: 6, borderRadius: "50%", background: V.ac, display: "inline-block" }} />)}
                 </div>
@@ -1010,7 +1010,7 @@ export default function ReportesIAPage() {
                 placeholder="Escribe o usa /reporte, /alerta, /predicción…"
                 style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: V.tx, fontSize: 13, fontFamily: "inherit" }}
               />
-              <button onClick={() => sendChat(chatMsg)} aria-label="Enviar" style={{ width: 36, height: 36, borderRadius: 9, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, border: "none", color: "#fffaf4", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
+              <button onClick={() => sendChat(chatMsg)} aria-label="Enviar" style={{ width: 36, height: 36, borderRadius: 9, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, border: "none", color: "#f7fbf8", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
                 <Send size={14} />
               </button>
             </div>

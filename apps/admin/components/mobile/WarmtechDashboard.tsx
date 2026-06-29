@@ -92,13 +92,13 @@ export default function WarmtechDashboard() {
     labels: series.map((point) => new Date(point.date + "T12:00:00").toLocaleDateString("es-MX", { weekday: "short" })),
     datasets: [{
       data: series.map((point) => point.revenue),
-      borderColor: "#e3794c",
-      backgroundColor: "rgba(201,90,47,.16)",
+      borderColor: "#34c988",
+      backgroundColor: "rgba(52,201,136,.16)",
       fill: true,
       borderWidth: 2,
       tension: 0.38,
       pointRadius: series.length <= 1 ? 3 : 0,
-      pointBackgroundColor: "#c95a2f",
+      pointBackgroundColor: "#1f9d63",
     }],
   }), [series]);
   const maxQuantity = Math.max(1, ...topItems.map((item) => item.quantity));
@@ -134,7 +134,7 @@ export default function WarmtechDashboard() {
 
       <div className="mb-3 flex rounded-[13px] p-1 md:mb-5 md:max-w-[360px]" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
         {(Object.keys(periodLabels) as Period[]).map((key) => (
-          <button key={key} type="button" onClick={() => setPeriod(key)} className="min-h-10 flex-1 rounded-[10px] text-xs font-bold transition-colors" style={{ color: period === key ? "#fffaf4" : "var(--tx-mut)", background: period === key ? "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))" : "transparent", boxShadow: period === key ? "0 3px 10px var(--iris-glow)" : "none" }}>{periodLabels[key]}</button>
+          <button key={key} type="button" onClick={() => setPeriod(key)} className="min-h-10 flex-1 rounded-[10px] text-xs font-bold transition-colors" style={{ color: period === key ? "#f7fbf8" : "var(--tx-mut)", background: period === key ? "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))" : "transparent", boxShadow: period === key ? "0 3px 10px var(--iris-glow)" : "none" }}>{periodLabels[key]}</button>
         ))}
       </div>
 
@@ -158,7 +158,7 @@ export default function WarmtechDashboard() {
         <StatCard icon={UsersRound} value={staffCount.toString()} label="Personal en turno" />
       </div>
 
-      <section className="mt-3 overflow-hidden rounded-[18px] p-3.5 text-white md:mt-5 md:flex md:items-center md:justify-between md:gap-8 md:p-6" style={{ background: "linear-gradient(135deg,#7d351f,#c95a2f)", boxShadow: "0 8px 22px var(--iris-glow)" }}>
+      <section className="mt-3 overflow-hidden rounded-[18px] p-3.5 text-white md:mt-5 md:flex md:items-center md:justify-between md:gap-8 md:p-6" style={{ background: "linear-gradient(135deg,#0b1410,#1f9d63)", boxShadow: "0 8px 22px var(--iris-glow)" }}>
         <div className="md:max-w-3xl">
         <div className="flex items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/15"><Bot size={17} /></span>
@@ -168,17 +168,17 @@ export default function WarmtechDashboard() {
           {stats?.orders.value ? `Llevas ${stats.orders.value} pedidos. Tu ticket promedio es ${money(stats.averageTicket.value)} y hay ${stats.prepMinutes.activeCount} órdenes activas.` : "Todavía no hay pedidos en este periodo. Es un buen momento para activar una promoción o revisar tu menú."}
         </p>
         </div>
-        <Link href="/admin/reportes/ia" className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-xl bg-white px-4 text-xs font-extrabold text-[#7d351f]">Ver plan del día <ArrowRight size={15} /></Link>
+        <Link href="/admin/reportes/ia" className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-xl bg-white px-4 text-xs font-extrabold text-[#0b1410]">Ver plan del día <ArrowRight size={15} /></Link>
       </section>
 
       <div className="md:grid md:grid-cols-[minmax(0,1.45fr)_minmax(300px,.55fr)] md:gap-5">
         <div>
           <div className="mb-3 mt-6 flex items-center justify-between">
-            <h2 className="font-display text-base font-extrabold text-tx-hi md:text-xl">Top platillos</h2>
+            <h2 className="font-display text-base font-extrabold text-tx-hi md:text-xl">Top productos</h2>
             <Link href="/admin/menu" className="flex min-h-10 items-center gap-1 text-xs font-bold text-primary">Ver menú <ChevronRight size={14} /></Link>
           </div>
           <section className="warmtech-card overflow-hidden px-4 md:px-5">
-        {topItems.length === 0 ? <div className="py-6 text-center text-sm text-tx-mut">Aún no hay ventas de platillos en este periodo.</div> : topItems.map((item, index) => (
+        {topItems.length === 0 ? <div className="py-6 text-center text-sm text-tx-mut">Aún no hay ventas de productos en este periodo.</div> : topItems.map((item, index) => (
           <div key={item.name} className="flex min-h-[70px] items-center gap-3 py-3" style={{ borderBottom: index < topItems.length - 1 ? "1px solid var(--bd-1)" : "none" }}>
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] font-mono text-xs font-bold text-primary" style={{ background: "var(--iris-soft)" }}>{index + 1}</span>
             <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold text-tx">{item.name}</div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surf-3"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(8, (item.quantity / maxQuantity) * 100)}%` }} /></div></div>
@@ -194,13 +194,15 @@ export default function WarmtechDashboard() {
         {[
           ["/admin/pedidos", ReceiptText, "Ver pedidos"],
           ["/admin/inventario", Box, "Inventario"],
+          ["/admin/retail/pos", CircleDollarSign, "Caja retail"],
+          ["/admin/retail", PackagePlus, "Retail SKU"],
           ["/admin/promociones", Sparkles, "Crear promo"],
           ["/admin/turnos", TrendingUp, "Corte de caja"],
         ].map(([href, Icon, label]) => {
           const ActionIcon = Icon as typeof ReceiptText;
           return <Link key={href as string} href={href as string} className="warmtech-card flex min-h-[64px] items-center gap-3 p-3 text-left text-xs font-semibold text-tx"><span className="grid h-9 w-9 place-items-center rounded-[10px] text-primary" style={{ background: "var(--iris-soft)" }}><ActionIcon size={17} /></span>{label as string}</Link>;
         })}
-            <Link href="/admin/menu" className="warmtech-card col-span-2 flex min-h-[58px] items-center justify-center gap-2 p-3 text-xs font-bold text-primary md:col-span-1"><PackagePlus size={17} /> Administrar platillos</Link>
+            <Link href="/admin/menu" className="warmtech-card col-span-2 flex min-h-[58px] items-center justify-center gap-2 p-3 text-xs font-bold text-primary md:col-span-1"><PackagePlus size={17} /> Administrar productos</Link>
           </div>
         </div>
       </div>

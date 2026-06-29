@@ -384,7 +384,7 @@ export default function InventarioPage() {
                 background: isScanning
                   ? "var(--warn-soft)"
                   : "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))",
-                color: isScanning ? "var(--warn)" : "#fffaf4",
+                color: isScanning ? "var(--warn)" : "#f7fbf8",
                 boxShadow: isScanning ? "none" : "0 6px 18px var(--iris-glow)",
               }}
             >
@@ -407,7 +407,7 @@ export default function InventarioPage() {
             background: isScanning
               ? "var(--warn-soft)"
               : "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))",
-            color: isScanning ? "var(--warn)" : "#fffaf4",
+            color: isScanning ? "var(--warn)" : "#f7fbf8",
             boxShadow: isScanning ? "none" : "0 6px 18px var(--iris-glow)",
           }}
         >
@@ -495,7 +495,7 @@ export default function InventarioPage() {
                     border: `1.5px solid ${allSelected ? "var(--brand-primary)" : "var(--bd-2)"}`,
                   }}
                 >
-                  {allSelected && <Check size={11} strokeWidth={3} color="#fffaf4" />}
+                  {allSelected && <Check size={11} strokeWidth={3} color="#f7fbf8" />}
                 </span>
                 Todos
               </button>
@@ -532,7 +532,7 @@ export default function InventarioPage() {
                           border: `1.5px solid ${sel ? "var(--brand-primary)" : "var(--bd-2)"}`,
                         }}
                       >
-                        {sel && <Check size={12} strokeWidth={3} color="#fffaf4" />}
+                        {sel && <Check size={12} strokeWidth={3} color="#f7fbf8" />}
                       </button>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">

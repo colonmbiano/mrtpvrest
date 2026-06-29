@@ -27,15 +27,15 @@ const manualSteps = [
     action: "+ Nuevo grupo",
   },
   {
-    title: "Agregar platillos",
+    title: "Agregar productos",
     text: "Registra nombre, precio base, imagen y categoria. Despues puedes agregar opciones y extras.",
-    route: "Menu -> Platillos",
-    action: "+ Nuevo platillo",
+    route: "Menu -> Productos",
+    action: "+ Nuevo producto",
   },
   {
     title: "Agregar modificadores",
     text: "Sirven para extras, ingredientes sin costo, instrucciones o complementos con precio adicional.",
-    route: "Editar platillo",
+    route: "Editar producto",
     action: "+ Nuevo grupo de modificadores",
   },
   {
@@ -49,7 +49,7 @@ const manualSteps = [
 const aiSteps = [
   {
     title: "Abrir Escaneo IA",
-    text: "Entra a Menu -> Platillos y presiona el boton Escaneo IA.",
+    text: "Entra a Menu -> Productos y presiona el boton Escaneo IA.",
   },
   {
     title: "Subir fotos claras",
@@ -70,7 +70,7 @@ const examples = [
     title: "Boneless",
     lines: [
       ["Categoria", "Boneless"],
-      ["Platillo", "Boneless 500g - $120"],
+      ["Producto", "Boneless 500g - $120"],
       ["Variantes", "BBQ, Bufalo, Mango Habanero"],
       ["Modificador", "Extra aderezo +$15"],
     ],
@@ -79,7 +79,7 @@ const examples = [
     title: "Hamburguesa",
     lines: [
       ["Categoria", "Hamburguesas"],
-      ["Platillo", "Hamburguesa Clasica - $89"],
+      ["Producto", "Hamburguesa Clasica - $89"],
       ["Extras", "Queso +$15, Tocino +$20"],
       ["Sin ingredientes", "Sin cebolla, sin tomate"],
     ],
@@ -88,7 +88,7 @@ const examples = [
 
 const checklist = [
   "Todas las categorias principales estan creadas.",
-  "Cada platillo tiene nombre, precio y categoria.",
+  "Cada producto tiene nombre, precio y categoria.",
   "Las fotos se ven correctamente.",
   "Las variantes tienen precios correctos.",
   "Los extras aparecen al tocar el producto.",
@@ -105,7 +105,7 @@ export default function GuiasUsoPage() {
       <PageHeader
         eyebrow="Guías de uso"
         title="Registrar el menú"
-        subtitle="Carga categorías, platillos, variantes, modificadores y crea un primer menú con IA."
+        subtitle="Carga categorías, productos, variantes, modificadores y crea un primer menú con IA."
       />
 
       {/* Hero / rutas */}
@@ -125,20 +125,20 @@ export default function GuiasUsoPage() {
               Registrar el menú en MRTPVREST
             </h2>
             <p className="mt-3 max-w-2xl text-sm text-tx-mut" style={{ lineHeight: 1.7 }}>
-              Carga categorías, platillos, variantes y modificadores manualmente, o genera un primer menú con IA.
+              Carga categorías, productos, variantes y modificadores manualmente, o genera un primer menú con IA.
             </p>
           </div>
           <div className="grid content-end gap-3">
             <div className="rounded-2xl p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
               <div className="font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Ruta manual</div>
               <div className="mt-1.5 font-display text-base font-extrabold text-tx-hi">
-                Categorías → Variantes → Platillos → Prueba en TPV
+                Categorías → Variantes → Productos → Prueba en TPV
               </div>
             </div>
             <div className="rounded-2xl p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
               <div className="font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Ruta con IA</div>
               <div className="mt-1.5 font-display text-base font-extrabold text-tx-hi">
-                Platillos → Escaneo IA → Revisar → Prueba en TPV
+                Productos → Escaneo IA → Revisar → Prueba en TPV
               </div>
             </div>
           </div>
@@ -177,7 +177,7 @@ export default function GuiasUsoPage() {
           </div>
           <h3 className="font-display text-lg font-extrabold text-tx-hi">Registrar el menú</h3>
           <p className="mt-2 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>
-            Carga categorías, platillos, variantes y modificadores (manual o con Escaneo IA). Continúa leyendo abajo.
+            Carga categorías, productos, variantes y modificadores (manual o con Escaneo IA). Continúa leyendo abajo.
           </p>
         </WtCard>
       </div>

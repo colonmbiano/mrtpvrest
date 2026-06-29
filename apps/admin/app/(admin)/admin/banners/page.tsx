@@ -381,7 +381,7 @@ export default function BannersPage() {
                           className="min-h-10 rounded-xl px-3 text-xs font-bold transition-all"
                           style={{
                             background: on ? "var(--brand-primary)" : "var(--surf-1)",
-                            color: on ? "#fffaf4" : "var(--tx-mut)",
+                            color: on ? "#f7fbf8" : "var(--tx-mut)",
                             border: `1px solid ${on ? "var(--brand-primary)" : "var(--bd-1)"}`,
                           }}
                         >
@@ -428,6 +428,11 @@ export default function BannersPage() {
                       style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
                     />
                   </div>
+                  {form.scheduleStart && form.scheduleEnd && form.scheduleStart > form.scheduleEnd && (
+                    <div className="mt-2 text-[11px] text-tx-mut">
+                      Horario nocturno: se mostrará desde las {form.scheduleStart} hasta las {form.scheduleEnd} del día siguiente.
+                    </div>
+                  )}
                 </div>
 
                 {/* Rango de fechas */}

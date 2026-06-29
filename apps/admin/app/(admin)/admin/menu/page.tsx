@@ -183,7 +183,7 @@ export default function MenuPage() {
   // grupos, omitirlo evita que el sync destructivo del backend las borre.
   const [initialTemplateIds, setInitialTemplateIds] = useState<string[]>([]);
 
-  // Crear categoría al vuelo (inline en el modal de platillo)
+  // Crear categoría al vuelo (inline en el modal de producto)
   const [showNewCat, setShowNewCat] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [creatingCat, setCreatingCat] = useState(false);
@@ -252,7 +252,7 @@ export default function MenuPage() {
         }
       }
 
-      // Fase 3: importar platillos con progreso
+      // Fase 3: importar productos con progreso
       if (aiItems) {
         for (let i = 0; i < aiItems.length; i++) {
           const item = aiItems[i];
@@ -283,7 +283,7 @@ export default function MenuPage() {
                 const globalModOptions = aiGlobalModifiers[modId];
                 if (globalModOptions && globalModOptions.length > 0) {
                   try {
-                    // Crea un ModifierGroup por cada ID permitido para este platillo
+                    // Crea un ModifierGroup por cada ID permitido para este producto
                     const { data: group } = await api.post(`/api/menu/items/${createdItem.id}/modifier-groups`, {
                       name: modId.replace(/_/g, " ").toUpperCase(),
                       required: false, multiSelect: true, minSelection: 0, maxSelection: 0, freeModifiersLimit: 0
@@ -521,7 +521,7 @@ export default function MenuPage() {
     setSelectedIds(new Set()); fetchData();
   }
   async function bulkDelete() {
-    if (!confirm(`¿Eliminar ${selectedIds.size} platillo(s)? Esta acción no se puede deshacer.`)) return;
+    if (!confirm(`¿Eliminar ${selectedIds.size} producto(s)? Esta acción no se puede deshacer.`)) return;
     const results = await Promise.allSettled(
       [...selectedIds].map(id => api.delete(`/api/menu/items/${id}`))
     );
@@ -531,7 +531,7 @@ export default function MenuPage() {
     if (failed.length > 0) {
       const firstErr: any = (failed[0] as PromiseRejectedResult).reason;
       const msg = firstErr?.response?.data?.error || firstErr?.message || 'Error desconocido';
-      alert(`No se pudieron eliminar ${failed.length} de ${results.length} platillo(s).\n\nMotivo: ${msg}`);
+      alert(`No se pudieron eliminar ${failed.length} de ${results.length} producto(s).\n\nMotivo: ${msg}`);
     }
   }
 
@@ -541,7 +541,7 @@ export default function MenuPage() {
     try {
       const { data } = await api.post('/api/menu/wipe-all', { confirm: 'BORRAR' });
       const d = data?.deleted || {};
-      alert(`Menú borrado: ${d.menuItems || 0} platillos, ${d.categories || 0} categorías, ${d.variantTemplates || 0} grupos de variantes, ${d.orderItems || 0} líneas de orden afectadas.`);
+      alert(`Menú borrado: ${d.menuItems || 0} productos, ${d.categories || 0} categorías, ${d.variantTemplates || 0} grupos de variantes, ${d.orderItems || 0} líneas de orden afectadas.`);
       setShowWipe(false);
       setWipeConfirm("");
       setSelectedIds(new Set());
@@ -603,7 +603,7 @@ export default function MenuPage() {
               {!scanState.active && <input type="file" accept="image/*" multiple onChange={handleAIScan} className="hidden" />}
             </label>
             <PrimaryBtn full={false} ghost icon={Plus} onClick={() => openForm()}>
-              Nuevo platillo
+              Nuevo producto
             </PrimaryBtn>
           </>
         }
@@ -619,7 +619,7 @@ export default function MenuPage() {
         <button type="button" onClick={() => openForm()}
           className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[13px] px-3 text-xs font-bold text-tx"
           style={{ background: "var(--surf-2)", border: "1px solid var(--bd-2)" }}>
-          <Plus size={15} strokeWidth={2.2} /> Nuevo platillo
+          <Plus size={15} strokeWidth={2.2} /> Nuevo producto
         </button>
       </div>
 
@@ -628,7 +628,7 @@ export default function MenuPage() {
         <div className="relative min-w-[160px] flex-1">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-tx-mut" />
           <input value={search} onChange={e => { setSearch(e.target.value); if (e.target.value.trim()) setView("products"); }}
-            placeholder="Buscar platillos o categorías…"
+            placeholder="Buscar productos o categorías…"
             className="min-h-11 w-full rounded-xl pl-9 pr-3 text-sm text-tx outline-none"
             style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }} />
         </div>
@@ -657,7 +657,7 @@ export default function MenuPage() {
           {filteredCats.length === 0 ? (
             <div className="col-span-full">
               <EmptyState icon={FolderOpen} title="Sin categorías"
-                hint="Crea tu primera categoría al agregar un platillo." />
+                hint="Crea tu primera categoría al agregar un producto." />
             </div>
           ) : (
             filteredCats.map((c) => {
@@ -708,8 +708,8 @@ export default function MenuPage() {
         <>
           {filtered.length === 0 ? (
             <EmptyState icon={UtensilsCrossed} title="Sin artículos"
-              hint={search.trim() ? "Prueba con otra búsqueda." : "Agrega tu primer platillo para empezar."}
-              action={<PrimaryBtn full={false} icon={Plus} onClick={() => openForm()}>Nuevo platillo</PrimaryBtn>} />
+              hint={search.trim() ? "Prueba con otra búsqueda." : "Agrega tu primer producto para empezar."}
+              action={<PrimaryBtn full={false} icon={Plus} onClick={() => openForm()}>Nuevo producto</PrimaryBtn>} />
           ) : (
             <>
               {/* Tabla (desktop ≥ md) */}
@@ -906,7 +906,7 @@ export default function MenuPage() {
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,0.8)" }}>
           <WtCard className="my-4 w-full max-w-lg p-0">
             <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid var(--bd-1)" }}>
-              <h2 className="font-display text-xl font-extrabold text-tx-hi">{editItem ? "Editar platillo" : "Nuevo platillo"}</h2>
+              <h2 className="font-display text-xl font-extrabold text-tx-hi">{editItem ? "Editar producto" : "Nuevo producto"}</h2>
               <button onClick={() => setShowForm(false)} aria-label="Cerrar" className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut"
                 style={{ background: "var(--surf-2)" }}><X size={16} /></button>
             </div>
@@ -931,7 +931,7 @@ export default function MenuPage() {
                             className="min-h-10 flex-1 rounded-xl px-3 text-xs font-bold transition-all"
                             style={{
                               background: active ? "var(--brand-primary)" : "transparent",
-                              color: active ? "#fffaf4" : "var(--tx-mut)",
+                              color: active ? "#f7fbf8" : "var(--tx-mut)",
                               border: `1px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`,
                             }}
                           >
@@ -953,7 +953,7 @@ export default function MenuPage() {
                   style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }} />
                 {imageUrlDirty && form.imageUrl.trim() && (
                   <p className="mt-1 px-1 text-[11px] text-tx-mut">
-                    Al guardar, esta URL se copiara al storage y se guardara en la base de datos.
+                    Al guardar, esta URL se copiará al storage y se guardará en la base de datos.
                   </p>
                 )}
               </div>
@@ -986,7 +986,7 @@ export default function MenuPage() {
                       className="flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-bold transition-all"
                       style={{
                         background: showNewCat ? "var(--brand-primary)" : "transparent",
-                        color: showNewCat ? "#fffaf4" : "var(--brand-primary)",
+                        color: showNewCat ? "#f7fbf8" : "var(--brand-primary)",
                         border: "1px solid var(--brand-primary)",
                       }}
                       aria-label="Crear nueva categoría"
@@ -1160,7 +1160,7 @@ export default function MenuPage() {
                     />
                   ) : (
                     <p className="rounded-xl border border-dashed p-3 text-xs text-tx-mut">
-                      Guarda primero el platillo para agregarle variantes con precio propio (ej. “Chica $90”, “Grande $160”).
+                      Guarda primero el producto para agregarle variantes con precio propio (ej. “Chica $90”, “Grande $160”).
                     </p>
                   )}
                   {variants.length > 0 && (
@@ -1179,7 +1179,7 @@ export default function MenuPage() {
                     <ModifierGroupsEditor itemId={editItem.id} />
                   ) : (
                     <p className="rounded-xl border border-dashed p-3 text-xs text-tx-mut">
-                      Guarda primero el platillo para agregar grupos de modificadores (ej. “Tipo de leche”, “Sin azúcar”).
+                      Guarda primero el producto para agregar grupos de modificadores (ej. “Tipo de leche”, “Sin azúcar”).
                     </p>
                   )}
                 </div>
@@ -1236,7 +1236,7 @@ export default function MenuPage() {
                     />
                   ) : (
                     <p className="rounded-xl border border-dashed p-3 text-xs text-tx-mut">
-                      Guarda primero el platillo para agregar complementos (ej. “Refresco”, “Papas”).
+                      Guarda primero el producto para agregar complementos (ej. “Refresco”, “Papas”).
                     </p>
                   )}
                 </div>
@@ -1306,7 +1306,7 @@ export default function MenuPage() {
                               className="min-h-10 rounded-lg px-3 text-xs font-bold transition-all"
                               style={{
                                 background: active ? "var(--brand-primary)" : "var(--surf-2)",
-                                color: active ? "#fffaf4" : "var(--tx-mut)",
+                                color: active ? "#f7fbf8" : "var(--tx-mut)",
                                 border: `1px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`
                               }}>
                               {label}
@@ -1340,7 +1340,7 @@ export default function MenuPage() {
               <div>
                 <h3 className="font-display text-sm font-extrabold uppercase tracking-wider" style={{ color: "var(--err)" }}>Zona de peligro</h3>
                 <p className="mt-1 text-xs text-tx-mut">
-                  Borra todo el menú del restaurante (platillos, categorías y grupos de variantes). Útil para volver a generarlo con IA desde cero.
+                  Borra todo el menú del restaurante (productos, categorías y grupos de variantes). Útil para volver a generarlo con IA desde cero.
                 </p>
               </div>
             </div>
@@ -1363,7 +1363,7 @@ export default function MenuPage() {
                 <h2 className="font-display text-lg font-extrabold sm:text-xl" style={{ color: "var(--err)" }}>Borrar todo el menú</h2>
               </div>
               <p className="text-sm text-tx-mut">
-                Esta acción <strong className="text-tx">no se puede deshacer</strong>. Se eliminarán todos los platillos, categorías y grupos de variantes de este restaurante, junto con sus referencias en órdenes pasadas.
+                Esta acción <strong className="text-tx">no se puede deshacer</strong>. Se eliminarán todos los productos, categorías y grupos de variantes de este restaurante, junto con sus referencias en órdenes pasadas.
               </p>
               <p className="text-xs text-tx-mut">Escribe <strong style={{ color: "var(--err)" }}>BORRAR</strong> para confirmar:</p>
               <input

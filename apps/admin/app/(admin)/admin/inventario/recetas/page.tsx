@@ -98,7 +98,7 @@ export default function RecetasPage() {
   const [subRecipes, setSubRecipes] = useState<SubRecipe[]>([]);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<MenuItem | null>(null);
-  // Variante en edición: null = receta base del platillo.
+  // Variante en edición: null = receta base del producto.
   const [variantId, setVariantId] = useState<string | null>(null);
 
   const [items, setItems] = useState<RecipeItem[]>([]);
@@ -240,7 +240,7 @@ export default function RecetasPage() {
   }, [items]);
 
   // Precio de referencia para el margen: el de la variante en edición si hay
-  // una seleccionada, si no el del platillo.
+  // una seleccionada, si no el del producto.
   const effectivePrice = useMemo(() => {
     if (variantId && selected?.variants) {
       const v = selected.variants.find((x) => x.id === variantId);
@@ -486,7 +486,7 @@ export default function RecetasPage() {
 
               {/* Selector de variante: cada variante (tamaño/sabor) lleva su
                   propia receta para descontar su propio insumo. "Base" = receta
-                  del platillo cuando se vende sin variante. */}
+                  del producto cuando se vende sin variante. */}
               {selected.variants && selected.variants.length > 0 && (
                 <div className="space-y-2">
                   <h3 className="font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Receta por variante</h3>

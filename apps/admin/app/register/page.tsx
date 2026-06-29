@@ -94,7 +94,7 @@ export default function RegisterPage() {
       {/* Brand */}
       <div style={{ marginBottom: 32, textAlign: "center" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 8 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 9, background: "linear-gradient(135deg,#7c3aed,#9f67ff)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 10, color: "#fff" }}>MR</div>
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: "linear-gradient(135deg,#1f9d63,#34c988)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 10, color: "#fff" }}>MR</div>
           <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 20, color: "var(--text)", letterSpacing: -0.5 }}>
             MRTPV<span style={{ color: "var(--brand-primary)" }}>REST</span>
           </span>
@@ -107,7 +107,7 @@ export default function RegisterPage() {
       </div>
 
       {/* Card */}
-      <div style={{ width: "100%", maxWidth: 480, background: "var(--surf)", border: "1px solid var(--border2)", borderRadius: 20, padding: "36px 40px", boxShadow: "0 0 40px rgba(124,58,237,0.06)" }}>
+      <div style={{ width: "100%", maxWidth: 480, background: "var(--surf)", border: "1px solid var(--border2)", borderRadius: 20, padding: "36px 40px", boxShadow: "0 0 40px rgba(31,157,99,0.06)" }}>
 
         {/* Stepper */}
         {step < 3 && (
@@ -117,9 +117,9 @@ export default function RegisterPage() {
                 <div style={{
                   display: "flex", alignItems: "center", gap: 8,
                   padding: "5px 12px", borderRadius: 99, fontSize: 10, fontWeight: 700,
-                  background: step === n ? "rgba(124,58,237,0.12)" : step > n ? "rgba(16,185,129,0.1)" : "var(--surf2)",
+                  background: step === n ? "rgba(31,157,99,0.12)" : step > n ? "rgba(16,185,129,0.1)" : "var(--surf2)",
                   color: step === n ? "var(--brand-primary)" : step > n ? "#10b981" : "var(--muted)",
-                  border: `1px solid ${step === n ? "rgba(124,58,237,0.25)" : step > n ? "rgba(16,185,129,0.25)" : "var(--border2)"}`,
+                  border: `1px solid ${step === n ? "rgba(31,157,99,0.25)" : step > n ? "rgba(16,185,129,0.25)" : "var(--border2)"}`,
                 }}>
                   <div style={{
                     width: 20, height: 20, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800,
@@ -178,9 +178,9 @@ export default function RegisterPage() {
                         style={{
                           textAlign: "left", cursor: "pointer",
                           padding: "14px 16px", borderRadius: 12,
-                          background: isSelected ? "rgba(124,58,237,0.10)" : "var(--surf2)",
+                          background: isSelected ? "rgba(31,157,99,0.10)" : "var(--surf2)",
                           border: `1px solid ${isSelected ? "var(--brand-primary)" : "var(--border2)"}`,
-                          boxShadow: isSelected ? "0 0 0 3px rgba(124,58,237,0.12)" : "none",
+                          boxShadow: isSelected ? "0 0 0 3px rgba(31,157,99,0.12)" : "none",
                           transition: "all .15s",
                         }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
@@ -253,7 +253,7 @@ export default function RegisterPage() {
         {/* Paso 3 — email enviado */}
         {step === 3 && (
           <div style={{ textAlign: "center" }}>
-            <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, margin: "0 auto 20px" }}>✉️</div>
+            <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(31,157,99,0.10)", border: "1px solid rgba(31,157,99,0.20)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, margin: "0 auto 20px" }}>✉️</div>
             <h2 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 22, color: "var(--text)", marginBottom: 8 }}>Revisa tu email</h2>
             <p style={{ fontSize: 14, color: "var(--muted)", lineHeight: 1.7, marginBottom: 24 }}>
               Enviamos un enlace a <br /><strong style={{ color: "var(--text)" }}>{email}</strong>
@@ -268,7 +268,7 @@ export default function RegisterPage() {
               <p style={{ fontSize: 9, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 12 }}>Qué sigue</p>
               {["Haz clic en el botón del email", "Tu cuenta queda activada", "Configura tu negocio"].map((s, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(124,58,237,0.12)", color: "var(--brand-primary)", fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i+1}</div>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(31,157,99,0.12)", color: "var(--brand-primary)", fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i+1}</div>
                   <span style={{ fontSize: 13, color: "var(--muted)" }}>{s}</span>
                 </div>
               ))}
@@ -302,12 +302,12 @@ export default function RegisterPage() {
             )}
             {step < 2 ? (
               <button disabled={!canNext1} onClick={() => { setStep(2); setError(""); }}
-                style={{ flex: 1, padding: "13px", borderRadius: 10, fontWeight: 800, fontSize: 13, border: "none", background: "var(--brand-primary)", color: "#fff", cursor: canNext1 ? "pointer" : "not-allowed", opacity: canNext1 ? 1 : 0.5, boxShadow: "0 4px 20px rgba(124,58,237,0.25)" }}>
+                style={{ flex: 1, padding: "13px", borderRadius: 10, fontWeight: 800, fontSize: 13, border: "none", background: "var(--brand-primary)", color: "#fff", cursor: canNext1 ? "pointer" : "not-allowed", opacity: canNext1 ? 1 : 0.5, boxShadow: "0 4px 20px rgba(31,157,99,0.25)" }}>
                 CONTINUAR →
               </button>
             ) : (
               <button disabled={!canNext2 || loading} onClick={handleSubmit}
-                style={{ flex: 1, padding: "13px", borderRadius: 10, fontWeight: 800, fontSize: 13, border: "none", background: "var(--brand-primary)", color: "#fff", cursor: (canNext2 && !loading) ? "pointer" : "not-allowed", opacity: (canNext2 && !loading) ? 1 : 0.5, boxShadow: "0 4px 20px rgba(124,58,237,0.25)" }}>
+                style={{ flex: 1, padding: "13px", borderRadius: 10, fontWeight: 800, fontSize: 13, border: "none", background: "var(--brand-primary)", color: "#fff", cursor: (canNext2 && !loading) ? "pointer" : "not-allowed", opacity: (canNext2 && !loading) ? 1 : 0.5, boxShadow: "0 4px 20px rgba(31,157,99,0.25)" }}>
                 {loading ? "Creando cuenta..." : "EMPEZAR GRATIS →"}
               </button>
             )}
