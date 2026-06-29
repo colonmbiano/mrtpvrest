@@ -10,13 +10,30 @@ const router = express.Router();
 // restaurantId/relaciones quedan fuera.
 const SUPPLIER_FIELDS = ['name', 'contact', 'phone', 'email', 'address', 'notes', 'isActive', 'leadTimeDays', 'minOrderAmount'];
 
+// Allowlist + coerción de tipos: el body llega del form como strings/checkbox,
+// pero Prisma exige Int/Float/Boolean. Sin esto un payload válido tiraría 500.
+function supplierData(body) {
+  const data = pick(body, SUPPLIER_FIELDS);
+  if (data.leadTimeDays !== undefined) {
+    const n = parseInt(data.leadTimeDays, 10);
+    data.leadTimeDays = Number.isFinite(n) && n >= 0 ? n : 0;
+  }
+  if (data.minOrderAmount !== undefined) {
+    const n = parseFloat(data.minOrderAmount);
+    data.minOrderAmount = Number.isFinite(n) && n >= 0 ? n : 0;
+  }
+  if (data.isActive !== undefined) data.isActive = Boolean(data.isActive);
+  return data;
+}
+
 // ── PROVEEDORES (Nivel Marca) ─────────────────────────────────────────────
 
 router.get('/suppliers', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const suppliers = await prisma.supplier.findMany({
-      where: { restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId }, // Global por Marca
-      orderBy: { name: 'asc' }
+      where: { restaurantId: req.user?.restaurantId || req.restaurantId }, // Global por Marca
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { ingredients: true } } },
     });
     res.json(suppliers);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -25,7 +42,7 @@ router.get('/suppliers', authenticate, requireTenantAccess, requireAdmin, async 
 router.post('/suppliers', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const supplier = await prisma.supplier.create({
-      data: { ...pick(req.body, SUPPLIER_FIELDS), restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId }
+      data: { ...supplierData(req.body), restaurantId: req.user?.restaurantId || req.restaurantId }
     });
     res.json(supplier);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -34,11 +51,38 @@ router.post('/suppliers', authenticate, requireTenantAccess, requireAdmin, async
 router.put('/suppliers/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const supplier = await prisma.supplier.update({
-      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.user?.restaurantId || req.restaurantId },
-      data: pick(req.body, SUPPLIER_FIELDS)
+      where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.restaurantId },
+      data: supplierData(req.body)
     });
     res.json(supplier);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Proveedor no encontrado' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete('/suppliers/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const supplier = await prisma.supplier.findFirst({
+      where: { id: req.params.id, restaurantId },
+      select: { id: true, _count: { select: { purchaseOrders: true } } },
+    });
+    if (!supplier) return res.status(404).json({ error: 'Proveedor no encontrado' });
+    // Las órdenes de compra son histórico financiero (FK Restrict): no las arrastramos.
+    if (supplier._count.purchaseOrders > 0) {
+      return res.status(409).json({
+        error: `No se puede eliminar: el proveedor tiene ${supplier._count.purchaseOrders} orden(es) de compra registradas. Desactívalo en su lugar.`,
+      });
+    }
+    // Insumos (Ingredient.supplierId opcional → SetNull) quedan sin proveedor por
+    // defecto; el historial multi-proveedor (IngredientSupplier) hace Cascade.
+    await prisma.supplier.delete({ where: { id: supplier.id } });
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.code === 'P2003') return res.status(409).json({ error: 'No se puede eliminar: el proveedor tiene registros vinculados.' });
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── INGREDIENTES (Nivel Sucursal) ─────────────────────────────────────────
