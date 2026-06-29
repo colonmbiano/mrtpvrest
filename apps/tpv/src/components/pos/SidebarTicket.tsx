@@ -6,6 +6,7 @@ import TicketLine from "@/components/pos/TicketLine";
 import PaymentModal, { type PaymentTip } from "@/components/pos/PaymentModal";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import GuestCountModal from "@/components/pos/GuestCountModal";
+import ConfirmModal from "@/components/pos/ConfirmModal";
 import ManagerOverrideModal from "@/components/ManagerOverrideModal";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
 import { buildOrderItemsPayload } from "@/lib/modifiers";
@@ -151,6 +152,15 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const [overrideOpen, setOverrideOpen] = useState(false);
   const overrideItemRef = React.useRef<any | null>(null);
 
+  // Confirmación in-app para anular líneas/extras ya enviados. Reemplaza
+  // window.confirm(): en la APK el confirm nativo bloquea el hilo / no siempre
+  // se muestra, y el cajero veía la app "trabada" sin que se abriera nada.
+  const [confirmState, setConfirmState] = useState<
+    | { kind: "void-item"; item: any; label: string }
+    | { kind: "void-modifier"; item: any; modRowId: string; modLabel: string; label: string }
+    | null
+  >(null);
+
   // Ejecuta el DELETE de una línea ya enviada + post-acciones (ticket de
   // anulación, recarga, toast). Si el backend lo rechaza por falta de permiso
   // (cancel_items), abre el modal de PIN de supervisor para autorizar en el
@@ -171,26 +181,38 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       toast.error(err?.response?.data?.error || "No se pudo quitar el producto");
       return;
     }
-    // Ticket de anulación a cocina (best-effort): el producto ya no va.
-    await printVoidTicket(item);
+    // UI primero: recargamos el historial para que la línea desaparezca al
+    // instante y el cajero tenga feedback inmediato.
     await reloadPreviousItems();
     hapticSuccess();
     toast.success(`"${label}" anulado`);
+    // Ticket de anulación a cocina en SEGUNDO PLANO (fire-and-forget): NO debe
+    // bloquear el borrado. Con la impresora apagada/inalcanzable printVoidTicket
+    // tarda hasta ~19s (timeout 6s × 3 reintentos, serializado por IP); cuando
+    // corría con `await` antes del reload, en la APK la pantalla quedaba
+    // "trabada" todo ese tiempo. printVoidTicket ya avisa por su cuenta si falla.
+    void printVoidTicket(item);
   };
 
-  const removePreviousItem = async (item: any) => {
+  // Abre la confirmación in-app (ver confirmState). El borrado real ocurre en
+  // performRemovePreviousItem cuando el cajero confirma en el modal.
+  const removePreviousItem = (item: any) => {
     const label = item.menuItem?.name || item.name || "este producto";
-    if (!confirm(`¿Anular "${label}"? Se quitará de la cuenta y se imprimirá un ticket de anulación en cocina.`)) return;
-    await performRemovePreviousItem(item);
+    setConfirmState({ kind: "void-item", item, label });
   };
 
   // Quitar UN solo extra de un producto ya en la cuenta (aún no servido/cobrado).
   // No anula el producto: el backend resta el cobro del extra y recalcula totales.
-  const removePreviousItemModifier = async (item: any, modRowId: string) => {
+  const removePreviousItemModifier = (item: any, modRowId: string) => {
     const mod = (item.modifiers || []).find((m: any) => m.id === modRowId);
     const modLabel = mod?.modifier?.name || mod?.name || "extra";
     const label = item.menuItem?.name || item.name || "producto";
-    if (!confirm(`¿Quitar "${modLabel}" de "${label}"?`)) return;
+    setConfirmState({ kind: "void-modifier", item, modRowId, modLabel, label });
+  };
+
+  // Ejecuta el DELETE del extra tras confirmar. Recarga el historial (rápido) y
+  // recalcula totales; el backend ya descontó el cobro del extra.
+  const performRemovePreviousItemModifier = async (item: any, modRowId: string, modLabel: string) => {
     try {
       await api.delete(`/api/orders/items/${item.id}/modifiers/${modRowId}`);
     } catch (err: any) {
@@ -205,7 +227,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
   const changePreviousItemQty = async (item: any, delta: number) => {
     const nextQty = (item.quantity || 1) + delta;
-    if (nextQty < 1) { await removePreviousItem(item); return; }
+    if (nextQty < 1) { removePreviousItem(item); return; }
     try {
       await api.put(`/api/orders/items/${item.id}`, { quantity: nextQty });
       await reloadPreviousItems();
@@ -1501,6 +1523,32 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           onConfirm={(guests) => {
             updateTicket({ numberOfGuests: guests, activeSeat: 1 });
             setEditingGuests(false);
+          }}
+        />
+
+        {/* Confirmación in-app de anulación (reemplaza window.confirm, que en la
+            APK bloqueaba/no se mostraba). Al confirmar dispara el DELETE; si el
+            cajero no tiene `cancel_items`, performRemovePreviousItem abre luego
+            el modal de PIN de supervisor. */}
+        <ConfirmModal
+          isOpen={confirmState != null}
+          danger
+          title={confirmState?.kind === "void-modifier" ? "Quitar extra" : "Anular producto"}
+          message={
+            confirmState?.kind === "void-modifier"
+              ? `¿Quitar "${confirmState.modLabel}" de "${confirmState.label}"?`
+              : confirmState?.kind === "void-item"
+                ? `¿Anular "${confirmState.label}"? Se quitará de la cuenta y se imprimirá un ticket de anulación en cocina.`
+                : ""
+          }
+          confirmLabel={confirmState?.kind === "void-modifier" ? "Quitar" : "Anular"}
+          onClose={() => setConfirmState(null)}
+          onConfirm={() => {
+            const s = confirmState;
+            setConfirmState(null);
+            if (!s) return;
+            if (s.kind === "void-item") void performRemovePreviousItem(s.item);
+            else void performRemovePreviousItemModifier(s.item, s.modRowId, s.modLabel);
           }}
         />
 
