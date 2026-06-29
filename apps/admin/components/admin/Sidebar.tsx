@@ -61,6 +61,8 @@ const SECTIONS = [
       { href: "/admin/reportes/ia",          icon: <ITrending />,  label: "Reportes" },
       { href: "/admin/mi-marca",             icon: <IBuilding />,  label: "Mi Marca" },
       { href: "/admin/tienda",               icon: <IStore />,     label: "Tienda" },
+      { href: "/admin/retail",               icon: <IStore />,     label: "Retail SKU" },
+      { href: "/admin/retail/pos",           icon: <IWallet />,    label: "Caja Retail" },
       { href: "/admin/integraciones",        icon: <IPlug />,      label: "Integraciones" },
       { href: "/admin/modulos",             icon: <IPuzzle />,    label: "Módulos" },
       { href: "/admin/billing",              icon: <ICreditCard />, label: "Facturación" },
@@ -74,7 +76,7 @@ const SECTIONS = [
     icon: <IUtensils />,
     accent: "#3b82f6",
     items: [
-      { href: "/admin/menu",            icon: <IUtensils />, label: "Platillos" },
+      { href: "/admin/menu",            icon: <IUtensils />, label: "Productos" },
       { href: "/admin/menu/categorias", icon: <IFolder />,   label: "Categorías" },
       { href: "/admin/menu/variantes",  icon: <ISliders />,  label: "Variantes" },
       { href: "/admin/promociones",     icon: <ITag />,      label: "Promociones IA" },
@@ -278,7 +280,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
                 className="w-full rounded-lg px-3 py-2 text-xs font-bold outline-none appearance-none cursor-pointer"
                 style={{
                   background: "var(--surf2)",
-                  border: "1px solid var(--brand-primary, #7c3aed)44",
+                  border: "1px solid var(--brand-primary, #1f9d63)44",
                   color: "var(--text)",
                 }}
               >
@@ -319,9 +321,9 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
             href="/admin/configurar-negocio"
             className="mt-2 flex items-center justify-center gap-1.5 w-full rounded-lg px-3 py-2 text-[11px] font-bold transition-all"
             style={{
-              background: locations.length === 0 && !isLoadingLocations ? "var(--brand-primary, #7c3aed)" : "transparent",
-              color: locations.length === 0 && !isLoadingLocations ? "#fff" : "var(--brand-primary, #7c3aed)",
-              border: `1px dashed ${locations.length === 0 && !isLoadingLocations ? "transparent" : "var(--brand-primary, #7c3aed)"}`,
+              background: locations.length === 0 && !isLoadingLocations ? "var(--brand-primary, #1f9d63)" : "transparent",
+              color: locations.length === 0 && !isLoadingLocations ? "#fff" : "var(--brand-primary, #1f9d63)",
+              border: `1px dashed ${locations.length === 0 && !isLoadingLocations ? "transparent" : "var(--brand-primary, #1f9d63)"}`,
             }}
           >
             <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
@@ -378,6 +380,8 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps = {}) {
                   {section.items.map(item => {
                     const active = item.href === "/admin"
                       ? path === "/admin"
+                      : item.href === "/admin/retail"
+                        ? path === item.href
                       : path.startsWith(item.href);
                     return (
                       <Link
