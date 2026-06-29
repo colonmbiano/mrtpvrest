@@ -60,6 +60,7 @@ const SCOPED_MODELS = new Set([
   'PayrollPeriod',
   'PricingPolicy',
   'Recipe',
+  'RecurringExpense',
   'RestaurantConfig',
   'StockTransfer',
   'SubRecipe',

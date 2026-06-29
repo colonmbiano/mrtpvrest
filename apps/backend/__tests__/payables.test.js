@@ -15,6 +15,7 @@ jest.mock('@mrtpvrest/database', () => {
     },
     operatingExpenseCategory: { findUnique: jest.fn(async () => ({ name: 'GAS' })) },
     purchaseOrder: { updateMany: jest.fn(async () => ({ count: 1 })) },
+    recurringExpense: { updateMany: jest.fn(async () => ({ count: 1 })) },
     driverCashMovement: { create: jest.fn(async (a) => ({ id: 'm1', ...a.data })) },
     shiftExpense: { create: jest.fn(async () => ({ id: 'se1' })) },
     shiftCashIn: { create: jest.fn(async () => ({ id: 'sci1' })) },
@@ -32,6 +33,7 @@ jest.mock('@mrtpvrest/database', () => {
         create: jest.fn(async (a) => ({ id: 'oeP', ...a.data })),
       },
       purchaseOrder: { findFirst: jest.fn() },
+      recurringExpense: { findMany: jest.fn() },
       $transaction: jest.fn(async (fn) => fn(tx)),
       __tx: tx,
     },
@@ -60,6 +62,7 @@ const request = require('supertest');
 const { prisma } = require('@mrtpvrest/database');
 const expensesRoutes = require('../src/routes/expenses.routes');
 const driverCashRoutes = require('../src/routes/driver-cash.routes');
+const payablesRoutes = require('../src/routes/payables.routes');
 
 const tx = prisma.__tx;
 
@@ -114,7 +117,7 @@ describe('POST /api/expenses — gasto PENDIENTE', () => {
 describe('POST /api/expenses/:id/settle — liquidación', () => {
   test('settle CASH_DRAWER golpea la caja y es idempotente', async () => {
     prisma.operatingExpense.findFirst.mockResolvedValue({
-      id: 'oe1', amount: 610, concept: 'Pago a Pepe', locationId: 'loc1', categoryId: null, settlementStatus: 'PENDING',
+      id: 'oe1', amount: 610, paidAmount: 0, concept: 'Pago a Pepe', locationId: 'loc1', categoryId: null, settlementStatus: 'PENDING',
     });
     // 1ª liquidación gana (count 1), 2ª pierde la carrera (count 0).
     tx.operatingExpense.updateMany
@@ -132,6 +135,34 @@ describe('POST /api/expenses/:id/settle — liquidación', () => {
       data: expect.objectContaining({ operatingExpenseId: 'oe1', amount: 610, shiftId: 'shift1' }),
     }));
     expect(tx.cashShift.update).toHaveBeenCalledTimes(1);
+  });
+
+  test('abono parcial deja PENDIENTE, sube paidAmount y carga solo el abono a caja', async () => {
+    prisma.operatingExpense.findFirst.mockResolvedValue({
+      id: 'oe9', amount: 1000, paidAmount: 0, concept: 'Renta', locationId: 'loc1', categoryId: null, settlementStatus: 'PENDING',
+    });
+    tx.operatingExpense.updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await request(makeApp('/api/expenses', expensesRoutes))
+      .post('/api/expenses/oe9/settle')
+      .send({ paymentMethod: 'CASH_DRAWER', amount: 400 })
+      .expect(200);
+
+    expect(res.body.fully).toBe(false);
+    expect(res.body.paidAmount).toBe(400);
+    expect(res.body.remaining).toBe(600);
+    // No marca PAID en el update (sigue pendiente)
+    const updArg = tx.operatingExpense.updateMany.mock.calls[0][0];
+    expect(updArg.where).toMatchObject({ id: 'oe9', settlementStatus: 'PENDING', paidAmount: 0 });
+    expect(updArg.data.settlementStatus).toBeUndefined();
+    expect(updArg.data.paidAmount).toBe(400);
+    // Solo el abono entra a caja
+    expect(tx.shiftExpense.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ amount: 400, operatingExpenseId: 'oe9' }),
+    }));
+    expect(tx.cashShift.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: { totalExpenses: { increment: 400 } },
+    }));
   });
 
   test('settle de un gasto ya pagado responde 409', async () => {
@@ -170,5 +201,27 @@ describe('POST /api/driver-cash/:driverId/movements — gasto pendiente del repa
 
     expect(prisma.operatingExpense.create).not.toHaveBeenCalled();
     expect(tx.shiftExpense.create).toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/payables/recurring/run — generador de recurrentes', () => {
+  test('materializa plantillas vencidas como cuentas por pagar PENDIENTE', async () => {
+    const past = new Date(Date.now() - 24 * 3600 * 1000);
+    prisma.recurringExpense.findMany.mockResolvedValue([
+      { id: 't1', restaurantId: 'r1', locationId: 'loc1', categoryId: null, supplierId: null,
+        concept: 'Renta local', amount: 9000, frequency: 'MONTHLY', dayOfMonth: 1, nextDueAt: past },
+    ]);
+    tx.recurringExpense.updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await request(makeApp('/api/payables', payablesRoutes))
+      .post('/api/payables/recurring/run')
+      .send({})
+      .expect(200);
+
+    expect(res.body).toMatchObject({ generated: 1, scanned: 1 });
+    expect(tx.operatingExpense.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ settlementStatus: 'PENDING', amount: 9000, concept: 'Renta local', locationId: 'loc1' }),
+    }));
+    expect(tx.recurringExpense.updateMany).toHaveBeenCalled(); // avanza nextDueAt
   });
 });

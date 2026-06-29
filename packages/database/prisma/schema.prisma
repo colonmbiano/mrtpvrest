@@ -3165,6 +3165,7 @@ model PurchaseOrder {
   // PENDING ⇒ la mercancía se recibe (sube stock) pero el pago queda a deber:
   // NO crea ShiftExpense hasta liquidarse vía POST /api/purchases/:id/settle.
   settlementStatus SettlementStatus     @default(PAID)
+  paidAmount       Float                @default(0)  // abonos acumulados (pagos parciales)
   dueDate          DateTime?
   settledAt        DateTime?
   settledShiftId   String?
@@ -3773,6 +3774,7 @@ model OperatingExpense {
   // ── Cuentas por pagar ──
   // PENDING ⇒ deuda que NO toca caja hasta liquidarse (ver SettlementStatus).
   settlementStatus SettlementStatus     @default(PAID)
+  paidAmount       Float                @default(0)  // abonos acumulados (pagos parciales)
   supplierId       String?
   supplier         Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   dueDate          DateTime?
@@ -3802,4 +3804,30 @@ model OperatingExpense {
   @@index([settlementStatus])
   @@index([supplierId])
   @@map("operating_expenses")
+}
+
+// Plantilla de gasto recurrente (renta, luz, sueldos): el generador
+// (POST /api/payables/recurring/run, idealmente por cron diario) materializa
+// una cuenta por pagar (OperatingExpense PENDING) cada periodo y avanza
+// nextDueAt. Sin relaciones formales para acotar el cambio de schema; los ids
+// se resuelven en la capa de ruta. Está en SCOPED_MODELS (tiene restaurantId).
+model RecurringExpense {
+  id              String    @id @default(cuid())
+  restaurantId    String
+  locationId      String?
+  categoryId      String?
+  supplierId      String?
+  concept         String
+  amount          Float
+  frequency       String    @default("MONTHLY") // MONTHLY | BIWEEKLY | WEEKLY
+  dayOfMonth      Int?       // ancla para MONTHLY (1-28)
+  nextDueAt       DateTime
+  lastGeneratedAt DateTime?
+  isActive        Boolean   @default(true)
+  createdById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([restaurantId, isActive])
+  @@map("recurring_expenses")
 }

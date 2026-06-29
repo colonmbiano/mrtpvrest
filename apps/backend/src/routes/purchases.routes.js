@@ -15,6 +15,7 @@
 
 const express = require('express');
 const { prisma, runWithBypass } = require('@mrtpvrest/database');
+const { round2 } = require('../lib/money');
 const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware');
 const { requireFeatureFlag } = require('../lib/modules');
 const router = express.Router();
@@ -255,28 +256,39 @@ router.post('/', async (req, res) => {
 });
 
 // ── POST /api/purchases/:id/settle ───────────────────────────────────────
-// Liquida una compra PENDIENTE. Body: { paymentMethod, occurredAt? }.
-// Si paymentMethod=CASH_DRAWER crea el ShiftExpense en el turno abierto AHORA
-// (golpea la caja del día en que se paga). Idempotente.
+// Liquida (total o PARCIAL) una compra PENDIENTE. Body: { paymentMethod, amount?, occurredAt? }.
+// amount omitido → paga el saldo; amount < saldo → ABONO (queda PENDIENTE).
+// Cada abono en efectivo crea un ShiftExpense por ese monto. Idempotente (el
+// WHERE condicional incluye paidAmount).
 router.post('/:id/settle', async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
 
     const { id } = req.params;
-    const { paymentMethod, occurredAt } = req.body || {};
+    const { paymentMethod, amount, occurredAt } = req.body || {};
     if (!VALID_PAYMENT_METHODS.includes(paymentMethod)) {
       return res.status(400).json({ error: 'paymentMethod inválido' });
     }
 
     const po = await prisma.purchaseOrder.findFirst({
       where: { id, location: { restaurantId } },
-      select: { id: true, totalAmount: true, poNumber: true, locationId: true, settlementStatus: true, supplier: { select: { name: true } } },
+      select: { id: true, totalAmount: true, paidAmount: true, poNumber: true, locationId: true, settlementStatus: true, supplier: { select: { name: true } } },
     });
     if (!po) return res.status(404).json({ error: 'Compra no encontrada' });
     if (po.settlementStatus !== 'PENDING') {
       return res.status(409).json({ error: 'La compra ya fue liquidada', code: 'ALREADY_SETTLED' });
     }
+
+    const prevPaid = Number(po.paidAmount || 0);
+    const remaining = round2(Number(po.totalAmount) - prevPaid);
+    const reqAmt = amount != null ? Number(amount) : remaining;
+    if (!Number.isFinite(reqAmt) || reqAmt <= 0) {
+      return res.status(400).json({ error: 'amount inválido' });
+    }
+    const pay = round2(Math.min(reqAmt, remaining));
+    const newPaid = round2(prevPaid + pay);
+    const fully = newPaid >= Number(po.totalAmount) - 0.005;
 
     let cashShiftId = null;
     if (paymentMethod === 'CASH_DRAWER') {
@@ -296,16 +308,17 @@ router.post('/:id/settle', async (req, res) => {
 
     const settledAt = occurredAt ? new Date(occurredAt) : new Date();
 
-    const settled = await prisma.$transaction(async (tx) => {
+    const applied = await prisma.$transaction(async (tx) => {
       const upd = await tx.purchaseOrder.updateMany({
-        where: { id, settlementStatus: 'PENDING' },
+        where: { id, settlementStatus: 'PENDING', paidAmount: prevPaid },
         data: {
-          settlementStatus: 'PAID',
-          settledAt,
-          settledMethod: paymentMethod,
-          settledShiftId: cashShiftId,
-          paymentMethod,
-          cashShiftId,
+          paidAmount: newPaid,
+          ...(fully ? {
+            settlementStatus: 'PAID',
+            settledAt,
+            settledMethod: paymentMethod,
+            settledShiftId: cashShiftId,
+          } : {}),
         },
       });
       if (upd.count === 0) return false;
@@ -314,24 +327,24 @@ router.post('/:id/settle', async (req, res) => {
         await tx.shiftExpense.create({
           data: {
             shiftId: cashShiftId,
-            description: `Compra: ${po.supplier?.name || ''} (${po.poNumber})`,
-            amount: po.totalAmount,
+            description: `Compra: ${po.supplier?.name || ''} (${po.poNumber})${fully ? '' : ' (abono)'}`,
+            amount: pay,
             category: 'PURCHASE',
             purchaseOrderId: po.id,
           },
         });
         await tx.cashShift.update({
           where: { id: cashShiftId },
-          data: { totalExpenses: { increment: po.totalAmount } },
+          data: { totalExpenses: { increment: pay } },
         });
       }
       return true;
     });
 
-    if (!settled) {
-      return res.status(409).json({ error: 'La compra ya fue liquidada', code: 'ALREADY_SETTLED' });
+    if (!applied) {
+      return res.status(409).json({ error: 'El saldo cambió o ya fue liquidada', code: 'STALE_OR_SETTLED' });
     }
-    res.json({ ok: true, id, settledAt, settledMethod: paymentMethod });
+    res.json({ ok: true, id, paid: pay, paidAmount: newPaid, remaining: round2(Number(po.totalAmount) - newPaid), fully, settledMethod: paymentMethod });
   } catch (e) {
     console.error('POST /api/purchases/:id/settle:', e);
     res.status(500).json({ error: 'Error al liquidar compra: ' + e.message });
